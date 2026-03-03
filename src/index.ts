@@ -1,23 +1,23 @@
-import { bot } from "./bot.js";
+import { bot } from './bot.js'
 
 const REQUIRED_ENV_VARS = [
-  "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_USER_ID",
-  "LINEAR_API_KEY",
-  "LINEAR_TEAM_ID",
-  "OPENAI_API_KEY",
-];
+  'TELEGRAM_BOT_TOKEN',
+  'TELEGRAM_USER_ID',
+  'LINEAR_API_KEY',
+  'LINEAR_TEAM_ID',
+  'OPENAI_API_KEY',
+]
 
-const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? "") === "");
+const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
 if (missing.length > 0) {
-  console.error(`Missing required environment variables: ${missing.join(", ")}`);
-  process.exit(1);
+  console.error(`Missing required environment variables: ${missing.join(', ')}`)
+  process.exit(1)
 }
 
-console.log("Starting papai...");
+console.log('Starting papai...')
 
 void bot.start({
   onStart: () => {
-    console.log("papai is running and listening for messages.");
+    console.log('papai is running and listening for messages.')
   },
-});
+})
