@@ -19,7 +19,7 @@ export const tools = {
       projectId: z.string().optional().describe("Linear project ID to associate the issue with"),
     }),
     execute: async ({ title, description, priority, projectId }) => {
-      const teamId = process.env.LINEAR_TEAM_ID!;
+      const teamId = process.env["LINEAR_TEAM_ID"]!;
       const issue = await createIssue({
         title,
         description,

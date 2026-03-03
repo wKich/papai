@@ -8,7 +8,7 @@ const REQUIRED_ENV_VARS = [
   "OPENAI_API_KEY",
 ];
 
-const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? "") === "");
 if (missing.length > 0) {
   console.error(`Missing required environment variables: ${missing.join(", ")}`);
   process.exit(1);
@@ -16,7 +16,7 @@ if (missing.length > 0) {
 
 console.log("Starting papai...");
 
-bot.start({
+void bot.start({
   onStart: () => {
     console.log("papai is running and listening for messages.");
   },

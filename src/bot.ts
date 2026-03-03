@@ -17,8 +17,8 @@ Always confirm actions to the user in a friendly, concise manner. \
 When creating or updating tasks, summarize what was done and include the issue identifier and URL if available. \
 If you need context (like project IDs), call list_projects first.`;
 
-const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
-const allowedUserId = parseInt(process.env.TELEGRAM_USER_ID!, 10);
+const bot = new Bot(process.env["TELEGRAM_BOT_TOKEN"]!);
+const allowedUserId = parseInt(process.env["TELEGRAM_USER_ID"]!, 10);
 
 const conversationHistory = new Map<number, ModelMessage[]>();
 

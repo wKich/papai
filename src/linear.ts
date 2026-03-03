@@ -1,6 +1,6 @@
 import { LinearClient } from "@linear/sdk";
 
-const client = new LinearClient({ apiKey: process.env.LINEAR_API_KEY! });
+const client = new LinearClient({ apiKey: process.env["LINEAR_API_KEY"]! });
 
 export async function createIssue({
   title,
@@ -36,7 +36,7 @@ export async function updateIssue({
 }) {
   const updateInput: { stateId?: string; assigneeId?: string } = {};
 
-  if (status) {
+  if (status !== undefined) {
     const issue = await client.issue(issueId);
     const team = await issue.team;
     if (team) {
@@ -48,7 +48,7 @@ export async function updateIssue({
     }
   }
 
-  if (assigneeId) {
+  if (assigneeId !== undefined) {
     updateInput.assigneeId = assigneeId;
   }
 
@@ -60,7 +60,7 @@ export async function searchIssues({ query, state }: { query: string; state?: st
   const result = await client.issueSearch({ query, includeArchived: false });
   const issues = result.nodes;
 
-  if (state) {
+  if (state !== undefined) {
     const filtered = await Promise.all(
       issues.map(async (issue) => {
         const issueState = await issue.state;

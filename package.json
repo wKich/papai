@@ -6,8 +6,8 @@
   "module": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
-    "lint": "oxlint .",
-    "lint:fix": "oxlint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "prepare": "cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit"
@@ -23,6 +23,7 @@
     "@types/bun": "latest",
     "oxfmt": "^0.36.0",
     "oxlint": "latest",
+    "oxlint-tsgolint": "^0.16.0",
     "typescript": "latest"
   }
 }
