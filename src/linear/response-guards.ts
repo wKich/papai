@@ -14,7 +14,7 @@ export const requireEntity = <T>(
     appError: AppError
   },
 ): T => {
-  if (entity) {
+  if (entity !== null && entity !== undefined) {
     return entity
   }
   logger.error({ entityName, ...context }, 'Linear API response missing required entity')

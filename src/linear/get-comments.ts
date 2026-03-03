@@ -23,8 +23,18 @@ export async function getComments({
     })
     const comments = await issue.comments()
     const result = filterPresentNodes(comments.nodes, { entityName: 'comment', parentId: issueId }).flatMap((c) => {
-      const createdAt = c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)
-      if (typeof c.id !== 'string' || typeof c.body !== 'string' || Number.isNaN(createdAt.getTime())) {
+      const createdAt =
+        c.createdAt instanceof Date
+          ? c.createdAt
+          : typeof c.createdAt === 'string' || typeof c.createdAt === 'number'
+            ? new Date(c.createdAt)
+            : undefined
+      if (
+        typeof c.id !== 'string' ||
+        typeof c.body !== 'string' ||
+        createdAt === undefined ||
+        Number.isNaN(createdAt.getTime())
+      ) {
         logger.warn({ issueId, commentId: c.id }, 'Skipping comment with invalid response shape')
         return []
       }
