@@ -23,7 +23,7 @@ If you need context (like project IDs), call list_projects first.`
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const allowedUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 
-const conversationHistory = new Map<number, ModelMessage[]>()
+const conversationHistory = new Map<number, readonly ModelMessage[]>()
 
 const checkAuthorization = (userId: number | undefined): userId is number => {
   logger.debug({ userId, allowedUserId }, 'Checking authorization')
@@ -36,7 +36,7 @@ const checkAuthorization = (userId: number | undefined): userId is number => {
   return true
 }
 
-const getOrCreateHistory = (userId: number): ModelMessage[] => {
+const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
   logger.debug({ userId }, 'getOrCreateHistory called')
   const existing = conversationHistory.has(userId)
   logger.debug(
@@ -44,19 +44,21 @@ const getOrCreateHistory = (userId: number): ModelMessage[] => {
     'Getting conversation history',
   )
   if (!existing) {
-    conversationHistory.set(userId, [])
+    conversationHistory.set(userId, [] as readonly ModelMessage[])
     logger.info({ userId }, 'New conversation history initialized')
   }
   return conversationHistory.get(userId)!
 }
 
-const trimHistory = (history: ModelMessage[], userId: number): void => {
+const trimHistory = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
   logger.debug({ userId, historyLength: history.length }, 'trimHistory called')
   if (history.length > 40) {
     const removedCount = history.length - 40
-    history.splice(0, history.length - 40)
-    logger.warn({ userId, removedCount, newSize: history.length }, 'Conversation history truncated')
+    const trimmed = history.slice(history.length - 40)
+    logger.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
+    return trimmed
   }
+  return history
 }
 
 const buildOpenAI = (apiKey: string, baseURL: string | null): ReturnType<typeof createOpenAI> => {
@@ -64,7 +66,7 @@ const buildOpenAI = (apiKey: string, baseURL: string | null): ReturnType<typeof 
   return createOpenAI(opts)
 }
 
-const callLlm = async (ctx: Context, userId: number, history: ModelMessage[]): Promise<void> => {
+const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
   const openaiKey = getConfig('openai_key')
   const linearKey = getConfig('linear_key')
   const linearTeamId = getConfig('linear_team_id')
@@ -87,14 +89,14 @@ const callLlm = async (ctx: Context, userId: number, history: ModelMessage[]): P
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
-    messages: history,
+    messages: [...history],
     tools,
     stopWhen: stepCountIs(5),
   })
 
   logger.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   const assistantText = result.text
-  history.push(...result.response.messages)
+  conversationHistory.set(userId, [...history, ...result.response.messages])
   await ctx.reply(assistantText || 'Done.')
   logger.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
@@ -106,14 +108,13 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   logger.debug({ userId, userText }, 'processMessage called')
   logger.info({ userId, messageLength: userText.length }, 'Message received from user')
 
-  const history = getOrCreateHistory(userId)
-  history.push({ role: 'user', content: userText })
-  trimHistory(history, userId)
+  const history = trimHistory([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
+  conversationHistory.set(userId, history)
 
   try {
     await callLlm(ctx, userId, history)
   } catch (error) {
-    history.pop()
+    conversationHistory.set(userId, history.slice(0, -1))
     logger.error({ error: error instanceof Error ? error.message : String(error), userId }, 'Error generating response')
     await ctx.reply('Sorry, something went wrong. Please try again.')
   }

@@ -36,13 +36,10 @@ export function isConfigKey(key: string): key is ConfigKey {
 export function getAllConfig(): Partial<Record<ConfigKey, string>> {
   logger.debug('getAllConfig called')
   const rows = db.query<{ key: string; value: string }, []>('SELECT key, value FROM config').all()
-  const result: Partial<Record<ConfigKey, string>> = {}
-  for (const row of rows) {
-    if (isConfigKey(row.key)) {
-      result[row.key] = row.value
-    }
-  }
-  return result
+  return rows.reduce<Partial<Record<ConfigKey, string>>>(
+    (acc, row) => (isConfigKey(row.key) ? { ...acc, [row.key]: row.value } : acc),
+    {},
+  )
 }
 
 export function maskValue(key: ConfigKey, value: string): string {

@@ -4,6 +4,14 @@ import { logger } from './logger.js'
 
 type IssueResult = { id: string; identifier: string; title: string; priority: number; url: string }
 
+const toIssueResult = (issue: Issue): IssueResult => ({
+  id: issue.id,
+  identifier: issue.identifier,
+  title: issue.title,
+  priority: issue.priority,
+  url: issue.url,
+})
+
 export async function createIssue({
   apiKey,
   title,
@@ -115,24 +123,12 @@ export async function searchIssues({
         return issueState.name.toLowerCase() === state.toLowerCase() ? issue : null
       }),
     )
-    const filteredIssues = filtered.filter(Boolean).map((issue) => ({
-      id: issue!.id,
-      identifier: issue!.identifier,
-      title: issue!.title,
-      priority: issue!.priority,
-      url: issue!.url,
-    }))
+    const filteredIssues = filtered.filter(Boolean).map((issue) => toIssueResult(issue!))
     logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
     return filteredIssues
   }
 
-  const mappedIssues = issues.map((issue) => ({
-    id: issue.id,
-    identifier: issue.identifier,
-    title: issue.title,
-    priority: issue.priority,
-    url: issue.url,
-  }))
+  const mappedIssues = issues.map(toIssueResult)
   logger.info({ query, resultCount: mappedIssues.length }, 'Issues searched')
   return mappedIssues
 }
