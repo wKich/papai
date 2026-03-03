@@ -45,6 +45,35 @@ const toIssueResult = (issue: Issue): IssueResult => ({
   url: issue.url,
 })
 
+const resolveWorkflowState = async (
+  client: LinearClient,
+  issueId: string,
+  status: string,
+): Promise<string | undefined> => {
+  const issue = await client.issue(issueId)
+  const team = await issue.team
+  if (!team) {
+    return undefined
+  }
+
+  const states = await team.states()
+  const state = states.nodes.find((s) => s.name.toLowerCase() === status.toLowerCase())
+  logger.debug(
+    { requestedStatus: status, foundState: state?.name, availableStates: states.nodes.map((s) => s.name) },
+    'Resolving workflow state',
+  )
+
+  if (state) {
+    return state.id
+  }
+
+  logger.warn(
+    { issueId, requestedStatus: status, availableStates: states.nodes.map((s) => s.name) },
+    'Workflow state not found',
+  )
+  return undefined
+}
+
 export async function createIssue({
   apiKey,
   title,
@@ -106,23 +135,9 @@ export async function updateIssue({
     const updateInput: { stateId?: string; assigneeId?: string } = {}
 
     if (status !== undefined) {
-      const issue = await client.issue(issueId)
-      const team = await issue.team
-      if (team) {
-        const states = await team.states()
-        const state = states.nodes.find((s) => s.name.toLowerCase() === status.toLowerCase())
-        logger.debug(
-          { requestedStatus: status, foundState: state?.name, availableStates: states.nodes.map((s) => s.name) },
-          'Resolving workflow state',
-        )
-        if (state) {
-          updateInput.stateId = state.id
-        } else {
-          logger.warn(
-            { issueId, requestedStatus: status, availableStates: states.nodes.map((s) => s.name) },
-            'Workflow state not found',
-          )
-        }
+      const stateId = await resolveWorkflowState(client, issueId, status)
+      if (stateId !== undefined) {
+        updateInput.stateId = stateId
       }
     }
 
