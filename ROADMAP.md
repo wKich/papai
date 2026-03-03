@@ -28,7 +28,7 @@
 
 ## Phase 4: Developer Experience
 
-- [x] CI pipeline — lint + type-check on push
+- [x] CI pipeline — format + lint + type-check on push and pull_request to master
 - [ ] Unit tests for Linear wrapper functions
 - [ ] Integration test scaffolding
 
