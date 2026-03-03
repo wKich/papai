@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 // Error categories using discriminated unions
 export type LinearError =
   | { type: 'linear'; code: 'issue-not-found'; issueId: string }
@@ -5,6 +7,7 @@ export type LinearError =
   | { type: 'linear'; code: 'auth-failed' }
   | { type: 'linear'; code: 'rate-limited' }
   | { type: 'linear'; code: 'validation-failed'; field: string; reason: string }
+  | { type: 'linear'; code: 'label-not-found'; labelName: string }
   | { type: 'linear'; code: 'unknown'; originalError: Error }
 
 export type LlmError =
@@ -36,6 +39,7 @@ export const linearError = {
     field,
     reason,
   }),
+  labelNotFound: (labelName: string): AppError => ({ type: 'linear', code: 'label-not-found', labelName }),
   unknown: (originalError: Error): AppError => ({ type: 'linear', code: 'unknown', originalError }),
 }
 
@@ -62,14 +66,10 @@ export const systemError = {
   unexpected: (originalError: Error): AppError => ({ type: 'system', code: 'unexpected', originalError }),
 }
 
+const appErrorTypeSchema = z.object({ type: z.enum(['linear', 'llm', 'validation', 'system']) })
+
 // Type guard to check if error is an AppError
-export const isAppError = (error: unknown): error is AppError => {
-  if (typeof error !== 'object' || error === null) {
-    return false
-  }
-  const typeValue = (error as { type?: unknown }).type
-  return typeValue === 'linear' || typeValue === 'llm' || typeValue === 'validation' || typeValue === 'system'
-}
+export const isAppError = (error: unknown): error is AppError => appErrorTypeSchema.safeParse(error).success
 
 // Error message mappers
 const getLinearMessage = (error: LinearError): string => {
@@ -84,6 +84,8 @@ const getLinearMessage = (error: LinearError): string => {
       return `Linear API rate limit reached. Please wait a moment and try again.`
     case 'validation-failed':
       return `Invalid ${error.field}: ${error.reason}`
+    case 'label-not-found':
+      return `Label "${error.labelName}" was not found. Use list_labels to see available labels.`
     case 'unknown':
       return `Linear API error occurred. Please try again later.`
   }

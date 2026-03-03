@@ -6,7 +6,7 @@ import { Bot, type Context } from 'grammy'
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
-import { makeTools } from './tools.js'
+import { makeTools } from './tools/index.js'
 
 const SYSTEM_PROMPT = `You are papai, an expert project manager and personal productivity assistant. \
 You help the user manage their Linear tasks directly from Telegram.
@@ -16,6 +16,12 @@ You can:
 - Update issue statuses and assignees
 - Search for issues by keyword or state
 - List available teams and projects
+- Fetch full details of a specific issue
+- Add and read comments on issues
+- Create labels, list available labels, view labels on an issue; apply labels when creating/updating
+- Set due dates and estimates on issues
+- Create and read issue relations (blocks, duplicate, related)
+- Create new projects
 
 Always confirm actions to the user in a friendly, concise manner. \
 When creating or updating tasks, summarize what was done and include the issue identifier and URL if available. \
