@@ -1,8 +1,10 @@
 import { LinearClient } from '@linear/sdk'
 import { z } from 'zod'
 
+import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { requireEntity } from './response-guards.js'
 
 export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: string }): Promise<{
   id: string
@@ -20,7 +22,11 @@ export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: s
 
   try {
     const client = new LinearClient({ apiKey })
-    const issue = await client.issue(issueId)
+    const issue = requireEntity(await client.issue(issueId), {
+      entityName: 'issue',
+      context: { issueId },
+      appError: linearError.issueNotFound(issueId),
+    })
     const [state, assignee] = await Promise.all([issue.state, issue.assignee])
     const dueDateSchema = z.object({ dueDate: z.string().nullable().optional().catch(undefined) })
     const { dueDate } = dueDateSchema.parse(issue)

@@ -1,7 +1,9 @@
 import { LinearClient } from '@linear/sdk'
 
+import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { filterPresentNodes, requireEntity } from './response-guards.js'
 
 export async function listLabels({
   apiKey,
@@ -14,9 +16,19 @@ export async function listLabels({
 
   try {
     const client = new LinearClient({ apiKey })
-    const team = await client.team(teamId)
+    const team = requireEntity(await client.team(teamId), {
+      entityName: 'team',
+      context: { teamId },
+      appError: linearError.teamNotFound(teamId),
+    })
     const labels = await team.labels()
-    const result = labels.nodes.map((l) => ({ id: l.id, name: l.name, color: l.color }))
+    const result = filterPresentNodes(labels.nodes, { entityName: 'label', parentId: teamId }).flatMap((l) => {
+      if (typeof l.id !== 'string' || typeof l.name !== 'string' || typeof l.color !== 'string') {
+        logger.warn({ teamId, labelId: l.id }, 'Skipping label with invalid response shape')
+        return []
+      }
+      return [{ id: l.id, name: l.name, color: l.color }]
+    })
     logger.info({ teamId, labelCount: result.length }, 'Labels listed')
     return result
   } catch (error) {

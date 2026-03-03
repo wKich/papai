@@ -2,6 +2,7 @@ import { type Issue, LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { filterPresentNodes } from './response-guards.js'
 
 type IssueResult = { id: string; identifier: string; title: string; priority: number; url: string }
 
@@ -27,7 +28,19 @@ export async function searchIssues({
   try {
     const client = new LinearClient({ apiKey })
     const result = await client.issueSearch({ query, includeArchived: false })
-    const issues = result.nodes
+    const issues = filterPresentNodes(result.nodes, { entityName: 'issue', parentId: query }).flatMap((issue) => {
+      if (
+        typeof issue.id !== 'string' ||
+        typeof issue.identifier !== 'string' ||
+        typeof issue.title !== 'string' ||
+        typeof issue.priority !== 'number' ||
+        typeof issue.url !== 'string'
+      ) {
+        logger.warn({ query, issueId: issue.id }, 'Skipping issue with invalid response shape')
+        return []
+      }
+      return [issue]
+    })
     logger.debug({ query, rawResultCount: issues.length }, 'Linear search completed')
 
     if (state !== undefined) {
@@ -36,12 +49,12 @@ export async function searchIssues({
           const issueState = await issue.state
           if (!issueState) {
             logger.warn({ issueId: issue.id, issueIdentifier: issue.identifier }, 'Issue has no state while filtering')
-            return null
+            return undefined
           }
-          return issueState.name.toLowerCase() === state.toLowerCase() ? issue : null
+          return issueState.name.toLowerCase() === state.toLowerCase() ? issue : undefined
         }),
       )
-      const filteredIssues = filtered.filter(Boolean).map((issue) => toIssueResult(issue!))
+      const filteredIssues = filtered.filter((issue): issue is Issue => issue !== undefined).map((issue) => toIssueResult(issue))
       logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
       return filteredIssues
     }
