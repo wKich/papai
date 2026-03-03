@@ -70,3 +70,67 @@ export const isAppError = (error: unknown): error is AppError => {
   const typeValue = (error as { type?: unknown }).type
   return typeValue === 'linear' || typeValue === 'llm' || typeValue === 'validation' || typeValue === 'system'
 }
+
+// Error message mappers
+const getLinearMessage = (error: LinearError): string => {
+  switch (error.code) {
+    case 'issue-not-found':
+      return `Issue "${error.issueId}" was not found. Please check the issue ID and try again.`
+    case 'team-not-found':
+      return `Team configuration error. Please check LINEAR_TEAM_ID.`
+    case 'auth-failed':
+      return `Failed to connect to Linear. Please check your LINEAR_API_KEY.`
+    case 'rate-limited':
+      return `Linear API rate limit reached. Please wait a moment and try again.`
+    case 'validation-failed':
+      return `Invalid ${error.field}: ${error.reason}`
+    case 'unknown':
+      return `Linear API error occurred. Please try again later.`
+  }
+}
+
+const getLlmMessage = (error: LlmError): string => {
+  switch (error.code) {
+    case 'api-error':
+      return `AI service error: ${error.message}. Please try again.`
+    case 'rate-limited':
+      return `AI service rate limit reached. Please wait a moment and try again.`
+    case 'timeout':
+      return `AI service request timed out. Please try again.`
+    case 'token-limit':
+      return `Message is too long. Please shorten your request and try again.`
+  }
+}
+
+const getValidationMessage = (error: ValidationError): string => {
+  switch (error.code) {
+    case 'invalid-input':
+      return `Invalid ${error.field}: ${error.reason}`
+    case 'missing-required':
+      return `Missing required field: ${error.field}`
+  }
+}
+
+const getSystemMessage = (error: SystemError): string => {
+  switch (error.code) {
+    case 'config-missing':
+      return `Configuration error: ${error.variable} is not set. Please use /set command to configure.`
+    case 'network-error':
+      return `Network error: ${error.message}. Please check your connection and try again.`
+    case 'unexpected':
+      return `An unexpected error occurred. Please try again later.`
+  }
+}
+
+export const getUserMessage = (error: AppError): string => {
+  switch (error.type) {
+    case 'linear':
+      return getLinearMessage(error)
+    case 'llm':
+      return getLlmMessage(error)
+    case 'validation':
+      return getValidationMessage(error)
+    case 'system':
+      return getSystemMessage(error)
+  }
+}
