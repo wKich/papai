@@ -1,6 +1,8 @@
-import { LinearClient } from "@linear/sdk";
+import { type Issue, type LinearFetch, LinearClient } from "@linear/sdk";
 
 const client = new LinearClient({ apiKey: process.env["LINEAR_API_KEY"]! });
+
+type IssueResult = { id: string; identifier: string; title: string; priority: number; url: string };
 
 export async function createIssue({
   title,
@@ -14,7 +16,7 @@ export async function createIssue({
   priority?: number;
   projectId?: string;
   teamId: string;
-}) {
+}): Promise<LinearFetch<Issue> | undefined> {
   const payload = await client.createIssue({
     title,
     description,
@@ -33,7 +35,7 @@ export async function updateIssue({
   issueId: string;
   status?: string;
   assigneeId?: string;
-}) {
+}): Promise<LinearFetch<Issue> | undefined> {
   const updateInput: { stateId?: string; assigneeId?: string } = {};
 
   if (status !== undefined) {
@@ -56,7 +58,13 @@ export async function updateIssue({
   return payload.issue;
 }
 
-export async function searchIssues({ query, state }: { query: string; state?: string }) {
+export async function searchIssues({
+  query,
+  state,
+}: {
+  query: string;
+  state?: string;
+}): Promise<IssueResult[]> {
   const result = await client.issueSearch({ query, includeArchived: false });
   const issues = result.nodes;
 
@@ -85,7 +93,9 @@ export async function searchIssues({ query, state }: { query: string; state?: st
   }));
 }
 
-export async function listProjects() {
+export async function listProjects(): Promise<
+  { teamId: string; teamName: string; projects: { id: string; name: string }[] }[]
+> {
   const teams = await client.teams();
   const result = await Promise.all(
     teams.nodes.map(async (team) => {
