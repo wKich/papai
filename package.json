@@ -10,10 +10,9 @@
     "format": "oxfmt --write ."
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "@types/bun": "latest",
+    "oxlint": "latest",
+    "typescript": "latest"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.39",
