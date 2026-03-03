@@ -31,4 +31,4 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Type check
-        run: bunx tsc --noEmit
+        run: bun tsc --noEmit
