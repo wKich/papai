@@ -35,7 +35,7 @@ Harden `src/linear/*` wrappers so unexpected `null`/missing fields from Linear A
 2. Handle missing required fields from API responses without unsafe non-null assertions.
 3. Preserve current public function contracts and return shapes in `src/linear/*`.
 4. Log validation anomalies with `logger.warn` (recoverable/partial data) and `logger.error` (operation failure).
-5. Route fatal validation failures through existing error classification (`classifyLinearError`) so user-facing behavior remains consistent.
+5. Route fatal validation failures through deterministic classification (avoid ambiguous substring-only matching): either throw `LinearApiError` with explicit `appError`, or extend `classifyLinearError` with dedicated response-shape rules.
 6. Add focused tests for new response-validation behavior (if adding tests is practical in current project setup).
 
 ## Implementation Plan
@@ -57,7 +57,7 @@ Harden `src/linear/*` wrappers so unexpected `null`/missing fields from Linear A
   - `get-issue-labels.ts`
   - `update-issue.ts` (inside workflow state resolution)
   - `list-labels.ts` (team fetch)
-- On missing required entity: throw a descriptive error that is caught and classified.
+- On missing required entity: throw a typed, explicit error (`LinearApiError`/`AppError`) or a deterministically recognizable error shape (not free-form ambiguous strings like "issue").
 
 ### 3) Guard list-node mapping and field extraction
 
@@ -85,6 +85,7 @@ Harden `src/linear/*` wrappers so unexpected `null`/missing fields from Linear A
 - [ ] No `src/linear/*` function dereferences API-returned entities without null checks.
 - [ ] `search-issues.ts` no longer relies on non-null assertion for filtered issues.
 - [ ] Missing required entities (issue/team/etc.) produce controlled, classified failures instead of implicit runtime type errors.
+- [ ] Response-shape validation failures are classified deterministically (not by broad substring matches that can misclassify errors).
 - [ ] Malformed optional list items are skipped safely with warning logs and without crashing the operation.
 - [ ] Existing successful-path return shapes for all Linear wrappers remain unchanged.
 - [ ] Lint/format checks pass for changed files.
