@@ -4,10 +4,14 @@ Telegram bot that manages Linear tasks via natural language, powered by GPT-4o t
 
 ## Features
 
-- **Issue creation** — create Linear issues with title, description, priority, and project association
-- **Issue updates** — change issue status and assignee
+- **Issue creation** — create issues with title, description, priority, project, due date, labels, and estimate
+- **Issue updates** — change status, assignee, due date, labels, or estimate
 - **Search** — find issues by keyword or filter by workflow state
-- **Project listing** — list all teams and projects for context
+- **Issue details** — fetch full details of any issue
+- **Comments** — add and read comments on issues
+- **Labels** — list, create, and apply labels when creating or updating issues
+- **Relations** — create and view blocks/duplicate/related relations between issues
+- **Projects** — list all teams and projects, or create new projects
 - **Conversation memory** — maintains per-user chat history (last 40 messages) for multi-turn interactions
 - **Single-user auth** — restricts access to a single authorized Telegram user
 
@@ -59,26 +63,31 @@ Send natural language messages to the bot in Telegram:
 - **"Move PAP-42 to Done"** — updates an issue's workflow state
 - **"List all projects"** — shows available teams and projects
 - **"Create a high-priority task in the Backend project: fix API timeout"** — creates an issue with priority and project
+- **"Show me the details of PAP-42"** — fetches full issue details
+- **"Add a comment to PAP-42: blocked by the auth refactor"** — adds a comment
+- **"What labels are available?"** — lists all team labels
+- **"Mark PAP-42 as blocking PAP-55"** — creates a blocks relation
+- **"Set the due date on PAP-42 to March 15"** — updates the due date
 
 ## Architecture
 
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-4o)
                                               │
-                                              ├─ tools (tools.ts) ─→ Linear SDK (linear.ts)
-                                              │   create_issue, update_issue,
-                                              │   search_issues, list_projects
+                                              ├─ src/tools/ ─→ src/linear/ ─→ Linear SDK
+                                              │   13 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
 
-| File            | Role                                                                                   |
+| Path            | Role                                                                                   |
 | --------------- | -------------------------------------------------------------------------------------- |
 | `src/index.ts`  | Entry point; validates env vars, starts the bot                                        |
 | `src/bot.ts`    | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
 | `src/config.ts` | SQLite-backed runtime config store; `/set` and `/config` command handlers              |
-| `src/tools.ts`  | Zod-validated tool definitions exposed to the LLM                                      |
-| `src/linear.ts` | Linear SDK wrapper functions called by the tools                                       |
+| `src/errors.ts` | Discriminated union error types, constructors, and user-facing message mapper          |
+| `src/tools/`    | One file per tool; `index.ts` assembles all 13 into `makeTools`                        |
+| `src/linear/`   | One file per Linear SDK wrapper; `index.ts` re-exports all 13                          |
 | `src/logger.ts` | pino logger instance                                                                   |
 
 ## Tech Stack
