@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { type ModelMessage } from "ai";
 import { tools } from "./tools.js";
@@ -48,7 +48,7 @@ bot.on("message:text", async (ctx) => {
       system: SYSTEM_PROMPT,
       messages: history,
       tools,
-      maxSteps: 5,
+      stopWhen: stepCountIs(5),
     });
 
     const assistantText = result.text;

@@ -1,4 +1,4 @@
-import { LinearClient, type IssueUpdateInput } from "@linear/sdk";
+import { LinearClient } from "@linear/sdk";
 
 const client = new LinearClient({ apiKey: process.env.LINEAR_API_KEY! });
 
@@ -34,7 +34,7 @@ export async function updateIssue({
   status?: string;
   assigneeId?: string;
 }) {
-  const updateInput: IssueUpdateInput = {};
+  const updateInput: { stateId?: string; assigneeId?: string } = {};
 
   if (status) {
     const issue = await client.issue(issueId);
@@ -65,7 +65,7 @@ export async function searchIssues({
   query: string;
   state?: string;
 }) {
-  const result = await client.issueSearch(query, { includeArchived: false });
+  const result = await client.issueSearch({ query, includeArchived: false });
   const issues = result.nodes;
 
   if (state) {
