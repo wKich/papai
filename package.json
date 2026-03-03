@@ -1,6 +1,6 @@
 {
   "name": "papai",
-  "description": "Agent Sniff — an intelligent Telegram bot for managing Linear tasks with LLM.",
+  "description": "papai — an intelligent Telegram bot for managing Linear tasks with LLM.",
   "module": "src/index.ts",
   "type": "module",
   "private": true,

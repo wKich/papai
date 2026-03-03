@@ -4,7 +4,7 @@ import { openai } from "@ai-sdk/openai";
 import { type ModelMessage } from "ai";
 import { tools } from "./tools.js";
 
-const SYSTEM_PROMPT = `You are Agent Sniff, an expert project manager and personal productivity assistant. \
+const SYSTEM_PROMPT = `You are papai, an expert project manager and personal productivity assistant. \
 You help the user manage their Linear tasks directly from Telegram.
 
 You can:

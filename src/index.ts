@@ -1,9 +1,9 @@
 import { bot } from "./bot.js";
 
-console.log("Starting Agent Sniff...");
+console.log("Starting papai...");
 
 bot.start({
   onStart: () => {
-    console.log("Agent Sniff is running and listening for messages.");
+    console.log("papai is running and listening for messages.");
   },
 });
