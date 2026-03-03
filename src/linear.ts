@@ -1,4 +1,4 @@
-import { LinearClient } from "@linear/sdk";
+import { LinearClient, type IssueUpdateInput } from "@linear/sdk";
 
 const client = new LinearClient({ apiKey: process.env.LINEAR_API_KEY! });
 

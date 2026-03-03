@@ -40,7 +40,7 @@ export const tools = {
         projectId,
         teamId,
       });
-      const resolved = await issue;
+      const resolved = issue;
       return {
         id: resolved?.id,
         identifier: resolved?.identifier,
@@ -68,7 +68,7 @@ export const tools = {
     }),
     execute: async ({ issueId, status, assigneeId }) => {
       const issue = await updateIssue({ issueId, status, assigneeId });
-      const resolved = await issue;
+      const resolved = issue;
       return {
         id: resolved?.id,
         identifier: resolved?.identifier,

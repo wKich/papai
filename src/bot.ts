@@ -37,6 +37,11 @@ bot.on("message:text", async (ctx) => {
 
   history.push({ role: "user", content: userText });
 
+  // Keep only the last 40 messages to avoid unbounded memory / context growth
+  if (history.length > 40) {
+    history.splice(0, history.length - 40);
+  }
+
   try {
     const result = await generateText({
       model: openai("gpt-4o"),
@@ -52,6 +57,8 @@ bot.on("message:text", async (ctx) => {
 
     await ctx.reply(assistantText || "Done.");
   } catch (error) {
+    // Remove the user message that failed so the history stays consistent
+    history.pop();
     console.error("Error generating response:", error);
     await ctx.reply(
       "Sorry, something went wrong. Please try again.",
