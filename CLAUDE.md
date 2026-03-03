@@ -17,8 +17,10 @@ No build step; Bun runs TypeScript directly.
 
 ## Required Environment Variables
 
-Copy `.env.example` to `.env`. All five are required at startup (validated in `src/index.ts`):
-`TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`, `LINEAR_API_KEY`, `LINEAR_TEAM_ID`, `OPENAI_API_KEY`
+Copy `.env.example` to `.env`. Only two are required at startup (validated in `src/index.ts`):
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`
+
+The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai_base_url`, `openai_model`) are stored in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
 
 ## Architecture
 
@@ -34,8 +36,10 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-
 
 - **`src/index.ts`** — entry point; validates env vars, starts the bot.
 - **`src/bot.ts`** — Grammy bot setup, per-user conversation history (capped at 40 messages), LLM orchestration with up to 5 tool-calling steps. Only processes messages from the authorized `TELEGRAM_USER_ID`.
+- **`src/config.ts`** — SQLite-backed runtime config store; exposes `getConfig`, `setConfig`, `getAllConfig`; handles `/set` and `/config` bot commands.
 - **`src/tools.ts`** — Zod-validated tool definitions exposed to the LLM.
 - **`src/linear.ts`** — Linear SDK wrapper functions called by the tools.
+- **`src/logger.ts`** — pino logger instance shared across all modules.
 
 ## Logging Requirements (HIGH PRIORITY)
 
