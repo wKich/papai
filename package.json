@@ -1,0 +1,24 @@
+{
+  "name": "papai",
+  "description": "Agent Sniff — an intelligent Telegram bot for managing Linear tasks with LLM.",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "lint": "oxlint .",
+    "format": "oxfmt --write ."
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.39",
+    "@linear/sdk": "^76.0.0",
+    "ai": "^6.0.108",
+    "grammy": "^1.41.1"
+  }
+}

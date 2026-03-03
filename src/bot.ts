@@ -1,0 +1,62 @@
+import { Bot } from "grammy";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { type ModelMessage } from "ai";
+import { tools } from "./tools.js";
+
+const SYSTEM_PROMPT = `You are Agent Sniff, an expert project manager and personal productivity assistant. \
+You help the user manage their Linear tasks directly from Telegram.
+
+You can:
+- Create new issues with titles, descriptions, priorities, and project associations
+- Update issue statuses and assignees
+- Search for issues by keyword or state
+- List available teams and projects
+
+Always confirm actions to the user in a friendly, concise manner. \
+When creating or updating tasks, summarize what was done and include the issue identifier and URL if available. \
+If you need context (like project IDs), call list_projects first.`;
+
+const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
+const allowedUserId = parseInt(process.env.TELEGRAM_USER_ID!, 10);
+
+const conversationHistory = new Map<number, ModelMessage[]>();
+
+bot.on("message:text", async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || userId !== allowedUserId) {
+    return;
+  }
+
+  const userText = ctx.message.text;
+
+  if (!conversationHistory.has(userId)) {
+    conversationHistory.set(userId, []);
+  }
+  const history = conversationHistory.get(userId)!;
+
+  history.push({ role: "user", content: userText });
+
+  try {
+    const result = await generateText({
+      model: openai("gpt-4o"),
+      system: SYSTEM_PROMPT,
+      messages: history,
+      tools,
+      maxSteps: 5,
+    });
+
+    const assistantText = result.text;
+
+    history.push(...result.response.messages);
+
+    await ctx.reply(assistantText || "Done.");
+  } catch (error) {
+    console.error("Error generating response:", error);
+    await ctx.reply(
+      "Sorry, something went wrong. Please try again.",
+    );
+  }
+});
+
+export { bot };
