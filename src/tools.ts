@@ -26,20 +26,32 @@ function createIssueTool(linearKey: string, linearTeamId: string): ToolSet[strin
       projectId: z.string().optional().describe('Linear project ID to associate the issue with'),
     }),
     execute: async ({ title, description, priority, projectId }) => {
-      const issue = await createIssue({
-        apiKey: linearKey,
-        title,
-        description,
-        priority,
-        projectId,
-        teamId: linearTeamId,
-      })
-      if (!issue) {
-        logger.warn({ title, teamId: linearTeamId }, 'createIssue returned no issue')
-      } else if (!issue.id || !issue.identifier) {
-        logger.warn({ issue }, 'createIssue returned incomplete issue data')
+      try {
+        const issue = await createIssue({
+          apiKey: linearKey,
+          title,
+          description,
+          priority,
+          projectId,
+          teamId: linearTeamId,
+        })
+        if (!issue) {
+          logger.warn({ title, teamId: linearTeamId }, 'createIssue returned no issue')
+        } else if (!issue.id || !issue.identifier) {
+          logger.warn({ issue }, 'createIssue returned incomplete issue data')
+        }
+        return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            title,
+            tool: 'create_issue',
+          },
+          'Tool execution failed',
+        )
+        throw error
       }
-      return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
     },
   })
 }
@@ -54,13 +66,25 @@ function updateIssueTool(linearKey: string): ToolSet[string] {
       assigneeId: z.string().optional().describe('Linear user ID to assign the issue to'),
     }),
     execute: async ({ issueId, status, assigneeId }) => {
-      const issue = await updateIssue({ apiKey: linearKey, issueId, status, assigneeId })
-      if (!issue) {
-        logger.warn({ issueId, status, assigneeId }, 'updateIssue returned no issue')
-      } else if (!issue.id || !issue.identifier) {
-        logger.warn({ issue }, 'updateIssue returned incomplete issue data')
+      try {
+        const issue = await updateIssue({ apiKey: linearKey, issueId, status, assigneeId })
+        if (!issue) {
+          logger.warn({ issueId, status, assigneeId }, 'updateIssue returned no issue')
+        } else if (!issue.id || !issue.identifier) {
+          logger.warn({ issue }, 'updateIssue returned incomplete issue data')
+        }
+        return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            issueId,
+            tool: 'update_issue',
+          },
+          'Tool execution failed',
+        )
+        throw error
       }
-      return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
     },
   })
 }
@@ -73,7 +97,21 @@ function searchIssuesTool(linearKey: string): ToolSet[string] {
       query: z.string().describe('Search keyword or phrase'),
       state: z.string().optional().describe("Filter by workflow state name (e.g. 'In Progress', 'Todo', 'Done')"),
     }),
-    execute: ({ query, state }) => searchIssues({ apiKey: linearKey, query, state }),
+    execute: ({ query, state }) => {
+      try {
+        return searchIssues({ apiKey: linearKey, query, state })
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            query,
+            tool: 'search_issues',
+          },
+          'Tool execution failed',
+        )
+        throw error
+      }
+    },
   })
 }
 
@@ -82,7 +120,20 @@ function listProjectsTool(linearKey: string): ToolSet[string] {
     description:
       'List all available teams and projects in Linear. Call this to get projectId or teamId context before creating or searching issues.',
     inputSchema: z.object({}),
-    execute: () => listProjects({ apiKey: linearKey }),
+    execute: () => {
+      try {
+        return listProjects({ apiKey: linearKey })
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            tool: 'list_projects',
+          },
+          'Tool execution failed',
+        )
+        throw error
+      }
+    },
   })
 }
 

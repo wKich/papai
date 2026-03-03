@@ -4,6 +4,7 @@ import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
 
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
+import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
 import { makeTools } from './tools.js'
 
@@ -115,8 +116,21 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     await callLlm(ctx, userId, history)
   } catch (error) {
     conversationHistory.set(userId, history.slice(0, -1))
-    logger.error({ error: error instanceof Error ? error.message : String(error), userId }, 'Error generating response')
-    await ctx.reply('Sorry, something went wrong. Please try again.')
+
+    if (isAppError(error)) {
+      const userMessage = getUserMessage(error)
+      logger.warn(
+        { error: { type: error.type, code: error.code }, userId },
+        `Handled error: ${error.type}/${error.code}`,
+      )
+      await ctx.reply(userMessage)
+    } else {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error), userId },
+        'Unexpected error generating response',
+      )
+      await ctx.reply('An unexpected error occurred. Please try again later.')
+    }
   }
 }
 
