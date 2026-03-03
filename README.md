@@ -31,13 +31,13 @@ bun run start
 
 ## Environment Variables
 
-| Variable | Description | Where to get it |
-|---|---|---|
-| `TELEGRAM_BOT_TOKEN` | Telegram bot API token | [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_USER_ID` | Your personal Telegram user ID | [@userinfobot](https://t.me/userinfobot) |
-| `LINEAR_API_KEY` | Linear personal API key | Linear Settings → API → Personal API keys |
-| `LINEAR_TEAM_ID` | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL |
-| `OPENAI_API_KEY` | OpenAI API key | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Variable             | Description                        | Where to get it                                                      |
+| -------------------- | ---------------------------------- | -------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot API token             | [@BotFather](https://t.me/BotFather)                                 |
+| `TELEGRAM_USER_ID`   | Your personal Telegram user ID     | [@userinfobot](https://t.me/userinfobot)                             |
+| `LINEAR_API_KEY`     | Linear personal API key            | Linear Settings → API → Personal API keys                            |
+| `LINEAR_TEAM_ID`     | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL             |
+| `OPENAI_API_KEY`     | OpenAI API key                     | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 
 ## Usage
 
@@ -61,12 +61,12 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-
                                               └─→ response back to Telegram
 ```
 
-| File | Role |
-|---|---|
-| `src/index.ts` | Entry point; validates env vars, starts the bot |
-| `src/bot.ts` | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
-| `src/tools.ts` | Zod-validated tool definitions exposed to the LLM |
-| `src/linear.ts` | Linear SDK wrapper functions called by the tools |
+| File            | Role                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `src/index.ts`  | Entry point; validates env vars, starts the bot                                        |
+| `src/bot.ts`    | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
+| `src/tools.ts`  | Zod-validated tool definitions exposed to the LLM                                      |
+| `src/linear.ts` | Linear SDK wrapper functions called by the tools                                       |
 
 ## Tech Stack
 

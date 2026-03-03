@@ -1,11 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import {
-  createIssue,
-  updateIssue,
-  searchIssues,
-  listProjects,
-} from "./linear.js";
+import { createIssue, updateIssue, searchIssues, listProjects } from "./linear.js";
 
 export const tools = {
   create_issue: tool({
@@ -13,23 +8,15 @@ export const tools = {
       "Create a new issue in Linear. Use this when the user wants to add a task or bug report.",
     inputSchema: z.object({
       title: z.string().describe("Short, descriptive issue title"),
-      description: z
-        .string()
-        .optional()
-        .describe("Detailed description of the issue"),
+      description: z.string().optional().describe("Detailed description of the issue"),
       priority: z
         .number()
         .int()
         .min(0)
         .max(4)
         .optional()
-        .describe(
-          "Priority level: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low",
-        ),
-      projectId: z
-        .string()
-        .optional()
-        .describe("Linear project ID to associate the issue with"),
+        .describe("Priority level: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low"),
+      projectId: z.string().optional().describe("Linear project ID to associate the issue with"),
     }),
     execute: async ({ title, description, priority, projectId }) => {
       const teamId = process.env.LINEAR_TEAM_ID!;
@@ -58,13 +45,8 @@ export const tools = {
       status: z
         .string()
         .optional()
-        .describe(
-          "New workflow state name (e.g. 'In Progress', 'Done', 'Todo')",
-        ),
-      assigneeId: z
-        .string()
-        .optional()
-        .describe("Linear user ID to assign the issue to"),
+        .describe("New workflow state name (e.g. 'In Progress', 'Done', 'Todo')"),
+      assigneeId: z.string().optional().describe("Linear user ID to assign the issue to"),
     }),
     execute: async ({ issueId, status, assigneeId }) => {
       const issue = await updateIssue({ issueId, status, assigneeId });
@@ -86,9 +68,7 @@ export const tools = {
       state: z
         .string()
         .optional()
-        .describe(
-          "Filter by workflow state name (e.g. 'In Progress', 'Todo', 'Done')",
-        ),
+        .describe("Filter by workflow state name (e.g. 'In Progress', 'Todo', 'Done')"),
     }),
     execute: async ({ query, state }) => {
       const issues = await searchIssues({ query, state });

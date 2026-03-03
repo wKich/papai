@@ -60,9 +60,7 @@ bot.on("message:text", async (ctx) => {
     // Remove the user message that failed so the history stays consistent
     history.pop();
     console.error("Error generating response:", error);
-    await ctx.reply(
-      "Sorry, something went wrong. Please try again.",
-    );
+    await ctx.reply("Sorry, something went wrong. Please try again.");
   }
 });
 

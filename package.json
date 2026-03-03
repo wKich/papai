@@ -1,18 +1,16 @@
 {
   "name": "papai",
-  "description": "papai — an intelligent Telegram bot for managing Linear tasks with LLM.",
-  "module": "src/index.ts",
-  "type": "module",
   "private": true,
+  "description": "papai — an intelligent Telegram bot for managing Linear tasks with LLM.",
+  "type": "module",
+  "module": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
     "lint": "oxlint .",
-    "format": "oxfmt --write ."
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "oxlint": "latest",
-    "typescript": "latest"
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "prepare": "cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.39",
@@ -20,5 +18,11 @@
     "ai": "^6.0.108",
     "grammy": "^1.41.1",
     "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.36.0",
+    "oxlint": "latest",
+    "typescript": "latest"
   }
 }

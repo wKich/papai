@@ -41,9 +41,7 @@ export async function updateIssue({
     const team = await issue.team;
     if (team) {
       const states = await team.states();
-      const state = states.nodes.find(
-        (s) => s.name.toLowerCase() === status.toLowerCase(),
-      );
+      const state = states.nodes.find((s) => s.name.toLowerCase() === status.toLowerCase());
       if (state) {
         updateInput.stateId = state.id;
       }
@@ -58,13 +56,7 @@ export async function updateIssue({
   return payload.issue;
 }
 
-export async function searchIssues({
-  query,
-  state,
-}: {
-  query: string;
-  state?: string;
-}) {
+export async function searchIssues({ query, state }: { query: string; state?: string }) {
   const result = await client.issueSearch({ query, includeArchived: false });
   const issues = result.nodes;
 
@@ -72,9 +64,7 @@ export async function searchIssues({
     const filtered = await Promise.all(
       issues.map(async (issue) => {
         const issueState = await issue.state;
-        return issueState?.name.toLowerCase() === state.toLowerCase()
-          ? issue
-          : null;
+        return issueState?.name.toLowerCase() === state.toLowerCase() ? issue : null;
       }),
     );
     return filtered.filter(Boolean).map((issue) => ({
