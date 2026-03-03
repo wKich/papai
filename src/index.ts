@@ -1,4 +1,5 @@
 import { bot } from './bot.js'
+import { logger } from './logger.js'
 
 const REQUIRED_ENV_VARS = [
   'TELEGRAM_BOT_TOKEN',
@@ -10,14 +11,14 @@ const REQUIRED_ENV_VARS = [
 
 const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
 if (missing.length > 0) {
-  console.error(`Missing required environment variables: ${missing.join(', ')}`)
+  logger.error({ variables: missing }, 'Missing required environment variables')
   process.exit(1)
 }
 
-console.log('Starting papai...')
+logger.info('Starting papai...')
 
 void bot.start({
   onStart: () => {
-    console.log('papai is running and listening for messages.')
+    logger.info('papai is running and listening for messages.')
   },
 })

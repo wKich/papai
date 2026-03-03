@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 
 import { createIssue, updateIssue, searchIssues, listProjects } from './linear.js'
+import { logger } from './logger.js'
 
 export const tools = {
   create_issue: tool({
@@ -28,6 +29,11 @@ export const tools = {
         teamId,
       })
       const resolved = issue
+      if (!resolved) {
+        logger.warn({ title, teamId }, 'createIssue returned no issue')
+      } else if (!resolved.id || !resolved.identifier) {
+        logger.warn({ issue: resolved }, 'createIssue returned incomplete issue data')
+      }
       return {
         id: resolved?.id,
         identifier: resolved?.identifier,
@@ -48,6 +54,11 @@ export const tools = {
     execute: async ({ issueId, status, assigneeId }) => {
       const issue = await updateIssue({ issueId, status, assigneeId })
       const resolved = issue
+      if (!resolved) {
+        logger.warn({ issueId, status, assigneeId }, 'updateIssue returned no issue')
+      } else if (!resolved.id || !resolved.identifier) {
+        logger.warn({ issue: resolved }, 'updateIssue returned incomplete issue data')
+      }
       return {
         id: resolved?.id,
         identifier: resolved?.identifier,

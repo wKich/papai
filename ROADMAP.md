@@ -2,7 +2,7 @@
 
 ## Phase 1: Code Quality & Reliability
 
-- [ ] Structured logging — replace `console.error`/`console.log` with a leveled logger
+- [x] Structured logging — replace `console.error`/`console.log` with a leveled logger
 - [ ] Granular error messages — surface specific failure reasons to the user instead of generic "something went wrong"
 - [ ] Linear API response validation — add null checks and handle missing fields from API responses
 - [ ] Workflow state resolution error handling — report when a status name doesn't match any team workflow state
