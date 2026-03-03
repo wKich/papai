@@ -4,18 +4,21 @@
 
 - [x] Structured logging — replace `console.error`/`console.log` with a leveled logger
 - [x] Granular error messages — surface specific failure reasons to the user instead of generic "something went wrong"
-- [ ] Linear API response validation — add null checks and handle missing fields from API responses
-- [ ] Workflow state resolution error handling — report when a status name doesn't match any team workflow state
+- [x] Workflow state resolution error handling — warn when a status name doesn't match any team workflow state
+- [ ] Linear API response validation — add Zod schemas and handle missing/unexpected fields from API responses
 - [ ] Configurable limits — expose history cap (currently 40) and max tool steps (currently 5) via env vars
 
 ## Phase 2: Enhanced Tool Capabilities
 
+- [x] Add comments to issues
+- [x] Set due dates on issues
+- [x] View issue details — full description and comments
+- [x] Label management — list, create, and apply labels to issues
+- [x] Issue relations — create and view blocks/duplicate/related relations
+- [x] Create projects
+- [ ] Remove labels from issues
 - [ ] Delete / archive issues
-- [ ] Add and remove labels
-- [ ] Add comments to issues
-- [ ] Set due dates
 - [ ] Assign issues to a cycle / iteration
-- [ ] View issue details — full description, comments, and activity history
 
 ## Phase 3: Persistence & Context
 
@@ -25,9 +28,9 @@
 
 ## Phase 4: Developer Experience
 
+- [x] CI pipeline — format + lint + type-check on push and pull_request to master
 - [ ] Unit tests for Linear wrapper functions
 - [ ] Integration test scaffolding
-- [ ] CI pipeline — lint + type-check on push
 
 ## Phase 5: Advanced Features
 
