@@ -1,13 +1,7 @@
 import { bot } from './bot.js'
 import { logger } from './logger.js'
 
-const REQUIRED_ENV_VARS = [
-  'TELEGRAM_BOT_TOKEN',
-  'TELEGRAM_USER_ID',
-  'LINEAR_API_KEY',
-  'LINEAR_TEAM_ID',
-  'OPENAI_API_KEY',
-]
+const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID']
 
 const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
 if (missing.length > 0) {

@@ -20,7 +20,7 @@
     "typescript/no-wrapper-object-types": "error",
     "typescript/non-nullable-type-assertion-style": "error",
     "typescript/prefer-literal-enum-member": "error",
-    "typescript/promise-function-async": "error",
+    "typescript/promise-function-async": "off",
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "no-param-reassign": "error"
   }

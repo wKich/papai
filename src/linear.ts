@@ -2,17 +2,17 @@ import { type Issue, type LinearFetch, LinearClient } from '@linear/sdk'
 
 import { logger } from './logger.js'
 
-const client = new LinearClient({ apiKey: process.env['LINEAR_API_KEY']! })
-
 type IssueResult = { id: string; identifier: string; title: string; priority: number; url: string }
 
 export async function createIssue({
+  apiKey,
   title,
   description,
   priority,
   projectId,
   teamId,
 }: {
+  apiKey: string
   title: string
   description?: string
   priority?: number
@@ -23,6 +23,7 @@ export async function createIssue({
     { title, hasDescription: description !== undefined, priority, hasProjectId: projectId !== undefined, teamId },
     'createIssue called',
   )
+  const client = new LinearClient({ apiKey })
   const payload = await client.createIssue({
     title,
     description,
@@ -38,10 +39,12 @@ export async function createIssue({
 }
 
 export async function updateIssue({
+  apiKey,
   issueId,
   status,
   assigneeId,
 }: {
+  apiKey: string
   issueId: string
   status?: string
   assigneeId?: string
@@ -50,6 +53,7 @@ export async function updateIssue({
     { issueId, hasStatus: status !== undefined, hasAssigneeId: assigneeId !== undefined },
     'updateIssue called',
   )
+  const client = new LinearClient({ apiKey })
   const updateInput: { stateId?: string; assigneeId?: string } = {}
 
   if (status !== undefined) {
@@ -85,8 +89,17 @@ export async function updateIssue({
   return payload.issue
 }
 
-export async function searchIssues({ query, state }: { query: string; state?: string }): Promise<IssueResult[]> {
+export async function searchIssues({
+  apiKey,
+  query,
+  state,
+}: {
+  apiKey: string
+  query: string
+  state?: string
+}): Promise<IssueResult[]> {
   logger.debug({ query, state, includeArchived: false }, 'searchIssues called')
+  const client = new LinearClient({ apiKey })
   const result = await client.issueSearch({ query, includeArchived: false })
   const issues = result.nodes
   logger.debug({ query, rawResultCount: issues.length }, 'Linear search completed')
@@ -124,10 +137,13 @@ export async function searchIssues({ query, state }: { query: string; state?: st
   return mappedIssues
 }
 
-export async function listProjects(): Promise<
-  { teamId: string; teamName: string; projects: { id: string; name: string }[] }[]
-> {
+export async function listProjects({
+  apiKey,
+}: {
+  apiKey: string
+}): Promise<{ teamId: string; teamName: string; projects: { id: string; name: string }[] }[]> {
   logger.debug('listProjects called')
+  const client = new LinearClient({ apiKey })
   const teams = await client.teams()
   const result = await Promise.all(
     teams.nodes.map(async (team) => {
