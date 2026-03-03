@@ -27,9 +27,8 @@ The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-4o)
                                               │
-                                              ├─ tools (tools.ts) ─→ Linear SDK (linear.ts)
-                                              │   create_issue, update_issue,
-                                              │   search_issues, list_projects
+                                              ├─ tools/ ─→ linear/ ─→ Linear SDK
+                                              │   13 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
@@ -37,9 +36,28 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-
 - **`src/index.ts`** — entry point; validates env vars, starts the bot.
 - **`src/bot.ts`** — Grammy bot setup, per-user conversation history (capped at 40 messages), LLM orchestration with up to 5 tool-calling steps. Only processes messages from the authorized `TELEGRAM_USER_ID`.
 - **`src/config.ts`** — SQLite-backed runtime config store; exposes `getConfig`, `setConfig`, `getAllConfig`; handles `/set` and `/config` bot commands.
-- **`src/tools.ts`** — Zod-validated tool definitions exposed to the LLM.
-- **`src/linear.ts`** — Linear SDK wrapper functions called by the tools.
+- **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
+- **`src/tools/`** — One file per tool. `index.ts` assembles all 13 into `makeTools`. Each tool imports its corresponding linear function.
+- **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 13. `classify-error.ts` contains the shared error classifier.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
+
+### Available tools
+
+| Tool               | Description                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| `create_issue`     | Create a new issue (supports title, description, priority, project, due date, labels, estimate) |
+| `update_issue`     | Update status, assignee, due date, labels, or estimate on an existing issue                     |
+| `search_issues`    | Search issues by keyword, optionally filtered by state                                          |
+| `list_projects`    | List all teams and their projects                                                               |
+| `get_issue`        | Fetch full details of a single issue                                                            |
+| `add_comment`      | Add a Markdown comment to an issue                                                              |
+| `get_comments`     | Read all comments on an issue                                                                   |
+| `list_labels`      | List all available labels in the team                                                           |
+| `get_issue_labels` | List labels currently applied to an issue                                                       |
+| `create_label`     | Create a new label with optional hex color                                                      |
+| `create_relation`  | Create a blocks/duplicate/related relation between two issues                                   |
+| `get_relations`    | List all relations on an issue                                                                  |
+| `create_project`   | Create a new project in the team                                                                |
 
 ## Logging Requirements (HIGH PRIORITY)
 
@@ -101,8 +119,8 @@ Use for:
 
 Every file must import and use the logger. Required log points:
 
-- All function entries in `linear.ts`
-- All tool executions in `tools.ts`
+- All function entries in `src/linear/`
+- All tool executions in `src/tools/`
 - Message lifecycle in `bot.ts` (receive, process, respond)
 - Authorization checks
 - Error catch blocks
