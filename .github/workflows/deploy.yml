@@ -65,6 +65,8 @@ jobs:
     needs: build-and-push
     environment: production
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy via SSH
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
@@ -82,9 +84,10 @@ jobs:
           trap 'rm -f ~/.ssh/id_rsa' EXIT
           printf '%s\n' "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" mkdir -p "~/${GITHUB_REPOSITORY##*/}"
+          scp -i ~/.ssh/id_rsa -P "$SSH_PORT" docker-compose.yml "$SSH_USER@$SSH_HOST:~/${GITHUB_REPOSITORY##*/}/docker-compose.yml"
           ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash << EOF
           set -e
-          mkdir -p ~/${GITHUB_REPOSITORY##*/}
           cd ~/${GITHUB_REPOSITORY##*/}
           printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_USER_ID=%s\n' "${TELEGRAM_BOT_TOKEN}" "${TELEGRAM_USER_ID}" > .env
           chmod 600 .env
