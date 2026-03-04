@@ -69,28 +69,24 @@ const trimHistory = (history: readonly ModelMessage[], userId: number): readonly
   return history
 }
 
-const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
-
-const buildOpenAI = (apiKey: string, baseURL: string | null): ReturnType<typeof createOpenAICompatible> =>
-  createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL: baseURL ?? OPENAI_DEFAULT_BASE_URL })
+const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
+  createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
-  const openaiKey = getConfig('openai_key')
-  const linearKey = getConfig('linear_key')
-  const linearTeamId = getConfig('linear_team_id')
-
-  if (openaiKey === null || linearKey === null || linearTeamId === null) {
-    const requiredKeys = ['openai_key', 'linear_key', 'linear_team_id'] as const
-    const missing = requiredKeys.filter((k) => getConfig(k) === null)
+  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
+  const missing = requiredKeys.filter((k) => getConfig(k) === null)
+  if (missing.length > 0) {
     logger.warn({ userId, missing }, 'Missing required config keys')
-    await ctx.reply(
-      `Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure. Keys: openai_key, linear_key, linear_team_id.`,
-    )
+    await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     return
   }
 
-  const openaiModel = getConfig('openai_model') ?? 'gpt-4o'
-  const model = buildOpenAI(openaiKey, getConfig('openai_base_url'))(openaiModel)
+  const openaiKey = getConfig('openai_key')!
+  const openaiBaseUrl = getConfig('openai_base_url')!
+  const openaiModel = getConfig('openai_model')!
+  const linearKey = getConfig('linear_key')!
+  const linearTeamId = getConfig('linear_team_id')!
+  const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
   logger.debug({ userId, historyLength: history.length }, 'Calling generateText')
