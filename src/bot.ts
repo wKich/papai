@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai'
+import { APICallError } from '@ai-sdk/provider'
 import { generateText, stepCountIs } from 'ai'
 import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
@@ -130,9 +131,25 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
         `Handled error: ${error.type}/${error.code}`,
       )
       await ctx.reply(userMessage)
+    } else if (APICallError.isInstance(error)) {
+      logger.error(
+        {
+          url: error.url,
+          statusCode: error.statusCode,
+          responseBody: error.responseBody,
+          error: error.message,
+          userId,
+        },
+        'LLM API call failed',
+      )
+      await ctx.reply('An unexpected error occurred. Please try again later.')
     } else {
       logger.error(
-        { error: error instanceof Error ? error.message : String(error), userId },
+        {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          userId,
+        },
         'Unexpected error generating response',
       )
       await ctx.reply('An unexpected error occurred. Please try again later.')
