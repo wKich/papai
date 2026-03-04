@@ -14,7 +14,8 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
 
-const db = new Database('papai.db')
+const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const db = new Database(DB_PATH)
 db.run('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
 
 export function setConfig(key: ConfigKey, value: string): void {
