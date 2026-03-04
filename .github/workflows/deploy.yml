@@ -80,13 +80,15 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           trap 'rm -f ~/.ssh/id_rsa' EXIT
-          echo "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "
             set -e
             mkdir -p ~/${GITHUB_REPOSITORY##*/}
             cd ~/${GITHUB_REPOSITORY##*/}
-            printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_USER_ID=%s\n' '$TELEGRAM_BOT_TOKEN' '$TELEGRAM_USER_ID' > .env
-            IMAGE='$IMAGE' docker compose pull
-            IMAGE='$IMAGE' docker compose up -d --remove-orphans
+            printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_USER_ID=%s\n' \"$TELEGRAM_BOT_TOKEN\" \"$TELEGRAM_USER_ID\" > .env
+            chmod 600 .env
+            IMAGE=\"$IMAGE\" docker compose pull
+            IMAGE=\"$IMAGE\" docker compose up -d --remove-orphans
             docker image prune -f
           "
