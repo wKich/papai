@@ -1,6 +1,7 @@
 import type { ToolSet } from 'ai'
 
 import { makeAddCommentTool } from './add-comment.js'
+import { makeArchiveIssueTool } from './archive-issue.js'
 import { makeCreateIssueTool } from './create-issue.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
@@ -33,5 +34,6 @@ export function makeTools({ linearKey, linearTeamId }: ToolConfig): ToolSet {
     create_label: makeCreateLabelTool(linearKey, linearTeamId),
     create_project: makeCreateProjectTool(linearKey, linearTeamId),
     remove_issue_label: makeRemoveIssueLabelTool(linearKey),
+    archive_issue: makeArchiveIssueTool(linearKey),
   }
 }
