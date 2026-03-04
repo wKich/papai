@@ -64,15 +64,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: production
-    env:
-      SSH_USER: ${{ secrets.SSH_USER }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
     steps:
       - name: Deploy via SSH
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           IMAGE: ${{ env.REGISTRY }}/${{ needs.build-and-push.outputs.image_name }}@${{ needs.build-and-push.outputs.digest }}
