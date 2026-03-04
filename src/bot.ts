@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { APICallError } from '@ai-sdk/provider'
 import { generateText, stepCountIs } from 'ai'
 import { type ModelMessage } from 'ai'
@@ -69,10 +69,10 @@ const trimHistory = (history: readonly ModelMessage[], userId: number): readonly
   return history
 }
 
-const buildOpenAI = (apiKey: string, baseURL: string | null): ReturnType<typeof createOpenAI> => {
-  const opts = baseURL === null ? { apiKey } : { apiKey, baseURL }
-  return createOpenAI(opts)
-}
+const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+
+const buildOpenAI = (apiKey: string, baseURL: string | null): ReturnType<typeof createOpenAICompatible> =>
+  createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL: baseURL ?? OPENAI_DEFAULT_BASE_URL })
 
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
   const openaiKey = getConfig('openai_key')
@@ -90,7 +90,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   }
 
   const openaiModel = getConfig('openai_model') ?? 'gpt-4o'
-  const model = buildOpenAI(openaiKey, getConfig('openai_base_url')).chat(openaiModel)
+  const model = buildOpenAI(openaiKey, getConfig('openai_base_url'))(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
   logger.debug({ userId, historyLength: history.length }, 'Calling generateText')
