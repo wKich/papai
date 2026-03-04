@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { listProjects } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:list-projects' })
+
 export function makeListProjectsTool(linearKey: string): ToolSet[string] {
   return tool({
     description:
@@ -14,7 +16,7 @@ export function makeListProjectsTool(linearKey: string): ToolSet[string] {
       try {
         return listProjects({ apiKey: linearKey })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'list_projects' },
           'Tool execution failed',
         )

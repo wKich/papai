@@ -5,6 +5,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:remove-issue-label' })
+
 export async function removeIssueLabel({
   apiKey,
   issueId,
@@ -14,7 +16,7 @@ export async function removeIssueLabel({
   issueId: string
   labelId: string
 }): Promise<{ id: string; identifier: string; title: string; url: string } | undefined> {
-  logger.debug({ issueId, labelId }, 'removeIssueLabel called')
+  log.debug({ issueId, labelId }, 'removeIssueLabel called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -24,10 +26,10 @@ export async function removeIssueLabel({
       context: { issueId, labelId },
       appError: linearError.issueNotFound(issueId),
     })
-    logger.info({ issueId, labelId, identifier: issue.identifier }, 'Label removed from issue')
+    log.info({ issueId, labelId, identifier: issue.identifier }, 'Label removed from issue')
     return { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url }
   } catch (error) {
-    logger.error(
+    log.error(
       { error: error instanceof Error ? error.message : String(error), issueId, labelId },
       'removeIssueLabel failed',
     )

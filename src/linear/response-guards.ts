@@ -2,6 +2,8 @@ import { type AppError } from '../errors.js'
 import { logger } from '../logger.js'
 import { LinearApiError } from './classify-error.js'
 
+const log = logger.child({ scope: 'linear:response-guards' })
+
 export const requireEntity = <T>(
   entity: T | null | undefined,
   {
@@ -27,7 +29,7 @@ export const filterPresentNodes = <T>(
   const validNodes: T[] = []
   for (const [nodeIndex, node] of nodes.entries()) {
     if (node === null || node === undefined) {
-      logger.warn({ entityName, parentId, nodeIndex }, 'Skipping malformed Linear API node')
+      log.warn({ entityName, parentId, nodeIndex }, 'Skipping malformed Linear API node')
       continue
     }
     validNodes.push(node)

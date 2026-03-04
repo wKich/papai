@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { archiveIssue } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:archive-issue' })
+
 export function makeArchiveIssueTool(linearKey: string): ToolSet[string] {
   return tool({
     description:
@@ -16,11 +18,11 @@ export function makeArchiveIssueTool(linearKey: string): ToolSet[string] {
       try {
         const result = await archiveIssue({ apiKey: linearKey, issueId })
         if (!result) {
-          logger.warn({ issueId }, 'archiveIssue returned no result')
+          log.warn({ issueId }, 'archiveIssue returned no result')
         }
         return result ?? { success: false, message: 'Failed to archive issue' }
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'archive_issue' },
           'Tool execution failed',
         )

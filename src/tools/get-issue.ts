@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { getIssue } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:get-issue' })
+
 export function makeGetIssueTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'Fetch full details of a single Linear issue.',
@@ -13,7 +15,7 @@ export function makeGetIssueTool(linearKey: string): ToolSet[string] {
       try {
         return await getIssue({ apiKey: linearKey, issueId })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'get_issue' },
           'Tool execution failed',
         )

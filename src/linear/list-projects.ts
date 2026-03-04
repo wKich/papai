@@ -4,12 +4,14 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { filterPresentNodes } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:list-projects' })
+
 export async function listProjects({
   apiKey,
 }: {
   apiKey: string
 }): Promise<{ teamId: string; teamName: string; projects: { id: string; name: string }[] }[]> {
-  logger.debug('listProjects called')
+  log.debug('listProjects called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -17,14 +19,14 @@ export async function listProjects({
     const result = await Promise.all(
       filterPresentNodes(teams.nodes, { entityName: 'team', parentId: 'teams' }).map(async (team) => {
         if (typeof team.id !== 'string' || typeof team.name !== 'string') {
-          logger.warn({ teamId: team.id }, 'Skipping team with invalid response shape')
+          log.warn({ teamId: team.id }, 'Skipping team with invalid response shape')
           return undefined
         }
         const projects = await team.projects()
         const validProjects = filterPresentNodes(projects.nodes, { entityName: 'project', parentId: team.id }).flatMap(
           (p) => {
             if (typeof p.id !== 'string' || typeof p.name !== 'string') {
-              logger.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
+              log.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
               return []
             }
             return [{ id: p.id, name: p.name }]
@@ -38,13 +40,13 @@ export async function listProjects({
       }),
     )
     const mappedResult = result.flatMap((team) => (team ? [team] : []))
-    logger.info(
+    log.info(
       { teamCount: mappedResult.length, totalProjects: mappedResult.reduce((sum, t) => sum + t.projects.length, 0) },
       'Projects listed',
     )
     return mappedResult
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error) }, 'listProjects failed')
+    log.error({ error: error instanceof Error ? error.message : String(error) }, 'listProjects failed')
     throw classifyLinearError(error)
   }
 }

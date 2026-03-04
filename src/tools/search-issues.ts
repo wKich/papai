@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { searchIssues } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:search-issues' })
+
 export function makeSearchIssuesTool(linearKey: string): ToolSet[string] {
   return tool({
     description:
@@ -17,7 +19,7 @@ export function makeSearchIssuesTool(linearKey: string): ToolSet[string] {
       try {
         return searchIssues({ apiKey: linearKey, query, state })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), query, tool: 'search_issues' },
           'Tool execution failed',
         )

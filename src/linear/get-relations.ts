@@ -5,6 +5,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { filterPresentNodes, requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:get-relations' })
+
 export async function getRelations({
   apiKey,
   issueId,
@@ -12,7 +14,7 @@ export async function getRelations({
   apiKey: string
   issueId: string
 }): Promise<{ id: string; type: string; relatedIssueId: string | undefined; relatedIdentifier: string | undefined }[]> {
-  logger.debug({ issueId }, 'getRelations called')
+  log.debug({ issueId }, 'getRelations called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -25,7 +27,7 @@ export async function getRelations({
     const result = await Promise.all(
       filterPresentNodes(relations.nodes, { entityName: 'relation', parentId: issueId }).map(async (r) => {
         if (typeof r.id !== 'string' || typeof r.type !== 'string') {
-          logger.warn({ issueId, relationId: r.id }, 'Skipping relation with invalid response shape')
+          log.warn({ issueId, relationId: r.id }, 'Skipping relation with invalid response shape')
           return undefined
         }
         const relatedIssue = await r.relatedIssue
@@ -33,10 +35,10 @@ export async function getRelations({
       }),
     )
     const mappedRelations = result.flatMap((relation) => (relation ? [relation] : []))
-    logger.info({ issueId, relationCount: mappedRelations.length }, 'Relations fetched')
+    log.info({ issueId, relationCount: mappedRelations.length }, 'Relations fetched')
     return mappedRelations
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getRelations failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getRelations failed')
     throw classifyLinearError(error)
   }
 }

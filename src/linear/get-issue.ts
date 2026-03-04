@@ -6,6 +6,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:get-issue' })
+
 export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: string }): Promise<{
   id: string
   identifier: string
@@ -18,7 +20,7 @@ export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: s
   state: string | undefined
   assignee: string | undefined
 }> {
-  logger.debug({ issueId }, 'getIssue called')
+  log.debug({ issueId }, 'getIssue called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -42,10 +44,10 @@ export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: s
       state: state?.name,
       assignee: assignee?.displayName,
     }
-    logger.info({ issueId, identifier: issue.identifier }, 'Issue fetched')
+    log.info({ issueId, identifier: issue.identifier }, 'Issue fetched')
     return result
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssue failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssue failed')
     throw classifyLinearError(error)
   }
 }

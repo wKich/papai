@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { listLabels } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:list-labels' })
+
 export function makeListLabelsTool(linearKey: string, linearTeamId: string): ToolSet[string] {
   return tool({
     description: 'List all available labels in the team. Use this to get label IDs before applying labels.',
@@ -13,7 +15,7 @@ export function makeListLabelsTool(linearKey: string, linearTeamId: string): Too
       try {
         return await listLabels({ apiKey: linearKey, teamId: linearTeamId })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'list_labels' },
           'Tool execution failed',
         )

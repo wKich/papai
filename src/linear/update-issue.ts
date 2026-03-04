@@ -5,6 +5,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { filterPresentNodes, requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:update-issue' })
+
 type UpdateInput = { stateId?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
 type UpdateParams = { status?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
 
@@ -27,7 +29,7 @@ const resolveWorkflowState = async (
   const validStates = filterPresentNodes(states.nodes, { entityName: 'workflow-state', parentId: issueId }).flatMap(
     (s) => {
       if (typeof s.id !== 'string' || typeof s.name !== 'string') {
-        logger.warn(
+        log.warn(
           { issueId, requestedStatus: status, stateId: s.id },
           'Skipping workflow state with invalid response shape',
         )
@@ -37,14 +39,14 @@ const resolveWorkflowState = async (
     },
   )
   const state = validStates.find((s) => s.name.toLowerCase() === status.toLowerCase())
-  logger.debug(
+  log.debug(
     { requestedStatus: status, foundState: state?.name, availableStates: validStates.map((s) => s.name) },
     'Resolving workflow state',
   )
   if (state) {
     return state.id
   }
-  logger.warn(
+  log.warn(
     { issueId, requestedStatus: status, availableStates: validStates.map((s) => s.name) },
     'Workflow state not found',
   )
@@ -91,7 +93,7 @@ export async function updateIssue({
   labelIds?: string[]
   estimate?: number
 }): Promise<LinearFetch<Issue> | undefined> {
-  logger.debug({ issueId, status, assigneeId }, 'updateIssue called')
+  log.debug({ issueId, status, assigneeId }, 'updateIssue called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -99,11 +101,11 @@ export async function updateIssue({
     const payload = await client.updateIssue(issueId, updateInput)
     const issue = await payload.issue
     if (issue) {
-      logger.info({ issueId, identifier: issue.identifier, updatedFields: Object.keys(updateInput) }, 'Issue updated')
+      log.info({ issueId, identifier: issue.identifier, updatedFields: Object.keys(updateInput) }, 'Issue updated')
     }
     return await payload.issue
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'updateIssue failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'updateIssue failed')
     throw classifyLinearError(error)
   }
 }

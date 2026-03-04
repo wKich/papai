@@ -1,12 +1,14 @@
-import { type Issue, LinearClient } from '@linear/sdk'
+import { type IssueSearchResult, LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { filterPresentNodes } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:search-issues' })
+
 type IssueResult = { id: string; identifier: string; title: string; priority: number; url: string }
 
-const toIssueResult = (issue: Issue): IssueResult => ({
+const toIssueResult = (issue: IssueSearchResult): IssueResult => ({
   id: issue.id,
   identifier: issue.identifier,
   title: issue.title,
@@ -14,19 +16,23 @@ const toIssueResult = (issue: Issue): IssueResult => ({
   url: issue.url,
 })
 
-const filterIssuesByState = async (issues: Issue[], state: string, query: string): Promise<IssueResult[]> => {
+const filterIssuesByState = async (
+  issues: IssueSearchResult[],
+  state: string,
+  query: string,
+): Promise<IssueResult[]> => {
   const filtered = await Promise.all(
     issues.map(async (issue) => {
       const issueState = await issue.state
       if (!issueState) {
-        logger.warn({ issueId: issue.id, issueIdentifier: issue.identifier }, 'Issue has no state while filtering')
+        log.warn({ issueId: issue.id, issueIdentifier: issue.identifier }, 'Issue has no state while filtering')
         return undefined
       }
       return issueState.name.toLowerCase() === state.toLowerCase() ? issue : undefined
     }),
   )
-  const filteredIssues = filtered.filter((issue): issue is Issue => issue !== undefined).map(toIssueResult)
-  logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
+  const filteredIssues = filtered.filter((issue): issue is IssueSearchResult => issue !== undefined).map(toIssueResult)
+  log.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
   return filteredIssues
 }
 
@@ -39,11 +45,11 @@ export async function searchIssues({
   query: string
   state?: string
 }): Promise<IssueResult[]> {
-  logger.debug({ query, state, includeArchived: false }, 'searchIssues called')
+  log.debug({ query, state, includeArchived: false }, 'searchIssues called')
 
   try {
     const client = new LinearClient({ apiKey })
-    const result = await client.issueSearch({ query, includeArchived: false })
+    const result = await client.searchIssues(query, { includeArchived: false })
     const rawResultCount = result.nodes.length
     const issues = filterPresentNodes(result.nodes, { entityName: 'issue', parentId: query }).flatMap((issue) => {
       if (
@@ -53,22 +59,22 @@ export async function searchIssues({
         typeof issue.priority !== 'number' ||
         typeof issue.url !== 'string'
       ) {
-        logger.warn({ query, issueId: issue.id }, 'Skipping issue with invalid response shape')
+        log.warn({ query, issueId: issue.id }, 'Skipping issue with invalid response shape')
         return []
       }
       return [issue]
     })
-    logger.debug({ query, rawResultCount, validResultCount: issues.length }, 'Linear search completed')
+    log.debug({ query, rawResultCount, validResultCount: issues.length }, 'Linear search completed')
 
     if (state !== undefined) {
       return await filterIssuesByState(issues, state, query)
     }
 
     const mappedIssues = issues.map(toIssueResult)
-    logger.info({ query, resultCount: mappedIssues.length }, 'Issues searched')
+    log.info({ query, resultCount: mappedIssues.length }, 'Issues searched')
     return mappedIssues
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), query, state }, 'searchIssues failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), query, state }, 'searchIssues failed')
     throw classifyLinearError(error)
   }
 }

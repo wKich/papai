@@ -5,6 +5,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:archive-issue' })
+
 export async function archiveIssue({
   apiKey,
   issueId,
@@ -12,7 +14,7 @@ export async function archiveIssue({
   apiKey: string
   issueId: string
 }): Promise<{ id: string; identifier: string; title: string; archivedAt: string } | undefined> {
-  logger.debug({ issueId }, 'archiveIssue called')
+  log.debug({ issueId }, 'archiveIssue called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -22,7 +24,7 @@ export async function archiveIssue({
       context: { issueId },
       appError: linearError.issueNotFound(issueId),
     })
-    logger.info({ issueId, identifier: issue.identifier, archivedAt: issue.archivedAt }, 'Issue archived')
+    log.info({ issueId, identifier: issue.identifier, archivedAt: issue.archivedAt }, 'Issue archived')
     return {
       id: issue.id,
       identifier: issue.identifier,
@@ -30,7 +32,7 @@ export async function archiveIssue({
       archivedAt: issue.archivedAt ? issue.archivedAt.toISOString() : new Date().toISOString(),
     }
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'archiveIssue failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'archiveIssue failed')
     throw classifyLinearError(error)
   }
 }

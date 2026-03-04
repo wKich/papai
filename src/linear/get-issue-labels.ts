@@ -5,6 +5,8 @@ import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 import { filterPresentNodes, requireEntity } from './response-guards.js'
 
+const log = logger.child({ scope: 'linear:get-issue-labels' })
+
 export async function getIssueLabels({
   apiKey,
   issueId,
@@ -12,7 +14,7 @@ export async function getIssueLabels({
   apiKey: string
   issueId: string
 }): Promise<{ id: string; name: string; color: string }[]> {
-  logger.debug({ issueId }, 'getIssueLabels called')
+  log.debug({ issueId }, 'getIssueLabels called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -24,15 +26,15 @@ export async function getIssueLabels({
     const labels = await issue.labels()
     const result = filterPresentNodes(labels.nodes, { entityName: 'label', parentId: issueId }).flatMap((l) => {
       if (typeof l.id !== 'string' || typeof l.name !== 'string' || typeof l.color !== 'string') {
-        logger.warn({ issueId, labelId: l.id }, 'Skipping label with invalid response shape')
+        log.warn({ issueId, labelId: l.id }, 'Skipping label with invalid response shape')
         return []
       }
       return [{ id: l.id, name: l.name, color: l.color }]
     })
-    logger.info({ issueId, labelCount: result.length }, 'Issue labels fetched')
+    log.info({ issueId, labelCount: result.length }, 'Issue labels fetched')
     return result
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssueLabels failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssueLabels failed')
     throw classifyLinearError(error)
   }
 }

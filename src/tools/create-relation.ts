@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { createRelation } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:create-relation' })
+
 export function makeCreateRelationTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'Create a relation between two Linear issues.',
@@ -19,7 +21,7 @@ export function makeCreateRelationTool(linearKey: string): ToolSet[string] {
       try {
         return await createRelation({ apiKey: linearKey, issueId, relatedIssueId, type })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'create_relation' },
           'Tool execution failed',
         )

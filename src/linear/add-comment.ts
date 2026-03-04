@@ -3,6 +3,8 @@ import { LinearClient } from '@linear/sdk'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 
+const log = logger.child({ scope: 'linear:add-comment' })
+
 export async function addComment({
   apiKey,
   issueId,
@@ -12,7 +14,7 @@ export async function addComment({
   issueId: string
   body: string
 }): Promise<{ id: string; body: string; url: string }> {
-  logger.debug({ issueId, bodyLength: body.length }, 'addComment called')
+  log.debug({ issueId, bodyLength: body.length }, 'addComment called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -21,10 +23,10 @@ export async function addComment({
     if (!comment) {
       throw new Error('No comment returned')
     }
-    logger.info({ issueId, commentId: comment.id }, 'Comment added')
+    log.info({ issueId, commentId: comment.id }, 'Comment added')
     return { id: comment.id, body: comment.body, url: comment.url }
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'addComment failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'addComment failed')
     throw classifyLinearError(error)
   }
 }

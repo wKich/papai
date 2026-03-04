@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { createIssue } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:create-issue' })
+
 export function makeCreateIssueTool(linearKey: string, linearTeamId: string): ToolSet[string] {
   return tool({
     description: 'Create a new issue in Linear. Use this when the user wants to add a task or bug report.',
@@ -37,13 +39,13 @@ export function makeCreateIssueTool(linearKey: string, linearTeamId: string): To
           estimate,
         })
         if (!issue) {
-          logger.warn({ title, teamId: linearTeamId }, 'createIssue returned no issue')
+          log.warn({ title, teamId: linearTeamId }, 'createIssue returned no issue')
         } else if (!issue.id || !issue.identifier) {
-          logger.warn({ issue }, 'createIssue returned incomplete issue data')
+          log.warn({ issue }, 'createIssue returned incomplete issue data')
         }
         return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), title, tool: 'create_issue' },
           'Tool execution failed',
         )

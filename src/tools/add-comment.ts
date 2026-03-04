@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { addComment } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:add-comment' })
+
 export function makeAddCommentTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'Add a comment to a Linear issue.',
@@ -16,7 +18,7 @@ export function makeAddCommentTool(linearKey: string): ToolSet[string] {
       try {
         return await addComment({ apiKey: linearKey, issueId, body })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'add_comment' },
           'Tool execution failed',
         )

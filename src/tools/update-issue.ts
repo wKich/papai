@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { updateIssue } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:update-issue' })
+
 export function makeUpdateIssueTool(linearKey: string): ToolSet[string] {
   return tool({
     description:
@@ -21,13 +23,13 @@ export function makeUpdateIssueTool(linearKey: string): ToolSet[string] {
       try {
         const issue = await updateIssue({ apiKey: linearKey, issueId, status, assigneeId, dueDate, labelIds, estimate })
         if (!issue) {
-          logger.warn({ issueId, status, assigneeId }, 'updateIssue returned no issue')
+          log.warn({ issueId, status, assigneeId }, 'updateIssue returned no issue')
         } else if (!issue.id || !issue.identifier) {
-          logger.warn({ issue }, 'updateIssue returned incomplete issue data')
+          log.warn({ issue }, 'updateIssue returned incomplete issue data')
         }
         return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'update_issue' },
           'Tool execution failed',
         )

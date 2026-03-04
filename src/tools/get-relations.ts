@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { getRelations } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:get-relations' })
+
 export function makeGetRelationsTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'Get all relations on a Linear issue.',
@@ -13,7 +15,7 @@ export function makeGetRelationsTool(linearKey: string): ToolSet[string] {
       try {
         return await getRelations({ apiKey: linearKey, issueId })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'get_relations' },
           'Tool execution failed',
         )

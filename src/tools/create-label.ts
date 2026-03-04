@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { createLabel } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:create-label' })
+
 export function makeCreateLabelTool(linearKey: string, linearTeamId: string): ToolSet[string] {
   return tool({
     description: 'Create a new label in the team.',
@@ -16,7 +18,7 @@ export function makeCreateLabelTool(linearKey: string, linearTeamId: string): To
       try {
         return await createLabel({ apiKey: linearKey, teamId: linearTeamId, name, color })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), name, tool: 'create_label' },
           'Tool execution failed',
         )

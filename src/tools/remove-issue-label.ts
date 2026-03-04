@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { removeIssueLabel } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:remove-issue-label' })
+
 export function makeRemoveIssueLabelTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'Remove a label from a Linear issue. Use this when the user wants to remove a label from an issue.',
@@ -16,11 +18,11 @@ export function makeRemoveIssueLabelTool(linearKey: string): ToolSet[string] {
       try {
         const result = await removeIssueLabel({ apiKey: linearKey, issueId, labelId })
         if (!result) {
-          logger.warn({ issueId, labelId }, 'removeIssueLabel returned no result')
+          log.warn({ issueId, labelId }, 'removeIssueLabel returned no result')
         }
         return result ?? { success: false, message: 'Failed to remove label' }
       } catch (error) {
-        logger.error(
+        log.error(
           {
             error: error instanceof Error ? error.message : String(error),
             issueId,

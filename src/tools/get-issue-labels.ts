@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { getIssueLabels } from '../linear/index.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'tool:get-issue-labels' })
+
 export function makeGetIssueLabelsTool(linearKey: string): ToolSet[string] {
   return tool({
     description: 'List labels currently applied to a specific issue.',
@@ -13,7 +15,7 @@ export function makeGetIssueLabelsTool(linearKey: string): ToolSet[string] {
       try {
         return await getIssueLabels({ apiKey: linearKey, issueId })
       } catch (error) {
-        logger.error(
+        log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'get_issue_labels' },
           'Tool execution failed',
         )

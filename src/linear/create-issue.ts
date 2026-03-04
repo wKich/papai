@@ -3,6 +3,8 @@ import { type Issue, type LinearFetch, LinearClient } from '@linear/sdk'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 
+const log = logger.child({ scope: 'linear:create-issue' })
+
 export async function createIssue({
   apiKey,
   title,
@@ -24,7 +26,7 @@ export async function createIssue({
   labelIds?: string[]
   estimate?: number
 }): Promise<LinearFetch<Issue> | undefined> {
-  logger.debug({ title, teamId, priority, dueDate, estimate }, 'createIssue called')
+  log.debug({ title, teamId, priority, dueDate, estimate }, 'createIssue called')
 
   try {
     const client = new LinearClient({ apiKey })
@@ -40,11 +42,11 @@ export async function createIssue({
     })
     const issue = await payload.issue
     if (issue) {
-      logger.info({ issueId: issue.id, identifier: issue.identifier, title }, 'Issue created')
+      log.info({ issueId: issue.id, identifier: issue.identifier, title }, 'Issue created')
     }
     return await payload.issue
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : String(error), title, teamId }, 'createIssue failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), title, teamId }, 'createIssue failed')
     throw classifyLinearError(error)
   }
 }

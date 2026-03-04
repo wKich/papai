@@ -9,6 +9,8 @@ import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
 import { makeTools } from './tools/index.js'
 
+const log = logger.child({ scope: 'bot' })
+
 const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Linear tasks directly from Telegram.
 
 You can:
@@ -34,10 +36,10 @@ const allowedUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 const conversationHistory = new Map<number, readonly ModelMessage[]>()
 
 const checkAuthorization = (userId: number | undefined): userId is number => {
-  logger.debug({ userId, allowedUserId }, 'Checking authorization')
+  log.debug({ userId, allowedUserId }, 'Checking authorization')
   if (userId === undefined || userId !== allowedUserId) {
     if (userId !== undefined) {
-      logger.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
+      log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
     }
     return false
   }
@@ -45,25 +47,25 @@ const checkAuthorization = (userId: number | undefined): userId is number => {
 }
 
 const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
-  logger.debug({ userId }, 'getOrCreateHistory called')
+  log.debug({ userId }, 'getOrCreateHistory called')
   const existing = conversationHistory.has(userId)
-  logger.debug(
+  log.debug(
     { userId, exists: existing, currentSize: conversationHistory.get(userId)?.length },
     'Getting conversation history',
   )
   if (!existing) {
     conversationHistory.set(userId, [] as readonly ModelMessage[])
-    logger.info({ userId }, 'New conversation history initialized')
+    log.info({ userId }, 'New conversation history initialized')
   }
   return conversationHistory.get(userId)!
 }
 
 const trimHistory = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
-  logger.debug({ userId, historyLength: history.length }, 'trimHistory called')
+  log.debug({ userId, historyLength: history.length }, 'trimHistory called')
   if (history.length > 40) {
     const removedCount = history.length - 40
     const trimmed = history.slice(history.length - 40)
-    logger.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
+    log.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
     return trimmed
   }
   return history
@@ -76,7 +78,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
   const missing = requiredKeys.filter((k) => getConfig(k) === null)
   if (missing.length > 0) {
-    logger.warn({ userId, missing }, 'Missing required config keys')
+    log.warn({ userId, missing }, 'Missing required config keys')
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     return
   }
@@ -89,7 +91,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
-  logger.debug({ userId, historyLength: history.length }, 'Calling generateText')
+  log.debug({ userId, historyLength: history.length }, 'Calling generateText')
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
@@ -98,19 +100,19 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
     stopWhen: stepCountIs(5),
   })
 
-  logger.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+  log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   const assistantText = result.text
   conversationHistory.set(userId, [...history, ...result.response.messages])
   await ctx.reply(assistantText || 'Done.')
-  logger.info(
+  log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',
   )
 }
 
 const processMessage = async (ctx: Context, userId: number, userText: string): Promise<void> => {
-  logger.debug({ userId, userText }, 'processMessage called')
-  logger.info({ userId, messageLength: userText.length }, 'Message received from user')
+  log.debug({ userId, userText }, 'processMessage called')
+  log.info({ userId, messageLength: userText.length }, 'Message received from user')
 
   const history = trimHistory([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
   conversationHistory.set(userId, history)
@@ -122,13 +124,10 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
 
     if (isAppError(error)) {
       const userMessage = getUserMessage(error)
-      logger.warn(
-        { error: { type: error.type, code: error.code }, userId },
-        `Handled error: ${error.type}/${error.code}`,
-      )
+      log.warn({ error: { type: error.type, code: error.code }, userId }, `Handled error: ${error.type}/${error.code}`)
       await ctx.reply(userMessage)
     } else if (APICallError.isInstance(error)) {
-      logger.error(
+      log.error(
         {
           url: error.url,
           statusCode: error.statusCode,
@@ -140,7 +139,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
       )
       await ctx.reply('An unexpected error occurred. Please try again later.')
     } else {
-      logger.error(
+      log.error(
         {
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
@@ -175,7 +174,7 @@ bot.command('set', async (ctx) => {
   }
 
   setConfig(key, value)
-  logger.info({ userId, key }, '/set command executed')
+  log.info({ userId, key }, '/set command executed')
   await ctx.reply(`Set ${key} successfully.`)
 })
 
@@ -185,7 +184,7 @@ bot.command('config', async (ctx) => {
     return
   }
 
-  logger.debug({ userId }, '/config command called')
+  log.debug({ userId }, '/config command called')
   const config = getAllConfig()
   const lines = CONFIG_KEYS.map((key) => {
     const value = config[key]
@@ -194,7 +193,7 @@ bot.command('config', async (ctx) => {
     }
     return `${key}: ${maskValue(key, value)}`
   })
-  logger.info({ userId }, '/config command executed')
+  log.info({ userId }, '/config command executed')
   await ctx.reply(lines.join('\n'))
 })
 

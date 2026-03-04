@@ -3,6 +3,8 @@ import { IssueRelationType, LinearClient } from '@linear/sdk'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
 
+const log = logger.child({ scope: 'linear:create-relation' })
+
 export async function createRelation({
   apiKey,
   issueId,
@@ -14,7 +16,7 @@ export async function createRelation({
   relatedIssueId: string
   type: 'blocks' | 'duplicate' | 'related'
 }): Promise<{ id: string; type: string }> {
-  logger.debug({ issueId, relatedIssueId, type }, 'createRelation called')
+  log.debug({ issueId, relatedIssueId, type }, 'createRelation called')
 
   const typeMap: Record<'blocks' | 'duplicate' | 'related', IssueRelationType> = {
     blocks: IssueRelationType.Blocks,
@@ -29,10 +31,10 @@ export async function createRelation({
     if (!relation) {
       throw new Error('No relation returned')
     }
-    logger.info({ issueId, relatedIssueId, type, relationId: relation.id }, 'Relation created')
+    log.info({ issueId, relatedIssueId, type, relationId: relation.id }, 'Relation created')
     return { id: relation.id, type: relation.type }
   } catch (error) {
-    logger.error(
+    log.error(
       { error: error instanceof Error ? error.message : String(error), issueId, relatedIssueId },
       'createRelation failed',
     )
