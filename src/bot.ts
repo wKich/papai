@@ -9,8 +9,7 @@ import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
 import { makeTools } from './tools/index.js'
 
-const SYSTEM_PROMPT = `You are papai, an expert project manager and personal productivity assistant. \
-You help the user manage their Linear tasks directly from Telegram.
+const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Linear tasks directly from Telegram.
 
 You can:
 - Create new issues with titles, descriptions, priorities, and project associations
