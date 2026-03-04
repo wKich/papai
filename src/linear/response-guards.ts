@@ -6,7 +6,7 @@ export const requireEntity = <T>(
   entity: T | null | undefined,
   {
     entityName,
-    context: _context,
+    context,
     appError,
   }: {
     entityName: string
@@ -17,7 +17,7 @@ export const requireEntity = <T>(
   if (entity !== null && entity !== undefined) {
     return entity
   }
-  throw new LinearApiError(`Linear API response missing required ${entityName}`, appError)
+  throw new LinearApiError(`Linear API response missing required ${entityName}: ${JSON.stringify(context)}`, appError)
 }
 
 export const filterPresentNodes = <T>(
@@ -26,7 +26,7 @@ export const filterPresentNodes = <T>(
 ): T[] => {
   const validNodes: T[] = []
   for (const [nodeIndex, node] of nodes.entries()) {
-    if (!node) {
+    if (node === null || node === undefined) {
       logger.warn({ entityName, parentId, nodeIndex }, 'Skipping malformed Linear API node')
       continue
     }

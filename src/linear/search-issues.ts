@@ -28,6 +28,7 @@ export async function searchIssues({
   try {
     const client = new LinearClient({ apiKey })
     const result = await client.issueSearch({ query, includeArchived: false })
+    const rawResultCount = result.nodes.length
     const issues = filterPresentNodes(result.nodes, { entityName: 'issue', parentId: query }).flatMap((issue) => {
       if (
         typeof issue.id !== 'string' ||
@@ -41,7 +42,7 @@ export async function searchIssues({
       }
       return [issue]
     })
-    logger.debug({ query, rawResultCount: issues.length }, 'Linear search completed')
+    logger.debug({ query, rawResultCount, validResultCount: issues.length }, 'Linear search completed')
 
     if (state !== undefined) {
       const filtered = await Promise.all(
@@ -54,7 +55,9 @@ export async function searchIssues({
           return issueState.name.toLowerCase() === state.toLowerCase() ? issue : undefined
         }),
       )
-      const filteredIssues = filtered.filter((issue): issue is Issue => issue !== undefined).map((issue) => toIssueResult(issue))
+      const filteredIssues = filtered
+        .filter((issue): issue is Issue => issue !== undefined)
+        .map((issue) => toIssueResult(issue))
       logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
       return filteredIssues
     }
