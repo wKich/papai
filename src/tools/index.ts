@@ -11,6 +11,7 @@ import { makeGetIssueTool } from './get-issue.js'
 import { makeGetRelationsTool } from './get-relations.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListProjectsTool } from './list-projects.js'
+import { makeRemoveIssueLabelTool } from './remove-issue-label.js'
 import { makeSearchIssuesTool } from './search-issues.js'
 import { makeUpdateIssueTool } from './update-issue.js'
 
@@ -31,5 +32,6 @@ export function makeTools({ linearKey, linearTeamId }: ToolConfig): ToolSet {
     get_issue: makeGetIssueTool(linearKey),
     create_label: makeCreateLabelTool(linearKey, linearTeamId),
     create_project: makeCreateProjectTool(linearKey, linearTeamId),
+    remove_issue_label: makeRemoveIssueLabelTool(linearKey),
   }
 }

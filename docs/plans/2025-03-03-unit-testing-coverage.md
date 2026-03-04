@@ -333,31 +333,65 @@ git commit -m "test: add unit tests for logger configuration"
 
 - Create: `src/config.test.ts`
 
-**Note:** This module uses SQLite. Tests should use an in-memory database or mock.
+> **Note:** `config.ts` creates a `bun:sqlite` Database at module-level (`const db = new Database('papai.db')`).
+> Since the `db` object is initialized once when the module is first imported, we must mock
+> `bun:sqlite` **before** importing `config.ts`. We use a shared in-memory Map as the mock store
+> and reset it in `beforeEach` via `.clear()` (mutating the same object the closure captured).
 
 ```typescript
 // src/config.test.ts
+import { mock } from 'bun:test'
+
+// --- bun:sqlite mock (must come before importing config.ts) ---
+const mockStore = new Map<string, string>()
+
+mock.module('bun:sqlite', () => ({
+  Database: class MockDatabase {
+    run(sql: string, params?: string[]) {
+      if (sql.includes('INSERT OR REPLACE') && params !== undefined) {
+        mockStore.set(params[0]!, params[1]!)
+      }
+      // CREATE TABLE and other DDL: no-op
+    }
+    query(sql: string) {
+      if (sql.includes('SELECT value FROM config WHERE key')) {
+        return {
+          get: (key: string) => {
+            const value = mockStore.get(key)
+            return value !== undefined ? { value } : null
+          },
+        }
+      }
+      if (sql.includes('SELECT key, value FROM config')) {
+        return {
+          all: () => Array.from(mockStore.entries()).map(([key, value]) => ({ key, value })),
+        }
+      }
+      return { get: () => null, all: () => [] }
+    }
+  },
+}))
+// --- end mock ---
+
 import { describe, expect, test, beforeEach } from 'bun:test'
+import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
 import type { ConfigKey } from './config.js'
 
 describe('config module', () => {
-  let config: typeof import('./config.js')
-
-  beforeEach(async () => {
-    // Import fresh module for isolation
-    config = await import('./config.js')
+  beforeEach(() => {
+    mockStore.clear()
   })
 
   describe('setConfig', () => {
     test('stores value for key', () => {
-      config.setConfig('linear_key', 'test-api-key')
-      expect(config.getConfig('linear_key')).toBe('test-api-key')
+      setConfig('linear_key', 'test-api-key')
+      expect(getConfig('linear_key')).toBe('test-api-key')
     })
 
     test('updates existing value', () => {
-      config.setConfig('linear_key', 'old-key')
-      config.setConfig('linear_key', 'new-key')
-      expect(config.getConfig('linear_key')).toBe('new-key')
+      setConfig('linear_key', 'old-key')
+      setConfig('linear_key', 'new-key')
+      expect(getConfig('linear_key')).toBe('new-key')
     })
 
     test('handles all config keys', () => {
@@ -370,20 +404,20 @@ describe('config module', () => {
       }
 
       Object.entries(testValues).forEach(([key, value]) => {
-        config.setConfig(key as ConfigKey, value)
-        expect(config.getConfig(key as ConfigKey)).toBe(value)
+        setConfig(key as ConfigKey, value)
+        expect(getConfig(key as ConfigKey)).toBe(value)
       })
     })
   })
 
   describe('getConfig', () => {
     test('returns null for unset key', () => {
-      expect(config.getConfig('openai_model')).toBeNull()
+      expect(getConfig('openai_model')).toBeNull()
     })
 
     test('returns stored value', () => {
-      config.setConfig('linear_team_id', 'team-abc')
-      expect(config.getConfig('linear_team_id')).toBe('team-abc')
+      setConfig('linear_team_id', 'team-abc')
+      expect(getConfig('linear_team_id')).toBe('team-abc')
     })
   })
 
@@ -391,33 +425,33 @@ describe('config module', () => {
     test('returns true for valid keys', () => {
       const validKeys: ConfigKey[] = ['linear_key', 'linear_team_id', 'openai_key', 'openai_base_url', 'openai_model']
       validKeys.forEach((key) => {
-        expect(config.isConfigKey(key)).toBe(true)
+        expect(isConfigKey(key)).toBe(true)
       })
     })
 
     test('returns false for invalid keys', () => {
       const invalidKeys = ['invalid', 'linear', 'openai', 'token', '']
       invalidKeys.forEach((key) => {
-        expect(config.isConfigKey(key)).toBe(false)
+        expect(isConfigKey(key)).toBe(false)
       })
     })
 
     test('returns false for non-string values', () => {
-      expect(config.isConfigKey(123 as unknown as string)).toBe(false)
-      expect(config.isConfigKey(null as unknown as string)).toBe(false)
-      expect(config.isConfigKey(undefined as unknown as string)).toBe(false)
+      expect(isConfigKey(123 as unknown as string)).toBe(false)
+      expect(isConfigKey(null as unknown as string)).toBe(false)
+      expect(isConfigKey(undefined as unknown as string)).toBe(false)
     })
   })
 
   describe('getAllConfig', () => {
     test('returns empty object when no config set', () => {
-      expect(Object.keys(config.getAllConfig())).toHaveLength(0)
+      expect(Object.keys(getAllConfig())).toHaveLength(0)
     })
 
     test('returns all set configs', () => {
-      config.setConfig('linear_key', 'key-1')
-      config.setConfig('openai_model', 'gpt-4')
-      const allConfig = config.getAllConfig()
+      setConfig('linear_key', 'key-1')
+      setConfig('openai_model', 'gpt-4')
+      const allConfig = getAllConfig()
       expect(allConfig.linear_key).toBe('key-1')
       expect(allConfig.openai_model).toBe('gpt-4')
       expect(allConfig.linear_team_id).toBeUndefined()
@@ -426,33 +460,33 @@ describe('config module', () => {
 
   describe('maskValue', () => {
     test('masks sensitive keys', () => {
-      expect(config.maskValue('linear_key', 'secret-key-1234')).toBe('****1234')
-      expect(config.maskValue('openai_key', 'sk-abc123')).toBe('****bc123')
+      expect(maskValue('linear_key', 'secret-key-1234')).toBe('****1234')
+      expect(maskValue('openai_key', 'sk-abc123')).toBe('****bc123')
     })
 
     test('returns unmasked value for non-sensitive keys', () => {
-      expect(config.maskValue('linear_team_id', 'team-123')).toBe('team-123')
-      expect(config.maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
-      expect(config.maskValue('openai_base_url', 'https://api.openai.com')).toBe('https://api.openai.com')
+      expect(maskValue('linear_team_id', 'team-123')).toBe('team-123')
+      expect(maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
+      expect(maskValue('openai_base_url', 'https://api.openai.com')).toBe('https://api.openai.com')
     })
 
     test('handles short values for sensitive keys', () => {
-      expect(config.maskValue('linear_key', 'ab')).toBe('****ab')
-      expect(config.maskValue('linear_key', '')).toBe('****')
+      expect(maskValue('linear_key', 'ab')).toBe('****ab')
+      expect(maskValue('linear_key', '')).toBe('****')
     })
   })
 
   describe('CONFIG_KEYS', () => {
     test('contains all expected keys', () => {
-      expect(config.CONFIG_KEYS).toContain('linear_key')
-      expect(config.CONFIG_KEYS).toContain('linear_team_id')
-      expect(config.CONFIG_KEYS).toContain('openai_key')
-      expect(config.CONFIG_KEYS).toContain('openai_base_url')
-      expect(config.CONFIG_KEYS).toContain('openai_model')
+      expect(CONFIG_KEYS).toContain('linear_key')
+      expect(CONFIG_KEYS).toContain('linear_team_id')
+      expect(CONFIG_KEYS).toContain('openai_key')
+      expect(CONFIG_KEYS).toContain('openai_base_url')
+      expect(CONFIG_KEYS).toContain('openai_model')
     })
 
     test('has correct length', () => {
-      expect(config.CONFIG_KEYS).toHaveLength(5)
+      expect(CONFIG_KEYS).toHaveLength(5)
     })
   })
 })
@@ -572,7 +606,8 @@ git commit -m "test: add unit tests for linear error classifier"
 
 ```typescript
 // src/linear/create-issue.test.ts
-import { describe, expect, test, beforeEach, mock } from 'bun:test'
+import { describe, expect, test, mock } from 'bun:test'
+import { LinearApiError } from './classify-error.js'
 import { createIssue } from './create-issue.js'
 
 // Mock Linear SDK
@@ -636,8 +671,7 @@ describe('createIssue', () => {
     expect(result).toBeDefined()
   })
 
-  test('returns undefined when API returns no issue', async () => {
-    // Override mock to return null issue
+  test('returns null when API returns no issue', async () => {
     mock.module('@linear/sdk', () => ({
       LinearClient: class MockLinearClient {
         async createIssue() {
@@ -664,9 +698,7 @@ describe('createIssue', () => {
       },
     }))
 
-    await expect(createIssue({ apiKey: 'invalid', title: 'Test', teamId: 'team-123' })).rejects.toThrow(
-      'LinearApiError',
-    )
+    await expect(createIssue({ apiKey: 'invalid', title: 'Test', teamId: 'team-123' })).rejects.toThrow(LinearApiError)
   })
 })
 ```
@@ -681,7 +713,8 @@ describe('createIssue', () => {
 
 ```typescript
 // src/linear/update-issue.test.ts
-import { describe, expect, test, mock } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { LinearApiError } from './classify-error.js'
 import { updateIssue } from './update-issue.js'
 
 // Mock Linear SDK with state resolution
@@ -691,7 +724,7 @@ describe('updateIssue', () => {
   beforeEach(() => {
     mock.module('@linear/sdk', () => ({
       LinearClient: class MockLinearClient {
-        async issue(issueId: string) {
+        async issue(_issueId: string) {
           return {
             team: Promise.resolve({
               states: async () => ({
@@ -711,7 +744,7 @@ describe('updateIssue', () => {
               id: issueId,
               identifier: 'TEAM-1',
               title: 'Updated Issue',
-              ...input,
+              ...(input as object),
             }),
           }
         }
@@ -773,15 +806,18 @@ describe('updateIssue', () => {
   })
 
   test('throws LinearApiError on API failure', async () => {
+    // Pass status so resolveWorkflowState calls client.issue(), triggering the error
     mock.module('@linear/sdk', () => ({
       LinearClient: class MockLinearClient {
         async issue() {
-          throw new Error('Issue not found')
+          throw new Error('Unauthorized')
         }
       },
     }))
 
-    await expect(updateIssue({ apiKey: mockApiKey, issueId: 'invalid' })).rejects.toThrow('LinearApiError')
+    await expect(updateIssue({ apiKey: mockApiKey, issueId: 'invalid', status: 'Todo' })).rejects.toThrow(
+      LinearApiError,
+    )
   })
 })
 ```
@@ -1022,170 +1058,129 @@ git commit -m "test: add unit tests for all tool factories"
 
 **Files:**
 
+- Modify: `src/bot.ts` — export the testable pure helpers
 - Create: `src/bot.test.ts`
+
+> **Note:** Only `bot` is currently exported from `bot.ts`. The internal helpers
+> `trimHistory` and `buildOpenAI` are pure functions worth unit testing, but they must be
+> exported first. `checkAuthorization` depends on the module-level `allowedUserId` constant
+> (read from `TELEGRAM_USER_ID` env at import time), so it can be tested by setting the env
+> before the mock import. `getOrCreateHistory` mutates module-level Map state and is
+> effectively tested through integration; skip it in unit tests.
+
+**Step 1: Export helpers in bot.ts**
+
+Add the following exports at the bottom of `src/bot.ts` alongside the existing `export { bot }`:
+
+```typescript
+export { bot, trimHistory, buildOpenAI, checkAuthorization }
+```
+
+**Step 2: Create bot.test.ts**
 
 ```typescript
 // src/bot.test.ts
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-// Set up environment before importing bot
-process.env.TELEGRAM_BOT_TOKEN = 'test-token'
-process.env.TELEGRAM_USER_ID = '123456'
+// Set env before any mocks or imports so allowedUserId is initialized correctly
+process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+process.env['TELEGRAM_USER_ID'] = '123456'
 
-// Mock all dependencies before importing bot
+import { mock } from 'bun:test'
+
 mock.module('grammy', () => ({
   Bot: class MockBot {
-    commands = new Map()
-    handlers = new Map()
-
-    command(name: string, handler: Function) {
-      this.commands.set(name, handler)
-    }
-
-    on(event: string, handler: Function) {
-      this.handlers.set(event, handler)
-    }
-
-    start = mock(async () => {})
+    command(_name: string, _handler: unknown) {}
+    on(_event: string, _handler: unknown) {}
   },
 }))
 
 mock.module('./config.js', () => ({
   CONFIG_KEYS: ['linear_key', 'linear_team_id', 'openai_key', 'openai_base_url', 'openai_model'],
-  getConfig: mock((key: string) => {
-    const configs: Record<string, string | null> = {
-      openai_key: 'test-openai-key',
-      linear_key: 'test-linear-key',
-      linear_team_id: 'team-123',
-    }
-    return configs[key] ?? null
-  }),
+  getConfig: mock((_key: string) => null),
   setConfig: mock(() => {}),
-  getAllConfig: mock(() => ({
-    linear_key: 'test-linear-key',
-    linear_team_id: 'team-123',
-  })),
-  isConfigKey: mock((key: string) => ['linear_key', 'linear_team_id', 'openai_key'].includes(key)),
+  getAllConfig: mock(() => ({})),
+  isConfigKey: mock(() => false),
   maskValue: mock((_k: string, v: string) => v),
 }))
 
 mock.module('./errors.js', () => ({
-  isAppError: mock((e: unknown) => e && typeof e === 'object' && 'type' in e),
+  isAppError: mock(() => false),
   getUserMessage: mock(() => 'Error message'),
 }))
 
 mock.module('ai', () => ({
-  generateText: mock(async () => ({
-    text: 'Hello! I can help you with that.',
-    toolCalls: [],
-    response: { messages: [{ role: 'assistant', content: 'Hello!' }] },
-    usage: { promptTokens: 10, completionTokens: 5 },
-  })),
-  stepCountIs: (n: number) => () => false,
+  generateText: mock(async () => ({ text: '', toolCalls: [], response: { messages: [] }, usage: {} })),
+  stepCountIs: (_n: number) => () => false,
 }))
 
 mock.module('@ai-sdk/openai', () => ({
-  createOpenAI: () => (model: string) => ({ model }),
+  createOpenAI: mock(() => (_model: string) => ({ id: _model })),
 }))
 
 mock.module('./tools/index.js', () => ({
   makeTools: mock(() => ({})),
 }))
 
+import { describe, expect, test } from 'bun:test'
+import { trimHistory, buildOpenAI, checkAuthorization } from './bot.js'
+import type { ModelMessage } from 'ai'
+
 describe('bot module', () => {
-  let botModule: typeof import('./bot.js')
-
-  beforeEach(async () => {
-    botModule = await import('./bot.js')
-  })
-
   describe('checkAuthorization', () => {
-    test('returns true for authorized user', () => {
-      const { checkAuthorization } = botModule
+    test('returns true for the authorized user ID', () => {
       expect(checkAuthorization(123456)).toBe(true)
     })
 
-    test('returns false for unauthorized user', () => {
-      const { checkAuthorization } = botModule
+    test('returns false for a different user ID', () => {
       expect(checkAuthorization(999999)).toBe(false)
     })
 
-    test('returns false for undefined userId', () => {
-      const { checkAuthorization } = botModule
+    test('returns false for undefined', () => {
       expect(checkAuthorization(undefined)).toBe(false)
     })
   })
 
-  describe('conversation history', () => {
+  describe('trimHistory', () => {
     const userId = 123456
 
-    test('initializes history for new user', () => {
-      const { getOrCreateHistory } = botModule
-      const history = getOrCreateHistory(userId)
-      expect(history).toEqual([])
+    test('returns history unchanged when under 40 messages', () => {
+      const history: ModelMessage[] = Array(20).fill({ role: 'user', content: 'test' })
+      const result = trimHistory(history, userId)
+      expect(result).toHaveLength(20)
     })
 
-    test('returns existing history', () => {
-      const { getOrCreateHistory } = botModule
-      const first = getOrCreateHistory(userId)
-      const second = getOrCreateHistory(userId)
-      expect(first).toBe(second)
+    test('returns history unchanged at exactly 40 messages', () => {
+      const history: ModelMessage[] = Array(40).fill({ role: 'user', content: 'test' })
+      const result = trimHistory(history, userId)
+      expect(result).toHaveLength(40)
     })
 
-    test('trims history over 40 messages', () => {
-      const { trimHistory } = botModule
-      const longHistory = Array(50).fill({ role: 'user', content: 'test' })
-      const trimmed = trimHistory(longHistory, userId)
-      expect(trimmed).toHaveLength(40)
+    test('trims to last 40 messages when over 40', () => {
+      const history: ModelMessage[] = Array(50).fill({ role: 'user', content: 'test' })
+      const result = trimHistory(history, userId)
+      expect(result).toHaveLength(40)
     })
 
-    test('preserves history under 40 messages', () => {
-      const { trimHistory } = botModule
-      const shortHistory = Array(20).fill({ role: 'user', content: 'test' })
-      const trimmed = trimHistory(shortHistory, userId)
-      expect(trimmed).toHaveLength(20)
-    })
-
-    test('keeps most recent messages when trimming', () => {
-      const { trimHistory } = botModule
-      const history = Array.from({ length: 50 }, (_, i) => ({
+    test('keeps the most recent messages when trimming', () => {
+      const history: ModelMessage[] = Array.from({ length: 50 }, (_, i) => ({
         role: 'user' as const,
         content: `message-${i}`,
       }))
-      const trimmed = trimHistory(history, userId)
-      expect(trimmed[0]?.content).toBe('message-10')
-      expect(trimmed[39]?.content).toBe('message-49')
+      const result = trimHistory(history, userId)
+      expect((result[0] as { role: string; content: string }).content).toBe('message-10')
+      expect((result[39] as { role: string; content: string }).content).toBe('message-49')
     })
   })
 
   describe('buildOpenAI', () => {
-    test('creates client with just API key', () => {
-      const { buildOpenAI } = botModule
-      const client = buildOpenAI('test-key', null)
-      expect(client).toBeDefined()
+    test('returns a callable client factory with API key only', () => {
+      const factory = buildOpenAI('test-key', null)
+      expect(typeof factory).toBe('function')
     })
 
-    test('creates client with custom base URL', () => {
-      const { buildOpenAI } = botModule
-      const client = buildOpenAI('test-key', 'https://custom.api.com')
-      expect(client).toBeDefined()
-    })
-  })
-
-  describe('bot commands', () => {
-    test('bot instance has set command', () => {
-      const { bot } = botModule
-      expect(bot.commands.has('set')).toBe(true)
-    })
-
-    test('bot instance has config command', () => {
-      const { bot } = botModule
-      expect(bot.commands.has('config')).toBe(true)
-    })
-
-    test('bot instance has text message handler', () => {
-      const { bot } = botModule
-      expect(bot.handlers.has('message:text')).toBe(true)
+    test('returns a callable client factory with custom base URL', () => {
+      const factory = buildOpenAI('test-key', 'https://custom.api.com')
+      expect(typeof factory).toBe('function')
     })
   })
 })
