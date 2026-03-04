@@ -77,6 +77,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           IMAGE: ${{ env.REGISTRY }}/${{ needs.build-and-push.outputs.image_name }}@${{ needs.build-and-push.outputs.digest }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -88,6 +90,7 @@ jobs:
           scp -i ~/.ssh/id_rsa -P "$SSH_PORT" docker-compose.yml "$SSH_USER@$SSH_HOST:~/${GITHUB_REPOSITORY##*/}/docker-compose.yml"
           ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash << EOF
           set -e
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
           cd ~/${GITHUB_REPOSITORY##*/}
           printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_USER_ID=%s\n' "${TELEGRAM_BOT_TOKEN}" "${TELEGRAM_USER_ID}" > .env
           chmod 600 .env
