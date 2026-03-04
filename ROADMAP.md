@@ -16,8 +16,8 @@
 - [x] Label management — list, create, and apply labels to issues
 - [x] Issue relations — create and view blocks/duplicate/related relations
 - [x] Create projects
-- [ ] Remove labels from issues
-- [ ] Delete / archive issues
+- [x] Remove labels from issues
+- [x] Delete / archive issues
 - [ ] Assign issues to a cycle / iteration
 
 ## Phase 3: Persistence & Context
