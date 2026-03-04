@@ -2,6 +2,7 @@ import { LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { filterPresentNodes } from './response-guards.js'
 
 export async function listProjects({
   apiKey,
@@ -14,20 +15,32 @@ export async function listProjects({
     const client = new LinearClient({ apiKey })
     const teams = await client.teams()
     const result = await Promise.all(
-      teams.nodes.map(async (team) => {
+      filterPresentNodes(teams.nodes, { entityName: 'team', parentId: 'teams' }).map(async (team) => {
+        if (typeof team.id !== 'string' || typeof team.name !== 'string') {
+          logger.warn({ teamId: team.id }, 'Skipping team with invalid response shape')
+          return undefined
+        }
         const projects = await team.projects()
+        const validProjects = filterPresentNodes(projects.nodes, { entityName: 'project', parentId: team.id }).flatMap((p) => {
+          if (typeof p.id !== 'string' || typeof p.name !== 'string') {
+            logger.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
+            return []
+          }
+          return [{ id: p.id, name: p.name }]
+        })
         return {
           teamId: team.id,
           teamName: team.name,
-          projects: projects.nodes.map((p) => ({ id: p.id, name: p.name })),
+          projects: validProjects,
         }
       }),
     )
+    const mappedResult = result.flatMap((team) => (team ? [team] : []))
     logger.info(
-      { teamCount: result.length, totalProjects: result.reduce((sum, t) => sum + t.projects.length, 0) },
+      { teamCount: mappedResult.length, totalProjects: mappedResult.reduce((sum, t) => sum + t.projects.length, 0) },
       'Projects listed',
     )
-    return result
+    return mappedResult
   } catch (error) {
     logger.error({ error: error instanceof Error ? error.message : String(error) }, 'listProjects failed')
     throw classifyLinearError(error)

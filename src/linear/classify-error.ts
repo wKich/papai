@@ -11,6 +11,9 @@ export class LinearApiError extends Error {
 }
 
 export const classifyLinearError = (error: unknown): LinearApiError => {
+  if (error instanceof LinearApiError) {
+    return error
+  }
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
     if (message.includes('not found') || message.includes('issue') || message.includes('resource')) {

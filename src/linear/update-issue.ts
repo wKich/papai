@@ -1,7 +1,9 @@
 import { type Issue, type LinearFetch, LinearClient } from '@linear/sdk'
 
+import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { filterPresentNodes, requireEntity } from './response-guards.js'
 
 type UpdateInput = { stateId?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
 type UpdateParams = { status?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
@@ -11,22 +13,34 @@ const resolveWorkflowState = async (
   issueId: string,
   status: string,
 ): Promise<string | undefined> => {
-  const issue = await client.issue(issueId)
-  const team = await issue.team
-  if (!team) {
-    return undefined
-  }
+  const issue = requireEntity(await client.issue(issueId), {
+    entityName: 'issue',
+    context: { issueId },
+    appError: linearError.issueNotFound(issueId),
+  })
+  const team = requireEntity(await issue.team, {
+    entityName: 'team',
+    context: { issueId },
+    appError: linearError.validationFailed('team', 'Missing team in issue response'),
+  })
   const states = await team.states()
-  const state = states.nodes.find((s) => s.name.toLowerCase() === status.toLowerCase())
+  const validStates = filterPresentNodes(states.nodes, { entityName: 'workflow-state', parentId: issueId }).flatMap((s) => {
+    if (typeof s.id !== 'string' || typeof s.name !== 'string') {
+      logger.warn({ issueId, requestedStatus: status, stateId: s.id }, 'Skipping workflow state with invalid response shape')
+      return []
+    }
+    return [s]
+  })
+  const state = validStates.find((s) => s.name.toLowerCase() === status.toLowerCase())
   logger.debug(
-    { requestedStatus: status, foundState: state?.name, availableStates: states.nodes.map((s) => s.name) },
+    { requestedStatus: status, foundState: state?.name, availableStates: validStates.map((s) => s.name) },
     'Resolving workflow state',
   )
   if (state) {
     return state.id
   }
   logger.warn(
-    { issueId, requestedStatus: status, availableStates: states.nodes.map((s) => s.name) },
+    { issueId, requestedStatus: status, availableStates: validStates.map((s) => s.name) },
     'Workflow state not found',
   )
   return undefined

@@ -1,7 +1,9 @@
 import { LinearClient } from '@linear/sdk'
 
+import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyLinearError } from './classify-error.js'
+import { filterPresentNodes, requireEntity } from './response-guards.js'
 
 export async function getComments({
   apiKey,
@@ -14,9 +16,30 @@ export async function getComments({
 
   try {
     const client = new LinearClient({ apiKey })
-    const issue = await client.issue(issueId)
+    const issue = requireEntity(await client.issue(issueId), {
+      entityName: 'issue',
+      context: { issueId },
+      appError: linearError.issueNotFound(issueId),
+    })
     const comments = await issue.comments()
-    const result = comments.nodes.map((c) => ({ id: c.id, body: c.body, createdAt: c.createdAt }))
+    const result = filterPresentNodes(comments.nodes, { entityName: 'comment', parentId: issueId }).flatMap((c) => {
+      const createdAt =
+        c.createdAt instanceof Date
+          ? c.createdAt
+          : typeof c.createdAt === 'string' || typeof c.createdAt === 'number'
+            ? new Date(c.createdAt)
+            : undefined
+      if (
+        typeof c.id !== 'string' ||
+        typeof c.body !== 'string' ||
+        createdAt === undefined ||
+        Number.isNaN(createdAt.getTime())
+      ) {
+        logger.warn({ issueId, commentId: c.id }, 'Skipping comment with invalid response shape')
+        return []
+      }
+      return [{ id: c.id, body: c.body, createdAt }]
+    })
     logger.info({ issueId, commentCount: result.length }, 'Comments fetched')
     return result
   } catch (error) {
