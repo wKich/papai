@@ -49,8 +49,8 @@ The remaining credentials are configured at runtime via the `/set` command:
 | `linear_key`      | Linear personal API key            | Linear Settings → API → Personal API keys                            |
 | `linear_team_id`  | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL             |
 | `openai_key`      | OpenAI API key                     | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `openai_base_url` | Custom OpenAI-compatible base URL  | Optional; defaults to OpenAI                                         |
-| `openai_model`    | Model name to use                  | Optional; defaults to `gpt-4o`                                       |
+| `openai_base_url` | OpenAI-compatible base URL         | Required; e.g. `https://api.openai.com/v1`                           |
+| `openai_model`    | Model name to use                  | Required; e.g. `gpt-4o`                                              |
 
 Use `/config` to view current values, and `/set <key> <value>` to update them.
 
@@ -75,7 +75,7 @@ Send natural language messages to the bot in Telegram:
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-4o)
                                               │
                                               ├─ src/tools/ ─→ src/linear/ ─→ Linear SDK
-                                              │   13 tools, one file each
+                                              │   15 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
@@ -86,18 +86,94 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-
 | `src/bot.ts`    | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
 | `src/config.ts` | SQLite-backed runtime config store; `/set` and `/config` command handlers              |
 | `src/errors.ts` | Discriminated union error types, constructors, and user-facing message mapper          |
-| `src/tools/`    | One file per tool; `index.ts` assembles all 13 into `makeTools`                        |
-| `src/linear/`   | One file per Linear SDK wrapper; `index.ts` re-exports all 13                          |
+| `src/tools/`    | One file per tool; `index.ts` assembles all 15 into `makeTools`                        |
+| `src/linear/`   | One file per Linear SDK wrapper; `index.ts` re-exports all 15                          |
 | `src/logger.ts` | pino logger instance                                                                   |
 
 ## Tech Stack
 
 - **Runtime** — [Bun](https://bun.sh)
 - **Bot framework** — [Grammy](https://grammy.dev)
-- **LLM integration** — [Vercel AI SDK](https://sdk.vercel.ai) with GPT-4o via `@ai-sdk/openai`
+- **LLM integration** — [Vercel AI SDK](https://sdk.vercel.ai) via `@ai-sdk/openai-compatible`
 - **Task management** — [Linear SDK](https://developers.linear.app/docs/sdk/getting-started)
 - **Validation** — [Zod v4](https://zod.dev)
 - **Linting/formatting** — oxlint / oxfmt
+
+## Deployment
+
+### Automated (GitHub Actions)
+
+Publishing a GitHub release triggers the deploy workflow, which builds a Docker image, pushes it to GHCR, and deploys to a remote server via SSH.
+
+**Required GitHub secrets:**
+
+| Secret               | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `SSH_KEY`            | Private SSH key for the deploy target                     |
+| `SSH_HOST_KEY`       | Server's public host key (output of `ssh-keyscan <host>`) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot API token                                    |
+| `TELEGRAM_USER_ID`   | Your Telegram user ID                                     |
+
+**Required GitHub variables:**
+
+| Variable   | Description                         |
+| ---------- | ----------------------------------- |
+| `SSH_HOST` | Hostname or IP of the deploy target |
+| `SSH_USER` | SSH username on the deploy target   |
+| `SSH_PORT` | SSH port (defaults to `22`)         |
+
+The workflow requires a `production` environment configured in GitHub repository settings.
+
+To deploy, create a release (e.g., `v0.2`) on GitHub. The workflow will:
+
+1. Build the Docker image and push to `ghcr.io/<owner>/papai`
+2. SSH into the server, copy `docker-compose.yml`, write `.env`, and start the container
+
+### Manual (Docker Compose)
+
+On the target server:
+
+```bash
+# Log in to GHCR (if using the pre-built image)
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <username> --password-stdin
+
+# Create project directory
+mkdir -p ~/papai && cd ~/papai
+
+# Copy docker-compose.yml from the repo, then create .env
+cat > .env <<EOF
+TELEGRAM_BOT_TOKEN=<your-bot-token>
+TELEGRAM_USER_ID=<your-user-id>
+EOF
+chmod 600 .env
+
+# Pull and start
+docker compose pull
+docker compose up -d
+```
+
+The SQLite database is persisted in a Docker volume (`papai-data`) at `/data/papai.db`.
+
+### Manual (bare metal)
+
+```bash
+git clone https://github.com/wKich/papai.git
+cd papai
+bun install
+cp .env.example .env
+# Edit .env with your TELEGRAM_BOT_TOKEN and TELEGRAM_USER_ID
+bun run start
+```
+
+After starting, configure credentials via Telegram:
+
+```
+/set linear_key lin_api_xxxxxxxxxxxx
+/set linear_team_id <team-id>
+/set openai_key sk-xxxxxxxxxxxx
+/set openai_base_url https://api.openai.com/v1
+/set openai_model gpt-4o
+```
 
 ## Development
 
