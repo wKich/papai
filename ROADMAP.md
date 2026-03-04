@@ -5,7 +5,7 @@
 - [x] Structured logging — replace `console.error`/`console.log` with a leveled logger
 - [x] Granular error messages — surface specific failure reasons to the user instead of generic "something went wrong"
 - [x] Workflow state resolution error handling — warn when a status name doesn't match any team workflow state
-- [ ] Linear API response validation — add Zod schemas and handle missing/unexpected fields from API responses
+- [x] Linear API response validation — add Zod schemas and handle missing/unexpected fields from API responses
 - [ ] Configurable limits — expose history cap (currently 40) and max tool steps (currently 5) via env vars
 
 ## Phase 2: Enhanced Tool Capabilities

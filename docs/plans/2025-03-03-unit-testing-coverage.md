@@ -286,71 +286,35 @@ git commit -m "test: add comprehensive unit tests for errors module"
 
 - Create: `src/logger.test.ts`
 
+> **Note:** `logger` is a module-level singleton created at import time from the `LOG_LEVEL` env var.
+> Bun ES modules are cached after first import — re-importing with different env vars does not
+> re-run module initialization. Tests are therefore limited to the already-initialized singleton.
+
 ```typescript
 // src/logger.test.ts
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
+import { logger } from './logger.js'
 
 describe('logger', () => {
-  const originalEnv = process.env
-
-  beforeEach(() => {
-    process.env = { ...originalEnv }
-  })
-
-  afterEach(() => {
-    process.env = originalEnv
-  })
-
-  describe('log level configuration', () => {
-    test('uses info level by default', () => {
-      delete process.env.LOG_LEVEL
-      const { logger } = require('./logger.js')
-      expect(logger.level).toBe('info')
-    })
-
-    test('uses LOG_LEVEL from environment', () => {
-      process.env.LOG_LEVEL = 'debug'
-      const { logger } = require('./logger.js')
-      expect(logger.level).toBe('debug')
-    })
-
-    test('handles uppercase log level', () => {
-      process.env.LOG_LEVEL = 'DEBUG'
-      const { logger } = require('./logger.js')
-      expect(logger.level).toBe('debug')
-    })
-
-    test('handles all valid log levels', () => {
-      const validLevels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']
-      validLevels.forEach((level) => {
-        process.env.LOG_LEVEL = level
-        const { logger } = require('./logger.js')
-        expect(logger.level).toBe(level)
-      })
-    })
-
-    test('falls back to info for invalid log level', () => {
-      process.env.LOG_LEVEL = 'invalid'
-      const { logger } = require('./logger.js')
-      expect(logger.level).toBe('info')
-    })
-
-    test('falls back to info for empty string', () => {
-      process.env.LOG_LEVEL = ''
-      const { logger } = require('./logger.js')
-      expect(logger.level).toBe('info')
-    })
-  })
-
   describe('logger methods', () => {
     test('has all required log methods', () => {
-      const { logger } = require('./logger.js')
       expect(typeof logger.trace).toBe('function')
       expect(typeof logger.debug).toBe('function')
       expect(typeof logger.info).toBe('function')
       expect(typeof logger.warn).toBe('function')
       expect(typeof logger.error).toBe('function')
       expect(typeof logger.fatal).toBe('function')
+    })
+  })
+
+  describe('logger properties', () => {
+    test('has a level property', () => {
+      expect(typeof logger.level).toBe('string')
+    })
+
+    test('level is one of the valid pino levels', () => {
+      const validLevels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']
+      expect(validLevels).toContain(logger.level)
     })
   })
 })

@@ -24,13 +24,18 @@ const resolveWorkflowState = async (
     appError: linearError.validationFailed('team', 'Missing team in issue response'),
   })
   const states = await team.states()
-  const validStates = filterPresentNodes(states.nodes, { entityName: 'workflow-state', parentId: issueId }).flatMap((s) => {
-    if (typeof s.id !== 'string' || typeof s.name !== 'string') {
-      logger.warn({ issueId, requestedStatus: status, stateId: s.id }, 'Skipping workflow state with invalid response shape')
-      return []
-    }
-    return [s]
-  })
+  const validStates = filterPresentNodes(states.nodes, { entityName: 'workflow-state', parentId: issueId }).flatMap(
+    (s) => {
+      if (typeof s.id !== 'string' || typeof s.name !== 'string') {
+        logger.warn(
+          { issueId, requestedStatus: status, stateId: s.id },
+          'Skipping workflow state with invalid response shape',
+        )
+        return []
+      }
+      return [s]
+    },
+  )
   const state = validStates.find((s) => s.name.toLowerCase() === status.toLowerCase())
   logger.debug(
     { requestedStatus: status, foundState: state?.name, availableStates: validStates.map((s) => s.name) },

@@ -21,13 +21,15 @@ export async function listProjects({
           return undefined
         }
         const projects = await team.projects()
-        const validProjects = filterPresentNodes(projects.nodes, { entityName: 'project', parentId: team.id }).flatMap((p) => {
-          if (typeof p.id !== 'string' || typeof p.name !== 'string') {
-            logger.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
-            return []
-          }
-          return [{ id: p.id, name: p.name }]
-        })
+        const validProjects = filterPresentNodes(projects.nodes, { entityName: 'project', parentId: team.id }).flatMap(
+          (p) => {
+            if (typeof p.id !== 'string' || typeof p.name !== 'string') {
+              logger.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
+              return []
+            }
+            return [{ id: p.id, name: p.name }]
+          },
+        )
         return {
           teamId: team.id,
           teamName: team.name,

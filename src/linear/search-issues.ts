@@ -14,6 +14,22 @@ const toIssueResult = (issue: Issue): IssueResult => ({
   url: issue.url,
 })
 
+const filterIssuesByState = async (issues: Issue[], state: string, query: string): Promise<IssueResult[]> => {
+  const filtered = await Promise.all(
+    issues.map(async (issue) => {
+      const issueState = await issue.state
+      if (!issueState) {
+        logger.warn({ issueId: issue.id, issueIdentifier: issue.identifier }, 'Issue has no state while filtering')
+        return undefined
+      }
+      return issueState.name.toLowerCase() === state.toLowerCase() ? issue : undefined
+    }),
+  )
+  const filteredIssues = filtered.filter((issue): issue is Issue => issue !== undefined).map(toIssueResult)
+  logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
+  return filteredIssues
+}
+
 export async function searchIssues({
   apiKey,
   query,
@@ -45,21 +61,7 @@ export async function searchIssues({
     logger.debug({ query, rawResultCount, validResultCount: issues.length }, 'Linear search completed')
 
     if (state !== undefined) {
-      const filtered = await Promise.all(
-        issues.map(async (issue) => {
-          const issueState = await issue.state
-          if (!issueState) {
-            logger.warn({ issueId: issue.id, issueIdentifier: issue.identifier }, 'Issue has no state while filtering')
-            return undefined
-          }
-          return issueState.name.toLowerCase() === state.toLowerCase() ? issue : undefined
-        }),
-      )
-      const filteredIssues = filtered
-        .filter((issue): issue is Issue => issue !== undefined)
-        .map((issue) => toIssueResult(issue))
-      logger.info({ query, state, resultCount: filteredIssues.length }, 'Issues searched')
-      return filteredIssues
+      return await filterIssuesByState(issues, state, query)
     }
 
     const mappedIssues = issues.map(toIssueResult)
