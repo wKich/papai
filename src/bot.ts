@@ -90,7 +90,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   }
 
   const openaiModel = getConfig('openai_model') ?? 'gpt-4o'
-  const model = buildOpenAI(openaiKey, getConfig('openai_base_url'))(openaiModel)
+  const model = buildOpenAI(openaiKey, getConfig('openai_base_url')).chat(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
   logger.debug({ userId, historyLength: history.length }, 'Calling generateText')
