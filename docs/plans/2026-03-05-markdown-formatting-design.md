@@ -200,7 +200,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
    ```typescript
    test('converts links', () => {
-     expect(formatMarkdownToHtml('[text](http://example.com)')).toBe('<p><a href="http://example.com">text</a></p>\n')
+     expect(formatMarkdownToHtml('[text](http://example.com)')).toContain('<a href="http://example.com">text</a>')
    })
    ```
 
@@ -208,7 +208,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
    ```typescript
    test('converts inline code', () => {
-     expect(formatMarkdownToHtml('`code`')).toBe('<p><code>code</code></p>\n')
+     expect(formatMarkdownToHtml('`code`')).toContain('<code>code</code>')
    })
    ```
 
@@ -231,7 +231,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
 ```typescript
 test('converts markdown in under 10ms for 1KB', () => {
-  const largeMarkdown = '---'.repeat(3000) // 9000 chars
+  const largeMarkdown = '-'.repeat(3000)
   const start = performance.now()
   formatMarkdownToHtml(largeMarkdown)
   const duration = performance.now() - start

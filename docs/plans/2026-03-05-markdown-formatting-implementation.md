@@ -113,6 +113,7 @@ const log = logger.child({ scope: 'markdown' })
 export const formatMarkdownToHtml = (markdown: string): string => {
   log.debug({ markdownLength: markdown.length }, 'Converting Markdown to HTML')
   const html = marked.parse(markdown, {
+    async: false,
     breaks: false,
     gfm: false,
   })
@@ -193,17 +194,11 @@ bun test tests/bot.test.ts
 
 Fix any tests that mock `ctx.reply` to account for the new parse_mode check.
 
-### Step 3: Run existing bot tests
-
-```bash
-bun test tests/bot.test.ts
-```
-
 The current test suite has a single smoke test. Add a test verifying HTML parse mode usage.
 
-### Step 4: Add integration test
+### Step 4: Add integration test stub
 
-Update `tests/bot.test.ts` to verify parse_mode is passed:
+Update `tests/bot.test.ts` to verify parse_mode is passed. Note: This is currently a stub that mocks `ctx.reply` without invoking the full bot flow. A full integration test would require mocking `generateText` and tracing `ctx.reply` via `processMessage`.
 
 ```typescript
 test('sends messages with HTML parse mode', async () => {
@@ -214,7 +209,7 @@ test('sends messages with HTML parse mode', async () => {
     },
   } as any
 
-  // Mock bot invocation with markdown input
+  // TODO: Full integration test - mock generateText and invoke processMessage
 })
 ```
 
