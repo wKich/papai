@@ -1,4 +1,4 @@
-import { db } from './db/index.js'
+import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
@@ -17,13 +17,13 @@ const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_ke
 
 export function setConfig(key: ConfigKey, value: string): void {
   log.debug({ key }, 'setConfig called')
-  db.run('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', [key, value])
+  getDb().run('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', [key, value])
   log.info({ key }, 'Config key set')
 }
 
 export function getConfig(key: ConfigKey): string | null {
   log.debug({ key }, 'getConfig called')
-  const row = db.query<{ value: string }, [string]>('SELECT value FROM config WHERE key = ?').get(key)
+  const row = getDb().query<{ value: string }, [string]>('SELECT value FROM config WHERE key = ?').get(key)
   return row?.value ?? null
 }
 
@@ -33,7 +33,7 @@ export function isConfigKey(key: string): key is ConfigKey {
 
 export function getAllConfig(): Partial<Record<ConfigKey, string>> {
   log.debug('getAllConfig called')
-  const rows = db.query<{ key: string; value: string }, []>('SELECT key, value FROM config').all()
+  const rows = getDb().query<{ key: string; value: string }, []>('SELECT key, value FROM config').all()
   return rows.reduce<Partial<Record<ConfigKey, string>>>(
     (acc, row) => (isConfigKey(row.key) ? { ...acc, [row.key]: row.value } : acc),
     {},

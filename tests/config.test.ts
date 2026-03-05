@@ -40,7 +40,7 @@ class MockDatabase {
 const mockDb = new MockDatabase()
 
 const mockSetupResult = mock.module('../src/db/index.js', () => ({
-  db: mockDb,
+  getDb: (): MockDatabase => mockDb,
   DB_PATH: ':memory:',
   initDb: (): void => {},
 }))
