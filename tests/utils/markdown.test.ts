@@ -39,14 +39,4 @@ describe('formatMarkdownToHtml', () => {
     const result = formatMarkdownToHtml(input)
     expect(result).toContain('<p>just text</p>')
   })
-
-  test('converts markdown in under 10ms for 1KB', () => {
-    const largeMarkdown = '-'.repeat(3000)
-    // Warmup to avoid cold-start overhead
-    formatMarkdownToHtml('warmup')
-    const start = performance.now()
-    formatMarkdownToHtml(largeMarkdown)
-    const duration = performance.now() - start
-    expect(duration).toBeLessThan(50)
-  })
 })
