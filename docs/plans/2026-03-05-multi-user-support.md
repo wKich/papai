@@ -639,7 +639,7 @@ This is the largest task. Changes:
 2. Keep `TELEGRAM_USER_ID` as `adminUserId` for admin-only commands
 3. `/set` and `/config` pass `userId` to config functions
 4. `callLlm` reads config per-user
-5. New admin commands: `/adduser <id>`, `/removeuser <id>`, `/users`
+5. New admin commands: `/user add <id>`, `/user remove <id>`, `/users`
 
 **Step 1: Update `bot.ts`**
 
@@ -718,47 +718,45 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
 6. **Add admin commands:**
 
 ```typescript
-bot.command('adduser', async (ctx) => {
+bot.command('user', async (ctx) => {
   const userId = ctx.from?.id
   if (!checkAdmin(userId)) {
-    await ctx.reply('Only the admin can add users.')
+    await ctx.reply('Only the admin can manage users.')
     return
   }
 
-  const idStr = ctx.match.trim()
-  const newUserId = parseInt(idStr, 10)
-  if (Number.isNaN(newUserId)) {
-    await ctx.reply('Usage: /adduser <telegram_user_id>')
-    return
+  const args = ctx.match.trim().split(/\s+/)
+  const subcommand = args[0]
+  const idStr = args[1]
+
+  if (subcommand === 'add') {
+    const newUserId = parseInt(idStr, 10)
+    if (Number.isNaN(newUserId)) {
+      await ctx.reply('Usage: /user add <telegram_user_id>')
+      return
+    }
+
+    addUser(newUserId, userId)
+    log.info({ adminId: userId, newUserId }, '/user add command executed')
+    await ctx.reply(`User ${newUserId} authorized.`)
+  } else if (subcommand === 'remove') {
+    const targetId = parseInt(idStr, 10)
+    if (Number.isNaN(targetId)) {
+      await ctx.reply('Usage: /user remove <telegram_user_id>')
+      return
+    }
+
+    if (targetId === adminUserId) {
+      await ctx.reply('Cannot remove the admin user.')
+      return
+    }
+
+    removeUser(targetId)
+    log.info({ adminId: userId, targetId }, '/user remove command executed')
+    await ctx.reply(`User ${targetId} removed.`)
+  } else {
+    await ctx.reply('Usage: /user add <id> or /user remove <id>')
   }
-
-  addUser(newUserId, userId)
-  log.info({ adminId: userId, newUserId }, '/adduser command executed')
-  await ctx.reply(`User ${newUserId} authorized.`)
-})
-
-bot.command('removeuser', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!checkAdmin(userId)) {
-    await ctx.reply('Only the admin can remove users.')
-    return
-  }
-
-  const idStr = ctx.match.trim()
-  const targetId = parseInt(idStr, 10)
-  if (Number.isNaN(targetId)) {
-    await ctx.reply('Usage: /removeuser <telegram_user_id>')
-    return
-  }
-
-  if (targetId === adminUserId) {
-    await ctx.reply('Cannot remove the admin user.')
-    return
-  }
-
-  removeUser(targetId)
-  log.info({ adminId: userId, targetId }, '/removeuser command executed')
-  await ctx.reply(`User ${targetId} removed.`)
 })
 
 bot.command('users', async (ctx) => {
@@ -863,7 +861,7 @@ git commit -m "feat: wire multi-user migration into startup"
 Key documentation changes:
 
 - `TELEGRAM_USER_ID` description: "The admin user ID. This user is automatically authorized on first run and can manage other users."
-- Add new commands to architecture section: `/adduser`, `/removeuser`, `/users`
+- Add new commands to architecture section: `/user add <id>`, `/user remove <id>`, `/users`
 - Update `src/config.ts` description: "SQLite-backed **per-user** runtime config store"
 - Add `src/users.ts` — "SQLite-backed user authorization store"
 - Add `src/migrate.ts` — "One-time migration: seeds admin, copies legacy config"

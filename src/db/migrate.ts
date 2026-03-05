@@ -11,9 +11,19 @@ const validateOrder = (migrations: readonly Migration[]): void => {
   for (let i = 1; i < migrations.length; i++) {
     const current = migrations[i]!
     const previous = migrations[i - 1]!
-    // Compare by numeric prefix first, then lexicographically for same prefix
-    const currentNum = parseInt(current.id.match(/^\d+/)?.[0] ?? '0', 10)
-    const previousNum = parseInt(previous.id.match(/^\d+/)?.[0] ?? '0', 10)
+    // Reject equal or decreasing numeric prefixes
+    const currentMatch = current.id.match(/^\d+/)
+    const previousMatch = previous.id.match(/^\d+/)
+
+    if (!currentMatch) {
+      throw new Error(`Migration ID must start with a numeric prefix: ${current.id}`)
+    }
+    if (!previousMatch) {
+      throw new Error(`Migration ID must start with a numeric prefix: ${previous.id}`)
+    }
+
+    const currentNum = parseInt(currentMatch[0], 10)
+    const previousNum = parseInt(previousMatch[0], 10)
     if (currentNum <= previousNum) {
       logger.error(
         { current: current.id, previous: previous.id },

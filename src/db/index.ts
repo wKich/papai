@@ -21,6 +21,14 @@ export const getDb = (): Database => {
   return dbInstance
 }
 
+export const closeDb = (): void => {
+  if (dbInstance !== undefined) {
+    dbInstance.close()
+    dbInstance = undefined
+    logger.info({ dbPath: DB_PATH }, 'Database connection closed')
+  }
+}
+
 const MIGRATIONS = [migration001Initial, migration002ConversationHistory] as const
 
 export const initDb = (): void => {
