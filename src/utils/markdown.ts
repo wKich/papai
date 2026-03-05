@@ -21,15 +21,15 @@ const telegram = new Marked({
       let result = ''
       for (let i = 0; i < token.items.length; i++) {
         const item = token.items[i]!
-        const prefix = token.ordered ? `${String(token.start + i)}. ` : '• '
-        const body = this.parser.parse(item.tokens, !!item.loose)
+        const prefix = token.ordered ? `${String(Number(token.start) + i)}. ` : '• '
+        const body = this.parser.parse(item.tokens)
         result += `${prefix}${body.trimEnd()}\n`
       }
       return `${result}\n`
     },
 
     listitem(item): string {
-      return this.parser.parse(item.tokens, !!item.loose)
+      return this.parser.parse(item.tokens)
     },
 
     checkbox({ checked }): string {

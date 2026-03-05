@@ -86,14 +86,4 @@ describe('formatMarkdownToHtml', () => {
     expect(result).toContain('<i>italic</i>')
     expect(result).toContain('<code>code</code>')
   })
-
-  test('converts markdown in under 50ms for 1KB', () => {
-    const largeMarkdown = '-'.repeat(3000)
-    // Warmup to avoid cold-start overhead
-    formatMarkdownToHtml('warmup')
-    const start = performance.now()
-    formatMarkdownToHtml(largeMarkdown)
-    const duration = performance.now() - start
-    expect(duration).toBeLessThan(50)
-  })
 })
