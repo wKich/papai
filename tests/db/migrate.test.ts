@@ -275,7 +275,33 @@ describe('runMigrations - order validation', () => {
 
     expect(() => {
       runMigrations(db, migrations)
-    }).toThrow('Migration 001_first has duplicate prefix')
+    }).toThrow('Migration 001_first has duplicate full ID')
+
+    // Verify no tables were created (migration didn't run)
+    const tableNames = getTableNames(db)
+    expect(tableNames).not.toContain('table_1')
+    expect(tableNames).not.toContain('table_2')
+  })
+
+  test('throws when migrations have different numeric prefixes with same suffix', () => {
+    const migrations: readonly Migration[] = [
+      {
+        id: '001_foo',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
+        },
+      },
+      {
+        id: '002_foo',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
+        },
+      },
+    ]
+
+    expect(() => {
+      runMigrations(db, migrations)
+    }).toThrow('Migration 002_foo has duplicate full ID')
 
     // Verify no tables were created (migration didn't run)
     const tableNames = getTableNames(db)

@@ -7,21 +7,55 @@ export interface Migration {
   up(db: Database): void
 }
 
+const extractNumericPrefix = (id: string): number | undefined => {
+  const match = id.match(/^\d+/)
+  return match === null ? undefined : Number.parseInt(match[0], 10)
+}
+
+const extractBaseName = (id: string): string | undefined => {
+  const match = id.match(/^\d+_(.+)$/)
+  return match === null ? undefined : match[1]
+}
+
 const validateOrder = (migrations: readonly Migration[]): void => {
-  // Per-element check: every migration must have a numeric prefix
+  const seenIds = new Set<string>()
+  const seenBaseNames = new Set<string>()
+
+  // Per-element check: every migration must have a numeric prefix + no duplicates
   for (const migration of migrations) {
     if (!/^\d+/.test(migration.id)) {
       throw new Error(`Migration ID must start with a numeric prefix: ${migration.id}`)
+    }
+
+    if (seenIds.has(migration.id)) {
+      throw new Error(`Migration ${migration.id} has duplicate full ID`)
+    }
+    seenIds.add(migration.id)
+
+    const baseName = extractBaseName(migration.id)
+    if (baseName !== undefined) {
+      if (seenBaseNames.has(baseName)) {
+        throw new Error(`Migration ${migration.id} has duplicate base name: ${baseName}`)
+      }
+      seenBaseNames.add(baseName)
     }
   }
 
   // Pairwise check: reject equal or decreasing numeric prefixes
   for (let i = 1; i < migrations.length; i++) {
-    const current = migrations[i]!
-    const previous = migrations[i - 1]!
+    const current = migrations[i]
+    const previous = migrations[i - 1]
 
-    const currentNum = parseInt(current.id.match(/^\d+/)![0], 10)
-    const previousNum = parseInt(previous.id.match(/^\d+/)![0], 10)
+    if (current === undefined || previous === undefined) {
+      throw new Error('Unexpected undefined migration in pairwise check')
+    }
+
+    const currentNum = extractNumericPrefix(current.id)
+    const previousNum = extractNumericPrefix(previous.id)
+
+    if (currentNum === undefined || previousNum === undefined) {
+      throw new Error(`Failed to extract numeric prefix from ${current.id} or ${previous.id}`)
+    }
 
     if (currentNum === previousNum) {
       logger.error(
