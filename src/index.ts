@@ -1,5 +1,5 @@
 import { bot } from './bot.js'
-import { initDb } from './db/index.js'
+import { closeDb, initDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'main' })
@@ -25,4 +25,17 @@ void bot.start({
   onStart: () => {
     log.info('papai is running and listening for messages.')
   },
+})
+
+// Graceful shutdown handlers to ensure database connection is closed
+process.on('SIGINT', () => {
+  log.info('SIGINT received, shutting down gracefully')
+  closeDb()
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  log.info('SIGTERM received, shutting down gracefully')
+  closeDb()
+  process.exit(0)
 })

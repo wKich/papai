@@ -39,18 +39,11 @@ class MockDatabase {
 
 const mockDb = new MockDatabase()
 
-const mockSetupResult = mock.module('../src/db/index.js', () => ({
+void mock.module('../src/db/index.js', () => ({
   getDb: (): MockDatabase => mockDb,
   DB_PATH: ':memory:',
   initDb: (): void => {},
 }))
-
-// Handle the Promise return type from mock.module
-if (mockSetupResult instanceof Promise) {
-  mockSetupResult.catch(() => {
-    // Mock setup errors are handled by the test framework
-  })
-}
 
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import type { ConfigKey } from '../src/config.js'

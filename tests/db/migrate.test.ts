@@ -1,5 +1,21 @@
 import { Database } from 'bun:sqlite'
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
+
+// Mock logger to silence output during tests
+void mock.module('../../src/logger.js', () => ({
+  logger: {
+    debug: (): void => {},
+    info: (): void => {},
+    warn: (): void => {},
+    error: (): void => {},
+    child: (): object => ({
+      debug: (): void => {},
+      info: (): void => {},
+      warn: (): void => {},
+      error: (): void => {},
+    }),
+  },
+}))
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
 
@@ -196,6 +212,25 @@ describe('runMigrations - order validation', () => {
     db.close()
   })
 
+  test('throws for single migration with no numeric prefix', () => {
+    const migrations: readonly Migration[] = [
+      {
+        id: 'initial',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS initial_table (id INTEGER PRIMARY KEY)')
+        },
+      },
+    ]
+
+    expect(() => {
+      runMigrations(db, migrations)
+    }).toThrow('Migration ID must start with a numeric prefix: initial')
+
+    // Verify no tables were created (migration didn't run)
+    const tableNames = getTableNames(db)
+    expect(tableNames).not.toContain('initial_table')
+  })
+
   test('throws when migrations are out of order', () => {
     const migrations: readonly Migration[] = [
       {
@@ -240,7 +275,7 @@ describe('runMigrations - order validation', () => {
 
     expect(() => {
       runMigrations(db, migrations)
-    }).toThrow('Migration 001_first is out of order')
+    }).toThrow('Migration 001_first has duplicate prefix')
 
     // Verify no tables were created (migration didn't run)
     const tableNames = getTableNames(db)
