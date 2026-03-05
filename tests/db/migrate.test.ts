@@ -3,7 +3,19 @@ import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
 
-describe('runMigrations', () => {
+const getTableNames = (db: Database): string[] =>
+  db
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table'")
+    .all()
+    .map((row) => row.name)
+
+const getMigrationIds = (db: Database): string[] =>
+  db
+    .query<{ id: string }, []>('SELECT id FROM migrations ORDER BY applied_at')
+    .all()
+    .map((row) => row.id)
+
+describe('runMigrations - basic behavior', () => {
   let db: Database
 
   beforeEach(() => {
@@ -34,17 +46,29 @@ describe('runMigrations', () => {
 
     expect(executionOrder).toEqual(['001_first', '002_second'])
 
-    const tables = db
-      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'test_table_%'")
-      .all()
-    const tableNames = tables.map((t) => t.name).sort()
+    const tableNames = getTableNames(db)
+      .filter((name) => name.startsWith('test_table_'))
+      .sort()
     expect(tableNames).toEqual(['test_table_1', 'test_table_2'])
 
-    const migrationIds = db
-      .query<{ id: string }, []>('SELECT id FROM migrations ORDER BY applied_at')
-      .all()
-      .map((row) => row.id)
-    expect(migrationIds).toEqual(['001_first', '002_second'])
+    expect(getMigrationIds(db)).toEqual(['001_first', '002_second'])
+  })
+
+  test('handles empty migration list', () => {
+    expect(() => {
+      runMigrations(db, [])
+    }).not.toThrow()
+
+    expect(getTableNames(db)).toContain('migrations')
+    expect(getMigrationIds(db)).toHaveLength(0)
+  })
+})
+
+describe('runMigrations - skips already-applied', () => {
+  let db: Database
+
+  beforeEach(() => {
+    db = new Database(':memory:')
   })
 
   test('skips already-applied migrations', () => {
@@ -74,44 +98,18 @@ describe('runMigrations', () => {
     expect(firstCallCount).toBe(0)
     expect(secondCallCount).toBe(1)
 
-    const migrationIds = db
-      .query<{ id: string }, []>('SELECT id FROM migrations')
-      .all()
-      .map((row) => row.id)
+    const migrationIds = getMigrationIds(db)
     expect(migrationIds).toContain('001_first')
     expect(migrationIds).toContain('002_second')
     expect(migrationIds).toHaveLength(2)
   })
+})
 
-  test('rolls back on failure and rethrows', () => {
-    let sideEffectVisible = false
+describe('runMigrations - idempotency', () => {
+  let db: Database
 
-    const migrations: readonly Migration[] = [
-      {
-        id: '001_will_fail',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS temp_table (id INTEGER PRIMARY KEY)')
-          sideEffectVisible = true
-          throw new Error('Migration failed intentionally')
-        },
-      },
-    ]
-
-    expect(() =>{  runMigrations(db, migrations); }).toThrow('Migration failed intentionally')
-
-    expect(sideEffectVisible).toBe(true)
-
-    const tableExists = db
-      .query<{ count: number }, []>(
-        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='temp_table'",
-      )
-      .get()
-    expect(tableExists?.count).toBe(0)
-
-    const migrationExists = db
-      .query<{ count: number }, []>("SELECT COUNT(*) as count FROM migrations WHERE id='001_will_fail'")
-      .get()
-    expect(migrationExists?.count).toBe(0)
+  beforeEach(() => {
+    db = new Database(':memory:')
   })
 
   test('is idempotent - second call applies nothing', () => {
@@ -132,21 +130,41 @@ describe('runMigrations', () => {
     runMigrations(db, migrations)
     expect(callCount).toBe(1)
 
-    const migrationCount = db.query<{ count: number }, []>('SELECT COUNT(*) as count FROM migrations').get()
-    expect(migrationCount?.count).toBe(1)
+    expect(getMigrationIds(db)).toHaveLength(1)
+  })
+})
+
+describe('runMigrations - rollback', () => {
+  let db: Database
+
+  beforeEach(() => {
+    db = new Database(':memory:')
   })
 
-  test('handles empty migration list', () => {
-    expect(() =>{  runMigrations(db, []); }).not.toThrow()
+  test('rolls back on failure and rethrows', () => {
+    let sideEffectVisible = false
 
-    const tableExists = db
-      .query<{ count: number }, []>(
-        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='migrations'",
-      )
-      .get()
-    expect(tableExists?.count).toBe(1)
+    const migrations: readonly Migration[] = [
+      {
+        id: '001_will_fail',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS temp_table (id INTEGER PRIMARY KEY)')
+          sideEffectVisible = true
+          throw new Error('Migration failed intentionally')
+        },
+      },
+    ]
 
-    const migrationCount = db.query<{ count: number }, []>('SELECT COUNT(*) as count FROM migrations').get()
-    expect(migrationCount?.count).toBe(0)
+    expect(() => {
+      runMigrations(db, migrations)
+    }).toThrow('Migration failed intentionally')
+
+    expect(sideEffectVisible).toBe(true)
+
+    const tableNames = getTableNames(db)
+    expect(tableNames).not.toContain('temp_table')
+
+    const migrationIds = getMigrationIds(db)
+    expect(migrationIds).not.toContain('001_will_fail')
   })
 })
