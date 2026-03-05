@@ -17,28 +17,57 @@ const extractBaseName = (id: string): string | undefined => {
   return match === null ? undefined : match[1]
 }
 
+const validateSingleMigration = (migration: Migration, seenIds: Set<string>, seenBaseNames: Set<string>): void => {
+  if (!/^\d+/.test(migration.id)) {
+    throw new Error(`Migration ID must start with a numeric prefix: ${migration.id}`)
+  }
+
+  if (seenIds.has(migration.id)) {
+    throw new Error(`Migration ${migration.id} has duplicate full ID`)
+  }
+  seenIds.add(migration.id)
+
+  const baseName = extractBaseName(migration.id)
+  if (baseName !== undefined) {
+    if (seenBaseNames.has(baseName)) {
+      throw new Error(`Migration ${migration.id} has duplicate base name: ${baseName}`)
+    }
+    seenBaseNames.add(baseName)
+  }
+}
+
+const validatePairwiseOrder = (current: Migration, previous: Migration): void => {
+  const currentNum = extractNumericPrefix(current.id)
+  const previousNum = extractNumericPrefix(previous.id)
+
+  if (currentNum === undefined || previousNum === undefined) {
+    throw new Error(`Failed to extract numeric prefix from ${current.id} or ${previous.id}`)
+  }
+
+  if (currentNum === previousNum) {
+    logger.error(
+      { current: current.id, previous: previous.id },
+      'Migration ID prefix conflict: duplicate numeric prefix detected',
+    )
+    throw new Error(`Migration ${current.id} has duplicate prefix`)
+  }
+
+  if (currentNum < previousNum) {
+    logger.error(
+      { current: current.id, previous: previous.id },
+      'Migration order violation: migrations must be in ascending order',
+    )
+    throw new Error(`Migration ${current.id} is out of order`)
+  }
+}
+
 const validateOrder = (migrations: readonly Migration[]): void => {
   const seenIds = new Set<string>()
   const seenBaseNames = new Set<string>()
 
   // Per-element check: every migration must have a numeric prefix + no duplicates
   for (const migration of migrations) {
-    if (!/^\d+/.test(migration.id)) {
-      throw new Error(`Migration ID must start with a numeric prefix: ${migration.id}`)
-    }
-
-    if (seenIds.has(migration.id)) {
-      throw new Error(`Migration ${migration.id} has duplicate full ID`)
-    }
-    seenIds.add(migration.id)
-
-    const baseName = extractBaseName(migration.id)
-    if (baseName !== undefined) {
-      if (seenBaseNames.has(baseName)) {
-        throw new Error(`Migration ${migration.id} has duplicate base name: ${baseName}`)
-      }
-      seenBaseNames.add(baseName)
-    }
+    validateSingleMigration(migration, seenIds, seenBaseNames)
   }
 
   // Pairwise check: reject equal or decreasing numeric prefixes
@@ -50,28 +79,7 @@ const validateOrder = (migrations: readonly Migration[]): void => {
       throw new Error('Unexpected undefined migration in pairwise check')
     }
 
-    const currentNum = extractNumericPrefix(current.id)
-    const previousNum = extractNumericPrefix(previous.id)
-
-    if (currentNum === undefined || previousNum === undefined) {
-      throw new Error(`Failed to extract numeric prefix from ${current.id} or ${previous.id}`)
-    }
-
-    if (currentNum === previousNum) {
-      logger.error(
-        { current: current.id, previous: previous.id },
-        'Migration ID prefix conflict: duplicate numeric prefix detected',
-      )
-      throw new Error(`Migration ${current.id} has duplicate prefix`)
-    }
-
-    if (currentNum < previousNum) {
-      logger.error(
-        { current: current.id, previous: previous.id },
-        'Migration order violation: migrations must be in ascending order',
-      )
-      throw new Error(`Migration ${current.id} is out of order`)
-    }
+    validatePairwiseOrder(current, previous)
   }
 }
 

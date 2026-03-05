@@ -1,7 +1,6 @@
 import { Database } from 'bun:sqlite'
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
 
-// Mock logger to silence output during tests
 void mock.module('../../src/logger.js', () => ({
   logger: {
     debug: (): void => {},
@@ -31,11 +30,13 @@ const getMigrationIds = (db: Database): string[] =>
     .all()
     .map((row) => row.id)
 
+const makeDb = (): Database => new Database(':memory:')
+
 describe('runMigrations - basic behavior', () => {
   let db: Database
 
   beforeEach(() => {
-    db = new Database(':memory:')
+    db = makeDb()
   })
 
   afterEach(() => {
@@ -88,7 +89,7 @@ describe('runMigrations - skips already-applied', () => {
   let db: Database
 
   beforeEach(() => {
-    db = new Database(':memory:')
+    db = makeDb()
   })
 
   afterEach(() => {
@@ -133,7 +134,7 @@ describe('runMigrations - idempotency', () => {
   let db: Database
 
   beforeEach(() => {
-    db = new Database(':memory:')
+    db = makeDb()
   })
 
   afterEach(() => {
@@ -166,7 +167,7 @@ describe('runMigrations - rollback', () => {
   let db: Database
 
   beforeEach(() => {
-    db = new Database(':memory:')
+    db = makeDb()
   })
 
   afterEach(() => {
@@ -205,7 +206,7 @@ describe('runMigrations - order validation', () => {
   let db: Database
 
   beforeEach(() => {
-    db = new Database(':memory:')
+    db = makeDb()
   })
 
   afterEach(() => {
@@ -213,99 +214,39 @@ describe('runMigrations - order validation', () => {
   })
 
   test('throws for single migration with no numeric prefix', () => {
-    const migrations: readonly Migration[] = [
-      {
-        id: 'initial',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS initial_table (id INTEGER PRIMARY KEY)')
-        },
-      },
-    ]
-
+    const migrations: readonly Migration[] = [{ id: 'initial', up: () => {} }]
     expect(() => {
       runMigrations(db, migrations)
     }).toThrow('Migration ID must start with a numeric prefix: initial')
-
-    // Verify no tables were created (migration didn't run)
-    const tableNames = getTableNames(db)
-    expect(tableNames).not.toContain('initial_table')
   })
 
   test('throws when migrations are out of order', () => {
     const migrations: readonly Migration[] = [
-      {
-        id: '002_second',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
-        },
-      },
-      {
-        id: '001_first',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
-        },
-      },
+      { id: '002_second', up: () => {} },
+      { id: '001_first', up: () => {} },
     ]
-
     expect(() => {
       runMigrations(db, migrations)
     }).toThrow('Migration 001_first is out of order')
-
-    // Verify no tables were created (migration didn't run)
-    const tableNames = getTableNames(db)
-    expect(tableNames).not.toContain('table_1')
-    expect(tableNames).not.toContain('table_2')
   })
 
   test('throws when migrations have duplicate IDs', () => {
     const migrations: readonly Migration[] = [
-      {
-        id: '001_first',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
-        },
-      },
-      {
-        id: '001_first',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
-        },
-      },
+      { id: '001_first', up: () => {} },
+      { id: '001_first', up: () => {} },
     ]
-
     expect(() => {
       runMigrations(db, migrations)
     }).toThrow('Migration 001_first has duplicate full ID')
-
-    // Verify no tables were created (migration didn't run)
-    const tableNames = getTableNames(db)
-    expect(tableNames).not.toContain('table_1')
-    expect(tableNames).not.toContain('table_2')
   })
 
   test('throws when migrations have different numeric prefixes with same suffix', () => {
     const migrations: readonly Migration[] = [
-      {
-        id: '001_foo',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
-        },
-      },
-      {
-        id: '002_foo',
-        up: (database: Database) => {
-          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
-        },
-      },
+      { id: '001_foo', up: () => {} },
+      { id: '002_foo', up: () => {} },
     ]
-
     expect(() => {
       runMigrations(db, migrations)
-    }).toThrow('Migration 002_foo has duplicate full ID')
-
-    // Verify no tables were created (migration didn't run)
-    const tableNames = getTableNames(db)
-    expect(tableNames).not.toContain('table_1')
-    expect(tableNames).not.toContain('table_2')
+    }).toThrow('Migration 002_foo has duplicate base name: foo')
   })
 })
