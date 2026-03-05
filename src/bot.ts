@@ -8,6 +8,7 @@ import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig
 import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
 import { makeTools } from './tools/index.js'
+import { formatMarkdownToHtml } from './utils/markdown.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -102,8 +103,9 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   const assistantText = result.text
+  const formattedText = formatMarkdownToHtml(assistantText || 'Done.')
   conversationHistory.set(userId, [...history, ...result.response.messages])
-  await ctx.reply(assistantText || 'Done.')
+  await ctx.reply(formattedText, { parse_mode: 'HTML' })
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',
