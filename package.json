@@ -10,6 +10,9 @@
     "lint:fix": "oxlint --type-aware --fix .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
   },
   "dependencies": {

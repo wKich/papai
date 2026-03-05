@@ -1,6 +1,6 @@
 # papai
 
-Telegram bot that manages Linear tasks via natural language, powered by GPT-4o tool-calling.
+Telegram bot that manages Linear tasks via natural language, powered by any OpenAI-compatible LLM.
 
 ## Features
 
@@ -20,7 +20,7 @@ Telegram bot that manages Linear tasks via natural language, powered by GPT-4o t
 - [Bun](https://bun.sh) runtime
 - Telegram bot token (from [@BotFather](https://t.me/BotFather))
 - [Linear](https://linear.app) API key
-- [OpenAI](https://platform.openai.com) API key
+- API key for any OpenAI-compatible LLM provider (OpenAI, Anthropic, Mistral, local Ollama, etc.)
 
 ## Setup
 
@@ -44,13 +44,13 @@ Two variables are required at startup:
 
 The remaining credentials are configured at runtime via the `/set` command:
 
-| Key               | Description                        | Where to get it                                                      |
-| ----------------- | ---------------------------------- | -------------------------------------------------------------------- |
-| `linear_key`      | Linear personal API key            | Linear Settings → API → Personal API keys                            |
-| `linear_team_id`  | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL             |
-| `openai_key`      | OpenAI API key                     | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `openai_base_url` | OpenAI-compatible base URL         | Required; e.g. `https://api.openai.com/v1`                           |
-| `openai_model`    | Model name to use                  | Required; e.g. `gpt-4o`                                              |
+| Key               | Description                        | Where to get it                                                           |
+| ----------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `linear_key`      | Linear personal API key            | Linear Settings → API → Personal API keys                                 |
+| `linear_team_id`  | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL                  |
+| `openai_key`      | API key for your LLM provider      | Your provider's API key (use any value for keyless local endpoints)       |
+| `openai_base_url` | OpenAI-compatible base URL         | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`             |
+| `openai_model`    | Model name to use                  | e.g. `gpt-5.2`, `claude-opus-4-6`, `qwen3.5`, `kimi-k2.5`, `minimax-m2.5` |
 
 Use `/config` to view current values, and `/set <key> <value>` to update them.
 
@@ -72,7 +72,7 @@ Send natural language messages to the bot in Telegram:
 ## Architecture
 
 ```
-Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-4o)
+Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
                                               ├─ src/tools/ ─→ src/linear/ ─→ Linear SDK
                                               │   15 tools, one file each
@@ -172,7 +172,7 @@ After starting, configure credentials via Telegram:
 /set linear_team_id <team-id>
 /set openai_key sk-xxxxxxxxxxxx
 /set openai_base_url https://api.openai.com/v1
-/set openai_model gpt-4o
+/set openai_model o3
 ```
 
 ## Development

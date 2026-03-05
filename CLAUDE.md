@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a Telegram bot that manages Linear tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes GPT-4o (via Vercel AI SDK) which autonomously selects and executes Linear operations, then replies with the result.
+papai is a Telegram bot that manages Linear tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Linear operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
 
 ## Commands
 
@@ -25,10 +25,10 @@ The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai
 ## Architecture
 
 ```
-Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (GPT-4o)
+Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
                                               ├─ tools/ ─→ linear/ ─→ Linear SDK
-                                              │   13 tools, one file each
+                                              │   15 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```

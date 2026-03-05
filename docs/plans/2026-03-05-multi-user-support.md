@@ -1,0 +1,934 @@
+# Multi-User Support with Per-User Authorization
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Allow multiple Telegram users to use the bot, each with their own Linear/LLM credentials and isolated conversation history.
+
+**Architecture:** The current single-user model (`TELEGRAM_USER_ID` env var + global config table) is replaced with a `users` SQLite table for authorization and a `user_config` table for per-user credentials. The original `TELEGRAM_USER_ID` becomes the admin user who can add/remove other users. Each user's `/set` and `/config` commands operate on their own credentials. Conversation history is already keyed by userId — no changes needed there.
+
+**Tech Stack:** Bun, Grammy, SQLite (`bun:sqlite`), Zod v4, pino
+
+---
+
+## Database Schema
+
+```sql
+-- Authorized users
+CREATE TABLE IF NOT EXISTS users (
+  telegram_id INTEGER PRIMARY KEY,
+  added_at TEXT NOT NULL DEFAULT (datetime('now')),
+  added_by INTEGER NOT NULL
+);
+
+-- Per-user configuration (replaces global config table)
+CREATE TABLE IF NOT EXISTS user_config (
+  user_id INTEGER NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (user_id, key),
+  FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+);
+```
+
+## Migration Strategy
+
+A one-time migration seeds the admin user into `users` and copies any existing rows from `config` into `user_config` scoped to the admin. The old `config` table is left in place (not dropped) to avoid data loss — it simply becomes unused.
+
+---
+
+### Task 1: Create `src/users.ts` — user store module
+
+**Files:**
+
+- Create: `src/users.ts`
+- Test: `src/users.test.ts`
+
+**Step 1: Write the failing tests**
+
+```typescript
+// src/users.test.ts
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
+
+const store = {
+  users: new Map<number, { telegram_id: number; added_at: string; added_by: number }>(),
+}
+
+const mockResult = mock.module('bun:sqlite', () => ({
+  Database: class MockDatabase {
+    run(sql: string, params?: (string | number)[]): void {
+      if (sql.includes('INSERT INTO users') && params !== undefined) {
+        store.users.set(params[0] as number, {
+          telegram_id: params[0] as number,
+          added_at: new Date().toISOString(),
+          added_by: params[1] as number,
+        })
+      }
+      if (sql.includes('DELETE FROM users') && params !== undefined) {
+        store.users.delete(params[0] as number)
+      }
+    }
+
+    query(sql: string): {
+      get: (...args: (string | number)[]) => Record<string, unknown> | null
+      all: () => Array<Record<string, unknown>>
+    } {
+      if (sql.includes('SELECT * FROM users WHERE telegram_id')) {
+        return {
+          get: (id: string | number): Record<string, unknown> | null => {
+            const user = store.users.get(id as number)
+            return user ?? null
+          },
+          all: (): Array<Record<string, unknown>> => [],
+        }
+      }
+      if (sql.includes('SELECT telegram_id, added_at, added_by FROM users')) {
+        return {
+          get: (): null => null,
+          all: (): Array<Record<string, unknown>> => Array.from(store.users.values()),
+        }
+      }
+      return { get: (): null => null, all: (): Array<Record<string, unknown>> => [] }
+    }
+  },
+}))
+
+if (mockResult instanceof Promise) {
+  mockResult.catch(() => {})
+}
+
+import { addUser, removeUser, isAuthorized, listUsers } from './users.js'
+
+describe('addUser', () => {
+  beforeEach(() => {
+    store.users.clear()
+  })
+
+  test('adds a user', () => {
+    addUser(111, 999)
+    expect(store.users.has(111)).toBe(true)
+    expect(store.users.get(111)?.added_by).toBe(999)
+  })
+})
+
+describe('removeUser', () => {
+  beforeEach(() => {
+    store.users.clear()
+  })
+
+  test('removes a user', () => {
+    addUser(111, 999)
+    removeUser(111)
+    expect(store.users.has(111)).toBe(false)
+  })
+})
+
+describe('isAuthorized', () => {
+  beforeEach(() => {
+    store.users.clear()
+  })
+
+  test('returns true for authorized user', () => {
+    addUser(111, 999)
+    expect(isAuthorized(111)).toBe(true)
+  })
+
+  test('returns false for unknown user', () => {
+    expect(isAuthorized(222)).toBe(false)
+  })
+})
+
+describe('listUsers', () => {
+  beforeEach(() => {
+    store.users.clear()
+  })
+
+  test('returns all users', () => {
+    addUser(111, 999)
+    addUser(222, 999)
+    const users = listUsers()
+    expect(users).toHaveLength(2)
+  })
+
+  test('returns empty array when no users', () => {
+    expect(listUsers()).toHaveLength(0)
+  })
+})
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `bun test src/users.test.ts`
+Expected: FAIL — module `./users.js` does not exist
+
+**Step 3: Write the implementation**
+
+```typescript
+// src/users.ts
+import { Database } from 'bun:sqlite'
+
+import { logger } from './logger.js'
+
+const log = logger.child({ scope: 'users' })
+
+const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const db = new Database(DB_PATH)
+db.run(
+  "CREATE TABLE IF NOT EXISTS users (telegram_id INTEGER PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime('now')), added_by INTEGER NOT NULL)",
+)
+
+export function addUser(telegramId: number, addedBy: number): void {
+  log.debug({ telegramId, addedBy }, 'addUser called')
+  db.run('INSERT INTO users (telegram_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [telegramId, addedBy])
+  log.info({ telegramId, addedBy }, 'User added')
+}
+
+export function removeUser(telegramId: number): void {
+  log.debug({ telegramId }, 'removeUser called')
+  db.run('DELETE FROM users WHERE telegram_id = ?', [telegramId])
+  log.info({ telegramId }, 'User removed')
+}
+
+export function isAuthorized(telegramId: number): boolean {
+  log.debug({ telegramId }, 'isAuthorized called')
+  const row = db.query<{ telegram_id: number }, [number]>('SELECT * FROM users WHERE telegram_id = ?').get(telegramId)
+  return row !== null
+}
+
+export interface UserRecord {
+  telegram_id: number
+  added_at: string
+  added_by: number
+}
+
+export function listUsers(): UserRecord[] {
+  log.debug('listUsers called')
+  return db.query<UserRecord, []>('SELECT telegram_id, added_at, added_by FROM users').all()
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `bun test src/users.test.ts`
+Expected: PASS — all 6 tests pass
+
+**Step 5: Commit**
+
+```bash
+git add src/users.ts src/users.test.ts
+git commit -m "feat: add users module for multi-user authorization"
+```
+
+---
+
+### Task 2: Make config per-user
+
+**Files:**
+
+- Modify: `src/config.ts`
+- Modify: `src/config.test.ts`
+
+The global `config` table is replaced by `user_config` keyed on `(user_id, key)`. All public functions gain a `userId: number` parameter.
+
+**Step 1: Update the tests**
+
+Replace the contents of `src/config.test.ts`. Key changes:
+
+- The mock store is now `Map<string, string>` keyed by `"${userId}:${key}"`
+- Every call to `setConfig`, `getConfig`, `getAllConfig` passes a `userId`
+
+```typescript
+// src/config.test.ts
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
+
+const store = { data: new Map<string, string>() }
+
+const mockSetupResult = mock.module('bun:sqlite', () => ({
+  Database: class MockDatabase {
+    run(sql: string, params?: (string | number)[]): void {
+      if (sql.includes('INSERT OR REPLACE INTO user_config') && params !== undefined) {
+        store.data.set(`${params[0]}:${params[1]}`, params[2] as string)
+      }
+    }
+
+    query(sql: string): {
+      get: (...args: (string | number)[]) => { value: string } | null
+      all: (...args: (string | number)[]) => Array<{ key: string; value: string }>
+    } {
+      if (sql.includes('SELECT value FROM user_config WHERE user_id') && sql.includes('AND key')) {
+        return {
+          get: (userId: string | number, key: string | number): { value: string } | null => {
+            const value = store.data.get(`${userId}:${key}`)
+            return value !== undefined ? { value } : null
+          },
+          all: (): Array<{ key: string; value: string }> => [],
+        }
+      }
+      if (sql.includes('SELECT key, value FROM user_config WHERE user_id')) {
+        return {
+          get: (): null => null,
+          all: (userId: string | number): Array<{ key: string; value: string }> => {
+            const prefix = `${userId}:`
+            return Array.from(store.data.entries())
+              .filter(([k]) => k.startsWith(prefix))
+              .map(([k, v]) => ({ key: k.slice(prefix.length), value: v }))
+          },
+        }
+      }
+      return { get: (): null => null, all: (): Array<{ key: string; value: string }> => [] }
+    }
+  },
+}))
+
+if (mockSetupResult instanceof Promise) {
+  mockSetupResult.catch(() => {})
+}
+
+import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
+import type { ConfigKey } from './config.js'
+
+const USER_A = 111
+const USER_B = 222
+
+describe('setConfig', () => {
+  beforeEach(() => {
+    store.data.clear()
+  })
+
+  test('stores value for user and key', () => {
+    setConfig(USER_A, 'linear_key', 'test-api-key')
+    expect(getConfig(USER_A, 'linear_key')).toBe('test-api-key')
+  })
+
+  test('updates existing value', () => {
+    setConfig(USER_A, 'linear_key', 'old-key')
+    setConfig(USER_A, 'linear_key', 'new-key')
+    expect(getConfig(USER_A, 'linear_key')).toBe('new-key')
+  })
+
+  test('isolates config between users', () => {
+    setConfig(USER_A, 'linear_key', 'key-a')
+    setConfig(USER_B, 'linear_key', 'key-b')
+    expect(getConfig(USER_A, 'linear_key')).toBe('key-a')
+    expect(getConfig(USER_B, 'linear_key')).toBe('key-b')
+  })
+})
+
+describe('getConfig', () => {
+  beforeEach(() => {
+    store.data.clear()
+  })
+
+  test('returns stored value', () => {
+    setConfig(USER_A, 'linear_team_id', 'team-abc')
+    expect(getConfig(USER_A, 'linear_team_id')).toBe('team-abc')
+  })
+
+  test('returns null for unset key', () => {
+    expect(getConfig(USER_A, 'openai_model')).toBeNull()
+  })
+})
+
+describe('getAllConfig', () => {
+  beforeEach(() => {
+    store.data.clear()
+  })
+
+  test('returns all set configs for user', () => {
+    setConfig(USER_A, 'linear_key', 'key-1')
+    setConfig(USER_A, 'openai_model', 'gpt-4')
+    const allConfig = getAllConfig(USER_A)
+    expect(allConfig.linear_key).toBe('key-1')
+    expect(allConfig.openai_model).toBe('gpt-4')
+  })
+
+  test('does not leak config from other users', () => {
+    setConfig(USER_A, 'linear_key', 'key-a')
+    setConfig(USER_B, 'linear_key', 'key-b')
+    const configA = getAllConfig(USER_A)
+    expect(configA.linear_key).toBe('key-a')
+  })
+})
+
+describe('isConfigKey', () => {
+  test('returns true for valid keys', () => {
+    const validKeys: ConfigKey[] = ['linear_key', 'linear_team_id', 'openai_key', 'openai_base_url', 'openai_model']
+    validKeys.forEach((key) => {
+      expect(isConfigKey(key)).toBe(true)
+    })
+  })
+
+  test('returns false for invalid keys', () => {
+    expect(isConfigKey('invalid')).toBe(false)
+  })
+})
+
+describe('maskValue', () => {
+  test('masks sensitive keys', () => {
+    expect(maskValue('linear_key', 'secret-key-1234')).toBe('****1234')
+    expect(maskValue('openai_key', 'sk-abc123')).toBe('****c123')
+  })
+
+  test('returns unmasked value for non-sensitive keys', () => {
+    expect(maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
+  })
+})
+
+describe('CONFIG_KEYS', () => {
+  test('contains all expected keys', () => {
+    expect(CONFIG_KEYS).toHaveLength(5)
+  })
+})
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `bun test src/config.test.ts`
+Expected: FAIL — `setConfig` signature mismatch (expects 2 args, got 3)
+
+**Step 3: Rewrite `src/config.ts`**
+
+```typescript
+// src/config.ts
+import { Database } from 'bun:sqlite'
+
+import { logger } from './logger.js'
+
+const log = logger.child({ scope: 'config' })
+
+export type ConfigKey = 'linear_key' | 'linear_team_id' | 'openai_key' | 'openai_base_url' | 'openai_model'
+
+export const CONFIG_KEYS: readonly ConfigKey[] = [
+  'linear_key',
+  'linear_team_id',
+  'openai_key',
+  'openai_base_url',
+  'openai_model',
+]
+
+const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
+
+const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const db = new Database(DB_PATH)
+db.run(
+  'CREATE TABLE IF NOT EXISTS user_config (user_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (user_id, key))',
+)
+
+export function setConfig(userId: number, key: ConfigKey, value: string): void {
+  log.debug({ userId, key }, 'setConfig called')
+  db.run('INSERT OR REPLACE INTO user_config (user_id, key, value) VALUES (?, ?, ?)', [userId, key, value])
+  log.info({ userId, key }, 'Config key set')
+}
+
+export function getConfig(userId: number, key: ConfigKey): string | null {
+  log.debug({ userId, key }, 'getConfig called')
+  const row = db
+    .query<{ value: string }, [number, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
+    .get(userId, key)
+  return row?.value ?? null
+}
+
+export function isConfigKey(key: string): key is ConfigKey {
+  return (CONFIG_KEYS as readonly string[]).includes(key)
+}
+
+export function getAllConfig(userId: number): Partial<Record<ConfigKey, string>> {
+  log.debug({ userId }, 'getAllConfig called')
+  const rows = db
+    .query<{ key: string; value: string }, [number]>('SELECT key, value FROM user_config WHERE user_id = ?')
+    .all(userId)
+  return rows.reduce<Partial<Record<ConfigKey, string>>>(
+    (acc, row) => (isConfigKey(row.key) ? { ...acc, [row.key]: row.value } : acc),
+    {},
+  )
+}
+
+export function maskValue(key: ConfigKey, value: string): string {
+  if (SENSITIVE_KEYS.has(key)) {
+    const last4 = value.slice(-4)
+    return `****${last4}`
+  }
+  return value
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `bun test src/config.test.ts`
+Expected: PASS
+
+**Step 5: Commit**
+
+```bash
+git add src/config.ts src/config.test.ts
+git commit -m "feat: make config per-user with user_config table"
+```
+
+---
+
+### Task 3: Add admin migration — seed admin user and migrate global config
+
+**Files:**
+
+- Create: `src/migrate.ts`
+- Test: `src/migrate.test.ts`
+
+On startup, the migration:
+
+1. Inserts the admin user (from `TELEGRAM_USER_ID`) into `users` (idempotent)
+2. If the old `config` table exists and has rows, copies them into `user_config` scoped to the admin, then leaves the old table untouched
+
+**Step 1: Write the failing tests**
+
+```typescript
+// src/migrate.test.ts
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
+
+const store = {
+  configRows: new Map<string, string>(),
+  userConfigRows: new Map<string, string>(),
+  users: new Map<number, boolean>(),
+  tableExists: true,
+}
+
+const mockResult = mock.module('bun:sqlite', () => ({
+  Database: class MockDatabase {
+    run(sql: string, params?: (string | number)[]): void {
+      if (sql.includes('INSERT INTO users') && params !== undefined) {
+        store.users.set(params[0] as number, true)
+      }
+      if (sql.includes('INSERT OR IGNORE INTO user_config') && params !== undefined) {
+        const key = `${params[0]}:${params[1]}`
+        if (!store.userConfigRows.has(key)) {
+          store.userConfigRows.set(key, params[2] as string)
+        }
+      }
+    }
+
+    query(sql: string): {
+      get: () => Record<string, unknown> | null
+      all: () => Array<Record<string, unknown>>
+    } {
+      if (sql.includes('sqlite_master') && sql.includes("name='config'")) {
+        return {
+          get: (): Record<string, unknown> | null => (store.tableExists ? { name: 'config' } : null),
+          all: (): Array<Record<string, unknown>> => [],
+        }
+      }
+      if (sql.includes('SELECT key, value FROM config')) {
+        return {
+          get: (): null => null,
+          all: (): Array<Record<string, unknown>> =>
+            Array.from(store.configRows.entries()).map(([key, value]) => ({ key, value })),
+        }
+      }
+      return { get: (): null => null, all: (): Array<Record<string, unknown>> => [] }
+    }
+  },
+}))
+
+if (mockResult instanceof Promise) {
+  mockResult.catch(() => {})
+}
+
+import { migrateToMultiUser } from './migrate.js'
+
+describe('migrateToMultiUser', () => {
+  beforeEach(() => {
+    store.configRows.clear()
+    store.userConfigRows.clear()
+    store.users.clear()
+    store.tableExists = true
+  })
+
+  test('seeds admin user', () => {
+    migrateToMultiUser(12345)
+    expect(store.users.has(12345)).toBe(true)
+  })
+
+  test('migrates existing config rows to admin user_config', () => {
+    store.configRows.set('linear_key', 'lin_xxx')
+    store.configRows.set('openai_model', 'gpt-4o')
+    migrateToMultiUser(12345)
+    expect(store.userConfigRows.get('12345:linear_key')).toBe('lin_xxx')
+    expect(store.userConfigRows.get('12345:openai_model')).toBe('gpt-4o')
+  })
+
+  test('skips migration when config table does not exist', () => {
+    store.tableExists = false
+    migrateToMultiUser(12345)
+    expect(store.userConfigRows.size).toBe(0)
+  })
+
+  test('does not overwrite existing user_config', () => {
+    store.userConfigRows.set('12345:linear_key', 'existing')
+    store.configRows.set('linear_key', 'old-value')
+    migrateToMultiUser(12345)
+    expect(store.userConfigRows.get('12345:linear_key')).toBe('existing')
+  })
+})
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `bun test src/migrate.test.ts`
+Expected: FAIL — module `./migrate.js` does not exist
+
+**Step 3: Write the implementation**
+
+```typescript
+// src/migrate.ts
+import { Database } from 'bun:sqlite'
+
+import { logger } from './logger.js'
+
+const log = logger.child({ scope: 'migrate' })
+
+const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const db = new Database(DB_PATH)
+
+export function migrateToMultiUser(adminId: number): void {
+  log.debug({ adminId }, 'migrateToMultiUser called')
+
+  // Seed admin user
+  db.run('INSERT INTO users (telegram_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [adminId, adminId])
+  log.info({ adminId }, 'Admin user seeded')
+
+  // Check if old config table exists
+  const tableRow = db
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name='config'")
+    .get()
+
+  if (tableRow === null) {
+    log.debug('No legacy config table found, skipping migration')
+    return
+  }
+
+  // Copy rows from config to user_config for the admin user
+  const rows = db.query<{ key: string; value: string }, []>('SELECT key, value FROM config').all()
+  for (const row of rows) {
+    db.run('INSERT OR IGNORE INTO user_config (user_id, key, value) VALUES (?, ?, ?)', [adminId, row.key, row.value])
+  }
+  log.info({ adminId, migratedKeys: rows.length }, 'Legacy config migrated to user_config')
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `bun test src/migrate.test.ts`
+Expected: PASS
+
+**Step 5: Commit**
+
+```bash
+git add src/migrate.ts src/migrate.test.ts
+git commit -m "feat: add migration to seed admin and copy legacy config"
+```
+
+---
+
+### Task 4: Update `bot.ts` — multi-user authorization, admin commands, per-user config
+
+**Files:**
+
+- Modify: `src/bot.ts`
+- Modify: `src/bot.test.ts`
+
+This is the largest task. Changes:
+
+1. Replace `allowedUserId` check with `isAuthorized()` from `users.ts`
+2. Keep `TELEGRAM_USER_ID` as `adminUserId` for admin-only commands
+3. `/set` and `/config` pass `userId` to config functions
+4. `callLlm` reads config per-user
+5. New admin commands: `/adduser <id>`, `/removeuser <id>`, `/users`
+
+**Step 1: Update `bot.ts`**
+
+Key changes (not a full rewrite — only the diffs):
+
+1. **Imports** — add `isAuthorized`, `addUser`, `removeUser`, `listUsers` from `./users.js`
+
+2. **Replace `checkAuthorization`:**
+
+```typescript
+const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
+
+const checkAuthorization = (userId: number | undefined): userId is number => {
+  log.debug({ userId }, 'Checking authorization')
+  if (userId === undefined || !isAuthorized(userId)) {
+    if (userId !== undefined) {
+      log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
+    }
+    return false
+  }
+  return true
+}
+
+const checkAdmin = (userId: number | undefined): userId is number => {
+  if (userId === undefined || userId !== adminUserId) {
+    return false
+  }
+  return true
+}
+```
+
+3. **Update `/set` command** — pass `userId` to `setConfig`:
+
+```typescript
+bot.command('set', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAuthorization(userId)) {
+    return
+  }
+  // ... parse key/value (same as current) ...
+  setConfig(userId, key, value)
+  log.info({ userId, key }, '/set command executed')
+  await ctx.reply(`Set ${key} successfully.`)
+})
+```
+
+4. **Update `/config` command** — pass `userId` to `getAllConfig`:
+
+```typescript
+bot.command('config', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAuthorization(userId)) {
+    return
+  }
+  const config = getAllConfig(userId)
+  // ... same formatting logic ...
+})
+```
+
+5. **Update `callLlm`** — read per-user config:
+
+```typescript
+const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
+  const missing = requiredKeys.filter((k) => getConfig(userId, k) === null)
+  // ...
+  const openaiKey = getConfig(userId, 'openai_key')!
+  const openaiBaseUrl = getConfig(userId, 'openai_base_url')!
+  const openaiModel = getConfig(userId, 'openai_model')!
+  const linearKey = getConfig(userId, 'linear_key')!
+  const linearTeamId = getConfig(userId, 'linear_team_id')!
+  // ... rest unchanged ...
+}
+```
+
+6. **Add admin commands:**
+
+```typescript
+bot.command('adduser', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAdmin(userId)) {
+    await ctx.reply('Only the admin can add users.')
+    return
+  }
+
+  const idStr = ctx.match.trim()
+  const newUserId = parseInt(idStr, 10)
+  if (Number.isNaN(newUserId)) {
+    await ctx.reply('Usage: /adduser <telegram_user_id>')
+    return
+  }
+
+  addUser(newUserId, userId)
+  log.info({ adminId: userId, newUserId }, '/adduser command executed')
+  await ctx.reply(`User ${newUserId} authorized.`)
+})
+
+bot.command('removeuser', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAdmin(userId)) {
+    await ctx.reply('Only the admin can remove users.')
+    return
+  }
+
+  const idStr = ctx.match.trim()
+  const targetId = parseInt(idStr, 10)
+  if (Number.isNaN(targetId)) {
+    await ctx.reply('Usage: /removeuser <telegram_user_id>')
+    return
+  }
+
+  if (targetId === adminUserId) {
+    await ctx.reply('Cannot remove the admin user.')
+    return
+  }
+
+  removeUser(targetId)
+  log.info({ adminId: userId, targetId }, '/removeuser command executed')
+  await ctx.reply(`User ${targetId} removed.`)
+})
+
+bot.command('users', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAdmin(userId)) {
+    await ctx.reply('Only the admin can list users.')
+    return
+  }
+
+  const users = listUsers()
+  if (users.length === 0) {
+    await ctx.reply('No authorized users.')
+    return
+  }
+
+  const lines = users.map((u) => {
+    const admin = u.telegram_id === adminUserId ? ' (admin)' : ''
+    return `${u.telegram_id}${admin} — added ${u.added_at}`
+  })
+  log.info({ userId }, '/users command executed')
+  await ctx.reply(lines.join('\n'))
+})
+```
+
+**Step 2: Run all tests**
+
+Run: `bun test`
+Expected: PASS — the bot.test.ts is minimal and should still pass. Config tests were already updated.
+
+**Step 3: Commit**
+
+```bash
+git add src/bot.ts src/bot.test.ts
+git commit -m "feat: multi-user authorization with admin commands"
+```
+
+---
+
+### Task 5: Wire migration into `index.ts`
+
+**Files:**
+
+- Modify: `src/index.ts`
+
+**Step 1: Update `index.ts`**
+
+Add the migration call after env var validation, before starting the bot:
+
+```typescript
+import { bot } from './bot.js'
+import { logger } from './logger.js'
+import { migrateToMultiUser } from './migrate.js'
+
+const log = logger.child({ scope: 'main' })
+
+const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID']
+
+const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
+if (missing.length > 0) {
+  log.error({ variables: missing }, 'Missing required environment variables')
+  process.exit(1)
+}
+
+const adminId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
+migrateToMultiUser(adminId)
+log.info({ adminId }, 'Migration complete')
+
+log.info('Starting papai...')
+
+void bot.start({
+  onStart: () => {
+    log.info('papai is running and listening for messages.')
+  },
+})
+```
+
+**Step 2: Run lint and type-check**
+
+Run: `bun run lint && bunx tsc --noEmit`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/index.ts
+git commit -m "feat: wire multi-user migration into startup"
+```
+
+---
+
+### Task 6: Update documentation
+
+**Files:**
+
+- Modify: `CLAUDE.md` (Architecture, Required Environment Variables, Available tools table — add admin commands)
+- Modify: `README.md` (if it documents single-user setup)
+- Modify: `.env.example` (add comment explaining admin role)
+- Modify: `ROADMAP.md` (check off multi-user item)
+
+**Step 1: Update CLAUDE.md**
+
+Key documentation changes:
+
+- `TELEGRAM_USER_ID` description: "The admin user ID. This user is automatically authorized on first run and can manage other users."
+- Add new commands to architecture section: `/adduser`, `/removeuser`, `/users`
+- Update `src/config.ts` description: "SQLite-backed **per-user** runtime config store"
+- Add `src/users.ts` — "SQLite-backed user authorization store"
+- Add `src/migrate.ts` — "One-time migration: seeds admin, copies legacy config"
+
+**Step 2: Update ROADMAP.md**
+
+Change:
+
+```
+- [ ] Multi-user support with per-user authorization
+```
+
+To:
+
+```
+- [x] Multi-user support with per-user authorization
+```
+
+**Step 3: Commit**
+
+```bash
+git add CLAUDE.md README.md .env.example ROADMAP.md
+git commit -m "docs: update documentation for multi-user support"
+```
+
+---
+
+### Task 7: Run full test suite and lint
+
+**Step 1: Run all tests**
+
+Run: `bun test`
+Expected: All tests pass
+
+**Step 2: Run lint**
+
+Run: `bun run lint`
+Expected: No errors
+
+**Step 3: Run type-check**
+
+Run: `bunx tsc --noEmit`
+Expected: No errors
+
+**Step 4: Run format check**
+
+Run: `bun run format:check`
+Expected: No formatting issues (run `bun run format` if needed)
+
+---
+
+## Summary of new/modified files
+
+| File                  | Action                                                          |
+| --------------------- | --------------------------------------------------------------- |
+| `src/users.ts`        | Create — user authorization store                               |
+| `src/users.test.ts`   | Create — tests for users module                                 |
+| `src/migrate.ts`      | Create — startup migration                                      |
+| `src/migrate.test.ts` | Create — tests for migration                                    |
+| `src/config.ts`       | Modify — per-user config (`userId` parameter)                   |
+| `src/config.test.ts`  | Modify — updated for per-user signatures                        |
+| `src/bot.ts`          | Modify — multi-user auth, admin commands, per-user config reads |
+| `src/bot.test.ts`     | Modify — if needed for new imports                              |
+| `src/index.ts`        | Modify — wire migration                                         |
+| `CLAUDE.md`           | Modify — document new architecture                              |
+| `README.md`           | Modify — document multi-user setup                              |
+| `.env.example`        | Modify — clarify admin role                                     |
+| `ROADMAP.md`          | Modify — check off item                                         |

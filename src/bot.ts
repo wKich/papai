@@ -62,9 +62,9 @@ const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
 
 const trimHistory = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
   log.debug({ userId, historyLength: history.length }, 'trimHistory called')
-  if (history.length > 40) {
-    const removedCount = history.length - 40
-    const trimmed = history.slice(history.length - 40)
+  if (history.length > 100) {
+    const removedCount = history.length - 100
+    const trimmed = history.slice(history.length - 100)
     log.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
     return trimmed
   }
@@ -97,7 +97,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
     system: SYSTEM_PROMPT,
     messages: [...history],
     tools,
-    stopWhen: stepCountIs(5),
+    stopWhen: stepCountIs(25),
   })
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
