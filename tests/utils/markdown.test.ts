@@ -4,39 +4,96 @@ import { formatMarkdownToHtml } from '../../src/utils/markdown.js'
 
 describe('formatMarkdownToHtml', () => {
   test('converts bold text', () => {
-    const input = '**bold**'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<strong>bold</strong>')
+    expect(formatMarkdownToHtml('**bold**')).toContain('<b>bold</b>')
   })
 
   test('converts italic text', () => {
-    const input = '_italic_'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<em>italic</em>')
+    expect(formatMarkdownToHtml('_italic_')).toContain('<i>italic</i>')
   })
 
   test('converts links', () => {
-    const input = '[text](http://example.com)'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<a href="http://example.com">text</a>')
+    expect(formatMarkdownToHtml('[text](http://example.com)')).toContain('<a href="http://example.com">text</a>')
   })
 
   test('converts inline code', () => {
-    const input = '`code`'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<code>code</code>')
+    expect(formatMarkdownToHtml('`code`')).toContain('<code>code</code>')
   })
 
   test('converts code blocks', () => {
-    const input = '```typescript\nconsole.log("hi")\n```'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<pre><code')
-    expect(result).toContain('language-typescript')
+    const result = formatMarkdownToHtml('```typescript\nconsole.log("hi")\n```')
+    expect(result).toContain('<pre><code class="language-typescript">')
+    expect(result).toContain('</code></pre>')
   })
 
-  test('handles plain text', () => {
-    const input = 'just text'
-    const result = formatMarkdownToHtml(input)
-    expect(result).toContain('<p>just text</p>')
+  test('converts code blocks without language', () => {
+    const result = formatMarkdownToHtml('```\nhello\n```')
+    expect(result).toContain('<pre><code>hello')
+  })
+
+  test('renders plain text without unsupported tags', () => {
+    const result = formatMarkdownToHtml('just text')
+    expect(result).toBe('just text')
+    expect(result).not.toContain('<p>')
+  })
+
+  test('converts headings to bold text', () => {
+    expect(formatMarkdownToHtml('# Title')).toContain('<b>Title</b>')
+    expect(formatMarkdownToHtml('## Subtitle')).toContain('<b>Subtitle</b>')
+    expect(formatMarkdownToHtml('### Small')).toContain('<b>Small</b>')
+    expect(formatMarkdownToHtml('# Title')).not.toContain('<h1>')
+  })
+
+  test('converts unordered lists to bullet text', () => {
+    const result = formatMarkdownToHtml('- one\n- two\n- three')
+    expect(result).toContain('• one')
+    expect(result).toContain('• two')
+    expect(result).toContain('• three')
+    expect(result).not.toContain('<ul>')
+    expect(result).not.toContain('<li>')
+  })
+
+  test('converts ordered lists to numbered text', () => {
+    const result = formatMarkdownToHtml('1. first\n2. second')
+    expect(result).toContain('1. first')
+    expect(result).toContain('2. second')
+    expect(result).not.toContain('<ol>')
+    expect(result).not.toContain('<li>')
+  })
+
+  test('converts blockquotes', () => {
+    const result = formatMarkdownToHtml('> quoted text')
+    expect(result).toContain('<blockquote>')
+    expect(result).toContain('quoted text')
+  })
+
+  test('converts strikethrough', () => {
+    expect(formatMarkdownToHtml('~~deleted~~')).toContain('<s>deleted</s>')
+  })
+
+  test('converts hr to newline', () => {
+    const result = formatMarkdownToHtml('above\n\n---\n\nbelow')
+    expect(result).not.toContain('<hr')
+  })
+
+  test('converts br to newline', () => {
+    const result = formatMarkdownToHtml('line one  \nline two')
+    expect(result).not.toContain('<br')
+  })
+
+  test('handles mixed formatting', () => {
+    const result = formatMarkdownToHtml('**bold** and _italic_ and `code`')
+    expect(result).toContain('<b>bold</b>')
+    expect(result).toContain('<i>italic</i>')
+    expect(result).toContain('<code>code</code>')
+  })
+
+  test('converts markdown in under 50ms for 1KB', () => {
+    const largeMarkdown = '-'.repeat(3000)
+    // Warmup to avoid cold-start overhead
+    formatMarkdownToHtml('warmup')
+    const start = performance.now()
+    formatMarkdownToHtml(largeMarkdown)
+    const duration = performance.now() - start
+    expect(duration).toBeLessThan(50)
   })
 })
