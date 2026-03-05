@@ -6,7 +6,19 @@ import { Bot, type Context } from 'grammy'
 
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
 import { getUserMessage, isAppError } from './errors.js'
+import { clearHistory, loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
+import {
+  buildMemoryContextMessage,
+  clearFacts,
+  clearSummary,
+  extractFacts,
+  loadFacts,
+  loadSummary,
+  saveSummary,
+  trimWithMemoryModel,
+  upsertFact,
+} from './memory.js'
 import { makeTools } from './tools/index.js'
 
 const log = logger.child({ scope: 'bot' })
@@ -33,8 +45,6 @@ If you need context (like project IDs), call list_projects first.`
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const allowedUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 
-const conversationHistory = new Map<number, readonly ModelMessage[]>()
-
 const checkAuthorization = (userId: number | undefined): userId is number => {
   log.debug({ userId, allowedUserId }, 'Checking authorization')
   if (userId === undefined || userId !== allowedUserId) {
@@ -48,27 +58,63 @@ const checkAuthorization = (userId: number | undefined): userId is number => {
 
 const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
   log.debug({ userId }, 'getOrCreateHistory called')
-  const existing = conversationHistory.has(userId)
-  log.debug(
-    { userId, exists: existing, currentSize: conversationHistory.get(userId)?.length },
-    'Getting conversation history',
-  )
-  if (!existing) {
-    conversationHistory.set(userId, [] as readonly ModelMessage[])
-    log.info({ userId }, 'New conversation history initialized')
-  }
-  return conversationHistory.get(userId)!
-}
-
-const trimHistory = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
-  log.debug({ userId, historyLength: history.length }, 'trimHistory called')
-  if (history.length > 100) {
-    const removedCount = history.length - 100
-    const trimmed = history.slice(history.length - 100)
-    log.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
-    return trimmed
+  const history = loadHistory(userId)
+  log.debug({ userId, messageCount: history.length }, 'Conversation history loaded')
+  if (history.length === 0) {
+    log.info({ userId }, 'No existing conversation history')
   }
   return history
+}
+
+// Working memory limits
+const WORKING_MEMORY_CAP = 100
+const TRIM_MIN = 50
+const TRIM_MAX = 100
+const SMART_TRIM_INTERVAL = 10
+
+const trimAndSummarise = async (history: readonly ModelMessage[], userId: number): Promise<readonly ModelMessage[]> => {
+  log.debug({ userId, historyLength: history.length }, 'trimAndSummarise called')
+
+  const userMessageCount = history.filter((m) => m.role === 'user').length
+  const periodicTrim = userMessageCount > 0 && userMessageCount % SMART_TRIM_INTERVAL === 0 && history.length > TRIM_MIN
+  const hardCapTrim = history.length >= WORKING_MEMORY_CAP
+
+  if (!periodicTrim && !hardCapTrim) {
+    return history
+  }
+
+  const reason = hardCapTrim ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
+  log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered')
+
+  const openaiKey = getConfig('openai_key')
+  const openaiBaseUrl = getConfig('openai_base_url')
+  const openaiModel = getConfig('openai_model')
+  // Use dedicated memory_model if configured; fall back to the main model.
+  const memoryModel = getConfig('memory_model') ?? openaiModel
+
+  if (openaiKey !== null && openaiBaseUrl !== null && memoryModel !== null) {
+    try {
+      const existing = loadSummary(userId)
+      const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, {
+        apiKey: openaiKey,
+        baseUrl: openaiBaseUrl,
+        model: memoryModel,
+      })
+      saveSummary(userId, summary)
+      log.info({ userId, retained: trimmedMessages.length }, 'Smart trim complete')
+      return trimmedMessages
+    } catch (error) {
+      log.warn(
+        { userId, error: error instanceof Error ? error.message : String(error) },
+        'Smart trim failed — falling back to positional slice',
+      )
+    }
+  } else {
+    log.warn({ userId }, 'LLM config not available — falling back to positional slice')
+  }
+
+  // Fallback: keep the most recent messages within hard limit
+  return history.slice(-WORKING_MEMORY_CAP)
 }
 
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
@@ -91,18 +137,39 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
-  log.debug({ userId, historyLength: history.length }, 'Calling generateText')
+  // Inject Tier 2 memory context
+  const summary = loadSummary(userId)
+  const facts = loadFacts(userId)
+  const memoryMsg = buildMemoryContextMessage(summary, facts)
+  const messagesWithMemory = memoryMsg !== null ? [memoryMsg, ...history] : [...history]
+
+  log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
-    messages: [...history],
+    messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),
   })
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+
+  // Extract and persist facts from tool results
+  const toolCallEntries = result.toolCalls.map((tc) => ({
+    toolName: tc.toolName,
+    args: tc.args,
+  }))
+  const toolResultEntries = result.toolResults.map((tr) => ({ toolName: tr.toolName, result: tr.result }))
+  const newFacts = extractFacts(toolCallEntries, toolResultEntries)
+  for (const fact of newFacts) {
+    upsertFact(userId, fact)
+  }
+  if (newFacts.length > 0) {
+    log.info({ userId, factsExtracted: newFacts.length }, 'Facts extracted and persisted')
+  }
+
   const assistantText = result.text
-  conversationHistory.set(userId, [...history, ...result.response.messages])
+  saveHistory(userId, [...history, ...result.response.messages])
   await ctx.reply(assistantText || 'Done.')
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
@@ -114,13 +181,13 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   log.debug({ userId, userText }, 'processMessage called')
   log.info({ userId, messageLength: userText.length }, 'Message received from user')
 
-  const history = trimHistory([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
-  conversationHistory.set(userId, history)
+  const history = await trimAndSummarise([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
+  saveHistory(userId, history)
 
   try {
     await callLlm(ctx, userId, history)
   } catch (error) {
-    conversationHistory.set(userId, history.slice(0, -1))
+    saveHistory(userId, history.slice(0, -1))
 
     if (isAppError(error)) {
       const userMessage = getUserMessage(error)
@@ -195,6 +262,19 @@ bot.command('config', async (ctx) => {
   })
   log.info({ userId }, '/config command executed')
   await ctx.reply(lines.join('\n'))
+})
+
+bot.command('clear', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAuthorization(userId)) {
+    return
+  }
+  log.debug({ userId }, '/clear command called')
+  clearHistory(userId)
+  clearSummary(userId)
+  clearFacts(userId)
+  log.info({ userId }, '/clear command executed — all memory tiers cleared')
+  await ctx.reply('Conversation history and memory cleared.')
 })
 
 bot.on('message:text', async (ctx) => {

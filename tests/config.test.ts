@@ -139,9 +139,10 @@ describe('CONFIG_KEYS', () => {
     expect(CONFIG_KEYS).toContain('openai_key')
     expect(CONFIG_KEYS).toContain('openai_base_url')
     expect(CONFIG_KEYS).toContain('openai_model')
+    expect(CONFIG_KEYS).toContain('memory_model')
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(5)
+    expect(CONFIG_KEYS).toHaveLength(6)
   })
 })

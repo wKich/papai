@@ -3,7 +3,13 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
 
-export type ConfigKey = 'linear_key' | 'linear_team_id' | 'openai_key' | 'openai_base_url' | 'openai_model'
+export type ConfigKey =
+  | 'linear_key'
+  | 'linear_team_id'
+  | 'openai_key'
+  | 'openai_base_url'
+  | 'openai_model'
+  | 'memory_model'
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
   'linear_key',
@@ -11,6 +17,7 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
   'openai_key',
   'openai_base_url',
   'openai_model',
+  'memory_model',
 ]
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
