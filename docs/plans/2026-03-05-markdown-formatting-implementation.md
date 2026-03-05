@@ -90,7 +90,13 @@ bun test tests/utils/markdown.test.ts
 
 **Expected output:** `FAIL src/utils/markdown.ts | No tests found` or `formatMarkdownToHtml is not defined`
 
-### Step 3: Create the utility file
+### Step 3: Install marked dependency
+
+```bash
+bun add marked
+```
+
+### Step 4: Create the utility file
 
 ```typescript
 // src/utils/markdown.ts
@@ -115,15 +121,7 @@ export const formatMarkdownToHtml = (markdown: string): string => {
 }
 ```
 
-### Step 4: Run test to verify it passes (will fail until Step 5)
-
-### Step 5: Install marked dependency
-
-```bash
-bun add marked
-```
-
-### Step 6: Rerun test to verify it passes
+### Step 5: Run test to verify it passes
 
 ```bash
 bun test tests/utils/markdown.test.ts
@@ -134,14 +132,14 @@ bun test tests/utils/markdown.test.ts
 ### Step 7: Commit
 
 ```bash
-git add src/utils/markdown.ts tests/utils/markdown.test.ts package.json package-lock.json
+git add src/utils/markdown.ts tests/utils/markdown.test.ts package.json bun.lock
 git commit -m "feat: add markdown to HTML converter utility
 
 - Create formatMarkdownToHtml() function in src/utils/markdown.ts
-- Configure marked with breaks:false and gfm:false
+- Configure marked with gfm:false
 - Add logging for markdown and html lengths
 - Add comprehensive unit tests for all formatting types
-- Install marked v15.0.0 as dependency"
+- Install marked dependency"
 ```
 
 ---
@@ -151,69 +149,49 @@ git commit -m "feat: add markdown to HTML converter utility
 **Files:**
 
 - Modify: `src/bot.ts:106`
-- Test: `tests/bot.test.ts` (integration test)
 
-### Step 1: Write failing integration test
+### Step 1: Add import to bot.ts
 
 ```typescript
-// tests/bot.test.ts
-import { describe, test, expect, beforeEach, afterEach, vi } from 'bun:test'
-import { Context } from 'grammy'
-import { bot } from '../src/bot'
-import { formatMarkdownToHtml } from '../src/utils/markdown'
-
-vi.mock('../src/utils/markdown', () => ({
-  formatMarkdownToHtml: vi.fn((text) => `<p>${text}</p>`),
-}))
-
-describe('bot HTML formatting', () => {
-  let ctx: Context
-  let mockReply: ReturnType<typeof vi.fn>
-  let messageHandler: any
-
-  beforeEach(() => {
-    mockReply = vi.fn().mockResolvedValue(undefined)
-    messageHandler = vi.fn().mockImplementation(async (ctxObj: any) => {
-      const userId = ctxObj.from.id
-      const userInput = ctxObj.message.text
-      const history: any[] = []
-      // Simulate the bot flow that leads to callLlm
-    })
-    ctx = {
-      from: { id: 123456 },
-      message: { text: '**test** message' },
-      reply: mockReply,
-    } as unknown as Context
-  })
-
-  test('sends messages with HTML parse mode', async () => {
-    // Mock the LLM to return test data
-    vi.mocked(formatMarkdownToHtml).mockReturnValue('<p>**test** message</p>')
-
-    // Trigger bot's message handler
-    await messageHandler(ctx)
-
-    // Verify reply was called with HTML parse mode
-    expect(mockReply).toHaveBeenCalledWith(expect.any(String), { parse_mode: 'HTML' })
-  })
-})
+// src/bot.ts (around line 10)
+import { formatMarkdownToHtml } from './utils/markdown.js'
 ```
 
-Note: The integration test verifies that when the bot processes a message, it calls `ctx.reply` with `{ parse_mode: 'HTML' }`. Full bot integration tests are complex due to dependency on LLM; consider testing the bot message handler directly.
+### Step 2: Update reply call in callLlm
 
-### Step 2: Run test to verify it fails
+```typescript
+// src/bot.ts (around line 104-106)
+// Before:
+const assistantText = result.text
+conversationHistory.set(userId, [...history, ...result.response.messages])
+await ctx.reply(assistantText || 'Done.')
+
+// After:
+const assistantText = result.text
+const formattedText = formatMarkdownToHtml(assistantText || 'Done.')
+conversationHistory.set(userId, [...history, ...result.response.messages])
+await ctx.reply(formattedText, { parse_mode: 'HTML' })
+```
+
+### Step 3: Run existing bot tests to verify they still pass
 
 ```bash
 bun test tests/bot.test.ts
 ```
 
-**Expected:** FAIL - callLlm not called with parse_mode
+Fix any tests that mock `ctx.reply` to account for the new parse_mode check.
 
-### Step 3: Add import to bot.ts
+### Step 4: Commit
 
-```typescript
-// src/bot.ts (around line 10)
-import { formatMarkdownToHtml } from './utils/markdown.js'
+```bash
+git add src/bot.ts tests/bot.test.ts
+git commit -m "feat: integrate markdown conversion with HTML parse mode
+
+- Import formatMarkdownToHtml utility
+- Convert LLM output before sending to Telegram
+- Use parse_mode='HTML' in ctx.reply call
+- Updated tests to verify parse_mode is passed
+"
 ```
 
 ### Step 4: Update reply call in callLlm
@@ -411,7 +389,7 @@ git commit -m "test: verify all tests pass and linting clean"
 ## Verification Checklist
 
 - [ ] All unit tests pass (`bun test src/utils/markdown.test.ts`)
-- [ ] Integration test passes (`bun test src/bot.test.ts`)
+- [ ] All existing bot tests pass (`bun test src/bot.test.ts`)
 - [ ] Full test suite passes (`bun test`)
 - [ ] No linting errors (`bun run lint`)
 - [ ] Code is formatted (`bun run format`)

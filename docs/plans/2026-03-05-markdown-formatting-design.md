@@ -94,10 +94,9 @@ export const formatMarkdownToHtml = (markdown: string): string => {
 
 **Configuration Rationale:**
 
-| Option   | Value   | Reason                                                                                                |
-| -------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `breaks` | `false` | Preserve paragraph structure, convert `\n\n` to HTML paragraphs                                       |
-| `gfm`    | `false` | Disable GitHub Flavored Markdown extras (tables, strikethrough, task lists) not supported by Telegram |
+| Option | Value   | Reason                                                                                                |
+| ------ | ------- | ----------------------------------------------------------------------------------------------------- |
+| `gfm`  | `false` | Disable GitHub Flavored Markdown extras (tables, strikethrough, task lists) not supported by Telegram |
 
 **Supported Output Tags:**
 
@@ -107,13 +106,14 @@ export const formatMarkdownToHtml = (markdown: string): string => {
 - Inline code: `` `code` `` → `<code>code</code>`
 - Code blocks: ` `lang\ncode` ` → `<pre><code class="language-lang">code</code></pre>`
 
-**Unsupported (by `marked` config):**
+**Unsupported (by `marked` config; generated but ignored by Telegram):**
 
 - Tables
 - Strikethrough (`~~text~~`)
 - Headers (`# Title`)
+- Lists (`- item`, `1. item`)
 
-These are intentionally disabled because Telegram's HTML parser doesn't support them.
+These are intentionally disabled because Telegram's HTML parser doesn't support them. Marked generates `<h1>`-`<h6>` and `<ul>`/`<ol>`/`<li>` tags but Telegram strips them while preserving the text content.
 
 **Logging:**
 
