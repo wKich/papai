@@ -84,6 +84,7 @@ const log = logger.child({ scope: 'markdown' })
 export const formatMarkdownToHtml = (markdown: string): string => {
   log.debug({ markdownLength: markdown.length }, 'Converting Markdown to HTML')
   const html = marked.parse(markdown, {
+    async: false,
     breaks: false,
     gfm: false,
   })

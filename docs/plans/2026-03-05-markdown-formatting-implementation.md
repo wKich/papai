@@ -40,7 +40,7 @@ git switch -c feature/markdown-formatting
 ````typescript
 // tests/utils/markdown.test.ts
 import { describe, test, expect } from 'bun:test'
-import { formatMarkdownToHtml } from '../../src/utils/markdown'
+import { formatMarkdownToHtml } from '../../src/utils/markdown.js'
 
 describe('formatMarkdownToHtml', () => {
   test('converts bold text', () => {
@@ -209,7 +209,8 @@ test('sends messages with HTML parse mode', async () => {
     },
   } as any
 
-  // TODO: Full integration test - mock generateText and invoke processMessage
+  // TODO: Full integration test requires mocking generateText and invoking processMessage
+  // For now, this test does not verify actual markdown-to-html integration
 })
 ```
 
@@ -379,8 +380,8 @@ git commit -m "test: verify all tests pass and linting clean"
 
 ## Verification Checklist
 
-- [ ] All unit tests pass (`bun test src/utils/markdown.test.ts`)
-- [ ] All existing bot tests pass (`bun test src/bot.test.ts`)
+- [ ] All unit tests pass (`bun test tests/utils/markdown.test.ts`)
+- [ ] All existing bot tests pass (`bun test tests/bot.test.ts`)
 - [ ] Full test suite passes (`bun test`)
 - [ ] No linting errors (`bun run lint`)
 - [ ] Code is formatted (`bun run format`)
@@ -396,12 +397,12 @@ git commit -m "test: verify all tests pass and linting clean"
 If issues occur:
 
 ```bash
-git revert HEAD~1..HEAD
+git revert HEAD~2..HEAD
 git push
 bun run start
 ```
 
-This reverts the feature branch to previous state and restores plain-text messaging.
+This reverts both commits (markdown converter utility + bot integration) to previous state and restores plain-text messaging.
 
 ---
 
