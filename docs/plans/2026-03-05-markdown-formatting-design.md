@@ -83,7 +83,7 @@ const log = logger.child({ scope: 'markdown' })
  */
 export const formatMarkdownToHtml = (markdown: string): string => {
   log.debug({ markdownLength: markdown.length }, 'Converting Markdown to HTML')
-  const html = marked(markdown, {
+  const html = marked.parse(markdown, {
     breaks: false,
     gfm: false,
   })
@@ -101,8 +101,8 @@ export const formatMarkdownToHtml = (markdown: string): string => {
 
 **Supported Output Tags:**
 
-- Bold: `**text**` → `<b>text</b>`
-- Italic: `_text_` → `<i>text</i>`
+- Bold: `**text**` → `<strong>text</strong>`
+- Italic: `_text_` → `<em>text</em>`
 - Links: `[text](url)` → `<a href="url">text</a>`
 - Inline code: `` `code` `` → `<code>code</code>`
 - Code blocks: ` `lang\ncode` ` → `<pre><code class="language-lang">code</code></pre>`
@@ -177,7 +177,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
 ## Testing Strategy
 
-### Unit Tests (`src/utils/markdown.test.ts`)
+### Unit Tests (`tests/utils/markdown.test.ts`)
 
 **Test Cases:**
 
@@ -185,7 +185,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
    ```typescript
    test('converts bold text', () => {
-     expect(formatMarkdownToHtml('**bold**')).toBe('<p><b>bold</b></p>\n')
+     expect(formatMarkdownToHtml('**bold**')).toContain('<strong>bold</strong>')
    })
    ```
 
@@ -193,7 +193,7 @@ await ctx.reply(formattedText, { parse_mode: 'HTML' })
 
    ```typescript
    test('converts italic text', () => {
-     expect(formatMarkdownToHtml('_italic_')).toBe('<p><i>italic</i></p>\n')
+     expect(formatMarkdownToHtml('_italic_')).toContain('<em>italic</em>')
    })
    ```
 
@@ -240,7 +240,7 @@ test('converts markdown in under 10ms for 1KB', () => {
 })
 ```
 
-### Integration Tests (`src/bot.test.ts`)
+### Integration Tests (`tests/bot.test.ts`)
 
 **Test Cases:**
 
