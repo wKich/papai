@@ -23,5 +23,13 @@
     "typescript/promise-function-async": "off",
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "no-param-reassign": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "max-lines-per-function": "off"
+      }
+    }
+  ]
 }

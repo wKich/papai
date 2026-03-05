@@ -11,7 +11,7 @@ const getTableNames = (db: Database): string[] =>
 
 const getMigrationIds = (db: Database): string[] =>
   db
-    .query<{ id: string }, []>('SELECT id FROM migrations ORDER BY applied_at')
+    .query<{ id: string }, []>('SELECT id FROM migrations ORDER BY rowid')
     .all()
     .map((row) => row.id)
 
@@ -166,5 +166,65 @@ describe('runMigrations - rollback', () => {
 
     const migrationIds = getMigrationIds(db)
     expect(migrationIds).not.toContain('001_will_fail')
+  })
+})
+
+describe('runMigrations - order validation', () => {
+  let db: Database
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+  })
+
+  test('throws when migrations are out of order', () => {
+    const migrations: readonly Migration[] = [
+      {
+        id: '002_second',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
+        },
+      },
+      {
+        id: '001_first',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
+        },
+      },
+    ]
+
+    expect(() => {
+      runMigrations(db, migrations)
+    }).toThrow('Migration 001_first is out of order')
+
+    // Verify no tables were created (migration didn't run)
+    const tableNames = getTableNames(db)
+    expect(tableNames).not.toContain('table_1')
+    expect(tableNames).not.toContain('table_2')
+  })
+
+  test('throws when migrations have duplicate IDs', () => {
+    const migrations: readonly Migration[] = [
+      {
+        id: '001_first',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_1 (id INTEGER PRIMARY KEY)')
+        },
+      },
+      {
+        id: '001_first',
+        up: (database: Database) => {
+          database.run('CREATE TABLE IF NOT EXISTS table_2 (id INTEGER PRIMARY KEY)')
+        },
+      },
+    ]
+
+    expect(() => {
+      runMigrations(db, migrations)
+    }).toThrow('Migration 001_first is out of order')
+
+    // Verify no tables were created (migration didn't run)
+    const tableNames = getTableNames(db)
+    expect(tableNames).not.toContain('table_1')
+    expect(tableNames).not.toContain('table_2')
   })
 })

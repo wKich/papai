@@ -11,6 +11,9 @@ let dbInstance: Database | undefined
 export const getDb = (): Database => {
   if (dbInstance === undefined) {
     dbInstance = new Database(DB_PATH)
+    // WAL mode is set here rather than in migrations because it must be
+    // configured per-database-connection, not per-database-file. This ensures
+    // WAL is active immediately on first connection, before any migrations run.
     dbInstance.run('PRAGMA journal_mode=WAL')
   }
   return dbInstance

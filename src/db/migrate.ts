@@ -11,7 +11,7 @@ const validateOrder = (migrations: readonly Migration[]): void => {
   for (let i = 1; i < migrations.length; i++) {
     const current = migrations[i]!
     const previous = migrations[i - 1]!
-    if (current.id.localeCompare(previous.id) < 0) {
+    if (current.id <= previous.id) {
       logger.error(
         { current: current.id, previous: previous.id },
         'Migration order violation: migrations must be in ascending order',
