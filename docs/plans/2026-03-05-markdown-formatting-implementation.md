@@ -129,6 +129,18 @@ bun test tests/utils/markdown.test.ts
 
 **Expected output:** All 6 tests PASS
 
+### Step 6: Add performance test
+
+```typescript
+test('converts markdown in under 10ms for 1KB', () => {
+  const largeMarkdown = '-'.repeat(3000)
+  const start = performance.now()
+  formatMarkdownToHtml(largeMarkdown)
+  const duration = performance.now() - start
+  expect(duration).toBeLessThan(10)
+})
+```
+
 ### Step 7: Commit
 
 ```bash
@@ -181,54 +193,38 @@ bun test tests/bot.test.ts
 
 Fix any tests that mock `ctx.reply` to account for the new parse_mode check.
 
-### Step 4: Commit
+### Step 3: Run existing bot tests
 
 ```bash
-git add src/bot.ts tests/bot.test.ts
-git commit -m "feat: integrate markdown conversion with HTML parse mode
-
-- Import formatMarkdownToHtml utility
-- Convert LLM output before sending to Telegram
-- Use parse_mode='HTML' in ctx.reply call
-- Updated tests to verify parse_mode is passed
-"
+bun test tests/bot.test.ts
 ```
 
-### Step 4: Update reply call in callLlm
+The current test suite has a single smoke test. Add a test verifying HTML parse mode usage.
+
+### Step 4: Add integration test
+
+Update `tests/bot.test.ts` to verify parse_mode is passed:
 
 ```typescript
-// src/bot.ts (around line 104-106)
-// Before:
-const assistantText = result.text
-conversationHistory.set(userId, [...history, ...result.response.messages])
-await ctx.reply(assistantText || 'Done.')
+test('sends messages with HTML parse mode', async () => {
+  const mockCtx = {
+    reply: (text: string, options?: any) => {
+      expect(options).toEqual({ parse_mode: 'HTML' })
+      return Promise.resolve()
+    },
+  } as any
 
-// After:
-const assistantText = result.text
-const formattedText = formatMarkdownToHtml(assistantText || 'Done.')
-conversationHistory.set(userId, [...history, ...result.response.messages])
-await ctx.reply(formattedText, { parse_mode: 'HTML' })
+  // Mock bot invocation with markdown input
+})
 ```
 
-### Step 5: Run integration test to verify it passes
+### Step 5: Run full test suite
 
 ```bash
 bun test tests/bot.test.ts
 ```
 
-**Expected:** All tests PASS
-
-### Step 6: Update existing bot tests (if any fail)
-
-Run all bot tests:
-
-```bash
-bun test tests/bot.test.ts
-```
-
-Fix any tests that mock `ctx.reply` to include parse_mode check.
-
-### Step 7: Commit
+### Step 6: Commit
 
 ```bash
 git add src/bot.ts tests/bot.test.ts
