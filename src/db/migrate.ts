@@ -14,7 +14,7 @@ const validateOrder = (migrations: readonly Migration[]): void => {
     // Compare by numeric prefix first, then lexicographically for same prefix
     const currentNum = parseInt(current.id.match(/^\d+/)?.[0] ?? '0', 10)
     const previousNum = parseInt(previous.id.match(/^\d+/)?.[0] ?? '0', 10)
-    if (currentNum < previousNum || (currentNum === previousNum && current.id <= previous.id)) {
+    if (currentNum <= previousNum) {
       logger.error(
         { current: current.id, previous: previous.id },
         'Migration order violation: migrations must be in ascending order',

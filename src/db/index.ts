@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite'
 
+import { logger } from '../logger.js'
 import { runMigrations } from './migrate.js'
 import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
@@ -15,14 +16,7 @@ export const getDb = (): Database => {
     // configured per-database-connection, not per-database-file. This ensures
     // WAL is active immediately on first connection, before any migrations run.
     dbInstance.run('PRAGMA journal_mode=WAL')
-    // Ensure migrations table exists early so any module can safely query it
-    // even if initDb() hasn't been called yet.
-    dbInstance.run(`
-      CREATE TABLE IF NOT EXISTS migrations (
-        id TEXT PRIMARY KEY,
-        applied_at TEXT NOT NULL
-      )
-    `)
+    logger.info({ dbPath: DB_PATH }, 'Database connection created')
   }
   return dbInstance
 }
