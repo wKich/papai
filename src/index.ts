@@ -1,4 +1,5 @@
 import { bot } from './bot.js'
+import { initDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'main' })
@@ -12,6 +13,13 @@ if (missing.length > 0) {
 }
 
 log.info('Starting papai...')
+
+try {
+  initDb()
+} catch (error) {
+  log.error({ error: error instanceof Error ? error.message : String(error) }, 'Database migration failed')
+  process.exit(1)
+}
 
 void bot.start({
   onStart: () => {

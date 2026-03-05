@@ -1,42 +1,48 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-// --- bun:sqlite mock (must come before importing config.ts) ---
+// --- Mock for db (must come before importing config.ts) ---
 const store = { data: new Map<string, string>() }
 
-const mockSetupResult = mock.module('bun:sqlite', () => ({
-  Database: class MockDatabase {
-    run(sql: string, params?: string[]): void {
-      if (sql.includes('INSERT OR REPLACE') && params !== undefined) {
-        store.data.set(params[0]!, params[1]!)
-      }
+class MockDatabase {
+  run(sql: string, params?: string[]): void {
+    if (sql.includes('INSERT OR REPLACE') && params !== undefined) {
+      store.data.set(params[0]!, params[1]!)
     }
+  }
 
-    query(sql: string): {
-      get: (key: string) => { value: string } | null
-      all: () => Array<{ key: string; value: string }>
-    } {
-      if (sql.includes('SELECT value FROM config WHERE key')) {
-        return {
-          get: (key: string): { value: string } | null => {
-            const value = store.data.get(key)
-            if (value === undefined) {
-              return null
-            }
-            return { value }
-          },
-          all: (): Array<{ key: string; value: string }> => [],
-        }
+  query(sql: string): {
+    get: (key: string) => { value: string } | null
+    all: () => Array<{ key: string; value: string }>
+  } {
+    if (sql.includes('SELECT value FROM config WHERE key')) {
+      return {
+        get: (key: string): { value: string } | null => {
+          const value = store.data.get(key)
+          if (value === undefined) {
+            return null
+          }
+          return { value }
+        },
+        all: (): Array<{ key: string; value: string }> => [],
       }
-      if (sql.includes('SELECT key, value FROM config')) {
-        return {
-          get: (): null => null,
-          all: (): Array<{ key: string; value: string }> =>
-            Array.from(store.data.entries()).map(([key, value]) => ({ key, value })),
-        }
-      }
-      return { get: (): null => null, all: (): Array<{ key: string; value: string }> => [] }
     }
-  },
+    if (sql.includes('SELECT key, value FROM config')) {
+      return {
+        get: (): null => null,
+        all: (): Array<{ key: string; value: string }> =>
+          Array.from(store.data.entries()).map(([key, value]) => ({ key, value })),
+      }
+    }
+    return { get: (): null => null, all: (): Array<{ key: string; value: string }> => [] }
+  }
+}
+
+const mockDb = new MockDatabase()
+
+const mockSetupResult = mock.module('../src/db/index.js', () => ({
+  db: mockDb,
+  DB_PATH: ':memory:',
+  initDb: (): void => {},
 }))
 
 // Handle the Promise return type from mock.module

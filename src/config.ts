@@ -1,5 +1,4 @@
-import { Database } from 'bun:sqlite'
-
+import { db } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
@@ -15,10 +14,6 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
 ]
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
-
-const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
-const db = new Database(DB_PATH)
-db.run('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
 
 export function setConfig(key: ConfigKey, value: string): void {
   log.debug({ key }, 'setConfig called')
