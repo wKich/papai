@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupGetCommentsMock } from './__mocks__/get-comments.js'
-import { getComments } from './get-comments.js'
+import { setupGetCommentsMock } from '../../src/linear/__mocks__/get-comments.js'
+import { getComments } from '../../src/linear/get-comments.js'
 
 const mockApiKey = 'test-api-key'
 

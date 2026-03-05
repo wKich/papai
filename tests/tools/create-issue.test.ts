@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { makeCreateIssueTool } from './create-issue.js'
+import { makeCreateIssueTool } from '../../src/tools/create-issue.js'
 
 describe('makeCreateIssueTool', () => {
   const linearKey = 'test-key'

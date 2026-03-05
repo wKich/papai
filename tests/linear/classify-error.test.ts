@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { LinearApiError, classifyLinearError } from './classify-error.js'
+import { LinearApiError, classifyLinearError } from '../../src/linear/classify-error.js'
 
 describe('LinearApiError', () => {
   test('extends Error with appError property', () => {

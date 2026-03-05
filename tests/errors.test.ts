@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { linearError, llmError, validationError, systemError, isAppError, getUserMessage } from './errors.js'
+import { linearError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
 
 describe('linearError basic constructors', () => {
   test('issueNotFound creates correct structure', () => {

@@ -125,6 +125,22 @@ Every file must import and use the logger. Required log points:
 - Authorization checks
 - Error catch blocks
 
+## Testing
+
+Tests are located in the `tests/` directory with the same structure as `src/`:
+
+```
+tests/
+├── bot.test.ts
+├── config.test.ts
+├── errors.test.ts
+├── logger.test.ts
+├── linear/           # Tests for src/linear/*
+└── tools/            # Tests for src/tools/*
+```
+
+Run tests with `bun test` or `bun run test`.
+
 ## Key Conventions
 
 - Runtime: **Bun** (not Node)
@@ -134,3 +150,4 @@ Every file must import and use the logger. Required log points:
 - Linting/formatting: **oxlint / oxfmt** (not ESLint/Prettier)
 - Strict TypeScript (`tsconfig.json` has strict mode + all safety flags)
 - Logging: **pino** with structured JSON output
+- Tests: Located in `tests/` directory, mirroring `src/` structure

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupAddCommentMock } from './__mocks__/add-comment.js'
-import { addComment } from './add-comment.js'
+import { setupAddCommentMock } from '../../src/linear/__mocks__/add-comment.js'
+import { addComment } from '../../src/linear/add-comment.js'
 
 const mockApiKey = 'test-api-key'
 

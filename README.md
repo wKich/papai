@@ -180,6 +180,30 @@ After starting, configure credentials via Telegram:
 ```bash
 bun run lint      # lint with oxlint
 bun run format    # format with oxfmt
+bun run test      # run tests with bun
 ```
 
 No build step — Bun runs TypeScript directly.
+
+## Testing
+
+Tests are organized in the `tests/` directory, mirroring the `src/` structure:
+
+```
+tests/
+├── bot.test.ts
+├── config.test.ts
+├── errors.test.ts
+├── logger.test.ts
+├── linear/
+│   ├── add-comment.test.ts
+│   ├── archive-issue.test.ts
+│   ├── classify-error.test.ts
+│   ├── create-issue.test.ts
+│   └── ... (14 more)
+└── tools/
+    ├── create-issue.test.ts
+    └── index.test.ts
+```
+
+Run all tests with `bun test` or `bun run test`.

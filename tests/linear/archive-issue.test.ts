@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupArchiveIssueMock } from './__mocks__/archive-issue.js'
-import { archiveIssue } from './archive-issue.js'
+import { setupArchiveIssueMock } from '../../src/linear/__mocks__/archive-issue.js'
+import { archiveIssue } from '../../src/linear/archive-issue.js'
 
 const mockApiKey = 'test-api-key'
 

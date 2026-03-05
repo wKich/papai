@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupGetIssueLabelsMock } from './__mocks__/get-issue-labels.js'
-import { getIssueLabels } from './get-issue-labels.js'
+import { setupGetIssueLabelsMock } from '../../src/linear/__mocks__/get-issue-labels.js'
+import { getIssueLabels } from '../../src/linear/get-issue-labels.js'
 
 const mockApiKey = 'test-api-key'
 

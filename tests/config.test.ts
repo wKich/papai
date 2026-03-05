@@ -46,8 +46,8 @@ if (mockSetupResult instanceof Promise) {
   })
 }
 
-import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
-import type { ConfigKey } from './config.js'
+import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import type { ConfigKey } from '../src/config.js'
 
 describe('setConfig', () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupCreateLabelMock } from './__mocks__/create-label.js'
-import { createLabel } from './create-label.js'
+import { setupCreateLabelMock } from '../../src/linear/__mocks__/create-label.js'
+import { createLabel } from '../../src/linear/create-label.js'
 
 const mockApiKey = 'test-api-key'
 

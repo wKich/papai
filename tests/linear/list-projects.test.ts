@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupListProjectsEmptyMock } from './__mocks__/list-projects-empty.js'
-import { setupListProjectsMock } from './__mocks__/list-projects.js'
-import { listProjects } from './list-projects.js'
+import { setupListProjectsEmptyMock } from '../../src/linear/__mocks__/list-projects-empty.js'
+import { setupListProjectsMock } from '../../src/linear/__mocks__/list-projects.js'
+import { listProjects } from '../../src/linear/list-projects.js'
 
 const mockApiKey = 'test-api-key'
 

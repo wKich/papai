@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupCreateProjectMock } from './__mocks__/create-project.js'
-import { createProject } from './create-project.js'
+import { setupCreateProjectMock } from '../../src/linear/__mocks__/create-project.js'
+import { createProject } from '../../src/linear/create-project.js'
 
 const mockApiKey = 'test-api-key'
 

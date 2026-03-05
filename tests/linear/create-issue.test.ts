@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupCreateIssueFailureMock } from './__mocks__/create-issue-failure.js'
-import { setupCreateIssueMock } from './__mocks__/create-issue.js'
-import { LinearApiError } from './classify-error.js'
-import { createIssue } from './create-issue.js'
+import { setupCreateIssueFailureMock } from '../../src/linear/__mocks__/create-issue-failure.js'
+import { setupCreateIssueMock } from '../../src/linear/__mocks__/create-issue.js'
+import { LinearApiError } from '../../src/linear/classify-error.js'
+import { createIssue } from '../../src/linear/create-issue.js'
 
 const mockApiKey = 'test-api-key'
 

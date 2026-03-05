@@ -9,7 +9,7 @@ beforeAll(() => {
 describe('bot', () => {
   test('module loads with env vars', async () => {
     // Import bot after setting env vars
-    const { bot } = await import('./bot.js')
+    const { bot } = await import('../src/bot.js')
     expect(bot).toBeDefined()
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupGetRelationsMock } from './__mocks__/get-relations.js'
-import { getRelations } from './get-relations.js'
+import { setupGetRelationsMock } from '../../src/linear/__mocks__/get-relations.js'
+import { getRelations } from '../../src/linear/get-relations.js'
 
 const mockApiKey = 'test-api-key'
 
