@@ -123,7 +123,7 @@ Runner logic (`runMigrations(db: Database, migrations: readonly Migration[]): vo
 5. If all succeed, log `logger.info` with the count of applied migrations.
 6. **No return value** — callers rely on the error throw + process.exit for failure semantics.
 
-**Tests** (`src/db/migrate.test.ts`):
+**Tests** (`tests/db/migrate.test.ts`):
 
 - Applies pending migrations in order.
 - Skips already-applied migrations.
@@ -142,13 +142,14 @@ Captures the current schema as the baseline and enables WAL mode:
 export const migration001Initial: Migration = {
   id: '001_initial',
   up(db) {
-    db.run('PRAGMA journal_mode=WAL')
     db.run('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   },
 }
 ```
 
 `CREATE TABLE IF NOT EXISTS` is idempotent — safe to run against a database that already has the table.
+
+**Note:** WAL mode (`PRAGMA journal_mode=WAL`) is configured in `src/db/index.ts` at connection time, not inside migrations. PRAGMAs cannot run inside transactions, and each migration is wrapped in a transaction.
 
 ---
 
@@ -279,9 +280,9 @@ The `MockDatabase` class structure remains the same; only the mock target change
 
 ---
 
-### Task 8 — Create `src/db/migrate.test.ts`
+### Task 8 — Create `tests/db/migrate.test.ts`
 
-**File:** `src/db/migrate.test.ts` (new)
+**File:** `tests/db/migrate.test.ts` (new)
 
 Tests use an **in-memory SQLite database** (`new Database(':memory:')`) so they are fast, isolated,
 and leave no files on disk. Each test gets a fresh `Database` instance via `beforeEach`.
@@ -340,7 +341,7 @@ src/
     migrations/
       001_initial.ts
       002_conversation_history.ts
-    migrate.test.ts          ← tests for migrate.ts
+    migrate.test.ts          ← tests for migrate.ts (in tests/ per project convention)
   config.ts                  ← uses db from src/db/index.ts
   config.test.ts             ← mock target updated (Task 7)
   index.ts                   ← calls initDb() before bot.start()

@@ -15,6 +15,14 @@ export const getDb = (): Database => {
     // configured per-database-connection, not per-database-file. This ensures
     // WAL is active immediately on first connection, before any migrations run.
     dbInstance.run('PRAGMA journal_mode=WAL')
+    // Ensure migrations table exists early so any module can safely query it
+    // even if initDb() hasn't been called yet.
+    dbInstance.run(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      )
+    `)
   }
   return dbInstance
 }

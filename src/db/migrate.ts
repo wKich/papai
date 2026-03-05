@@ -11,7 +11,10 @@ const validateOrder = (migrations: readonly Migration[]): void => {
   for (let i = 1; i < migrations.length; i++) {
     const current = migrations[i]!
     const previous = migrations[i - 1]!
-    if (current.id <= previous.id) {
+    // Compare by numeric prefix first, then lexicographically for same prefix
+    const currentNum = parseInt(current.id.match(/^\d+/)?.[0] ?? '0', 10)
+    const previousNum = parseInt(previous.id.match(/^\d+/)?.[0] ?? '0', 10)
+    if (currentNum < previousNum || (currentNum === previousNum && current.id <= previous.id)) {
       logger.error(
         { current: current.id, previous: previous.id },
         'Migration order violation: migrations must be in ascending order',
@@ -42,6 +45,9 @@ const applyMigration = (db: Database, migration: Migration): void => {
   logger.debug({ migrationId: migration.id }, 'Applying migration')
 
   try {
+    // NOTE: PRAGMAs cannot run inside transactions and will be silently ignored.
+    // If you need PRAGMA settings (like WAL mode), configure them at connection
+    // time in src/db/index.ts, not inside migration up() functions.
     db.transaction(() => {
       migration.up(db)
 
@@ -67,7 +73,7 @@ export const runMigrations = (db: Database, migrations: readonly Migration[]): v
   const pendingMigrations = migrations.filter((m) => !appliedIds.has(m.id))
 
   if (pendingMigrations.length === 0) {
-    logger.info({ appliedCount: 0 }, 'No pending migrations')
+    logger.info({ pending: 0, alreadyApplied: appliedIds.size }, 'No pending migrations')
     return
   }
 

@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
 
@@ -20,6 +20,10 @@ describe('runMigrations - basic behavior', () => {
 
   beforeEach(() => {
     db = new Database(':memory:')
+  })
+
+  afterEach(() => {
+    db.close()
   })
 
   test('applies pending migrations in order', () => {
@@ -71,6 +75,10 @@ describe('runMigrations - skips already-applied', () => {
     db = new Database(':memory:')
   })
 
+  afterEach(() => {
+    db.close()
+  })
+
   test('skips already-applied migrations', () => {
     let firstCallCount = 0
     let secondCallCount = 0
@@ -112,6 +120,10 @@ describe('runMigrations - idempotency', () => {
     db = new Database(':memory:')
   })
 
+  afterEach(() => {
+    db.close()
+  })
+
   test('is idempotent - second call applies nothing', () => {
     let callCount = 0
 
@@ -139,6 +151,10 @@ describe('runMigrations - rollback', () => {
 
   beforeEach(() => {
     db = new Database(':memory:')
+  })
+
+  afterEach(() => {
+    db.close()
   })
 
   test('rolls back on failure and rethrows', () => {
@@ -174,6 +190,10 @@ describe('runMigrations - order validation', () => {
 
   beforeEach(() => {
     db = new Database(':memory:')
+  })
+
+  afterEach(() => {
+    db.close()
   })
 
   test('throws when migrations are out of order', () => {
