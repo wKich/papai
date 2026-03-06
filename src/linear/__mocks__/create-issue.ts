@@ -1,59 +1,153 @@
 import { mock } from 'bun:test'
 
-export interface CreateIssueInput {
-  title: string
-  priority?: number
-}
+import type { PlatformClient } from '@hcengineering/api-client'
+import core, { type Ref, type Doc } from '@hcengineering/core'
+import { makeRank } from '@hcengineering/rank'
+import type { Issue, Project } from '@hcengineering/tracker'
+import tracker, { IssuePriority } from '@hcengineering/tracker'
 
-export interface IssuePayload {
-  id: string
-  identifier: string
-  title: string
-  priority: number
-  url: string
-}
+// Mock issue storage
+const mockIssues = new Map<string, Issue>()
+let issueSequence = 1
 
-function hasProperty<K extends string>(value: unknown, key: K): value is Record<K, unknown> {
-  return typeof value === 'object' && value !== null && key in value
-}
+// Mock project storage
+const mockProjects: Map<string, Project> = new Map([
+  [
+    'project-123',
+    {
+      _id: 'project-123' as Ref<Project>,
+      _class: tracker.class.Project,
+      space: core.space.Space,
+      modifiedBy: 'system' as Ref<Doc>,
+      modifiedOn: Date.now(),
+      createdBy: 'system' as Ref<Doc>,
+      createdOn: Date.now(),
+      title: 'Test Project',
+      identifier: 'P',
+      description: '',
+      private: false,
+      archived: false,
+      defaultIssueStatus: 'status-1' as Ref<Doc>,
+      members: [],
+      owners: [],
+      sequence: 0,
+    } as Project,
+  ],
+])
 
-function isCreateIssueInput(value: unknown): value is CreateIssueInput {
-  if (!hasProperty(value, 'title')) {
-    return false
-  }
-  return typeof value['title'] === 'string'
-}
+class MockHulyClient implements Partial<PlatformClient> {
+  async findOne<T extends Doc>(
+    _class: unknown,
+    query: Record<string, unknown>,
+    options?: { sort?: Record<string, unknown> },
+  ): Promise<T | undefined> {
+    const className = String(_class)
 
-function createMockIssue(input: unknown): IssuePayload {
-  if (!isCreateIssueInput(input)) {
-    throw new Error('Invalid input: title is required')
-  }
-  return {
-    id: 'issue-123',
-    identifier: 'TEAM-1',
-    title: input.title,
-    priority: input.priority ?? 0,
-    url: 'https://linear.app/issue/TEAM-1',
-  }
-}
-
-export class MockLinearClient {
-  constructor(public config: { apiKey: string }) {}
-
-  createIssue(input: unknown): { issue: Promise<IssuePayload> } {
-    return {
-      issue: Promise.resolve(createMockIssue(input)),
+    if (className.includes('Project')) {
+      const projectId = query['_id'] as string
+      return mockProjects.get(projectId) as unknown as T
     }
+
+    if (className.includes('Issue')) {
+      if (options?.sort?.rank === -1) {
+        // Return last issue for ranking
+        const issues = Array.from(mockIssues.values())
+        return issues.length > 0 ? (issues[issues.length - 1] as unknown as T) : undefined
+      }
+      const issueId = query['_id'] as string
+      return mockIssues.get(issueId) as unknown as T
+    }
+
+    return undefined
+  }
+
+  async updateDoc<T extends Doc>(
+    _class: unknown,
+    _space: unknown,
+    docId: unknown,
+    operations: Record<string, unknown>,
+    _getResult?: boolean,
+  ): Promise<{ object: T }> {
+    const className = String(_class)
+    const id = String(docId)
+
+    if (className.includes('Project')) {
+      const project = mockProjects.get(id)
+      if (project) {
+        const inc = operations['$inc'] as { sequence?: number } | undefined
+        if (inc?.sequence) {
+          project.sequence += 1
+        }
+        return { object: project as unknown as T }
+      }
+    }
+
+    return { object: undefined as unknown as T }
+  }
+
+  async uploadMarkup(
+    _class: unknown,
+    _objectId: unknown,
+    _attribute: string,
+    markup: string,
+    _format: string,
+  ): Promise<{ content: unknown[] }> {
+    // Simple mock - just return empty content
+    return { content: [] }
+  }
+
+  async addCollection<T extends Doc>(
+    _class: unknown,
+    space: unknown,
+    _attachedTo: unknown,
+    _attachedToClass: unknown,
+    _collection: string,
+    attributes: Record<string, unknown>,
+    docId: string,
+  ): Promise<void> {
+    const className = String(_class)
+
+    if (className.includes('Issue')) {
+      const issue: Issue = {
+        _id: docId as Ref<Issue>,
+        _class: tracker.class.Issue,
+        space: space as Ref<Project>,
+        modifiedBy: 'system' as Ref<Doc>,
+        modifiedOn: Date.now(),
+        createdBy: 'system' as Ref<Doc>,
+        createdOn: Date.now(),
+        title: attributes['title'] as string,
+        description: attributes['description'],
+        status: attributes['status'] as Ref<Doc>,
+        number: attributes['number'] as number,
+        kind: tracker.taskTypes.Issue,
+        identifier: attributes['identifier'] as string,
+        priority: attributes['priority'] as IssuePriority,
+        assignee: attributes['assignee'] as Ref<Doc> | null,
+        component: attributes['component'] as Ref<Doc> | null,
+        estimation: attributes['estimation'] as number,
+        remainingTime: attributes['remainingTime'] as number,
+        reportedTime: attributes['reportedTime'] as number,
+        reports: attributes['reports'] as number,
+        subIssues: attributes['subIssues'] as number,
+        parents: attributes['parents'] as unknown[],
+        childInfo: attributes['childInfo'] as unknown[],
+        dueDate: attributes['dueDate'] as number | null,
+        rank: (attributes['rank'] as string) ?? makeRank(undefined, undefined),
+      } as Issue
+
+      mockIssues.set(docId, issue)
+      issueSequence += 1
+    }
+  }
+
+  async close(): Promise<void> {
+    // Cleanup if needed
   }
 }
 
 export function setupCreateIssueMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

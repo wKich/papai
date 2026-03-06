@@ -1,138 +1,152 @@
-import { type Issue, type LinearFetch, LinearClient } from '@linear/sdk'
+import core from '@hcengineering/core'
+import tags, { type TagReference } from '@hcengineering/tags'
+import tracker, { type Issue } from '@hcengineering/tracker'
 
-import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { filterPresentNodes, requireEntity } from './response-guards.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:update-issue' })
+const log = logger.child({ scope: 'huly:update-issue' })
 
-type UpdateInput = {
-  stateId?: string
-  assigneeId?: string
-  dueDate?: string
-  labelIds?: string[]
-  estimate?: number
-  projectId?: string
-}
-
-type UpdateParams = {
+type UpdateIssueParams = {
+  userId: number
+  issueId: string
+  projectId: string
   status?: string
   assigneeId?: string
   dueDate?: string
   labelIds?: string[]
   estimate?: number
-  projectId?: string
-}
-
-const resolveWorkflowState = async (
-  client: LinearClient,
-  issueId: string,
-  status: string,
-): Promise<string | undefined> => {
-  const issue = requireEntity(await client.issue(issueId), {
-    entityName: 'issue',
-    context: { issueId },
-    appError: linearError.issueNotFound(issueId),
-  })
-  const team = requireEntity(await issue.team, {
-    entityName: 'team',
-    context: { issueId },
-    appError: linearError.validationFailed('team', 'Missing team in issue response'),
-  })
-  const states = await team.states()
-  const validStates = filterPresentNodes(states.nodes, { entityName: 'workflow-state', parentId: issueId }).flatMap(
-    (s) => {
-      if (typeof s.id !== 'string' || typeof s.name !== 'string') {
-        log.warn(
-          { issueId, requestedStatus: status, stateId: s.id },
-          'Skipping workflow state with invalid response shape',
-        )
-        return []
-      }
-      return [s]
-    },
-  )
-  const state = validStates.find((s) => s.name.toLowerCase() === status.toLowerCase())
-  log.debug(
-    { requestedStatus: status, foundState: state?.name, availableStates: validStates.map((s) => s.name) },
-    'Resolving workflow state',
-  )
-  if (state) {
-    return state.id
-  }
-  log.warn(
-    { issueId, requestedStatus: status, availableStates: validStates.map((s) => s.name) },
-    'Workflow state not found',
-  )
-  return undefined
-}
-
-const buildUpdateInput = async (client: LinearClient, issueId: string, params: UpdateParams): Promise<UpdateInput> => {
-  const input: UpdateInput = {}
-  if (params.status !== undefined) {
-    const stateId = await resolveWorkflowState(client, issueId, params.status)
-    if (stateId !== undefined) {
-      input.stateId = stateId
-    }
-  }
-  if (params.assigneeId !== undefined) {
-    input.assigneeId = params.assigneeId
-  }
-  if (params.dueDate !== undefined) {
-    input.dueDate = params.dueDate
-  }
-  if (params.labelIds !== undefined) {
-    input.labelIds = params.labelIds
-  }
-  if (params.estimate !== undefined) {
-    input.estimate = params.estimate
-  }
-  if (params.projectId !== undefined) {
-    input.projectId = params.projectId
-  }
-  return input
 }
 
 export async function updateIssue({
-  apiKey,
+  userId,
   issueId,
+  projectId,
   status,
   assigneeId,
   dueDate,
   labelIds,
   estimate,
-  projectId,
-}: {
-  apiKey: string
-  issueId: string
-  status?: string
-  assigneeId?: string
-  dueDate?: string
-  labelIds?: string[]
-  estimate?: number
-  projectId?: string
-}): Promise<LinearFetch<Issue> | undefined> {
-  log.debug({ issueId, status, assigneeId, projectId }, 'updateIssue called')
+}: UpdateIssueParams): Promise<{ id: string; identifier: string } | undefined> {
+  log.debug({ userId, issueId, projectId, status, assigneeId, dueDate, estimate }, 'updateIssue called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
-    const updateInput = await buildUpdateInput(client, issueId, {
-      status,
-      assigneeId,
-      dueDate,
-      labelIds,
-      estimate,
-      projectId,
-    })
-    const payload = await client.updateIssue(issueId, updateInput)
-    const issue = await payload.issue
-    if (issue) {
-      log.info({ issueId, identifier: issue.identifier, updatedFields: Object.keys(updateInput) }, 'Issue updated')
+    // First, fetch the existing issue to verify it exists
+    const existingIssue = (await client.findOne(tracker.class.Issue, {
+      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
+
+    if (!existingIssue) {
+      throw new Error(`Issue not found: ${issueId}`)
     }
-    return await payload.issue
+
+    // Build update object
+    const updates: Record<string, unknown> = {}
+
+    // Update status
+    if (status !== undefined) {
+      // Find the status by name
+      const statusResult = (await client.findAll(tracker.class.IssueStatus, {
+        name: status,
+      } as unknown as Parameters<typeof client.findAll>[1])) as unknown as Array<{ _id: string }>
+
+      if (statusResult.length > 0 && statusResult[0] !== undefined) {
+        updates['status'] = statusResult[0]._id
+      } else {
+        log.warn({ userId, issueId, requestedStatus: status }, 'Workflow state not found')
+      }
+    }
+
+    // Update assignee
+    if (assigneeId !== undefined) {
+      updates['assignee'] = assigneeId
+    }
+
+    // Update due date
+    if (dueDate !== undefined) {
+      const date = new Date(dueDate)
+      if (!isNaN(date.getTime())) {
+        updates['dueDate'] = date.getTime()
+      } else {
+        log.warn({ userId, issueId, dueDate }, 'Invalid dueDate format, ignoring')
+      }
+    }
+
+    // Update estimate
+    if (estimate !== undefined) {
+      updates['estimation'] = estimate
+      updates['remainingTime'] = estimate
+    }
+
+    // Apply updates if any
+    if (Object.keys(updates).length > 0) {
+      await client.updateDoc(
+        tracker.class.Issue,
+        core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
+        issueId as unknown as Parameters<typeof client.updateDoc>[2],
+        updates as unknown as Parameters<typeof client.updateDoc>[3],
+        false,
+      )
+    }
+
+    // Handle labels separately - remove old and add new
+    if (labelIds !== undefined) {
+      // Fetch existing labels
+      const existingLabels = (await client.findAll(tags.class.TagReference, {
+        attachedTo: issueId as unknown as Parameters<typeof client.findAll>[1]['attachedTo'],
+      } as unknown as Parameters<typeof client.findAll>[1])) as unknown as TagReference[]
+
+      // Remove existing labels
+      for (const label of existingLabels) {
+        await client.removeDoc(
+          tags.class.TagReference,
+          core.space.Space as unknown as Parameters<typeof client.removeDoc>[1],
+          (label as { _id: string })._id as unknown as Parameters<typeof client.removeDoc>[2],
+        )
+      }
+
+      // Add new labels
+      for (const labelId of labelIds) {
+        await client.addCollection(
+          tags.class.TagReference,
+          projectId as unknown as Parameters<typeof client.addCollection>[1],
+          issueId as unknown as Parameters<typeof client.addCollection>[2],
+          tracker.class.Issue,
+          'labels',
+          {
+            title: '',
+            color: 0,
+            tag: labelId,
+          } as unknown as Parameters<typeof client.addCollection>[5],
+        )
+      }
+    }
+
+    // Fetch updated issue
+    const updatedIssue = (await client.findOne(tracker.class.Issue, {
+      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
+
+    if (!updatedIssue) {
+      throw new Error('Issue was not found after update')
+    }
+
+    log.info(
+      { userId, issueId, identifier: updatedIssue.identifier, updatedFields: Object.keys(updates) },
+      'Issue updated',
+    )
+
+    return {
+      id: updatedIssue._id as string,
+      identifier: updatedIssue.identifier,
+    }
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'updateIssue failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), userId, issueId }, 'updateIssue failed')
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

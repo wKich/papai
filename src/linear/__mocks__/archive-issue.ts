@@ -1,25 +1,45 @@
 import { mock } from 'bun:test'
 
-export class MockLinearClient {
-  archiveIssue(): { entity: Promise<{ id: string; identifier: string; title: string; archivedAt: Date | null }> } {
-    return {
-      entity: Promise.resolve({
-        id: 'issue-123',
-        identifier: 'TEAM-1',
-        title: 'Archived Issue',
-        archivedAt: new Date('2025-03-05'),
-      }),
+const mockIssue = {
+  _id: 'issue-123',
+  title: 'Archived Issue',
+  identifier: 'P-1',
+}
+
+const mockArchivedStatus = {
+  _id: 'status-archived',
+  name: 'Archived',
+}
+
+class MockHulyClient {
+  async findOne(_class: unknown, query: Record<string, unknown>): Promise<unknown | undefined> {
+    const className = String(_class)
+
+    if (className.includes('Issue')) {
+      const issueId = query['_id'] as string
+      if (issueId === 'issue-123') {
+        return mockIssue
+      }
     }
+
+    if (className.includes('IssueStatus')) {
+      return mockArchivedStatus
+    }
+
+    return undefined
+  }
+
+  async updateDoc(): Promise<unknown> {
+    return { object: mockIssue }
+  }
+
+  async close(): Promise<void> {
+    // Cleanup
   }
 }
 
 export function setupArchiveIssueMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

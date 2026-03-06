@@ -1,89 +1,87 @@
 import { mock } from 'bun:test'
 
-export interface TeamState {
-  id: string
-  name: string
+const mockProject = {
+  _id: 'project-123',
+  identifier: 'P',
+  defaultIssueStatus: 'status-1',
 }
 
-export interface IssueUpdateInput {
-  stateId?: string
-  assigneeId?: string
-  dueDate?: string
-  estimate?: number
+const mockIssue = {
+  _id: 'issue-123',
+  title: 'Test Issue',
+  identifier: 'P-1',
+  priority: 1,
+  space: 'project-123',
+  status: 'status-1',
+  assignee: null,
+  dueDate: null,
+  estimation: 0,
 }
 
-export interface IssueResponse {
-  id: string
-  identifier: string
-  title: string
-  stateId?: string
-  assigneeId?: string
-  dueDate?: string
-  estimate?: number
+const mockStatus = {
+  _id: 'status-1',
+  name: 'Todo',
 }
 
-function hasProperty<K extends string>(value: unknown, key: K): value is Record<K, unknown> {
-  return typeof value === 'object' && value !== null && key in value
-}
+const mockStatuses = [
+  { _id: 'status-1', name: 'Todo' },
+  { _id: 'status-2', name: 'In Progress' },
+  { _id: 'status-3', name: 'Done' },
+]
 
-function getStringProperty(value: unknown, key: string): string | undefined {
-  if (!hasProperty(value, key)) {
+class MockHulyClient {
+  async findOne(_class: unknown, query: Record<string, unknown>): Promise<unknown | undefined> {
+    const className = String(_class)
+
+    if (className.includes('Project')) {
+      return mockProject
+    }
+
+    if (className.includes('Issue')) {
+      const issueId = query['_id'] as string
+      if (issueId === 'issue-123') {
+        return mockIssue
+      }
+    }
+
+    if (className.includes('IssueStatus')) {
+      const name = query['name'] as string | undefined
+      if (name !== undefined) {
+        return mockStatuses.find((s) => s.name.toLowerCase() === name.toLowerCase())
+      }
+      return mockStatus
+    }
+
     return undefined
   }
-  const prop = value[key]
-  return typeof prop === 'string' ? prop : undefined
-}
 
-function getNumberProperty(value: unknown, key: string): number | undefined {
-  if (!hasProperty(value, key)) {
-    return undefined
-  }
-  const prop = value[key]
-  return typeof prop === 'number' ? prop : undefined
-}
+  async findAll(_class: unknown, query: Record<string, unknown>): Promise<unknown[]> {
+    const className = String(_class)
 
-function createMockIssueResponse(input: unknown): IssueResponse {
-  return {
-    id: 'issue-123',
-    identifier: 'TEAM-1',
-    title: 'Updated Issue',
-    stateId: getStringProperty(input, 'stateId'),
-    assigneeId: getStringProperty(input, 'assigneeId'),
-    dueDate: getStringProperty(input, 'dueDate'),
-    estimate: getNumberProperty(input, 'estimate'),
-  }
-}
-
-export class MockLinearClient {
-  issue(): { team: Promise<{ states: () => Promise<{ nodes: TeamState[] }> }> } {
-    return {
-      team: Promise.resolve({
-        states: (): Promise<{ nodes: TeamState[] }> =>
-          Promise.resolve({
-            nodes: [
-              { id: 'state-1', name: 'Todo' },
-              { id: 'state-2', name: 'In Progress' },
-              { id: 'state-3', name: 'Done' },
-            ],
-          }),
-      }),
+    if (className.includes('TagReference')) {
+      return []
     }
+
+    if (className.includes('IssueStatus') && query['name']) {
+      const name = query['name'] as string
+      const found = mockStatuses.find((s) => s.name.toLowerCase() === name.toLowerCase())
+      return found ? [found] : []
+    }
+
+    return []
   }
 
-  updateIssue(_issueId: string, input: unknown): { issue: Promise<IssueResponse> } {
-    return {
-      issue: Promise.resolve(createMockIssueResponse(input)),
-    }
+  async updateDoc(): Promise<unknown> {
+    return { object: mockIssue }
+  }
+
+  async close(): Promise<void> {
+    // Cleanup
   }
 }
 
 export function setupUpdateIssueMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

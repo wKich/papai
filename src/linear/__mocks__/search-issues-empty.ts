@@ -1,26 +1,21 @@
 import { mock } from 'bun:test'
 
-export interface SearchNode {
-  id: string
-  identifier: string
-  title: string
-  priority: number
-  url: string
-}
+class MockHulyClient {
+  async findAll(): Promise<unknown[]> {
+    return []
+  }
 
-class MockLinearClientEmpty {
-  searchIssues(): { nodes: SearchNode[] } {
-    return { nodes: [] }
+  async findOne(): Promise<unknown | undefined> {
+    return undefined
+  }
+
+  async close(): Promise<void> {
+    // Cleanup
   }
 }
 
 export function setupSearchIssuesEmptyMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClientEmpty,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

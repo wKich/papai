@@ -1,18 +1,24 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { setupUpdateIssueFailureMock } from '../../src/linear/__mocks__/update-issue-failure.js'
 import { setupUpdateIssueMock } from '../../src/linear/__mocks__/update-issue.js'
 import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateIssue } from '../../src/linear/update-issue.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
-describe('updateIssue status', () => {
+describe('updateIssue status with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('updates issue status', async () => {
     setupUpdateIssueMock()
     const result = await updateIssue({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
+      projectId: 'project-123',
       status: 'In Progress',
     })
 
@@ -20,12 +26,18 @@ describe('updateIssue status', () => {
   })
 })
 
-describe('updateIssue assignee', () => {
+describe('updateIssue assignee with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('updates issue assignee', async () => {
     setupUpdateIssueMock()
     const result = await updateIssue({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
+      projectId: 'project-123',
       assigneeId: 'user-456',
     })
 
@@ -33,12 +45,18 @@ describe('updateIssue assignee', () => {
   })
 })
 
-describe('updateIssue multiple fields', () => {
+describe('updateIssue multiple fields with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('updates multiple fields at once', async () => {
     setupUpdateIssueMock()
     const result = await updateIssue({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
+      projectId: 'project-123',
       status: 'Done',
       assigneeId: 'user-789',
       dueDate: '2025-03-20',
@@ -49,12 +67,18 @@ describe('updateIssue multiple fields', () => {
   })
 })
 
-describe('updateIssue status resolution', () => {
+describe('updateIssue status resolution with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('handles unknown workflow state gracefully', async () => {
     setupUpdateIssueMock()
     const result = await updateIssue({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
+      projectId: 'project-123',
       status: 'NonExistentState',
     })
 
@@ -64,8 +88,9 @@ describe('updateIssue status resolution', () => {
   test('matches state names case-insensitively', async () => {
     setupUpdateIssueMock()
     const result = await updateIssue({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
+      projectId: 'project-123',
       status: 'in progress',
     })
 
@@ -73,9 +98,16 @@ describe('updateIssue status resolution', () => {
   })
 })
 
-describe('updateIssue error handling', () => {
+describe('updateIssue error handling with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('throws HulyApiError on API failure', () => {
     setupUpdateIssueFailureMock()
-    expect(updateIssue({ apiKey: mockApiKey, issueId: 'invalid', status: 'Todo' })).rejects.toThrow(HulyApiError)
+    expect(
+      updateIssue({ userId: mockUserId, issueId: 'invalid', projectId: 'project-123', status: 'Todo' }),
+    ).rejects.toThrow(HulyApiError)
   })
 })
