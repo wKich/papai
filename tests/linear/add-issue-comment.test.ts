@@ -1,34 +1,36 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupAddIssueCommentFailureMock } from '../../src/linear/__mocks__/add-issue-comment-failure.js'
-import { setupAddIssueCommentNullMock } from '../../src/linear/__mocks__/add-issue-comment-null.js'
 import { setupAddIssueCommentMock } from '../../src/linear/__mocks__/add-issue-comment.js'
 import { addIssueComment } from '../../src/linear/add-issue-comment.js'
 import { HulyApiError } from '../../src/linear/classify-error.js'
 
-const mockApiKey = 'test-api-key'
-
 describe('addIssueComment', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('adds comment to issue', async () => {
     setupAddIssueCommentMock()
     const result = await addIssueComment({
-      apiKey: mockApiKey,
+      userId: 123,
+      projectId: 'project-123',
       issueId: 'issue-123',
       body: 'Test comment body',
     })
 
     expect(result).toBeDefined()
-    expect(result.id).toBe('comment-123')
-    expect(result.body).toBe('Test comment')
-    expect(result.url).toBe('https://linear.app/comment/comment-123')
+    expect(result.body).toBe('Test comment body')
+    expect(result.url).toBeDefined()
   })
 
   describe('error handling', () => {
-    test('throws HulyApiError when issue not found', () => {
-      setupAddIssueCommentFailureMock()
-      expect(
+    test('throws HulyApiError when issue not found', async () => {
+      setupAddIssueCommentMock()
+      await expect(
         addIssueComment({
-          apiKey: mockApiKey,
+          userId: 123,
+          projectId: 'project-123',
           issueId: 'invalid-issue',
           body: 'Test comment',
         }),
@@ -36,11 +38,12 @@ describe('addIssueComment', () => {
     })
 
     test('throws HulyApiError with issue-not-found code', async () => {
-      setupAddIssueCommentFailureMock()
+      setupAddIssueCommentMock()
       let thrown = false
       try {
         await addIssueComment({
-          apiKey: mockApiKey,
+          userId: 123,
+          projectId: 'project-123',
           issueId: 'invalid-issue',
           body: 'Test comment',
         })
@@ -52,17 +55,6 @@ describe('addIssueComment', () => {
         }
       }
       expect(thrown).toBe(true)
-    })
-
-    test('throws HulyApiError when API returns null', () => {
-      setupAddIssueCommentNullMock()
-      expect(
-        addIssueComment({
-          apiKey: mockApiKey,
-          issueId: 'issue-123',
-          body: 'Test comment',
-        }),
-      ).rejects.toThrow(HulyApiError)
     })
   })
 })

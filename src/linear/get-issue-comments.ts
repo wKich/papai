@@ -1,51 +1,75 @@
-import { LinearClient } from '@linear/sdk'
+import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import tracker, { type Issue } from '@hcengineering/tracker'
 
-import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { filterPresentNodes, requireEntity } from './response-guards.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:get-issue-comments' })
+const log = logger.child({ scope: 'huly:get-issue-comments' })
 
-export async function getIssueComments({
-  apiKey,
-  issueId,
-}: {
-  apiKey: string
+export interface GetIssueCommentsParams {
+  userId: number
   issueId: string
-}): Promise<{ id: string; body: string; createdAt: Date }[]> {
-  log.debug({ issueId }, 'getIssueComments called')
+}
+
+export interface GetIssueCommentsResult {
+  id: string
+  body: string
+  createdAt: Date
+}
+
+export async function getIssueComments({ userId, issueId }: GetIssueCommentsParams): Promise<GetIssueCommentsResult[]> {
+  log.debug({ userId, issueId }, 'getIssueComments called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
-    const issue = requireEntity(await client.issue(issueId), {
-      entityName: 'issue',
-      context: { issueId },
-      appError: linearError.issueNotFound(issueId),
-    })
-    const comments = await issue.comments()
-    const result = filterPresentNodes(comments.nodes, { entityName: 'comment', parentId: issueId }).flatMap((c) => {
-      const createdAt =
-        c.createdAt instanceof Date
-          ? c.createdAt
-          : typeof c.createdAt === 'string' || typeof c.createdAt === 'number'
-            ? new Date(c.createdAt)
-            : undefined
-      if (
-        typeof c.id !== 'string' ||
-        typeof c.body !== 'string' ||
-        createdAt === undefined ||
-        Number.isNaN(createdAt.getTime())
-      ) {
-        log.warn({ issueId, commentId: c.id }, 'Skipping comment with invalid response shape')
-        return []
-      }
-      return [{ id: c.id, body: c.body, createdAt }]
-    })
-    log.info({ issueId, commentCount: result.length }, 'Comments fetched')
+    // First verify the issue exists
+    const issue = (await client.findOne(tracker.class.Issue, {
+      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
+
+    if (!issue) {
+      throw new Error(`Issue not found: ${issueId}`)
+    }
+
+    // Fetch comments using findAll with attachedTo filter
+    const comments = (await client.findAll(chunter.class.ChatMessage, {
+      attachedTo: issueId as unknown as Parameters<typeof client.findAll>[1]['attachedTo'],
+    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as ChatMessage[]
+
+    const result: GetIssueCommentsResult[] = comments
+      .filter((comment) => {
+        // Validate required fields
+        if (typeof comment._id !== 'string' || typeof comment.message !== 'string') {
+          log.warn({ userId, issueId, commentId: comment._id }, 'Skipping comment with invalid response shape')
+          return false
+        }
+        return true
+      })
+      .map((comment) => {
+        const createdAt =
+          typeof comment.modifiedOn === 'number'
+            ? new Date(comment.modifiedOn)
+            : typeof comment.createdOn === 'number'
+              ? new Date(comment.createdOn)
+              : new Date()
+        return {
+          id: comment._id as string,
+          body: comment.message,
+          createdAt,
+        }
+      })
+
+    log.info({ userId, issueId, commentCount: result.length }, 'Comments fetched')
     return result
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssueComments failed')
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), userId, issueId },
+      'getIssueComments failed',
+    )
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

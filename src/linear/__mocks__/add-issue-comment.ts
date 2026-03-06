@@ -1,24 +1,54 @@
 import { mock } from 'bun:test'
 
-export class MockLinearClient {
-  createComment(): { comment: Promise<{ id: string; body: string; url: string } | null> } {
-    return {
-      comment: Promise.resolve({
-        id: 'comment-123',
-        body: 'Test comment',
-        url: 'https://linear.app/comment/comment-123',
-      }),
+export interface MockChatMessage {
+  _id: string
+  message: string
+  modifiedOn: number
+  createdOn: number
+  attachedTo: string
+}
+
+export class MockHulyClient {
+  private comments: Map<string, MockChatMessage> = new Map()
+
+  async findOne(_classRef: unknown, query: { _id?: string }): Promise<unknown> {
+    if (query._id === 'issue-123') {
+      return {
+        _id: 'issue-123',
+        identifier: 'TEST-123',
+        title: 'Test Issue',
+        space: 'project-123',
+      }
     }
+    return undefined
+  }
+
+  async addCollection(
+    _classRef: unknown,
+    _space: unknown,
+    attachedTo: unknown,
+    _attachedToClass: unknown,
+    _collection: string,
+    _data: { message?: string },
+  ): Promise<string> {
+    const commentId = `comment-${Date.now()}`
+    this.comments.set(commentId, {
+      _id: commentId,
+      message: _data.message ?? '',
+      modifiedOn: Date.now(),
+      createdOn: Date.now(),
+      attachedTo: attachedTo as string,
+    })
+    return commentId
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve()
   }
 }
 
 export function setupAddIssueCommentMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

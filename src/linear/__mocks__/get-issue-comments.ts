@@ -1,34 +1,55 @@
 import { mock } from 'bun:test'
 
-export interface CommentNode {
-  id: string
-  body: string
-  createdAt: Date
+export interface MockChatMessage {
+  _id: string
+  message: string
+  modifiedOn: number
+  createdOn: number
+  attachedTo: string
 }
 
-export class MockLinearClient {
-  issue(): Promise<{
-    comments: () => Promise<{ nodes: (CommentNode | null)[] }>
-  }> {
-    return Promise.resolve({
-      comments: () =>
-        Promise.resolve({
-          nodes: [
-            { id: 'comment-1', body: 'First comment', createdAt: new Date('2025-03-01') },
-            { id: 'comment-2', body: 'Second comment', createdAt: new Date('2025-03-02') },
-          ],
-        }),
-    })
+export class MockHulyClient {
+  async findOne(_classRef: unknown, query: { _id?: string }): Promise<unknown> {
+    if (query._id === 'issue-123') {
+      return {
+        _id: 'issue-123',
+        identifier: 'TEST-123',
+        title: 'Test Issue',
+        space: 'project-123',
+      }
+    }
+    return undefined
+  }
+
+  async findAll(_classRef: unknown, query: { attachedTo?: string }): Promise<unknown[]> {
+    if (query.attachedTo === 'issue-123') {
+      return [
+        {
+          _id: 'comment-1',
+          message: 'First comment',
+          modifiedOn: new Date('2025-03-01').getTime(),
+          createdOn: new Date('2025-03-01').getTime(),
+          attachedTo: 'issue-123',
+        },
+        {
+          _id: 'comment-2',
+          message: 'Second comment',
+          modifiedOn: new Date('2025-03-02').getTime(),
+          createdOn: new Date('2025-03-02').getTime(),
+          attachedTo: 'issue-123',
+        },
+      ]
+    }
+    return []
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve()
   }
 }
 
 export function setupGetIssueCommentsMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

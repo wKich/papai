@@ -1,15 +1,18 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { setupGetIssueCommentsMock } from '../../src/linear/__mocks__/get-issue-comments.js'
 import { getIssueComments } from '../../src/linear/get-issue-comments.js'
 
-const mockApiKey = 'test-api-key'
-
 describe('getIssueComments', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('returns comments for issue', async () => {
     setupGetIssueCommentsMock()
     const result = await getIssueComments({
-      apiKey: mockApiKey,
+      userId: 123,
       issueId: 'issue-123',
     })
 
