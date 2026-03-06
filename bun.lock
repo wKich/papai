@@ -13,7 +13,6 @@
         "@hcengineering/tags": "^0.7.0",
         "@hcengineering/task": "^0.7.0",
         "@hcengineering/tracker": "^0.7.0",
-        "@linear/sdk": "^76.0.0",
         "ai": "^6.0.108",
         "grammy": "^1.41.1",
         "marked": "^17.0.4",
@@ -57,8 +56,6 @@
     "@gramio/types": ["@gramio/types@9.5.0", "", {}, "sha512-bpOxXjtsabZpm2TTvr0QA4XJKPVeIoN0scMFuViUaLb1FbtQ+yp4hGz0XUKHVUTr39TzPV4ICANNX5b5uMtTKw=="],
 
     "@grammyjs/types": ["@grammyjs/types@3.25.0", "", {}, "sha512-iN9i5p+8ZOu9OMxWNcguojQfz4K/PDyMPOnL7PPCON+SoA/F8OKMH3uR7CVUkYfdNe0GCz8QOzAWrnqusQYFOg=="],
-
-    "@graphql-typed-document-node/core": ["@graphql-typed-document-node/core@3.2.0", "", { "peerDependencies": { "graphql": "^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0" } }, "sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ=="],
 
     "@hcengineering/account-client": ["@hcengineering/account-client@0.7.25", "", { "dependencies": { "@hcengineering/core": "^0.7.26", "@hcengineering/platform": "^0.7.20" } }, "sha512-GHGitAfJjljj201TxmeFZSN6qw/FSblDs0ljpl230eBd4EB7jDpAbUyCNdvUt1CK0uBbJECtPrfbmiuBVPvI8w=="],
 
@@ -133,8 +130,6 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
-
-    "@linear/sdk": ["@linear/sdk@76.0.0", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0" } }, "sha512-Xt0x5Kl6qBoWhGFypb8ykyP+c5kT7scmRPs1uJidSPOaRgkMJ/4y41QpmZCWCBUMmZtf/O0VktgQio6rLXT94w=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3", "", { "os": "darwin", "cpu": "arm64" }, "sha512-QZHtlVgbAdy2zAqNA9Gu1UpIuI8Xvsd1v8ic6B2pZmeFnFcMWiPLfWXh7TVw4eGEZ/C9TH281KwhVoeQUKbyjw=="],
 
@@ -401,8 +396,6 @@
     "fast-equals": ["fast-equals@5.4.0", "", {}, "sha512-jt2DW/aNFNwke7AUd+Z+e6pz39KO5rzdbbFCg2sGafS4mk13MI7Z8O5z9cADNn5lhGODIgLwug6TZO2ctf7kcw=="],
 
     "grammy": ["grammy@1.41.1", "", { "dependencies": { "@grammyjs/types": "3.25.0", "abort-controller": "^3.0.0", "debug": "^4.4.3", "node-fetch": "^2.7.0" } }, "sha512-wcHAQ1e7svL3fJMpDchcQVcWUmywhuepOOjHUHmMmWAwUJEIyK5ea5sbSjZd+Gy1aMpZeP8VYJa+4tP+j1YptQ=="],
-
-    "graphql": ["graphql@16.13.1", "", {}, "sha512-gGgrVCoDKlIZ8fIqXBBb0pPKqDgki0Z/FSKNiQzSGj2uEYHr1tq5wmBegGwJx6QB5S5cM0khSBpi/JFHMCvsmQ=="],
 
     "hash-it": ["hash-it@6.0.1", "", {}, "sha512-qhl8+l4Zwi1eLlL3lja5ywmDQnBzLEJxd0QJoAVIgZpgQbdtVZrN5ypB0y3VHwBlvAalpcbM2/A6x7oUks5zNg=="],
 
