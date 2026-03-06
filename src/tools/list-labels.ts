@@ -7,13 +7,13 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:list-labels' })
 
-export function makeListLabelsTool(linearKey: string, linearTeamId: string): ToolSet[string] {
+export function makeListLabelsTool(userId: number): ToolSet[string] {
   return tool({
     description: 'List all available labels in the team. Use this to get label IDs before applying labels.',
     inputSchema: z.object({}),
     execute: async () => {
       try {
-        return await listLabels({ apiKey: linearKey, teamId: linearTeamId })
+        return await listLabels({ userId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'list_labels' },

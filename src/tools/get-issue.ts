@@ -7,13 +7,13 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:get-issue' })
 
-export function makeGetIssueTool(linearKey: string): ToolSet[string] {
+export function makeGetIssueTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Fetch full details of a single Linear issue.',
-    inputSchema: z.object({ issueId: z.string().describe("Linear issue ID or identifier (e.g. 'PAP-42')") }),
+    description: 'Fetch full details of a single issue.',
+    inputSchema: z.object({ issueId: z.string().describe("Issue ID or identifier (e.g. 'PAP-42')") }),
     execute: async ({ issueId }) => {
       try {
-        return await getIssue({ apiKey: linearKey, issueId })
+        return await getIssue({ userId, issueId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'get_issue' },

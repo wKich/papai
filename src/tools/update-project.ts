@@ -7,12 +7,12 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:update-project' })
 
-export function makeUpdateProjectTool(linearKey: string): ToolSet[string] {
+export function makeUpdateProjectTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Update an existing Linear project.',
+    description: 'Update an existing project.',
     inputSchema: z
       .object({
-        projectId: z.string().describe('Linear project ID'),
+        projectId: z.string().describe('Project ID'),
         name: z.string().optional().describe('New project name'),
         description: z.string().optional().describe('New project description'),
       })
@@ -22,7 +22,7 @@ export function makeUpdateProjectTool(linearKey: string): ToolSet[string] {
       ),
     execute: async ({ projectId, name, description }) => {
       try {
-        return await updateProject({ apiKey: linearKey, projectId, name, description })
+        return await updateProject({ userId, projectId, name, description })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'update_project' },

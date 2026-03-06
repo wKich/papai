@@ -7,15 +7,15 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:remove-label' })
 
-export function makeRemoveLabelTool(linearKey: string): ToolSet[string] {
+export function makeRemoveLabelTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Remove (delete) a Linear issue label.',
+    description: 'Remove (delete) an issue label.',
     inputSchema: z.object({
-      labelId: z.string().describe('Linear label ID to remove'),
+      labelId: z.string().describe('Label ID to remove'),
     }),
     execute: async ({ labelId }) => {
       try {
-        return await removeLabel({ apiKey: linearKey, labelId })
+        return await removeLabel({ userId, labelId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), labelId, tool: 'remove_label' },

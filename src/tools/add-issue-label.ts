@@ -7,16 +7,16 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:add-issue-label' })
 
-export function makeAddIssueLabelTool(linearKey: string): ToolSet[string] {
+export function makeAddIssueLabelTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Add a label to a Linear issue. Use list_labels first to get available label IDs.',
+    description: 'Add a label to an issue. Use list_labels first to get available label IDs.',
     inputSchema: z.object({
-      issueId: z.string().describe('Linear issue ID'),
+      issueId: z.string().describe('Issue ID'),
       labelId: z.string().describe('Label ID to add'),
     }),
     execute: async ({ issueId, labelId }) => {
       try {
-        return await addIssueLabel({ apiKey: linearKey, issueId, labelId })
+        return await addIssueLabel({ userId, issueId, labelId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, labelId, tool: 'add_issue_label' },

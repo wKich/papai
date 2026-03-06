@@ -7,16 +7,16 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:update-issue-comment' })
 
-export function makeUpdateIssueCommentTool(linearKey: string): ToolSet[string] {
+export function makeUpdateIssueCommentTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Update an existing comment on a Linear issue.',
+    description: 'Update an existing comment on an issue.',
     inputSchema: z.object({
-      commentId: z.string().describe('Linear comment ID'),
+      commentId: z.string().describe('Comment ID'),
       body: z.string().describe('New comment body (supports Markdown)'),
     }),
     execute: async ({ commentId, body }) => {
       try {
-        return await updateIssueComment({ apiKey: linearKey, commentId, body })
+        return await updateIssueComment({ userId, commentId, body })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), commentId, tool: 'update_issue_comment' },

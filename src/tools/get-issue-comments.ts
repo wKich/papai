@@ -7,13 +7,13 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:get-issue-comments' })
 
-export function makeGetIssueCommentsTool(linearKey: string): ToolSet[string] {
+export function makeGetIssueCommentsTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Get all comments on a Linear issue.',
-    inputSchema: z.object({ issueId: z.string().describe('Linear issue ID') }),
+    description: 'Get all comments on an issue.',
+    inputSchema: z.object({ issueId: z.string().describe('Issue ID') }),
     execute: async ({ issueId }) => {
       try {
-        return await getIssueComments({ apiKey: linearKey, issueId })
+        return await getIssueComments({ userId, issueId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'get_issue_comments' },

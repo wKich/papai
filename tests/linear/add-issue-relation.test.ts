@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { setupAddIssueRelationFailureMock } from '../../src/linear/__mocks__/add-issue-relation-failure.js'
 import { setupAddIssueRelationNullMock } from '../../src/linear/__mocks__/add-issue-relation-null.js'
@@ -6,47 +6,55 @@ import { setupAddIssueRelationMock } from '../../src/linear/__mocks__/add-issue-
 import { addIssueRelation } from '../../src/linear/add-issue-relation.js'
 import { HulyApiError } from '../../src/linear/classify-error.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 123456
 
-describe('addIssueRelation', () => {
+describe('addIssueRelation with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('creates blocks relation', async () => {
     setupAddIssueRelationMock()
     const result = await addIssueRelation({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
       relatedIssueId: 'issue-456',
       type: 'blocks',
     })
 
     expect(result).toBeDefined()
-    expect(result.id).toBe('relation-123')
+    expect(result.id).toBe('issue-123-issue-456')
     expect(result.type).toBe('blocks')
+    expect(result.relatedIssueId).toBe('issue-456')
   })
 
   test('creates duplicate relation', async () => {
     setupAddIssueRelationMock()
     const result = await addIssueRelation({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
       relatedIssueId: 'issue-456',
       type: 'duplicate',
     })
 
     expect(result).toBeDefined()
-    expect(result.id).toBe('relation-123')
+    expect(result.id).toBe('issue-123-issue-456')
+    expect(result.type).toBe('duplicate')
   })
 
   test('creates related relation', async () => {
     setupAddIssueRelationMock()
     const result = await addIssueRelation({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       issueId: 'issue-123',
       relatedIssueId: 'issue-456',
       type: 'related',
     })
 
     expect(result).toBeDefined()
-    expect(result.id).toBe('relation-123')
+    expect(result.id).toBe('issue-123-issue-456')
+    expect(result.type).toBe('related')
   })
 
   describe('error handling', () => {
@@ -54,7 +62,7 @@ describe('addIssueRelation', () => {
       setupAddIssueRelationFailureMock()
       expect(
         addIssueRelation({
-          apiKey: mockApiKey,
+          userId: mockUserId,
           issueId: 'invalid-issue',
           relatedIssueId: 'issue-456',
           type: 'blocks',
@@ -67,7 +75,7 @@ describe('addIssueRelation', () => {
       let thrown = false
       try {
         await addIssueRelation({
-          apiKey: mockApiKey,
+          userId: mockUserId,
           issueId: 'invalid-issue',
           relatedIssueId: 'issue-456',
           type: 'blocks',
@@ -82,13 +90,13 @@ describe('addIssueRelation', () => {
       expect(thrown).toBe(true)
     })
 
-    test('throws HulyApiError when API returns null', () => {
+    test('throws HulyApiError when related issue not found', () => {
       setupAddIssueRelationNullMock()
       expect(
         addIssueRelation({
-          apiKey: mockApiKey,
+          userId: mockUserId,
           issueId: 'issue-123',
-          relatedIssueId: 'issue-456',
+          relatedIssueId: 'invalid-issue',
           type: 'blocks',
         }),
       ).rejects.toThrow(HulyApiError)

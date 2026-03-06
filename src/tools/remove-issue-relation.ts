@@ -7,16 +7,16 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:remove-issue-relation' })
 
-export function makeRemoveIssueRelationTool(linearKey: string): ToolSet[string] {
+export function makeRemoveIssueRelationTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Remove a relation between two Linear issues.',
+    description: 'Remove a relation between two issues.',
     inputSchema: z.object({
-      issueId: z.string().describe('Linear issue ID'),
-      relatedIssueId: z.string().describe('Linear issue ID of the related issue'),
+      issueId: z.string().describe('Issue ID'),
+      relatedIssueId: z.string().describe('Issue ID of the related issue'),
     }),
     execute: async ({ issueId, relatedIssueId }) => {
       try {
-        return await removeIssueRelation({ apiKey: linearKey, issueId, relatedIssueId })
+        return await removeIssueRelation({ userId, issueId, relatedIssueId })
       } catch (error) {
         log.error(
           {

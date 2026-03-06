@@ -1,43 +1,79 @@
-import { LinearClient } from '@linear/sdk'
+import core from '@hcengineering/core'
+import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
-import { findRelationByRelatedIssueId } from './relation-helpers.js'
-import { requireEntity } from './response-guards.js'
+import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:remove-issue-relation' })
+const log = logger.child({ scope: 'huly:remove-issue-relation' })
+
+interface RelatedIssueEntry {
+  issueId: string
+  type: string
+}
 
 export async function removeIssueRelation({
-  apiKey,
+  userId,
   issueId,
   relatedIssueId,
 }: {
-  apiKey: string
+  userId: number
   issueId: string
   relatedIssueId: string
 }): Promise<{ id: string; success: true }> {
-  log.debug({ issueId, relatedIssueId }, 'removeIssueRelation called')
+  log.debug({ userId, issueId, relatedIssueId }, 'removeIssueRelation called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
+    // Fetch the source issue
+    const issue = (await client.findOne(tracker.class.Issue, {
+      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
 
-    const issue = requireEntity(await client.issue(issueId), {
-      entityName: 'issue',
-      context: { issueId },
-      appError: linearError.issueNotFound(issueId),
-    })
+    if (!issue) {
+      throw new HulyApiError(`Issue not found: ${issueId}`, linearError.issueNotFound(issueId))
+    }
 
-    const foundRelation = await findRelationByRelatedIssueId({ issue, relatedIssueId })
+    // Get current relatedIssues array
+    const currentRelatedIssues = (issue as unknown as { relatedIssues?: RelatedIssueEntry[] }).relatedIssues ?? []
 
-    await client.deleteIssueRelation(foundRelation.id)
-    log.info({ issueId, relatedIssueId, relationId: foundRelation.id }, 'Relation removed')
-    return { id: foundRelation.id, success: true }
+    // Find the relation to remove
+    const relationIndex = currentRelatedIssues.findIndex((entry) => entry.issueId === relatedIssueId)
+
+    if (relationIndex === -1) {
+      throw new HulyApiError(
+        `Relation between issues "${issueId}" and "${relatedIssueId}" was not found.`,
+        linearError.relationNotFound(issueId, relatedIssueId),
+      )
+    }
+
+    // Remove the relation from the array
+    const updatedRelatedIssues = currentRelatedIssues.filter((entry) => entry.issueId !== relatedIssueId)
+
+    // Update the issue with modified relatedIssues array
+    await client.updateDoc(
+      tracker.class.Issue,
+      core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
+      issueId as unknown as Parameters<typeof client.updateDoc>[2],
+      { relatedIssues: updatedRelatedIssues } as unknown as Parameters<typeof client.updateDoc>[3],
+      false,
+    )
+
+    log.info({ userId, issueId, relatedIssueId }, 'Relation removed')
+
+    return {
+      id: `${issueId}-${relatedIssueId}`,
+      success: true,
+    }
   } catch (error) {
     log.error(
-      { error: error instanceof Error ? error.message : String(error), issueId, relatedIssueId },
+      { error: error instanceof Error ? error.message : String(error), userId, issueId, relatedIssueId },
       'removeIssueRelation failed',
     )
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

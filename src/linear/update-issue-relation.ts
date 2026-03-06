@@ -1,60 +1,86 @@
-import { IssueRelationType, LinearClient } from '@linear/sdk'
+import core from '@hcengineering/core'
+import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
-import { findRelationByRelatedIssueId } from './relation-helpers.js'
-import { requireEntity } from './response-guards.js'
+import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:update-issue-relation' })
+const log = logger.child({ scope: 'huly:update-issue-relation' })
 
-const typeMap: Record<'blocks' | 'duplicate' | 'related', IssueRelationType> = {
-  blocks: IssueRelationType.Blocks,
-  duplicate: IssueRelationType.Duplicate,
-  related: IssueRelationType.Related,
+type RelationType = 'blocks' | 'duplicate' | 'related'
+
+interface RelatedIssueEntry {
+  issueId: string
+  type: RelationType
 }
 
 export async function updateIssueRelation({
-  apiKey,
+  userId,
   issueId,
   relatedIssueId,
   type,
 }: {
-  apiKey: string
+  userId: number
   issueId: string
   relatedIssueId: string
-  type: 'blocks' | 'duplicate' | 'related'
+  type: RelationType
 }): Promise<{ id: string; type: string; relatedIssueId: string }> {
-  log.debug({ issueId, relatedIssueId, type }, 'updateIssueRelation called')
+  log.debug({ userId, issueId, relatedIssueId, type }, 'updateIssueRelation called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
+    // Fetch the source issue
+    const issue = (await client.findOne(tracker.class.Issue, {
+      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
 
-    const issue = requireEntity(await client.issue(issueId), {
-      entityName: 'issue',
-      context: { issueId },
-      appError: linearError.issueNotFound(issueId),
-    })
+    if (!issue) {
+      throw new HulyApiError(`Issue not found: ${issueId}`, linearError.issueNotFound(issueId))
+    }
 
-    const foundRelation = await findRelationByRelatedIssueId({ issue, relatedIssueId })
+    // Get current relatedIssues array
+    const currentRelatedIssues = (issue as unknown as { relatedIssues?: RelatedIssueEntry[] }).relatedIssues ?? []
 
-    const payload = await client.updateIssueRelation(foundRelation.id, {
-      type: typeMap[type],
-    })
+    // Find the relation to update
+    const relationIndex = currentRelatedIssues.findIndex((entry) => entry.issueId === relatedIssueId)
 
-    const updatedRelation = requireEntity(await payload.issueRelation, {
-      entityName: 'issue relation',
-      context: { issueId, relatedIssueId, relationId: foundRelation.id },
-      appError: linearError.relationNotFound(issueId, relatedIssueId),
-    })
+    if (relationIndex === -1) {
+      throw new HulyApiError(
+        `Relation between issues "${issueId}" and "${relatedIssueId}" was not found.`,
+        linearError.relationNotFound(issueId, relatedIssueId),
+      )
+    }
 
-    log.info({ issueId, relatedIssueId, type, relationId: updatedRelation.id }, 'Relation updated')
-    return { id: updatedRelation.id, type: updatedRelation.type, relatedIssueId }
+    // Update the relation type
+    const updatedRelatedIssues = currentRelatedIssues.map((entry, index) =>
+      index === relationIndex ? { ...entry, type } : entry,
+    )
+
+    // Update the issue with modified relatedIssues array
+    await client.updateDoc(
+      tracker.class.Issue,
+      core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
+      issueId as unknown as Parameters<typeof client.updateDoc>[2],
+      { relatedIssues: updatedRelatedIssues } as unknown as Parameters<typeof client.updateDoc>[3],
+      false,
+    )
+
+    log.info({ userId, issueId, relatedIssueId, type }, 'Relation type updated')
+
+    return {
+      id: `${issueId}-${relatedIssueId}`,
+      type,
+      relatedIssueId,
+    }
   } catch (error) {
     log.error(
-      { error: error instanceof Error ? error.message : String(error), issueId, relatedIssueId },
+      { error: error instanceof Error ? error.message : String(error), userId, issueId, relatedIssueId },
       'updateIssueRelation failed',
     )
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

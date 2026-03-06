@@ -17,7 +17,7 @@ import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
-const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Linear tasks directly from Telegram.
+const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Huly tasks directly from Telegram.
 
 You can:
 - Create new issues with titles, descriptions, priorities, and project associations
@@ -62,7 +62,7 @@ const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createO
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
 const checkRequiredConfig = (userId: number): string[] => {
-  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
+  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'huly_email', 'huly_password'] as const
   return requiredKeys.filter((k) => getConfig(userId, k) === null)
 }
 
@@ -105,10 +105,8 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const openaiKey = getConfig(userId, 'openai_key')!
   const openaiBaseUrl = getConfig(userId, 'openai_base_url')!
   const openaiModel = getConfig(userId, 'openai_model')!
-  const linearKey = getConfig(userId, 'linear_key')!
-  const linearTeamId = getConfig(userId, 'linear_team_id')!
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
-  const tools = makeTools({ linearKey, linearTeamId })
+  const tools = makeTools({ userId })
 
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
 

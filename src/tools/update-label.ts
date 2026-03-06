@@ -7,12 +7,12 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:update-label' })
 
-export function makeUpdateLabelTool(linearKey: string): ToolSet[string] {
+export function makeUpdateLabelTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Update an existing Linear issue label.',
+    description: 'Update an existing issue label.',
     inputSchema: z
       .object({
-        labelId: z.string().describe('Linear label ID'),
+        labelId: z.string().describe('Label ID'),
         name: z.string().optional().describe('New label name'),
         description: z.string().optional().describe('New label description'),
         color: z.string().optional().describe('New label color (hex)'),
@@ -23,7 +23,7 @@ export function makeUpdateLabelTool(linearKey: string): ToolSet[string] {
       ),
     execute: async ({ labelId, name, description, color }) => {
       try {
-        return await updateLabel({ apiKey: linearKey, labelId, name, description, color })
+        return await updateLabel({ userId, labelId, name, description, color })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), labelId, tool: 'update_label' },

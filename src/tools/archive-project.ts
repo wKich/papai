@@ -7,15 +7,15 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:archive-project' })
 
-export function makeArchiveProjectTool(linearKey: string): ToolSet[string] {
+export function makeArchiveProjectTool(userId: number): ToolSet[string] {
   return tool({
-    description: 'Archive a Linear project.',
+    description: 'Archive a project.',
     inputSchema: z.object({
-      projectId: z.string().describe('Linear project ID'),
+      projectId: z.string().describe('Project ID'),
     }),
     execute: async ({ projectId }) => {
       try {
-        return await archiveProject({ apiKey: linearKey, projectId })
+        return await archiveProject({ userId, projectId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'archive_project' },

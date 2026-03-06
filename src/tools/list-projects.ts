@@ -7,14 +7,14 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:list-projects' })
 
-export function makeListProjectsTool(linearKey: string): ToolSet[string] {
+export function makeListProjectsTool(userId: number): ToolSet[string] {
   return tool({
     description:
-      'List all available teams and projects in Linear. Call this to get projectId or teamId context before creating or searching issues.',
+      'List all available teams and projects. Call this to get projectId or teamId context before creating or searching issues.',
     inputSchema: z.object({}),
     execute: () => {
       try {
-        return listProjects({ apiKey: linearKey })
+        return listProjects({ userId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'list_projects' },

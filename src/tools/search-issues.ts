@@ -32,10 +32,10 @@ const searchIssuesInputSchema = z.object({
     .describe('Filter by specific relation type (requires hasRelations=true)'),
 })
 
-export function makeSearchIssuesTool(linearKey: string): ToolSet[string] {
+export function makeSearchIssuesTool(userId: number): ToolSet[string] {
   return tool({
     description:
-      'Search for issues in Linear by keyword or filter by state, project, label, due date, estimate, or relations. Use this when the user asks about existing tasks.',
+      'Search for issues by keyword or filter by state, project, label, due date, estimate, or relations. Use this when the user asks about existing tasks.',
     inputSchema: searchIssuesInputSchema,
     execute: async ({
       query,
@@ -51,7 +51,7 @@ export function makeSearchIssuesTool(linearKey: string): ToolSet[string] {
     }) => {
       try {
         return await searchIssues({
-          apiKey: linearKey,
+          userId,
           query,
           state,
           projectId,

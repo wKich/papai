@@ -63,7 +63,7 @@ class MockHulyClient implements Partial<PlatformClient> {
   }
 }
 
-export function setupUpdateIssueRelationFailureMock(): void {
+export function setupRemoveIssueRelationFailureMock(): void {
   mockIssues.clear()
   mock.module('../huly-client.js', () => ({
     getHulyClient: async () => new MockHulyClient(),
