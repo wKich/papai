@@ -105,7 +105,6 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const assistantText = result.text
   const formatted = formatLlmOutput(assistantText || 'Done.')
   conversationHistory.set(userId, [...history, ...result.response.messages])
-  // @ts-expect-error TelegramMessageEntity from @gramio/format is compatible with grammy's MessageEntity at runtime
   await ctx.reply(formatted.text, { entities: formatted.entities })
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
