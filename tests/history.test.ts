@@ -91,7 +91,9 @@ describe('loadHistory', () => {
     expect(result).toHaveLength(1)
     const first = result[0]
     expect(first).toBeDefined()
-    expect('toolCalls' in first).toBe(true)
+    if (first !== undefined) {
+      expect('toolCalls' in first).toBe(true)
+    }
   })
 })
 
