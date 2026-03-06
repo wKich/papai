@@ -13,58 +13,62 @@ const createBaseEntity = (entity: TelegramMessageEntity): { offset: number; leng
 
 const isValidDateTimeFormat = (value: string): value is MessageEntity.DateTimeMessageEntity['date_time_format'] => {
   // Valid patterns: "r" or combinations of optional "w", "d"/"D", "t"/"T"
-  // e.g., "r", "d", "dt", "D", "Dt", "DT", "w", "wd", "wdt", etc.
   return /^[rwdDtT]*$/.test(value) && (value === 'r' || value.length <= 3)
 }
 
-const mapEntityWithExtras = (entity: TelegramMessageEntity): MessageEntity | null => {
-  const base = createBaseEntity(entity)
+const mapPreEntity = (entity: TelegramMessageEntity, base: { offset: number; length: number }): MessageEntity | null =>
+  entity.language === undefined ? null : { ...base, type: 'pre', language: entity.language }
 
-  if (entity.type === 'pre' && entity.language !== undefined) {
-    return { ...base, type: 'pre', language: entity.language }
-  }
+const mapTextLinkEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => (entity.url === undefined ? null : { ...base, type: 'text_link', url: entity.url })
 
-  if (entity.type === 'text_link' && entity.url !== undefined) {
-    return { ...base, type: 'text_link', url: entity.url }
-  }
+const mapTextMentionEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => (entity.user === undefined ? null : { ...base, type: 'text_mention', user: entity.user })
 
-  if (entity.type === 'text_mention' && entity.user !== undefined) {
-    return { ...base, type: 'text_mention', user: entity.user }
-  }
+const mapCustomEmojiEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null =>
+  entity.custom_emoji_id === undefined
+    ? null
+    : { ...base, type: 'custom_emoji', custom_emoji_id: entity.custom_emoji_id }
 
-  if (entity.type === 'custom_emoji' && entity.custom_emoji_id !== undefined) {
-    return { ...base, type: 'custom_emoji', custom_emoji_id: entity.custom_emoji_id }
-  }
-
+const mapDateTimeEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => {
   if (
-    entity.type === 'date_time' &&
-    entity.unix_time !== undefined &&
-    entity.date_time_format !== undefined &&
-    isValidDateTimeFormat(entity.date_time_format)
+    entity.unix_time === undefined ||
+    entity.date_time_format === undefined ||
+    !isValidDateTimeFormat(entity.date_time_format)
   ) {
-    return {
-      ...base,
-      type: 'date_time',
-      unix_time: entity.unix_time,
-      date_time_format: entity.date_time_format,
-    }
+    return null
   }
-
-  return null
+  return {
+    ...base,
+    type: 'date_time',
+    unix_time: entity.unix_time,
+    date_time_format: entity.date_time_format,
+  }
 }
 
-const mapCommonEntity = (entity: TelegramMessageEntity): MessageEntity => {
+const mapEntity = (entity: TelegramMessageEntity): MessageEntity | null => {
   const base = createBaseEntity(entity)
+  const { type } = entity
 
-  switch (entity.type) {
-    case 'pre':
-      return { ...base, type: 'pre' }
-    case 'text_link':
-      return { ...base, type: 'text_link', url: '' }
-    case 'text_mention':
-      return { ...base, type: 'text_mention', user: { id: 0, is_bot: false, first_name: '' } }
-    case 'custom_emoji':
-      return { ...base, type: 'custom_emoji', custom_emoji_id: '' }
+  // Entities with optional extra properties
+  if (type === 'pre') return mapPreEntity(entity, base)
+  if (type === 'text_link') return mapTextLinkEntity(entity, base)
+  if (type === 'text_mention') return mapTextMentionEntity(entity, base)
+  if (type === 'custom_emoji') return mapCustomEmojiEntity(entity, base)
+  if (type === 'date_time') return mapDateTimeEntity(entity, base)
+
+  // Common entity types without extra properties
+  switch (type) {
     case 'mention':
       return { ...base, type: 'mention' }
     case 'hashtag':
@@ -95,16 +99,22 @@ const mapCommonEntity = (entity: TelegramMessageEntity): MessageEntity => {
       return { ...base, type: 'expandable_blockquote' }
     case 'code':
       return { ...base, type: 'code' }
-    // date_time is handled in mapEntityWithExtras, falls through to default
-    case 'date_time':
     default:
-      // For any unknown types, use 'bold' as safe default
-      return { ...base, type: 'bold' }
+      // Unknown entity types - return null to treat as regular text
+      return null
   }
 }
 
-const mapToGrammyEntities = (entities: TelegramMessageEntity[]): MessageEntity[] =>
-  entities.map((entity) => mapEntityWithExtras(entity) ?? mapCommonEntity(entity))
+const mapToGrammyEntities = (entities: TelegramMessageEntity[]): MessageEntity[] => {
+  const mapped: MessageEntity[] = []
+  for (const entity of entities) {
+    const mappedEntity = mapEntity(entity)
+    if (mappedEntity !== null) {
+      mapped.push(mappedEntity)
+    }
+  }
+  return mapped
+}
 
 /**
  * Converts LLM Markdown response to Telegram-compatible format with grammy MessageEntity types
