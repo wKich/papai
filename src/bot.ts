@@ -4,6 +4,7 @@ import { generateText, stepCountIs } from 'ai'
 import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
 
+import { registerAdminCommands } from './admin-commands.js'
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
 import { buildMessagesWithMemory, trimAndSummarise } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
@@ -11,6 +12,7 @@ import { clearHistory, loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { clearFacts, clearSummary, extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { makeTools } from './tools/index.js'
+import { isAuthorized, resolveUserByUsername } from './users.js'
 import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
@@ -35,17 +37,15 @@ When creating or updating tasks, summarize what was done and include the issue i
 If you need context (like project IDs), call list_projects first.`
 
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
-const allowedUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
+const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 
-const checkAuthorization = (userId: number | undefined): userId is number => {
-  log.debug({ userId, allowedUserId }, 'Checking authorization')
-  if (userId === undefined || userId !== allowedUserId) {
-    if (userId !== undefined) {
-      log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
-    }
-    return false
-  }
-  return true
+const checkAuthorization = (userId: number | undefined, username?: string): userId is number => {
+  log.debug({ userId }, 'Checking authorization')
+  if (userId === undefined) return false
+  if (isAuthorized(userId)) return true
+  if (username !== undefined && resolveUserByUsername(userId, username)) return true
+  log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
+  return false
 }
 
 const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
@@ -61,9 +61,9 @@ const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
-const checkRequiredConfig = (): string[] => {
+const checkRequiredConfig = (userId: number): string[] => {
   const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
-  return requiredKeys.filter((k) => getConfig(k) === null)
+  return requiredKeys.filter((k) => getConfig(userId, k) === null)
 }
 
 const persistFactsFromResults = (
@@ -95,18 +95,18 @@ const withTypingIndicator = async <T>(ctx: Context, fn: () => Promise<T>): Promi
 }
 
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
-  const missing = checkRequiredConfig()
+  const missing = checkRequiredConfig(userId)
   if (missing.length > 0) {
     log.warn({ userId, missing }, 'Missing required config keys')
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     return
   }
 
-  const openaiKey = getConfig('openai_key')!
-  const openaiBaseUrl = getConfig('openai_base_url')!
-  const openaiModel = getConfig('openai_model')!
-  const linearKey = getConfig('linear_key')!
-  const linearTeamId = getConfig('linear_team_id')!
+  const openaiKey = getConfig(userId, 'openai_key')!
+  const openaiBaseUrl = getConfig(userId, 'openai_base_url')!
+  const openaiModel = getConfig(userId, 'openai_model')!
+  const linearKey = getConfig(userId, 'linear_key')!
+  const linearTeamId = getConfig(userId, 'linear_team_id')!
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
@@ -180,7 +180,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
 
 bot.command('set', async (ctx) => {
   const userId = ctx.from?.id
-  if (!checkAuthorization(userId)) {
+  if (!checkAuthorization(userId, ctx.from?.username)) {
     return
   }
 
@@ -199,19 +199,19 @@ bot.command('set', async (ctx) => {
     return
   }
 
-  setConfig(key, value)
+  setConfig(userId, key, value)
   log.info({ userId, key }, '/set command executed')
   await ctx.reply(`Set ${key} successfully.`)
 })
 
 bot.command('config', async (ctx) => {
   const userId = ctx.from?.id
-  if (!checkAuthorization(userId)) {
+  if (!checkAuthorization(userId, ctx.from?.username)) {
     return
   }
 
   log.debug({ userId }, '/config command called')
-  const config = getAllConfig()
+  const config = getAllConfig(userId)
   const lines = CONFIG_KEYS.map((key) => {
     const value = config[key]
     if (value === undefined) {
@@ -225,7 +225,7 @@ bot.command('config', async (ctx) => {
 
 bot.command('clear', async (ctx) => {
   const userId = ctx.from?.id
-  if (!checkAuthorization(userId)) {
+  if (!checkAuthorization(userId, ctx.from?.username)) {
     return
   }
   log.debug({ userId }, '/clear command called')
@@ -236,9 +236,11 @@ bot.command('clear', async (ctx) => {
   await ctx.reply('Conversation history and memory cleared.')
 })
 
+registerAdminCommands(bot, adminUserId)
+
 bot.on('message:text', async (ctx) => {
   const userId = ctx.from?.id
-  if (!checkAuthorization(userId)) {
+  if (!checkAuthorization(userId, ctx.from?.username)) {
     return
   }
 

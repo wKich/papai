@@ -41,10 +41,10 @@ export const trimAndSummarise = async (
   const reason = hardCapTrim ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
   log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered')
 
-  const openaiKey = getConfig('openai_key')
-  const openaiBaseUrl = getConfig('openai_base_url')
-  const openaiModel = getConfig('openai_model')
-  const memoryModel = getConfig('memory_model') ?? openaiModel
+  const openaiKey = getConfig(userId, 'openai_key')
+  const openaiBaseUrl = getConfig(userId, 'openai_base_url')
+  const openaiModel = getConfig(userId, 'openai_model')
+  const memoryModel = getConfig(userId, 'memory_model') ?? openaiModel
 
   if (openaiKey !== null && openaiBaseUrl !== null && memoryModel !== null) {
     try {

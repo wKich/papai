@@ -20,7 +20,9 @@ No build step; Bun runs TypeScript directly.
 Copy `.env.example` to `.env`. Only two are required at startup (validated in `src/index.ts`):
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`
 
-The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai_base_url`, `openai_model`) are stored in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+`TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
+
+The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
 
 ## Architecture
 
@@ -33,9 +35,12 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
                                               └─→ response back to Telegram
 ```
 
-- **`src/index.ts`** — entry point; validates env vars, starts the bot.
-- **`src/bot.ts`** — Grammy bot setup, per-user conversation history (capped at 40 messages), LLM orchestration with up to 5 tool-calling steps. Only processes messages from the authorized `TELEGRAM_USER_ID`.
-- **`src/config.ts`** — SQLite-backed runtime config store; exposes `getConfig`, `setConfig`, `getAllConfig`; handles `/set` and `/config` bot commands.
+- **`src/index.ts`** — entry point; validates env vars, runs migrations, starts the bot.
+- **`src/bot.ts`** — Grammy bot setup, per-user conversation history, LLM orchestration with up to 25 tool-calling steps. Multi-user authorization via `users` table.
+- **`src/admin-commands.ts`** — Admin-only Telegram commands (`/user add`, `/user remove`, `/users`) registered on the bot.
+- **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
+- **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
+- **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
 - **`src/tools/`** — One file per tool. `index.ts` assembles all 22 into `makeTools`. Each tool imports its corresponding linear function.
 - **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 22. `classify-error.ts` contains the shared error classifier.
@@ -144,6 +149,8 @@ tests/
 ├── config.test.ts
 ├── errors.test.ts
 ├── logger.test.ts
+├── migrate.test.ts
+├── users.test.ts
 ├── linear/           # Tests for src/linear/*
 └── tools/            # Tests for src/tools/*
 ```

@@ -34,7 +34,7 @@
 
 ## Phase 5: Advanced Features
 
-- [ ] [Multi-user support with per-user authorization](docs/plans/2026-03-05-multi-user-support.md)
+- [x] [Multi-user support with per-user authorization](docs/plans/2026-03-05-multi-user-support.md)
 - [x] Configurable LLM provider — swap GPT-4o for other models
 - [x] ~~Rate limiting and request throttling~~ (Not planned)
 

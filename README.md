@@ -12,8 +12,8 @@ Telegram bot that manages Linear tasks via natural language, powered by any Open
 - **Labels** — list, create, and apply labels when creating or updating issues
 - **Relations** — create and view blocks/duplicate/related relations between issues
 - **Projects** — list all teams and projects, or create new projects
-- **Conversation memory** — maintains per-user chat history (last 40 messages) for multi-turn interactions
-- **Single-user auth** — restricts access to a single authorized Telegram user
+- **Conversation memory** — maintains per-user chat history with smart trimming and rolling summaries for multi-turn interactions
+- **Multi-user support** — admin can authorize multiple Telegram users, each with isolated credentials and conversation history
 
 ## Prerequisites
 
@@ -37,10 +37,10 @@ bun run start
 
 Two variables are required at startup:
 
-| Variable             | Description                    | Where to get it                          |
-| -------------------- | ------------------------------ | ---------------------------------------- |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot API token         | [@BotFather](https://t.me/BotFather)     |
-| `TELEGRAM_USER_ID`   | Your personal Telegram user ID | [@userinfobot](https://t.me/userinfobot) |
+| Variable             | Description                                                      | Where to get it                          |
+| -------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot API token                                           | [@BotFather](https://t.me/BotFather)     |
+| `TELEGRAM_USER_ID`   | Admin Telegram user ID (auto-authorized, can manage other users) | [@userinfobot](https://t.me/userinfobot) |
 
 The remaining credentials are configured at runtime via the `/set` command:
 
@@ -52,7 +52,17 @@ The remaining credentials are configured at runtime via the `/set` command:
 | `openai_base_url` | OpenAI-compatible base URL         | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`             |
 | `openai_model`    | Model name to use                  | e.g. `gpt-5.2`, `claude-opus-4-6`, `qwen3.5`, `kimi-k2.5`, `minimax-m2.5` |
 
-Use `/config` to view current values, and `/set <key> <value>` to update them.
+Use `/config` to view current values, and `/set <key> <value>` to update them. Each user's credentials are isolated.
+
+### Admin Commands
+
+The admin user (from `TELEGRAM_USER_ID`) can manage authorized users:
+
+| Command                        | Description                                     |
+| ------------------------------ | ----------------------------------------------- |
+| `/user add <id\|@username>`    | Authorize a new user by Telegram ID or username |
+| `/user remove <id\|@username>` | Revoke a user's access                          |
+| `/users`                       | List all authorized users                       |
 
 ## Usage
 
@@ -80,15 +90,17 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
                                               └─→ response back to Telegram
 ```
 
-| Path            | Role                                                                                   |
-| --------------- | -------------------------------------------------------------------------------------- |
-| `src/index.ts`  | Entry point; validates env vars, starts the bot                                        |
-| `src/bot.ts`    | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
-| `src/config.ts` | SQLite-backed runtime config store; `/set` and `/config` command handlers              |
-| `src/errors.ts` | Discriminated union error types, constructors, and user-facing message mapper          |
-| `src/tools/`    | One file per tool; `index.ts` assembles all 15 into `makeTools`                        |
-| `src/linear/`   | One file per Linear SDK wrapper; `index.ts` re-exports all 15                          |
-| `src/logger.ts` | pino logger instance                                                                   |
+| Path             | Role                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `src/index.ts`   | Entry point; validates env vars, starts the bot                                        |
+| `src/bot.ts`     | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
+| `src/config.ts`  | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers     |
+| `src/users.ts`   | User authorization store; admin commands for adding/removing users                     |
+| `src/migrate.ts` | One-time migration: seeds admin, copies legacy config to per-user table                |
+| `src/errors.ts`  | Discriminated union error types, constructors, and user-facing message mapper          |
+| `src/tools/`     | One file per tool; `index.ts` assembles all 15 into `makeTools`                        |
+| `src/linear/`    | One file per Linear SDK wrapper; `index.ts` re-exports all 15                          |
+| `src/logger.ts`  | pino logger instance                                                                   |
 
 ## Tech Stack
 

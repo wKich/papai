@@ -4,6 +4,7 @@ import { logger } from '../logger.js'
 import { runMigrations } from './migrate.js'
 import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
+import { migration003MultiuserSupport } from './migrations/003_multiuser_support.js'
 
 export const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -16,6 +17,7 @@ export const getDb = (): Database => {
     // configured per-database-connection, not per-database-file. This ensures
     // WAL is active immediately on first connection, before any migrations run.
     dbInstance.run('PRAGMA journal_mode=WAL')
+    dbInstance.run('PRAGMA foreign_keys=ON')
     logger.info({ dbPath: DB_PATH }, 'Database connection created')
   }
   return dbInstance
@@ -29,7 +31,7 @@ export const closeDb = (): void => {
   }
 }
 
-const MIGRATIONS = [migration001Initial, migration002ConversationHistory] as const
+const MIGRATIONS = [migration001Initial, migration002ConversationHistory, migration003MultiuserSupport] as const
 
 export const initDb = (): void => {
   runMigrations(getDb(), MIGRATIONS)

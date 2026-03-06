@@ -4,33 +4,34 @@ import { mock, describe, expect, test, beforeEach } from 'bun:test'
 const store = { data: new Map<string, string>() }
 
 class MockDatabase {
-  run(sql: string, params?: string[]): void {
-    if (sql.includes('INSERT OR REPLACE') && params !== undefined) {
-      store.data.set(params[0]!, params[1]!)
+  run(sql: string, params?: (string | number)[]): void {
+    if (sql.includes('INSERT OR REPLACE INTO user_config') && params !== undefined) {
+      store.data.set(`${params[0]}:${params[1]}`, String(params[2]))
     }
   }
 
   query(sql: string): {
-    get: (key: string) => { value: string } | null
-    all: () => Array<{ key: string; value: string }>
+    get: (...args: (string | number)[]) => { value: string } | null
+    all: (...args: (string | number)[]) => Array<{ key: string; value: string }>
   } {
-    if (sql.includes('SELECT value FROM config WHERE key')) {
+    if (sql.includes('SELECT value FROM user_config WHERE user_id') && sql.includes('AND key')) {
       return {
-        get: (key: string): { value: string } | null => {
-          const value = store.data.get(key)
-          if (value === undefined) {
-            return null
-          }
-          return { value }
+        get: (userId: string | number, key: string | number): { value: string } | null => {
+          const value = store.data.get(`${userId}:${key}`)
+          return value === undefined ? null : { value }
         },
         all: (): Array<{ key: string; value: string }> => [],
       }
     }
-    if (sql.includes('SELECT key, value FROM config')) {
+    if (sql.includes('SELECT key, value FROM user_config WHERE user_id')) {
       return {
         get: (): null => null,
-        all: (): Array<{ key: string; value: string }> =>
-          Array.from(store.data.entries()).map(([key, value]) => ({ key, value })),
+        all: (userId: string | number): Array<{ key: string; value: string }> => {
+          const prefix = `${userId}:`
+          return Array.from(store.data.entries())
+            .filter(([k]) => k.startsWith(prefix))
+            .map(([k, v]) => ({ key: k.slice(prefix.length), value: v }))
+        },
       }
     }
     return { get: (): null => null, all: (): Array<{ key: string; value: string }> => [] }
@@ -48,27 +49,44 @@ void mock.module('../src/db/index.js', () => ({
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import type { ConfigKey } from '../src/config.js'
 
+const USER_A = 111
+const USER_B = 222
+
 describe('setConfig', () => {
   beforeEach(() => {
     store.data.clear()
   })
 
-  test('stores value for key', () => {
-    setConfig('linear_key', 'test-api-key')
-    expect(getConfig('linear_key')).toBe('test-api-key')
+  test('stores value for user and key', () => {
+    setConfig(USER_A, 'linear_key', 'test-api-key')
+    expect(getConfig(USER_A, 'linear_key')).toBe('test-api-key')
   })
 
   test('updates existing value', () => {
-    setConfig('linear_key', 'old-key')
-    setConfig('linear_key', 'new-key')
-    expect(getConfig('linear_key')).toBe('new-key')
+    setConfig(USER_A, 'linear_key', 'old-key')
+    setConfig(USER_A, 'linear_key', 'new-key')
+    expect(getConfig(USER_A, 'linear_key')).toBe('new-key')
+  })
+
+  test('isolates config between users', () => {
+    setConfig(USER_A, 'linear_key', 'key-a')
+    setConfig(USER_B, 'linear_key', 'key-b')
+    expect(getConfig(USER_A, 'linear_key')).toBe('key-a')
+    expect(getConfig(USER_B, 'linear_key')).toBe('key-b')
   })
 
   test('handles all config keys', () => {
-    const allKeys: ConfigKey[] = ['linear_key', 'linear_team_id', 'openai_key', 'openai_base_url', 'openai_model']
+    const allKeys: ConfigKey[] = [
+      'linear_key',
+      'linear_team_id',
+      'openai_key',
+      'openai_base_url',
+      'openai_model',
+      'memory_model',
+    ]
     allKeys.forEach((key) => {
-      setConfig(key, `value-for-${key}`)
-      expect(getConfig(key)).toBe(`value-for-${key}`)
+      setConfig(USER_A, key, `value-for-${key}`)
+      expect(getConfig(USER_A, key)).toBe(`value-for-${key}`)
     })
   })
 })
@@ -79,14 +97,25 @@ describe('getConfig', () => {
   })
 
   test('returns stored value', () => {
-    setConfig('linear_team_id', 'team-abc')
-    expect(getConfig('linear_team_id')).toBe('team-abc')
+    setConfig(USER_A, 'linear_team_id', 'team-abc')
+    expect(getConfig(USER_A, 'linear_team_id')).toBe('team-abc')
+  })
+
+  test('returns null for unset key', () => {
+    expect(getConfig(USER_A, 'openai_model')).toBeNull()
   })
 })
 
 describe('isConfigKey', () => {
   test('returns true for valid keys', () => {
-    const validKeys: ConfigKey[] = ['linear_key', 'linear_team_id', 'openai_key', 'openai_base_url', 'openai_model']
+    const validKeys: ConfigKey[] = [
+      'linear_key',
+      'linear_team_id',
+      'openai_key',
+      'openai_base_url',
+      'openai_model',
+      'memory_model',
+    ]
     validKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(true)
     })
@@ -105,12 +134,19 @@ describe('getAllConfig', () => {
     store.data.clear()
   })
 
-  test('returns all set configs', () => {
-    setConfig('linear_key', 'key-1')
-    setConfig('openai_model', 'gpt-4')
-    const allConfig = getAllConfig()
+  test('returns all set configs for user', () => {
+    setConfig(USER_A, 'linear_key', 'key-1')
+    setConfig(USER_A, 'openai_model', 'gpt-4')
+    const allConfig = getAllConfig(USER_A)
     expect(allConfig.linear_key).toBe('key-1')
     expect(allConfig.openai_model).toBe('gpt-4')
+  })
+
+  test('does not leak config from other users', () => {
+    setConfig(USER_A, 'linear_key', 'key-a')
+    setConfig(USER_B, 'linear_key', 'key-b')
+    const configA = getAllConfig(USER_A)
+    expect(configA.linear_key).toBe('key-a')
   })
 })
 
