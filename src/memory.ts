@@ -286,7 +286,7 @@ export function buildMemoryContextMessage(
 
   if (facts.length > 0) {
     const lines = facts.map((f) => `- ${f.identifier}: "${f.title}" — last seen ${f.last_seen.slice(0, 10)}`)
-    parts.push(`Recently accessed issues:\n${lines.join('\n')}`)
+    parts.push(`Recently accessed Linear entities:\n${lines.join('\n')}`)
   }
 
   if (parts.length === 0) {
