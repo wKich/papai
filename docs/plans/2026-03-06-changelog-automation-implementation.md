@@ -39,7 +39,7 @@ Expected: Version number displayed (e.g., "git-cliff 2.x.x")
 **Step 3: Test basic functionality**
 
 ```bash
-cd /Users/ki/Projects/experiments/papai
+cd path/to/your/local/clone
 git-cliff --dry-run
 ```
 
