@@ -20,6 +20,7 @@ import {
   upsertFact,
 } from './memory.js'
 import { makeTools } from './tools/index.js'
+import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -179,8 +180,9 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
 
   const assistantText = result.text
+  const formatted = formatLlmOutput(assistantText || 'Done.')
   saveHistory(userId, [...history, ...result.response.messages])
-  await ctx.reply(assistantText || 'Done.')
+  await ctx.reply(formatted.text, { entities: formatted.entities })
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',

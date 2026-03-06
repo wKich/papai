@@ -1,0 +1,138 @@
+import { markdownToFormattable } from '@gramio/format/markdown'
+import type { TelegramMessageEntity } from '@gramio/types'
+import type { MessageEntity } from '@grammyjs/types'
+
+import { logger } from '../logger.js'
+
+const log = logger.child({ scope: 'format' })
+
+const createBaseEntity = (entity: TelegramMessageEntity): { offset: number; length: number } => ({
+  offset: entity.offset,
+  length: entity.length,
+})
+
+const isValidDateTimeFormat = (value: string): value is MessageEntity.DateTimeMessageEntity['date_time_format'] => {
+  // Valid patterns: "r" or combinations of optional "w", "d"/"D", "t"/"T"
+  return /^[rwdDtT]*$/.test(value) && (value === 'r' || value.length <= 3)
+}
+
+const mapPreEntity = (entity: TelegramMessageEntity, base: { offset: number; length: number }): MessageEntity | null =>
+  entity.language === undefined ? null : { ...base, type: 'pre', language: entity.language }
+
+const mapTextLinkEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => (entity.url === undefined ? null : { ...base, type: 'text_link', url: entity.url })
+
+const mapTextMentionEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => (entity.user === undefined ? null : { ...base, type: 'text_mention', user: entity.user })
+
+const mapCustomEmojiEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null =>
+  entity.custom_emoji_id === undefined
+    ? null
+    : { ...base, type: 'custom_emoji', custom_emoji_id: entity.custom_emoji_id }
+
+const mapDateTimeEntity = (
+  entity: TelegramMessageEntity,
+  base: { offset: number; length: number },
+): MessageEntity | null => {
+  if (
+    entity.unix_time === undefined ||
+    entity.date_time_format === undefined ||
+    !isValidDateTimeFormat(entity.date_time_format)
+  ) {
+    return null
+  }
+  return {
+    ...base,
+    type: 'date_time',
+    unix_time: entity.unix_time,
+    date_time_format: entity.date_time_format,
+  }
+}
+
+const mapEntity = (entity: TelegramMessageEntity): MessageEntity | null => {
+  const base = createBaseEntity(entity)
+  const { type } = entity
+
+  // Entities with optional extra properties
+  if (type === 'pre') return mapPreEntity(entity, base)
+  if (type === 'text_link') return mapTextLinkEntity(entity, base)
+  if (type === 'text_mention') return mapTextMentionEntity(entity, base)
+  if (type === 'custom_emoji') return mapCustomEmojiEntity(entity, base)
+  if (type === 'date_time') return mapDateTimeEntity(entity, base)
+
+  // Common entity types without extra properties
+  switch (type) {
+    case 'mention':
+      return { ...base, type: 'mention' }
+    case 'hashtag':
+      return { ...base, type: 'hashtag' }
+    case 'cashtag':
+      return { ...base, type: 'cashtag' }
+    case 'bot_command':
+      return { ...base, type: 'bot_command' }
+    case 'url':
+      return { ...base, type: 'url' }
+    case 'email':
+      return { ...base, type: 'email' }
+    case 'phone_number':
+      return { ...base, type: 'phone_number' }
+    case 'bold':
+      return { ...base, type: 'bold' }
+    case 'italic':
+      return { ...base, type: 'italic' }
+    case 'underline':
+      return { ...base, type: 'underline' }
+    case 'strikethrough':
+      return { ...base, type: 'strikethrough' }
+    case 'spoiler':
+      return { ...base, type: 'spoiler' }
+    case 'blockquote':
+      return { ...base, type: 'blockquote' }
+    case 'expandable_blockquote':
+      return { ...base, type: 'expandable_blockquote' }
+    case 'code':
+      return { ...base, type: 'code' }
+    default:
+      // Unknown entity types - return null to treat as regular text
+      return null
+  }
+}
+
+const mapToGrammyEntities = (entities: TelegramMessageEntity[]): MessageEntity[] => {
+  const mapped: MessageEntity[] = []
+  for (const entity of entities) {
+    const mappedEntity = mapEntity(entity)
+    if (mappedEntity !== null) {
+      mapped.push(mappedEntity)
+    }
+  }
+  return mapped
+}
+
+/**
+ * Converts LLM Markdown response to Telegram-compatible format with grammy MessageEntity types
+ * @param markdown - LLM output in Markdown format
+ * @returns Object with text and entities compatible with grammy's reply method
+ */
+export const formatLlmOutput = (markdown: string): { text: string; entities: MessageEntity[] } => {
+  log.debug({ markdownLength: markdown.length }, 'Converting Markdown to entities')
+  const result = markdownToFormattable(markdown)
+  log.debug(
+    {
+      textLength: result.text.length,
+      entityCount: result.entities.length,
+    },
+    'Markdown converted to entities',
+  )
+  return {
+    text: result.text,
+    entities: mapToGrammyEntities(result.entities),
+  }
+}
