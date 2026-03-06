@@ -77,6 +77,7 @@ const mapCommonEntity = (entity: TelegramMessageEntity): MessageEntity => {
       return { ...base, type: 'code' }
     case 'date_time':
     default:
+      // For date_time and any unknown types, use 'bold' as safe default
       return { ...base, type: 'bold' }
   }
 }
