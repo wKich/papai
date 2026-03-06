@@ -152,9 +152,17 @@ describe('addUser', () => {
     store.users.clear()
   })
 
-  test('adds a user', () => {
+  test('adds a user by ID', () => {
     addUser(111, 999)
     expect(store.users.has(111)).toBe(true)
+    expect(store.users.get(111)?.added_by).toBe(999)
+    expect(store.users.get(111)?.username).toBeNull()
+  })
+
+  test('adds a user with username', () => {
+    addUser(111, 999, 'testuser')
+    expect(store.users.has(111)).toBe(true)
+    expect(store.users.get(111)?.username).toBe('testuser')
     expect(store.users.get(111)?.added_by).toBe(999)
   })
 })
@@ -164,9 +172,15 @@ describe('removeUser', () => {
     store.users.clear()
   })
 
-  test('removes a user', () => {
+  test('removes a user by ID', () => {
     addUser(111, 999)
     removeUser(111)
+    expect(store.users.has(111)).toBe(false)
+  })
+
+  test('removes a user by username', () => {
+    addUser(111, 999, 'testuser')
+    removeUser('testuser')
     expect(store.users.has(111)).toBe(false)
   })
 })
