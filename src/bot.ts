@@ -8,6 +8,7 @@ import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig
 import { getUserMessage, isAppError } from './errors.js'
 import { logger } from './logger.js'
 import { makeTools } from './tools/index.js'
+import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -102,8 +103,10 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   const assistantText = result.text
+  const formatted = formatLlmOutput(assistantText || 'Done.')
   conversationHistory.set(userId, [...history, ...result.response.messages])
-  await ctx.reply(assistantText || 'Done.')
+  // @ts-expect-error TelegramMessageEntity from @gramio/format is compatible with grammy's MessageEntity at runtime
+  await ctx.reply(formatted.text, { entities: formatted.entities })
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',

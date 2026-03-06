@@ -1,5 +1,7 @@
 import { describe, expect, test, beforeAll } from 'bun:test'
 
+import { formatLlmOutput } from '../src/utils/format.js'
+
 // Set required env vars before importing bot
 beforeAll(() => {
   process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
@@ -11,5 +13,20 @@ describe('bot', () => {
     // Import bot after setting env vars
     const { bot } = await import('../src/bot.js')
     expect(bot).toBeDefined()
+  })
+})
+
+describe('bot message formatting', () => {
+  test('formatLlmOutput converts markdown to entities', () => {
+    const result = formatLlmOutput('**bold** text')
+    expect(result.text).toBe('bold text')
+    expect(result.entities).toHaveLength(1)
+    expect(result.entities[0].type).toBe('bold')
+  })
+
+  test('formatLlmOutput handles plain text', () => {
+    const result = formatLlmOutput('plain text')
+    expect(result.text).toBe('plain text')
+    expect(result.entities).toHaveLength(0)
   })
 })
