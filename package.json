@@ -13,7 +13,9 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
-    "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
+    "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
+    "changelog:preview": "git-cliff --unreleased",
+    "changelog:generate": "git-cliff -o CHANGELOG.md"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.33",
