@@ -58,27 +58,27 @@ describe('setConfig', () => {
   })
 
   test('stores value for user and key', () => {
-    setConfig(USER_A, 'linear_key', 'test-api-key')
-    expect(getConfig(USER_A, 'linear_key')).toBe('test-api-key')
+    setConfig(USER_A, 'huly_email', 'test@example.com')
+    expect(getConfig(USER_A, 'huly_email')).toBe('test@example.com')
   })
 
   test('updates existing value', () => {
-    setConfig(USER_A, 'linear_key', 'old-key')
-    setConfig(USER_A, 'linear_key', 'new-key')
-    expect(getConfig(USER_A, 'linear_key')).toBe('new-key')
+    setConfig(USER_A, 'huly_email', 'old@example.com')
+    setConfig(USER_A, 'huly_email', 'new@example.com')
+    expect(getConfig(USER_A, 'huly_email')).toBe('new@example.com')
   })
 
   test('isolates config between users', () => {
-    setConfig(USER_A, 'linear_key', 'key-a')
-    setConfig(USER_B, 'linear_key', 'key-b')
-    expect(getConfig(USER_A, 'linear_key')).toBe('key-a')
-    expect(getConfig(USER_B, 'linear_key')).toBe('key-b')
+    setConfig(USER_A, 'huly_email', 'user-a@example.com')
+    setConfig(USER_B, 'huly_email', 'user-b@example.com')
+    expect(getConfig(USER_A, 'huly_email')).toBe('user-a@example.com')
+    expect(getConfig(USER_B, 'huly_email')).toBe('user-b@example.com')
   })
 
   test('handles all config keys', () => {
     const allKeys: ConfigKey[] = [
-      'linear_key',
-      'linear_team_id',
+      'huly_email',
+      'huly_password',
       'openai_key',
       'openai_base_url',
       'openai_model',
@@ -97,8 +97,8 @@ describe('getConfig', () => {
   })
 
   test('returns stored value', () => {
-    setConfig(USER_A, 'linear_team_id', 'team-abc')
-    expect(getConfig(USER_A, 'linear_team_id')).toBe('team-abc')
+    setConfig(USER_A, 'huly_password', 'secret-password')
+    expect(getConfig(USER_A, 'huly_password')).toBe('secret-password')
   })
 
   test('returns null for unset key', () => {
@@ -109,8 +109,8 @@ describe('getConfig', () => {
 describe('isConfigKey', () => {
   test('returns true for valid keys', () => {
     const validKeys: ConfigKey[] = [
-      'linear_key',
-      'linear_team_id',
+      'huly_email',
+      'huly_password',
       'openai_key',
       'openai_base_url',
       'openai_model',
@@ -135,43 +135,43 @@ describe('getAllConfig', () => {
   })
 
   test('returns all set configs for user', () => {
-    setConfig(USER_A, 'linear_key', 'key-1')
+    setConfig(USER_A, 'huly_email', 'user@example.com')
     setConfig(USER_A, 'openai_model', 'gpt-4')
     const allConfig = getAllConfig(USER_A)
-    expect(allConfig.linear_key).toBe('key-1')
+    expect(allConfig.huly_email).toBe('user@example.com')
     expect(allConfig.openai_model).toBe('gpt-4')
   })
 
   test('does not leak config from other users', () => {
-    setConfig(USER_A, 'linear_key', 'key-a')
-    setConfig(USER_B, 'linear_key', 'key-b')
+    setConfig(USER_A, 'huly_email', 'user-a@example.com')
+    setConfig(USER_B, 'huly_email', 'user-b@example.com')
     const configA = getAllConfig(USER_A)
-    expect(configA.linear_key).toBe('key-a')
+    expect(configA.huly_email).toBe('user-a@example.com')
   })
 })
 
 describe('maskValue', () => {
   test('masks sensitive keys', () => {
-    expect(maskValue('linear_key', 'secret-key-1234')).toBe('****1234')
+    expect(maskValue('huly_password', 'secret-password-1234')).toBe('****1234')
     expect(maskValue('openai_key', 'sk-abc123')).toBe('****c123')
   })
 
   test('returns unmasked value for non-sensitive keys', () => {
-    expect(maskValue('linear_team_id', 'team-123')).toBe('team-123')
+    expect(maskValue('huly_email', 'user@example.com')).toBe('user@example.com')
     expect(maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
     expect(maskValue('openai_base_url', 'https://api.openai.com')).toBe('https://api.openai.com')
   })
 
   test('handles short values for sensitive keys', () => {
-    expect(maskValue('linear_key', 'ab')).toBe('****ab')
-    expect(maskValue('linear_key', '')).toBe('****')
+    expect(maskValue('huly_password', 'ab')).toBe('****ab')
+    expect(maskValue('huly_password', '')).toBe('****')
   })
 })
 
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
-    expect(CONFIG_KEYS).toContain('linear_key')
-    expect(CONFIG_KEYS).toContain('linear_team_id')
+    expect(CONFIG_KEYS).toContain('huly_email')
+    expect(CONFIG_KEYS).toContain('huly_password')
     expect(CONFIG_KEYS).toContain('openai_key')
     expect(CONFIG_KEYS).toContain('openai_base_url')
     expect(CONFIG_KEYS).toContain('openai_model')
