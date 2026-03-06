@@ -79,11 +79,10 @@ const persistFactsFromResults = (
 
   let upsertCount = 0
   for (const fact of newFacts) {
-    const existing = existingById.get(fact.identifier)
-    if (existing === undefined || existing.title !== fact.title || existing.url !== fact.url) {
-      upsertFact(userId, fact)
-      upsertCount++
-    }
+    // Always upsert to ensure metadata like `last_seen` is refreshed,
+    // even when title and URL have not changed.
+    upsertFact(userId, fact)
+    upsertCount++
   }
 
   log.info({ userId, factsExtracted: newFacts.length, factsUpserted: upsertCount }, 'Facts extracted and persisted')
