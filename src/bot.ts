@@ -5,8 +5,11 @@ import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
 
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
+import { buildMessagesWithMemory, trimAndSummarise } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
+import { clearHistory, loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
+import { clearFacts, clearSummary, extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { makeTools } from './tools/index.js'
 import { formatLlmOutput } from './utils/format.js'
 
@@ -34,8 +37,6 @@ If you need context (like project IDs), call list_projects first.`
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const allowedUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 
-const conversationHistory = new Map<number, readonly ModelMessage[]>()
-
 const checkAuthorization = (userId: number | undefined): userId is number => {
   log.debug({ userId, allowedUserId }, 'Checking authorization')
   if (userId === undefined || userId !== allowedUserId) {
@@ -49,25 +50,10 @@ const checkAuthorization = (userId: number | undefined): userId is number => {
 
 const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
   log.debug({ userId }, 'getOrCreateHistory called')
-  const existing = conversationHistory.has(userId)
-  log.debug(
-    { userId, exists: existing, currentSize: conversationHistory.get(userId)?.length },
-    'Getting conversation history',
-  )
-  if (!existing) {
-    conversationHistory.set(userId, [] as readonly ModelMessage[])
-    log.info({ userId }, 'New conversation history initialized')
-  }
-  return conversationHistory.get(userId)!
-}
-
-const trimHistory = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
-  log.debug({ userId, historyLength: history.length }, 'trimHistory called')
-  if (history.length > 100) {
-    const removedCount = history.length - 100
-    const trimmed = history.slice(history.length - 100)
-    log.warn({ userId, removedCount, newSize: trimmed.length }, 'Conversation history truncated')
-    return trimmed
+  const history = loadHistory(userId)
+  log.debug({ userId, messageCount: history.length }, 'Conversation history loaded')
+  if (history.length === 0) {
+    log.info({ userId }, 'No existing conversation history')
   }
   return history
 }
@@ -75,9 +61,28 @@ const trimHistory = (history: readonly ModelMessage[], userId: number): readonly
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
-const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+const checkRequiredConfig = (): string[] => {
   const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
-  const missing = requiredKeys.filter((k) => getConfig(k) === null)
+  return requiredKeys.filter((k) => getConfig(k) === null)
+}
+
+const persistFactsFromResults = (
+  userId: number,
+  toolCalls: Array<{ toolName: string; input: unknown }>,
+  toolResults: Array<{ toolName: string; output: unknown }>,
+): void => {
+  const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
+  if (newFacts.length === 0) return
+
+  for (const fact of newFacts) {
+    upsertFact(userId, fact)
+  }
+
+  log.info({ userId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
+}
+
+const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+  const missing = checkRequiredConfig()
   if (missing.length > 0) {
     log.warn({ userId, missing }, 'Missing required config keys')
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
@@ -92,19 +97,23 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
-  log.debug({ userId, historyLength: history.length }, 'Calling generateText')
+  const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
+
+  log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
-    messages: [...history],
+    messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),
   })
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+  persistFactsFromResults(userId, result.toolCalls, result.toolResults)
+
   const assistantText = result.text
   const formatted = formatLlmOutput(assistantText || 'Done.')
-  conversationHistory.set(userId, [...history, ...result.response.messages])
+  saveHistory(userId, [...history, ...result.response.messages])
   await ctx.reply(formatted.text, { entities: formatted.entities })
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
@@ -116,13 +125,13 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   log.debug({ userId, userText }, 'processMessage called')
   log.info({ userId, messageLength: userText.length }, 'Message received from user')
 
-  const history = trimHistory([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
-  conversationHistory.set(userId, history)
+  const history = await trimAndSummarise([...getOrCreateHistory(userId), { role: 'user', content: userText }], userId)
+  saveHistory(userId, history)
 
   try {
     await callLlm(ctx, userId, history)
   } catch (error) {
-    conversationHistory.set(userId, history.slice(0, -1))
+    saveHistory(userId, history.slice(0, -1))
 
     if (isAppError(error)) {
       const userMessage = getUserMessage(error)
@@ -197,6 +206,19 @@ bot.command('config', async (ctx) => {
   })
   log.info({ userId }, '/config command executed')
   await ctx.reply(lines.join('\n'))
+})
+
+bot.command('clear', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!checkAuthorization(userId)) {
+    return
+  }
+  log.debug({ userId }, '/clear command called')
+  clearHistory(userId)
+  clearSummary(userId)
+  clearFacts(userId)
+  log.info({ userId }, '/clear command executed — all memory tiers cleared')
+  await ctx.reply('Conversation history and memory cleared.')
 })
 
 bot.on('message:text', async (ctx) => {

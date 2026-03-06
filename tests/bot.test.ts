@@ -21,7 +21,8 @@ describe('bot message formatting', () => {
     const result = formatLlmOutput('**bold** text')
     expect(result.text).toBe('bold text')
     expect(result.entities).toHaveLength(1)
-    expect(result.entities[0].type).toBe('bold')
+    const firstEntity = result.entities[0]!
+    expect(firstEntity.type).toBe('bold')
   })
 
   test('formatLlmOutput handles plain text', () => {

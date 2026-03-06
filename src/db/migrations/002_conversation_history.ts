@@ -30,5 +30,11 @@ export const migration002ConversationHistory: Migration = {
         PRIMARY KEY (user_id, identifier)
       )
     `)
+
+    // Composite index for efficient lookup of user's facts sorted by last_seen
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_memory_facts_user_lastseen
+      ON memory_facts(user_id, last_seen DESC)
+    `)
   },
 }
