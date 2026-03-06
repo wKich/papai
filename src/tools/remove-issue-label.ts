@@ -12,7 +12,11 @@ export function makeRemoveIssueLabelTool(linearKey: string): ToolSet[string] {
     description: 'Remove a label from a Linear issue. Use this when the user wants to remove a label from an issue.',
     inputSchema: z.object({
       issueId: z.string().describe("The Linear issue ID (e.g. 'abc123')"),
-      labelId: z.string().describe('The label ID to remove. Call get_issue_labels first to get available label IDs.'),
+      labelId: z
+        .string()
+        .describe(
+          "The label ID to remove. Call get_issue first to see the issue's labels, or list_labels to see all available labels.",
+        ),
     }),
     execute: async ({ issueId, labelId }) => {
       try {

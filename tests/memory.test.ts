@@ -194,7 +194,7 @@ describe('buildMemoryContextMessage', () => {
     expect(result).not.toBeNull()
     expect(result!.content).toContain('ENG-42')
     expect(result!.content).toContain('Fix login')
-    expect(result!.content).toContain('Recently accessed issues')
+    expect(result!.content).toContain('Recently accessed Linear entities')
   })
 
   test('returns combined message with both summary and facts', () => {

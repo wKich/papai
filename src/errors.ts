@@ -8,6 +8,9 @@ export type LinearError =
   | { type: 'linear'; code: 'rate-limited' }
   | { type: 'linear'; code: 'validation-failed'; field: string; reason: string }
   | { type: 'linear'; code: 'label-not-found'; labelName: string }
+  | { type: 'linear'; code: 'project-not-found'; projectId: string }
+  | { type: 'linear'; code: 'comment-not-found'; commentId: string }
+  | { type: 'linear'; code: 'relation-not-found'; issueId: string; relatedIssueId: string }
   | { type: 'linear'; code: 'unknown'; originalError: Error }
 
 export type LlmError =
@@ -40,6 +43,14 @@ export const linearError = {
     reason,
   }),
   labelNotFound: (labelName: string): AppError => ({ type: 'linear', code: 'label-not-found', labelName }),
+  projectNotFound: (projectId: string): AppError => ({ type: 'linear', code: 'project-not-found', projectId }),
+  commentNotFound: (commentId: string): AppError => ({ type: 'linear', code: 'comment-not-found', commentId }),
+  relationNotFound: (issueId: string, relatedIssueId: string): AppError => ({
+    type: 'linear',
+    code: 'relation-not-found',
+    issueId,
+    relatedIssueId,
+  }),
   unknown: (originalError: Error): AppError => ({ type: 'linear', code: 'unknown', originalError }),
 }
 
@@ -86,6 +97,12 @@ const getLinearMessage = (error: LinearError): string => {
       return `Invalid ${error.field}: ${error.reason}`
     case 'label-not-found':
       return `Label "${error.labelName}" was not found. Use list_labels to see available labels.`
+    case 'project-not-found':
+      return `Project "${error.projectId}" was not found.`
+    case 'comment-not-found':
+      return `Comment "${error.commentId}" was not found.`
+    case 'relation-not-found':
+      return `Relation between issues "${error.issueId}" and "${error.relatedIssueId}" was not found.`
     case 'unknown':
       return `Linear API error occurred. Please try again later.`
   }

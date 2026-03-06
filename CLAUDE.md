@@ -28,7 +28,7 @@ The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
                                               ├─ tools/ ─→ linear/ ─→ Linear SDK
-                                              │   15 tools, one file each
+                                              │   22 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
@@ -37,27 +37,36 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/bot.ts`** — Grammy bot setup, per-user conversation history (capped at 40 messages), LLM orchestration with up to 5 tool-calling steps. Only processes messages from the authorized `TELEGRAM_USER_ID`.
 - **`src/config.ts`** — SQLite-backed runtime config store; exposes `getConfig`, `setConfig`, `getAllConfig`; handles `/set` and `/config` bot commands.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
-- **`src/tools/`** — One file per tool. `index.ts` assembles all 13 into `makeTools`. Each tool imports its corresponding linear function.
-- **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 13. `classify-error.ts` contains the shared error classifier.
+- **`src/tools/`** — One file per tool. `index.ts` assembles all 22 into `makeTools`. Each tool imports its corresponding linear function.
+- **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 22. `classify-error.ts` contains the shared error classifier.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
 
 ### Available tools
 
-| Tool               | Description                                                                                     |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| `create_issue`     | Create a new issue (supports title, description, priority, project, due date, labels, estimate) |
-| `update_issue`     | Update status, assignee, due date, labels, or estimate on an existing issue                     |
-| `search_issues`    | Search issues by keyword, optionally filtered by state                                          |
-| `list_projects`    | List all teams and their projects                                                               |
-| `get_issue`        | Fetch full details of a single issue                                                            |
-| `add_comment`      | Add a Markdown comment to an issue                                                              |
-| `get_comments`     | Read all comments on an issue                                                                   |
-| `list_labels`      | List all available labels in the team                                                           |
-| `get_issue_labels` | List labels currently applied to an issue                                                       |
-| `create_label`     | Create a new label with optional hex color                                                      |
-| `create_relation`  | Create a blocks/duplicate/related relation between two issues                                   |
-| `get_relations`    | List all relations on an issue                                                                  |
-| `create_project`   | Create a new project in the team                                                                |
+| Tool                    | Description                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `create_issue`          | Create a new issue (supports title, description, priority, project, due date, labels, estimate) |
+| `update_issue`          | Update status, assignee, due date, labels, or estimate on an existing issue                     |
+| `search_issues`         | Search issues by keyword, optionally filtered by state                                          |
+| `get_issue`             | Fetch full details of a single issue including labels and relations                             |
+| `archive_issue`         | Archive an issue                                                                                |
+| `add_issue_comment`     | Add a Markdown comment to an issue                                                              |
+| `get_issue_comments`    | Read all comments on an issue                                                                   |
+| `update_issue_comment`  | Update an existing comment on an issue                                                          |
+| `remove_issue_comment`  | Remove a comment from an issue                                                                  |
+| `list_projects`         | List all teams and their projects                                                               |
+| `create_project`        | Create a new project in the team                                                                |
+| `update_project`        | Update an existing project (name, description)                                                  |
+| `archive_project`       | Archive a project                                                                               |
+| `list_labels`           | List all available labels in the team                                                           |
+| `create_label`          | Create a new label with optional hex color                                                      |
+| `update_label`          | Update an existing label (name, description, color)                                             |
+| `remove_label`          | Remove (delete) a label                                                                         |
+| `add_issue_label`       | Add a label to an issue                                                                         |
+| `remove_issue_label`    | Remove a label from an issue                                                                    |
+| `add_issue_relation`    | Create a blocks/duplicate/related relation between two issues                                   |
+| `update_issue_relation` | Update the type of an existing relation between two issues                                      |
+| `remove_issue_relation` | Remove a relation between two issues                                                            |
 
 ## Logging Requirements (HIGH PRIORITY)
 

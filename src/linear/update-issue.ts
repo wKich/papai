@@ -7,8 +7,23 @@ import { filterPresentNodes, requireEntity } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:update-issue' })
 
-type UpdateInput = { stateId?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
-type UpdateParams = { status?: string; assigneeId?: string; dueDate?: string; labelIds?: string[]; estimate?: number }
+type UpdateInput = {
+  stateId?: string
+  assigneeId?: string
+  dueDate?: string
+  labelIds?: string[]
+  estimate?: number
+  projectId?: string
+}
+
+type UpdateParams = {
+  status?: string
+  assigneeId?: string
+  dueDate?: string
+  labelIds?: string[]
+  estimate?: number
+  projectId?: string
+}
 
 const resolveWorkflowState = async (
   client: LinearClient,
@@ -73,6 +88,9 @@ const buildUpdateInput = async (client: LinearClient, issueId: string, params: U
   if (params.estimate !== undefined) {
     input.estimate = params.estimate
   }
+  if (params.projectId !== undefined) {
+    input.projectId = params.projectId
+  }
   return input
 }
 
@@ -84,6 +102,7 @@ export async function updateIssue({
   dueDate,
   labelIds,
   estimate,
+  projectId,
 }: {
   apiKey: string
   issueId: string
@@ -92,12 +111,20 @@ export async function updateIssue({
   dueDate?: string
   labelIds?: string[]
   estimate?: number
+  projectId?: string
 }): Promise<LinearFetch<Issue> | undefined> {
-  log.debug({ issueId, status, assigneeId }, 'updateIssue called')
+  log.debug({ issueId, status, assigneeId, projectId }, 'updateIssue called')
 
   try {
     const client = new LinearClient({ apiKey })
-    const updateInput = await buildUpdateInput(client, issueId, { status, assigneeId, dueDate, labelIds, estimate })
+    const updateInput = await buildUpdateInput(client, issueId, {
+      status,
+      assigneeId,
+      dueDate,
+      labelIds,
+      estimate,
+      projectId,
+    })
     const payload = await client.updateIssue(issueId, updateInput)
     const issue = await payload.issue
     if (issue) {

@@ -10,6 +10,18 @@ export interface AssigneeNode {
   displayName: string
 }
 
+export interface LabelNode {
+  id: string
+  name: string
+  color: string
+}
+
+export interface RelationNode {
+  id: string
+  type: string
+  relatedIssue: Promise<{ id: string; identifier: string } | null>
+}
+
 export class MockLinearClient {
   issue(): Promise<{
     id: string
@@ -22,6 +34,8 @@ export class MockLinearClient {
     estimate: number | null
     state: Promise<StateNode | null>
     assignee: Promise<AssigneeNode | null>
+    labels: () => Promise<{ nodes: (LabelNode | null)[] }>
+    relations: () => Promise<{ nodes: (RelationNode | null)[] }>
   }> {
     return Promise.resolve({
       id: 'issue-123',
@@ -34,6 +48,23 @@ export class MockLinearClient {
       estimate: 5,
       state: Promise.resolve({ id: 'state-1', name: 'In Progress' }),
       assignee: Promise.resolve({ id: 'user-1', displayName: 'John Doe' }),
+      labels: () =>
+        Promise.resolve({
+          nodes: [
+            { id: 'label-1', name: 'Bug', color: '#ff0000' },
+            { id: 'label-2', name: 'Feature', color: '#00ff00' },
+          ],
+        }),
+      relations: () =>
+        Promise.resolve({
+          nodes: [
+            {
+              id: 'relation-1',
+              type: 'blocks',
+              relatedIssue: Promise.resolve({ id: 'issue-456', identifier: 'TEAM-2' }),
+            },
+          ],
+        }),
     })
   }
 }

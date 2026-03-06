@@ -1,35 +1,49 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupAddCommentMock } from '../../src/linear/__mocks__/add-comment.js'
+import { setupAddIssueCommentMock } from '../../src/linear/__mocks__/add-issue-comment.js'
+import { setupAddIssueLabelMock } from '../../src/linear/__mocks__/add-issue-label.js'
+import { setupAddIssueRelationMock } from '../../src/linear/__mocks__/add-issue-relation.js'
 import { setupArchiveIssueMock } from '../../src/linear/__mocks__/archive-issue.js'
+import { setupArchiveProjectMock } from '../../src/linear/__mocks__/archive-project.js'
 import { setupCreateIssueMock } from '../../src/linear/__mocks__/create-issue.js'
 import { setupCreateLabelMock } from '../../src/linear/__mocks__/create-label.js'
 import { setupCreateProjectMock } from '../../src/linear/__mocks__/create-project.js'
-import { setupCreateRelationMock } from '../../src/linear/__mocks__/create-relation.js'
-import { setupGetCommentsMock } from '../../src/linear/__mocks__/get-comments.js'
-import { setupGetIssueLabelsMock } from '../../src/linear/__mocks__/get-issue-labels.js'
+import { setupGetIssueCommentsMock } from '../../src/linear/__mocks__/get-issue-comments.js'
 import { setupGetIssueMock } from '../../src/linear/__mocks__/get-issue.js'
-import { setupGetRelationsMock } from '../../src/linear/__mocks__/get-relations.js'
 import { setupListLabelsMock } from '../../src/linear/__mocks__/list-labels.js'
 import { setupListProjectsMock } from '../../src/linear/__mocks__/list-projects.js'
+import { setupRemoveIssueCommentMock } from '../../src/linear/__mocks__/remove-issue-comment.js'
 import { setupRemoveIssueLabelMock } from '../../src/linear/__mocks__/remove-issue-label.js'
+import { setupRemoveIssueRelationMock } from '../../src/linear/__mocks__/remove-issue-relation.js'
+import { setupRemoveLabelMock } from '../../src/linear/__mocks__/remove-label.js'
 import { setupSearchIssuesMock } from '../../src/linear/__mocks__/search-issues.js'
+import { setupUpdateIssueCommentMock } from '../../src/linear/__mocks__/update-issue-comment.js'
+import { setupUpdateIssueRelationMock } from '../../src/linear/__mocks__/update-issue-relation.js'
 import { setupUpdateIssueMock } from '../../src/linear/__mocks__/update-issue.js'
-import { makeAddCommentTool } from '../../src/tools/add-comment.js'
+import { setupUpdateLabelMock } from '../../src/linear/__mocks__/update-label.js'
+import { setupUpdateProjectMock } from '../../src/linear/__mocks__/update-project.js'
+import { makeAddIssueCommentTool } from '../../src/tools/add-issue-comment.js'
+import { makeAddIssueLabelTool } from '../../src/tools/add-issue-label.js'
+import { makeAddIssueRelationTool } from '../../src/tools/add-issue-relation.js'
 import { makeArchiveIssueTool } from '../../src/tools/archive-issue.js'
+import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateIssueTool } from '../../src/tools/create-issue.js'
 import { makeCreateLabelTool } from '../../src/tools/create-label.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
-import { makeCreateRelationTool } from '../../src/tools/create-relation.js'
-import { makeGetCommentsTool } from '../../src/tools/get-comments.js'
-import { makeGetIssueLabelsTool } from '../../src/tools/get-issue-labels.js'
+import { makeGetIssueCommentsTool } from '../../src/tools/get-issue-comments.js'
 import { makeGetIssueTool } from '../../src/tools/get-issue.js'
-import { makeGetRelationsTool } from '../../src/tools/get-relations.js'
 import { makeListLabelsTool } from '../../src/tools/list-labels.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
+import { makeRemoveIssueCommentTool } from '../../src/tools/remove-issue-comment.js'
 import { makeRemoveIssueLabelTool } from '../../src/tools/remove-issue-label.js'
+import { makeRemoveIssueRelationTool } from '../../src/tools/remove-issue-relation.js'
+import { makeRemoveLabelTool } from '../../src/tools/remove-label.js'
 import { makeSearchIssuesTool } from '../../src/tools/search-issues.js'
+import { makeUpdateIssueCommentTool } from '../../src/tools/update-issue-comment.js'
+import { makeUpdateIssueRelationTool } from '../../src/tools/update-issue-relation.js'
 import { makeUpdateIssueTool } from '../../src/tools/update-issue.js'
+import { makeUpdateLabelTool } from '../../src/tools/update-label.js'
+import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
 
 const mockApiKey = 'test-api-key'
 const mockTeamId = 'team-123'
@@ -102,10 +116,10 @@ describe('list_projects tool', () => {
   })
 })
 
-describe('add_comment tool', () => {
+describe('add_issue_comment tool', () => {
   test('executes successfully', async () => {
-    setupAddCommentMock()
-    const tool = makeAddCommentTool(mockApiKey)
+    setupAddIssueCommentMock()
+    const tool = makeAddIssueCommentTool(mockApiKey)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -114,10 +128,10 @@ describe('add_comment tool', () => {
   })
 })
 
-describe('get_comments tool', () => {
+describe('get_issue_comments tool', () => {
   test('executes successfully', async () => {
-    setupGetCommentsMock()
-    const tool = makeGetCommentsTool(mockApiKey)
+    setupGetIssueCommentsMock()
+    const tool = makeGetIssueCommentsTool(mockApiKey)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -138,22 +152,10 @@ describe('list_labels tool', () => {
   })
 })
 
-describe('get_issue_labels tool', () => {
+describe('add_issue_relation tool', () => {
   test('executes successfully', async () => {
-    setupGetIssueLabelsMock()
-    const tool = makeGetIssueLabelsTool(mockApiKey)
-    if (tool.execute === undefined) {
-      throw new Error('Tool execute not defined')
-    }
-    const exec = tool.execute
-    expect(Array.isArray(await exec({ issueId: 'issue-123' }, { toolCallId: 'test', messages: [] }))).toBe(true)
-  })
-})
-
-describe('create_relation tool', () => {
-  test('executes successfully', async () => {
-    setupCreateRelationMock()
-    const tool = makeCreateRelationTool(mockApiKey)
+    setupAddIssueRelationMock()
+    const tool = makeAddIssueRelationTool(mockApiKey)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -162,18 +164,6 @@ describe('create_relation tool', () => {
       { issueId: 'issue-123', relatedIssueId: 'issue-456', type: 'blocks' },
       { toolCallId: 'test', messages: [] },
     )
-  })
-})
-
-describe('get_relations tool', () => {
-  test('executes successfully', async () => {
-    setupGetRelationsMock()
-    const tool = makeGetRelationsTool(mockApiKey)
-    if (tool.execute === undefined) {
-      throw new Error('Tool execute not defined')
-    }
-    const exec = tool.execute
-    expect(Array.isArray(await exec({ issueId: 'issue-123' }, { toolCallId: 'test', messages: [] }))).toBe(true)
   })
 })
 
@@ -234,5 +224,116 @@ describe('archive_issue tool', () => {
     }
     const exec = tool.execute
     await exec({ issueId: 'issue-123' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('add_issue_label tool', () => {
+  test('executes successfully', async () => {
+    setupAddIssueLabelMock()
+    const tool = makeAddIssueLabelTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ issueId: 'issue-123', labelId: 'label-456' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('archive_project tool', () => {
+  test('executes successfully', async () => {
+    setupArchiveProjectMock()
+    const tool = makeArchiveProjectTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ projectId: 'project-123' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('remove_issue_comment tool', () => {
+  test('executes successfully', async () => {
+    setupRemoveIssueCommentMock()
+    const tool = makeRemoveIssueCommentTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ commentId: 'comment-123' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('remove_issue_relation tool', () => {
+  test('executes successfully', async () => {
+    setupRemoveIssueRelationMock()
+    const tool = makeRemoveIssueRelationTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ issueId: 'issue-123', relatedIssueId: 'issue-456' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('remove_label tool', () => {
+  test('executes successfully', async () => {
+    setupRemoveLabelMock()
+    const tool = makeRemoveLabelTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ labelId: 'label-123' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('update_issue_comment tool', () => {
+  test('executes successfully', async () => {
+    setupUpdateIssueCommentMock()
+    const tool = makeUpdateIssueCommentTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ commentId: 'comment-123', body: 'Updated comment' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('update_issue_relation tool', () => {
+  test('executes successfully', async () => {
+    setupUpdateIssueRelationMock()
+    const tool = makeUpdateIssueRelationTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec(
+      { issueId: 'issue-123', relatedIssueId: 'issue-456', type: 'related' },
+      { toolCallId: 'test', messages: [] },
+    )
+  })
+})
+
+describe('update_label tool', () => {
+  test('executes successfully', async () => {
+    setupUpdateLabelMock()
+    const tool = makeUpdateLabelTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ labelId: 'label-123', name: 'Updated Label' }, { toolCallId: 'test', messages: [] })
+  })
+})
+
+describe('update_project tool', () => {
+  test('executes successfully', async () => {
+    setupUpdateProjectMock()
+    const tool = makeUpdateProjectTool(mockApiKey)
+    if (tool.execute === undefined) {
+      throw new Error('Tool execute not defined')
+    }
+    const exec = tool.execute
+    await exec({ projectId: 'project-123', name: 'Updated Project' }, { toolCallId: 'test', messages: [] })
   })
 })

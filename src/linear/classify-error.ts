@@ -16,7 +16,23 @@ export const classifyLinearError = (error: unknown): LinearApiError => {
   }
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
-    if (message.includes('not found') || message.includes('issue') || message.includes('resource')) {
+    // Check for specific error types first (more specific before generic)
+    if (message.includes('relation') && message.includes('not found')) {
+      return new LinearApiError(error.message, linearError.relationNotFound('unknown', 'unknown'))
+    }
+    if (message.includes('comment') && message.includes('not found')) {
+      return new LinearApiError(error.message, linearError.commentNotFound('unknown'))
+    }
+    if (message.includes('label') && message.includes('not found')) {
+      return new LinearApiError(error.message, linearError.labelNotFound('unknown'))
+    }
+    if (message.includes('project') && message.includes('not found')) {
+      return new LinearApiError(error.message, linearError.projectNotFound('unknown'))
+    }
+    if (message.includes('issue') && message.includes('not found')) {
+      return new LinearApiError(error.message, linearError.issueNotFound('unknown'))
+    }
+    if (message.includes('not found') || message.includes('resource')) {
       return new LinearApiError(error.message, linearError.issueNotFound('unknown'))
     }
     if (message.includes('authentication') || message.includes('unauthorized') || message.includes('auth')) {
