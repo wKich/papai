@@ -5,20 +5,11 @@ import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
 
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
+import { buildMessagesWithMemory, trimAndSummarise } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { clearHistory, loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
-import {
-  buildMemoryContextMessage,
-  clearFacts,
-  clearSummary,
-  extractFactsFromSdkResults,
-  loadFacts,
-  loadSummary,
-  saveSummary,
-  trimWithMemoryModel,
-  upsertFact,
-} from './memory.js'
+import { clearFacts, clearSummary, extractFactsFromSdkResults, loadFacts, upsertFact } from './memory.js'
 import { makeTools } from './tools/index.js'
 import { formatLlmOutput } from './utils/format.js'
 
@@ -67,57 +58,6 @@ const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
   return history
 }
 
-// Working memory limits
-const WORKING_MEMORY_CAP = 100
-const TRIM_MIN = 50
-const TRIM_MAX = 100
-const SMART_TRIM_INTERVAL = 10
-
-const trimAndSummarise = async (history: readonly ModelMessage[], userId: number): Promise<readonly ModelMessage[]> => {
-  log.debug({ userId, historyLength: history.length }, 'trimAndSummarise called')
-
-  const userMessageCount = history.filter((m) => m.role === 'user').length
-  const periodicTrim = userMessageCount > 0 && userMessageCount % SMART_TRIM_INTERVAL === 0 && history.length > TRIM_MIN
-  const hardCapTrim = history.length >= WORKING_MEMORY_CAP
-
-  if (!periodicTrim && !hardCapTrim) {
-    return history
-  }
-
-  const reason = hardCapTrim ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
-  log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered')
-
-  const openaiKey = getConfig('openai_key')
-  const openaiBaseUrl = getConfig('openai_base_url')
-  const openaiModel = getConfig('openai_model')
-  // Use dedicated memory_model if configured; fall back to the main model.
-  const memoryModel = getConfig('memory_model') ?? openaiModel
-
-  if (openaiKey !== null && openaiBaseUrl !== null && memoryModel !== null) {
-    try {
-      const existing = loadSummary(userId)
-      const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, {
-        apiKey: openaiKey,
-        baseUrl: openaiBaseUrl,
-        model: memoryModel,
-      })
-      saveSummary(userId, summary)
-      log.info({ userId, retained: trimmedMessages.length }, 'Smart trim complete')
-      return trimmedMessages
-    } catch (error) {
-      log.warn(
-        { userId, error: error instanceof Error ? error.message : String(error) },
-        'Smart trim failed — falling back to positional slice',
-      )
-    }
-  } else {
-    log.warn({ userId }, 'LLM config not available — falling back to positional slice')
-  }
-
-  // Fallback: keep the most recent messages within hard limit
-  return history.slice(-WORKING_MEMORY_CAP)
-}
-
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
@@ -126,27 +66,27 @@ const checkRequiredConfig = (): string[] => {
   return requiredKeys.filter((k) => getConfig(k) === null)
 }
 
-type MessagesWithMemory = { messages: ModelMessage[]; memoryMsg: { role: 'system'; content: string } | null }
-
-const buildMessagesWithMemory = (userId: number, history: readonly ModelMessage[]): MessagesWithMemory => {
-  const summary = loadSummary(userId)
-  const facts = loadFacts(userId)
-  const memoryMsg = buildMemoryContextMessage(summary, facts)
-  return { messages: memoryMsg === null ? [...history] : [memoryMsg, ...history], memoryMsg }
-}
-
 const persistFactsFromResults = (
   userId: number,
   toolCalls: Array<{ toolName: string; input: unknown }>,
   toolResults: Array<{ toolName: string; output: unknown }>,
 ): void => {
   const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
+  if (newFacts.length === 0) return
+
+  const existingFacts = loadFacts(userId)
+  const existingById = new Map(existingFacts.map((f) => [f.identifier, f]))
+
+  let upsertCount = 0
   for (const fact of newFacts) {
-    upsertFact(userId, fact)
+    const existing = existingById.get(fact.identifier)
+    if (existing === undefined || existing.title !== fact.title || existing.url !== fact.url) {
+      upsertFact(userId, fact)
+      upsertCount++
+    }
   }
-  if (newFacts.length > 0) {
-    log.info({ userId, factsExtracted: newFacts.length }, 'Facts extracted and persisted')
-  }
+
+  log.info({ userId, factsExtracted: newFacts.length, factsUpserted: upsertCount }, 'Facts extracted and persisted')
 }
 
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {

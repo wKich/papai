@@ -64,18 +64,30 @@ export function loadFacts(userId: number): readonly MemoryFact[] {
 export function upsertFact(userId: number, fact: Omit<MemoryFact, 'last_seen'>): void {
   log.debug({ userId, identifier: fact.identifier }, 'upsertFact called')
   const now = new Date().toISOString()
-  getDb().run(
-    'INSERT OR REPLACE INTO memory_facts (user_id, identifier, title, url, last_seen) VALUES (?, ?, ?, ?, ?)',
-    [userId, fact.identifier, fact.title, fact.url, now],
-  )
-  // Evict oldest facts beyond cap
-  getDb().run(
-    `DELETE FROM memory_facts WHERE user_id = ? AND identifier NOT IN (
-      SELECT identifier FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC LIMIT ?
-    )`,
-    [userId, userId, FACTS_CAP],
-  )
-  log.info({ userId, identifier: fact.identifier }, 'Fact upserted')
+  const db = getDb()
+
+  // Atomic transaction: insert/replace fact then evict oldest beyond cap
+  db.run('BEGIN TRANSACTION')
+  try {
+    db.run('INSERT OR REPLACE INTO memory_facts (user_id, identifier, title, url, last_seen) VALUES (?, ?, ?, ?, ?)', [
+      userId,
+      fact.identifier,
+      fact.title,
+      fact.url,
+      now,
+    ])
+    db.run(
+      `DELETE FROM memory_facts WHERE user_id = ? AND identifier NOT IN (
+        SELECT identifier FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC LIMIT ?
+      )`,
+      [userId, userId, FACTS_CAP],
+    )
+    db.run('COMMIT')
+    log.info({ userId, identifier: fact.identifier }, 'Fact upserted')
+  } catch (error) {
+    db.run('ROLLBACK')
+    throw error
+  }
 }
 
 export function clearFacts(userId: number): void {

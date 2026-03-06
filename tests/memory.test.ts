@@ -328,7 +328,7 @@ describe('upsertFact eviction', () => {
     clearFacts(userId)
   })
 
-  test('updates last_seen on duplicate fact insert', () => {
+  test('updates last_seen on duplicate fact insert', async () => {
     const userId = 999
     const fact = { identifier: 'ENG-100', title: 'Test Issue', url: '' }
 
@@ -337,10 +337,7 @@ describe('upsertFact eviction', () => {
     const firstSeen = firstLoad[0]!.last_seen
 
     // Small delay to ensure different timestamp
-    const start = Date.now()
-    while (Date.now() - start < 10) {
-      // busy wait
-    }
+    await Bun.sleep(10)
 
     upsertFact(userId, fact)
     const secondLoad = loadFacts(userId)
