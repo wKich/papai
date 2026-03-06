@@ -81,6 +81,19 @@ const persistFactsFromResults = (
   log.info({ userId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
 }
 
+const withTypingIndicator = async <T>(ctx: Context, fn: () => Promise<T>): Promise<T> => {
+  const send = (): void => {
+    ctx.replyWithChatAction('typing').catch(() => undefined)
+  }
+  send()
+  const interval = setInterval(send, 4500)
+  try {
+    return await fn()
+  } finally {
+    clearInterval(interval)
+  }
+}
+
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
   const missing = checkRequiredConfig()
   if (missing.length > 0) {
@@ -100,13 +113,15 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
 
   log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
-  const result = await generateText({
-    model,
-    system: SYSTEM_PROMPT,
-    messages: messagesWithMemory,
-    tools,
-    stopWhen: stepCountIs(25),
-  })
+  const result = await withTypingIndicator(ctx, () =>
+    generateText({
+      model,
+      system: SYSTEM_PROMPT,
+      messages: messagesWithMemory,
+      tools,
+      stopWhen: stepCountIs(25),
+    }),
+  )
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
