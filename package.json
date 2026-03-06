@@ -20,12 +20,6 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.33",
     "@gramio/format": "^0.5.0",
-    "@hcengineering/api-client": "^0.7.0",
-    "@hcengineering/core": "^0.7.0",
-    "@hcengineering/rank": "^0.7.0",
-    "@hcengineering/tags": "^0.7.0",
-    "@hcengineering/task": "^0.7.0",
-    "@hcengineering/tracker": "^0.7.0",
     "@linear/sdk": "^76.0.0",
     "ai": "^6.0.108",
     "grammy": "^1.41.1",
