@@ -39,7 +39,8 @@ jobs:
       - name: Calculate next version
         id: version
         run: |
-          CURRENT=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CURRENT=$(echo "$CURRENT_TAG" | sed 's/^v//')
           case "${{ github.event.inputs.bump_type }}" in
             major)
               NEXT=$(echo $CURRENT | awk -F. '{print $1+1".0.0"}')
@@ -69,7 +70,7 @@ jobs:
 
       - name: Create Git tag
         run: |
-          if git rev-parse "${{ steps.version.outputs.next }}" >/dev/null 2>&1; then
+          if git rev-parse "refs/tags/${{ steps.version.outputs.next }}" >/dev/null 2>&1; then
             echo "Tag ${{ steps.version.outputs.next }} already exists"
           else
             git tag ${{ steps.version.outputs.next }}
@@ -83,7 +84,7 @@ jobs:
           VERSION_NUM=$(echo "$VERSION" | sed 's/^v//')
 
           # Find the section for this version
-          awk -v ver="## \"[$VERSION_NUM]\"" '
+          awk -v ver="## [$VERSION_NUM]" '
             $0 ~ ver {found=1; next}
             found && /^## \[/ {exit}
             found {print}

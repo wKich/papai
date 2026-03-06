@@ -236,6 +236,8 @@ To create a new release:
 
 ### Local Development
 
+> **Prerequisite:** [`git-cliff`](https://git-cliff.org/docs/installation) must be installed and available on your `PATH`.
+
 Preview changelog without releasing:
 
 ```bash
