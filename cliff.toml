@@ -22,6 +22,7 @@ body = """
 {% endfor %}
 """
 footer = """
+
 {% for release in releases -%}
     {% if release.version -%}
         {% if release.previous.version -%}
