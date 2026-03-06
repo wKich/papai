@@ -1,34 +1,68 @@
-import { LinearClient } from '@linear/sdk'
+import core, { generateId } from '@hcengineering/core'
+import tracker from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:create-project' })
+const log = logger.child({ scope: 'huly:create-project' })
+
+export interface CreateProjectParams {
+  userId: number
+  name: string
+  identifier: string
+  description?: string
+}
+
+export interface ProjectResult {
+  id: string
+  name: string
+  identifier: string
+  url: string
+}
 
 export async function createProject({
-  apiKey,
-  teamId,
+  userId,
   name,
+  identifier,
   description,
-}: {
-  apiKey: string
-  teamId: string
-  name: string
-  description?: string
-}): Promise<{ id: string; name: string; url: string }> {
-  log.debug({ teamId, name, hasDescription: description !== undefined }, 'createProject called')
+}: CreateProjectParams): Promise<ProjectResult> {
+  log.debug({ userId, name, identifier, hasDescription: description !== undefined }, 'createProject called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
-    const payload = await client.createProject({ teamIds: [teamId], name, description })
-    const project = await payload.project
-    if (!project) {
-      throw new Error('No project returned')
+    const projectId = generateId()
+
+    await client.createDoc(
+      tracker.class.Project,
+      core.space.Space,
+      {
+        name,
+        identifier: identifier.toUpperCase(),
+        description: description ?? '',
+        private: false,
+        defaultIssueStatus: null,
+        members: [],
+      },
+      projectId,
+    )
+
+    log.info({ projectId, name, identifier }, 'Project created')
+
+    const hulyUrl = process.env['HULY_URL'] ?? ''
+    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
+
+    return {
+      id: projectId,
+      name,
+      identifier: identifier.toUpperCase(),
+      url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${identifier.toUpperCase()}`,
     }
-    log.info({ teamId, projectId: project.id, name }, 'Project created')
-    return { id: project.id, name: project.name, url: project.url }
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), teamId, name }, 'createProject failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), userId, name }, 'createProject failed')
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

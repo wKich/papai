@@ -1,24 +1,17 @@
 import { mock } from 'bun:test'
 
-export class MockLinearClient {
-  createProject(): { project: Promise<{ id: string; name: string; url: string } | null> } {
-    return {
-      project: Promise.resolve({
-        id: 'project-123',
-        name: 'Test Project',
-        url: 'https://linear.app/project/project-123',
-      }),
-    }
+class MockHulyClient {
+  async createDoc(_class: unknown, _space: unknown, data: Record<string, unknown>, id: string): Promise<void> {
+    // Project created
+  }
+
+  async close(): Promise<void> {
+    // Cleanup
   }
 }
 
 export function setupCreateProjectMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

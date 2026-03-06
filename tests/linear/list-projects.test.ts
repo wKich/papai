@@ -1,25 +1,25 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupListProjectsEmptyMock } from '../../src/linear/__mocks__/list-projects-empty.js'
 import { setupListProjectsMock } from '../../src/linear/__mocks__/list-projects.js'
 import { listProjects } from '../../src/linear/list-projects.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
-describe('listProjects with projects', () => {
-  test('returns teams and projects', async () => {
+describe('listProjects', () => {
+  test('returns projects', async () => {
     setupListProjectsMock()
-    const results = await listProjects({ apiKey: mockApiKey })
+    const results = await listProjects({ userId: mockUserId })
     expect(results).toHaveLength(1)
-    expect(results[0]?.teamName).toBe('Engineering')
+    expect(results[0]?.teamName).toBe('Projects')
     expect(results[0]?.projects).toHaveLength(2)
+    expect(results[0]?.projects[0]?.name).toBe('Project A')
+    expect(results[0]?.projects[0]?.identifier).toBe('PROJ-A')
   })
-})
 
-describe('listProjects empty team', () => {
-  test('handles team without projects', async () => {
+  test('handles empty project list', async () => {
+    const { setupListProjectsEmptyMock } = await import('../../src/linear/__mocks__/list-projects-empty.js')
     setupListProjectsEmptyMock()
-    const results = await listProjects({ apiKey: mockApiKey })
+    const results = await listProjects({ userId: mockUserId })
     expect(results[0]?.projects).toHaveLength(0)
   })
 })

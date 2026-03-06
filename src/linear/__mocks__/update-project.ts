@@ -1,24 +1,33 @@
 import { mock } from 'bun:test'
 
-export class MockLinearClient {
-  updateProject(): { project: Promise<{ id: string; name: string; url: string }> } {
-    return {
-      project: Promise.resolve({
-        id: 'project-123',
-        name: 'Updated Project',
-        url: 'https://linear.app/project/project-123',
-      }),
+const mockProject = {
+  _id: 'project-123',
+  name: 'Original Project',
+  identifier: 'PROJ',
+  description: 'Original description',
+}
+
+class MockHulyClient {
+  async findOne(_class: unknown, query: Record<string, unknown>): Promise<unknown | undefined> {
+    const className = String(_class)
+    const projectId = query['_id'] as string
+    if (className.includes('Project') && projectId === 'project-123') {
+      return mockProject
     }
+    return undefined
+  }
+
+  async updateDoc(_class: unknown, _space: unknown, _id: unknown, _updates: Record<string, unknown>): Promise<void> {
+    // Project updated
+  }
+
+  async close(): Promise<void> {
+    // Cleanup
   }
 }
 
 export function setupUpdateProjectMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

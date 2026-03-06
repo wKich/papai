@@ -1,52 +1,50 @@
-import { LinearClient } from '@linear/sdk'
+import tracker, { type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { filterPresentNodes } from './response-guards.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:list-projects' })
+const log = logger.child({ scope: 'huly:list-projects' })
+
+interface ProjectData {
+  id: string
+  name: string
+  identifier: string
+  description: string | undefined
+}
 
 export async function listProjects({
-  apiKey,
+  userId,
 }: {
-  apiKey: string
-}): Promise<{ teamId: string; teamName: string; projects: { id: string; name: string }[] }[]> {
-  log.debug('listProjects called')
+  userId: number
+}): Promise<{ teamId: string; teamName: string; projects: ProjectData[] }[]> {
+  log.debug({ userId }, 'listProjects called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
-    const teams = await client.teams()
-    const result = await Promise.all(
-      filterPresentNodes(teams.nodes, { entityName: 'team', parentId: 'teams' }).map(async (team) => {
-        if (typeof team.id !== 'string' || typeof team.name !== 'string') {
-          log.warn({ teamId: team.id }, 'Skipping team with invalid response shape')
-          return undefined
-        }
-        const projects = await team.projects()
-        const validProjects = filterPresentNodes(projects.nodes, { entityName: 'project', parentId: team.id }).flatMap(
-          (p) => {
-            if (typeof p.id !== 'string' || typeof p.name !== 'string') {
-              log.warn({ teamId: team.id, projectId: p.id }, 'Skipping project with invalid response shape')
-              return []
-            }
-            return [{ id: p.id, name: p.name }]
-          },
-        )
-        return {
-          teamId: team.id,
-          teamName: team.name,
-          projects: validProjects,
-        }
-      }),
-    )
-    const mappedResult = result.flatMap((team) => (team ? [team] : []))
-    log.info(
-      { teamCount: mappedResult.length, totalProjects: mappedResult.reduce((sum, t) => sum + t.projects.length, 0) },
-      'Projects listed',
-    )
-    return mappedResult
+    const projects = (await client.findAll(tracker.class.Project, {})) as unknown as Project[]
+
+    const mappedProjects: ProjectData[] = projects.map((project) => ({
+      id: project._id as string,
+      name: project.name,
+      identifier: project.identifier,
+      description: project.description !== undefined ? String(project.description) : undefined,
+    }))
+
+    log.info({ projectCount: mappedProjects.length }, 'Projects listed')
+
+    return [
+      {
+        teamId: 'default',
+        teamName: 'Projects',
+        projects: mappedProjects,
+      },
+    ]
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'listProjects failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), userId }, 'listProjects failed')
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
 }

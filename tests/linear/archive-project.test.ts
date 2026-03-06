@@ -3,13 +3,13 @@ import { describe, expect, test } from 'bun:test'
 import { setupArchiveProjectMock } from '../../src/linear/__mocks__/archive-project.js'
 import { archiveProject } from '../../src/linear/archive-project.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
 describe('archiveProject', () => {
   test('archives project successfully', async () => {
     setupArchiveProjectMock()
     const result = await archiveProject({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       projectId: 'project-123',
     })
 

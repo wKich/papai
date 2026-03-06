@@ -1,17 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupUpdateProjectFailureMock } from '../../src/linear/__mocks__/update-project-failure.js'
 import { setupUpdateProjectMock } from '../../src/linear/__mocks__/update-project.js'
 import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateProject } from '../../src/linear/update-project.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
 describe('updateProject', () => {
   test('updates project successfully', async () => {
     setupUpdateProjectMock()
     const result = await updateProject({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       projectId: 'project-123',
       name: 'Updated Project',
       description: 'New description',
@@ -20,14 +19,13 @@ describe('updateProject', () => {
     expect(result).toBeDefined()
     expect(result.id).toBe('project-123')
     expect(result.name).toBe('Updated Project')
-    expect(result.url).toBe('https://linear.app/project/project-123')
   })
 
   test('throws error when no fields provided', () => {
     setupUpdateProjectMock()
     expect(
       updateProject({
-        apiKey: mockApiKey,
+        userId: mockUserId,
         projectId: 'project-123',
       }),
     ).rejects.toThrow(HulyApiError)
@@ -35,10 +33,10 @@ describe('updateProject', () => {
 
   describe('error handling', () => {
     test('throws HulyApiError when project not found', () => {
-      setupUpdateProjectFailureMock()
+      setupUpdateProjectMock()
       expect(
         updateProject({
-          apiKey: mockApiKey,
+          userId: mockUserId,
           projectId: 'invalid-project',
           name: 'Updated Name',
         }),
@@ -46,11 +44,11 @@ describe('updateProject', () => {
     })
 
     test('throws HulyApiError with project-not-found code', async () => {
-      setupUpdateProjectFailureMock()
+      setupUpdateProjectMock()
       let thrown = false
       try {
         await updateProject({
-          apiKey: mockApiKey,
+          userId: mockUserId,
           projectId: 'invalid-project',
           name: 'Updated Name',
         })
