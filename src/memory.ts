@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateObject } from 'ai'
+import { generateText, Output } from 'ai'
 import { type ModelMessage } from 'ai'
 import { z } from 'zod'
 
@@ -95,6 +95,12 @@ const IssueResultSchema = z.looseObject({
   url: z.string().optional(),
 })
 
+const ProjectResultSchema = z.looseObject({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().optional(),
+})
+
 export function extractFacts(
   _toolCalls: readonly ToolCallEntry[],
   toolResults: readonly ToolResultEntry[],
@@ -125,9 +131,40 @@ export function extractFacts(
         }
       }
     }
+
+    if (result.toolName === 'create_project') {
+      const parsed = ProjectResultSchema.safeParse(result.result)
+      if (parsed.success) {
+        facts.push({
+          identifier: `proj:${parsed.data.id}`,
+          title: parsed.data.name,
+          url: parsed.data.url ?? '',
+        })
+      }
+    }
   }
 
   return facts
+}
+
+// Wrapper to accept SDK result types directly without unsafe assignments
+// SDK v5 uses input/output properties typed as any
+export function extractFactsFromSdkResults(
+  toolCalls: Array<{ toolName: string; input: unknown }>,
+  toolResults: Array<{ toolName: string; output: unknown }>,
+): readonly Omit<MemoryFact, 'last_seen'>[] {
+  // Map SDK types to internal types safely
+  const callEntries: ToolCallEntry[] = []
+  for (const tc of toolCalls) {
+    callEntries.push({ toolName: tc.toolName, args: tc.input })
+  }
+
+  const resultEntries: ToolResultEntry[] = []
+  for (const tr of toolResults) {
+    resultEntries.push({ toolName: tr.toolName, result: tr.output })
+  }
+
+  return extractFacts(callEntries, resultEntries)
 }
 
 // --- Smart trimming with memory model ---
@@ -156,6 +193,27 @@ Conversation (index: [role] content):
 
 Return JSON exactly matching the schema.`
 
+function clampIndices(selected: number[], trimMin: number, trimMax: number, historyLength: number): number[] {
+  if (selected.length > trimMax) {
+    return selected.slice(selected.length - trimMax)
+  }
+  if (selected.length < trimMin) {
+    const selectedSet = new Set(selected)
+    const candidates = Array.from({ length: historyLength }, (_, i) => i)
+      .filter((i) => !selectedSet.has(i))
+      .reverse()
+    for (const i of candidates) {
+      if (selected.length >= trimMin) break
+      selected.push(i)
+    }
+    selected.sort((a, b) => a - b)
+  }
+  return selected
+}
+
+const buildMemoryModel = (config: ModelConfig): ReturnType<ReturnType<typeof createOpenAICompatible>> =>
+  createOpenAICompatible({ name: 'openai-compatible', apiKey: config.apiKey, baseURL: config.baseUrl })(config.model)
+
 export async function trimWithMemoryModel(
   history: readonly ModelMessage[],
   trimMin: number,
@@ -168,12 +226,6 @@ export async function trimWithMemoryModel(
     'trimWithMemoryModel called',
   )
 
-  const model = createOpenAICompatible({
-    name: 'openai-compatible',
-    apiKey: config.apiKey,
-    baseURL: config.baseUrl,
-  })(config.model)
-
   const messagesText = history
     .map((m, i) => `${i}: [${m.role}] ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`)
     .join('\n')
@@ -182,43 +234,30 @@ export async function trimWithMemoryModel(
     .replace('{PREVIOUS_SUMMARY}', previousSummary ?? '(none)')
     .replace('{MESSAGES}', messagesText)
 
-  const result = await generateObject({
-    model,
-    schema: TrimResultSchema,
+  const result = await generateText({
+    model: buildMemoryModel(config),
+    output: Output.object({ schema: TrimResultSchema }),
     prompt,
   })
 
-  let selected = [...new Set(result.object.keep_indices)]
-    .filter((i) => i >= 0 && i < history.length)
-    .sort((a, b) => a - b)
-
-  // Clamp to [trimMin, trimMax]: if too few, pad with most-recent messages not already selected
-  if (selected.length > trimMax) {
-    selected = selected.slice(selected.length - trimMax)
-  } else if (selected.length < trimMin) {
-    const selectedSet = new Set(selected)
-    const candidates = Array.from({ length: history.length }, (_, i) => i)
-      .filter((i) => !selectedSet.has(i))
-      .reverse()
-    for (const i of candidates) {
-      if (selected.length >= trimMin) break
-      selected.push(i)
-    }
-    selected.sort((a, b) => a - b)
-  }
-
+  const selected = clampIndices(
+    [...new Set(result.output.keep_indices)].filter((i) => i >= 0 && i < history.length).sort((a, b) => a - b),
+    trimMin,
+    trimMax,
+    history.length,
+  )
   const trimmedMessages = selected.map((i) => history[i]!)
 
   log.info(
     {
       retained: trimmedMessages.length,
       dropped: history.length - trimmedMessages.length,
-      summaryLength: result.object.summary.length,
+      summaryLength: result.output.summary.length,
     },
     'Memory model trim complete',
   )
 
-  return { trimmedMessages, summary: result.object.summary }
+  return { trimmedMessages, summary: result.output.summary }
 }
 
 // --- Context message builder ---

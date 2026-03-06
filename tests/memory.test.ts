@@ -14,6 +14,30 @@ class MockDatabase {
     if (sql.includes('DELETE FROM memory_summary') && params !== undefined) {
       mockSummaryStore.delete(Number(params[0]))
     }
+    if (sql.includes('INSERT OR REPLACE INTO memory_facts') && params !== undefined) {
+      const userId = String(params[0])
+      const fact = {
+        identifier: String(params[1]),
+        title: String(params[2]),
+        url: String(params[3]),
+        last_seen: String(params[4]),
+      }
+      const existing = mockFactsStore.get(userId) ?? []
+      const filtered = existing.filter((f) => f.identifier !== fact.identifier)
+      filtered.push(fact)
+      mockFactsStore.set(userId, filtered)
+    }
+    if (sql.includes('DELETE FROM memory_facts') && sql.includes('NOT IN') && params !== undefined) {
+      const userId = String(params[0])
+      const cap = Number(params[2])
+      const facts = mockFactsStore.get(userId) ?? []
+      if (facts.length > cap) {
+        // Sort by last_seen DESC and keep only top 'cap' facts
+        const sorted = facts.sort((a, b) => b.last_seen.localeCompare(a.last_seen))
+        const toKeep = sorted.slice(0, cap)
+        mockFactsStore.set(userId, toKeep)
+      }
+    }
     if (sql.includes('DELETE FROM memory_facts') && !sql.includes('NOT IN') && params !== undefined) {
       mockFactsStore.delete(String(params[0]))
     }
@@ -38,7 +62,9 @@ class MockDatabase {
         get: (): null => null,
         all: (userId?: number): unknown[] => {
           if (userId === undefined) return []
-          return mockFactsStore.get(String(userId)) ?? []
+          const facts = mockFactsStore.get(String(userId)) ?? []
+          // Sort by last_seen DESC as real DB would
+          return facts.sort((a, b) => b.last_seen.localeCompare(a.last_seen))
         },
       }
     }
@@ -54,13 +80,14 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-type GenerateObjectResult = { object: { keep_indices: number[]; summary: string } }
+type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
 
-let generateObjectImpl = (): Promise<GenerateObjectResult> =>
-  Promise.resolve({ object: { keep_indices: [0, 1], summary: 'Updated summary text' } })
+let generateTextImpl = (): Promise<GenerateTextResult> =>
+  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Updated summary text' } })
 
 void mock.module('ai', () => ({
-  generateObject: (..._args: unknown[]): Promise<GenerateObjectResult> => generateObjectImpl(),
+  generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+  Output: { object: ({ schema }: { schema: unknown }): { schema: unknown } => ({ schema }) },
 }))
 // --- end mocks ---
 
@@ -69,6 +96,8 @@ import {
   extractFacts,
   loadSummary,
   saveSummary,
+  loadFacts,
+  upsertFact,
   clearSummary,
   clearFacts,
   trimWithMemoryModel,
@@ -238,6 +267,91 @@ describe('extractFacts', () => {
     const facts = extractFacts([], results)
     expect(facts).toEqual([])
   })
+
+  test('extracts fact from create_project result', () => {
+    const results = [
+      {
+        toolName: 'create_project',
+        result: { id: 'proj-123', name: 'Backend Migration', url: 'https://linear.app/project/proj-123' },
+      },
+    ]
+    const facts = extractFacts([], results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-123')
+    expect(facts[0]!.title).toBe('Backend Migration')
+    expect(facts[0]!.url).toBe('https://linear.app/project/proj-123')
+  })
+
+  test('extracts create_project fact without url', () => {
+    const results = [{ toolName: 'create_project', result: { id: 'proj-456', name: 'Frontend Refactor' } }]
+    const facts = extractFacts([], results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-456')
+    expect(facts[0]!.title).toBe('Frontend Refactor')
+    expect(facts[0]!.url).toBe('')
+  })
+
+  test('ignores malformed create_project result', () => {
+    const results = [{ toolName: 'create_project', result: { no_id: true, name: 'Test' } }]
+    const facts = extractFacts([], results)
+    expect(facts).toEqual([])
+  })
+})
+
+describe('upsertFact eviction', () => {
+  beforeEach(() => {
+    mockFactsStore.clear()
+    mockSummaryStore.clear()
+    runCalls.length = 0
+  })
+
+  test('evicts oldest facts when exceeding FACTS_CAP', () => {
+    const userId = 999
+    // Insert 52 facts (over the 50 cap)
+    for (let i = 0; i < 52; i++) {
+      upsertFact(userId, {
+        identifier: `ENG-${i}`,
+        title: `Issue ${i}`,
+        url: `https://linear.app/ENG-${i}`,
+      })
+    }
+
+    const facts = loadFacts(userId)
+    // Should be capped at 50 (FACTS_CAP)
+    expect(facts).toHaveLength(50)
+    // Verify the facts are returned sorted by last_seen DESC
+    for (let i = 1; i < facts.length; i++) {
+      expect(facts[i]!.last_seen <= facts[i - 1]!.last_seen).toBe(true)
+    }
+
+    // Cleanup
+    clearFacts(userId)
+  })
+
+  test('updates last_seen on duplicate fact insert', () => {
+    const userId = 999
+    const fact = { identifier: 'ENG-100', title: 'Test Issue', url: '' }
+
+    upsertFact(userId, fact)
+    const firstLoad = loadFacts(userId)
+    const firstSeen = firstLoad[0]!.last_seen
+
+    // Small delay to ensure different timestamp
+    const start = Date.now()
+    while (Date.now() - start < 10) {
+      // busy wait
+    }
+
+    upsertFact(userId, fact)
+    const secondLoad = loadFacts(userId)
+    const secondSeen = secondLoad[0]!.last_seen
+
+    expect(secondSeen).not.toBe(firstSeen)
+    expect(secondLoad).toHaveLength(1)
+
+    // Cleanup
+    clearFacts(userId)
+  })
 })
 
 describe('trimWithMemoryModel', () => {
@@ -249,8 +363,8 @@ describe('trimWithMemoryModel', () => {
 
   test('returns trimmed messages and summary', async () => {
     const history = makeMessages(5)
-    generateObjectImpl = (): Promise<GenerateObjectResult> =>
-      Promise.resolve({ object: { keep_indices: [0, 2, 4], summary: 'Test summary' } })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 2, 4], summary: 'Test summary' } })
 
     const result = await trimWithMemoryModel(history, 2, 10, null, {
       apiKey: 'key',
@@ -267,8 +381,8 @@ describe('trimWithMemoryModel', () => {
 
   test('filters out-of-range indices', async () => {
     const history = makeMessages(3)
-    generateObjectImpl = (): Promise<GenerateObjectResult> =>
-      Promise.resolve({ object: { keep_indices: [0, 1, 99], summary: 'Summary' } })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1, 99], summary: 'Summary' } })
 
     const result = await trimWithMemoryModel(history, 1, 10, null, {
       apiKey: 'key',
@@ -282,8 +396,8 @@ describe('trimWithMemoryModel', () => {
 
   test('deduplicates indices', async () => {
     const history = makeMessages(5)
-    generateObjectImpl = (): Promise<GenerateObjectResult> =>
-      Promise.resolve({ object: { keep_indices: [1, 1, 2], summary: 'Summary' } })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [1, 1, 2], summary: 'Summary' } })
 
     const result = await trimWithMemoryModel(history, 1, 10, null, {
       apiKey: 'key',
@@ -298,8 +412,8 @@ describe('trimWithMemoryModel', () => {
 
   test('pads to trimMin when model returns too few indices', async () => {
     const history = makeMessages(10)
-    generateObjectImpl = (): Promise<GenerateObjectResult> =>
-      Promise.resolve({ object: { keep_indices: [0, 1], summary: 'Summary' } })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Summary' } })
 
     const result = await trimWithMemoryModel(history, 5, 10, null, {
       apiKey: 'key',
@@ -312,8 +426,8 @@ describe('trimWithMemoryModel', () => {
 
   test('caps at trimMax when model returns too many indices', async () => {
     const history = makeMessages(10)
-    generateObjectImpl = (): Promise<GenerateObjectResult> =>
-      Promise.resolve({ object: { keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' } })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' } })
 
     const result = await trimWithMemoryModel(history, 1, 3, null, {
       apiKey: 'key',

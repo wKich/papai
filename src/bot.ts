@@ -12,7 +12,7 @@ import {
   buildMemoryContextMessage,
   clearFacts,
   clearSummary,
-  extractFacts,
+  extractFactsFromSdkResults,
   loadFacts,
   loadSummary,
   saveSummary,
@@ -120,9 +120,36 @@ const trimAndSummarise = async (history: readonly ModelMessage[], userId: number
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
-const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+const checkRequiredConfig = (): string[] => {
   const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
-  const missing = requiredKeys.filter((k) => getConfig(k) === null)
+  return requiredKeys.filter((k) => getConfig(k) === null)
+}
+
+type MessagesWithMemory = { messages: ModelMessage[]; memoryMsg: { role: 'system'; content: string } | null }
+
+const buildMessagesWithMemory = (userId: number, history: readonly ModelMessage[]): MessagesWithMemory => {
+  const summary = loadSummary(userId)
+  const facts = loadFacts(userId)
+  const memoryMsg = buildMemoryContextMessage(summary, facts)
+  return { messages: memoryMsg === null ? [...history] : [memoryMsg, ...history], memoryMsg }
+}
+
+const persistFactsFromResults = (
+  userId: number,
+  toolCalls: Array<{ toolName: string; input: unknown }>,
+  toolResults: Array<{ toolName: string; output: unknown }>,
+): void => {
+  const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
+  for (const fact of newFacts) {
+    upsertFact(userId, fact)
+  }
+  if (newFacts.length > 0) {
+    log.info({ userId, factsExtracted: newFacts.length }, 'Facts extracted and persisted')
+  }
+}
+
+const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+  const missing = checkRequiredConfig()
   if (missing.length > 0) {
     log.warn({ userId, missing }, 'Missing required config keys')
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
@@ -137,11 +164,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
   const tools = makeTools({ linearKey, linearTeamId })
 
-  // Inject Tier 2 memory context
-  const summary = loadSummary(userId)
-  const facts = loadFacts(userId)
-  const memoryMsg = buildMemoryContextMessage(summary, facts)
-  const messagesWithMemory = memoryMsg !== null ? [memoryMsg, ...history] : [...history]
+  const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
 
   log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
@@ -153,20 +176,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   })
 
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
-
-  // Extract and persist facts from tool results
-  const toolCallEntries = result.toolCalls.map((tc) => ({
-    toolName: tc.toolName,
-    args: tc.args,
-  }))
-  const toolResultEntries = result.toolResults.map((tr) => ({ toolName: tr.toolName, result: tr.result }))
-  const newFacts = extractFacts(toolCallEntries, toolResultEntries)
-  for (const fact of newFacts) {
-    upsertFact(userId, fact)
-  }
-  if (newFacts.length > 0) {
-    log.info({ userId, factsExtracted: newFacts.length }, 'Facts extracted and persisted')
-  }
+  persistFactsFromResults(userId, result.toolCalls, result.toolResults)
 
   const assistantText = result.text
   saveHistory(userId, [...history, ...result.response.messages])

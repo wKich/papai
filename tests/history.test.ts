@@ -23,7 +23,7 @@ class MockDatabase {
       return {
         get: (userId: number): { messages: string } | null => {
           const messages = mockStore.get(userId)
-          return messages !== undefined ? { messages } : null
+          return messages === undefined ? null : { messages }
         },
         all: (): unknown[] => [],
       }
