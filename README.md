@@ -219,3 +219,31 @@ tests/
 ```
 
 Run all tests with `bun test` or `bun run test`.
+
+## Releasing
+
+To create a new release:
+
+1. Go to GitHub Actions → Release workflow
+2. Click "Run workflow"
+3. Select bump type (patch/minor/major)
+4. The workflow will:
+   - Generate changelog from conventional commits
+   - Commit CHANGELOG.md
+   - Create git tag
+   - Publish GitHub release
+   - Trigger deployment
+
+### Local Development
+
+Preview changelog without releasing:
+
+```bash
+bun run changelog:preview
+```
+
+Generate changelog locally:
+
+```bash
+bun run changelog:generate
+```
