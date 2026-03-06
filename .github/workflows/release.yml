@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install git-cliff
+        run: bun add -g git-cliff
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate next version
+        id: version
+        run: |
+          CURRENT=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          case "${{ github.event.inputs.bump_type }}" in
+            major)
+              NEXT=$(echo $CURRENT | awk -F. '{print $1+1".0.0"}')
+              ;;
+            minor)
+              NEXT=$(echo $CURRENT | awk -F. '{print $1"."$2+1".0"}')
+              ;;
+            patch)
+              NEXT=$(echo $CURRENT | awk -F. '{print $1"."$2"."$3+1}')
+              ;;
+          esac
+          echo "next=v$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Calculated next version: v$NEXT"
+
+      - name: Generate CHANGELOG.md
+        run: git-cliff -o CHANGELOG.md
+
+      - name: Commit CHANGELOG.md
+        run: |
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(release): update changelog for ${{ steps.version.outputs.next }}"
+            git push
+          fi
+
+      - name: Create Git tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.next }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.version.outputs.next }} already exists"
+          else
+            git tag ${{ steps.version.outputs.next }}
+            git push origin ${{ steps.version.outputs.next }}
+          fi
+
+      - name: Extract release notes
+        run: |
+          # Extract changelog section for this version
+          VERSION="${{ steps.version.outputs.next }}"
+          VERSION_NUM=$(echo "$VERSION" | sed 's/^v//')
+
+          # Find the section for this version
+          awk -v ver="## \"[$VERSION_NUM]\"" '
+            $0 ~ ver {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+
+          echo "Release notes:"
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.next }}
+          name: Release ${{ steps.version.outputs.next }}
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
