@@ -1,15 +1,20 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { setupRemoveLabelMock } from '../../src/linear/__mocks__/remove-label.js'
 import { removeLabel } from '../../src/linear/remove-label.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
-describe('removeLabel', () => {
+describe('removeLabel with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
   test('removes label successfully', async () => {
     setupRemoveLabelMock()
     const result = await removeLabel({
-      apiKey: mockApiKey,
+      userId: mockUserId,
       labelId: 'label-123',
     })
 

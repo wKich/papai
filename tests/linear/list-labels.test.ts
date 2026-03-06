@@ -1,16 +1,20 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { setupListLabelsMock } from '../../src/linear/__mocks__/list-labels.js'
 import { listLabels } from '../../src/linear/list-labels.js'
 
-const mockApiKey = 'test-api-key'
+const mockUserId = 12345
 
-describe('listLabels', () => {
-  test('returns labels for team', async () => {
+describe('listLabels with Huly', () => {
+  beforeEach(() => {
+    process.env['HULY_URL'] = 'http://localhost:8087'
+    process.env['HULY_WORKSPACE'] = 'test-workspace'
+  })
+
+  test('returns labels for workspace', async () => {
     setupListLabelsMock()
     const result = await listLabels({
-      apiKey: mockApiKey,
-      teamId: 'team-123',
+      userId: mockUserId,
     })
 
     expect(result).toHaveLength(3)

@@ -1,54 +1,96 @@
-import { LinearClient } from '@linear/sdk'
+import core from '@hcengineering/core'
+import tags, { type TagElement } from '@hcengineering/tags'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
-import { requireEntity } from './response-guards.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:update-label' })
+const log = logger.child({ scope: 'huly:update-label' })
 
-export async function updateLabel({
-  apiKey,
-  labelId,
-  name,
-  description,
-  color,
-}: {
-  apiKey: string
+export interface UpdateLabelParams {
+  userId: number
   labelId: string
   name?: string
-  description?: string
   color?: string
-}): Promise<{ id: string; name: string; color: string }> {
-  log.debug(
-    { labelId, hasName: name !== undefined, hasDescription: description !== undefined, hasColor: color !== undefined },
-    'updateLabel called',
-  )
+}
+
+export interface LabelResult {
+  id: string
+  name: string
+  color: string
+}
+
+export async function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
+  log.debug({ userId, labelId, hasName: name !== undefined, hasColor: color !== undefined }, 'updateLabel called')
 
   // Validate that at least one field is provided
-  if (name === undefined && description === undefined && color === undefined) {
+  if (name === undefined && color === undefined) {
     throw new HulyApiError(
-      'At least one field (name, description, or color) must be provided to update a label',
+      'At least one field (name or color) must be provided to update a label',
       linearError.validationFailed('fields', 'No update fields provided'),
     )
   }
 
+  const client = await getHulyClient(userId)
+
   try {
-    const client = new LinearClient({ apiKey })
-    const payload = await client.updateIssueLabel(labelId, {
-      name,
-      description,
-      color,
-    })
-    const label = requireEntity(await payload.issueLabel, {
-      entityName: 'label',
-      context: { labelId },
-      appError: linearError.labelNotFound(labelId),
-    })
-    log.info({ labelId, name: label.name }, 'Label updated')
-    return { id: label.id, name: label.name, color: label.color }
+    // Check if label exists
+    const existingLabel = (await client.findOne(tags.class.TagElement, {
+      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
+
+    if (!existingLabel) {
+      throw new Error(`Label not found: ${labelId}`)
+    }
+
+    // Build updates object
+    const updates: Record<string, unknown> = {}
+    if (name !== undefined) {
+      updates['title'] = name
+    }
+    if (color !== undefined) {
+      updates['color'] = color
+    }
+
+    // Update the label
+    await client.updateDoc(
+      tags.class.TagElement,
+      core.space.Workspace as unknown as Parameters<typeof client.updateDoc>[1],
+      labelId as unknown as Parameters<typeof client.updateDoc>[2],
+      updates as unknown as Parameters<typeof client.updateDoc>[3],
+    )
+
+    // Fetch the updated label
+    const label = (await client.findOne(tags.class.TagElement, {
+      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
+    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
+
+    if (!label) {
+      throw new Error(`Label not found after update: ${labelId}`)
+    }
+
+    log.info({ userId, labelId, name: label.title }, 'Label updated')
+
+    return {
+      id: label._id as string,
+      name: label.title,
+      color: label.color !== undefined ? numberToHexColor(label.color) : '#000000',
+    }
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), labelId }, 'updateLabel failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), userId, labelId }, 'updateLabel failed')
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
+}
+
+function numberToHexColor(color: number | unknown): string {
+  if (typeof color === 'number') {
+    return `#${color.toString(16).padStart(6, '0')}`
+  }
+  if (typeof color === 'string' && color.startsWith('#')) {
+    return color
+  }
+  return '#000000'
 }

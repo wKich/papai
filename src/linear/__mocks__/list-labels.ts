@@ -1,35 +1,84 @@
 import { mock } from 'bun:test'
 
-export interface LabelNode {
-  id: string
-  name: string
-  color: string
-}
+import type { PlatformClient } from '@hcengineering/api-client'
+import core, { type Ref, type Doc } from '@hcengineering/core'
+import tags, { type TagElement } from '@hcengineering/tags'
+import tracker from '@hcengineering/tracker'
 
-export class MockLinearClient {
-  team(): Promise<{
-    labels: () => Promise<{ nodes: (LabelNode | null)[] }>
-  }> {
-    return Promise.resolve({
-      labels: () =>
-        Promise.resolve({
-          nodes: [
-            { id: 'label-1', name: 'Bug', color: '#FF0000' },
-            { id: 'label-2', name: 'Feature', color: '#00FF00' },
-            { id: 'label-3', name: 'Documentation', color: '#0000FF' },
-          ],
-        }),
-    })
+// Mock label storage
+const mockLabels = new Map<string, TagElement>([
+  [
+    'label-1',
+    {
+      _id: 'label-1' as Ref<TagElement>,
+      _class: tags.class.TagElement,
+      space: core.space.Workspace,
+      modifiedBy: 'system' as Ref<Doc>,
+      modifiedOn: Date.now(),
+      createdBy: 'system' as Ref<Doc>,
+      createdOn: Date.now(),
+      title: 'Bug',
+      description: '',
+      color: 0xff0000,
+      targetClass: tracker.class.Issue,
+      category: undefined,
+    } as unknown as TagElement,
+  ],
+  [
+    'label-2',
+    {
+      _id: 'label-2' as Ref<TagElement>,
+      _class: tags.class.TagElement,
+      space: core.space.Workspace,
+      modifiedBy: 'system' as Ref<Doc>,
+      modifiedOn: Date.now(),
+      createdBy: 'system' as Ref<Doc>,
+      createdOn: Date.now(),
+      title: 'Feature',
+      description: '',
+      color: 0x00ff00,
+      targetClass: tracker.class.Issue,
+      category: undefined,
+    } as unknown as TagElement,
+  ],
+  [
+    'label-3',
+    {
+      _id: 'label-3' as Ref<TagElement>,
+      _class: tags.class.TagElement,
+      space: core.space.Workspace,
+      modifiedBy: 'system' as Ref<Doc>,
+      modifiedOn: Date.now(),
+      createdBy: 'system' as Ref<Doc>,
+      createdOn: Date.now(),
+      title: 'Documentation',
+      description: '',
+      color: 0x0000ff,
+      targetClass: tracker.class.Issue,
+      category: undefined,
+    } as unknown as TagElement,
+  ],
+])
+
+class MockHulyClient implements Partial<PlatformClient> {
+  async findAll<T extends Doc>(_class: unknown, query: Record<string, unknown>): Promise<Array<T> & { total: number }> {
+    const className = String(_class)
+
+    if (className.includes('TagElement') && query['targetClass'] === tracker.class.Issue) {
+      const results = Array.from(mockLabels.values()) as unknown as T[]
+      return Object.assign(results, { total: results.length })
+    }
+
+    return Object.assign([], { total: 0 })
+  }
+
+  async close(): Promise<void> {
+    // Cleanup if needed
   }
 }
 
 export function setupListLabelsMock(): void {
-  const result = mock.module('@linear/sdk', () => ({
-    LinearClient: MockLinearClient,
+  mock.module('../huly-client.js', () => ({
+    getHulyClient: async () => new MockHulyClient(),
   }))
-  if (result instanceof Promise) {
-    result.catch(() => {
-      // Mock setup errors are handled by the test framework
-    })
-  }
 }

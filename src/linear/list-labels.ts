@@ -1,40 +1,51 @@
-import { LinearClient } from '@linear/sdk'
+import tags, { type TagElement } from '@hcengineering/tags'
+import tracker from '@hcengineering/tracker'
 
-import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { filterPresentNodes, requireEntity } from './response-guards.js'
+import { getHulyClient } from './huly-client.js'
 
-const log = logger.child({ scope: 'linear:list-labels' })
+const log = logger.child({ scope: 'huly:list-labels' })
 
-export async function listLabels({
-  apiKey,
-  teamId,
-}: {
-  apiKey: string
-  teamId: string
-}): Promise<{ id: string; name: string; color: string }[]> {
-  log.debug({ teamId }, 'listLabels called')
+interface LabelData {
+  id: string
+  name: string
+  color: string
+}
+
+export async function listLabels({ userId }: { userId: number }): Promise<LabelData[]> {
+  log.debug({ userId }, 'listLabels called')
+
+  const client = await getHulyClient(userId)
 
   try {
-    const client = new LinearClient({ apiKey })
-    const team = requireEntity(await client.team(teamId), {
-      entityName: 'team',
-      context: { teamId },
-      appError: linearError.teamNotFound(teamId),
-    })
-    const labels = await team.labels()
-    const result = filterPresentNodes(labels.nodes, { entityName: 'label', parentId: teamId }).flatMap((l) => {
-      if (typeof l.id !== 'string' || typeof l.name !== 'string' || typeof l.color !== 'string') {
-        log.warn({ teamId, labelId: l.id }, 'Skipping label with invalid response shape')
-        return []
-      }
-      return [{ id: l.id, name: l.name, color: l.color }]
-    })
-    log.info({ teamId, labelCount: result.length }, 'Labels listed')
+    // Find all tag elements that target issues (labels)
+    const labels = (await client.findAll(tags.class.TagElement, {
+      targetClass: tracker.class.Issue,
+    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as TagElement[]
+
+    const result: LabelData[] = labels.map((label) => ({
+      id: label._id as string,
+      name: label.title,
+      color: label.color !== undefined ? numberToHexColor(label.color) : '#000000',
+    }))
+
+    log.info({ userId, labelCount: result.length }, 'Labels listed')
     return result
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), teamId }, 'listLabels failed')
+    log.error({ error: error instanceof Error ? error.message : String(error), userId }, 'listLabels failed')
     throw classifyHulyError(error)
+  } finally {
+    await client.close()
   }
+}
+
+function numberToHexColor(color: number | unknown): string {
+  if (typeof color === 'number') {
+    return `#${color.toString(16).padStart(6, '0')}`
+  }
+  if (typeof color === 'string' && color.startsWith('#')) {
+    return color
+  }
+  return '#000000'
 }
