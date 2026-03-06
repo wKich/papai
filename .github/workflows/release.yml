@@ -85,7 +85,7 @@ jobs:
 
           # Find the section for this version
           awk -v ver="## [$VERSION_NUM]" '
-            $0 ~ ver {found=1; next}
+            index($0, ver) {found=1; next}
             found && /^## \[/ {exit}
             found {print}
           ' CHANGELOG.md > RELEASE_NOTES.md
