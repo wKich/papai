@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import * as linear from '../../src/linear/index.js'
+import * as linear from '../../src/huly/index.js'
 
 describe('linear index exports', () => {
   test('exports all 22 Linear functions', () => {

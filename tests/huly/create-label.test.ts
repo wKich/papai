@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupCreateLabelMock } from '../../src/linear/__mocks__/create-label.js'
-import { createLabel } from '../../src/linear/create-label.js'
+import { setupCreateLabelMock } from '../../src/huly/__mocks__/create-label.js'
+import { createLabel } from '../../src/huly/create-label.js'
 
 const mockUserId = 12345
 

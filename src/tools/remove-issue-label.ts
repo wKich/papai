@@ -2,7 +2,7 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { removeIssueLabel } from '../linear/index.js'
+import { removeIssueLabel } from '../huly/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:remove-issue-label' })

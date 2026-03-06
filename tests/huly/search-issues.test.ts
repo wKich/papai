@@ -1,8 +1,8 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupSearchIssuesEmptyMock } from '../../src/linear/__mocks__/search-issues-empty.js'
-import { setupSearchIssuesMock } from '../../src/linear/__mocks__/search-issues.js'
-import { searchIssues } from '../../src/linear/search-issues.js'
+import { setupSearchIssuesEmptyMock } from '../../src/huly/__mocks__/search-issues-empty.js'
+import { setupSearchIssuesMock } from '../../src/huly/__mocks__/search-issues.js'
+import { searchIssues } from '../../src/huly/search-issues.js'
 
 const mockUserId = 12345
 

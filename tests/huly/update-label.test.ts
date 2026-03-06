@@ -1,8 +1,8 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupUpdateLabelMock } from '../../src/linear/__mocks__/update-label.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
-import { updateLabel } from '../../src/linear/update-label.js'
+import { setupUpdateLabelMock } from '../../src/huly/__mocks__/update-label.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
+import { updateLabel } from '../../src/huly/update-label.js'
 
 const mockUserId = 12345
 

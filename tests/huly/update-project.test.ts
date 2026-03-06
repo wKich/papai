@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupUpdateProjectMock } from '../../src/linear/__mocks__/update-project.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
-import { updateProject } from '../../src/linear/update-project.js'
+import { setupUpdateProjectMock } from '../../src/huly/__mocks__/update-project.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
+import { updateProject } from '../../src/huly/update-project.js'
 
 const mockUserId = 12345
 

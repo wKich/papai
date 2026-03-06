@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupCreateProjectMock } from '../../src/linear/__mocks__/create-project.js'
-import { createProject } from '../../src/linear/create-project.js'
+import { setupCreateProjectMock } from '../../src/huly/__mocks__/create-project.js'
+import { createProject } from '../../src/huly/create-project.js'
 
 const mockUserId = 12345
 

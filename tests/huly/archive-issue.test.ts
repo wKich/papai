@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupArchiveIssueMock } from '../../src/linear/__mocks__/archive-issue.js'
-import { archiveIssue } from '../../src/linear/archive-issue.js'
+import { setupArchiveIssueMock } from '../../src/huly/__mocks__/archive-issue.js'
+import { archiveIssue } from '../../src/huly/archive-issue.js'
 
 const mockUserId = 12345
 

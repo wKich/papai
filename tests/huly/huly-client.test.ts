@@ -50,7 +50,7 @@ void mock.module('../../src/db/index.js', () => ({
 
 import { setConfig } from '../../src/config.js'
 // Import after mocking
-import { getHulyClient } from '../../src/linear/huly-client.js'
+import { getHulyClient } from '../../src/huly/huly-client.js'
 
 describe('getHulyClient', () => {
   const userId = 999999
@@ -110,7 +110,7 @@ describe('getHulyClient', () => {
       NodeWebSocketFactory: (): void => {},
     }))
 
-    const { getHulyClient: getHulyClientFresh } = await import('../../src/linear/huly-client.js')
+    const { getHulyClient: getHulyClientFresh } = await import('../../src/huly/huly-client.js')
 
     const result = await getHulyClientFresh(userId)
 

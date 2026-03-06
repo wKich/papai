@@ -1,9 +1,9 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupUpdateIssueFailureMock } from '../../src/linear/__mocks__/update-issue-failure.js'
-import { setupUpdateIssueMock } from '../../src/linear/__mocks__/update-issue.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
-import { updateIssue } from '../../src/linear/update-issue.js'
+import { setupUpdateIssueFailureMock } from '../../src/huly/__mocks__/update-issue-failure.js'
+import { setupUpdateIssueMock } from '../../src/huly/__mocks__/update-issue.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
+import { updateIssue } from '../../src/huly/update-issue.js'
 
 const mockUserId = 12345
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupListProjectsMock } from '../../src/linear/__mocks__/list-projects.js'
-import { listProjects } from '../../src/linear/list-projects.js'
+import { setupListProjectsMock } from '../../src/huly/__mocks__/list-projects.js'
+import { listProjects } from '../../src/huly/list-projects.js'
 
 const mockUserId = 12345
 
@@ -17,7 +17,7 @@ describe('listProjects', () => {
   })
 
   test('handles empty project list', async () => {
-    const { setupListProjectsEmptyMock } = await import('../../src/linear/__mocks__/list-projects-empty.js')
+    const { setupListProjectsEmptyMock } = await import('../../src/huly/__mocks__/list-projects-empty.js')
     setupListProjectsEmptyMock()
     const results = await listProjects({ userId: mockUserId })
     expect(results[0]?.projects).toHaveLength(0)

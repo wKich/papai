@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupRemoveLabelMock } from '../../src/linear/__mocks__/remove-label.js'
-import { removeLabel } from '../../src/linear/remove-label.js'
+import { setupRemoveLabelMock } from '../../src/huly/__mocks__/remove-label.js'
+import { removeLabel } from '../../src/huly/remove-label.js'
 
 const mockUserId = 12345
 

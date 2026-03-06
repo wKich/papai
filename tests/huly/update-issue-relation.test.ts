@@ -1,51 +1,55 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupRemoveIssueRelationFailureMock } from '../../src/linear/__mocks__/remove-issue-relation-failure.js'
-import { setupRemoveIssueRelationMock } from '../../src/linear/__mocks__/remove-issue-relation.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
-import { removeIssueRelation } from '../../src/linear/remove-issue-relation.js'
+import { setupUpdateIssueRelationFailureMock } from '../../src/huly/__mocks__/update-issue-relation-failure.js'
+import { setupUpdateIssueRelationMock } from '../../src/huly/__mocks__/update-issue-relation.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
+import { updateIssueRelation } from '../../src/huly/update-issue-relation.js'
 
 const mockUserId = 123456
 
-describe('removeIssueRelation with Huly', () => {
+describe('updateIssueRelation with Huly', () => {
   beforeEach(() => {
     process.env['HULY_URL'] = 'http://localhost:8087'
     process.env['HULY_WORKSPACE'] = 'test-workspace'
   })
 
-  test('removes relation successfully', async () => {
-    setupRemoveIssueRelationMock()
-    const result = await removeIssueRelation({
+  test('updates relation type successfully', async () => {
+    setupUpdateIssueRelationMock()
+    const result = await updateIssueRelation({
       userId: mockUserId,
       issueId: 'issue-123',
       relatedIssueId: 'issue-456',
+      type: 'related',
     })
 
     expect(result).toBeDefined()
     expect(result.id).toBe('issue-123-issue-456')
-    expect(result.success).toBe(true)
+    expect(result.type).toBe('related')
+    expect(result.relatedIssueId).toBe('issue-456')
   })
 
   describe('error handling', () => {
     test('throws HulyApiError when relation not found', () => {
-      setupRemoveIssueRelationFailureMock()
+      setupUpdateIssueRelationFailureMock()
       expect(
-        removeIssueRelation({
+        updateIssueRelation({
           userId: mockUserId,
           issueId: 'issue-123',
           relatedIssueId: 'invalid-issue',
+          type: 'blocks',
         }),
       ).rejects.toThrow(HulyApiError)
     })
 
     test('throws HulyApiError with relation-not-found code', async () => {
-      setupRemoveIssueRelationFailureMock()
+      setupUpdateIssueRelationFailureMock()
       let thrown = false
       try {
-        await removeIssueRelation({
+        await updateIssueRelation({
           userId: mockUserId,
           issueId: 'issue-123',
           relatedIssueId: 'invalid-issue',
+          type: 'blocks',
         })
       } catch (error) {
         thrown = true

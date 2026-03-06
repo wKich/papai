@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import { classifyHulyError, HulyApiError } from '../../src/linear/classify-error.js'
+import { classifyHulyError, HulyApiError } from '../../src/huly/classify-error.js'
 
 describe('classifyHulyError', () => {
   it('should classify authentication errors', () => {

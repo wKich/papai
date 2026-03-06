@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupAddIssueRelationFailureMock } from '../../src/linear/__mocks__/add-issue-relation-failure.js'
-import { setupAddIssueRelationNullMock } from '../../src/linear/__mocks__/add-issue-relation-null.js'
-import { setupAddIssueRelationMock } from '../../src/linear/__mocks__/add-issue-relation.js'
-import { addIssueRelation } from '../../src/linear/add-issue-relation.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
+import { setupAddIssueRelationFailureMock } from '../../src/huly/__mocks__/add-issue-relation-failure.js'
+import { setupAddIssueRelationNullMock } from '../../src/huly/__mocks__/add-issue-relation-null.js'
+import { setupAddIssueRelationMock } from '../../src/huly/__mocks__/add-issue-relation.js'
+import { addIssueRelation } from '../../src/huly/add-issue-relation.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
 
 const mockUserId = 123456
 

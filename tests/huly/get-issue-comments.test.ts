@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupGetIssueCommentsMock } from '../../src/linear/__mocks__/get-issue-comments.js'
-import { getIssueComments } from '../../src/linear/get-issue-comments.js'
+import { setupGetIssueCommentsMock } from '../../src/huly/__mocks__/get-issue-comments.js'
+import { getIssueComments } from '../../src/huly/get-issue-comments.js'
 
 describe('getIssueComments', () => {
   beforeEach(() => {

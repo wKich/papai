@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupListLabelsMock } from '../../src/linear/__mocks__/list-labels.js'
-import { listLabels } from '../../src/linear/list-labels.js'
+import { setupListLabelsMock } from '../../src/huly/__mocks__/list-labels.js'
+import { listLabels } from '../../src/huly/list-labels.js'
 
 const mockUserId = 12345
 

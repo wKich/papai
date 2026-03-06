@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 
 import type { PlatformClient } from '@hcengineering/api-client'
 
-import { formatProjectIdentifier, getOrCreateUserProject } from '../../src/linear/project-utils.js'
+import { formatProjectIdentifier, getOrCreateUserProject } from '../../src/huly/project-utils.js'
 
 describe('formatProjectIdentifier', () => {
   it('should format username correctly', () => {

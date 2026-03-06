@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupAddIssueCommentMock } from '../../src/linear/__mocks__/add-issue-comment.js'
-import { addIssueComment } from '../../src/linear/add-issue-comment.js'
-import { HulyApiError } from '../../src/linear/classify-error.js'
+import { setupAddIssueCommentMock } from '../../src/huly/__mocks__/add-issue-comment.js'
+import { addIssueComment } from '../../src/huly/add-issue-comment.js'
+import { HulyApiError } from '../../src/huly/classify-error.js'
 
 describe('addIssueComment', () => {
   beforeEach(() => {

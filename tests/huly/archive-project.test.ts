@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { setupArchiveProjectMock } from '../../src/linear/__mocks__/archive-project.js'
-import { archiveProject } from '../../src/linear/archive-project.js'
+import { setupArchiveProjectMock } from '../../src/huly/__mocks__/archive-project.js'
+import { archiveProject } from '../../src/huly/archive-project.js'
 
 const mockUserId = 12345
 

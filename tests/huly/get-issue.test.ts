@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setupGetIssueMock } from '../../src/linear/__mocks__/get-issue.js'
-import { getIssue } from '../../src/linear/get-issue.js'
+import { setupGetIssueMock } from '../../src/huly/__mocks__/get-issue.js'
+import { getIssue } from '../../src/huly/get-issue.js'
 
 const mockUserId = 12345
 

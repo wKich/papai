@@ -2,7 +2,7 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { createProject } from '../linear/index.js'
+import { createProject } from '../huly/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:create-project' })
