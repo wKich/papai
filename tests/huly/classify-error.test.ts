@@ -7,7 +7,7 @@ describe('classifyHulyError', () => {
     const error = new Error('Authentication failed')
     const result = classifyHulyError(error)
     expect(result).toBeInstanceOf(HulyApiError)
-    expect(result.appError.type).toBe('linear') // Keep type for compatibility
+    expect(result.appError.type).toBe('huly')
     expect(result.appError.code).toBe('auth-failed')
   })
 

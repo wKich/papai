@@ -1,4 +1,4 @@
-import { type AppError, linearError, systemError } from '../errors.js'
+import { type AppError, hulyError, systemError } from '../errors.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'huly:classify-error' })
@@ -31,25 +31,25 @@ export function classifyHulyError(error: unknown): HulyApiError {
       message.includes('login failed')
     ) {
       log.warn({ error: message }, 'Authentication error detected')
-      return new HulyApiError(error.message, linearError.authFailed())
+      return new HulyApiError(error.message, hulyError.authFailed())
     }
 
     // Not found errors - detect entity type from message
     if (message.includes('not found') || message.includes('does not exist') || message.includes('document not found')) {
       log.warn({ error: message }, 'Not found error detected')
       if (message.includes('project')) {
-        return new HulyApiError(error.message, linearError.projectNotFound('unknown'))
+        return new HulyApiError(error.message, hulyError.projectNotFound('unknown'))
       }
       if (message.includes('label')) {
-        return new HulyApiError(error.message, linearError.labelNotFound('unknown'))
+        return new HulyApiError(error.message, hulyError.labelNotFound('unknown'))
       }
       if (message.includes('comment')) {
-        return new HulyApiError(error.message, linearError.commentNotFound('unknown'))
+        return new HulyApiError(error.message, hulyError.commentNotFound('unknown'))
       }
       if (message.includes('issue') || message.includes('task')) {
-        return new HulyApiError(error.message, linearError.issueNotFound('unknown'))
+        return new HulyApiError(error.message, hulyError.issueNotFound('unknown'))
       }
-      return new HulyApiError(error.message, linearError.issueNotFound('unknown'))
+      return new HulyApiError(error.message, hulyError.issueNotFound('unknown'))
     }
 
     // Validation errors
@@ -60,13 +60,13 @@ export function classifyHulyError(error: unknown): HulyApiError {
       message.includes('cannot be empty')
     ) {
       log.warn({ error: message }, 'Validation error detected')
-      return new HulyApiError(error.message, linearError.validationFailed('unknown', error.message))
+      return new HulyApiError(error.message, hulyError.validationFailed('unknown', error.message))
     }
 
     // Rate limit errors
     if (message.includes('rate limit') || message.includes('429') || message.includes('too many requests')) {
       log.warn({ error: message }, 'Rate limit error detected')
-      return new HulyApiError(error.message, linearError.rateLimited())
+      return new HulyApiError(error.message, hulyError.rateLimited())
     }
   }
 

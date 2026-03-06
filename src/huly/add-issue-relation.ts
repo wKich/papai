@@ -1,7 +1,7 @@
 import core from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
-import { linearError } from '../errors.js'
+import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
@@ -37,7 +37,7 @@ export async function addIssueRelation({
     } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
 
     if (!issue) {
-      throw new HulyApiError(`Issue not found: ${issueId}`, linearError.issueNotFound(issueId))
+      throw new HulyApiError(`Issue not found: ${issueId}`, hulyError.issueNotFound(issueId))
     }
 
     // Fetch the related issue to verify it exists
@@ -46,7 +46,7 @@ export async function addIssueRelation({
     } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
 
     if (!relatedIssue) {
-      throw new HulyApiError(`Related issue not found: ${relatedIssueId}`, linearError.issueNotFound(relatedIssueId))
+      throw new HulyApiError(`Related issue not found: ${relatedIssueId}`, hulyError.issueNotFound(relatedIssueId))
     }
 
     // Get current relatedIssues array

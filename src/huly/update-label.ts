@@ -1,7 +1,7 @@
 import core from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 
-import { linearError } from '../errors.js'
+import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
@@ -28,7 +28,7 @@ export async function updateLabel({ userId, labelId, name, color }: UpdateLabelP
   if (name === undefined && color === undefined) {
     throw new HulyApiError(
       'At least one field (name or color) must be provided to update a label',
-      linearError.validationFailed('fields', 'No update fields provided'),
+      hulyError.validationFailed('fields', 'No update fields provided'),
     )
   }
 
