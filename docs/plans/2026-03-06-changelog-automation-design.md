@@ -70,11 +70,11 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with [Semantic 
 | `fix:`      | Fixed             | Yes     |
 | `refactor:` | Changed           | Yes     |
 | `perf:`     | Changed           | Yes     |
-| `docs:`     | -                 | No      |
-| `test:`     | -                 | No      |
-| `chore:`    | -                 | No      |
-| `ci:`       | -                 | No      |
-| `style:`    | -                 | No      |
+| `docs:`     | Documentation     | Yes     |
+| `test:`     | Testing           | Yes     |
+| `chore:`    | Chore             | Yes     |
+| `ci:`       | CI                | Yes     |
+| `style:`    | Style             | Yes     |
 
 ### Structure
 
