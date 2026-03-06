@@ -11,6 +11,12 @@ const createBaseEntity = (entity: TelegramMessageEntity): { offset: number; leng
   length: entity.length,
 })
 
+const isValidDateTimeFormat = (value: string): value is MessageEntity.DateTimeMessageEntity['date_time_format'] => {
+  // Valid patterns: "r" or combinations of optional "w", "d"/"D", "t"/"T"
+  // e.g., "r", "d", "dt", "D", "Dt", "DT", "w", "wd", "wdt", etc.
+  return /^[rwdDtT]*$/.test(value) && (value === 'r' || value.length <= 3)
+}
+
 const mapEntityWithExtras = (entity: TelegramMessageEntity): MessageEntity | null => {
   const base = createBaseEntity(entity)
 
@@ -28,6 +34,20 @@ const mapEntityWithExtras = (entity: TelegramMessageEntity): MessageEntity | nul
 
   if (entity.type === 'custom_emoji' && entity.custom_emoji_id !== undefined) {
     return { ...base, type: 'custom_emoji', custom_emoji_id: entity.custom_emoji_id }
+  }
+
+  if (
+    entity.type === 'date_time' &&
+    entity.unix_time !== undefined &&
+    entity.date_time_format !== undefined &&
+    isValidDateTimeFormat(entity.date_time_format)
+  ) {
+    return {
+      ...base,
+      type: 'date_time',
+      unix_time: entity.unix_time,
+      date_time_format: entity.date_time_format,
+    }
   }
 
   return null
@@ -76,8 +96,9 @@ const mapCommonEntity = (entity: TelegramMessageEntity): MessageEntity => {
     case 'code':
       return { ...base, type: 'code' }
     case 'date_time':
+    // date_time is handled in mapEntityWithExtras, this is just for exhaustiveness
     default:
-      // For date_time and any unknown types, use 'bold' as safe default
+      // For any unknown types, use 'bold' as safe default
       return { ...base, type: 'bold' }
   }
 }
