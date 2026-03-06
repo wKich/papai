@@ -9,7 +9,7 @@ import { buildMessagesWithMemory, trimAndSummarise } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { clearHistory, loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
-import { clearFacts, clearSummary, extractFactsFromSdkResults, loadFacts, upsertFact } from './memory.js'
+import { clearFacts, clearSummary, extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { makeTools } from './tools/index.js'
 import { formatLlmOutput } from './utils/format.js'
 
@@ -74,18 +74,11 @@ const persistFactsFromResults = (
   const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
   if (newFacts.length === 0) return
 
-  const existingFacts = loadFacts(userId)
-  const existingById = new Map(existingFacts.map((f) => [f.identifier, f]))
-
-  let upsertCount = 0
   for (const fact of newFacts) {
-    // Always upsert to ensure metadata like `last_seen` is refreshed,
-    // even when title and URL have not changed.
     upsertFact(userId, fact)
-    upsertCount++
   }
 
-  log.info({ userId, factsExtracted: newFacts.length, factsUpserted: upsertCount }, 'Facts extracted and persisted')
+  log.info({ userId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
 }
 
 const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
