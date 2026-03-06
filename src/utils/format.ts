@@ -95,8 +95,8 @@ const mapCommonEntity = (entity: TelegramMessageEntity): MessageEntity => {
       return { ...base, type: 'expandable_blockquote' }
     case 'code':
       return { ...base, type: 'code' }
+    // date_time is handled in mapEntityWithExtras, falls through to default
     case 'date_time':
-    // date_time is handled in mapEntityWithExtras, this is just for exhaustiveness
     default:
       // For any unknown types, use 'bold' as safe default
       return { ...base, type: 'bold' }
