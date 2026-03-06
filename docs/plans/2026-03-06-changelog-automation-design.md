@@ -261,6 +261,7 @@ Key settings:
    - Confirm commit grouping is accurate
 
 3. **Generate and review**
+
    ```bash
    bun run changelog:generate
    git diff CHANGELOG.md
