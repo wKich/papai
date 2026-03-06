@@ -1,6 +1,7 @@
 import { markdownToFormattable } from '@gramio/format/markdown'
 import type { TelegramMessageEntity } from '@gramio/types'
 import type { MessageEntity } from '@grammyjs/types'
+import { lexer, type Token, type Tokens } from 'marked'
 
 import { logger } from '../logger.js'
 
@@ -117,13 +118,33 @@ const mapToGrammyEntities = (entities: TelegramMessageEntity[]): MessageEntity[]
 }
 
 /**
+ * Flattens markdown table tokens to plain rows so that inline elements (links, bold, etc.)
+ * inside cells are handled by markdownToFormattable rather than falling through to its
+ * raw-text fallback, which would leave "[text](url)" syntax visible to the user.
+ */
+const isTableToken = (token: Token): token is Tokens.Table => token.type === 'table'
+
+const preprocessTables = (markdown: string): string =>
+  lexer(markdown)
+    .map((token) => {
+      if (isTableToken(token)) {
+        const trailingNewlines = token.raw.match(/\n+$/)?.[0] ?? '\n'
+        const headerLine = token.header.map((c) => c.text).join(' | ')
+        const dataLines = token.rows.map((row) => row.map((c) => c.text).join(' | '))
+        return [headerLine, ...dataLines].join('\n') + trailingNewlines
+      }
+      return token.raw
+    })
+    .join('')
+
+/**
  * Converts LLM Markdown response to Telegram-compatible format with grammy MessageEntity types
  * @param markdown - LLM output in Markdown format
  * @returns Object with text and entities compatible with grammy's reply method
  */
 export const formatLlmOutput = (markdown: string): { text: string; entities: MessageEntity[] } => {
   log.debug({ markdownLength: markdown.length }, 'Converting Markdown to entities')
-  const result = markdownToFormattable(markdown)
+  const result = markdownToFormattable(preprocessTables(markdown))
   log.debug(
     {
       textLength: result.text.length,

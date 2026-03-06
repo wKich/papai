@@ -32,7 +32,30 @@ CREATE TABLE IF NOT EXISTS user_config (
 
 ## Migration Strategy
 
-A one-time migration seeds the admin user into `users` and copies any existing rows from `config` into `user_config` scoped to the admin. The old `config` table is left in place (not dropped) to avoid data loss — it simply becomes unused.
+The migration is split into two phases:
+
+### Phase 1: Schema Migration (Database-level)
+
+Migration `003_multiuser_support.ts` creates the new tables:
+
+- `users` table for authorization
+- `user_config` table for per-user credentials
+- Index on `user_config(user_id)` for efficient lookups
+
+**File:** `src/db/migrations/003_multiuser_support.ts`
+
+### Phase 2: Data Migration (Runtime)
+
+Module `src/migrate.ts` handles runtime data migration:
+
+- Seeds admin user (from `TELEGRAM_USER_ID` env var) into `users` table
+- Copies existing rows from legacy `config` table to `user_config` scoped to admin
+- Uses `INSERT OR IGNORE` to avoid overwriting existing data
+- Idempotent: safe to run multiple times
+
+**File:** `src/migrate.ts`
+
+The old `config` table is left in place (not dropped) to avoid data loss — it simply becomes unused after migration.
 
 ---
 
@@ -41,12 +64,12 @@ A one-time migration seeds the admin user into `users` and copies any existing r
 **Files:**
 
 - Create: `src/users.ts`
-- Test: `src/users.test.ts`
+- Create: `tests/users.test.ts`
 
 **Step 1: Write the failing tests**
 
 ```typescript
-// src/users.test.ts
+// tests/users.test.ts
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 const store = {
@@ -96,7 +119,7 @@ if (mockResult instanceof Promise) {
   mockResult.catch(() => {})
 }
 
-import { addUser, removeUser, isAuthorized, listUsers } from './users.js'
+import { addUser, removeUser, isAuthorized, listUsers } from '../src/users.js'
 
 describe('addUser', () => {
   beforeEach(() => {
@@ -157,24 +180,19 @@ describe('listUsers', () => {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `bun test src/users.test.ts`
-Expected: FAIL — module `./users.js` does not exist
+Run: `bun test tests/users.test.ts`
+Expected: FAIL — module `../src/users.js` does not exist
 
 **Step 3: Write the implementation**
 
 ```typescript
 // src/users.ts
-import { Database } from 'bun:sqlite'
-
+import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'users' })
 
-const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
-const db = new Database(DB_PATH)
-db.run(
-  "CREATE TABLE IF NOT EXISTS users (telegram_id INTEGER PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime('now')), added_by INTEGER NOT NULL)",
-)
+const db = getDb()
 
 export function addUser(telegramId: number, addedBy: number): void {
   log.debug({ telegramId, addedBy }, 'addUser called')
@@ -208,13 +226,13 @@ export function listUsers(): UserRecord[] {
 
 **Step 4: Run tests to verify they pass**
 
-Run: `bun test src/users.test.ts`
+Run: `bun test tests/users.test.ts`
 Expected: PASS — all 6 tests pass
 
 **Step 5: Commit**
 
 ```bash
-git add src/users.ts src/users.test.ts
+git add src/users.ts tests/users.test.ts
 git commit -m "feat: add users module for multi-user authorization"
 ```
 
@@ -225,19 +243,19 @@ git commit -m "feat: add users module for multi-user authorization"
 **Files:**
 
 - Modify: `src/config.ts`
-- Modify: `src/config.test.ts`
+- Modify: `tests/config.test.ts`
 
 The global `config` table is replaced by `user_config` keyed on `(user_id, key)`. All public functions gain a `userId: number` parameter.
 
 **Step 1: Update the tests**
 
-Replace the contents of `src/config.test.ts`. Key changes:
+Replace the contents of `tests/config.test.ts`. Key changes:
 
 - The mock store is now `Map<string, string>` keyed by `"${userId}:${key}"`
 - Every call to `setConfig`, `getConfig`, `getAllConfig` passes a `userId`
 
 ```typescript
-// src/config.test.ts
+// tests/config.test.ts
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 const store = { data: new Map<string, string>() }
@@ -283,8 +301,8 @@ if (mockSetupResult instanceof Promise) {
   mockSetupResult.catch(() => {})
 }
 
-import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
-import type { ConfigKey } from './config.js'
+import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import type { ConfigKey } from '../src/config.js'
 
 const USER_A = 111
 const USER_B = 222
@@ -382,15 +400,14 @@ describe('CONFIG_KEYS', () => {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `bun test src/config.test.ts`
+Run: `bun test tests/config.test.ts`
 Expected: FAIL — `setConfig` signature mismatch (expects 2 args, got 3)
 
 **Step 3: Rewrite `src/config.ts`**
 
 ```typescript
 // src/config.ts
-import { Database } from 'bun:sqlite'
-
+import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
@@ -407,11 +424,7 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
 
-const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
-const db = new Database(DB_PATH)
-db.run(
-  'CREATE TABLE IF NOT EXISTS user_config (user_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (user_id, key))',
-)
+const db = getDb()
 
 export function setConfig(userId: number, key: ConfigKey, value: string): void {
   log.debug({ userId, key }, 'setConfig called')
@@ -453,34 +466,50 @@ export function maskValue(key: ConfigKey, value: string): string {
 
 **Step 4: Run tests to verify they pass**
 
-Run: `bun test src/config.test.ts`
+Run: `bun test tests/config.test.ts`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add src/config.ts src/config.test.ts
+git add src/config.ts tests/config.test.ts
 git commit -m "feat: make config per-user with user_config table"
 ```
 
 ---
 
-### Task 3: Add admin migration — seed admin user and migrate global config
+### Task 3: Add schema migration — create users and user_config tables
+
+**Files:**
+
+- Create: `src/db/migrations/003_multiuser_support.ts`
+
+This database migration creates the schema needed for multi-user support:
+
+1. Creates `users` table for authorization
+2. Creates `user_config` table for per-user credentials
+3. Adds foreign key constraint and index for efficient lookups
+
+**Note:** This is a prerequisite for Task 4 (runtime data migration).
+
+---
+
+### Task 4: Add runtime data migration — seed admin and migrate config
 
 **Files:**
 
 - Create: `src/migrate.ts`
-- Test: `src/migrate.test.ts`
+- Create: `tests/migrate.test.ts`
 
-On startup, the migration:
+On startup, the runtime migration:
 
 1. Inserts the admin user (from `TELEGRAM_USER_ID`) into `users` (idempotent)
-2. If the old `config` table exists and has rows, copies them into `user_config` scoped to the admin, then leaves the old table untouched
+2. If the old `config` table exists and has rows, copies them into `user_config` scoped to the admin using `INSERT OR IGNORE` (won't overwrite existing)
 
 **Step 1: Write the failing tests**
 
 ```typescript
-// src/migrate.test.ts
+// tests/migrate.test.ts
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 const store = {
@@ -530,7 +559,7 @@ if (mockResult instanceof Promise) {
   mockResult.catch(() => {})
 }
 
-import { migrateToMultiUser } from './migrate.js'
+import { migrateToMultiUser } from '../src/migrate.js'
 
 describe('migrateToMultiUser', () => {
   beforeEach(() => {
@@ -570,23 +599,30 @@ describe('migrateToMultiUser', () => {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `bun test src/migrate.test.ts`
-Expected: FAIL — module `./migrate.js` does not exist
+Run: `bun test tests/migrate.test.ts`
+Expected: FAIL — module `../src/migrate.js` does not exist
 
 **Step 3: Write the implementation**
 
 ```typescript
 // src/migrate.ts
-import { Database } from 'bun:sqlite'
-
+import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'migrate' })
 
-const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
-const db = new Database(DB_PATH)
-
+/**
+ * Runtime migration to seed admin user and migrate legacy config.
+ * Must be called after database initialization but before bot starts.
+ *
+ * This migration is idempotent and safe to run multiple times:
+ * - Admin user is inserted with ON CONFLICT DO NOTHING
+ * - Config is copied with INSERT OR IGNORE (won't overwrite existing)
+ */
 export function migrateToMultiUser(adminId: number): void {
+  log.debug({ adminId }, 'migrateToMultiUser called')
+
+  const db = getDb()
   log.debug({ adminId }, 'migrateToMultiUser called')
 
   // Seed admin user
@@ -614,24 +650,24 @@ export function migrateToMultiUser(adminId: number): void {
 
 **Step 4: Run tests to verify they pass**
 
-Run: `bun test src/migrate.test.ts`
+Run: `bun test tests/migrate.test.ts`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add src/migrate.ts src/migrate.test.ts
+git add src/migrate.ts tests/migrate.test.ts
 git commit -m "feat: add migration to seed admin and copy legacy config"
 ```
 
 ---
 
-### Task 4: Update `bot.ts` — multi-user authorization, admin commands, per-user config
+### Task 5: Update `bot.ts` — multi-user authorization, admin commands, per-user config
 
 **Files:**
 
 - Modify: `src/bot.ts`
-- Modify: `src/bot.test.ts`
+- Modify: `tests/bot.test.ts` (if needed for new imports)
 
 This is the largest task. Changes:
 
@@ -789,13 +825,13 @@ Expected: PASS — the bot.test.ts is minimal and should still pass. Config test
 **Step 3: Commit**
 
 ```bash
-git add src/bot.ts src/bot.test.ts
+git add src/bot.ts tests/bot.test.ts
 git commit -m "feat: multi-user authorization with admin commands"
 ```
 
 ---
 
-### Task 5: Wire migration into `index.ts`
+### Task 6: Wire migration into `index.ts`
 
 **Files:**
 
@@ -847,7 +883,7 @@ git commit -m "feat: wire multi-user migration into startup"
 
 ---
 
-### Task 6: Update documentation
+### Task 7: Update documentation
 
 **Files:**
 
@@ -889,7 +925,7 @@ git commit -m "docs: update documentation for multi-user support"
 
 ---
 
-### Task 7: Run full test suite and lint
+### Task 8: Run full test suite and lint
 
 **Step 1: Run all tests**
 
@@ -915,18 +951,19 @@ Expected: No formatting issues (run `bun run format` if needed)
 
 ## Summary of new/modified files
 
-| File                  | Action                                                          |
-| --------------------- | --------------------------------------------------------------- |
-| `src/users.ts`        | Create — user authorization store                               |
-| `src/users.test.ts`   | Create — tests for users module                                 |
-| `src/migrate.ts`      | Create — startup migration                                      |
-| `src/migrate.test.ts` | Create — tests for migration                                    |
-| `src/config.ts`       | Modify — per-user config (`userId` parameter)                   |
-| `src/config.test.ts`  | Modify — updated for per-user signatures                        |
-| `src/bot.ts`          | Modify — multi-user auth, admin commands, per-user config reads |
-| `src/bot.test.ts`     | Modify — if needed for new imports                              |
-| `src/index.ts`        | Modify — wire migration                                         |
-| `CLAUDE.md`           | Modify — document new architecture                              |
-| `README.md`           | Modify — document multi-user setup                              |
-| `.env.example`        | Modify — clarify admin role                                     |
-| `ROADMAP.md`          | Modify — check off item                                         |
+| File                                         | Action                                                          |
+| -------------------------------------------- | --------------------------------------------------------------- |
+| `src/db/migrations/003_multiuser_support.ts` | Create — schema migration for users and user_config tables      |
+| `src/users.ts`                               | Create — user authorization store                               |
+| `tests/users.test.ts`                        | Create — tests for users module                                 |
+| `src/migrate.ts`                             | Create — runtime data migration (seed admin, copy config)       |
+| `tests/migrate.test.ts`                      | Create — tests for migration                                    |
+| `src/config.ts`                              | Modify — per-user config (`userId` parameter)                   |
+| `tests/config.test.ts`                       | Modify — updated for per-user signatures                        |
+| `src/bot.ts`                                 | Modify — multi-user auth, admin commands, per-user config reads |
+| `tests/bot.test.ts`                          | Modify — if needed for new imports                              |
+| `src/index.ts`                               | Modify — wire migration                                         |
+| `CLAUDE.md`                                  | Modify — document new architecture                              |
+| `README.md`                                  | Modify — document multi-user setup                              |
+| `.env.example`                               | Modify — clarify admin role                                     |
+| `ROADMAP.md`                                 | Modify — check off item                                         |

@@ -78,4 +78,42 @@ describe('formatLlmOutput', () => {
     expect(result.text).toBe('just plain text')
     expect(result.entities).toHaveLength(0)
   })
+
+  describe('link formatting', () => {
+    test('converts inline link within a sentence', () => {
+      const result = formatLlmOutput('See [ABC-123](https://linear.app/issue/ABC-123) for details')
+      expect(result.text).toBe('See ABC-123 for details')
+      expect(result.entities).toHaveLength(1)
+      expect(result.entities[0]).toMatchObject({
+        type: 'text_link',
+        offset: 4,
+        length: 7,
+        url: 'https://linear.app/issue/ABC-123',
+      })
+    })
+
+    test('converts multiple links in one message', () => {
+      const result = formatLlmOutput('See [issue 1](https://linear.app/1) and [issue 2](https://linear.app/2)')
+      expect(result.text).toBe('See issue 1 and issue 2')
+      expect(result.entities).toHaveLength(2)
+      expect(result.entities[0]).toMatchObject({ type: 'text_link', offset: 4, length: 7, url: 'https://linear.app/1' })
+      expect(result.entities[1]).toMatchObject({
+        type: 'text_link',
+        offset: 16,
+        length: 7,
+        url: 'https://linear.app/2',
+      })
+    })
+
+    // Bug: @gramio/format has no handler for the "table" token from marked, so the
+    // entire table raw text (including "[text](url)" markdown syntax) is passed through
+    // as plain text. Links inside tables never become text_link entities.
+    test('does not leave raw markdown link syntax in text when link is inside a table', () => {
+      const result = formatLlmOutput(
+        '| Issue | Link |\n|-------|------|\n| ABC-123 | [ABC-123](https://linear.app/issue/ABC-123) |',
+      )
+      expect(result.text).not.toContain('](')
+      expect(result.entities.some((e) => e.type === 'text_link')).toBe(true)
+    })
+  })
 })
