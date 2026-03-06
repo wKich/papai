@@ -16,6 +16,7 @@
 -- Authorized users
 CREATE TABLE IF NOT EXISTS users (
   telegram_id INTEGER PRIMARY KEY,
+  username TEXT UNIQUE,
   added_at TEXT NOT NULL DEFAULT (datetime('now')),
   added_by INTEGER NOT NULL
 );
@@ -73,21 +74,33 @@ The old `config` table is left in place (not dropped) to avoid data loss — it 
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 const store = {
-  users: new Map<number, { telegram_id: number; added_at: string; added_by: number }>(),
+  users: new Map<number, { telegram_id: number; username: string | null; added_at: string; added_by: number }>(),
 }
 
 const mockResult = mock.module('bun:sqlite', () => ({
   Database: class MockDatabase {
     run(sql: string, params?: (string | number)[]): void {
       if (sql.includes('INSERT INTO users') && params !== undefined) {
+        const hasUsername = params.length >= 3 && params[2] !== undefined
         store.users.set(params[0] as number, {
           telegram_id: params[0] as number,
+          username: hasUsername ? (params[1] as string) : null,
           added_at: new Date().toISOString(),
-          added_by: params[1] as number,
+          added_by: hasUsername ? (params[2] as number) : (params[1] as number),
         })
       }
       if (sql.includes('DELETE FROM users') && params !== undefined) {
-        store.users.delete(params[0] as number)
+        if (typeof params[0] === 'string') {
+          // Delete by username - find and remove
+          for (const [id, user] of store.users) {
+            if (user.username === params[0]) {
+              store.users.delete(id)
+              break
+            }
+          }
+        } else {
+          store.users.delete(params[0] as number)
+        }
       }
     }
 
@@ -104,10 +117,23 @@ const mockResult = mock.module('bun:sqlite', () => ({
           all: (): Array<Record<string, unknown>> => [],
         }
       }
-      if (sql.includes('SELECT telegram_id, added_at, added_by FROM users')) {
+      if (sql.includes('SELECT telegram_id, username, added_at, added_by FROM users')) {
         return {
           get: (): null => null,
           all: (): Array<Record<string, unknown>> => Array.from(store.users.values()),
+        }
+      }
+      if (sql.includes('SELECT * FROM users WHERE username')) {
+        return {
+          get: (username: string | number): Record<string, unknown> | null => {
+            for (const user of store.users.values()) {
+              if (user.username === username) {
+                return user
+              }
+            }
+            return null
+          },
+          all: (): Array<Record<string, unknown>> => [],
         }
       }
       return { get: (): null => null, all: (): Array<Record<string, unknown>> => [] }
@@ -119,7 +145,7 @@ if (mockResult instanceof Promise) {
   mockResult.catch(() => {})
 }
 
-import { addUser, removeUser, isAuthorized, listUsers } from '../src/users.js'
+import { addUser, removeUser, isAuthorized, isAuthorizedByUsername, listUsers } from '../src/users.js'
 
 describe('addUser', () => {
   beforeEach(() => {
@@ -160,6 +186,21 @@ describe('isAuthorized', () => {
   })
 })
 
+describe('isAuthorizedByUsername', () => {
+  beforeEach(() => {
+    store.users.clear()
+  })
+
+  test('returns true for authorized user by username', () => {
+    addUser(111, 999, 'testuser')
+    expect(isAuthorizedByUsername('testuser')).toBe(true)
+  })
+
+  test('returns false for unknown username', () => {
+    expect(isAuthorizedByUsername('unknown')).toBe(false)
+  })
+})
+
 describe('listUsers', () => {
   beforeEach(() => {
     store.users.clear()
@@ -174,6 +215,12 @@ describe('listUsers', () => {
 
   test('returns empty array when no users', () => {
     expect(listUsers()).toHaveLength(0)
+  })
+
+  test('includes username when set', () => {
+    addUser(111, 999, 'testuser')
+    const users = listUsers()
+    expect(users[0]?.username).toBe('testuser')
   })
 })
 ```
@@ -194,16 +241,27 @@ const log = logger.child({ scope: 'users' })
 
 const db = getDb()
 
-export function addUser(telegramId: number, addedBy: number): void {
-  log.debug({ telegramId, addedBy }, 'addUser called')
-  db.run('INSERT INTO users (telegram_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [telegramId, addedBy])
-  log.info({ telegramId, addedBy }, 'User added')
+export function addUser(telegramId: number, addedBy: number, username?: string): void {
+  log.debug({ telegramId, addedBy, username }, 'addUser called')
+  if (username !== undefined) {
+    db.run(
+      'INSERT INTO users (telegram_id, username, added_by) VALUES (?, ?, ?) ON CONFLICT(telegram_id) DO UPDATE SET username = excluded.username',
+      [telegramId, username, addedBy],
+    )
+  } else {
+    db.run('INSERT INTO users (telegram_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [telegramId, addedBy])
+  }
+  log.info({ telegramId, addedBy, username }, 'User added')
 }
 
-export function removeUser(telegramId: number): void {
-  log.debug({ telegramId }, 'removeUser called')
-  db.run('DELETE FROM users WHERE telegram_id = ?', [telegramId])
-  log.info({ telegramId }, 'User removed')
+export function removeUser(identifier: number | string): void {
+  log.debug({ identifier }, 'removeUser called')
+  if (typeof identifier === 'string') {
+    db.run('DELETE FROM users WHERE username = ?', [identifier])
+  } else {
+    db.run('DELETE FROM users WHERE telegram_id = ?', [identifier])
+  }
+  log.info({ identifier }, 'User removed')
 }
 
 export function isAuthorized(telegramId: number): boolean {
@@ -212,15 +270,22 @@ export function isAuthorized(telegramId: number): boolean {
   return row !== null
 }
 
+export function isAuthorizedByUsername(username: string): boolean {
+  log.debug({ username }, 'isAuthorizedByUsername called')
+  const row = db.query<{ telegram_id: number }, [string]>('SELECT * FROM users WHERE username = ?').get(username)
+  return row !== null
+}
+
 export interface UserRecord {
   telegram_id: number
+  username: string | null
   added_at: string
   added_by: number
 }
 
 export function listUsers(): UserRecord[] {
   log.debug('listUsers called')
-  return db.query<UserRecord, []>('SELECT telegram_id, added_at, added_by FROM users').all()
+  return db.query<UserRecord, []>('SELECT telegram_id, username, added_at, added_by FROM users').all()
 }
 ```
 
@@ -675,13 +740,13 @@ This is the largest task. Changes:
 2. Keep `TELEGRAM_USER_ID` as `adminUserId` for admin-only commands
 3. `/set` and `/config` pass `userId` to config functions
 4. `callLlm` reads config per-user
-5. New admin commands: `/user add <id>`, `/user remove <id>`, `/users`
+5. New admin commands: `/user add <id|@username>`, `/user remove <id|@username>`, `/users`
 
 **Step 1: Update `bot.ts`**
 
 Key changes (not a full rewrite — only the diffs):
 
-1. **Imports** — add `isAuthorized`, `addUser`, `removeUser`, `listUsers` from `./users.js`
+1. **Imports** — add `isAuthorized`, `isAuthorizedByUsername`, `addUser`, `removeUser`, `listUsers` from `./users.js`
 
 2. **Replace `checkAuthorization`:**
 
@@ -754,6 +819,27 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
 6. **Add admin commands:**
 
 ```typescript
+// Helper to parse user identifier (ID or username)
+const parseUserIdentifier = (
+  input: string,
+): { type: 'id'; value: number } | { type: 'username'; value: string } | null => {
+  const trimmed = input.trim()
+  // Check if it's a username (starts with @ or contains only letters/numbers/underscores)
+  if (trimmed.startsWith('@')) {
+    return { type: 'username', value: trimmed.slice(1) }
+  }
+  // Try parsing as numeric ID
+  const num = parseInt(trimmed, 10)
+  if (!Number.isNaN(num)) {
+    return { type: 'id', value: num }
+  }
+  // Treat as username if it looks like one
+  if (/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+    return { type: 'username', value: trimmed }
+  }
+  return null
+}
+
 bot.command('user', async (ctx) => {
   const userId = ctx.from?.id
   if (!checkAdmin(userId)) {
@@ -763,35 +849,51 @@ bot.command('user', async (ctx) => {
 
   const args = ctx.match.trim().split(/\s+/)
   const subcommand = args[0]
-  const idStr = args[1]
+  const identifier = args[1]
 
   if (subcommand === 'add') {
-    const newUserId = parseInt(idStr, 10)
-    if (Number.isNaN(newUserId)) {
-      await ctx.reply('Usage: /user add <telegram_user_id>')
+    if (!identifier) {
+      await ctx.reply('Usage: /user add <telegram_user_id|@username>')
       return
     }
 
-    addUser(newUserId, userId)
-    log.info({ adminId: userId, newUserId }, '/user add command executed')
-    await ctx.reply(`User ${newUserId} authorized.`)
+    const parsed = parseUserIdentifier(identifier)
+    if (parsed === null) {
+      await ctx.reply('Invalid identifier. Use numeric ID or @username')
+      return
+    }
+
+    if (parsed.type === 'id') {
+      addUser(parsed.value, userId)
+      log.info({ adminId: userId, newUserId: parsed.value }, '/user add command executed')
+      await ctx.reply(`User ${parsed.value} authorized.`)
+    } else {
+      addUser(0, userId, parsed.value) // ID 0 placeholder, username will be resolved on first login
+      log.info({ adminId: userId, username: parsed.value }, '/user add command executed')
+      await ctx.reply(`User @${parsed.value} authorized.`)
+    }
   } else if (subcommand === 'remove') {
-    const targetId = parseInt(idStr, 10)
-    if (Number.isNaN(targetId)) {
-      await ctx.reply('Usage: /user remove <telegram_user_id>')
+    if (!identifier) {
+      await ctx.reply('Usage: /user remove <telegram_user_id|@username>')
       return
     }
 
-    if (targetId === adminUserId) {
+    const parsed = parseUserIdentifier(identifier)
+    if (parsed === null) {
+      await ctx.reply('Invalid identifier. Use numeric ID or @username')
+      return
+    }
+
+    if (parsed.type === 'id' && parsed.value === adminUserId) {
       await ctx.reply('Cannot remove the admin user.')
       return
     }
 
-    removeUser(targetId)
-    log.info({ adminId: userId, targetId }, '/user remove command executed')
-    await ctx.reply(`User ${targetId} removed.`)
+    removeUser(parsed.value)
+    log.info({ adminId: userId, identifier: parsed.value }, '/user remove command executed')
+    await ctx.reply(`User ${identifier} removed.`)
   } else {
-    await ctx.reply('Usage: /user add <id> or /user remove <id>')
+    await ctx.reply('Usage: /user add <id|@username> or /user remove <id|@username>')
   }
 })
 
@@ -810,7 +912,8 @@ bot.command('users', async (ctx) => {
 
   const lines = users.map((u) => {
     const admin = u.telegram_id === adminUserId ? ' (admin)' : ''
-    return `${u.telegram_id}${admin} — added ${u.added_at}`
+    const username = u.username ? ` (@${u.username})` : ''
+    return `${u.telegram_id}${username}${admin} — added ${u.added_at}`
   })
   log.info({ userId }, '/users command executed')
   await ctx.reply(lines.join('\n'))
@@ -897,7 +1000,7 @@ git commit -m "feat: wire multi-user migration into startup"
 Key documentation changes:
 
 - `TELEGRAM_USER_ID` description: "The admin user ID. This user is automatically authorized on first run and can manage other users."
-- Add new commands to architecture section: `/user add <id>`, `/user remove <id>`, `/users`
+- Add new commands to architecture section: `/user add <id|@username>`, `/user remove <id|@username>`, `/users`
 - Update `src/config.ts` description: "SQLite-backed **per-user** runtime config store"
 - Add `src/users.ts` — "SQLite-backed user authorization store"
 - Add `src/migrate.ts` — "One-time migration: seeds admin, copies legacy config"
