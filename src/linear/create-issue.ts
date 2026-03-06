@@ -1,7 +1,7 @@
 import { type Issue, type LinearFetch, LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 
 const log = logger.child({ scope: 'linear:create-issue' })
 
@@ -47,6 +47,6 @@ export async function createIssue({
     return await payload.issue
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), title, teamId }, 'createIssue failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

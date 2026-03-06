@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { setupUpdateProjectFailureMock } from '../../src/linear/__mocks__/update-project-failure.js'
 import { setupUpdateProjectMock } from '../../src/linear/__mocks__/update-project.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateProject } from '../../src/linear/update-project.js'
 
 const mockApiKey = 'test-api-key'
@@ -30,11 +30,11 @@ describe('updateProject', () => {
         apiKey: mockApiKey,
         projectId: 'project-123',
       }),
-    ).rejects.toThrow(LinearApiError)
+    ).rejects.toThrow(HulyApiError)
   })
 
   describe('error handling', () => {
-    test('throws LinearApiError when project not found', () => {
+    test('throws HulyApiError when project not found', () => {
       setupUpdateProjectFailureMock()
       expect(
         updateProject({
@@ -42,10 +42,10 @@ describe('updateProject', () => {
           projectId: 'invalid-project',
           name: 'Updated Name',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
 
-    test('throws LinearApiError with project-not-found code', async () => {
+    test('throws HulyApiError with project-not-found code', async () => {
       setupUpdateProjectFailureMock()
       let thrown = false
       try {
@@ -56,8 +56,8 @@ describe('updateProject', () => {
         })
       } catch (error) {
         thrown = true
-        expect(error).toBeInstanceOf(LinearApiError)
-        if (error instanceof LinearApiError) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        if (error instanceof HulyApiError) {
           expect(error.appError.code).toBe('project-not-found')
         }
       }

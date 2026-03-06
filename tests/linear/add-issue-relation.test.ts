@@ -4,7 +4,7 @@ import { setupAddIssueRelationFailureMock } from '../../src/linear/__mocks__/add
 import { setupAddIssueRelationNullMock } from '../../src/linear/__mocks__/add-issue-relation-null.js'
 import { setupAddIssueRelationMock } from '../../src/linear/__mocks__/add-issue-relation.js'
 import { addIssueRelation } from '../../src/linear/add-issue-relation.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 
 const mockApiKey = 'test-api-key'
 
@@ -50,7 +50,7 @@ describe('addIssueRelation', () => {
   })
 
   describe('error handling', () => {
-    test('throws LinearApiError when issue not found', () => {
+    test('throws HulyApiError when issue not found', () => {
       setupAddIssueRelationFailureMock()
       expect(
         addIssueRelation({
@@ -59,10 +59,10 @@ describe('addIssueRelation', () => {
           relatedIssueId: 'issue-456',
           type: 'blocks',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
 
-    test('throws LinearApiError with issue-not-found code', async () => {
+    test('throws HulyApiError with issue-not-found code', async () => {
       setupAddIssueRelationFailureMock()
       let thrown = false
       try {
@@ -74,15 +74,15 @@ describe('addIssueRelation', () => {
         })
       } catch (error) {
         thrown = true
-        expect(error).toBeInstanceOf(LinearApiError)
-        if (error instanceof LinearApiError) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        if (error instanceof HulyApiError) {
           expect(error.appError.code).toBe('issue-not-found')
         }
       }
       expect(thrown).toBe(true)
     })
 
-    test('throws LinearApiError when API returns null', () => {
+    test('throws HulyApiError when API returns null', () => {
       setupAddIssueRelationNullMock()
       expect(
         addIssueRelation({
@@ -91,7 +91,7 @@ describe('addIssueRelation', () => {
           relatedIssueId: 'issue-456',
           type: 'blocks',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
   })
 })

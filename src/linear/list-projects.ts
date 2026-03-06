@@ -1,7 +1,7 @@
 import { LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { filterPresentNodes } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:list-projects' })
@@ -47,6 +47,6 @@ export async function listProjects({
     return mappedResult
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error) }, 'listProjects failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

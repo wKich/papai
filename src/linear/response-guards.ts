@@ -1,6 +1,6 @@
 import { type AppError } from '../errors.js'
 import { logger } from '../logger.js'
-import { LinearApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 
 const log = logger.child({ scope: 'linear:response-guards' })
 
@@ -19,7 +19,7 @@ export const requireEntity = <T>(
   if (entity !== null && entity !== undefined) {
     return entity
   }
-  throw new LinearApiError(`Linear API response missing required ${entityName}: ${JSON.stringify(context)}`, appError)
+  throw new HulyApiError(`API response missing required ${entityName}: ${JSON.stringify(context)}`, appError)
 }
 
 export const filterPresentNodes = <T>(

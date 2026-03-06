@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { setupUpdateIssueRelationFailureMock } from '../../src/linear/__mocks__/update-issue-relation-failure.js'
 import { setupUpdateIssueRelationMock } from '../../src/linear/__mocks__/update-issue-relation.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateIssueRelation } from '../../src/linear/update-issue-relation.js'
 
 const mockApiKey = 'test-api-key'
@@ -24,7 +24,7 @@ describe('updateIssueRelation', () => {
   })
 
   describe('error handling', () => {
-    test('throws LinearApiError when relation not found', () => {
+    test('throws HulyApiError when relation not found', () => {
       setupUpdateIssueRelationFailureMock()
       expect(
         updateIssueRelation({
@@ -33,7 +33,7 @@ describe('updateIssueRelation', () => {
           relatedIssueId: 'invalid-issue',
           type: 'blocks',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
   })
 })

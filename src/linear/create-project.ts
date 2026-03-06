@@ -1,7 +1,7 @@
 import { LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 
 const log = logger.child({ scope: 'linear:create-project' })
 
@@ -29,6 +29,6 @@ export async function createProject({
     return { id: project.id, name: project.name, url: project.url }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), teamId, name }, 'createProject failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

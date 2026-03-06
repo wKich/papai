@@ -2,7 +2,7 @@ import { LinearClient } from '@linear/sdk'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { filterPresentNodes, requireEntity } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:list-labels' })
@@ -35,6 +35,6 @@ export async function listLabels({
     return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), teamId }, 'listLabels failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

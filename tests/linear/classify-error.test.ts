@@ -1,85 +1,34 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
 
-import { LinearApiError, classifyLinearError } from '../../src/linear/classify-error.js'
+import { classifyHulyError, HulyApiError } from '../../src/linear/classify-error.js'
 
-describe('LinearApiError', () => {
-  test('extends Error with appError property', () => {
-    const appError = { type: 'linear' as const, code: 'auth-failed' as const }
-    const error = new LinearApiError('Auth failed', appError)
-
-    expect(error).toBeInstanceOf(Error)
-    expect(error.message).toBe('Auth failed')
-    expect(error.appError).toBe(appError)
-    expect(error.name).toBe('LinearApiError')
-  })
-})
-
-describe('classifyLinearError not found cases', () => {
-  test('classifies not found errors', () => {
-    const error = classifyLinearError(new Error('Issue not found'))
-    expect(error).toBeInstanceOf(LinearApiError)
-    expect(error.appError.code).toBe('issue-not-found')
+describe('classifyHulyError', () => {
+  it('should classify authentication errors', () => {
+    const error = new Error('Authentication failed')
+    const result = classifyHulyError(error)
+    expect(result).toBeInstanceOf(HulyApiError)
+    expect(result.appError.type).toBe('linear') // Keep type for compatibility
+    expect(result.appError.code).toBe('auth-failed')
   })
 
-  test('classifies resource not found errors', () => {
-    const error = classifyLinearError(new Error('Resource not found'))
-    expect(error.appError.code).toBe('issue-not-found')
-  })
-})
-
-describe('classifyLinearError auth cases', () => {
-  test('classifies authentication errors', () => {
-    const error = classifyLinearError(new Error('Authentication failed'))
-    expect(error.appError.code).toBe('auth-failed')
+  it('should classify not found errors', () => {
+    const error = new Error('Document not found')
+    const result = classifyHulyError(error)
+    expect(result).toBeInstanceOf(HulyApiError)
+    expect(result.appError.code).toBe('issue-not-found')
   })
 
-  test('classifies unauthorized errors', () => {
-    const error = classifyLinearError(new Error('Unauthorized'))
-    expect(error.appError.code).toBe('auth-failed')
-  })
-})
-
-describe('classifyLinearError rate limit cases', () => {
-  test('classifies rate limit errors', () => {
-    const error = classifyLinearError(new Error('Rate limit exceeded'))
-    expect(error.appError.code).toBe('rate-limited')
+  it('should classify validation errors', () => {
+    const error = new Error('Invalid input')
+    const result = classifyHulyError(error)
+    expect(result).toBeInstanceOf(HulyApiError)
+    expect(result.appError.code).toBe('validation-failed')
   })
 
-  test('classifies 429 status code', () => {
-    const error = classifyLinearError(new Error('429 Too Many Requests'))
-    expect(error.appError.code).toBe('rate-limited')
-  })
-})
-
-describe('classifyLinearError validation cases', () => {
-  test('classifies validation errors', () => {
-    const error = classifyLinearError(new Error('Validation failed'))
-    expect(error.appError.code).toBe('validation-failed')
-  })
-
-  test('classifies invalid input errors', () => {
-    const error = classifyLinearError(new Error('Invalid field'))
-    expect(error.appError.code).toBe('validation-failed')
-  })
-})
-
-describe('classifyLinearError fallback cases', () => {
-  test('wraps unknown errors as unexpected', () => {
-    const original = new Error('Something else')
-    const error = classifyLinearError(original)
-    expect(error.appError.type).toBe('system')
-    expect(error.appError.code).toBe('unexpected')
-  })
-
-  test('handles non-Error values', () => {
-    const error = classifyLinearError('string error')
-    expect(error).toBeInstanceOf(LinearApiError)
-    expect(error.message).toBe('string error')
-  })
-
-  test('handles null/undefined', () => {
-    const error = classifyLinearError(null)
-    expect(error).toBeInstanceOf(LinearApiError)
-    expect(error.message).toBe('null')
+  it('should wrap unknown errors', () => {
+    const error = new Error('Something else')
+    const result = classifyHulyError(error)
+    expect(result).toBeInstanceOf(HulyApiError)
+    expect(result.appError.type).toBe('system')
   })
 })

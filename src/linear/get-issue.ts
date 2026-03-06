@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { type MappedLabel, type MappedRelation, mapLabels, mapRelations } from './issue-mappers.js'
 import { requireEntity } from './response-guards.js'
 
@@ -84,6 +84,6 @@ export async function getIssue({ apiKey, issueId }: { apiKey: string; issueId: s
     }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), issueId }, 'getIssue failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

@@ -1,7 +1,7 @@
 import { LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 
 const log = logger.child({ scope: 'linear:remove-issue-comment' })
 
@@ -21,6 +21,6 @@ export async function removeIssueComment({
     return { id: commentId, success: true }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), commentId }, 'removeIssueComment failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

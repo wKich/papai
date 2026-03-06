@@ -1,7 +1,7 @@
 import type { Issue, IssueRelation } from '@linear/sdk'
 
 import { linearError } from '../errors.js'
-import { LinearApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 import { filterPresentNodes } from './response-guards.js'
 
 interface RelationWithRelatedIssue {
@@ -30,7 +30,7 @@ export async function findRelationByRelatedIssueId({
   )
 
   if (found === undefined) {
-    throw new LinearApiError(
+    throw new HulyApiError(
       `Relation between issues "${issueId}" and "${relatedIssueId}" was not found.`,
       linearError.relationNotFound(issueId, relatedIssueId),
     )

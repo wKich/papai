@@ -4,7 +4,7 @@ import { generateId } from '@hcengineering/core'
 import tracker from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 
 const log = logger.child({ scope: 'huly:project-utils' })
 
@@ -43,7 +43,7 @@ export async function getOrCreateUserProject(
   })
 
   if (!workspaceSpace) {
-    throw classifyLinearError(new Error('Workspace space not found'))
+    throw classifyHulyError(new Error('Workspace space not found'))
   }
 
   await client.createDoc(

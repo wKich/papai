@@ -2,7 +2,7 @@ import { LinearClient } from '@linear/sdk'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyLinearError, LinearApiError } from './classify-error.js'
+import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { requireEntity } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:update-label' })
@@ -27,7 +27,7 @@ export async function updateLabel({
 
   // Validate that at least one field is provided
   if (name === undefined && description === undefined && color === undefined) {
-    throw new LinearApiError(
+    throw new HulyApiError(
       'At least one field (name, description, or color) must be provided to update a label',
       linearError.validationFailed('fields', 'No update fields provided'),
     )
@@ -49,6 +49,6 @@ export async function updateLabel({
     return { id: label.id, name: label.name, color: label.color }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), labelId }, 'updateLabel failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

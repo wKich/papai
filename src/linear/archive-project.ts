@@ -2,7 +2,7 @@ import { LinearClient } from '@linear/sdk'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { requireEntity } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:archive-project' })
@@ -28,6 +28,6 @@ export async function archiveProject({
     return { id: projectId, success: true }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'archiveProject failed')
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

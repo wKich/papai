@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { setupUpdateIssueFailureMock } from '../../src/linear/__mocks__/update-issue-failure.js'
 import { setupUpdateIssueMock } from '../../src/linear/__mocks__/update-issue.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateIssue } from '../../src/linear/update-issue.js'
 
 const mockApiKey = 'test-api-key'
@@ -74,8 +74,8 @@ describe('updateIssue status resolution', () => {
 })
 
 describe('updateIssue error handling', () => {
-  test('throws LinearApiError on API failure', () => {
+  test('throws HulyApiError on API failure', () => {
     setupUpdateIssueFailureMock()
-    expect(updateIssue({ apiKey: mockApiKey, issueId: 'invalid', status: 'Todo' })).rejects.toThrow(LinearApiError)
+    expect(updateIssue({ apiKey: mockApiKey, issueId: 'invalid', status: 'Todo' })).rejects.toThrow(HulyApiError)
   })
 })

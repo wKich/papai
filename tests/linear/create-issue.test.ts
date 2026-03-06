@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { setupCreateIssueFailureMock } from '../../src/linear/__mocks__/create-issue-failure.js'
 import { setupCreateIssueMock } from '../../src/linear/__mocks__/create-issue.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 import { createIssue } from '../../src/linear/create-issue.js'
 
 const mockApiKey = 'test-api-key'
@@ -40,9 +40,9 @@ describe('createIssue', () => {
   })
 
   describe('error handling', () => {
-    test('throws LinearApiError on API failure', () => {
+    test('throws HulyApiError on API failure', () => {
       setupCreateIssueFailureMock()
-      expect(createIssue({ apiKey: 'invalid', title: 'Test', teamId: 'team-123' })).rejects.toThrow(LinearApiError)
+      expect(createIssue({ apiKey: 'invalid', title: 'Test', teamId: 'team-123' })).rejects.toThrow(HulyApiError)
     })
   })
 })

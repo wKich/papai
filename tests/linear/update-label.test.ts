@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { setupUpdateLabelMock } from '../../src/linear/__mocks__/update-label.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 import { updateLabel } from '../../src/linear/update-label.js'
 
 const mockApiKey = 'test-api-key'
@@ -29,6 +29,6 @@ describe('updateLabel', () => {
         apiKey: mockApiKey,
         labelId: 'label-123',
       }),
-    ).rejects.toThrow(LinearApiError)
+    ).rejects.toThrow(HulyApiError)
   })
 })

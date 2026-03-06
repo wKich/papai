@@ -2,7 +2,7 @@ import { IssueRelationType, LinearClient } from '@linear/sdk'
 
 import { linearError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { findRelationByRelatedIssueId } from './relation-helpers.js'
 import { requireEntity } from './response-guards.js'
 
@@ -55,6 +55,6 @@ export async function updateIssueRelation({
       { error: error instanceof Error ? error.message : String(error), issueId, relatedIssueId },
       'updateIssueRelation failed',
     )
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }

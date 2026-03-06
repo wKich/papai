@@ -4,7 +4,7 @@ import { setupAddIssueCommentFailureMock } from '../../src/linear/__mocks__/add-
 import { setupAddIssueCommentNullMock } from '../../src/linear/__mocks__/add-issue-comment-null.js'
 import { setupAddIssueCommentMock } from '../../src/linear/__mocks__/add-issue-comment.js'
 import { addIssueComment } from '../../src/linear/add-issue-comment.js'
-import { LinearApiError } from '../../src/linear/classify-error.js'
+import { HulyApiError } from '../../src/linear/classify-error.js'
 
 const mockApiKey = 'test-api-key'
 
@@ -24,7 +24,7 @@ describe('addIssueComment', () => {
   })
 
   describe('error handling', () => {
-    test('throws LinearApiError when issue not found', () => {
+    test('throws HulyApiError when issue not found', () => {
       setupAddIssueCommentFailureMock()
       expect(
         addIssueComment({
@@ -32,10 +32,10 @@ describe('addIssueComment', () => {
           issueId: 'invalid-issue',
           body: 'Test comment',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
 
-    test('throws LinearApiError with issue-not-found code', async () => {
+    test('throws HulyApiError with issue-not-found code', async () => {
       setupAddIssueCommentFailureMock()
       let thrown = false
       try {
@@ -46,15 +46,15 @@ describe('addIssueComment', () => {
         })
       } catch (error) {
         thrown = true
-        expect(error).toBeInstanceOf(LinearApiError)
-        if (error instanceof LinearApiError) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        if (error instanceof HulyApiError) {
           expect(error.appError.code).toBe('issue-not-found')
         }
       }
       expect(thrown).toBe(true)
     })
 
-    test('throws LinearApiError when API returns null', () => {
+    test('throws HulyApiError when API returns null', () => {
       setupAddIssueCommentNullMock()
       expect(
         addIssueComment({
@@ -62,7 +62,7 @@ describe('addIssueComment', () => {
           issueId: 'issue-123',
           body: 'Test comment',
         }),
-      ).rejects.toThrow(LinearApiError)
+      ).rejects.toThrow(HulyApiError)
     })
   })
 })

@@ -1,7 +1,7 @@
 import { type Issue, type IssueSearchResult, LinearClient } from '@linear/sdk'
 
 import { logger } from '../logger.js'
-import { classifyLinearError } from './classify-error.js'
+import { classifyHulyError } from './classify-error.js'
 import { filterPresentNodes } from './response-guards.js'
 
 const log = logger.child({ scope: 'linear:search-issues' })
@@ -266,6 +266,6 @@ export async function searchIssues({
       { error: error instanceof Error ? error.message : String(error), query, state, projectId },
       'searchIssues failed',
     )
-    throw classifyLinearError(error)
+    throw classifyHulyError(error)
   }
 }
