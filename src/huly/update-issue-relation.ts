@@ -4,10 +4,11 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:update-issue-relation' })
 
@@ -63,7 +64,7 @@ async function saveRelations(client: HulyClient, issueId: Ref<Issue>, relations:
   await client.updateDoc(tracker.class.Issue, core.space.Space as Ref<Space>, issueId, update, false)
 }
 
-export async function updateIssueRelation({
+export function updateIssueRelation({
   userId,
   issueId,
   relatedIssueId,
@@ -76,11 +77,9 @@ export async function updateIssueRelation({
 }): Promise<{ id: string; type: string; relatedIssueId: string }> {
   log.debug({ userId, issueId, relatedIssueId, type }, 'updateIssueRelation called')
 
-  const client = await getHulyClient(userId)
-
   ensureRef<Issue>(issueId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const { relations: currentRelatedIssues } = await fetchIssueWithRelations(client, issueId)
 
     const relationIndex = findRelationIndex(currentRelatedIssues, relatedIssueId)
@@ -102,13 +101,5 @@ export async function updateIssueRelation({
       type,
       relatedIssueId,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, relatedIssueId },
-      'updateIssueRelation failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

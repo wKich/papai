@@ -3,11 +3,12 @@ import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
 import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:update-issue-comment' })
 
@@ -23,16 +24,6 @@ export interface UpdateIssueCommentResult {
   id: string
   body: string
   url: string
-}
-
-async function findIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-
-  return issue
 }
 
 async function findComment(client: HulyClient, commentId: Ref<ChatMessage>, issueId: Ref<Issue>): Promise<ChatMessage> {
@@ -66,7 +57,7 @@ async function updateComment(
   )
 }
 
-export async function updateIssueComment({
+export function updateIssueComment({
   userId,
   projectId,
   issueId,
@@ -75,14 +66,10 @@ export async function updateIssueComment({
 }: UpdateIssueCommentParams): Promise<UpdateIssueCommentResult> {
   log.debug({ userId, projectId, issueId, commentId, bodyLength: body.length }, 'updateIssueComment called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Issue>(issueId)
-  ensureRef<ChatMessage>(commentId)
-  ensureRef<Space>(projectId)
-
-  try {
-    const issue = await findIssue(client, issueId)
+  return withClient(userId, getHulyClient, async (client) => {
+    ensureRef<ChatMessage>(commentId)
+    ensureRef<Space>(projectId)
+    const issue = await fetchIssue(client, issueId)
     await findComment(client, commentId, issueId)
     await updateComment(client, projectId, commentId, issueId, body)
     const url = await buildIssueUrl(client, issue)
@@ -94,13 +81,5 @@ export async function updateIssueComment({
       body,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, commentId },
-      'updateIssueComment failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

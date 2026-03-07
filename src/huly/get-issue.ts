@@ -8,12 +8,12 @@ interface Person extends Doc {
 }
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
 import { mapHulyPriorityToOutput } from './utils/priority.js'
 import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:get-issue' })
 
@@ -171,17 +171,10 @@ async function fetchIssueData(client: HulyClient, userId: number, issueId: strin
   }
 }
 
-export async function getIssue({ userId, issueId }: { userId: number; issueId: string }): Promise<IssueData> {
+export function getIssue({ userId, issueId }: { userId: number; issueId: string }): Promise<IssueData> {
   log.debug({ userId, issueId }, 'getIssue called')
 
-  const client = await getHulyClient(userId)
-
-  try {
-    return await fetchIssueData(client, userId, issueId)
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, issueId }, 'getIssue failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  return withClient(userId, getHulyClient, (client) => {
+    return fetchIssueData(client, userId, issueId)
+  })
 }

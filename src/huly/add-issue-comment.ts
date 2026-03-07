@@ -3,11 +3,12 @@ import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
 import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:add-issue-comment' })
 
@@ -24,15 +25,6 @@ export interface AddIssueCommentResult {
   url: string
 }
 
-async function verifyIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
-  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (result === undefined || result === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return result
-}
-
 function addComment(
   client: HulyClient,
   projectId: Ref<Space>,
@@ -45,7 +37,7 @@ function addComment(
   })
 }
 
-export async function addIssueComment({
+export function addIssueComment({
   userId,
   projectId,
   issueId,
@@ -53,13 +45,9 @@ export async function addIssueComment({
 }: AddIssueCommentParams): Promise<AddIssueCommentResult> {
   log.debug({ userId, projectId, issueId, bodyLength: body.length }, 'addIssueComment called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Issue>(issueId)
-  ensureRef<Space>(projectId)
-
-  try {
-    const issue = await verifyIssue(client, issueId)
+  return withClient(userId, getHulyClient, async (client) => {
+    ensureRef<Space>(projectId)
+    const issue = await fetchIssue(client, issueId)
     const commentId = await addComment(client, projectId, issueId, body)
     const url = await buildIssueUrl(client, issue)
 
@@ -70,13 +58,5 @@ export async function addIssueComment({
       body,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId },
-      'addIssueComment failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

@@ -1,11 +1,12 @@
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
-import tracker, { type Issue } from '@hcengineering/tracker'
+import { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:get-issue-comments' })
 
@@ -18,15 +19,6 @@ export interface GetIssueCommentsResult {
   id: string
   body: string
   createdAt: Date
-}
-
-async function verifyIssue(client: HulyClient, issueId: string): Promise<void> {
-  ensureRef<Issue>(issueId)
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
 }
 
 async function fetchComments(client: HulyClient, issueId: string): Promise<ChatMessage[]> {
@@ -61,25 +53,15 @@ function mapComment(comment: ChatMessage): GetIssueCommentsResult {
   }
 }
 
-export async function getIssueComments({ userId, issueId }: GetIssueCommentsParams): Promise<GetIssueCommentsResult[]> {
+export function getIssueComments({ userId, issueId }: GetIssueCommentsParams): Promise<GetIssueCommentsResult[]> {
   log.debug({ userId, issueId }, 'getIssueComments called')
 
-  const client = await getHulyClient(userId)
-
-  try {
-    await verifyIssue(client, issueId)
+  return withClient(userId, getHulyClient, async (client) => {
+    await fetchIssue(client, issueId)
     const comments = await fetchComments(client, issueId)
     const result = comments.filter(isValidComment).map(mapComment)
 
     log.info({ userId, issueId, commentCount: result.length }, 'Comments fetched')
     return result
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId },
-      'getIssueComments failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

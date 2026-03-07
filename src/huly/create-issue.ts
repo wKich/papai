@@ -5,12 +5,12 @@ import tags, { type TagElement } from '@hcengineering/tags'
 import tracker, { type IssueChildInfo, type IssueParentInfo, type Project, type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
 import { mapInputPriorityToHuly } from './utils/priority.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:create-issue' })
 
@@ -217,7 +217,7 @@ async function createIssueCore(
   return finalizeIssueCreation(client, project, issueId)
 }
 
-export async function createIssue({
+export function createIssue({
   userId,
   title,
   description,
@@ -238,9 +238,8 @@ export async function createIssue({
     },
     'createIssue called',
   )
-  const client = await getHulyClient(userId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const { issue, url } = await createIssueCore(
       client,
       projectId,
@@ -260,10 +259,5 @@ export async function createIssue({
       title: issue.title,
       url,
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), title, projectId }, 'createIssue failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

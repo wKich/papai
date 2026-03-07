@@ -3,12 +3,12 @@ import tags, { type TagElement } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
 import { fetchIssue } from './utils/fetchers.js'
 import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:add-issue-label' })
 
@@ -37,7 +37,7 @@ async function addLabelToIssue(client: HulyClient, projectId: string, issueId: s
   })
 }
 
-export async function addIssueLabel({
+export function addIssueLabel({
   userId,
   projectId,
   issueId,
@@ -45,10 +45,7 @@ export async function addIssueLabel({
 }: AddIssueLabelParams): Promise<AddIssueLabelResult> {
   log.debug({ userId, projectId, issueId, labelId }, 'addIssueLabel called')
 
-  const client = await getHulyClient(userId)
-
-  try {
-    ensureRef<Issue>(issueId)
+  return withClient(userId, getHulyClient, async (client) => {
     const issue = await fetchIssue(client, issueId)
     await addLabelToIssue(client, projectId, issueId, labelId)
     const url = await buildIssueUrl(client, issue)
@@ -61,13 +58,5 @@ export async function addIssueLabel({
       title: issue.title,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, labelId },
-      'addIssueLabel failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

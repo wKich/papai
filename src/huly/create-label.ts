@@ -3,9 +3,9 @@ import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { hexColorToNumber, numberToHexColor } from './utils/color.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:create-label' })
 
@@ -21,12 +21,10 @@ export interface LabelResult {
   color: string
 }
 
-export async function createLabel({ userId, name, color }: CreateLabelParams): Promise<LabelResult> {
+export function createLabel({ userId, name, color }: CreateLabelParams): Promise<LabelResult> {
   log.debug({ userId, name, color: color !== undefined }, 'createLabel called')
 
-  const client = await getHulyClient(userId)
-
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const labelId = generateId<TagElement>()
 
     await client.createDoc(
@@ -55,10 +53,5 @@ export async function createLabel({ userId, name, color }: CreateLabelParams): P
       name: label.title,
       color: numberToHexColor(label.color),
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, name }, 'createLabel failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

@@ -3,12 +3,12 @@ import { SortingOrder } from '@hcengineering/core'
 import tracker, { type Issue, type IssueStatus, type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
 import { mapHulyPriorityToOutput } from './utils/priority.js'
 import { buildIssueUrlByIdentifier } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:search-issues' })
 
@@ -98,7 +98,7 @@ function handleLabelFilter(userId: number, labelName: string | undefined, labelI
   }
 }
 
-export async function searchIssues({
+export function searchIssues({
   userId,
   projectId,
   query,
@@ -116,8 +116,7 @@ export async function searchIssues({
 
   ensureRef<Project>(projectId)
 
-  const client = await getHulyClient(userId)
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const statusId = await resolveStateFilter(client, state)
     const dateFilter = buildDateFilter(dueDateBefore, dueDateAfter)
     const hulyQuery = buildHulyQuery(
@@ -135,13 +134,5 @@ export async function searchIssues({
     const results = mapToIssueResult(issues, projectIdentifier)
     log.info({ userId, projectId, query, state, resultCount: results.length }, 'Issues searched')
     return results
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, projectId, query },
-      'searchIssues failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

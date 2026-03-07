@@ -4,10 +4,11 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:add-issue-relation' })
 
@@ -67,7 +68,7 @@ async function updateIssueRelations(
   await client.updateDoc(tracker.class.Issue, core.space.Space as Ref<Space>, issueId, update, false)
 }
 
-export async function addIssueRelation({
+export function addIssueRelation({
   userId,
   issueId,
   relatedIssueId,
@@ -80,11 +81,9 @@ export async function addIssueRelation({
 }): Promise<{ id: string; type: string; relatedIssueId: string }> {
   log.debug({ userId, issueId, relatedIssueId, type }, 'addIssueRelation called')
 
-  const client = await getHulyClient(userId)
-
   ensureRef<Issue>(issueId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const issue = await fetchIssue(client, issueId, `Issue not found: ${issueId}`)
     ensureRef<Issue>(relatedIssueId)
     await fetchIssue(client, relatedIssueId, `Related issue not found: ${relatedIssueId}`)
@@ -105,13 +104,5 @@ export async function addIssueRelation({
       type,
       relatedIssueId,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, relatedIssueId },
-      'addIssueRelation failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

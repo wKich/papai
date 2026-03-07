@@ -4,10 +4,11 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
 import type { HulyClient } from './types.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-relation' })
 
@@ -57,7 +58,7 @@ async function removeRelationFromIssue(client: HulyClient, issueId: Ref<Issue>, 
   await client.updateDoc(tracker.class.Issue, core.space.Space as Ref<Space>, issueId, update, false)
 }
 
-export async function removeIssueRelation({
+export function removeIssueRelation({
   userId,
   issueId,
   relatedIssueId,
@@ -68,11 +69,9 @@ export async function removeIssueRelation({
 }): Promise<{ id: string; success: true }> {
   log.debug({ userId, issueId, relatedIssueId }, 'removeIssueRelation called')
 
-  const client = await getHulyClient(userId)
-
   ensureRef<Issue>(issueId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     await removeRelationFromIssue(client, issueId, relatedIssueId)
 
     log.info({ userId, issueId, relatedIssueId }, 'Relation removed')
@@ -81,13 +80,5 @@ export async function removeIssueRelation({
       id: `${issueId}-${relatedIssueId}`,
       success: true,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, relatedIssueId },
-      'removeIssueRelation failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }
