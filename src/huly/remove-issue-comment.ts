@@ -1,10 +1,11 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-comment' })
 
@@ -20,6 +21,50 @@ export interface RemoveIssueCommentResult {
   success: true
 }
 
+async function verifyIssueExists(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  issueId: Ref<Issue>,
+): Promise<Issue> {
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+  return issue
+}
+
+async function verifyCommentExists(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  commentId: Ref<ChatMessage>,
+  issueId: Ref<Issue>,
+): Promise<ChatMessage> {
+  const comment = await client.findOne(chunter.class.ChatMessage, {
+    _id: commentId,
+    attachedTo: issueId,
+  })
+
+  if (comment === undefined || comment === null) {
+    throw new Error(`Comment not found: ${commentId}`)
+  }
+  return comment
+}
+
+async function removeComment(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: Ref<Space>,
+  commentId: Ref<ChatMessage>,
+  issueId: Ref<Issue>,
+): Promise<void> {
+  await client.removeCollection(
+    chunter.class.ChatMessage,
+    projectId,
+    commentId,
+    issueId,
+    tracker.class.Issue,
+    'comments',
+  )
+}
+
 export async function removeIssueComment({
   userId,
   projectId,
@@ -30,35 +75,14 @@ export async function removeIssueComment({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+  ensureRef<ChatMessage>(commentId)
+  ensureRef<Space>(projectId)
+
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Verify the comment exists and is attached to this issue
-    const comment = (await client.findOne(chunter.class.ChatMessage, {
-      _id: commentId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-      attachedTo: issueId as unknown as Parameters<typeof client.findOne>[1]['attachedTo'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as ChatMessage | undefined
-
-    if (!comment) {
-      throw new Error(`Comment not found: ${commentId}`)
-    }
-
-    // Remove comment using removeCollection
-    await client.removeCollection(
-      chunter.class.ChatMessage,
-      projectId as unknown as Parameters<typeof client.removeCollection>[1],
-      commentId as unknown as Parameters<typeof client.removeCollection>[2],
-      issueId as unknown as Parameters<typeof client.removeCollection>[3],
-      tracker.class.Issue,
-      'comments',
-    )
+    const issue = await verifyIssueExists(client, issueId)
+    await verifyCommentExists(client, commentId, issueId)
+    await removeComment(client, projectId, commentId, issueId)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment removed')
 

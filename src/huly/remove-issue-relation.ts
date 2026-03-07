@@ -1,4 +1,4 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
+import type { Ref, Space, DocumentUpdate } from '@hcengineering/core'
 import core from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
@@ -6,12 +6,58 @@ import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-relation' })
 
 interface RelatedIssueEntry {
   issueId: string
   type: string
+}
+
+type IssueRelationUpdate = DocumentUpdate<Issue> & { relatedIssues?: RelatedIssueEntry[] }
+
+function getRelatedIssues(issue: Issue): RelatedIssueEntry[] {
+  if (!('relatedIssues' in issue)) return []
+  const field: unknown = issue['relatedIssues']
+  if (!Array.isArray(field)) return []
+  const items = Array.from<unknown>(field)
+  return items.filter(
+    (e): e is RelatedIssueEntry =>
+      typeof e === 'object' &&
+      e !== null &&
+      'issueId' in e &&
+      typeof e.issueId === 'string' &&
+      'type' in e &&
+      typeof e.type === 'string',
+  )
+}
+
+async function removeRelationFromIssue(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  issueId: Ref<Issue>,
+  relatedIssueId: string,
+): Promise<void> {
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new HulyApiError(`Issue not found: ${issueId}`, hulyError.issueNotFound(issueId))
+  }
+
+  const currentRelatedIssues = getRelatedIssues(issue)
+  const relationIndex = currentRelatedIssues.findIndex((entry) => entry.issueId === relatedIssueId)
+
+  if (relationIndex === -1) {
+    throw new HulyApiError(
+      `Relation between issues "${issueId}" and "${relatedIssueId}" was not found.`,
+      hulyError.relationNotFound(issueId, relatedIssueId),
+    )
+  }
+
+  const updatedRelatedIssues = currentRelatedIssues.filter((entry) => entry.issueId !== relatedIssueId)
+
+  const update: IssueRelationUpdate = { relatedIssues: updatedRelatedIssues }
+  await client.updateDoc(tracker.class.Issue, core.space.Space as Ref<Space>, issueId, update, false)
 }
 
 export async function removeIssueRelation({
@@ -27,40 +73,10 @@ export async function removeIssueRelation({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+
   try {
-    // Fetch the source issue
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new HulyApiError(`Issue not found: ${issueId}`, hulyError.issueNotFound(issueId))
-    }
-
-    // Get current relatedIssues array
-    const currentRelatedIssues = (issue as unknown as { relatedIssues?: RelatedIssueEntry[] }).relatedIssues ?? []
-
-    // Find the relation to remove
-    const relationIndex = currentRelatedIssues.findIndex((entry) => entry.issueId === relatedIssueId)
-
-    if (relationIndex === -1) {
-      throw new HulyApiError(
-        `Relation between issues "${issueId}" and "${relatedIssueId}" was not found.`,
-        hulyError.relationNotFound(issueId, relatedIssueId),
-      )
-    }
-
-    // Remove the relation from the array
-    const updatedRelatedIssues = currentRelatedIssues.filter((entry) => entry.issueId !== relatedIssueId)
-
-    // Update the issue with modified relatedIssues array
-    await client.updateDoc(
-      tracker.class.Issue,
-      core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
-      issueId as unknown as Parameters<typeof client.updateDoc>[2],
-      { relatedIssues: updatedRelatedIssues } as unknown as Parameters<typeof client.updateDoc>[3],
-      false,
-    )
+    await removeRelationFromIssue(client, issueId, relatedIssueId)
 
     log.info({ userId, issueId, relatedIssueId }, 'Relation removed')
 

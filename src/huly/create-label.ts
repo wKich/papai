@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core, { generateId } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
@@ -27,35 +26,33 @@ export async function createLabel({ userId, name, color }: CreateLabelParams): P
   const client = await getHulyClient(userId)
 
   try {
-    const labelId = generateId()
+    const labelId = generateId<TagElement>()
 
-    // Create the label in workspace space
     await client.createDoc(
       tags.class.TagElement,
-      core.space.Workspace as unknown as Parameters<typeof client.createDoc>[1],
+      core.space.Workspace,
       {
         title: name,
-        color: color ?? '#000000',
+        color: hexColorToNumber(color),
+        description: '',
+        category: tags.category.NoCategory,
         targetClass: tracker.class.Issue,
-      } as unknown as Parameters<typeof client.createDoc>[2],
+      },
       labelId,
     )
 
-    // Fetch the created label
-    const label = (await client.findOne(tags.class.TagElement, {
-      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
+    const label = await client.findOne<TagElement>(tags.class.TagElement, { _id: labelId })
 
-    if (!label) {
+    if (label === undefined) {
       throw new Error('Label was not created')
     }
 
     log.info({ userId, labelId, name }, 'Label created')
 
     return {
-      id: label._id as string,
+      id: label._id,
       name: label.title,
-      color: label.color !== undefined ? numberToHexColor(label.color) : '#000000',
+      color: numberToHexColor(label.color),
     }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), userId, name }, 'createLabel failed')
@@ -65,12 +62,11 @@ export async function createLabel({ userId, name, color }: CreateLabelParams): P
   }
 }
 
-function numberToHexColor(color: unknown): string {
-  if (typeof color === 'number') {
-    return `#${color.toString(16).padStart(6, '0')}`
-  }
-  if (typeof color === 'string' && color.startsWith('#')) {
-    return color
-  }
-  return '#000000'
+function hexColorToNumber(hex: string | undefined): number {
+  if (hex === undefined) return 0
+  return parseInt(hex.replace(/^#/, ''), 16) || 0
+}
+
+function numberToHexColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`
 }

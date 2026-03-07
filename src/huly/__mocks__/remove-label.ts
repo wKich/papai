@@ -1,7 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import core, { type Ref, type Doc } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
@@ -29,7 +28,7 @@ function createMockLabels(): Map<string, TagElement> {
   ])
 }
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   private mockLabels: Map<string, TagElement>
 
   constructor() {

@@ -1,10 +1,10 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:remove-label' })
 
@@ -23,22 +23,16 @@ export async function removeLabel({ userId, labelId }: RemoveLabelParams): Promi
 
   const client = await getHulyClient(userId)
 
-  try {
-    // Check if label exists
-    const existingLabel = (await client.findOne(tags.class.TagElement, {
-      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
+  ensureRef<TagElement>(labelId)
 
-    if (!existingLabel) {
+  try {
+    const existingLabel = await client.findOne<TagElement>(tags.class.TagElement, { _id: labelId })
+
+    if (existingLabel === undefined) {
       throw new Error(`Label not found: ${labelId}`)
     }
 
-    // Remove the label
-    await client.removeDoc(
-      tags.class.TagElement,
-      core.space.Workspace as unknown as Parameters<typeof client.removeDoc>[1],
-      labelId as unknown as Parameters<typeof client.removeDoc>[2],
-    )
+    await client.removeDoc(tags.class.TagElement, core.space.Workspace, labelId)
 
     log.info({ userId, labelId }, 'Label removed')
 

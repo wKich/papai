@@ -1,12 +1,12 @@
-import { describe, expect, test, beforeAll } from 'bun:test'
+// Set required env vars before any imports
+process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+process.env['TELEGRAM_USER_ID'] = '12345'
+process.env['HULY_URL'] = 'http://localhost:8087'
+process.env['HULY_WORKSPACE'] = 'test-workspace'
+
+import { describe, expect, test } from 'bun:test'
 
 import { formatLlmOutput } from '../src/utils/format.js'
-
-// Set required env vars before importing bot
-beforeAll(() => {
-  process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
-  process.env['TELEGRAM_USER_ID'] = '12345'
-})
 
 describe('bot', () => {
   test('module loads with env vars', async () => {

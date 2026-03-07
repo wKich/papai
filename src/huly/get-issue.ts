@@ -1,10 +1,17 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import tags, { type TagReference, type TagElement } from '@hcengineering/tags'
-import tracker, { type Issue } from '@hcengineering/tracker'
+import type { Class, Ref, Doc } from '@hcengineering/core'
+import tags from '@hcengineering/tags'
+import tracker, { type Issue, type IssueStatus } from '@hcengineering/tracker'
+
+// Minimal Person interface for contact lookups - extends Doc to satisfy constraints
+interface Person extends Doc {
+  name: string
+}
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:get-issue' })
 
@@ -41,17 +48,160 @@ function mapPriorityToNumber(hulyPriority: number): number {
   // Linear: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
   switch (hulyPriority) {
     case 0:
-      return 0 // No Priority
+      // No Priority
+      return 0
     case 4:
-      return 1 // Urgent
+      // Urgent
+      return 1
     case 3:
-      return 2 // High
+      // High
+      return 2
     case 2:
-      return 3 // Medium
+      // Medium
+      return 3
     case 1:
-      return 4 // Low
+      // Low
+      return 4
     default:
       return 0
+  }
+}
+
+type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
+
+async function fetchStateName(client: HulyClient, statusId: unknown): Promise<string | undefined> {
+  if (typeof statusId !== 'string') {
+    return undefined
+  }
+
+  ensureRef<IssueStatus>(statusId)
+  const status = await client.findOne(tracker.class.IssueStatus, { _id: statusId })
+
+  if (status !== undefined && status !== null && 'name' in status) {
+    return String(status.name)
+  }
+  return undefined
+}
+
+async function fetchAssigneeName(client: HulyClient, assigneeId: unknown): Promise<string | undefined> {
+  if (typeof assigneeId !== 'string') {
+    return undefined
+  }
+
+  ensureRef<Person>(assigneeId)
+  const personClass = 'contact:class:Person'
+  ensureRef<Class<Person>>(personClass)
+  const assignee = await client.findOne<Person>(personClass, {
+    _id: assigneeId,
+  })
+
+  if (assignee !== undefined && assignee !== null) {
+    return assignee.name
+  }
+  return undefined
+}
+
+async function fetchLabels(client: HulyClient, issueId: Ref<Issue>): Promise<MappedLabel[]> {
+  const labelRefs = await client.findAll(tags.class.TagReference, { attachedTo: issueId })
+
+  return Promise.all(
+    labelRefs.map(async (ref) => {
+      const tag = await client.findOne(tags.class.TagElement, { _id: ref.tag })
+
+      if (tag !== undefined && tag !== null && 'title' in tag && 'color' in tag) {
+        return {
+          id: ref._id,
+          name: String(tag.title),
+          color: String(tag.color),
+        }
+      }
+      log.debug({ tagId: ref.tag }, 'Failed to parse TagElement')
+      return {
+        id: ref._id,
+        name: 'Unknown',
+        color: '#000000',
+      }
+    }),
+  )
+}
+
+function getRelatedIssueIds(issue: Issue): string[] {
+  if (!('relatedIssues' in issue)) return []
+  const field: unknown = issue['relatedIssues']
+  if (!Array.isArray(field)) return []
+  return Array.from<unknown>(field).filter((id): id is string => typeof id === 'string')
+}
+
+async function fetchRelations(client: HulyClient, issue: Issue): Promise<MappedRelation[]> {
+  const relations: MappedRelation[] = []
+  const relatedIssueIds = getRelatedIssueIds(issue)
+
+  if (relatedIssueIds.length > 0) {
+    const relatedIssues = await Promise.all(
+      relatedIssueIds.map((relatedId) => {
+        ensureRef<Issue>(relatedId)
+        return client.findOne(tracker.class.Issue, { _id: relatedId })
+      }),
+    )
+    for (const relatedIssue of relatedIssues) {
+      if (relatedIssue !== undefined) {
+        relations.push({
+          id: String(relatedIssue._id),
+          type: 'related',
+          relatedIssueId: String(relatedIssue._id),
+          relatedIdentifier: relatedIssue.identifier,
+        })
+      }
+    }
+  }
+  return relations
+}
+
+async function buildIssueUrl(client: HulyClient, issue: Issue): Promise<string> {
+  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
+
+  if (project !== undefined && project !== null && 'identifier' in project) {
+    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
+  }
+
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
+}
+
+async function fetchIssueData(client: HulyClient, userId: number, issueId: string): Promise<IssueData> {
+  ensureRef<Issue>(issueId)
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+
+  const stateName =
+    issue.status !== undefined && issue.status !== null ? await fetchStateName(client, issue.status) : undefined
+  const assigneeName =
+    issue.assignee !== undefined && issue.assignee !== null
+      ? await fetchAssigneeName(client, issue.assignee)
+      : undefined
+  const [labels, relations] = await Promise.all([fetchLabels(client, issueId), fetchRelations(client, issue)])
+  const url = await buildIssueUrl(client, issue)
+
+  log.info(
+    { userId, issueId, identifier: issue.identifier, labelCount: labels.length, relationCount: relations.length },
+    'Issue fetched',
+  )
+
+  return {
+    id: String(issue._id),
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description === undefined ? undefined : String(issue.description),
+    priority: mapPriorityToNumber(issue.priority),
+    url,
+    dueDate: issue.dueDate === null ? null : new Date(issue.dueDate).toISOString(),
+    estimate: issue.estimation ?? null,
+    state: stateName,
+    assignee: assigneeName,
+    labels,
+    relations,
   }
 }
 
@@ -61,100 +211,7 @@ export async function getIssue({ userId, issueId }: { userId: number; issueId: s
   const client = await getHulyClient(userId)
 
   try {
-    // Fetch the issue
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Fetch state name
-    let stateName: string | undefined
-    if (issue.status) {
-      const status = (await client.findOne(tracker.class.IssueStatus, {
-        _id: issue.status as unknown as Parameters<typeof client.findOne>[1]['_id'],
-      } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { name: string } | undefined
-      stateName = status?.name
-    }
-
-    // Fetch assignee name
-    let assigneeName: string | undefined
-    if (issue.assignee) {
-      const assignee = (await client.findOne(
-        'contact:class:Person' as unknown as Parameters<typeof client.findOne>[0],
-        { _id: issue.assignee as unknown as Parameters<typeof client.findOne>[1]['_id'] } as unknown as Parameters<
-          typeof client.findOne
-        >[1],
-      )) as unknown as { name: string } | undefined
-      assigneeName = assignee?.name
-    }
-
-    // Fetch labels
-    const labelRefs = (await client.findAll(tags.class.TagReference, {
-      attachedTo: issueId as unknown as Parameters<typeof client.findAll>[1]['attachedTo'],
-    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as TagReference[]
-
-    const labels: MappedLabel[] = await Promise.all(
-      labelRefs.map(async (ref) => {
-        const tag = (await client.findOne(tags.class.TagElement, {
-          _id: ref.tag as unknown as Parameters<typeof client.findOne>[1]['_id'],
-        } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
-        return {
-          id: ref._id as string,
-          name: tag?.title ?? 'Unknown',
-          color: tag?.color !== undefined ? String(tag.color) : '#000000',
-        }
-      }),
-    )
-
-    // Relations are stored differently in Huly - check for relatedIssues field dynamically
-    const relations: MappedRelation[] = []
-    const relatedIssuesField = (issue as unknown as { relatedIssues?: string[] }).relatedIssues
-    if (relatedIssuesField && Array.isArray(relatedIssuesField)) {
-      for (const relatedId of relatedIssuesField) {
-        const relatedIssue = (await client.findOne(tracker.class.Issue, {
-          _id: relatedId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-        } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-        if (relatedIssue) {
-          relations.push({
-            id: relatedIssue._id as string,
-            type: 'related',
-            relatedIssueId: relatedIssue._id as string,
-            relatedIdentifier: relatedIssue.identifier,
-          })
-        }
-      }
-    }
-
-    // Construct URL
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: issue.space as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { identifier: string } | undefined
-    const projectIdentifier = project?.identifier ?? 'UNK'
-
-    log.info(
-      { userId, issueId, identifier: issue.identifier, labelCount: labels.length, relationCount: relations.length },
-      'Issue fetched',
-    )
-
-    return {
-      id: issue._id as string,
-      identifier: issue.identifier,
-      title: issue.title,
-      description: issue.description !== undefined ? String(issue.description) : undefined,
-      priority: mapPriorityToNumber(issue.priority as number),
-      url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`,
-      dueDate: issue.dueDate !== null ? new Date(issue.dueDate).toISOString() : null,
-      estimate: issue.estimation ?? null,
-      state: stateName,
-      assignee: assigneeName,
-      labels,
-      relations,
-    }
+    return await fetchIssueData(client, userId, issueId)
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), userId, issueId }, 'getIssue failed')
     throw classifyHulyError(error)

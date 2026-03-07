@@ -1,7 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import core, { type Ref, type Doc } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
@@ -61,7 +60,7 @@ const mockLabels = new Map<string, TagElement>([
   ],
 ])
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async findAll<T extends Doc>(_class: unknown, query: Record<string, unknown>): Promise<Array<T> & { total: number }> {
     const className = String(_class)
 

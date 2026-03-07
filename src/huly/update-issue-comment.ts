@@ -1,10 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:update-issue-comment' })
 
@@ -22,6 +24,61 @@ export interface UpdateIssueCommentResult {
   url: string
 }
 
+async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+
+  return issue
+}
+
+async function findComment(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  commentId: Ref<ChatMessage>,
+  issueId: Ref<Issue>,
+): Promise<ChatMessage> {
+  const comment = await client.findOne(chunter.class.ChatMessage, {
+    _id: commentId,
+    attachedTo: issueId,
+  })
+
+  if (comment === undefined || comment === null) {
+    throw new Error(`Comment not found: ${commentId}`)
+  }
+
+  return comment
+}
+
+async function updateComment(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: Ref<Space>,
+  commentId: Ref<ChatMessage>,
+  issueId: Ref<Issue>,
+  body: string,
+): Promise<void> {
+  await client.updateCollection(
+    chunter.class.ChatMessage,
+    projectId,
+    commentId,
+    issueId,
+    tracker.class.Issue,
+    'comments',
+    { message: body, editedOn: Date.now() },
+  )
+}
+
+async function buildCommentUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
+  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
+
+  if (project !== undefined && project !== null && 'identifier' in project) {
+    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
+  }
+
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
+}
+
 export async function updateIssueComment({
   userId,
   projectId,
@@ -33,50 +90,17 @@ export async function updateIssueComment({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+  ensureRef<ChatMessage>(commentId)
+  ensureRef<Space>(projectId)
+
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Verify the comment exists and is attached to this issue
-    const comment = (await client.findOne(chunter.class.ChatMessage, {
-      _id: commentId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-      attachedTo: issueId as unknown as Parameters<typeof client.findOne>[1]['attachedTo'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as ChatMessage | undefined
-
-    if (!comment) {
-      throw new Error(`Comment not found: ${commentId}`)
-    }
-
-    // Update comment using updateCollection
-    await client.updateCollection(
-      chunter.class.ChatMessage,
-      projectId as unknown as Parameters<typeof client.updateCollection>[1],
-      commentId as unknown as Parameters<typeof client.updateCollection>[2],
-      issueId as unknown as Parameters<typeof client.updateCollection>[3],
-      tracker.class.Issue,
-      'comments',
-      {
-        message: body,
-        editedOn: Date.now(),
-      } as unknown as Parameters<typeof client.updateCollection>[6],
-    )
+    const issue = await findIssue(client, issueId)
+    await findComment(client, commentId, issueId)
+    await updateComment(client, projectId, commentId, issueId, body)
+    const url = await buildCommentUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment updated')
-
-    // Construct URL
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: issue.space as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { identifier: string } | undefined
-    const projectIdentifier = project?.identifier ?? 'UNK'
-    const url = `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`
 
     return {
       id: commentId,

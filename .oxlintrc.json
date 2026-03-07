@@ -31,6 +31,14 @@
         "max-lines-per-function": "off",
         "max-lines": "off"
       }
+    },
+    {
+      "files": ["src/**/__mocks__/**/*.ts"],
+      "rules": {
+        "require-await": "off",
+        "typescript/require-await": "off",
+        "max-lines-per-function": "off"
+      }
     }
   ]
 }

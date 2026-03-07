@@ -1,10 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import tags from '@hcengineering/tags'
+import type { Space } from '@hcengineering/core'
+import tags, { type TagElement } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:add-issue-label' })
 
@@ -22,6 +24,42 @@ export interface AddIssueLabelResult {
   url: string
 }
 
+async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: string): Promise<Issue> {
+  ensureRef<Issue>(issueId)
+  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (result === undefined || result === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+  return result
+}
+
+async function addLabelToIssue(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: string,
+  issueId: string,
+  labelId: string,
+): Promise<void> {
+  ensureRef<Space>(projectId)
+  ensureRef<Issue>(issueId)
+  ensureRef<TagElement>(labelId)
+  await client.addCollection(tags.class.TagReference, projectId, issueId, tracker.class.Issue, 'labels', {
+    title: '',
+    color: 0,
+    tag: labelId,
+  })
+}
+
+async function buildIssueUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
+  const result = await client.findOne(tracker.class.Project, { _id: issue.space })
+
+  if (result !== undefined && result !== null && 'identifier' in result) {
+    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${result.identifier}/${issue.identifier}`
+  }
+  log.warn({ space: issue.space }, 'Failed to find Project')
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
+}
+
 export async function addIssueLabel({
   userId,
   projectId,
@@ -33,42 +71,14 @@ export async function addIssueLabel({
   const client = await getHulyClient(userId)
 
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Add label to issue using TagReference collection
-    await client.addCollection(
-      tags.class.TagReference,
-      projectId as unknown as Parameters<typeof client.addCollection>[1],
-      issueId as unknown as Parameters<typeof client.addCollection>[2],
-      tracker.class.Issue,
-      'labels',
-      {
-        title: '',
-        color: 0,
-        tag: labelId as unknown,
-      } as unknown as Parameters<typeof client.addCollection>[5],
-    )
+    const issue = await findIssue(client, issueId)
+    await addLabelToIssue(client, projectId, issueId, labelId)
+    const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, labelId, identifier: issue.identifier }, 'Label added to issue')
 
-    // Construct URL
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: issue.space as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { identifier: string } | undefined
-    const projectIdentifier = project?.identifier ?? 'UNK'
-    const url = `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`
-
     return {
-      id: issue._id as string,
+      id: issue._id,
       identifier: issue.identifier,
       title: issue.title,
       url,

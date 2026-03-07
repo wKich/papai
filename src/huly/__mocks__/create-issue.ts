@@ -1,117 +1,87 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
-import core, { type Ref, type Doc } from '@hcengineering/core'
 import { makeRank } from '@hcengineering/rank'
-import type { Issue, Project } from '@hcengineering/tracker'
-import tracker, { IssuePriority } from '@hcengineering/tracker'
 
-// Factory functions to create fresh mock data for each test
-function createMockProjects(): Map<string, Project> {
+type MockRecord = Record<string, unknown>
+
+function createMockProjects(): Map<string, MockRecord> {
   return new Map([
     [
       'project-123',
       {
-        _id: 'project-123' as Ref<Project>,
-        _class: tracker.class.Project,
-        space: core.space.Space,
-        modifiedBy: 'system' as Ref<Doc>,
-        modifiedOn: Date.now(),
-        createdBy: 'system' as Ref<Doc>,
-        createdOn: Date.now(),
-        title: 'Test Project',
+        _id: 'project-123',
         identifier: 'P',
-        description: '',
-        private: false,
-        archived: false,
-        defaultIssueStatus: 'status-1' as Ref<Doc>,
-        members: [],
-        owners: [],
+        defaultIssueStatus: 'status-1',
         sequence: 0,
-      } as Project,
+      },
     ],
     [
       'team-123',
       {
-        _id: 'team-123' as Ref<Project>,
-        _class: tracker.class.Project,
-        space: core.space.Space,
-        modifiedBy: 'system' as Ref<Doc>,
-        modifiedOn: Date.now(),
-        createdBy: 'system' as Ref<Doc>,
-        createdOn: Date.now(),
-        title: 'Team Project',
+        _id: 'team-123',
         identifier: 'TEAM',
-        description: '',
-        private: false,
-        archived: false,
-        defaultIssueStatus: 'status-1' as Ref<Doc>,
-        members: [],
-        owners: [],
+        defaultIssueStatus: 'status-1',
         sequence: 0,
-      } as Project,
+      },
     ],
   ])
 }
 
-class MockHulyClient implements Partial<PlatformClient> {
-  private mockIssues: Map<string, Issue>
-  private mockProjects: Map<string, Project>
-  private issueSequence: number
+class MockHulyClient {
+  private mockIssues: Map<string, MockRecord>
+  private mockProjects: Map<string, MockRecord>
 
   constructor() {
-    this.mockIssues = new Map<string, Issue>()
+    this.mockIssues = new Map<string, MockRecord>()
     this.mockProjects = createMockProjects()
-    this.issueSequence = 1
   }
-  async findOne<T extends Doc>(
+
+  async findOne(
     _class: unknown,
     query: Record<string, unknown>,
     options?: { sort?: Record<string, unknown> },
-  ): Promise<T | undefined> {
+  ): Promise<MockRecord | undefined> {
     const className = String(_class)
 
     if (className.includes('Project')) {
-      const projectId = query['_id'] as string
-      return this.mockProjects.get(projectId) as unknown as T
+      const rawId = query['_id']
+      const projectId = typeof rawId === 'string' ? rawId : ''
+      return this.mockProjects.get(projectId)
     }
 
     if (className.includes('Issue')) {
-      if (options?.sort?.rank === -1) {
-        // Return last issue for ranking
+      if (options?.sort?.['rank'] !== undefined) {
         const issues = Array.from(this.mockIssues.values())
-        return issues.length > 0 ? (issues[issues.length - 1] as unknown as T) : undefined
+        return issues.length > 0 ? issues[issues.length - 1] : undefined
       }
-      const issueId = query['_id'] as string
-      return this.mockIssues.get(issueId) as unknown as T
+      const rawId = query['_id']
+      const issueId = typeof rawId === 'string' ? rawId : ''
+      return this.mockIssues.get(issueId)
     }
 
     return undefined
   }
 
-  async updateDoc<T extends Doc>(
+  async updateDoc(
     _class: unknown,
     _space: unknown,
     docId: unknown,
     operations: Record<string, unknown>,
     _getResult?: boolean,
-  ): Promise<{ object: T }> {
+  ): Promise<void> {
     const className = String(_class)
     const id = String(docId)
 
     if (className.includes('Project')) {
       const project = this.mockProjects.get(id)
-      if (project) {
-        const inc = operations['$inc'] as { sequence?: number } | undefined
-        if (inc?.sequence) {
-          project.sequence += 1
+      if (project !== undefined) {
+        const inc = operations['$inc']
+        if (typeof inc === 'object' && inc !== null && 'sequence' in inc) {
+          const currentSeq = typeof project['sequence'] === 'number' ? project['sequence'] : 0
+          project['sequence'] = currentSeq + 1
         }
-        return { object: project as unknown as T }
       }
     }
-
-    return { object: undefined as unknown as T }
   }
 
   async uploadMarkup(
@@ -120,12 +90,11 @@ class MockHulyClient implements Partial<PlatformClient> {
     _attribute: string,
     _markup: string,
     _format: string,
-  ): Promise<{ content: unknown[] }> {
-    // Simple mock - just return empty content
-    return { content: [] }
+  ): Promise<string> {
+    return 'mock-markup-ref'
   }
 
-  async addCollection<_T extends Doc>(
+  async addCollection(
     _class: unknown,
     space: unknown,
     _attachedTo: unknown,
@@ -137,36 +106,26 @@ class MockHulyClient implements Partial<PlatformClient> {
     const className = String(_class)
 
     if (className.includes('Issue')) {
-      const issue: Issue = {
-        _id: docId as Ref<Issue>,
-        _class: tracker.class.Issue,
-        space: space as Ref<Project>,
-        modifiedBy: 'system' as Ref<Doc>,
-        modifiedOn: Date.now(),
-        createdBy: 'system' as Ref<Doc>,
-        createdOn: Date.now(),
-        title: attributes['title'] as string,
+      this.mockIssues.set(docId, {
+        _id: docId,
+        space,
+        title: attributes['title'],
         description: attributes['description'],
-        status: attributes['status'] as Ref<Doc>,
-        number: attributes['number'] as number,
-        kind: tracker.taskTypes.Issue,
-        identifier: attributes['identifier'] as string,
-        priority: attributes['priority'] as IssuePriority,
-        assignee: attributes['assignee'] as Ref<Doc> | null,
-        component: attributes['component'] as Ref<Doc> | null,
-        estimation: attributes['estimation'] as number,
-        remainingTime: attributes['remainingTime'] as number,
-        reportedTime: attributes['reportedTime'] as number,
-        reports: attributes['reports'] as number,
-        subIssues: attributes['subIssues'] as number,
-        parents: attributes['parents'] as unknown[],
-        childInfo: attributes['childInfo'] as unknown[],
-        dueDate: attributes['dueDate'] as number | null,
-        rank: (attributes['rank'] as string) ?? makeRank(undefined, undefined),
-      } as Issue
-
-      this.mockIssues.set(docId, issue)
-      this.issueSequence += 1
+        status: attributes['status'],
+        number: attributes['number'],
+        identifier: attributes['identifier'],
+        priority: attributes['priority'],
+        assignee: attributes['assignee'],
+        estimation: attributes['estimation'],
+        remainingTime: attributes['remainingTime'],
+        reportedTime: attributes['reportedTime'],
+        reports: attributes['reports'],
+        subIssues: attributes['subIssues'],
+        parents: attributes['parents'],
+        childInfo: attributes['childInfo'],
+        dueDate: attributes['dueDate'],
+        rank: attributes['rank'] ?? makeRank(undefined, undefined),
+      })
     }
   }
 
@@ -176,7 +135,7 @@ class MockHulyClient implements Partial<PlatformClient> {
 }
 
 export function setupCreateIssueMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

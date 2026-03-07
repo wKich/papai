@@ -1,3 +1,7 @@
+// Set up env vars before any imports
+process.env['HULY_URL'] = 'http://localhost:8087'
+process.env['HULY_WORKSPACE'] = 'test-workspace'
+
 import { describe, expect, test } from 'bun:test'
 
 import { setupAddIssueCommentMock } from '../../src/huly/__mocks__/add-issue-comment.js'
@@ -101,7 +105,9 @@ describe('search_issues tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    expect(Array.isArray(await exec({ query: 'test' }, { toolCallId: 'test', messages: [] }))).toBe(true)
+    expect(
+      Array.isArray(await exec({ query: 'test', projectId: 'project-123' }, { toolCallId: 'test', messages: [] })),
+    ).toBe(true)
   })
 })
 
@@ -125,7 +131,10 @@ describe('add_issue_comment tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ issueId: 'issue-123', body: 'Test comment' }, { toolCallId: 'test', messages: [] })
+    await exec(
+      { issueId: 'issue-123', projectId: 'project-123', body: 'Test comment' },
+      { toolCallId: 'test', messages: [] },
+    )
   })
 })
 
@@ -212,7 +221,10 @@ describe('remove_issue_label tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ issueId: 'issue-123', labelId: 'label-456' }, { toolCallId: 'test', messages: [] })
+    await exec(
+      { issueId: 'issue-123', projectId: 'project-123', labelId: 'label-456' },
+      { toolCallId: 'test', messages: [] },
+    )
   })
 })
 
@@ -236,7 +248,10 @@ describe('add_issue_label tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ issueId: 'issue-123', labelId: 'label-456' }, { toolCallId: 'test', messages: [] })
+    await exec(
+      { issueId: 'issue-123', projectId: 'project-123', labelId: 'label-456' },
+      { toolCallId: 'test', messages: [] },
+    )
   })
 })
 

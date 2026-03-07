@@ -1,14 +1,13 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import core, { type Ref, type Doc } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 
 // Mock label storage
 const mockLabels = new Map<string, TagElement>()
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async createDoc(_class: unknown, _space: unknown, attributes: Record<string, unknown>, docId: string): Promise<void> {
     const className = String(_class)
 

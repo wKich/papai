@@ -1,9 +1,9 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core, { generateId } from '@hcengineering/core'
 import tracker from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 
 const log = logger.child({ scope: 'huly:create-project' })
@@ -50,9 +50,6 @@ export async function createProject({
     )
 
     log.info({ projectId, name, identifier }, 'Project created')
-
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
 
     return {
       id: projectId,

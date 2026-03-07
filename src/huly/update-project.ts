@@ -1,11 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import core from '@hcengineering/core'
+import core, { type Ref, type Space, type DocumentUpdate } from '@hcengineering/core'
 import tracker, { type Project } from '@hcengineering/tracker'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:update-project' })
 
@@ -21,6 +22,42 @@ export interface ProjectResult {
   name: string
   identifier: string
   url: string
+}
+
+function buildUpdateFields(name: string | undefined, description: string | undefined): DocumentUpdate<Project> {
+  const updates: DocumentUpdate<Project> = {}
+  if (name !== undefined) {
+    updates['name'] = name
+  }
+  if (description !== undefined) {
+    updates['description'] = description
+  }
+  return updates
+}
+
+async function fetchProject(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: Ref<Project>,
+): Promise<Project> {
+  const project = await client.findOne<Project>(tracker.class.Project, { _id: projectId })
+
+  if (!project) {
+    throw new Error(`Project not found: ${projectId}`)
+  }
+
+  return project
+}
+
+async function updateProjectDoc(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: Ref<Project>,
+  updates: DocumentUpdate<Project>,
+): Promise<void> {
+  await client.updateDoc(tracker.class.Project, core.space.Space as Ref<Space>, projectId, updates)
+}
+
+function buildProjectUrl(project: Project): string {
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}`
 }
 
 export async function updateProject({
@@ -43,40 +80,20 @@ export async function updateProject({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Project>(projectId)
+
   try {
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: projectId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Project | undefined
-
-    if (!project) {
-      throw new Error(`Project not found: ${projectId}`)
-    }
-
-    const updates: Record<string, unknown> = {}
-    if (name !== undefined) {
-      updates['name'] = name
-    }
-    if (description !== undefined) {
-      updates['description'] = description
-    }
-
-    await client.updateDoc(
-      tracker.class.Project,
-      core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
-      projectId as unknown as Parameters<typeof client.updateDoc>[2],
-      updates,
-    )
+    const project = await fetchProject(client, projectId)
+    const updates = buildUpdateFields(name, description)
+    await updateProjectDoc(client, projectId, updates)
 
     log.info({ projectId, name: name ?? project.name }, 'Project updated')
-
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
 
     return {
       id: projectId,
       name: name ?? project.name,
       identifier: project.identifier,
-      url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}`,
+      url: buildProjectUrl(project),
     }
   } catch (error) {
     log.error(

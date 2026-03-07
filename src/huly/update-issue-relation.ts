@@ -1,4 +1,4 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
+import type { Ref, Space, DocumentUpdate } from '@hcengineering/core'
 import core from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
@@ -6,6 +6,7 @@ import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:update-issue-relation' })
 
@@ -14,6 +15,53 @@ type RelationType = 'blocks' | 'duplicate' | 'related'
 interface RelatedIssueEntry {
   issueId: string
   type: RelationType
+}
+
+type IssueRelationUpdate = DocumentUpdate<Issue> & { relatedIssues?: RelatedIssueEntry[] }
+
+type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
+
+function getRelatedIssues(issue: Issue): RelatedIssueEntry[] {
+  if (!('relatedIssues' in issue)) return []
+  const field: unknown = issue['relatedIssues']
+  if (!Array.isArray(field)) return []
+  const items = Array.from<unknown>(field)
+  return items.filter(
+    (e): e is RelatedIssueEntry =>
+      typeof e === 'object' &&
+      e !== null &&
+      'issueId' in e &&
+      typeof e.issueId === 'string' &&
+      'type' in e &&
+      typeof e.type === 'string',
+  )
+}
+
+async function fetchIssueWithRelations(
+  client: HulyClient,
+  issueId: Ref<Issue>,
+): Promise<{ issue: Issue; relations: RelatedIssueEntry[] }> {
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new HulyApiError(`Issue not found: ${issueId}`, hulyError.issueNotFound(issueId))
+  }
+
+  const relations = getRelatedIssues(issue)
+  return { issue, relations }
+}
+
+function findRelationIndex(relations: RelatedIssueEntry[], relatedIssueId: string): number {
+  return relations.findIndex((entry) => entry.issueId === relatedIssueId)
+}
+
+function updateRelationType(relations: RelatedIssueEntry[], index: number, type: RelationType): RelatedIssueEntry[] {
+  return relations.map((entry, i) => (i === index ? { ...entry, type } : entry))
+}
+
+async function saveRelations(client: HulyClient, issueId: Ref<Issue>, relations: RelatedIssueEntry[]): Promise<void> {
+  const update: IssueRelationUpdate = { relatedIssues: relations }
+  await client.updateDoc(tracker.class.Issue, core.space.Space as Ref<Space>, issueId, update, false)
 }
 
 export async function updateIssueRelation({
@@ -31,21 +79,12 @@ export async function updateIssueRelation({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+
   try {
-    // Fetch the source issue
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
+    const { relations: currentRelatedIssues } = await fetchIssueWithRelations(client, issueId)
 
-    if (!issue) {
-      throw new HulyApiError(`Issue not found: ${issueId}`, hulyError.issueNotFound(issueId))
-    }
-
-    // Get current relatedIssues array
-    const currentRelatedIssues = (issue as unknown as { relatedIssues?: RelatedIssueEntry[] }).relatedIssues ?? []
-
-    // Find the relation to update
-    const relationIndex = currentRelatedIssues.findIndex((entry) => entry.issueId === relatedIssueId)
+    const relationIndex = findRelationIndex(currentRelatedIssues, relatedIssueId)
 
     if (relationIndex === -1) {
       throw new HulyApiError(
@@ -54,19 +93,8 @@ export async function updateIssueRelation({
       )
     }
 
-    // Update the relation type
-    const updatedRelatedIssues = currentRelatedIssues.map((entry, index) =>
-      index === relationIndex ? { ...entry, type } : entry,
-    )
-
-    // Update the issue with modified relatedIssues array
-    await client.updateDoc(
-      tracker.class.Issue,
-      core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
-      issueId as unknown as Parameters<typeof client.updateDoc>[2],
-      { relatedIssues: updatedRelatedIssues } as unknown as Parameters<typeof client.updateDoc>[3],
-      false,
-    )
+    const updatedRelatedIssues = updateRelationType(currentRelatedIssues, relationIndex, type)
+    await saveRelations(client, issueId, updatedRelatedIssues)
 
     log.info({ userId, issueId, relatedIssueId, type }, 'Relation type updated')
 

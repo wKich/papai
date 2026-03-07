@@ -1,10 +1,11 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
+import type { Ref, Space } from '@hcengineering/core'
 import core from '@hcengineering/core'
-import tracker, { type Issue } from '@hcengineering/tracker'
+import tracker, { type Issue, type IssueStatus } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:archive-issue' })
 
@@ -19,51 +20,17 @@ export async function archiveIssue({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+
   try {
-    // Fetch the issue first
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // In Huly, archiving is typically done by setting the status to an archived state
-    // or by updating an archived field. We'll update the isArchived field if it exists,
-    // or we can move it to an "Archived" status
-
-    // Try to find an archived status
-    const archivedStatus = (await client.findOne(tracker.class.IssueStatus, {
-      name: 'Archived',
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { _id: string } | undefined
-
-    if (archivedStatus) {
-      // Move to Archived status
-      await client.updateDoc(
-        tracker.class.Issue,
-        core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
-        issueId as unknown as Parameters<typeof client.updateDoc>[2],
-        { status: archivedStatus._id } as unknown as Parameters<typeof client.updateDoc>[3],
-        false,
-      )
-    } else {
-      // Try to update isArchived field if it exists
-      await client.updateDoc(
-        tracker.class.Issue,
-        core.space.Space as unknown as Parameters<typeof client.updateDoc>[1],
-        issueId as unknown as Parameters<typeof client.updateDoc>[2],
-        { isArchived: true } as unknown as Parameters<typeof client.updateDoc>[3],
-        false,
-      )
-    }
-
+    const issue = await fetchIssue(client, issueId)
+    await archiveIssueByStatus(client, issueId)
     const archivedAt = new Date().toISOString()
 
     log.info({ userId, issueId, identifier: issue.identifier, archivedAt }, 'Issue archived')
 
     return {
-      id: issue._id as string,
+      id: issue._id,
       identifier: issue.identifier,
       title: issue.title,
       archivedAt,
@@ -73,5 +40,35 @@ export async function archiveIssue({
     throw classifyHulyError(error)
   } finally {
     await client.close()
+  }
+}
+
+async function fetchIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
+  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (result === undefined || result === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+  return result
+}
+
+async function archiveIssueByStatus(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  issueId: Ref<Issue>,
+): Promise<void> {
+  const result = await client.findOne(tracker.class.IssueStatus, { name: 'Archived' })
+
+  const archivedStatus: IssueStatus | undefined = result ?? undefined
+
+  if (archivedStatus === undefined) {
+    log.warn({ issueId }, 'Archived status not found, issue will not be archived by status')
+  } else {
+    await client.updateDoc(
+      tracker.class.Issue,
+      core.space.Space as Ref<Space>,
+      issueId,
+      { status: archivedStatus._id },
+      false,
+    )
   }
 }

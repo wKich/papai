@@ -1,9 +1,7 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
-
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async findOne<T extends Record<string, unknown>>(
     _class: unknown,
     query: Record<string, unknown>,

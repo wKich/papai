@@ -1,11 +1,13 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import core from '@hcengineering/core'
+import core, { type Ref, type DocumentUpdate } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
+
+type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
 
 const log = logger.child({ scope: 'huly:update-label' })
 
@@ -22,68 +24,40 @@ export interface LabelResult {
   color: string
 }
 
-export async function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
-  log.debug({ userId, labelId, hasName: name !== undefined, hasColor: color !== undefined }, 'updateLabel called')
+function buildUpdateFields(name: string | undefined, color: string | undefined): DocumentUpdate<TagElement> {
+  const updates: DocumentUpdate<TagElement> = {}
+  if (name !== undefined) {
+    updates.title = name
+  }
+  if (color !== undefined) {
+    updates.color = parseInt(color.replace(/^#/, ''), 16) || 0
+  }
+  return updates
+}
 
-  // Validate that at least one field is provided
-  if (name === undefined && color === undefined) {
-    throw new HulyApiError(
-      'At least one field (name or color) must be provided to update a label',
-      hulyError.validationFailed('fields', 'No update fields provided'),
-    )
+async function findLabel(client: HulyClient, labelId: Ref<TagElement>): Promise<TagElement> {
+  const label = await client.findOne<TagElement>(tags.class.TagElement, { _id: labelId })
+
+  if (label === undefined) {
+    throw new Error(`Label not found: ${labelId}`)
   }
 
-  const client = await getHulyClient(userId)
+  return label
+}
 
-  try {
-    // Check if label exists
-    const existingLabel = (await client.findOne(tags.class.TagElement, {
-      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
+async function updateLabelDoc(
+  client: HulyClient,
+  labelId: Ref<TagElement>,
+  updates: DocumentUpdate<TagElement>,
+): Promise<void> {
+  await client.updateDoc(tags.class.TagElement, core.space.Workspace, labelId, updates)
+}
 
-    if (!existingLabel) {
-      throw new Error(`Label not found: ${labelId}`)
-    }
-
-    // Build updates object
-    const updates: Record<string, unknown> = {}
-    if (name !== undefined) {
-      updates['title'] = name
-    }
-    if (color !== undefined) {
-      updates['color'] = color
-    }
-
-    // Update the label
-    await client.updateDoc(
-      tags.class.TagElement,
-      core.space.Workspace as unknown as Parameters<typeof client.updateDoc>[1],
-      labelId as unknown as Parameters<typeof client.updateDoc>[2],
-      updates as unknown as Parameters<typeof client.updateDoc>[3],
-    )
-
-    // Fetch the updated label
-    const label = (await client.findOne(tags.class.TagElement, {
-      _id: labelId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as TagElement | undefined
-
-    if (!label) {
-      throw new Error(`Label not found after update: ${labelId}`)
-    }
-
-    log.info({ userId, labelId, name: label.title }, 'Label updated')
-
-    return {
-      id: label._id as string,
-      name: label.title,
-      color: label.color !== undefined ? numberToHexColor(label.color) : '#000000',
-    }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, labelId }, 'updateLabel failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
+function formatColor(color: unknown): string {
+  if (color === undefined) {
+    return '#000000'
   }
+  return numberToHexColor(color)
 }
 
 function numberToHexColor(color: unknown): string {
@@ -94,4 +68,38 @@ function numberToHexColor(color: unknown): string {
     return color
   }
   return '#000000'
+}
+
+export async function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
+  log.debug({ userId, labelId, hasName: name !== undefined, hasColor: color !== undefined }, 'updateLabel called')
+
+  if (name === undefined && color === undefined) {
+    throw new HulyApiError(
+      'At least one field (name or color) must be provided to update a label',
+      hulyError.validationFailed('fields', 'No update fields provided'),
+    )
+  }
+
+  ensureRef<TagElement>(labelId)
+  const client = await getHulyClient(userId)
+
+  try {
+    await findLabel(client, labelId)
+    const updates = buildUpdateFields(name, color)
+    await updateLabelDoc(client, labelId, updates)
+    const updatedLabel = await findLabel(client, labelId)
+
+    log.info({ userId, labelId, name: updatedLabel.title }, 'Label updated')
+
+    return {
+      id: updatedLabel._id,
+      name: updatedLabel.title,
+      color: formatColor(updatedLabel.color),
+    }
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), userId, labelId }, 'updateLabel failed')
+    throw classifyHulyError(error)
+  } finally {
+    await client.close()
+  }
 }

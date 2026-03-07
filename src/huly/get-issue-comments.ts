@@ -1,10 +1,10 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:get-issue-comments' })
 
@@ -19,48 +19,59 @@ export interface GetIssueCommentsResult {
   createdAt: Date
 }
 
+async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: string): Promise<void> {
+  ensureRef<Issue>(issueId)
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+}
+
+async function fetchComments(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  issueId: string,
+): Promise<ChatMessage[]> {
+  ensureRef<Issue>(issueId)
+  const comments = await client.findAll(chunter.class.ChatMessage, { attachedTo: issueId })
+  return comments
+}
+
+function isValidComment(comment: ChatMessage): boolean {
+  if (typeof comment._id !== 'string' || typeof comment.message !== 'string') {
+    log.warn({ commentId: comment._id }, 'Skipping comment with invalid response shape')
+    return false
+  }
+  return true
+}
+
+function extractCreatedAt(comment: ChatMessage): Date {
+  if (typeof comment.modifiedOn === 'number') {
+    return new Date(comment.modifiedOn)
+  }
+  if (typeof comment.createdOn === 'number') {
+    return new Date(comment.createdOn)
+  }
+  return new Date()
+}
+
+function mapComment(comment: ChatMessage): GetIssueCommentsResult {
+  return {
+    id: comment._id,
+    body: comment.message,
+    createdAt: extractCreatedAt(comment),
+  }
+}
+
 export async function getIssueComments({ userId, issueId }: GetIssueCommentsParams): Promise<GetIssueCommentsResult[]> {
   log.debug({ userId, issueId }, 'getIssueComments called')
 
   const client = await getHulyClient(userId)
 
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Fetch comments using findAll with attachedTo filter
-    const comments = (await client.findAll(chunter.class.ChatMessage, {
-      attachedTo: issueId as unknown as Parameters<typeof client.findAll>[1]['attachedTo'],
-    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as ChatMessage[]
-
-    const result: GetIssueCommentsResult[] = comments
-      .filter((comment) => {
-        // Validate required fields
-        if (typeof comment._id !== 'string' || typeof comment.message !== 'string') {
-          log.warn({ userId, issueId, commentId: comment._id }, 'Skipping comment with invalid response shape')
-          return false
-        }
-        return true
-      })
-      .map((comment) => {
-        const createdAt =
-          typeof comment.modifiedOn === 'number'
-            ? new Date(comment.modifiedOn)
-            : typeof comment.createdOn === 'number'
-              ? new Date(comment.createdOn)
-              : new Date()
-        return {
-          id: comment._id as string,
-          body: comment.message,
-          createdAt,
-        }
-      })
+    await verifyIssue(client, issueId)
+    const comments = await fetchComments(client, issueId)
+    const result = comments.filter(isValidComment).map(mapComment)
 
     log.info({ userId, issueId, commentCount: result.length }, 'Comments fetched')
     return result

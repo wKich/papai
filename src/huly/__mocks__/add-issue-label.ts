@@ -1,7 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import tags, { type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
@@ -9,7 +8,7 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 const mockTagReferences = new Map<string, TagReference>()
 const mockIssues = new Map<string, Issue>()
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async addCollection<_T extends Record<string, unknown>>(
     _class: unknown,
     _space: unknown,

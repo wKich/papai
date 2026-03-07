@@ -1,14 +1,13 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import tags, { type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 // Mock storage
 const mockTagReferences = new Map<string, TagReference>()
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async findOne<T extends Record<string, unknown>>(
     _class: unknown,
     query: Record<string, unknown>,
@@ -88,14 +87,7 @@ class MockHulyClient implements Partial<PlatformClient> {
     return []
   }
 
-  async removeCollection(
-    _class: unknown,
-    _space: unknown,
-    _id: unknown,
-    attachedTo: unknown,
-    attachedToClass: unknown,
-    collection: unknown,
-  ): Promise<void> {
+  async removeCollection(_class: unknown, _space: unknown, _id: unknown, collection: unknown): Promise<void> {
     const className = String(_class)
 
     if (className.includes('TagReference') && String(collection) === 'labels') {

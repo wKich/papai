@@ -1,13 +1,12 @@
 /* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 // Mock storage for related issues
 const mockIssues = new Map<string, Issue & { relatedIssues?: Array<{ issueId: string; type: string }> }>()
 
-class MockHulyClient implements Partial<PlatformClient> {
+class MockHulyClient {
   async updateDoc(_class: unknown, _space: unknown, id: unknown, attributes: Record<string, unknown>): Promise<void> {
     const className = String(_class)
     const issueId = id as string

@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 // Mock storage
@@ -35,11 +34,13 @@ class MockHulyClient {
     const className = String(_class)
 
     if (className.includes('Issue')) {
-      // Filter by title if query contains $like
-      const titleFilter = query['title'] as { $like?: string } | undefined
-      if (titleFilter?.$like) {
-        const searchTerm = titleFilter.$like.replace(/%/g, '').toLowerCase()
-        return Array.from(mockIssues.values()).filter((issue) => issue.title.toLowerCase().includes(searchTerm))
+      const titleFilter = query['title']
+      if (typeof titleFilter === 'object' && titleFilter !== null && '$like' in titleFilter) {
+        const likeValue = titleFilter['$like']
+        if (typeof likeValue === 'string') {
+          const searchTerm = likeValue.replace(/%/g, '').toLowerCase()
+          return Array.from(mockIssues.values()).filter((issue) => issue.title.toLowerCase().includes(searchTerm))
+        }
       }
       return Array.from(mockIssues.values())
     }
@@ -55,8 +56,8 @@ class MockHulyClient {
     }
 
     if (className.includes('Issue')) {
-      const issueId = query['_id'] as string
-      return mockIssues.get(issueId)
+      const rawId = query['_id']
+      return typeof rawId === 'string' ? mockIssues.get(rawId) : undefined
     }
 
     return undefined
@@ -68,7 +69,7 @@ class MockHulyClient {
 }
 
 export function setupSearchIssuesMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

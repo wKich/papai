@@ -18,7 +18,7 @@ export function makeUpdateIssueTool(userId: number): ToolSet[string] {
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
       labelIds: z.string().array().optional().describe('Label IDs to apply. Call list_labels first to get IDs.'),
       estimate: z.number().int().optional().describe('Story point estimate'),
-      projectId: z.string().optional().describe('Project ID to move the issue to'),
+      projectId: z.string().describe('Project ID to move the issue to'),
     }),
     execute: async ({ issueId, status, assigneeId, dueDate, labelIds, estimate, projectId }) => {
       try {
@@ -32,12 +32,15 @@ export function makeUpdateIssueTool(userId: number): ToolSet[string] {
           estimate,
           projectId,
         })
-        if (!issue) {
+        if (issue === undefined) {
           log.warn({ issueId, status, assigneeId, projectId }, 'updateIssue returned no issue')
-        } else if (!issue.id || !issue.identifier) {
+        } else if (issue.id === undefined || issue.identifier === undefined) {
           log.warn({ issue }, 'updateIssue returned incomplete issue data')
         }
-        return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
+        return {
+          id: issue?.id ?? '',
+          identifier: issue?.identifier ?? '',
+        }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'update_issue' },

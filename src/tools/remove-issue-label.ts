@@ -12,15 +12,16 @@ export function makeRemoveIssueLabelTool(userId: number): ToolSet[string] {
     description: 'Remove a label from an issue. Use this when the user wants to remove a label from an issue.',
     inputSchema: z.object({
       issueId: z.string().describe("The issue ID (e.g. 'abc123')"),
+      projectId: z.string().describe('Project ID where the issue belongs'),
       labelId: z
         .string()
         .describe(
           "The label ID to remove. Call get_issue first to see the issue's labels, or list_labels to see all available labels.",
         ),
     }),
-    execute: async ({ issueId, labelId }) => {
+    execute: async ({ issueId, projectId, labelId }) => {
       try {
-        const result = await removeIssueLabel({ userId, issueId, labelId })
+        const result = await removeIssueLabel({ userId, issueId, projectId, labelId })
         if (!result) {
           log.warn({ issueId, labelId }, 'removeIssueLabel returned no result')
         }

@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import tracker, { type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
@@ -24,13 +23,13 @@ export async function listProjects({
   const client = await getHulyClient(userId)
 
   try {
-    const projects = (await client.findAll(tracker.class.Project, {})) as unknown as Project[]
+    const projects = await client.findAll<Project>(tracker.class.Project, {})
 
     const mappedProjects: ProjectData[] = projects.map((project) => ({
       id: project._id as string,
       name: project.name,
       identifier: project.identifier,
-      description: project.description !== undefined ? String(project.description) : undefined,
+      description: project.description === undefined ? undefined : String(project.description),
     }))
 
     log.info({ projectCount: mappedProjects.length }, 'Projects listed')

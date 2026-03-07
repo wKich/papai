@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 const mockProject = {
@@ -10,7 +9,8 @@ const mockIssue = {
   _id: 'issue-123',
   title: 'Test Issue',
   identifier: 'P-1',
-  priority: 4, // Huly: 4 = Urgent, which maps to Linear: 1
+  // Huly: 4 = Urgent, which maps to Linear: 1
+  priority: 4,
   space: 'project-123',
   description: { content: [] },
   status: 'status-1',
@@ -64,8 +64,8 @@ class MockHulyClient {
     }
 
     if (className.includes('Issue')) {
-      const issueId = query['_id'] as string
-      if (issueId === 'issue-123') {
+      const rawId = query['_id']
+      if (rawId === 'issue-123') {
         return mockIssue
       }
     }
@@ -79,8 +79,8 @@ class MockHulyClient {
     }
 
     if (className.includes('TagElement')) {
-      const tagId = query['_id'] as string
-      return mockTagElements.find((t) => t._id === tagId)
+      const rawTagId = query['_id']
+      return typeof rawTagId === 'string' ? mockTagElements.find((t) => t._id === rawTagId) : undefined
     }
 
     return undefined
@@ -90,7 +90,7 @@ class MockHulyClient {
     const className = String(_class)
 
     if (className.includes('TagReference')) {
-      const attachedTo = query['attachedTo'] as string
+      const attachedTo = query['attachedTo']
       if (attachedTo === 'issue-123') {
         return mockLabels
       }
@@ -105,7 +105,7 @@ class MockHulyClient {
 }
 
 export function setupGetIssueMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

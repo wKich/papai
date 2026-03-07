@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 const mockProject = {
@@ -39,16 +38,15 @@ class MockHulyClient {
     }
 
     if (className.includes('Issue')) {
-      const issueId = query['_id'] as string
-      if (issueId === 'issue-123') {
+      if (query['_id'] === 'issue-123') {
         return mockIssue
       }
     }
 
     if (className.includes('IssueStatus')) {
-      const name = query['name'] as string | undefined
-      if (name !== undefined) {
-        return mockStatuses.find((s) => s.name.toLowerCase() === name.toLowerCase())
+      const rawName = query['name']
+      if (typeof rawName === 'string') {
+        return mockStatuses.find((s) => s.name.toLowerCase() === rawName.toLowerCase())
       }
       return mockStatus
     }
@@ -63,10 +61,12 @@ class MockHulyClient {
       return []
     }
 
-    if (className.includes('IssueStatus') && query['name']) {
-      const name = query['name'] as string
-      const found = mockStatuses.find((s) => s.name.toLowerCase() === name.toLowerCase())
-      return found ? [found] : []
+    if (className.includes('IssueStatus') && query['name'] !== undefined) {
+      const rawName = query['name']
+      if (typeof rawName === 'string') {
+        const found = mockStatuses.find((s) => s.name.toLowerCase() === rawName.toLowerCase())
+        return found === undefined ? [] : [found]
+      }
     }
 
     return []
@@ -82,7 +82,7 @@ class MockHulyClient {
 }
 
 export function setupUpdateIssueMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

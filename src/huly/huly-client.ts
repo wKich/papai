@@ -2,23 +2,12 @@ import { connect, NodeWebSocketFactory, type PlatformClient } from '@hcengineeri
 
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 
 const log = logger.child({ scope: 'huly-client' })
 
 export async function getHulyClient(userId: number): Promise<PlatformClient> {
   log.debug({ userId }, 'getHulyClient called')
-
-  const url = process.env['HULY_URL']
-  if (url === undefined || url === '') {
-    log.error({}, 'HULY_URL environment variable not set')
-    throw new Error('HULY_URL environment variable is required')
-  }
-
-  const workspace = process.env['HULY_WORKSPACE']
-  if (workspace === undefined || workspace === '') {
-    log.error({}, 'HULY_WORKSPACE environment variable not set')
-    throw new Error('HULY_WORKSPACE environment variable is required')
-  }
 
   const email = getConfig(userId, 'huly_email')
   if (email === null || email === '') {
@@ -32,12 +21,12 @@ export async function getHulyClient(userId: number): Promise<PlatformClient> {
     throw new Error('huly_password not configured. Use /set huly_password <password>')
   }
 
-  log.info({ userId, workspace }, 'Connecting to Huly')
+  log.info({ userId, workspace: hulyWorkspace }, 'Connecting to Huly')
 
-  const client = await connect(url, {
+  const client = await connect(hulyUrl, {
     email,
     password,
-    workspace,
+    workspace: hulyWorkspace,
     socketFactory: NodeWebSocketFactory,
     connectionTimeout: 30000,
   })

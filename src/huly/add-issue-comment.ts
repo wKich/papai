@@ -1,10 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import chunter from '@hcengineering/chunter'
+import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:add-issue-comment' })
 
@@ -21,6 +23,37 @@ export interface AddIssueCommentResult {
   url: string
 }
 
+async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
+  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (result === undefined || result === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+  return result
+}
+
+function addComment(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  projectId: Ref<Space>,
+  issueId: Ref<Issue>,
+  body: string,
+): Promise<Ref<ChatMessage>> {
+  return client.addCollection(chunter.class.ChatMessage, projectId, issueId, tracker.class.Issue, 'comments', {
+    message: body,
+    attachments: 0,
+  })
+}
+
+async function buildCommentUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
+  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
+
+  if (project !== undefined && project !== null && 'identifier' in project) {
+    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
+  }
+  log.warn({ space: issue.space }, 'Failed to find Project')
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
+}
+
 export async function addIssueComment({
   userId,
   projectId,
@@ -31,42 +64,18 @@ export async function addIssueComment({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+  ensureRef<Space>(projectId)
+
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
-
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Add comment using addCollection
-    const commentId = await client.addCollection(
-      chunter.class.ChatMessage,
-      projectId as unknown as Parameters<typeof client.addCollection>[1],
-      issueId as unknown as Parameters<typeof client.addCollection>[2],
-      tracker.class.Issue,
-      'comments',
-      {
-        message: body,
-        attachments: 0,
-      } as unknown as Parameters<typeof client.addCollection>[5],
-    )
+    const issue = await verifyIssue(client, issueId)
+    const commentId = await addComment(client, projectId, issueId, body)
+    const url = await buildCommentUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment added to issue')
 
-    // Construct URL
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: issue.space as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { identifier: string } | undefined
-    const projectIdentifier = project?.identifier ?? 'UNK'
-    const url = `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`
-
     return {
-      id: commentId as string,
+      id: commentId,
       body,
       url,
     }

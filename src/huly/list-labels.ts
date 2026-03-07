@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
 
@@ -21,14 +20,14 @@ export async function listLabels({ userId }: { userId: number }): Promise<LabelD
 
   try {
     // Find all tag elements that target issues (labels)
-    const labels = (await client.findAll(tags.class.TagElement, {
+    const labels = await client.findAll<TagElement>(tags.class.TagElement, {
       targetClass: tracker.class.Issue,
-    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as TagElement[]
+    })
 
     const result: LabelData[] = labels.map((label) => ({
       id: label._id as string,
       name: label.title,
-      color: label.color !== undefined ? numberToHexColor(label.color) : '#000000',
+      color: label.color === undefined ? '#000000' : numberToHexColor(label.color),
     }))
 
     log.info({ userId, labelCount: result.length }, 'Labels listed')

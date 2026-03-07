@@ -1,10 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
-import tags, { type TagReference } from '@hcengineering/tags'
+import type { Ref, Space } from '@hcengineering/core'
+import tags, { type TagElement, type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-label' })
 
@@ -22,6 +24,49 @@ export interface RemoveIssueLabelResult {
   url: string
 }
 
+type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
+
+async function fetchIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
+  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
+
+  if (issue === undefined || issue === null) {
+    throw new Error(`Issue not found: ${issueId}`)
+  }
+  return issue
+}
+
+async function findTagReference(
+  client: HulyClient,
+  issueId: Ref<Issue>,
+  labelId: Ref<TagElement>,
+): Promise<TagReference | undefined> {
+  const tagRefs = await client.findAll(tags.class.TagReference, {
+    attachedTo: issueId,
+    tag: labelId,
+  })
+
+  return tagRefs[0]
+}
+
+async function removeTagReference(
+  client: HulyClient,
+  projectId: Ref<Space>,
+  tagRefId: Ref<TagReference>,
+  issueId: Ref<Issue>,
+): Promise<void> {
+  await client.removeCollection(tags.class.TagReference, projectId, tagRefId, issueId, tracker.class.Issue, 'labels')
+}
+
+async function buildIssueUrl(client: HulyClient, issue: Issue): Promise<string> {
+  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
+
+  if (project !== undefined && project !== null && 'identifier' in project) {
+    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
+  }
+  log.warn({ space: issue.space }, 'Failed to find Project')
+  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
+}
+
 export async function removeIssueLabel({
   userId,
   projectId,
@@ -32,51 +77,27 @@ export async function removeIssueLabel({
 
   const client = await getHulyClient(userId)
 
+  ensureRef<Issue>(issueId)
+  ensureRef<TagElement>(labelId)
+  ensureRef<Space>(projectId)
+
   try {
-    // First verify the issue exists
-    const issue = (await client.findOne(tracker.class.Issue, {
-      _id: issueId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Issue | undefined
+    const issue = await fetchIssue(client, issueId)
+    const tagRef = await findTagReference(client, issueId, labelId)
 
-    if (!issue) {
-      throw new Error(`Issue not found: ${issueId}`)
-    }
-
-    // Find the TagReference for this label on this issue
-    const tagRefs = (await client.findAll(tags.class.TagReference, {
-      attachedTo: issueId as unknown as Parameters<typeof client.findAll>[1]['attachedTo'],
-      tag: labelId as unknown as Parameters<typeof client.findAll>[1]['tag'],
-    } as unknown as Parameters<typeof client.findAll>[1])) as unknown as TagReference[]
-
-    if (tagRefs.length === 0) {
+    if (tagRef === undefined) {
       log.warn({ userId, issueId, labelId }, 'Label not found on issue')
       return undefined
     }
 
-    // Remove the TagReference
-    const tagRefId = (tagRefs[0] as { _id: string })._id
-    await client.removeCollection(
-      tags.class.TagReference,
-      projectId as unknown as Parameters<typeof client.removeCollection>[1],
-      tagRefId as unknown as Parameters<typeof client.removeCollection>[2],
-      issueId as unknown as Parameters<typeof client.removeCollection>[3],
-      tracker.class.Issue,
-      'labels',
-    )
+    await removeTagReference(client, projectId, tagRef._id, issueId)
 
     log.info({ userId, issueId, labelId, identifier: issue.identifier }, 'Label removed from issue')
 
-    // Construct URL
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: issue.space as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as { identifier: string } | undefined
-    const projectIdentifier = project?.identifier ?? 'UNK'
-    const url = `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`
+    const url = await buildIssueUrl(client, issue)
 
     return {
-      id: issue._id as string,
+      id: issue._id,
       identifier: issue.identifier,
       title: issue.title,
       url,

@@ -1,11 +1,12 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
+import type { DocumentQuery } from '@hcengineering/core'
 import { SortingOrder } from '@hcengineering/core'
-import tracker from '@hcengineering/tracker'
-import type { Issue, Project } from '@hcengineering/tracker'
+import tracker, { type Issue, type IssueStatus, type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
+import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
+import { ensureRef } from './refs.js'
 
 const log = logger.child({ scope: 'huly:search-issues' })
 
@@ -32,19 +33,80 @@ type SearchIssuesParams = {
 function mapPriorityToNumber(hulyPriority: number): number {
   // Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
   // Linear: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
-  switch (hulyPriority) {
-    case 0:
-      return 0 // No Priority
-    case 4:
-      return 1 // Urgent
-    case 3:
-      return 2 // High
-    case 2:
-      return 3 // Medium
-    case 1:
-      return 4 // Low
-    default:
-      return 0
+  // Mapping: No Priority -> 0, Urgent -> 1, High -> 2, Medium -> 3, Low -> 4
+  const priorityMap: Record<number, number> = {
+    0: 0,
+    4: 1,
+    3: 2,
+    2: 3,
+    1: 4,
+  }
+  return priorityMap[hulyPriority] ?? 0
+}
+
+async function resolveStateFilter(
+  client: Awaited<ReturnType<typeof getHulyClient>>,
+  state: string | undefined,
+): Promise<IssueStatus['_id'] | undefined> {
+  if (state === undefined) return undefined
+  const statusQuery = await client.findAll<IssueStatus>(tracker.class.IssueStatus, { name: state })
+  if (statusQuery.length > 0 && statusQuery[0] !== undefined) {
+    return statusQuery[0]._id
+  }
+  return undefined
+}
+
+function buildDateFilter(
+  dueDateBefore: string | undefined,
+  dueDateAfter: string | undefined,
+): { $lt?: number; $gt?: number } | undefined {
+  if (dueDateBefore === undefined && dueDateAfter === undefined) return undefined
+  const dateFilter: { $lt?: number; $gt?: number } = {}
+  if (dueDateBefore !== undefined) {
+    dateFilter.$lt = new Date(dueDateBefore).getTime()
+  }
+  if (dueDateAfter !== undefined) {
+    dateFilter.$gt = new Date(dueDateAfter).getTime()
+  }
+  return dateFilter
+}
+
+function buildHulyQuery(
+  params: Omit<SearchIssuesParams, 'userId' | 'labelName' | 'labelId'>,
+  statusId: IssueStatus['_id'] | undefined,
+  dateFilter: { $lt?: number; $gt?: number } | undefined,
+  projectRef: Project['_id'],
+): DocumentQuery<Issue> {
+  const { query, estimate } = params
+  const hulyQuery: DocumentQuery<Issue> = { space: projectRef }
+  if (query !== undefined && query.length > 0) {
+    hulyQuery.title = { $like: `%${query}%` }
+  }
+  if (statusId !== undefined) {
+    hulyQuery.status = statusId
+  }
+  if (dateFilter !== undefined) {
+    hulyQuery.dueDate = dateFilter
+  }
+  if (estimate !== undefined) {
+    hulyQuery.estimation = estimate
+  }
+  return hulyQuery
+}
+
+function mapToIssueResult(issues: Issue[], projectIdentifier: string): IssueResult[] {
+  return issues.map((issue) => ({
+    id: issue._id,
+    identifier: issue.identifier,
+    title: issue.title,
+    priority: mapPriorityToNumber(issue.priority),
+    url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`,
+  }))
+}
+
+function handleLabelFilter(userId: number, labelName: string | undefined, labelId: string | undefined): void {
+  if (labelName !== undefined || labelId !== undefined) {
+    log.warn({ userId, labelName, labelId }, 'Label filtering not fully implemented for Huly')
   }
 }
 
@@ -64,81 +126,26 @@ export async function searchIssues({
     'searchIssues called',
   )
 
+  ensureRef<Project>(projectId)
+
   const client = await getHulyClient(userId)
-
   try {
-    // Build query for Huly
-    const hulyQuery: Record<string, unknown> = { space: projectId }
-
-    // Use $like for title search (Huly doesn't have full-text search like Linear)
-    if (query !== undefined && query.length > 0) {
-      hulyQuery['title'] = { $like: `%${query}%` }
-    }
-
-    // Filter by state name
-    if (state !== undefined) {
-      // We need to fetch the state ID first
-      const statusQuery = await client.findAll(tracker.class.IssueStatus, { name: state } as unknown as Parameters<
-        typeof client.findAll
-      >[1])
-
-      if (statusQuery.length > 0) {
-        const statusResult = statusQuery[0] as unknown as { _id: string }
-        hulyQuery['status'] = statusResult._id
-      }
-    }
-
-    // Filter by due date
-    if (dueDateBefore !== undefined || dueDateAfter !== undefined) {
-      const dateFilter: Record<string, number> = {}
-      if (dueDateBefore !== undefined) {
-        dateFilter['$lt'] = new Date(dueDateBefore).getTime()
-      }
-      if (dueDateAfter !== undefined) {
-        dateFilter['$gt'] = new Date(dueDateAfter).getTime()
-      }
-      hulyQuery['dueDate'] = dateFilter
-    }
-
-    // Filter by estimate
-    if (estimate !== undefined) {
-      hulyQuery['estimation'] = estimate
-    }
-
-    // Fetch issues
-    const issues = (await client.findAll(
-      tracker.class.Issue,
-      hulyQuery as unknown as Parameters<typeof client.findAll>[1],
-      { sort: { modifiedOn: SortingOrder.Descending } } as unknown as Parameters<typeof client.findAll>[2],
-    )) as unknown as Issue[]
-
-    // Filter by label if specified (post-search filter since Huly doesn't support $like on labels in findAll)
-    let filteredIssues = issues
-    if (labelName !== undefined || labelId !== undefined) {
-      // For simplicity, we'll skip label filtering for now as it requires additional lookups
-      // This is a degraded feature compared to Linear
-      log.warn({ userId, labelName, labelId }, 'Label filtering not fully implemented for Huly')
-    }
-
-    // Map results
-    const hulyUrl = process.env['HULY_URL'] ?? ''
-    const hulyWorkspace = process.env['HULY_WORKSPACE'] ?? ''
-    const project = (await client.findOne(tracker.class.Project, {
-      _id: projectId as unknown as Parameters<typeof client.findOne>[1]['_id'],
-    } as unknown as Parameters<typeof client.findOne>[1])) as unknown as Project | undefined
-
+    const statusId = await resolveStateFilter(client, state)
+    const dateFilter = buildDateFilter(dueDateBefore, dueDateAfter)
+    const hulyQuery = buildHulyQuery(
+      { projectId, query, state, dueDateBefore, dueDateAfter, estimate },
+      statusId,
+      dateFilter,
+      projectId,
+    )
+    const issues = await client.findAll<Issue>(tracker.class.Issue, hulyQuery, {
+      sort: { modifiedOn: SortingOrder.Descending },
+    })
+    handleLabelFilter(userId, labelName, labelId)
+    const project = await client.findOne<Project>(tracker.class.Project, { _id: projectId })
     const projectIdentifier = project?.identifier ?? 'UNK'
-
-    const results: IssueResult[] = filteredIssues.map((issue) => ({
-      id: issue._id as string,
-      identifier: issue.identifier,
-      title: issue.title,
-      priority: mapPriorityToNumber(issue.priority as number),
-      url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`,
-    }))
-
+    const results = mapToIssueResult(issues, projectIdentifier)
     log.info({ userId, projectId, query, state, resultCount: results.length }, 'Issues searched')
-
     return results
   } catch (error) {
     log.error(

@@ -14,16 +14,15 @@ export function makeUpdateLabelTool(userId: number): ToolSet[string] {
       .object({
         labelId: z.string().describe('Label ID'),
         name: z.string().optional().describe('New label name'),
-        description: z.string().optional().describe('New label description'),
         color: z.string().optional().describe('New label color (hex)'),
       })
       .refine(
-        (data) => data.name !== undefined || data.description !== undefined || data.color !== undefined,
-        'At least one of name, description, or color must be provided',
+        (data) => data.name !== undefined || data.color !== undefined,
+        'At least one of name or color must be provided',
       ),
-    execute: async ({ labelId, name, description, color }) => {
+    execute: async ({ labelId, name, color }) => {
       try {
-        return await updateLabel({ userId, labelId, name, description, color })
+        return await updateLabel({ userId, labelId, name, color })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), labelId, tool: 'update_label' },
