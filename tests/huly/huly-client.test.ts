@@ -99,8 +99,14 @@ describe('getHulyClient', () => {
     const originalUrl = process.env['HULY_URL']
     delete process.env['HULY_URL']
 
-    // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-    await expect(mockGetHulyClient(userId)).rejects.toThrow('HULY_URL')
+    let caught: unknown
+    try {
+      await mockGetHulyClient(userId)
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    if (caught instanceof Error) expect(caught.message).toContain('HULY_URL')
 
     process.env['HULY_URL'] = originalUrl
   })
@@ -109,8 +115,14 @@ describe('getHulyClient', () => {
     const originalWorkspace = process.env['HULY_WORKSPACE']
     delete process.env['HULY_WORKSPACE']
 
-    // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-    await expect(mockGetHulyClient(userId)).rejects.toThrow('HULY_WORKSPACE')
+    let caught: unknown
+    try {
+      await mockGetHulyClient(userId)
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    if (caught instanceof Error) expect(caught.message).toContain('HULY_WORKSPACE')
 
     process.env['HULY_WORKSPACE'] = originalWorkspace
   })
@@ -118,15 +130,27 @@ describe('getHulyClient', () => {
   it('should throw if user email not configured', async () => {
     store.data.delete(`${userId}:huly_email`)
 
-    // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-    await expect(mockGetHulyClient(userId)).rejects.toThrow('huly_email')
+    let caught: unknown
+    try {
+      await mockGetHulyClient(userId)
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    if (caught instanceof Error) expect(caught.message).toContain('huly_email')
   })
 
   it('should throw if user password not configured', async () => {
     store.data.delete(`${userId}:huly_password`)
 
-    // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-    await expect(mockGetHulyClient(userId)).rejects.toThrow('huly_password')
+    let caught: unknown
+    try {
+      await mockGetHulyClient(userId)
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    if (caught instanceof Error) expect(caught.message).toContain('huly_password')
   })
 
   it('should return client on successful connection', async () => {

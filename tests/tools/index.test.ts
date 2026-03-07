@@ -49,13 +49,12 @@ import { makeUpdateIssueTool } from '../../src/tools/update-issue.js'
 import { makeUpdateLabelTool } from '../../src/tools/update-label.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
 
-const mockApiKey = 'test-api-key'
-const mockTeamId = 'team-123'
+const mockUserId = 12345
 
 describe('create_issue tool', () => {
   test('executes successfully with minimal params', async () => {
     setupCreateIssueMock()
-    const tool = makeCreateIssueTool(mockApiKey, mockTeamId)
+    const tool = makeCreateIssueTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -65,7 +64,7 @@ describe('create_issue tool', () => {
 
   test('executes successfully with all params', async () => {
     setupCreateIssueMock()
-    const tool = makeCreateIssueTool(mockApiKey, mockTeamId)
+    const tool = makeCreateIssueTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -88,7 +87,7 @@ describe('create_issue tool', () => {
 describe('update_issue tool', () => {
   test('executes successfully', async () => {
     setupUpdateIssueMock()
-    const tool = makeUpdateIssueTool(mockApiKey)
+    const tool = makeUpdateIssueTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -100,7 +99,7 @@ describe('update_issue tool', () => {
 describe('search_issues tool', () => {
   test('executes successfully', async () => {
     setupSearchIssuesMock()
-    const tool = makeSearchIssuesTool(mockApiKey)
+    const tool = makeSearchIssuesTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -114,7 +113,7 @@ describe('search_issues tool', () => {
 describe('list_projects tool', () => {
   test('executes successfully', () => {
     setupListProjectsMock()
-    const tool = makeListProjectsTool(mockApiKey)
+    const tool = makeListProjectsTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -126,7 +125,7 @@ describe('list_projects tool', () => {
 describe('add_issue_comment tool', () => {
   test('executes successfully', async () => {
     setupAddIssueCommentMock()
-    const tool = makeAddIssueCommentTool(mockApiKey)
+    const tool = makeAddIssueCommentTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -141,7 +140,7 @@ describe('add_issue_comment tool', () => {
 describe('get_issue_comments tool', () => {
   test('executes successfully', async () => {
     setupGetIssueCommentsMock()
-    const tool = makeGetIssueCommentsTool(mockApiKey)
+    const tool = makeGetIssueCommentsTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -153,7 +152,7 @@ describe('get_issue_comments tool', () => {
 describe('list_labels tool', () => {
   test('executes successfully', async () => {
     setupListLabelsMock()
-    const tool = makeListLabelsTool(mockApiKey, mockTeamId)
+    const tool = makeListLabelsTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -165,7 +164,7 @@ describe('list_labels tool', () => {
 describe('add_issue_relation tool', () => {
   test('executes successfully', async () => {
     setupAddIssueRelationMock()
-    const tool = makeAddIssueRelationTool(mockApiKey)
+    const tool = makeAddIssueRelationTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -180,7 +179,7 @@ describe('add_issue_relation tool', () => {
 describe('get_issue tool', () => {
   test('executes successfully', async () => {
     setupGetIssueMock()
-    const tool = makeGetIssueTool(mockApiKey)
+    const tool = makeGetIssueTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -192,7 +191,7 @@ describe('get_issue tool', () => {
 describe('create_label tool', () => {
   test('executes successfully', async () => {
     setupCreateLabelMock()
-    const tool = makeCreateLabelTool(mockApiKey, mockTeamId)
+    const tool = makeCreateLabelTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -204,7 +203,7 @@ describe('create_label tool', () => {
 describe('create_project tool', () => {
   test('executes successfully', async () => {
     setupCreateProjectMock()
-    const tool = makeCreateProjectTool(mockApiKey, mockTeamId)
+    const tool = makeCreateProjectTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -216,7 +215,7 @@ describe('create_project tool', () => {
 describe('remove_issue_label tool', () => {
   test('executes successfully', async () => {
     setupRemoveIssueLabelMock()
-    const tool = makeRemoveIssueLabelTool(mockApiKey)
+    const tool = makeRemoveIssueLabelTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -231,7 +230,7 @@ describe('remove_issue_label tool', () => {
 describe('archive_issue tool', () => {
   test('executes successfully', async () => {
     setupArchiveIssueMock()
-    const tool = makeArchiveIssueTool(mockApiKey)
+    const tool = makeArchiveIssueTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -243,7 +242,7 @@ describe('archive_issue tool', () => {
 describe('add_issue_label tool', () => {
   test('executes successfully', async () => {
     setupAddIssueLabelMock()
-    const tool = makeAddIssueLabelTool(mockApiKey)
+    const tool = makeAddIssueLabelTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -258,7 +257,7 @@ describe('add_issue_label tool', () => {
 describe('archive_project tool', () => {
   test('executes successfully', async () => {
     setupArchiveProjectMock()
-    const tool = makeArchiveProjectTool(mockApiKey)
+    const tool = makeArchiveProjectTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -270,7 +269,7 @@ describe('archive_project tool', () => {
 describe('remove_issue_comment tool', () => {
   test('executes successfully', async () => {
     setupRemoveIssueCommentMock()
-    const tool = makeRemoveIssueCommentTool(mockApiKey)
+    const tool = makeRemoveIssueCommentTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -285,7 +284,7 @@ describe('remove_issue_comment tool', () => {
 describe('remove_issue_relation tool', () => {
   test('executes successfully', async () => {
     setupRemoveIssueRelationMock()
-    const tool = makeRemoveIssueRelationTool(mockApiKey)
+    const tool = makeRemoveIssueRelationTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -297,7 +296,7 @@ describe('remove_issue_relation tool', () => {
 describe('remove_label tool', () => {
   test('executes successfully', async () => {
     setupRemoveLabelMock()
-    const tool = makeRemoveLabelTool(mockApiKey)
+    const tool = makeRemoveLabelTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -309,7 +308,7 @@ describe('remove_label tool', () => {
 describe('update_issue_comment tool', () => {
   test('executes successfully', async () => {
     setupUpdateIssueCommentMock()
-    const tool = makeUpdateIssueCommentTool(mockApiKey)
+    const tool = makeUpdateIssueCommentTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -324,7 +323,7 @@ describe('update_issue_comment tool', () => {
 describe('update_issue_relation tool', () => {
   test('executes successfully', async () => {
     setupUpdateIssueRelationMock()
-    const tool = makeUpdateIssueRelationTool(mockApiKey)
+    const tool = makeUpdateIssueRelationTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -339,7 +338,7 @@ describe('update_issue_relation tool', () => {
 describe('update_label tool', () => {
   test('executes successfully', async () => {
     setupUpdateLabelMock()
-    const tool = makeUpdateLabelTool(mockApiKey)
+    const tool = makeUpdateLabelTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }
@@ -351,7 +350,7 @@ describe('update_label tool', () => {
 describe('update_project tool', () => {
   test('executes successfully', async () => {
     setupUpdateProjectMock()
-    const tool = makeUpdateProjectTool(mockApiKey)
+    const tool = makeUpdateProjectTool(mockUserId)
     if (tool.execute === undefined) {
       throw new Error('Tool execute not defined')
     }

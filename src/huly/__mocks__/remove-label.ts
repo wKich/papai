@@ -1,46 +1,24 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import core, { type Ref, type Doc } from '@hcengineering/core'
-import tags, { type TagElement } from '@hcengineering/tags'
-import tracker from '@hcengineering/tracker'
+type MockRecord = Record<string, unknown>
 
-// Mock label storage - recreated on each setup call
-function createMockLabels(): Map<string, TagElement> {
-  return new Map<string, TagElement>([
-    [
-      'label-123',
-      {
-        _id: 'label-123' as Ref<TagElement>,
-        _class: tags.class.TagElement,
-        space: core.space.Workspace,
-        modifiedBy: 'system' as Ref<Doc>,
-        modifiedOn: Date.now(),
-        createdBy: 'system' as Ref<Doc>,
-        createdOn: Date.now(),
-        title: 'Label to Remove',
-        description: '',
-        color: 0xff0000,
-        targetClass: tracker.class.Issue,
-        category: undefined,
-      } as unknown as TagElement,
-    ],
-  ])
+function createMockLabels(): Map<string, MockRecord> {
+  return new Map<string, MockRecord>([['label-123', { _id: 'label-123', title: 'Label to Remove', color: 0xff0000 }]])
 }
 
 class MockHulyClient {
-  private mockLabels: Map<string, TagElement>
+  private mockLabels: Map<string, MockRecord>
 
   constructor() {
     this.mockLabels = createMockLabels()
   }
 
-  async findOne<T extends Doc>(_class: unknown, query: Record<string, unknown>): Promise<T | undefined> {
+  async findOne(_class: unknown, query: MockRecord): Promise<unknown> {
     const className = String(_class)
 
     if (className.includes('TagElement')) {
-      const labelId = query['_id'] as string
-      return this.mockLabels.get(labelId) as unknown as T
+      const labelId = query['_id']
+      return typeof labelId === 'string' ? this.mockLabels.get(labelId) : undefined
     }
 
     return undefined
@@ -48,7 +26,7 @@ class MockHulyClient {
 
   async removeDoc(_class: unknown, _space: unknown, docId: unknown): Promise<void> {
     const className = String(_class)
-    const id = String(docId)
+    const id = typeof docId === 'string' ? docId : ''
 
     if (className.includes('TagElement')) {
       this.mockLabels.delete(id)
@@ -61,7 +39,7 @@ class MockHulyClient {
 }
 
 export function setupRemoveLabelMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

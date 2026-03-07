@@ -27,15 +27,18 @@ describe('addIssueComment', () => {
   describe('error handling', () => {
     test('throws HulyApiError when issue not found', async () => {
       setupAddIssueCommentMock()
-      // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-      await expect(
-        addIssueComment({
+      let caught: unknown
+      try {
+        await addIssueComment({
           userId: 123,
           projectId: 'project-123',
           issueId: 'invalid-issue',
           body: 'Test comment',
-        }),
-      ).rejects.toThrow(HulyApiError)
+        })
+      } catch (error: unknown) {
+        caught = error
+      }
+      expect(caught).toBeInstanceOf(HulyApiError)
     })
 
     test('throws HulyApiError with issue-not-found code', async () => {

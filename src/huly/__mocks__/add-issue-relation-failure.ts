@@ -1,19 +1,11 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 class MockHulyClient {
-  async findOne<T extends Record<string, unknown>>(
-    _class: unknown,
-    query: Record<string, unknown>,
-  ): Promise<T | undefined> {
+  async findOne(_class: unknown, query: Record<string, unknown>): Promise<unknown> {
     const className = String(_class)
 
-    if (className.includes('Issue')) {
-      const issueId = query['_id'] as string
-
-      if (issueId === 'invalid-issue') {
-        return undefined
-      }
+    if (className.includes('Issue') && query['_id'] === 'invalid-issue') {
+      return undefined
     }
 
     return undefined
@@ -25,7 +17,7 @@ class MockHulyClient {
 }
 
 export function setupAddIssueRelationFailureMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

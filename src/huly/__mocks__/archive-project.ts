@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 const mockProject = {
@@ -11,8 +10,7 @@ const mockProject = {
 class MockHulyClient {
   async findOne(_class: unknown, query: Record<string, unknown>): Promise<unknown> {
     const className = String(_class)
-    const projectId = query['_id'] as string
-    if (className.includes('Project') && projectId === 'project-123') {
+    if (className.includes('Project') && query['_id'] === 'project-123') {
       return mockProject
     }
     return undefined
@@ -28,7 +26,7 @@ class MockHulyClient {
 }
 
 export function setupArchiveProjectMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

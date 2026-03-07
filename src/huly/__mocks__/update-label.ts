@@ -1,76 +1,49 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
-import core, { type Ref, type Doc } from '@hcengineering/core'
-import tags, { type TagElement } from '@hcengineering/tags'
-import tracker from '@hcengineering/tracker'
+type MockRecord = Record<string, unknown>
 
-// Mock label storage
-const mockLabels = new Map<string, TagElement>([
-  [
-    'label-123',
-    {
-      _id: 'label-123' as Ref<TagElement>,
-      _class: tags.class.TagElement,
-      space: core.space.Workspace,
-      modifiedBy: 'system' as Ref<Doc>,
-      modifiedOn: Date.now(),
-      createdBy: 'system' as Ref<Doc>,
-      createdOn: Date.now(),
-      title: 'Original Label',
-      description: '',
-      color: 0xff0000,
-      targetClass: tracker.class.Issue,
-      category: undefined,
-    } as unknown as TagElement,
-  ],
+function parseColor(color: unknown): number {
+  if (typeof color === 'number') return color
+  if (typeof color === 'string') {
+    if (color.startsWith('#')) return Number.parseInt(color.slice(1), 16)
+    return Number.parseInt(color, 16)
+  }
+  return 0x000000
+}
+
+const mockLabels = new Map<string, MockRecord>([
+  ['label-123', { _id: 'label-123', title: 'Original Label', color: 0xff0000 }],
 ])
 
 class MockHulyClient {
-  async findOne<T extends Doc>(_class: unknown, query: Record<string, unknown>): Promise<T | undefined> {
+  async findOne(_class: unknown, query: MockRecord): Promise<unknown> {
     const className = String(_class)
 
     if (className.includes('TagElement')) {
-      const labelId = query['_id'] as string
-      return mockLabels.get(labelId) as unknown as T
+      const labelId = query['_id']
+      return typeof labelId === 'string' ? mockLabels.get(labelId) : undefined
     }
 
     return undefined
   }
 
-  async updateDoc(
-    _class: unknown,
-    _space: unknown,
-    docId: unknown,
-    operations: Record<string, unknown>,
-  ): Promise<void> {
+  async updateDoc(_class: unknown, _space: unknown, docId: unknown, operations: MockRecord): Promise<void> {
     const className = String(_class)
-    const id = String(docId)
+    const id = typeof docId === 'string' ? docId : ''
 
-    if (className.includes('TagElement')) {
+    if (className.includes('TagElement') && id !== '') {
       const label = mockLabels.get(id)
-      if (label) {
+      if (label !== undefined) {
         if (operations['title'] !== undefined) {
-          label.title = operations['title'] as string
+          label['title'] = operations['title']
         }
         if (operations['color'] !== undefined) {
-          label.color = this.parseColor(operations['color'])
+          label['color'] = parseColor(operations['color'])
         }
-        label.modifiedOn = Date.now()
+        label['modifiedOn'] = Date.now()
         mockLabels.set(id, label)
       }
     }
-  }
-
-  private parseColor(color: unknown): number {
-    if (typeof color === 'number') return color
-    if (typeof color === 'string') {
-      if (color.startsWith('#')) {
-        return Number.parseInt(color.slice(1), 16)
-      }
-      return Number.parseInt(color, 16)
-    }
-    return 0x000000
   }
 
   async close(): Promise<void> {
@@ -79,7 +52,7 @@ class MockHulyClient {
 }
 
 export function setupUpdateLabelMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

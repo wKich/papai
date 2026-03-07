@@ -1,4 +1,3 @@
-/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 export interface MockChatMessage {
@@ -38,7 +37,7 @@ export class MockHulyClient {
       message: _data.message ?? '',
       modifiedOn: Date.now(),
       createdOn: Date.now(),
-      attachedTo: attachedTo as string,
+      attachedTo: typeof attachedTo === 'string' ? attachedTo : '',
     })
     return commentId
   }
@@ -49,7 +48,7 @@ export class MockHulyClient {
 }
 
 export function setupAddIssueCommentMock(): void {
-  mock.module('../huly-client.js', () => ({
+  void mock.module('../huly-client.js', () => ({
     getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
 
-import type { PlatformClient } from '@hcengineering/api-client'
-
-import { formatProjectIdentifier, getOrCreateUserProject } from '../../src/huly/project-utils.js'
+import {
+  formatProjectIdentifier,
+  getOrCreateUserProject,
+  type ProjectQueryClient,
+} from '../../src/huly/project-utils.js'
 
 describe('formatProjectIdentifier', () => {
   it('should format username correctly', () => {
@@ -19,8 +21,7 @@ describe('formatProjectIdentifier', () => {
 })
 
 describe('getOrCreateUserProject', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockClient: PlatformClient
+  let mockClient: ProjectQueryClient
   let findOneCalls: Array<{ classRef: unknown; query: Record<string, unknown> }>
   let createDocCalls: Array<{
     classRef: unknown
@@ -42,8 +43,7 @@ describe('getOrCreateUserProject', () => {
         createDocCalls.push({ classRef, space, data, id })
         return Promise.resolve()
       },
-      // oxlint-disable-next-line no-unsafe-type-assertion
-    } as unknown as PlatformClient
+    }
   })
 
   it('should return existing project when found', async () => {
@@ -80,6 +80,16 @@ describe('getOrCreateUserProject', () => {
       return Promise.resolve({ _id: 'workspace-space-id' })
     }
 
+    mockClient.createDoc = (
+      classRef: unknown,
+      space: unknown,
+      data: Record<string, unknown>,
+      id: string,
+    ): Promise<void> => {
+      createDocCalls.push({ classRef, space, data, id })
+      return Promise.resolve()
+    }
+
     const result = await getOrCreateUserProject(mockClient, 'bob')
 
     expect(result.identifier).toBe('P-BOB')
@@ -96,12 +106,17 @@ describe('getOrCreateUserProject', () => {
   it('should throw error when workspace space not found', async () => {
     mockClient.findOne = (classRef: unknown, query: Record<string, unknown>): Promise<unknown> => {
       findOneCalls.push({ classRef, query })
-      // Project not found, workspace space not found
       return Promise.resolve(null)
     }
 
-    // oxlint-disable-next-line await-thenable, no-confusing-void-expression
-    await expect(getOrCreateUserProject(mockClient, 'charlie')).rejects.toThrow('Workspace space not found')
+    let caught: unknown
+    try {
+      await getOrCreateUserProject(mockClient, 'charlie')
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    if (caught instanceof Error) expect(caught.message).toContain('Workspace space not found')
 
     expect(findOneCalls).toHaveLength(2)
     expect(createDocCalls).toHaveLength(0)
@@ -131,14 +146,13 @@ describe('getOrCreateUserProject', () => {
   })
 
   it('should return correct project id and identifier for new project', async () => {
-    let generatedId: string | null = null
+    let generatedId = ''
 
     mockClient.findOne = (classRef: unknown, query: Record<string, unknown>): Promise<unknown> => {
       findOneCalls.push({ classRef, query })
       if (query['identifier'] === 'P-NEWUSER') {
         return Promise.resolve(null)
       }
-      // Workspace space
       return Promise.resolve({ _id: 'workspace-space' })
     }
 

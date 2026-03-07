@@ -1,7 +1,7 @@
 {
   "name": "papai",
   "private": true,
-  "description": "papai — an intelligent Telegram bot for managing Linear tasks with LLM.",
+  "description": "papai — an intelligent Telegram bot for managing Huly tasks with LLM.",
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
