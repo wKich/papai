@@ -32,8 +32,7 @@ type SearchIssuesParams = {
 
 function mapPriorityToNumber(hulyPriority: number): number {
   // Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
-  // Linear: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
-  // Mapping: No Priority -> 0, Urgent -> 1, High -> 2, Medium -> 3, Low -> 4
+  // Output: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
   const priorityMap: Record<number, number> = {
     0: 0,
     4: 1,

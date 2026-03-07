@@ -49,11 +49,11 @@ function parseDueDate(dueDate: string | undefined): number | null {
   return date.getTime()
 }
 
-function mapPriority(linearPriority: number | undefined): IssuePriority {
-  if (linearPriority === undefined) {
+function mapPriority(hulyPriority: number | undefined): IssuePriority {
+  if (hulyPriority === undefined) {
     return IssuePriority.NoPriority
   }
-  switch (linearPriority) {
+  switch (hulyPriority) {
     case 0:
       return IssuePriority.NoPriority
     case 1:

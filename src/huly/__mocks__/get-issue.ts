@@ -9,7 +9,7 @@ const mockIssue = {
   _id: 'issue-123',
   title: 'Test Issue',
   identifier: 'P-1',
-  // Huly: 4 = Urgent, which maps to Linear: 1
+  // Huly: 4 = Urgent, which maps to priority: 1 in external API convention
   priority: 4,
   space: 'project-123',
   description: { content: [] },

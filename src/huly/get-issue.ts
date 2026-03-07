@@ -45,7 +45,7 @@ interface IssueData {
 
 function mapPriorityToNumber(hulyPriority: number): number {
   // Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
-  // Linear: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
+  // Output: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
   switch (hulyPriority) {
     case 0:
       // No Priority

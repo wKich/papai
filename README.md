@@ -213,7 +213,7 @@ tests/
 ├── config.test.ts
 ├── errors.test.ts
 ├── logger.test.ts
-├── linear/           # Tests for src/huly/*
+├── huly/           # Tests for src/huly/*
 │   ├── add-comment.test.ts
 │   ├── archive-issue.test.ts
 │   ├── classify-error.test.ts

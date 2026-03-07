@@ -166,7 +166,7 @@ describe('isAppError type guard', () => {
   })
 })
 
-describe('getUserMessage for linear errors', () => {
+describe('getUserMessage for huly errors', () => {
   test('returns appropriate message for each error code', () => {
     expect(getUserMessage(hulyError.issueNotFound('ABC-123'))).toContain('ABC-123')
     expect(getUserMessage(hulyError.teamNotFound('TEAM-1'))).toContain('Team configuration')
