@@ -6,8 +6,8 @@ import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
+import type { HulyClient } from './types.js'
+import { hexColorToNumber, numberToHexColor } from './utils/color.js'
 
 const log = logger.child({ scope: 'huly:update-label' })
 
@@ -30,7 +30,7 @@ function buildUpdateFields(name: string | undefined, color: string | undefined):
     updates.title = name
   }
   if (color !== undefined) {
-    updates.color = parseInt(color.replace(/^#/, ''), 16) || 0
+    updates.color = hexColorToNumber(color)
   }
   return updates
 }
@@ -51,23 +51,6 @@ async function updateLabelDoc(
   updates: DocumentUpdate<TagElement>,
 ): Promise<void> {
   await client.updateDoc(tags.class.TagElement, core.space.Workspace, labelId, updates)
-}
-
-function formatColor(color: unknown): string {
-  if (color === undefined) {
-    return '#000000'
-  }
-  return numberToHexColor(color)
-}
-
-function numberToHexColor(color: unknown): string {
-  if (typeof color === 'number') {
-    return `#${color.toString(16).padStart(6, '0')}`
-  }
-  if (typeof color === 'string' && color.startsWith('#')) {
-    return color
-  }
-  return '#000000'
 }
 
 export async function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
@@ -94,7 +77,7 @@ export async function updateLabel({ userId, labelId, name, color }: UpdateLabelP
     return {
       id: updatedLabel._id,
       name: updatedLabel.title,
-      color: formatColor(updatedLabel.color),
+      color: numberToHexColor(updatedLabel.color),
     }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), userId, labelId }, 'updateLabel failed')

@@ -7,6 +7,7 @@ import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-relation' })
 
@@ -33,11 +34,7 @@ function getRelatedIssues(issue: Issue): RelatedIssueEntry[] {
   )
 }
 
-async function removeRelationFromIssue(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: Ref<Issue>,
-  relatedIssueId: string,
-): Promise<void> {
+async function removeRelationFromIssue(client: HulyClient, issueId: Ref<Issue>, relatedIssueId: string): Promise<void> {
   const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
 
   if (issue === undefined || issue === null) {

@@ -5,6 +5,7 @@ import tracker from '@hcengineering/tracker'
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { hexColorToNumber, numberToHexColor } from './utils/color.js'
 
 const log = logger.child({ scope: 'huly:create-label' })
 
@@ -60,13 +61,4 @@ export async function createLabel({ userId, name, color }: CreateLabelParams): P
   } finally {
     await client.close()
   }
-}
-
-function hexColorToNumber(hex: string | undefined): number {
-  if (hex === undefined) return 0
-  return parseInt(hex.replace(/^#/, ''), 16) || 0
-}
-
-function numberToHexColor(color: number): string {
-  return `#${color.toString(16).padStart(6, '0')}`
 }

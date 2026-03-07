@@ -7,6 +7,7 @@ import { logger } from '../logger.js'
 import { classifyHulyError, HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
 
 const log = logger.child({ scope: 'huly:add-issue-relation' })
 
@@ -18,8 +19,6 @@ interface RelatedIssueEntry {
 }
 
 type IssueRelationUpdate = DocumentUpdate<Issue> & { relatedIssues?: RelatedIssueEntry[] }
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
 
 function getRelatedIssues(issue: Issue): RelatedIssueEntry[] {
   if (!('relatedIssues' in issue)) return []

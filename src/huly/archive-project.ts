@@ -3,9 +3,10 @@ import core from '@hcengineering/core'
 import tracker, { type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import { fetchProject } from './utils/fetchers.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:archive-project' })
 
@@ -19,19 +20,12 @@ export interface ArchiveProjectResult {
   success: true
 }
 
-export async function archiveProject({ userId, projectId }: ArchiveProjectParams): Promise<ArchiveProjectResult> {
+export function archiveProject({ userId, projectId }: ArchiveProjectParams): Promise<ArchiveProjectResult> {
   log.debug({ userId, projectId }, 'archiveProject called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Project>(projectId)
-
-  try {
-    const project = await client.findOne(tracker.class.Project, { _id: projectId })
-
-    if (!project) {
-      throw new Error(`Project not found: ${projectId}`)
-    }
+  return withClient(userId, getHulyClient, async (client) => {
+    await fetchProject(client, projectId)
+    ensureRef<Project>(projectId)
 
     await client.removeDoc(tracker.class.Project, core.space.Space as Ref<Space>, projectId)
 
@@ -41,13 +35,5 @@ export async function archiveProject({ userId, projectId }: ArchiveProjectParams
       id: projectId,
       success: true,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, projectId },
-      'archiveProject failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

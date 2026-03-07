@@ -9,9 +9,11 @@ interface Person extends Doc {
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { mapHulyPriorityToOutput } from './utils/priority.js'
+import { buildIssueUrl } from './utils/url-builder.js'
 
 const log = logger.child({ scope: 'huly:get-issue' })
 
@@ -42,32 +44,6 @@ interface IssueData {
   labels: MappedLabel[]
   relations: MappedRelation[]
 }
-
-function mapPriorityToNumber(hulyPriority: number): number {
-  // Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
-  // Output: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
-  switch (hulyPriority) {
-    case 0:
-      // No Priority
-      return 0
-    case 4:
-      // Urgent
-      return 1
-    case 3:
-      // High
-      return 2
-    case 2:
-      // Medium
-      return 3
-    case 1:
-      // Low
-      return 4
-    default:
-      return 0
-  }
-}
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
 
 async function fetchStateName(client: HulyClient, statusId: unknown): Promise<string | undefined> {
   if (typeof statusId !== 'string') {
@@ -157,16 +133,6 @@ async function fetchRelations(client: HulyClient, issue: Issue): Promise<MappedR
   return relations
 }
 
-async function buildIssueUrl(client: HulyClient, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
-}
-
 async function fetchIssueData(client: HulyClient, userId: number, issueId: string): Promise<IssueData> {
   ensureRef<Issue>(issueId)
   const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
@@ -194,7 +160,7 @@ async function fetchIssueData(client: HulyClient, userId: number, issueId: strin
     identifier: issue.identifier,
     title: issue.title,
     description: issue.description === undefined ? undefined : String(issue.description),
-    priority: mapPriorityToNumber(issue.priority),
+    priority: mapHulyPriorityToOutput(issue.priority),
     url,
     dueDate: issue.dueDate === null ? null : new Date(issue.dueDate).toISOString(),
     estimate: issue.estimation ?? null,

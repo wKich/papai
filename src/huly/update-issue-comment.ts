@@ -4,9 +4,10 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { buildIssueUrl } from './utils/url-builder.js'
 
 const log = logger.child({ scope: 'huly:update-issue-comment' })
 
@@ -24,7 +25,7 @@ export interface UpdateIssueCommentResult {
   url: string
 }
 
-async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
+async function findIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
   const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
 
   if (issue === undefined || issue === null) {
@@ -34,11 +35,7 @@ async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issu
   return issue
 }
 
-async function findComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  commentId: Ref<ChatMessage>,
-  issueId: Ref<Issue>,
-): Promise<ChatMessage> {
+async function findComment(client: HulyClient, commentId: Ref<ChatMessage>, issueId: Ref<Issue>): Promise<ChatMessage> {
   const comment = await client.findOne(chunter.class.ChatMessage, {
     _id: commentId,
     attachedTo: issueId,
@@ -52,7 +49,7 @@ async function findComment(
 }
 
 async function updateComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   projectId: Ref<Space>,
   commentId: Ref<ChatMessage>,
   issueId: Ref<Issue>,
@@ -67,16 +64,6 @@ async function updateComment(
     'comments',
     { message: body, editedOn: Date.now() },
   )
-}
-
-async function buildCommentUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
 }
 
 export async function updateIssueComment({
@@ -98,7 +85,7 @@ export async function updateIssueComment({
     const issue = await findIssue(client, issueId)
     await findComment(client, commentId, issueId)
     await updateComment(client, projectId, commentId, issueId, body)
-    const url = await buildCommentUrl(client, issue)
+    const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment updated')
 

@@ -4,9 +4,11 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue as fetchIssueUtil } from './utils/fetchers.js'
+import { buildIssueUrl } from './utils/url-builder.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-label' })
 
@@ -22,17 +24,6 @@ export interface RemoveIssueLabelResult {
   identifier: string
   title: string
   url: string
-}
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
-
-async function fetchIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return issue
 }
 
 async function findTagReference(
@@ -57,16 +48,6 @@ async function removeTagReference(
   await client.removeCollection(tags.class.TagReference, projectId, tagRefId, issueId, tracker.class.Issue, 'labels')
 }
 
-async function buildIssueUrl(client: HulyClient, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-  log.warn({ space: issue.space }, 'Failed to find Project')
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
-}
-
 export async function removeIssueLabel({
   userId,
   projectId,
@@ -82,7 +63,7 @@ export async function removeIssueLabel({
   ensureRef<Space>(projectId)
 
   try {
-    const issue = await fetchIssue(client, issueId)
+    const issue = await fetchIssueUtil(client, issueId)
     const tagRef = await findTagReference(client, issueId, labelId)
 
     if (tagRef === undefined) {

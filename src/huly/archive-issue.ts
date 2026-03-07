@@ -6,6 +6,8 @@ import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
 
 const log = logger.child({ scope: 'huly:archive-issue' })
 
@@ -23,7 +25,7 @@ export async function archiveIssue({
   ensureRef<Issue>(issueId)
 
   try {
-    const issue = await fetchIssue(client, issueId)
+    const issue = await fetchIssue(client, issueId as string)
     await archiveIssueByStatus(client, issueId)
     const archivedAt = new Date().toISOString()
 
@@ -43,19 +45,7 @@ export async function archiveIssue({
   }
 }
 
-async function fetchIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
-  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (result === undefined || result === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return result
-}
-
-async function archiveIssueByStatus(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: Ref<Issue>,
-): Promise<void> {
+async function archiveIssueByStatus(client: HulyClient, issueId: Ref<Issue>): Promise<void> {
   const result = await client.findOne(tracker.class.IssueStatus, { name: 'Archived' })
 
   const archivedStatus: IssueStatus | undefined = result ?? undefined

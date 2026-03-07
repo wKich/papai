@@ -5,6 +5,7 @@ import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
 
 const log = logger.child({ scope: 'huly:get-issue-comments' })
 
@@ -19,7 +20,7 @@ export interface GetIssueCommentsResult {
   createdAt: Date
 }
 
-async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: string): Promise<void> {
+async function verifyIssue(client: HulyClient, issueId: string): Promise<void> {
   ensureRef<Issue>(issueId)
   const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
 
@@ -28,10 +29,7 @@ async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, is
   }
 }
 
-async function fetchComments(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: string,
-): Promise<ChatMessage[]> {
+async function fetchComments(client: HulyClient, issueId: string): Promise<ChatMessage[]> {
   ensureRef<Issue>(issueId)
   const comments = await client.findAll(chunter.class.ChatMessage, { attachedTo: issueId })
   return comments

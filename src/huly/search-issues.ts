@@ -4,9 +4,11 @@ import tracker, { type Issue, type IssueStatus, type Project } from '@hcengineer
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { mapHulyPriorityToOutput } from './utils/priority.js'
+import { buildIssueUrlByIdentifier } from './utils/url-builder.js'
 
 const log = logger.child({ scope: 'huly:search-issues' })
 
@@ -30,21 +32,8 @@ type SearchIssuesParams = {
   estimate?: number
 }
 
-function mapPriorityToNumber(hulyPriority: number): number {
-  // Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
-  // Output: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
-  const priorityMap: Record<number, number> = {
-    0: 0,
-    4: 1,
-    3: 2,
-    2: 3,
-    1: 4,
-  }
-  return priorityMap[hulyPriority] ?? 0
-}
-
 async function resolveStateFilter(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   state: string | undefined,
 ): Promise<IssueStatus['_id'] | undefined> {
   if (state === undefined) return undefined
@@ -98,8 +87,8 @@ function mapToIssueResult(issues: Issue[], projectIdentifier: string): IssueResu
     id: issue._id,
     identifier: issue.identifier,
     title: issue.title,
-    priority: mapPriorityToNumber(issue.priority),
-    url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${projectIdentifier}/${issue.identifier}`,
+    priority: mapHulyPriorityToOutput(issue.priority),
+    url: buildIssueUrlByIdentifier(projectIdentifier, issue.identifier),
   }))
 }
 

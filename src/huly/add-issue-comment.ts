@@ -4,9 +4,10 @@ import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { buildIssueUrl } from './utils/url-builder.js'
 
 const log = logger.child({ scope: 'huly:add-issue-comment' })
 
@@ -23,7 +24,7 @@ export interface AddIssueCommentResult {
   url: string
 }
 
-async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
+async function verifyIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
   const result = await client.findOne(tracker.class.Issue, { _id: issueId })
 
   if (result === undefined || result === null) {
@@ -33,7 +34,7 @@ async function verifyIssue(client: Awaited<ReturnType<typeof getHulyClient>>, is
 }
 
 function addComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   projectId: Ref<Space>,
   issueId: Ref<Issue>,
   body: string,
@@ -42,16 +43,6 @@ function addComment(
     message: body,
     attachments: 0,
   })
-}
-
-async function buildCommentUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-  log.warn({ space: issue.space }, 'Failed to find Project')
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
 }
 
 export async function addIssueComment({
@@ -70,7 +61,7 @@ export async function addIssueComment({
   try {
     const issue = await verifyIssue(client, issueId)
     const commentId = await addComment(client, projectId, issueId, body)
-    const url = await buildCommentUrl(client, issue)
+    const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment added to issue')
 

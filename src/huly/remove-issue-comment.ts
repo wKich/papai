@@ -6,6 +6,7 @@ import { logger } from '../logger.js'
 import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-comment' })
 
@@ -21,10 +22,7 @@ export interface RemoveIssueCommentResult {
   success: true
 }
 
-async function verifyIssueExists(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: Ref<Issue>,
-): Promise<Issue> {
+async function verifyIssueExists(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
   const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
 
   if (issue === undefined || issue === null) {
@@ -34,7 +32,7 @@ async function verifyIssueExists(
 }
 
 async function verifyCommentExists(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   commentId: Ref<ChatMessage>,
   issueId: Ref<Issue>,
 ): Promise<ChatMessage> {
@@ -50,7 +48,7 @@ async function verifyCommentExists(
 }
 
 async function removeComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   projectId: Ref<Space>,
   commentId: Ref<ChatMessage>,
   issueId: Ref<Issue>,
