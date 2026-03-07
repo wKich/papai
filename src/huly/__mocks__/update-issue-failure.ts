@@ -1,7 +1,8 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 class MockHulyClient {
-  async findOne(): Promise<unknown | undefined> {
+  async findOne(): Promise<unknown> {
     throw new Error('Unauthorized')
   }
 
@@ -12,6 +13,6 @@ class MockHulyClient {
 
 export function setupUpdateIssueFailureMock(): void {
   mock.module('../huly-client.js', () => ({
-    getHulyClient: async () => new MockHulyClient(),
+    getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

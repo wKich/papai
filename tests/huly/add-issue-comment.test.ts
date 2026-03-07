@@ -27,6 +27,7 @@ describe('addIssueComment', () => {
   describe('error handling', () => {
     test('throws HulyApiError when issue not found', async () => {
       setupAddIssueCommentMock()
+      // oxlint-disable-next-line await-thenable, no-confusing-void-expression
       await expect(
         addIssueComment({
           userId: 123,

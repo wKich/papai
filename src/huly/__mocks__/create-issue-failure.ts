@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 class MockFailingHulyClient {
@@ -12,6 +13,6 @@ class MockFailingHulyClient {
 
 export function setupCreateIssueFailureMock(): void {
   mock.module('../huly-client.js', () => ({
-    getHulyClient: async () => new MockFailingHulyClient(),
+    getHulyClient: async (): Promise<MockFailingHulyClient> => new MockFailingHulyClient(),
   }))
 }

@@ -52,7 +52,7 @@ import { setConfig } from '../../src/config.js'
 
 // Mock getHulyClient for error validation tests to use actual implementation logic
 // but bypass the @hcengineering/api-client dependency
-async function mockGetHulyClient(userId: number) {
+async function mockGetHulyClient(userId: number): Promise<{ connected: boolean; close: () => Promise<void> }> {
   const url = process.env['HULY_URL']
   if (url === undefined || url === '') {
     throw new Error('HULY_URL environment variable is required')
@@ -75,7 +75,7 @@ async function mockGetHulyClient(userId: number) {
   }
 
   // Return a mock client for successful connection
-  return { connected: true, close: async () => {} }
+  return { connected: true, close: async (): Promise<void> => {} }
 }
 
 // Import after mocking - this import will use the actual implementation

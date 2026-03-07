@@ -1,7 +1,7 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 import type { PlatformClient } from '@hcengineering/api-client'
-import tracker, { type Issue } from '@hcengineering/tracker'
 
 class MockHulyClient implements Partial<PlatformClient> {
   async findOne<T extends Record<string, unknown>>(
@@ -28,6 +28,6 @@ class MockHulyClient implements Partial<PlatformClient> {
 
 export function setupAddIssueRelationFailureMock(): void {
   mock.module('../huly-client.js', () => ({
-    getHulyClient: async () => new MockHulyClient(),
+    getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

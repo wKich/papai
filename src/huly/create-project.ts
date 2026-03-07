@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core, { generateId } from '@hcengineering/core'
 import tracker from '@hcengineering/tracker'
 

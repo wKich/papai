@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import { SortingOrder } from '@hcengineering/core'
 import tracker from '@hcengineering/tracker'
 import type { Issue, Project } from '@hcengineering/tracker'

@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import tags, { type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 

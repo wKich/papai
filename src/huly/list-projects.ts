@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import tracker, { type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'

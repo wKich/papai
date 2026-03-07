@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
 import tracker, { type Issue } from '@hcengineering/tracker'
 

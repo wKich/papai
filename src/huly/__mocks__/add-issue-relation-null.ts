@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-floating-promises */
 import { mock } from 'bun:test'
 
 import type { PlatformClient } from '@hcengineering/api-client'
@@ -109,6 +110,6 @@ class MockHulyClient implements Partial<PlatformClient> {
 export function setupAddIssueRelationNullMock(): void {
   mockIssues.clear()
   mock.module('../huly-client.js', () => ({
-    getHulyClient: async () => new MockHulyClient(),
+    getHulyClient: async (): Promise<MockHulyClient> => new MockHulyClient(),
   }))
 }

@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core, { generateId } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
@@ -64,7 +65,7 @@ export async function createLabel({ userId, name, color }: CreateLabelParams): P
   }
 }
 
-function numberToHexColor(color: number | unknown): string {
+function numberToHexColor(color: unknown): string {
   if (typeof color === 'number') {
     return `#${color.toString(16).padStart(6, '0')}`
   }

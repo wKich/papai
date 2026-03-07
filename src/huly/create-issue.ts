@@ -1,3 +1,4 @@
+/* oxlint-disable @typescript-eslint/no-unsafe-type-assertion */
 import core, { generateId, SortingOrder } from '@hcengineering/core'
 import { makeRank } from '@hcengineering/rank'
 import tags from '@hcengineering/tags'
