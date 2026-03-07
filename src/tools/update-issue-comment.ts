@@ -13,10 +13,12 @@ export function makeUpdateIssueCommentTool(userId: number): ToolSet[string] {
     inputSchema: z.object({
       commentId: z.string().describe('Comment ID'),
       body: z.string().describe('New comment body (supports Markdown)'),
+      issueId: z.string().describe('Issue ID that the comment belongs to'),
+      projectId: z.string().describe('Project ID that the issue belongs to'),
     }),
-    execute: async ({ commentId, body }) => {
+    execute: async ({ commentId, body, issueId, projectId }) => {
       try {
-        return await updateIssueComment({ userId, commentId, body })
+        return await updateIssueComment({ userId, commentId, body, issueId, projectId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), commentId, tool: 'update_issue_comment' },

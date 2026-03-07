@@ -6,36 +6,64 @@ import { makeRank } from '@hcengineering/rank'
 import type { Issue, Project } from '@hcengineering/tracker'
 import tracker, { IssuePriority } from '@hcengineering/tracker'
 
-// Mock issue storage
-const mockIssues = new Map<string, Issue>()
-let issueSequence = 1
-
-// Mock project storage
-const mockProjects: Map<string, Project> = new Map([
-  [
-    'project-123',
-    {
-      _id: 'project-123' as Ref<Project>,
-      _class: tracker.class.Project,
-      space: core.space.Space,
-      modifiedBy: 'system' as Ref<Doc>,
-      modifiedOn: Date.now(),
-      createdBy: 'system' as Ref<Doc>,
-      createdOn: Date.now(),
-      title: 'Test Project',
-      identifier: 'P',
-      description: '',
-      private: false,
-      archived: false,
-      defaultIssueStatus: 'status-1' as Ref<Doc>,
-      members: [],
-      owners: [],
-      sequence: 0,
-    } as Project,
-  ],
-])
+// Factory functions to create fresh mock data for each test
+function createMockProjects(): Map<string, Project> {
+  return new Map([
+    [
+      'project-123',
+      {
+        _id: 'project-123' as Ref<Project>,
+        _class: tracker.class.Project,
+        space: core.space.Space,
+        modifiedBy: 'system' as Ref<Doc>,
+        modifiedOn: Date.now(),
+        createdBy: 'system' as Ref<Doc>,
+        createdOn: Date.now(),
+        title: 'Test Project',
+        identifier: 'P',
+        description: '',
+        private: false,
+        archived: false,
+        defaultIssueStatus: 'status-1' as Ref<Doc>,
+        members: [],
+        owners: [],
+        sequence: 0,
+      } as Project,
+    ],
+    [
+      'team-123',
+      {
+        _id: 'team-123' as Ref<Project>,
+        _class: tracker.class.Project,
+        space: core.space.Space,
+        modifiedBy: 'system' as Ref<Doc>,
+        modifiedOn: Date.now(),
+        createdBy: 'system' as Ref<Doc>,
+        createdOn: Date.now(),
+        title: 'Team Project',
+        identifier: 'TEAM',
+        description: '',
+        private: false,
+        archived: false,
+        defaultIssueStatus: 'status-1' as Ref<Doc>,
+        members: [],
+        owners: [],
+        sequence: 0,
+      } as Project,
+    ],
+  ])
+}
 
 class MockHulyClient implements Partial<PlatformClient> {
+  private mockIssues: Map<string, Issue>
+  private mockProjects: Map<string, Project>
+  private issueSequence: number
+
+  constructor() {
+    this.mockIssues = new Map<string, Issue>()
+    this.mockProjects = createMockProjects()
+    this.issueSequence = 1
+  }
   async findOne<T extends Doc>(
     _class: unknown,
     query: Record<string, unknown>,
@@ -45,17 +73,17 @@ class MockHulyClient implements Partial<PlatformClient> {
 
     if (className.includes('Project')) {
       const projectId = query['_id'] as string
-      return mockProjects.get(projectId) as unknown as T
+      return this.mockProjects.get(projectId) as unknown as T
     }
 
     if (className.includes('Issue')) {
       if (options?.sort?.rank === -1) {
         // Return last issue for ranking
-        const issues = Array.from(mockIssues.values())
+        const issues = Array.from(this.mockIssues.values())
         return issues.length > 0 ? (issues[issues.length - 1] as unknown as T) : undefined
       }
       const issueId = query['_id'] as string
-      return mockIssues.get(issueId) as unknown as T
+      return this.mockIssues.get(issueId) as unknown as T
     }
 
     return undefined
@@ -72,7 +100,7 @@ class MockHulyClient implements Partial<PlatformClient> {
     const id = String(docId)
 
     if (className.includes('Project')) {
-      const project = mockProjects.get(id)
+      const project = this.mockProjects.get(id)
       if (project) {
         const inc = operations['$inc'] as { sequence?: number } | undefined
         if (inc?.sequence) {
@@ -136,8 +164,8 @@ class MockHulyClient implements Partial<PlatformClient> {
         rank: (attributes['rank'] as string) ?? makeRank(undefined, undefined),
       } as Issue
 
-      mockIssues.set(docId, issue)
-      issueSequence += 1
+      this.mockIssues.set(docId, issue)
+      this.issueSequence += 1
     }
   }
 

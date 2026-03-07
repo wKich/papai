@@ -56,7 +56,7 @@ describe('create_issue tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ title: 'Test Issue' }, { toolCallId: 'test', messages: [] })
+    await exec({ title: 'Test Issue', projectId: 'team-123' }, { toolCallId: 'test', messages: [] })
   })
 
   test('executes successfully with all params', async () => {
@@ -71,6 +71,7 @@ describe('create_issue tool', () => {
         title: 'Test Issue',
         description: 'Description',
         priority: 1,
+        projectId: 'team-123',
         dueDate: '2025-03-15',
         labelIds: ['label-1'],
         estimate: 5,
@@ -259,7 +260,10 @@ describe('remove_issue_comment tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ commentId: 'comment-123' }, { toolCallId: 'test', messages: [] })
+    await exec(
+      { commentId: 'comment-123', issueId: 'issue-123', projectId: 'project-123' },
+      { toolCallId: 'test', messages: [] },
+    )
   })
 })
 
@@ -295,7 +299,10 @@ describe('update_issue_comment tool', () => {
       throw new Error('Tool execute not defined')
     }
     const exec = tool.execute
-    await exec({ commentId: 'comment-123', body: 'Updated comment' }, { toolCallId: 'test', messages: [] })
+    await exec(
+      { commentId: 'comment-123', body: 'Updated comment', issueId: 'issue-123', projectId: 'project-123' },
+      { toolCallId: 'test', messages: [] },
+    )
   })
 })
 

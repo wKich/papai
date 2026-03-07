@@ -5,34 +5,42 @@ import core, { type Ref, type Doc } from '@hcengineering/core'
 import tags, { type TagElement } from '@hcengineering/tags'
 import tracker from '@hcengineering/tracker'
 
-// Mock label storage
-const mockLabels = new Map<string, TagElement>([
-  [
-    'label-123',
-    {
-      _id: 'label-123' as Ref<TagElement>,
-      _class: tags.class.TagElement,
-      space: core.space.Workspace,
-      modifiedBy: 'system' as Ref<Doc>,
-      modifiedOn: Date.now(),
-      createdBy: 'system' as Ref<Doc>,
-      createdOn: Date.now(),
-      title: 'Label to Remove',
-      description: '',
-      color: 0xff0000,
-      targetClass: tracker.class.Issue,
-      category: undefined,
-    } as unknown as TagElement,
-  ],
-])
+// Mock label storage - recreated on each setup call
+function createMockLabels(): Map<string, TagElement> {
+  return new Map<string, TagElement>([
+    [
+      'label-123',
+      {
+        _id: 'label-123' as Ref<TagElement>,
+        _class: tags.class.TagElement,
+        space: core.space.Workspace,
+        modifiedBy: 'system' as Ref<Doc>,
+        modifiedOn: Date.now(),
+        createdBy: 'system' as Ref<Doc>,
+        createdOn: Date.now(),
+        title: 'Label to Remove',
+        description: '',
+        color: 0xff0000,
+        targetClass: tracker.class.Issue,
+        category: undefined,
+      } as unknown as TagElement,
+    ],
+  ])
+}
 
 class MockHulyClient implements Partial<PlatformClient> {
+  private mockLabels: Map<string, TagElement>
+
+  constructor() {
+    this.mockLabels = createMockLabels()
+  }
+
   async findOne<T extends Doc>(_class: unknown, query: Record<string, unknown>): Promise<T | undefined> {
     const className = String(_class)
 
     if (className.includes('TagElement')) {
       const labelId = query['_id'] as string
-      return mockLabels.get(labelId) as unknown as T
+      return this.mockLabels.get(labelId) as unknown as T
     }
 
     return undefined
@@ -43,7 +51,7 @@ class MockHulyClient implements Partial<PlatformClient> {
     const id = String(docId)
 
     if (className.includes('TagElement')) {
-      mockLabels.delete(id)
+      this.mockLabels.delete(id)
     }
   }
 
