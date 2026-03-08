@@ -3,10 +3,12 @@ import tags, { type TagElement, type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:remove-issue-label' })
 
@@ -22,17 +24,6 @@ export interface RemoveIssueLabelResult {
   identifier: string
   title: string
   url: string
-}
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
-
-async function fetchIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return issue
 }
 
 async function findTagReference(
@@ -57,17 +48,7 @@ async function removeTagReference(
   await client.removeCollection(tags.class.TagReference, projectId, tagRefId, issueId, tracker.class.Issue, 'labels')
 }
 
-async function buildIssueUrl(client: HulyClient, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-  log.warn({ space: issue.space }, 'Failed to find Project')
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
-}
-
-export async function removeIssueLabel({
+export function removeIssueLabel({
   userId,
   projectId,
   issueId,
@@ -75,22 +56,18 @@ export async function removeIssueLabel({
 }: RemoveIssueLabelParams): Promise<RemoveIssueLabelResult | undefined> {
   log.debug({ userId, projectId, issueId, labelId }, 'removeIssueLabel called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Issue>(issueId)
-  ensureRef<TagElement>(labelId)
-  ensureRef<Space>(projectId)
-
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
+    ensureRef<TagElement>(labelId)
+    ensureRef<Space>(projectId)
     const issue = await fetchIssue(client, issueId)
-    const tagRef = await findTagReference(client, issueId, labelId)
+    const tagRef = await findTagReference(client, issue._id, labelId)
 
     if (tagRef === undefined) {
       log.warn({ userId, issueId, labelId }, 'Label not found on issue')
       return undefined
     }
 
-    await removeTagReference(client, projectId, tagRef._id, issueId)
+    await removeTagReference(client, projectId, tagRef._id, issue._id)
 
     log.info({ userId, issueId, labelId, identifier: issue.identifier }, 'Label removed from issue')
 
@@ -102,13 +79,5 @@ export async function removeIssueLabel({
       title: issue.title,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, labelId },
-      'removeIssueLabel failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

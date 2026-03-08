@@ -3,11 +3,12 @@ import tags, { type TagElement } from '@hcengineering/tags'
 
 import { hulyError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyHulyError, HulyApiError } from './classify-error.js'
+import { HulyApiError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
+import type { HulyClient } from './types.js'
+import { hexColorToNumber, numberToHexColor } from './utils/color.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:update-label' })
 
@@ -30,7 +31,7 @@ function buildUpdateFields(name: string | undefined, color: string | undefined):
     updates.title = name
   }
   if (color !== undefined) {
-    updates.color = parseInt(color.replace(/^#/, ''), 16) || 0
+    updates.color = hexColorToNumber(color)
   }
   return updates
 }
@@ -53,37 +54,21 @@ async function updateLabelDoc(
   await client.updateDoc(tags.class.TagElement, core.space.Workspace, labelId, updates)
 }
 
-function formatColor(color: unknown): string {
-  if (color === undefined) {
-    return '#000000'
-  }
-  return numberToHexColor(color)
-}
-
-function numberToHexColor(color: unknown): string {
-  if (typeof color === 'number') {
-    return `#${color.toString(16).padStart(6, '0')}`
-  }
-  if (typeof color === 'string' && color.startsWith('#')) {
-    return color
-  }
-  return '#000000'
-}
-
-export async function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
+export function updateLabel({ userId, labelId, name, color }: UpdateLabelParams): Promise<LabelResult> {
   log.debug({ userId, labelId, hasName: name !== undefined, hasColor: color !== undefined }, 'updateLabel called')
 
   if (name === undefined && color === undefined) {
-    throw new HulyApiError(
-      'At least one field (name or color) must be provided to update a label',
-      hulyError.validationFailed('fields', 'No update fields provided'),
+    return Promise.reject(
+      new HulyApiError(
+        'At least one field (name or color) must be provided to update a label',
+        hulyError.validationFailed('fields', 'No update fields provided'),
+      ),
     )
   }
 
   ensureRef<TagElement>(labelId)
-  const client = await getHulyClient(userId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     await findLabel(client, labelId)
     const updates = buildUpdateFields(name, color)
     await updateLabelDoc(client, labelId, updates)
@@ -94,12 +79,7 @@ export async function updateLabel({ userId, labelId, name, color }: UpdateLabelP
     return {
       id: updatedLabel._id,
       name: updatedLabel.title,
-      color: formatColor(updatedLabel.color),
+      color: numberToHexColor(updatedLabel.color),
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, labelId }, 'updateLabel failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

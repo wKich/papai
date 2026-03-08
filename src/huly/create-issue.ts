@@ -2,19 +2,15 @@ import type { AttachedData, MarkupBlobRef, Ref } from '@hcengineering/core'
 import core, { generateId, SortingOrder } from '@hcengineering/core'
 import { makeRank } from '@hcengineering/rank'
 import tags, { type TagElement } from '@hcengineering/tags'
-import tracker, {
-  IssuePriority,
-  type IssueChildInfo,
-  type IssueParentInfo,
-  type Project,
-  type Issue,
-} from '@hcengineering/tracker'
+import tracker, { type IssueChildInfo, type IssueParentInfo, type Project, type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { mapInputPriorityToHuly } from './utils/priority.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:create-issue' })
 
@@ -48,28 +44,6 @@ function parseDueDate(dueDate: string | undefined): number | null {
   }
   return date.getTime()
 }
-
-function mapPriority(hulyPriority: number | undefined): IssuePriority {
-  if (hulyPriority === undefined) {
-    return IssuePriority.NoPriority
-  }
-  switch (hulyPriority) {
-    case 0:
-      return IssuePriority.NoPriority
-    case 1:
-      return IssuePriority.Urgent
-    case 2:
-      return IssuePriority.High
-    case 3:
-      return IssuePriority.Medium
-    case 4:
-      return IssuePriority.Low
-    default:
-      return IssuePriority.NoPriority
-  }
-}
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
 
 async function fetchProject(client: HulyClient, projectId: Ref<Project>): Promise<Project | undefined> {
   return (await client.findOne(tracker.class.Project, { _id: projectId })) ?? undefined
@@ -156,7 +130,7 @@ function buildIssueData(
     number: sequence,
     kind: tracker.taskTypes.Issue,
     identifier: `${project.identifier}-${sequence}`,
-    priority: mapPriority(priority),
+    priority: mapInputPriorityToHuly(priority),
     assignee: null,
     component: null,
     estimation: estimate ?? 0,
@@ -243,7 +217,7 @@ async function createIssueCore(
   return finalizeIssueCreation(client, project, issueId)
 }
 
-export async function createIssue({
+export function createIssue({
   userId,
   title,
   description,
@@ -264,9 +238,8 @@ export async function createIssue({
     },
     'createIssue called',
   )
-  const client = await getHulyClient(userId)
 
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const { issue, url } = await createIssueCore(
       client,
       projectId,
@@ -286,10 +259,5 @@ export async function createIssue({
       title: issue.title,
       url,
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), title, projectId }, 'createIssue failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

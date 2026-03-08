@@ -1,8 +1,8 @@
 import tracker, { type Project } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:list-projects' })
 
@@ -13,38 +13,36 @@ interface ProjectData {
   description: string | undefined
 }
 
-export async function listProjects({
+export function listProjects({
   userId,
 }: {
   userId: number
 }): Promise<{ teamId: string; teamName: string; projects: ProjectData[] }[]> {
   log.debug({ userId }, 'listProjects called')
 
-  const client = await getHulyClient(userId)
+  return withClient(
+    userId,
+    getHulyClient,
+    async (client) => {
+      const projects = await client.findAll<Project>(tracker.class.Project, {})
 
-  try {
-    const projects = await client.findAll<Project>(tracker.class.Project, {})
+      const mappedProjects: ProjectData[] = projects.map((project) => ({
+        id: project._id as string,
+        name: project.name,
+        identifier: project.identifier,
+        description: project.description === undefined ? undefined : String(project.description),
+      }))
 
-    const mappedProjects: ProjectData[] = projects.map((project) => ({
-      id: project._id as string,
-      name: project.name,
-      identifier: project.identifier,
-      description: project.description === undefined ? undefined : String(project.description),
-    }))
+      log.info({ projectCount: mappedProjects.length }, 'Projects listed')
 
-    log.info({ projectCount: mappedProjects.length }, 'Projects listed')
-
-    return [
-      {
-        teamId: 'default',
-        teamName: 'Projects',
-        projects: mappedProjects,
-      },
-    ]
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId }, 'listProjects failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+      return [
+        {
+          teamId: 'default',
+          teamName: 'Projects',
+          projects: mappedProjects,
+        },
+      ]
+    },
+    { operation: 'listProjects' },
+  )
 }

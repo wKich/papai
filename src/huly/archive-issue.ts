@@ -3,13 +3,14 @@ import core from '@hcengineering/core'
 import tracker, { type Issue, type IssueStatus } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
-import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:archive-issue' })
 
-export async function archiveIssue({
+export function archiveIssue({
   userId,
   issueId,
 }: {
@@ -18,13 +19,9 @@ export async function archiveIssue({
 }): Promise<{ id: string; identifier: string; title: string; archivedAt: string } | undefined> {
   log.debug({ userId, issueId }, 'archiveIssue called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Issue>(issueId)
-
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const issue = await fetchIssue(client, issueId)
-    await archiveIssueByStatus(client, issueId)
+    await archiveIssueByStatus(client, issue._id)
     const archivedAt = new Date().toISOString()
 
     log.info({ userId, issueId, identifier: issue.identifier, archivedAt }, 'Issue archived')
@@ -35,27 +32,10 @@ export async function archiveIssue({
       title: issue.title,
       archivedAt,
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, issueId }, 'archiveIssue failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }
 
-async function fetchIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
-  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (result === undefined || result === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return result
-}
-
-async function archiveIssueByStatus(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: Ref<Issue>,
-): Promise<void> {
+async function archiveIssueByStatus(client: HulyClient, issueId: Ref<Issue>): Promise<void> {
   const result = await client.findOne(tracker.class.IssueStatus, { name: 'Archived' })
 
   const archivedStatus: IssueStatus | undefined = result ?? undefined

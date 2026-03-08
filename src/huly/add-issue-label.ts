@@ -3,10 +3,12 @@ import tags, { type TagElement } from '@hcengineering/tags'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:add-issue-label' })
 
@@ -24,22 +26,7 @@ export interface AddIssueLabelResult {
   url: string
 }
 
-async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: string): Promise<Issue> {
-  ensureRef<Issue>(issueId)
-  const result = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (result === undefined || result === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return result
-}
-
-async function addLabelToIssue(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  projectId: string,
-  issueId: string,
-  labelId: string,
-): Promise<void> {
+async function addLabelToIssue(client: HulyClient, projectId: string, issueId: string, labelId: string): Promise<void> {
   ensureRef<Space>(projectId)
   ensureRef<Issue>(issueId)
   ensureRef<TagElement>(labelId)
@@ -50,17 +37,7 @@ async function addLabelToIssue(
   })
 }
 
-async function buildIssueUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
-  const result = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (result !== undefined && result !== null && 'identifier' in result) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${result.identifier}/${issue.identifier}`
-  }
-  log.warn({ space: issue.space }, 'Failed to find Project')
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
-}
-
-export async function addIssueLabel({
+export function addIssueLabel({
   userId,
   projectId,
   issueId,
@@ -68,10 +45,8 @@ export async function addIssueLabel({
 }: AddIssueLabelParams): Promise<AddIssueLabelResult> {
   log.debug({ userId, projectId, issueId, labelId }, 'addIssueLabel called')
 
-  const client = await getHulyClient(userId)
-
-  try {
-    const issue = await findIssue(client, issueId)
+  return withClient(userId, getHulyClient, async (client) => {
+    const issue = await fetchIssue(client, issueId)
     await addLabelToIssue(client, projectId, issueId, labelId)
     const url = await buildIssueUrl(client, issue)
 
@@ -83,13 +58,5 @@ export async function addIssueLabel({
       title: issue.title,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, labelId },
-      'addIssueLabel failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

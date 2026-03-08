@@ -5,9 +5,11 @@ import tags, { type TagElement, type TagReference } from '@hcengineering/tags'
 import tracker, { type Issue, type IssueStatus } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:update-issue' })
 
@@ -23,7 +25,7 @@ type UpdateIssueParams = {
 }
 
 async function updateIssueStatus(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   status: string,
   updates: DocumentUpdate<Issue>,
   userId: number,
@@ -47,12 +49,7 @@ function updateDueDate(dueDate: string, updates: DocumentUpdate<Issue>, userId: 
   }
 }
 
-async function updateLabels(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  issueId: string,
-  projectId: string,
-  labelIds: string[],
-): Promise<void> {
+async function updateLabels(client: HulyClient, issueId: string, projectId: string, labelIds: string[]): Promise<void> {
   ensureRef<Issue>(issueId)
   ensureRef<Space>(projectId)
 
@@ -72,17 +69,6 @@ async function updateLabels(
       } satisfies AttachedData<TagReference>)
     }),
   )
-}
-
-type HulyClient = Awaited<ReturnType<typeof getHulyClient>>
-
-async function fetchIssue(client: HulyClient, issueId: Ref<Issue>): Promise<Issue> {
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-  return issue
 }
 
 function createUpdates(): DocumentUpdate<Issue> {
@@ -141,7 +127,7 @@ async function applyUpdates(
   return fetchIssue(client, issueId)
 }
 
-export async function updateIssue({
+export function updateIssue({
   userId,
   issueId,
   projectId,
@@ -153,9 +139,7 @@ export async function updateIssue({
 }: UpdateIssueParams): Promise<{ id: string; identifier: string } | undefined> {
   log.debug({ userId, issueId, projectId, status, assigneeId, dueDate, estimate }, 'updateIssue called')
 
-  const client = await getHulyClient(userId)
-
-  try {
+  return withClient(userId, getHulyClient, async (client) => {
     const updatedIssue = await applyUpdates(
       client,
       issueId,
@@ -174,10 +158,5 @@ export async function updateIssue({
       id: updatedIssue._id,
       identifier: updatedIssue.identifier,
     }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), userId, issueId }, 'updateIssue failed')
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }

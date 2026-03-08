@@ -3,10 +3,12 @@ import type { Ref, Space } from '@hcengineering/core'
 import tracker, { type Issue } from '@hcengineering/tracker'
 
 import { logger } from '../logger.js'
-import { classifyHulyError } from './classify-error.js'
-import { hulyUrl, hulyWorkspace } from './env.js'
 import { getHulyClient } from './huly-client.js'
 import { ensureRef } from './refs.js'
+import type { HulyClient } from './types.js'
+import { fetchIssue } from './utils/fetchers.js'
+import { buildIssueUrl } from './utils/url-builder.js'
+import { withClient } from './utils/with-client.js'
 
 const log = logger.child({ scope: 'huly:update-issue-comment' })
 
@@ -24,21 +26,7 @@ export interface UpdateIssueCommentResult {
   url: string
 }
 
-async function findIssue(client: Awaited<ReturnType<typeof getHulyClient>>, issueId: Ref<Issue>): Promise<Issue> {
-  const issue = await client.findOne(tracker.class.Issue, { _id: issueId })
-
-  if (issue === undefined || issue === null) {
-    throw new Error(`Issue not found: ${issueId}`)
-  }
-
-  return issue
-}
-
-async function findComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
-  commentId: Ref<ChatMessage>,
-  issueId: Ref<Issue>,
-): Promise<ChatMessage> {
+async function findComment(client: HulyClient, commentId: Ref<ChatMessage>, issueId: Ref<Issue>): Promise<ChatMessage> {
   const comment = await client.findOne(chunter.class.ChatMessage, {
     _id: commentId,
     attachedTo: issueId,
@@ -52,7 +40,7 @@ async function findComment(
 }
 
 async function updateComment(
-  client: Awaited<ReturnType<typeof getHulyClient>>,
+  client: HulyClient,
   projectId: Ref<Space>,
   commentId: Ref<ChatMessage>,
   issueId: Ref<Issue>,
@@ -69,17 +57,7 @@ async function updateComment(
   )
 }
 
-async function buildCommentUrl(client: Awaited<ReturnType<typeof getHulyClient>>, issue: Issue): Promise<string> {
-  const project = await client.findOne(tracker.class.Project, { _id: issue.space })
-
-  if (project !== undefined && project !== null && 'identifier' in project) {
-    return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${project.identifier}/${issue.identifier}`
-  }
-
-  return `${hulyUrl}/workbench/${hulyWorkspace}/tracker/UNK/${issue.identifier}`
-}
-
-export async function updateIssueComment({
+export function updateIssueComment({
   userId,
   projectId,
   issueId,
@@ -88,17 +66,13 @@ export async function updateIssueComment({
 }: UpdateIssueCommentParams): Promise<UpdateIssueCommentResult> {
   log.debug({ userId, projectId, issueId, commentId, bodyLength: body.length }, 'updateIssueComment called')
 
-  const client = await getHulyClient(userId)
-
-  ensureRef<Issue>(issueId)
-  ensureRef<ChatMessage>(commentId)
-  ensureRef<Space>(projectId)
-
-  try {
-    const issue = await findIssue(client, issueId)
-    await findComment(client, commentId, issueId)
-    await updateComment(client, projectId, commentId, issueId, body)
-    const url = await buildCommentUrl(client, issue)
+  return withClient(userId, getHulyClient, async (client) => {
+    ensureRef<ChatMessage>(commentId)
+    ensureRef<Space>(projectId)
+    const issue = await fetchIssue(client, issueId)
+    await findComment(client, commentId, issue._id)
+    await updateComment(client, projectId, commentId, issue._id, body)
+    const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment updated')
 
@@ -107,13 +81,5 @@ export async function updateIssueComment({
       body,
       url,
     }
-  } catch (error) {
-    log.error(
-      { error: error instanceof Error ? error.message : String(error), userId, issueId, commentId },
-      'updateIssueComment failed',
-    )
-    throw classifyHulyError(error)
-  } finally {
-    await client.close()
-  }
+  })
 }
