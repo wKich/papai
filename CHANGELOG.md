@@ -60,4 +60,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove @linear/sdk, complete migration to Huly
 
 [2.0.0]: https://github.com/wKich/papai/compare/v1.1...v2.0.0
-
