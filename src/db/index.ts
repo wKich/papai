@@ -5,6 +5,7 @@ import { runMigrations } from './migrate.js'
 import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
 import { migration003MultiuserSupport } from './migrations/003_multiuser_support.js'
+import { migration004MigratedIssues } from './migrations/004_migrated_issues.js'
 
 export const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -31,7 +32,12 @@ export const closeDb = (): void => {
   }
 }
 
-const MIGRATIONS = [migration001Initial, migration002ConversationHistory, migration003MultiuserSupport] as const
+const MIGRATIONS = [
+  migration001Initial,
+  migration002ConversationHistory,
+  migration003MultiuserSupport,
+  migration004MigratedIssues,
+] as const
 
 export const initDb = (): void => {
   runMigrations(getDb(), MIGRATIONS)
