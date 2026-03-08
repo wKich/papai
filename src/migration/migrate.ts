@@ -1,5 +1,13 @@
 import { getConfig } from '../config.js'
 import { getDb } from '../db/index.js'
+
+// Helper function to get non-standard config keys for migration
+function getMigrationConfigValue(userId: number, key: string): string | null {
+  const row = getDb()
+    .query<{ value: string }, [number, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
+    .get(userId, key)
+  return row?.value ?? null
+}
 import { isIssueMigrated, recordMigratedIssue } from '../db/migrated-issues.js'
 import { getMigrationStatus, setMigrationStatus, isMigrationComplete } from '../db/migration-status.js'
 import { createIssue } from '../huly/create-issue.js'
@@ -137,8 +145,8 @@ async function migrateUserIssues(userId: number): Promise<UserMigrationResult> {
 }
 
 function getMigrationConfig(userId: number): MigrationConfig & { error?: string } {
-  const linearKey = getConfig(userId, 'linear_key')
-  const linearTeamId = getConfig(userId, 'linear_team_id')
+  const linearKey = getMigrationConfigValue(userId, 'linear_key')
+  const linearTeamId = getMigrationConfigValue(userId, 'linear_team_id')
   const hulyEmail = getConfig(userId, 'huly_email')
   const hulyPassword = getConfig(userId, 'huly_password')
 
