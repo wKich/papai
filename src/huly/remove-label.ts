@@ -22,14 +22,19 @@ export interface RemoveLabelResult {
 export function removeLabel({ userId, labelId }: RemoveLabelParams): Promise<RemoveLabelResult> {
   log.debug({ userId, labelId }, 'removeLabel called')
 
-  return withClient(userId, getHulyClient, async (client) => {
-    await fetchLabel(client, labelId)
-    ensureRef<TagElement>(labelId)
+  return withClient(
+    userId,
+    getHulyClient,
+    async (client) => {
+      await fetchLabel(client, labelId)
+      ensureRef<TagElement>(labelId)
 
-    await client.removeDoc(tags.class.TagElement, core.space.Workspace, labelId)
+      await client.removeDoc(tags.class.TagElement, core.space.Workspace, labelId)
 
-    log.info({ userId, labelId }, 'Label removed')
+      log.info({ userId, labelId }, 'Label removed')
 
-    return { id: labelId, success: true }
-  })
+      return { id: labelId, success: true }
+    },
+    { operation: 'removeLabel', labelId },
+  )
 }

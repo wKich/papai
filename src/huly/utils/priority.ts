@@ -3,7 +3,7 @@ import { IssuePriority } from '@hcengineering/tracker'
 /**
  * Maps input priority values to Huly IssuePriority enum
  * Input: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
- * Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
+ * Huly: NoPriority=0, Urgent=1, High=2, Medium=3, Low=4
  */
 export function mapInputPriorityToHuly(priority: number | undefined): IssuePriority {
   if (priority === undefined) {
@@ -27,16 +27,16 @@ export function mapInputPriorityToHuly(priority: number | undefined): IssuePrior
 
 /**
  * Maps Huly priority values to output priority scale
- * Huly: NoPriority=0, Low=1, Medium=2, High=3, Urgent=4
+ * Huly: NoPriority=0, Urgent=1, High=2, Medium=3, Low=4
  * Output: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low
  */
 export function mapHulyPriorityToOutput(hulyPriority: number): number {
   const priorityMap: Record<number, number> = {
     0: 0,
-    4: 1,
-    3: 2,
-    2: 3,
-    1: 4,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
   }
   return priorityMap[hulyPriority] ?? 0
 }

@@ -64,18 +64,23 @@ export function updateProject({ userId, projectId, name, description }: UpdatePr
     )
   }
 
-  return withClient(userId, getHulyClient, async (client) => {
-    const project = await fetchProject(client, projectId)
-    const updates = buildUpdateFields(name, description)
-    await updateProjectDoc(client, project._id, updates)
+  return withClient(
+    userId,
+    getHulyClient,
+    async (client) => {
+      const project = await fetchProject(client, projectId)
+      const updates = buildUpdateFields(name, description)
+      await updateProjectDoc(client, project._id, updates)
 
-    log.info({ projectId, name: name ?? project.name }, 'Project updated')
+      log.info({ projectId, name: name ?? project.name }, 'Project updated')
 
-    return {
-      id: projectId,
-      name: name ?? project.name,
-      identifier: project.identifier,
-      url: buildProjectUrl(project),
-    }
-  })
+      return {
+        id: projectId,
+        name: name ?? project.name,
+        identifier: project.identifier,
+        url: buildProjectUrl(project),
+      }
+    },
+    { operation: 'updateProject', projectId },
+  )
 }

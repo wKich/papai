@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test'
 
+import { HulyApiError } from '../../../src/huly/classify-error.js'
 import { withClient } from '../../../src/huly/utils/with-client.js'
 
 class MockHulyClient {
@@ -20,11 +21,38 @@ describe('withClient', () => {
     expect(result).toBe('result')
   })
 
-  it('should close client even when operation throws', () => {
+  it('should close client even when operation throws', async () => {
     const mockClient = new MockHulyClient()
     const mockGetClient = mock(() => Promise.resolve(mockClient))
     const mockOperation = mock(() => Promise.reject(new Error('Operation failed')))
 
-    expect(withClient(123, mockGetClient, mockOperation)).rejects.toThrow()
+    try {
+      await withClient(123, mockGetClient, mockOperation)
+      throw new Error('Expected withClient to throw')
+    } catch (error) {
+      expect(error).toMatchObject({ message: 'Operation failed' })
+    }
+
+    expect(mockClient.close).toHaveBeenCalled()
+  })
+
+  it('should classify getClient errors and skip close when client is not acquired', async () => {
+    const mockClient = new MockHulyClient()
+    const mockGetClient = mock(() => Promise.reject(new Error('authentication failed')))
+    const mockOperation = mock(() => Promise.resolve('result'))
+
+    try {
+      await withClient(123, mockGetClient, mockOperation)
+      throw new Error('Expected withClient to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(HulyApiError)
+      expect(error).toMatchObject({
+        message: 'authentication failed',
+        appError: { type: 'huly', code: 'auth-failed' },
+      })
+    }
+
+    expect(mockOperation).not.toHaveBeenCalled()
+    expect(mockClient.close).not.toHaveBeenCalled()
   })
 })
