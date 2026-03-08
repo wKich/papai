@@ -10,6 +10,8 @@ export type ConfigKey =
   | 'openai_base_url'
   | 'openai_model'
   | 'memory_model'
+  | 'linear_key'
+  | 'linear_team_id'
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
   'huly_email',
@@ -18,9 +20,11 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
   'openai_base_url',
   'openai_model',
   'memory_model',
+  'linear_key',
+  'linear_team_id',
 ]
 
-const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['huly_password', 'openai_key'])
+const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['huly_password', 'openai_key', 'linear_key'])
 
 export function setConfig(userId: number, key: ConfigKey, value: string): void {
   log.debug({ userId, key }, 'setConfig called')
