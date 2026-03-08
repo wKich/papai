@@ -1,7 +1,9 @@
 import { bot } from './bot.js'
 import { closeDb, initDb } from './db/index.js'
+import { isMigrationComplete } from './db/migration-status.js'
 import { logger } from './logger.js'
 import { migrateToMultiUser } from './migrate.js'
+import { runLinearToHulyMigration } from './migration/migrate.js'
 
 const log = logger.child({ scope: 'main' })
 
@@ -29,6 +31,16 @@ try {
 } catch (error) {
   log.error({ error: error instanceof Error ? error.message : String(error) }, 'Multi-user migration failed')
   process.exit(1)
+}
+
+// Run Linear to Huly migration if needed
+if (!isMigrationComplete('linear_to_huly')) {
+  log.info('Linear to Huly migration not complete, running migration...')
+  const result = await runLinearToHulyMigration()
+  if (!result.success) {
+    log.error({ errors: result.errors }, 'Migration failed but continuing startup')
+    // Don't fail startup on migration error - allow manual retry
+  }
 }
 
 void bot.start({
