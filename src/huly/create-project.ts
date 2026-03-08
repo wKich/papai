@@ -25,30 +25,35 @@ export interface ProjectResult {
 export function createProject({ userId, name, identifier, description }: CreateProjectParams): Promise<ProjectResult> {
   log.debug({ userId, name, identifier, hasDescription: description !== undefined }, 'createProject called')
 
-  return withClient(userId, getHulyClient, async (client) => {
-    const projectId = generateId()
+  return withClient(
+    userId,
+    getHulyClient,
+    async (client) => {
+      const projectId = generateId()
 
-    await client.createDoc(
-      tracker.class.Project,
-      core.space.Space,
-      {
+      await client.createDoc(
+        tracker.class.Project,
+        core.space.Space,
+        {
+          name,
+          identifier: identifier.toUpperCase(),
+          description: description ?? '',
+          private: false,
+          defaultIssueStatus: null,
+          members: [],
+        },
+        projectId,
+      )
+
+      log.info({ projectId, name, identifier }, 'Project created')
+
+      return {
+        id: projectId,
         name,
         identifier: identifier.toUpperCase(),
-        description: description ?? '',
-        private: false,
-        defaultIssueStatus: null,
-        members: [],
-      },
-      projectId,
-    )
-
-    log.info({ projectId, name, identifier }, 'Project created')
-
-    return {
-      id: projectId,
-      name,
-      identifier: identifier.toUpperCase(),
-      url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${identifier.toUpperCase()}`,
-    }
-  })
+        url: `${hulyUrl}/workbench/${hulyWorkspace}/tracker/${identifier.toUpperCase()}`,
+      }
+    },
+    { operation: 'createProject', identifier: identifier.toUpperCase() },
+  )
 }

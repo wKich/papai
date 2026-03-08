@@ -20,24 +20,29 @@ export function listProjects({
 }): Promise<{ teamId: string; teamName: string; projects: ProjectData[] }[]> {
   log.debug({ userId }, 'listProjects called')
 
-  return withClient(userId, getHulyClient, async (client) => {
-    const projects = await client.findAll<Project>(tracker.class.Project, {})
+  return withClient(
+    userId,
+    getHulyClient,
+    async (client) => {
+      const projects = await client.findAll<Project>(tracker.class.Project, {})
 
-    const mappedProjects: ProjectData[] = projects.map((project) => ({
-      id: project._id as string,
-      name: project.name,
-      identifier: project.identifier,
-      description: project.description === undefined ? undefined : String(project.description),
-    }))
+      const mappedProjects: ProjectData[] = projects.map((project) => ({
+        id: project._id as string,
+        name: project.name,
+        identifier: project.identifier,
+        description: project.description === undefined ? undefined : String(project.description),
+      }))
 
-    log.info({ projectCount: mappedProjects.length }, 'Projects listed')
+      log.info({ projectCount: mappedProjects.length }, 'Projects listed')
 
-    return [
-      {
-        teamId: 'default',
-        teamName: 'Projects',
-        projects: mappedProjects,
-      },
-    ]
-  })
+      return [
+        {
+          teamId: 'default',
+          teamName: 'Projects',
+          projects: mappedProjects,
+        },
+      ]
+    },
+    { operation: 'listProjects' },
+  )
 }

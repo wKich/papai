@@ -20,11 +20,18 @@ describe('withClient', () => {
     expect(result).toBe('result')
   })
 
-  it('should close client even when operation throws', () => {
+  it('should close client even when operation throws', async () => {
     const mockClient = new MockHulyClient()
     const mockGetClient = mock(() => Promise.resolve(mockClient))
     const mockOperation = mock(() => Promise.reject(new Error('Operation failed')))
 
-    expect(withClient(123, mockGetClient, mockOperation)).rejects.toThrow()
+    try {
+      await withClient(123, mockGetClient, mockOperation)
+      throw new Error('Expected withClient to throw')
+    } catch (error) {
+      expect(error).toMatchObject({ message: 'Operation failed' })
+    }
+
+    expect(mockClient.close).toHaveBeenCalled()
   })
 })

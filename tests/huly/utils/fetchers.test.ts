@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test'
 
+import { HulyApiError } from '../../../src/huly/classify-error.js'
 import { fetchIssue, fetchProject, fetchLabel, type FindOneClient } from '../../../src/huly/utils/fetchers.js'
 
 function createMockClient(returnValue: unknown): FindOneClient {
@@ -19,14 +20,32 @@ describe('entity fetchers', () => {
       expect(result.identifier).toBe('TEST-1')
     })
 
-    it('should throw error when issue not found (null)', () => {
+    it('should throw HulyApiError when issue not found (null)', async () => {
       const client = createMockClient(null)
-      expect(fetchIssue(client, 'issue-123')).rejects.toThrow('Issue not found: issue-123')
+      try {
+        await fetchIssue(client, 'issue-123')
+        throw new Error('Expected fetchIssue to throw')
+      } catch (error) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        expect(error).toMatchObject({
+          message: 'Issue not found: issue-123',
+          appError: { type: 'huly', code: 'issue-not-found', issueId: 'issue-123' },
+        })
+      }
     })
 
-    it('should throw error when issue not found (undefined)', () => {
+    it('should throw HulyApiError when issue not found (undefined)', async () => {
       const client = createMockClient(undefined)
-      expect(fetchIssue(client, 'issue-123')).rejects.toThrow('Issue not found: issue-123')
+      try {
+        await fetchIssue(client, 'issue-123')
+        throw new Error('Expected fetchIssue to throw')
+      } catch (error) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        expect(error).toMatchObject({
+          message: 'Issue not found: issue-123',
+          appError: { type: 'huly', code: 'issue-not-found', issueId: 'issue-123' },
+        })
+      }
     })
   })
 
@@ -40,9 +59,18 @@ describe('entity fetchers', () => {
       expect(result.identifier).toBe('TEST')
     })
 
-    it('should throw error when project not found', () => {
+    it('should throw HulyApiError when project not found', async () => {
       const client = createMockClient(undefined)
-      expect(fetchProject(client, 'proj-123')).rejects.toThrow('Project not found: proj-123')
+      try {
+        await fetchProject(client, 'proj-123')
+        throw new Error('Expected fetchProject to throw')
+      } catch (error) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        expect(error).toMatchObject({
+          message: 'Project not found: proj-123',
+          appError: { type: 'huly', code: 'project-not-found', projectId: 'proj-123' },
+        })
+      }
     })
   })
 
@@ -55,9 +83,18 @@ describe('entity fetchers', () => {
       expect(String(result._id)).toBe('label-123')
     })
 
-    it('should throw error when label not found', () => {
+    it('should throw HulyApiError when label not found', async () => {
       const client = createMockClient(undefined)
-      expect(fetchLabel(client, 'label-123')).rejects.toThrow('Label not found: label-123')
+      try {
+        await fetchLabel(client, 'label-123')
+        throw new Error('Expected fetchLabel to throw')
+      } catch (error) {
+        expect(error).toBeInstanceOf(HulyApiError)
+        expect(error).toMatchObject({
+          message: 'Label not found: label-123',
+          appError: { type: 'huly', code: 'label-not-found', labelName: 'label-123' },
+        })
+      }
     })
   })
 })
