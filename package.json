@@ -13,6 +13,8 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
+    "migrate": "bun run scripts/migrate.ts",
+    "migrate:reset": "bun run scripts/migrate.ts --reset",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md"
