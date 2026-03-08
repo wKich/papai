@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -101,4 +102,11 @@ jobs:
           body_path: RELEASE_NOTES.md
           generate_release_notes: false
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    needs: release
+    uses: ./.github/workflows/deploy.yml
+    with:
+      prerelease: false
+    secrets: inherit
