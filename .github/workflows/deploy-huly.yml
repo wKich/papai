@@ -1,0 +1,77 @@
+name: Deploy Huly
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: string
+        default: 'production'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy-huly:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Huly via SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.SSH_HOST_KEY }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          HULY_HOST_ADDRESS: ${{ vars.HULY_HOST_ADDRESS }}
+          HULY_VERSION: ${{ vars.HULY_VERSION }}
+          HULY_SECRET: ${{ secrets.HULY_SECRET }}
+          HULY_CR_USER_PASSWORD: ${{ secrets.HULY_CR_USER_PASSWORD }}
+          HULY_REDPANDA_ADMIN_PWD: ${{ secrets.HULY_REDPANDA_ADMIN_PWD }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          trap 'rm -f ~/.ssh/id_rsa' EXIT
+          printf '%s\n' "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" mkdir -p ~/huly
+          scp -i ~/.ssh/id_rsa -P "$SSH_PORT" huly/docker-compose.yml huly/Caddyfile "$SSH_USER@$SSH_HOST:~/huly/"
+          ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash << EOF
+          set -e
+          cd ~/huly
+          printf '%s\n' \
+            'DOCKER_NAME=huly' \
+            'HULY_VERSION=${HULY_VERSION}' \
+            'HOST_ADDRESS=${HULY_HOST_ADDRESS}' \
+            'SECRET=${HULY_SECRET}' \
+            'CR_DATABASE=huly' \
+            'CR_USERNAME=root' \
+            'CR_USER_PASSWORD=${HULY_CR_USER_PASSWORD}' \
+            'CR_DB_URL=postgresql://root@cockroach:26257/huly?sslmode=disable' \
+            'REDPANDA_ADMIN_USER=admin' \
+            'REDPANDA_ADMIN_PWD=${HULY_REDPANDA_ADMIN_PWD}' \
+            'DEFAULT_LANGUAGE=en' \
+            'LAST_NAME_FIRST=true' \
+            > .env
+          chmod 600 .env
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker image prune -f
+          EOF
+
+      - name: Wait for Huly Health Check
+        run: |
+          echo "Waiting for Huly to be ready..."
+          # Add health check logic here
+          # e.g., curl --retry 10 --retry-delay 5 ${{ secrets.HULY_HEALTH_URL }}
+          sleep 30
+
+      - name: Verify Huly Deployment
+        run: |
+          echo "Verifying Huly deployment..."
+          # Add verification logic here
+          # e.g., curl -f ${{ secrets.HULY_HEALTH_URL }} || exit 1

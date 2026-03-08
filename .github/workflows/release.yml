@@ -104,8 +104,46 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  deploy:
+  deploy-huly:
+    name: Deploy Huly
     needs: release
+    uses: ./.github/workflows/deploy-huly.yml
+    with:
+      environment: production
+    secrets: inherit
+
+  migrate:
+    name: Run Migration
+    needs: deploy-huly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run migration
+        run: bun run migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HULY_URL: ${{ secrets.HULY_URL }}
+          HULY_WORKSPACE: ${{ secrets.HULY_WORKSPACE }}
+
+      - name: Migration status
+        if: failure()
+        run: |
+          echo "::warning::Migration failed. Deploy will continue but data may be incomplete."
+          echo "Run 'bun run migrate:reset' manually to retry."
+    continue-on-error: true
+
+  deploy-papai:
+    name: Deploy Papai
+    needs: [deploy-huly, migrate]
+    if: always() && needs.deploy-huly.result == 'success'
     uses: ./.github/workflows/deploy.yml
     with:
       prerelease: false
