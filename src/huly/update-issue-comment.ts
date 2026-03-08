@@ -70,8 +70,8 @@ export function updateIssueComment({
     ensureRef<ChatMessage>(commentId)
     ensureRef<Space>(projectId)
     const issue = await fetchIssue(client, issueId)
-    await findComment(client, commentId, issueId)
-    await updateComment(client, projectId, commentId, issueId, body)
+    await findComment(client, commentId, issue._id)
+    await updateComment(client, projectId, commentId, issue._id, body)
     const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment updated')

@@ -67,7 +67,7 @@ export function updateProject({ userId, projectId, name, description }: UpdatePr
   return withClient(userId, getHulyClient, async (client) => {
     const project = await fetchProject(client, projectId)
     const updates = buildUpdateFields(name, description)
-    await updateProjectDoc(client, projectId, updates)
+    await updateProjectDoc(client, project._id, updates)
 
     log.info({ projectId, name: name ?? project.name }, 'Project updated')
 

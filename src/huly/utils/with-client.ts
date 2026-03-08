@@ -1,9 +1,11 @@
 import { logger } from '../../logger.js'
 import { classifyHulyError } from '../classify-error.js'
-import type { getHulyClient } from '../huly-client.js'
-import type { HulyClient } from '../types.js'
 
 const log = logger.child({ scope: 'huly:with-client' })
+
+export interface CloseableClient {
+  close(): Promise<void>
+}
 
 /**
  * Higher-order function that manages Huly client lifecycle
@@ -12,10 +14,10 @@ const log = logger.child({ scope: 'huly:with-client' })
  * - Ensures client is closed in finally block
  * - Catches and classifies errors
  */
-export async function withClient<T>(
+export async function withClient<T, C extends CloseableClient>(
   userId: number,
-  getClient: typeof getHulyClient,
-  operation: (client: HulyClient) => Promise<T>,
+  getClient: (userId: number) => Promise<C>,
+  operation: (client: C) => Promise<T>,
 ): Promise<T> {
   const client = await getClient(userId)
 

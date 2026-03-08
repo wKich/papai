@@ -1,21 +1,11 @@
 import { describe, expect, it, mock } from 'bun:test'
 
-import { fetchIssue, fetchProject, fetchLabel } from '../../../src/huly/utils/fetchers.js'
+import { fetchIssue, fetchProject, fetchLabel, type FindOneClient } from '../../../src/huly/utils/fetchers.js'
 
-class MockHulyClient {
-  private returnValue: unknown
-
-  constructor(returnValue: unknown) {
-    this.returnValue = returnValue
+function createMockClient(returnValue: unknown): FindOneClient {
+  return {
+    findOne: mock(() => Promise.resolve(returnValue)),
   }
-
-  findOne = mock((): Promise<unknown> => Promise.resolve(this.returnValue))
-
-  async close(): Promise<void> {}
-}
-
-function createMockClient(returnValue: unknown): MockHulyClient {
-  return new MockHulyClient(returnValue)
 }
 
 describe('entity fetchers', () => {
@@ -25,7 +15,8 @@ describe('entity fetchers', () => {
       const client = createMockClient(mockIssue)
 
       const result = await fetchIssue(client, 'issue-123')
-      expect(result).toBe(mockIssue)
+      expect(String(result._id)).toBe('issue-123')
+      expect(result.identifier).toBe('TEST-1')
     })
 
     it('should throw error when issue not found (null)', () => {
@@ -45,7 +36,8 @@ describe('entity fetchers', () => {
       const client = createMockClient(mockProject)
 
       const result = await fetchProject(client, 'proj-123')
-      expect(result).toBe(mockProject)
+      expect(String(result._id)).toBe('proj-123')
+      expect(result.identifier).toBe('TEST')
     })
 
     it('should throw error when project not found', () => {
@@ -60,7 +52,7 @@ describe('entity fetchers', () => {
       const client = createMockClient(mockLabel)
 
       const result = await fetchLabel(client, 'label-123')
-      expect(result).toBe(mockLabel)
+      expect(String(result._id)).toBe('label-123')
     })
 
     it('should throw error when label not found', () => {

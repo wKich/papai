@@ -60,14 +60,14 @@ export function removeIssueLabel({
     ensureRef<TagElement>(labelId)
     ensureRef<Space>(projectId)
     const issue = await fetchIssue(client, issueId)
-    const tagRef = await findTagReference(client, issueId, labelId)
+    const tagRef = await findTagReference(client, issue._id, labelId)
 
     if (tagRef === undefined) {
       log.warn({ userId, issueId, labelId }, 'Label not found on issue')
       return undefined
     }
 
-    await removeTagReference(client, projectId, tagRef._id, issueId)
+    await removeTagReference(client, projectId, tagRef._id, issue._id)
 
     log.info({ userId, issueId, labelId, identifier: issue.identifier }, 'Label removed from issue')
 

@@ -48,7 +48,7 @@ export function addIssueComment({
   return withClient(userId, getHulyClient, async (client) => {
     ensureRef<Space>(projectId)
     const issue = await fetchIssue(client, issueId)
-    const commentId = await addComment(client, projectId, issueId, body)
+    const commentId = await addComment(client, projectId, issue._id, body)
     const url = await buildIssueUrl(client, issue)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment added to issue')

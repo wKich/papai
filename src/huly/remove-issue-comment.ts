@@ -67,8 +67,8 @@ export function removeIssueComment({
     ensureRef<ChatMessage>(commentId)
     ensureRef<Space>(projectId)
     const issue = await fetchIssue(client, issueId)
-    await verifyCommentExists(client, commentId, issueId)
-    await removeComment(client, projectId, commentId, issueId)
+    await verifyCommentExists(client, commentId, issue._id)
+    await removeComment(client, projectId, commentId, issue._id)
 
     log.info({ userId, issueId, commentId, identifier: issue.identifier }, 'Comment removed')
 

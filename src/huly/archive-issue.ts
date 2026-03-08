@@ -21,7 +21,7 @@ export function archiveIssue({
 
   return withClient(userId, getHulyClient, async (client) => {
     const issue = await fetchIssue(client, issueId)
-    await archiveIssueByStatus(client, issueId)
+    await archiveIssueByStatus(client, issue._id)
     const archivedAt = new Date().toISOString()
 
     log.info({ userId, issueId, identifier: issue.identifier, archivedAt }, 'Issue archived')
