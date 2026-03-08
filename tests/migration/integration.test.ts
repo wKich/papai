@@ -47,7 +47,7 @@ describe('Migration Integration', () => {
     runMigrations(db, MIGRATIONS)
 
     // Mock getDb to return our test database
-    void mock.module('../../src/db/index.js', () => ({
+    await mock.module('../../src/db/index.js', () => ({
       getDb: (): Database => db,
       closeDb: (): void => {
         db.close()
