@@ -20,7 +20,17 @@ export async function withClient<T, C extends CloseableClient>(
   operation: (client: C) => Promise<T>,
   context?: Record<string, unknown>,
 ): Promise<T> {
-  const client = await getClient(userId)
+  let client: C | undefined
+
+  try {
+    client = await getClient(userId)
+  } catch (error) {
+    log.error(
+      { ...(context ?? {}), error: error instanceof Error ? error.message : String(error), userId },
+      'Failed to get Huly client',
+    )
+    throw classifyHulyError(error)
+  }
 
   try {
     return await operation(client)
@@ -31,13 +41,15 @@ export async function withClient<T, C extends CloseableClient>(
     )
     throw classifyHulyError(error)
   } finally {
-    try {
-      await client.close()
-    } catch (closeError) {
-      log.error(
-        { ...(context ?? {}), error: closeError instanceof Error ? closeError.message : String(closeError), userId },
-        'Failed to close Huly client',
-      )
+    if (client !== undefined) {
+      try {
+        await client.close()
+      } catch (closeError) {
+        log.error(
+          { ...(context ?? {}), error: closeError instanceof Error ? closeError.message : String(closeError), userId },
+          'Failed to close Huly client',
+        )
+      }
     }
   }
 }
