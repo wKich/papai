@@ -26,6 +26,7 @@
     "@hcengineering/tags": "^0.7.0",
     "@hcengineering/task": "^0.7.0",
     "@hcengineering/tracker": "^0.7.0",
+    "@linear/sdk": "^38.0.0",
     "ai": "^6.0.108",
     "grammy": "^1.41.1",
     "marked": "^17.0.4",
