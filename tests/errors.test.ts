@@ -1,48 +1,48 @@
 import { describe, expect, test } from 'bun:test'
 
-import { hulyError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
+import { linearError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
 
-describe('hulyError basic constructors', () => {
+describe('linearError basic constructors', () => {
   test('issueNotFound creates correct structure', () => {
-    const error = hulyError.issueNotFound('ISS-123')
+    const error = linearError.issueNotFound('ISS-123')
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'issue-not-found',
       issueId: 'ISS-123',
     })
   })
 
   test('teamNotFound creates correct structure', () => {
-    const error = hulyError.teamNotFound('TEAM-456')
+    const error = linearError.teamNotFound('TEAM-456')
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'team-not-found',
       teamId: 'TEAM-456',
     })
   })
 
   test('authFailed creates correct structure', () => {
-    const error = hulyError.authFailed()
+    const error = linearError.authFailed()
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'auth-failed',
     })
   })
 
   test('rateLimited creates correct structure', () => {
-    const error = hulyError.rateLimited()
+    const error = linearError.rateLimited()
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'rate-limited',
     })
   })
 })
 
-describe('hulyError advanced constructors', () => {
+describe('linearError advanced constructors', () => {
   test('validationFailed creates correct structure', () => {
-    const error = hulyError.validationFailed('title', 'Title is required')
+    const error = linearError.validationFailed('title', 'Title is required')
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'validation-failed',
       field: 'title',
       reason: 'Title is required',
@@ -50,9 +50,9 @@ describe('hulyError advanced constructors', () => {
   })
 
   test('labelNotFound creates correct structure', () => {
-    const error = hulyError.labelNotFound('urgent')
+    const error = linearError.labelNotFound('urgent')
     expect(error).toEqual({
-      type: 'huly',
+      type: 'linear',
       code: 'label-not-found',
       labelName: 'urgent',
     })
@@ -60,8 +60,8 @@ describe('hulyError advanced constructors', () => {
 
   test('unknown creates correct structure', () => {
     const originalError = new Error('Something went wrong')
-    const error = hulyError.unknown(originalError)
-    expect(error.type).toBe('huly')
+    const error = linearError.unknown(originalError)
+    expect(error.type).toBe('linear')
     expect(error.code).toBe('unknown')
     if (error.code === 'unknown') {
       expect(error.originalError).toBe(originalError)
@@ -148,7 +148,7 @@ describe('systemError constructors', () => {
 
 describe('isAppError type guard', () => {
   test('returns true for all valid error types', () => {
-    expect(isAppError(hulyError.authFailed())).toBe(true)
+    expect(isAppError(linearError.authFailed())).toBe(true)
     expect(isAppError(llmError.timeout())).toBe(true)
     expect(isAppError(validationError.missingRequired('field'))).toBe(true)
     expect(isAppError(systemError.configMissing('VAR'))).toBe(true)
@@ -166,15 +166,15 @@ describe('isAppError type guard', () => {
   })
 })
 
-describe('getUserMessage for huly errors', () => {
+describe('getUserMessage for linear errors', () => {
   test('returns appropriate message for each error code', () => {
-    expect(getUserMessage(hulyError.issueNotFound('ABC-123'))).toContain('ABC-123')
-    expect(getUserMessage(hulyError.teamNotFound('TEAM-1'))).toContain('Team configuration')
-    expect(getUserMessage(hulyError.authFailed())).toContain('Failed to connect')
-    expect(getUserMessage(hulyError.rateLimited())).toContain('rate limit')
-    expect(getUserMessage(hulyError.validationFailed('title', 'too short'))).toContain('title')
-    expect(getUserMessage(hulyError.labelNotFound('bug'))).toContain('bug')
-    expect(getUserMessage(hulyError.unknown(new Error('test')))).toContain('error occurred')
+    expect(getUserMessage(linearError.issueNotFound('ABC-123'))).toContain('ABC-123')
+    expect(getUserMessage(linearError.teamNotFound('TEAM-1'))).toContain('Team configuration')
+    expect(getUserMessage(linearError.authFailed())).toContain('Failed to connect')
+    expect(getUserMessage(linearError.rateLimited())).toContain('rate limit')
+    expect(getUserMessage(linearError.validationFailed('title', 'too short'))).toContain('title')
+    expect(getUserMessage(linearError.labelNotFound('bug'))).toContain('bug')
+    expect(getUserMessage(linearError.unknown(new Error('test')))).toContain('error occurred')
   })
 })
 

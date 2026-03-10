@@ -34,5 +34,3 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 .worktrees/
 *.db
-*.db-shm
-*.db-wal

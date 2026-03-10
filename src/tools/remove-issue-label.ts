@@ -2,26 +2,25 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { removeIssueLabel } from '../huly/index.js'
+import { removeIssueLabel } from '../linear/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:remove-issue-label' })
 
-export function makeRemoveIssueLabelTool(userId: number): ToolSet[string] {
+export function makeRemoveIssueLabelTool(linearKey: string): ToolSet[string] {
   return tool({
-    description: 'Remove a label from an issue. Use this when the user wants to remove a label from an issue.',
+    description: 'Remove a label from a Linear issue. Use this when the user wants to remove a label from an issue.',
     inputSchema: z.object({
-      issueId: z.string().describe("The issue ID (e.g. 'abc123')"),
-      projectId: z.string().describe('Project ID where the issue belongs'),
+      issueId: z.string().describe("The Linear issue ID (e.g. 'abc123')"),
       labelId: z
         .string()
         .describe(
           "The label ID to remove. Call get_issue first to see the issue's labels, or list_labels to see all available labels.",
         ),
     }),
-    execute: async ({ issueId, projectId, labelId }) => {
+    execute: async ({ issueId, labelId }) => {
       try {
-        const result = await removeIssueLabel({ userId, issueId, projectId, labelId })
+        const result = await removeIssueLabel({ apiKey: linearKey, issueId, labelId })
         if (!result) {
           log.warn({ issueId, labelId }, 'removeIssueLabel returned no result')
         }

@@ -2,22 +2,21 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { addIssueComment } from '../huly/index.js'
+import { addIssueComment } from '../linear/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:add-issue-comment' })
 
-export function makeAddIssueCommentTool(userId: number): ToolSet[string] {
+export function makeAddIssueCommentTool(linearKey: string): ToolSet[string] {
   return tool({
-    description: 'Add a comment to an issue.',
+    description: 'Add a comment to a Linear issue.',
     inputSchema: z.object({
-      issueId: z.string().describe('Issue ID'),
-      projectId: z.string().describe('Project ID where the issue belongs'),
+      issueId: z.string().describe('Linear issue ID'),
       body: z.string().describe('Comment body (supports Markdown)'),
     }),
-    execute: async ({ issueId, projectId, body }) => {
+    execute: async ({ issueId, body }) => {
       try {
-        return await addIssueComment({ userId, issueId, projectId, body })
+        return await addIssueComment({ apiKey: linearKey, issueId, body })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'add_issue_comment' },

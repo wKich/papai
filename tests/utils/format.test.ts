@@ -78,29 +78,27 @@ describe('formatLlmOutput', () => {
     })
 
     test('inline link within a sentence', () => {
-      const result = formatLlmOutput('See [ABC-123](https://example.huly.io/issue/ABC-123) for details')
+      const result = formatLlmOutput('See [ABC-123](https://linear.app/issue/ABC-123) for details')
       expect(result.text).toBe('See ABC-123 for details')
       expect(result.entities).toEqual([
-        { offset: 4, length: 7, type: 'text_link', url: 'https://example.huly.io/issue/ABC-123' },
+        { offset: 4, length: 7, type: 'text_link', url: 'https://linear.app/issue/ABC-123' },
       ])
     })
 
     test('multiple links in one message', () => {
-      const result = formatLlmOutput(
-        'See [issue 1](https://example.huly.io/1) and [issue 2](https://example.huly.io/2)',
-      )
+      const result = formatLlmOutput('See [issue 1](https://linear.app/1) and [issue 2](https://linear.app/2)')
       expect(result.text).toBe('See issue 1 and issue 2')
       expect(result.entities).toEqual([
-        { offset: 4, length: 7, type: 'text_link', url: 'https://example.huly.io/1' },
-        { offset: 16, length: 7, type: 'text_link', url: 'https://example.huly.io/2' },
+        { offset: 4, length: 7, type: 'text_link', url: 'https://linear.app/1' },
+        { offset: 16, length: 7, type: 'text_link', url: 'https://linear.app/2' },
       ])
     })
 
     test('bare URL becomes a text_link entity', () => {
-      const result = formatLlmOutput('See https://example.huly.io/issue/ABC-123')
-      expect(result.text).toBe('See https://example.huly.io/issue/ABC-123')
+      const result = formatLlmOutput('See https://linear.app/issue/ABC-123')
+      expect(result.text).toBe('See https://linear.app/issue/ABC-123')
       expect(result.entities).toEqual([
-        { offset: 4, length: 37, type: 'text_link', url: 'https://example.huly.io/issue/ABC-123' },
+        { offset: 4, length: 32, type: 'text_link', url: 'https://linear.app/issue/ABC-123' },
       ])
     })
   })
@@ -108,32 +106,32 @@ describe('formatLlmOutput', () => {
   describe('tables', () => {
     test('links in table cells become text_link entities without raw markdown in text', () => {
       const result = formatLlmOutput(
-        '| Issue | Link |\n|-------|------|\n| ABC-123 | [ABC-123](https://example.huly.io/issue/ABC-123) |',
+        '| Issue | Link |\n|-------|------|\n| ABC-123 | [ABC-123](https://linear.app/issue/ABC-123) |',
       )
       expect(result.text).toBe('Issue | Link\nABC-123 | ABC-123')
       expect(result.text).not.toContain('](')
       expect(result.entities).toEqual([
-        { offset: 23, length: 7, type: 'text_link', url: 'https://example.huly.io/issue/ABC-123' },
+        { offset: 23, length: 7, type: 'text_link', url: 'https://linear.app/issue/ABC-123' },
       ])
     })
 
     test('bold and links in table cells both produce entities', () => {
       const result = formatLlmOutput(
-        '| Name | Status |\n|------|--------|\n| **urgent** | [ABC-123](https://example.huly.io/1) |',
+        '| Name | Status |\n|------|--------|\n| **urgent** | [ABC-123](https://linear.app/1) |',
       )
       expect(result.text).toBe('Name | Status\nurgent | ABC-123')
       expect(result.entities).toEqual([
         { offset: 14, length: 6, type: 'bold' },
-        { offset: 23, length: 7, type: 'text_link', url: 'https://example.huly.io/1' },
+        { offset: 23, length: 7, type: 'text_link', url: 'https://linear.app/1' },
       ])
     })
 
     test('table surrounded by paragraphs preserves paragraph separation', () => {
       const result = formatLlmOutput(
-        'Before.\n\n| Issue | Link |\n|-------|------|\n| ABC-123 | [ABC-123](https://example.huly.io/1) |\n\nAfter.',
+        'Before.\n\n| Issue | Link |\n|-------|------|\n| ABC-123 | [ABC-123](https://linear.app/1) |\n\nAfter.',
       )
       expect(result.text).toBe('Before.\n\nIssue | Link\nABC-123 | ABC-123\n\nAfter.')
-      expect(result.entities).toEqual([{ offset: 32, length: 7, type: 'text_link', url: 'https://example.huly.io/1' }])
+      expect(result.entities).toEqual([{ offset: 32, length: 7, type: 'text_link', url: 'https://linear.app/1' }])
     })
 
     test('multiple tables each produce correct entities with accurate offsets', () => {

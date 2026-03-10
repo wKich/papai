@@ -2,28 +2,28 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { updateIssue } from '../huly/index.js'
+import { updateIssue } from '../linear/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:update-issue' })
 
-export function makeUpdateIssueTool(userId: number): ToolSet[string] {
+export function makeUpdateIssueTool(linearKey: string): ToolSet[string] {
   return tool({
     description:
-      "Update an existing issue status, assignee, due date, labels, estimate, or project. Use this when the user wants to change a task's properties.",
+      "Update an existing Linear issue status, assignee, due date, labels, estimate, or project. Use this when the user wants to change a task's properties.",
     inputSchema: z.object({
-      issueId: z.string().describe("The issue ID (e.g. 'abc123')"),
+      issueId: z.string().describe("The Linear issue ID (e.g. 'abc123')"),
       status: z.string().optional().describe("New workflow state name (e.g. 'In Progress', 'Done', 'Todo')"),
-      assigneeId: z.string().optional().describe('User ID to assign the issue to'),
+      assigneeId: z.string().optional().describe('Linear user ID to assign the issue to'),
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
       labelIds: z.string().array().optional().describe('Label IDs to apply. Call list_labels first to get IDs.'),
       estimate: z.number().int().optional().describe('Story point estimate'),
-      projectId: z.string().describe('Project ID to move the issue to'),
+      projectId: z.string().optional().describe('Project ID to move the issue to'),
     }),
     execute: async ({ issueId, status, assigneeId, dueDate, labelIds, estimate, projectId }) => {
       try {
         const issue = await updateIssue({
-          userId,
+          apiKey: linearKey,
           issueId,
           status,
           assigneeId,
@@ -32,15 +32,12 @@ export function makeUpdateIssueTool(userId: number): ToolSet[string] {
           estimate,
           projectId,
         })
-        if (issue === undefined) {
+        if (!issue) {
           log.warn({ issueId, status, assigneeId, projectId }, 'updateIssue returned no issue')
-        } else if (issue.id === undefined || issue.identifier === undefined) {
+        } else if (!issue.id || !issue.identifier) {
           log.warn({ issue }, 'updateIssue returned incomplete issue data')
         }
-        return {
-          id: issue?.id ?? '',
-          identifier: issue?.identifier ?? '',
-        }
+        return { id: issue?.id, identifier: issue?.identifier, title: issue?.title, url: issue?.url }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), issueId, tool: 'update_issue' },

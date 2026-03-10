@@ -23,31 +23,31 @@ import { makeUpdateIssueTool } from './update-issue.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
 
-type ToolConfig = { userId: number }
+type ToolConfig = { linearKey: string; linearTeamId: string }
 
-export function makeTools({ userId }: ToolConfig): ToolSet {
+export function makeTools({ linearKey, linearTeamId }: ToolConfig): ToolSet {
   return {
-    create_issue: makeCreateIssueTool(userId),
-    update_issue: makeUpdateIssueTool(userId),
-    search_issues: makeSearchIssuesTool(userId),
-    list_projects: makeListProjectsTool(userId),
-    update_project: makeUpdateProjectTool(userId),
-    archive_project: makeArchiveProjectTool(userId),
-    add_issue_comment: makeAddIssueCommentTool(userId),
-    get_issue_comments: makeGetIssueCommentsTool(userId),
-    update_issue_comment: makeUpdateIssueCommentTool(userId),
-    remove_issue_comment: makeRemoveIssueCommentTool(userId),
-    list_labels: makeListLabelsTool(userId),
-    create_label: makeCreateLabelTool(userId),
-    update_label: makeUpdateLabelTool(userId),
-    remove_label: makeRemoveLabelTool(userId),
-    add_issue_label: makeAddIssueLabelTool(userId),
-    remove_issue_label: makeRemoveIssueLabelTool(userId),
-    add_issue_relation: makeAddIssueRelationTool(userId),
-    update_issue_relation: makeUpdateIssueRelationTool(userId),
-    remove_issue_relation: makeRemoveIssueRelationTool(userId),
-    get_issue: makeGetIssueTool(userId),
-    create_project: makeCreateProjectTool(userId),
-    archive_issue: makeArchiveIssueTool(userId),
+    create_issue: makeCreateIssueTool(linearKey, linearTeamId),
+    update_issue: makeUpdateIssueTool(linearKey),
+    search_issues: makeSearchIssuesTool(linearKey),
+    list_projects: makeListProjectsTool(linearKey),
+    update_project: makeUpdateProjectTool(linearKey),
+    archive_project: makeArchiveProjectTool(linearKey),
+    add_issue_comment: makeAddIssueCommentTool(linearKey),
+    get_issue_comments: makeGetIssueCommentsTool(linearKey),
+    update_issue_comment: makeUpdateIssueCommentTool(linearKey),
+    remove_issue_comment: makeRemoveIssueCommentTool(linearKey),
+    list_labels: makeListLabelsTool(linearKey, linearTeamId),
+    create_label: makeCreateLabelTool(linearKey, linearTeamId),
+    update_label: makeUpdateLabelTool(linearKey),
+    remove_label: makeRemoveLabelTool(linearKey),
+    add_issue_label: makeAddIssueLabelTool(linearKey),
+    remove_issue_label: makeRemoveIssueLabelTool(linearKey),
+    add_issue_relation: makeAddIssueRelationTool(linearKey),
+    update_issue_relation: makeUpdateIssueRelationTool(linearKey),
+    remove_issue_relation: makeRemoveIssueRelationTool(linearKey),
+    get_issue: makeGetIssueTool(linearKey),
+    create_project: makeCreateProjectTool(linearKey, linearTeamId),
+    archive_issue: makeArchiveIssueTool(linearKey),
   }
 }

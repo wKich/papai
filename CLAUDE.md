@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a Telegram bot that manages Huly tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Huly operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
+papai is a Telegram bot that manages Linear tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Linear operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
 
 ## Commands
 
@@ -17,19 +17,19 @@ No build step; Bun runs TypeScript directly.
 
 ## Required Environment Variables
 
-Copy `.env.example` to `.env`. Four variables are required at startup (validated in `src/index.ts`):
-`TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`, `HULY_URL`, `HULY_WORKSPACE`
+Copy `.env.example` to `.env`. Only two are required at startup (validated in `src/index.ts`):
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`
 
 `TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
 
-The remaining credentials (`huly_email`, `huly_password`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
 
 ## Architecture
 
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
-                                              ├─ tools/ ─→ huly/ ─→ Huly API Client
+                                              ├─ tools/ ─→ linear/ ─→ Linear SDK
                                               │   22 tools, one file each
                                               │
                                               └─→ response back to Telegram
@@ -42,8 +42,8 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 - **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
-- **`src/tools/`** — One file per tool. `index.ts` assembles all 22 into `makeTools`. Each tool imports its corresponding huly function.
-- **`src/huly/`** — One file per Huly API wrapper function. `index.ts` re-exports all 22. `classify-error.ts` contains the shared error classifier. Uses `@hcengineering/api-client` for Huly integration.
+- **`src/tools/`** — One file per tool. `index.ts` assembles all 22 into `makeTools`. Each tool imports its corresponding linear function.
+- **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 22. `classify-error.ts` contains the shared error classifier.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
 
 ### Available tools
@@ -133,7 +133,7 @@ Use for:
 
 Every file must import and use the logger. Required log points:
 
-- All function entries in `src/huly/`
+- All function entries in `src/linear/`
 - All tool executions in `src/tools/`
 - Message lifecycle in `bot.ts` (receive, process, respond)
 - Authorization checks
@@ -151,7 +151,7 @@ tests/
 ├── logger.test.ts
 ├── migrate.test.ts
 ├── users.test.ts
-├── huly/             # Tests for src/huly/*
+├── linear/           # Tests for src/linear/*
 └── tools/            # Tests for src/tools/*
 ```
 
@@ -167,4 +167,3 @@ Run tests with `bun test` or `bun run test`.
 - Strict TypeScript (`tsconfig.json` has strict mode + all safety flags)
 - Logging: **pino** with structured JSON output
 - Tests: Located in `tests/` directory, mirroring `src/` structure
-- Huly Integration: Uses `@hcengineering/api-client` package

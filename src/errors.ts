@@ -1,17 +1,17 @@
 import { z } from 'zod'
 
 // Error categories using discriminated unions
-export type HulyError =
-  | { type: 'huly'; code: 'issue-not-found'; issueId: string }
-  | { type: 'huly'; code: 'team-not-found'; teamId: string }
-  | { type: 'huly'; code: 'auth-failed' }
-  | { type: 'huly'; code: 'rate-limited' }
-  | { type: 'huly'; code: 'validation-failed'; field: string; reason: string }
-  | { type: 'huly'; code: 'label-not-found'; labelName: string }
-  | { type: 'huly'; code: 'project-not-found'; projectId: string }
-  | { type: 'huly'; code: 'comment-not-found'; commentId: string }
-  | { type: 'huly'; code: 'relation-not-found'; issueId: string; relatedIssueId: string }
-  | { type: 'huly'; code: 'unknown'; originalError: Error }
+export type LinearError =
+  | { type: 'linear'; code: 'issue-not-found'; issueId: string }
+  | { type: 'linear'; code: 'team-not-found'; teamId: string }
+  | { type: 'linear'; code: 'auth-failed' }
+  | { type: 'linear'; code: 'rate-limited' }
+  | { type: 'linear'; code: 'validation-failed'; field: string; reason: string }
+  | { type: 'linear'; code: 'label-not-found'; labelName: string }
+  | { type: 'linear'; code: 'project-not-found'; projectId: string }
+  | { type: 'linear'; code: 'comment-not-found'; commentId: string }
+  | { type: 'linear'; code: 'relation-not-found'; issueId: string; relatedIssueId: string }
+  | { type: 'linear'; code: 'unknown'; originalError: Error }
 
 export type LlmError =
   | { type: 'llm'; code: 'api-error'; message: string }
@@ -28,30 +28,30 @@ export type SystemError =
   | { type: 'system'; code: 'network-error'; message: string }
   | { type: 'system'; code: 'unexpected'; originalError: Error }
 
-export type AppError = HulyError | LlmError | ValidationError | SystemError
+export type AppError = LinearError | LlmError | ValidationError | SystemError
 
 // Error constructors
-export const hulyError = {
-  issueNotFound: (issueId: string): AppError => ({ type: 'huly', code: 'issue-not-found', issueId }),
-  teamNotFound: (teamId: string): AppError => ({ type: 'huly', code: 'team-not-found', teamId }),
-  authFailed: (): AppError => ({ type: 'huly', code: 'auth-failed' }),
-  rateLimited: (): AppError => ({ type: 'huly', code: 'rate-limited' }),
+export const linearError = {
+  issueNotFound: (issueId: string): AppError => ({ type: 'linear', code: 'issue-not-found', issueId }),
+  teamNotFound: (teamId: string): AppError => ({ type: 'linear', code: 'team-not-found', teamId }),
+  authFailed: (): AppError => ({ type: 'linear', code: 'auth-failed' }),
+  rateLimited: (): AppError => ({ type: 'linear', code: 'rate-limited' }),
   validationFailed: (field: string, reason: string): AppError => ({
-    type: 'huly',
+    type: 'linear',
     code: 'validation-failed',
     field,
     reason,
   }),
-  labelNotFound: (labelName: string): AppError => ({ type: 'huly', code: 'label-not-found', labelName }),
-  projectNotFound: (projectId: string): AppError => ({ type: 'huly', code: 'project-not-found', projectId }),
-  commentNotFound: (commentId: string): AppError => ({ type: 'huly', code: 'comment-not-found', commentId }),
+  labelNotFound: (labelName: string): AppError => ({ type: 'linear', code: 'label-not-found', labelName }),
+  projectNotFound: (projectId: string): AppError => ({ type: 'linear', code: 'project-not-found', projectId }),
+  commentNotFound: (commentId: string): AppError => ({ type: 'linear', code: 'comment-not-found', commentId }),
   relationNotFound: (issueId: string, relatedIssueId: string): AppError => ({
-    type: 'huly',
+    type: 'linear',
     code: 'relation-not-found',
     issueId,
     relatedIssueId,
   }),
-  unknown: (originalError: Error): AppError => ({ type: 'huly', code: 'unknown', originalError }),
+  unknown: (originalError: Error): AppError => ({ type: 'linear', code: 'unknown', originalError }),
 }
 
 export const llmError = {
@@ -77,22 +77,22 @@ export const systemError = {
   unexpected: (originalError: Error): AppError => ({ type: 'system', code: 'unexpected', originalError }),
 }
 
-const appErrorTypeSchema = z.object({ type: z.enum(['huly', 'llm', 'validation', 'system']) })
+const appErrorTypeSchema = z.object({ type: z.enum(['linear', 'llm', 'validation', 'system']) })
 
 // Type guard to check if error is an AppError
 export const isAppError = (error: unknown): error is AppError => appErrorTypeSchema.safeParse(error).success
 
 // Error message mappers
-const getHulyMessage = (error: HulyError): string => {
+const getLinearMessage = (error: LinearError): string => {
   switch (error.code) {
     case 'issue-not-found':
       return `Issue "${error.issueId}" was not found. Please check the issue ID and try again.`
     case 'team-not-found':
-      return `Team configuration error. Please check Huly project configuration.`
+      return `Team configuration error. Please check LINEAR_TEAM_ID.`
     case 'auth-failed':
-      return `Failed to connect to Huly. Please check your HULY_API_KEY.`
+      return `Failed to connect to Linear. Please check your LINEAR_API_KEY.`
     case 'rate-limited':
-      return `Huly API rate limit reached. Please wait a moment and try again.`
+      return `Linear API rate limit reached. Please wait a moment and try again.`
     case 'validation-failed':
       return `Invalid ${error.field}: ${error.reason}`
     case 'label-not-found':
@@ -104,7 +104,7 @@ const getHulyMessage = (error: HulyError): string => {
     case 'relation-not-found':
       return `Relation between issues "${error.issueId}" and "${error.relatedIssueId}" was not found.`
     case 'unknown':
-      return `Huly API error occurred. Please try again later.`
+      return `Linear API error occurred. Please try again later.`
   }
 }
 
@@ -143,8 +143,8 @@ const getSystemMessage = (error: SystemError): string => {
 
 export const getUserMessage = (error: AppError): string => {
   switch (error.type) {
-    case 'huly':
-      return getHulyMessage(error)
+    case 'linear':
+      return getLinearMessage(error)
     case 'llm':
       return getLlmMessage(error)
     case 'validation':

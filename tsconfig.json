@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
-    // Redirect @hcengineering/ui to stub (we don't use it directly)
-    "paths": {
-      "@hcengineering/ui": ["./types/empty.d.ts"]
-    },
     // Environment setup & latest features
-    "lib": ["ESNext", "DOM"],
+    "lib": ["ESNext"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",

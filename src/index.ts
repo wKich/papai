@@ -5,7 +5,7 @@ import { migrateToMultiUser } from './migrate.js'
 
 const log = logger.child({ scope: 'main' })
 
-const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID', 'HULY_URL', 'HULY_WORKSPACE']
+const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID']
 
 const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
 if (missing.length > 0) {

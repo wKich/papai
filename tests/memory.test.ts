@@ -186,7 +186,7 @@ describe('buildMemoryContextMessage', () => {
       {
         identifier: 'ENG-42',
         title: 'Fix login',
-        url: 'https://example.huly.io/ENG-42',
+        url: 'https://linear.app/ENG-42',
         last_seen: '2026-03-01T00:00:00Z',
       },
     ]
@@ -194,7 +194,7 @@ describe('buildMemoryContextMessage', () => {
     expect(result).not.toBeNull()
     expect(result!.content).toContain('ENG-42')
     expect(result!.content).toContain('Fix login')
-    expect(result!.content).toContain('Recently accessed Huly entities')
+    expect(result!.content).toContain('Recently accessed Linear entities')
   })
 
   test('returns combined message with both summary and facts', () => {
@@ -217,20 +217,18 @@ describe('extractFacts', () => {
     const results = [
       {
         toolName: 'create_issue',
-        result: { identifier: 'ENG-42', title: 'New issue', url: 'https://example.huly.io/ENG-42' },
+        result: { identifier: 'ENG-42', title: 'New issue', url: 'https://linear.app/ENG-42' },
       },
     ]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('ENG-42')
     expect(facts[0]!.title).toBe('New issue')
-    expect(facts[0]!.url).toBe('https://example.huly.io/ENG-42')
+    expect(facts[0]!.url).toBe('https://linear.app/ENG-42')
   })
 
   test('extracts fact from update_issue result', () => {
-    const results = [
-      { toolName: 'update_issue', result: { identifier: 'ENG-38', url: 'https://example.huly.io/ENG-38' } },
-    ]
+    const results = [{ toolName: 'update_issue', result: { identifier: 'ENG-38', url: 'https://linear.app/ENG-38' } }]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('ENG-38')
@@ -274,14 +272,14 @@ describe('extractFacts', () => {
     const results = [
       {
         toolName: 'create_project',
-        result: { id: 'proj-123', name: 'Backend Migration', url: 'https://example.huly.io/project/proj-123' },
+        result: { id: 'proj-123', name: 'Backend Migration', url: 'https://linear.app/project/proj-123' },
       },
     ]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('proj:proj-123')
     expect(facts[0]!.title).toBe('Backend Migration')
-    expect(facts[0]!.url).toBe('https://example.huly.io/project/proj-123')
+    expect(facts[0]!.url).toBe('https://linear.app/project/proj-123')
   })
 
   test('extracts create_project fact without url', () => {
@@ -314,7 +312,7 @@ describe('upsertFact eviction', () => {
       upsertFact(userId, {
         identifier: `ENG-${i}`,
         title: `Issue ${i}`,
-        url: `https://example.huly.io/ENG-${i}`,
+        url: `https://linear.app/ENG-${i}`,
       })
     }
 
