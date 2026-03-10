@@ -4,7 +4,13 @@ import { z } from 'zod'
 import type { KaneoConfig } from '../kaneo/client.js'
 import { KaneoWorkspaceSchema, kaneoFetch } from '../kaneo/client.js'
 import { logger } from '../logger.js'
-import { AUTH_SECRET, COMPOSE_PROJECT, KANEO_BASE_URL, KANEO_PORT, POSTGRES_PASSWORD } from './test-migration.js'
+import {
+  AUTH_SECRET,
+  COMPOSE_PROJECT,
+  KANEO_BASE_URL,
+  KANEO_PORT,
+  POSTGRES_PASSWORD,
+} from './test-migration-constants.js'
 
 const log = logger.child({ scope: 'test-migration:infra' })
 

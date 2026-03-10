@@ -1,8 +1,7 @@
-import { z } from 'zod'
-
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:archive-project' })
 
@@ -16,9 +15,10 @@ export async function archiveProject({
   log.debug({ projectId }, 'archiveProject called')
 
   try {
-    await kaneoFetch(config, 'DELETE', `/project/${projectId}`, undefined, undefined, z.unknown())
+    const client = new KaneoClient(config)
+    const result = await client.projects.archive(projectId)
     log.info({ projectId }, 'Project archived (deleted)')
-    return { id: projectId, success: true }
+    return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'archiveProject failed')
     throw classifyKaneoError(error)

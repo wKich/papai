@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoLabelSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 
@@ -30,11 +31,8 @@ export async function updateLabel({
   }
 
   try {
-    const body: Record<string, string> = {}
-    if (name !== undefined) body['name'] = name
-    if (color !== undefined) body['color'] = color
-
-    const label = await kaneoFetch(config, 'PUT', `/label/${labelId}`, body, undefined, KaneoLabelSchema)
+    const client = new KaneoClient(config)
+    const label = await client.labels.update(labelId, { name, color })
     log.info({ labelId, name: label.name }, 'Label updated')
     return label
   } catch (error) {

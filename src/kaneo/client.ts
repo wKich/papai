@@ -1,6 +1,7 @@
 import { type ZodType, z } from 'zod'
 
 import { logger } from '../logger.js'
+import { KaneoApiError, KaneoValidationError } from './errors.js'
 
 const log = logger.child({ scope: 'kaneo:client' })
 
@@ -110,26 +111,7 @@ export type KaneoConfig = {
   baseUrl: string
 }
 
-export class KaneoApiError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode: number,
-    public readonly responseBody: unknown,
-  ) {
-    super(message)
-    this.name = 'KaneoApiError'
-  }
-}
-
-export class KaneoValidationError extends Error {
-  constructor(
-    message: string,
-    public readonly validationError: unknown,
-  ) {
-    super(message)
-    this.name = 'KaneoValidationError'
-  }
-}
+export { KaneoApiError, KaneoValidationError } from './errors.js'
 
 function buildUrl(config: KaneoConfig, path: string, query?: Record<string, string>): URL {
   const url = new URL(`${config.baseUrl}/api${path}`)

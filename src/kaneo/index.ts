@@ -23,3 +23,13 @@ export { updateLabel } from './update-label.js'
 export { updateProject } from './update-project.js'
 export { updateTask } from './update-task.js'
 export { updateTaskRelation } from './update-task-relation.js'
+
+// High-level client
+export {
+  KaneoClient,
+  TaskResource,
+  ProjectResource,
+  LabelResource,
+  CommentResource,
+  ColumnResource,
+} from './kaneo-client.js'

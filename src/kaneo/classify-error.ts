@@ -1,5 +1,5 @@
 import { type AppError, kaneoError, systemError } from '../errors.js'
-import { KaneoApiError } from './client.js'
+import { KaneoApiError } from './errors.js'
 
 export class KaneoClassifiedError extends Error {
   constructor(

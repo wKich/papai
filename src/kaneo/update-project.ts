@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoProjectSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoProjectSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:update-project' })
 
@@ -33,11 +34,8 @@ export async function updateProject({
   }
 
   try {
-    const body: Record<string, string> = {}
-    if (name !== undefined) body['name'] = name
-    if (description !== undefined) body['description'] = description
-
-    const project = await kaneoFetch(config, 'PUT', `/project/${projectId}`, body, undefined, KaneoProjectSchema)
+    const client = new KaneoClient(config)
+    const project = await client.projects.update(projectId, { name, description })
     log.info({ projectId, name: project.name }, 'Project updated')
     return project
   } catch (error) {

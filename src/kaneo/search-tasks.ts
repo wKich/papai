@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 
@@ -14,11 +15,7 @@ const TaskResultSchema = z.object({
   priority: z.string(),
 })
 
-const SearchResultSchema = z.object({
-  tasks: z.array(TaskResultSchema),
-})
-
-type TaskResult = z.infer<typeof TaskResultSchema>
+export type TaskResult = z.infer<typeof TaskResultSchema>
 
 export async function searchTasks({
   config,
@@ -34,17 +31,8 @@ export async function searchTasks({
   log.debug({ query, workspaceId, projectId }, 'searchTasks called')
 
   try {
-    const queryParams: Record<string, string> = {
-      q: query,
-      type: 'tasks',
-      workspaceId,
-    }
-    if (projectId !== undefined) {
-      queryParams['projectId'] = projectId
-    }
-
-    const result = await kaneoFetch(config, 'GET', '/search', undefined, queryParams, SearchResultSchema)
-    const tasks = result.tasks ?? []
+    const client = new KaneoClient(config)
+    const tasks = await client.tasks.search({ query, workspaceId, projectId })
     log.info({ query, resultCount: tasks.length }, 'Tasks searched')
     return tasks
   } catch (error) {

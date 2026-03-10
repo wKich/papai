@@ -1,14 +1,6 @@
 /**
  * Migration script: Linear → self-hosted Kaneo
- *
- * For each bot user who has both Linear credentials (linear_key, linear_team_id)
- * and Kaneo credentials (kaneo_key, kaneo_base_url, kaneo_workspace_id),
- * this script:
- *
- * 1. Exports all data from the user's Linear team
- * 2. Creates matching entities in their Kaneo workspace
- * 3. Each user gets isolated scope in Kaneo (own workspace + projects)
- *
+ * For each bot user with Linear & Kaneo credentials, exports Linear data and creates matching entities in Kaneo.
  * Usage: bun run migrate:linear [--dry-run] [--user <telegram_id>]
  */
 
@@ -246,6 +238,41 @@ function printSummary(results: MigrationResult[]): void {
   console.log()
 }
 
+async function processSingleUser(user: UserRow, db: Database, results: MigrationResult[]): Promise<void> {
+  const config = getUserConfig(db, user.telegram_id)
+
+  const linearKey = config.get('linear_key')
+  const linearTeamId = config.get('linear_team_id')
+  if (linearKey === undefined || linearTeamId === undefined) {
+    log.warn({ userId: user.telegram_id }, 'Skipping — missing Linear credentials')
+    results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Linear config' })
+    return
+  }
+
+  const kaneoKey = config.get('kaneo_key')
+  const kaneoBaseUrl = config.get('kaneo_base_url')
+  const kaneoWorkspaceId = config.get('kaneo_workspace_id')
+  if (kaneoKey === undefined || kaneoBaseUrl === undefined || kaneoWorkspaceId === undefined) {
+    log.warn({ userId: user.telegram_id }, 'Skipping — missing Kaneo credentials')
+    results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Kaneo config' })
+    return
+  }
+
+  try {
+    const stats = await migrateUser(
+      user.telegram_id,
+      { apiKey: linearKey, teamId: linearTeamId },
+      { apiKey: kaneoKey, baseUrl: kaneoBaseUrl },
+      kaneoWorkspaceId,
+    )
+    results.push({ userId: user.telegram_id, username: user.username, status: 'success', stats })
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error)
+    log.error({ userId: user.telegram_id, error: msg }, 'Migration failed for user')
+    results.push({ userId: user.telegram_id, username: user.username, status: `failed: ${msg}` })
+  }
+}
+
 async function main(): Promise<void> {
   log.info({ dryRun, singleUserId }, 'Migration started')
 
@@ -255,44 +282,9 @@ async function main(): Promise<void> {
 
   const results: MigrationResult[] = []
 
-  const processUser = async (user: UserRow): Promise<void> => {
-    const config = getUserConfig(db, user.telegram_id)
-
-    const linearKey = config.get('linear_key')
-    const linearTeamId = config.get('linear_team_id')
-    if (linearKey === undefined || linearTeamId === undefined) {
-      log.warn({ userId: user.telegram_id }, 'Skipping — missing Linear credentials')
-      results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Linear config' })
-      return
-    }
-
-    const kaneoKey = config.get('kaneo_key')
-    const kaneoBaseUrl = config.get('kaneo_base_url')
-    const kaneoWorkspaceId = config.get('kaneo_workspace_id')
-    if (kaneoKey === undefined || kaneoBaseUrl === undefined || kaneoWorkspaceId === undefined) {
-      log.warn({ userId: user.telegram_id }, 'Skipping — missing Kaneo credentials')
-      results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Kaneo config' })
-      return
-    }
-
-    try {
-      const stats = await migrateUser(
-        user.telegram_id,
-        { apiKey: linearKey, teamId: linearTeamId },
-        { apiKey: kaneoKey, baseUrl: kaneoBaseUrl },
-        kaneoWorkspaceId,
-      )
-      results.push({ userId: user.telegram_id, username: user.username, status: 'success', stats })
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error)
-      log.error({ userId: user.telegram_id, error: msg }, 'Migration failed for user')
-      results.push({ userId: user.telegram_id, username: user.username, status: `failed: ${msg}` })
-    }
-  }
-
   await users.reduce<Promise<void>>(async (accPromise, user) => {
     await accPromise
-    return processUser(user)
+    return processSingleUser(user, db, results)
   }, Promise.resolve())
 
   db.close()

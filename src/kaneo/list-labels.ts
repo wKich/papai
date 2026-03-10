@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoLabelSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:list-labels' })
 
@@ -18,14 +19,8 @@ export async function listLabels({
   log.debug({ workspaceId }, 'listLabels called')
 
   try {
-    const labels = await kaneoFetch(
-      config,
-      'GET',
-      `/label/workspace/${workspaceId}`,
-      undefined,
-      undefined,
-      z.array(KaneoLabelSchema),
-    )
+    const client = new KaneoClient(config)
+    const labels = await client.labels.list(workspaceId)
     log.info({ workspaceId, labelCount: labels.length }, 'Labels listed')
     return labels
   } catch (error) {

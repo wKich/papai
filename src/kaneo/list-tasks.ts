@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:list-tasks' })
 
@@ -22,14 +23,8 @@ export async function listTasks({
   log.debug({ projectId }, 'listTasks called')
 
   try {
-    const tasks = await kaneoFetch(
-      config,
-      'GET',
-      `/task/tasks/${projectId}`,
-      undefined,
-      undefined,
-      z.array(KaneoTaskListItemSchema),
-    )
+    const client = new KaneoClient(config)
+    const tasks = await client.tasks.list(projectId)
     log.info({ projectId, taskCount: tasks.length }, 'Tasks listed')
     return tasks
   } catch (error) {

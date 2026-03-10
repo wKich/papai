@@ -1,8 +1,7 @@
-import { z } from 'zod'
-
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:remove-comment' })
 
@@ -16,9 +15,10 @@ export async function removeComment({
   log.debug({ activityId }, 'removeComment called')
 
   try {
-    await kaneoFetch(config, 'DELETE', '/activity/comment', { activityId }, undefined, z.unknown())
+    const client = new KaneoClient(config)
+    const result = await client.comments.remove(activityId)
     log.info({ activityId }, 'Comment removed')
-    return { id: activityId, success: true }
+    return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), activityId }, 'removeComment failed')
     throw classifyKaneoError(error)

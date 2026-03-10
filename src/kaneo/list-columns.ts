@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoColumnSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoColumnSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:list-columns' })
 
@@ -18,14 +19,8 @@ export async function listColumns({
   log.debug({ projectId }, 'listColumns called')
 
   try {
-    const columns = await kaneoFetch(
-      config,
-      'GET',
-      `/column/${projectId}`,
-      undefined,
-      undefined,
-      z.array(KaneoColumnSchema),
-    )
+    const client = new KaneoClient(config)
+    const columns = await client.columns.list(projectId)
     log.info({ projectId, columnCount: columns.length }, 'Columns listed')
     return columns
   } catch (error) {

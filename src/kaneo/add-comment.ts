@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoActivitySchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoActivitySchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:add-comment' })
 
@@ -20,19 +21,10 @@ export async function addComment({
   log.debug({ taskId, commentLength: comment.length }, 'addComment called')
 
   try {
-    const activity = await kaneoFetch(
-      config,
-      'POST',
-      '/activity/comment',
-      {
-        taskId,
-        comment,
-      },
-      undefined,
-      KaneoActivitySchema,
-    )
-    log.info({ taskId, activityId: activity.id }, 'Comment added')
-    return { id: activity.id, comment: activity.comment, createdAt: activity.createdAt }
+    const client = new KaneoClient(config)
+    const result = await client.comments.add(taskId, comment)
+    log.info({ taskId, activityId: result.id }, 'Comment added')
+    return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'addComment failed')
     throw classifyKaneoError(error)

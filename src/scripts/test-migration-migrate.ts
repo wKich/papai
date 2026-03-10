@@ -9,6 +9,7 @@ import {
   type LinearConfig,
   type LinearIssue,
   type LinearProject,
+  type LinearState,
 } from './linear-client.js'
 
 const log = logger.child({ scope: 'test-migration:migrate' })
@@ -20,11 +21,33 @@ export interface MigrationResult {
   linearProjects: LinearProject[]
 }
 
+async function processIssues(
+  issues: LinearIssue[],
+  kaneoConfig: KaneoConfig,
+  kaneoProjectId: string,
+  workspaceId: string,
+  labelIdMap: Map<string, string>,
+  linearIdToKaneoId: Map<string, string>,
+  stats: Record<string, number>,
+): Promise<void> {
+  const processIssue = async (issue: LinearIssue): Promise<void> => {
+    await createTaskFromIssue(kaneoConfig, kaneoProjectId, workspaceId, issue, labelIdMap, linearIdToKaneoId)
+    stats['tasks']!++
+    stats['comments']! += issue.comments.nodes.length
+    if (issue.archivedAt !== null) stats['archived']!++
+  }
+
+  await issues.reduce<Promise<void>>(async (accPromise, issue) => {
+    await accPromise
+    return processIssue(issue)
+  }, Promise.resolve())
+}
+
 async function importProjectGroup(
   kaneoConfig: KaneoConfig,
   workspaceId: string,
   issues: LinearIssue[],
-  states: Awaited<ReturnType<typeof fetchWorkflowStates>>,
+  states: LinearState[],
   projectName: string,
   projectDescription: string | undefined,
   labelIdMap: Map<string, string>,
@@ -37,17 +60,44 @@ async function importProjectGroup(
   const stateToColumnId = await ensureColumns(kaneoConfig, kaneoProjectId, states)
   stats['columns']! += stateToColumnId.size
 
-  const processIssue = async (issue: LinearIssue): Promise<void> => {
-    await createTaskFromIssue(kaneoConfig, kaneoProjectId, workspaceId, issue, labelIdMap, linearIdToKaneoId)
-    stats['tasks']!++
-    stats['comments']! += issue.comments.nodes.length
-    if (issue.archivedAt !== null) stats['archived']!++
-  }
+  await processIssues(issues, kaneoConfig, kaneoProjectId, workspaceId, labelIdMap, linearIdToKaneoId, stats)
+}
 
-  await issues.reduce<Promise<void>>(async (accPromise, issue) => {
-    await accPromise
-    return processIssue(issue)
-  }, Promise.resolve())
+function groupIssuesByProject(issues: LinearIssue[]): Map<string | null, LinearIssue[]> {
+  const issuesByProject = new Map<string | null, LinearIssue[]>()
+  for (const issue of issues) {
+    const key = issue.project?.id ?? null
+    const arr = issuesByProject.get(key) ?? []
+    arr.push(issue)
+    issuesByProject.set(key, arr)
+  }
+  return issuesByProject
+}
+
+async function migrateProjectGroup(
+  linearProjectId: string | null,
+  projectIssues: LinearIssue[],
+  projectNameById: Map<string, LinearProject>,
+  states: LinearState[],
+  kaneoConfig: KaneoConfig,
+  workspaceId: string,
+  labelIdMap: Map<string, string>,
+  linearIdToKaneoId: Map<string, string>,
+  stats: Record<string, number>,
+): Promise<void> {
+  const lp = linearProjectId === null ? undefined : projectNameById.get(linearProjectId)
+  const name = lp?.name ?? (linearProjectId === null ? 'Inbox' : 'Untitled Project')
+  await importProjectGroup(
+    kaneoConfig,
+    workspaceId,
+    projectIssues,
+    states,
+    name,
+    lp?.description,
+    labelIdMap,
+    linearIdToKaneoId,
+    stats,
+  )
 }
 
 export async function runMigration(
@@ -81,39 +131,23 @@ export async function runMigration(
   const labelIdMap = await ensureLabels(kaneoConfig, workspaceId, labels)
   stats['labels'] = labelIdMap.size
 
-  const issuesByProject = new Map<string | null, LinearIssue[]>()
-  for (const issue of issues) {
-    const key = issue.project?.id ?? null
-    const arr = issuesByProject.get(key) ?? []
-    arr.push(issue)
-    issuesByProject.set(key, arr)
-  }
-
+  const issuesByProject = groupIssuesByProject(issues)
   const projectNameById = new Map(projects.map((p) => [p.id, p]))
   const linearIdToKaneoId = new Map<string, string>()
 
-  const processProjectGroup = async ([linearProjectId, projectIssues]: [
-    string | null,
-    LinearIssue[],
-  ]): Promise<void> => {
-    const lp = linearProjectId === null ? undefined : projectNameById.get(linearProjectId)
-    const name = lp?.name ?? (linearProjectId === null ? 'Inbox' : 'Untitled Project')
-    await importProjectGroup(
+  await Array.from(issuesByProject).reduce<Promise<void>>(async (accPromise, [projectId, projectIssues]) => {
+    await accPromise
+    return migrateProjectGroup(
+      projectId,
+      projectIssues,
+      projectNameById,
+      states,
       kaneoConfig,
       workspaceId,
-      projectIssues,
-      states,
-      name,
-      lp?.description,
       labelIdMap,
       linearIdToKaneoId,
       stats,
     )
-  }
-
-  await Array.from(issuesByProject).reduce<Promise<void>>(async (accPromise, projectGroup) => {
-    await accPromise
-    return processProjectGroup(projectGroup)
   }, Promise.resolve())
 
   stats['relations'] = await patchRelations(kaneoConfig, issues, linearIdToKaneoId)

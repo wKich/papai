@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoLabelSchema } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:create-label' })
 
@@ -22,18 +23,8 @@ export async function createLabel({
   log.debug({ workspaceId, name, hasColor: color !== undefined }, 'createLabel called')
 
   try {
-    const label = await kaneoFetch(
-      config,
-      'POST',
-      '/label',
-      {
-        name,
-        color: color ?? '#6b7280',
-        workspaceId,
-      },
-      undefined,
-      KaneoLabelSchema,
-    )
+    const client = new KaneoClient(config)
+    const label = await client.labels.create({ workspaceId, name, color })
     log.info({ workspaceId, labelId: label.id, name }, 'Label created')
     return label
   } catch (error) {

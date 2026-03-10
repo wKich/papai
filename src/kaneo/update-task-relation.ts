@@ -1,15 +1,10 @@
-import { z } from 'zod'
-
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
-import { type TaskRelation, updateRelation } from './frontmatter.js'
+import { type KaneoConfig } from './client.js'
+import { type TaskRelation } from './frontmatter.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:update-task-relation' })
-
-const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
-  description: z.string(),
-})
 
 export async function updateTaskRelation({
   config,
@@ -25,29 +20,10 @@ export async function updateTaskRelation({
   log.debug({ taskId, relatedTaskId, type }, 'updateTaskRelation called')
 
   try {
-    const task = await kaneoFetch(
-      config,
-      'GET',
-      `/task/${taskId}`,
-      undefined,
-      undefined,
-      KaneoTaskWithDescriptionSchema,
-    )
-    const updatedDescription = updateRelation(task.description, relatedTaskId, type)
-
-    await kaneoFetch(
-      config,
-      'PUT',
-      `/task/description/${taskId}`,
-      {
-        description: updatedDescription,
-      },
-      undefined,
-      KaneoTaskSchema,
-    )
-
-    log.info({ taskId, relatedTaskId, type }, 'Relation updated via frontmatter')
-    return { taskId, relatedTaskId, type }
+    const client = new KaneoClient(config)
+    const result = await client.tasks.updateRelation(taskId, relatedTaskId, type)
+    log.info({ taskId, relatedTaskId, type }, 'Relation updated')
+    return result
   } catch (error) {
     log.error(
       { error: error instanceof Error ? error.message : String(error), taskId, relatedTaskId },

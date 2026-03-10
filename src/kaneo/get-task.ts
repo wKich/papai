@@ -2,8 +2,9 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
-import { type TaskRelation, parseRelationsFromDescription } from './frontmatter.js'
+import { type KaneoConfig, KaneoTaskResponseSchema } from './client.js'
+import { type TaskRelation } from './frontmatter.js'
+import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:get-task' })
 
@@ -27,14 +28,10 @@ export async function getTask({ config, taskId }: { config: KaneoConfig; taskId:
   log.debug({ taskId }, 'getTask called')
 
   try {
-    const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, KaneoTaskResponseSchema)
-    const { relations, body } = parseRelationsFromDescription(task.description)
-    log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
-    return {
-      ...task,
-      description: body,
-      relations,
-    }
+    const client = new KaneoClient(config)
+    const task = await client.tasks.get(taskId)
+    log.info({ taskId, number: task.number, relationCount: task.relations.length }, 'Task fetched')
+    return task
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'getTask failed')
     throw classifyKaneoError(error)
