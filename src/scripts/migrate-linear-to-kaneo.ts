@@ -24,6 +24,7 @@ import {
   fetchWorkflowStates,
   type LinearConfig,
   type LinearIssue,
+  type LinearLabel,
   type LinearProject,
   type LinearState,
 } from './linear-client.js'
@@ -139,42 +140,33 @@ async function importProjectGroup(
   }
 }
 
-async function migrateUser(
-  userId: number,
-  linearConfig: LinearConfig,
-  kaneoConfig: KaneoConfig,
-  workspaceId: string,
-): Promise<MigrationStats> {
-  log.info({ userId }, 'Starting migration')
+type LinearData = {
+  labels: LinearLabel[]
+  states: LinearState[]
+  projects: LinearProject[]
+  issues: LinearIssue[]
+}
 
-  const [linearLabels, workflowStates, linearProjects, linearIssues] = await Promise.all([
+async function fetchLinearData(linearConfig: LinearConfig): Promise<LinearData> {
+  const [labels, states, projects, issues] = await Promise.all([
     fetchLabels(linearConfig),
     fetchWorkflowStates(linearConfig),
     fetchProjects(linearConfig),
     fetchAllIssues(linearConfig),
   ])
+  return { labels, states, projects, issues }
+}
 
-  log.info(
-    {
-      userId,
-      labels: linearLabels.length,
-      states: workflowStates.length,
-      projects: linearProjects.length,
-      issues: linearIssues.length,
-    },
-    'Linear data fetched',
-  )
-
-  if (dryRun) {
-    log.info({ userId }, 'Dry run — skipping Kaneo writes')
-    return dryRunStats(linearLabels.length, linearProjects.length, workflowStates.length, linearIssues)
-  }
-
-  const stats: MigrationStats = { labels: 0, projects: 0, columns: 0, tasks: 0, comments: 0, relations: 0, archived: 0 }
-  const labelIdMap = await ensureLabels(kaneoConfig, workspaceId, linearLabels)
+async function writeToKaneo(
+  kaneoConfig: KaneoConfig,
+  workspaceId: string,
+  data: LinearData,
+  stats: MigrationStats,
+): Promise<void> {
+  const labelIdMap = await ensureLabels(kaneoConfig, workspaceId, data.labels)
   stats.labels = labelIdMap.size
 
-  const { issuesByProject, projectNameById } = groupIssuesByProject(linearIssues, linearProjects)
+  const { issuesByProject, projectNameById } = groupIssuesByProject(data.issues, data.projects)
   const linearIdToKaneoId = new Map<string, string>()
 
   for (const [linearProjectId, issues] of issuesByProject) {
@@ -186,7 +178,7 @@ async function migrateUser(
       workspaceId,
       name,
       lp?.description,
-      workflowStates,
+      data.states,
       issues,
       labelIdMap,
       linearIdToKaneoId,
@@ -194,7 +186,36 @@ async function migrateUser(
     )
   }
 
-  stats.relations = await patchRelations(kaneoConfig, linearIssues, linearIdToKaneoId)
+  stats.relations = await patchRelations(kaneoConfig, data.issues, linearIdToKaneoId)
+}
+
+async function migrateUser(
+  userId: number,
+  linearConfig: LinearConfig,
+  kaneoConfig: KaneoConfig,
+  workspaceId: string,
+): Promise<MigrationStats> {
+  log.info({ userId }, 'Starting migration')
+
+  const data = await fetchLinearData(linearConfig)
+  log.info(
+    {
+      userId,
+      labels: data.labels.length,
+      states: data.states.length,
+      projects: data.projects.length,
+      issues: data.issues.length,
+    },
+    'Linear data fetched',
+  )
+
+  if (dryRun) {
+    log.info({ userId }, 'Dry run — skipping Kaneo writes')
+    return dryRunStats(data.labels.length, data.projects.length, data.states.length, data.issues)
+  }
+
+  const stats: MigrationStats = { labels: 0, projects: 0, columns: 0, tasks: 0, comments: 0, relations: 0, archived: 0 }
+  await writeToKaneo(kaneoConfig, workspaceId, data, stats)
   log.info({ userId, stats }, 'Migration complete')
   return stats
 }
