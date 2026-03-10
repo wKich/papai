@@ -8,6 +8,50 @@ services:
       DB_PATH: /data/papai.db
     volumes:
       - papai-data:/data
+    depends_on:
+      kaneo-api:
+        condition: service_started
+
+  kaneo-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KANEO_POSTGRES_DB:-kaneo}
+      POSTGRES_USER: ${KANEO_POSTGRES_USER:-kaneo}
+      POSTGRES_PASSWORD: ${KANEO_POSTGRES_PASSWORD:?KANEO_POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', '${KANEO_POSTGRES_USER:-kaneo}', '-d', '${KANEO_POSTGRES_DB:-kaneo}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - kaneo-postgres-data:/var/lib/postgresql/data
+
+  kaneo-api:
+    image: ghcr.io/usekaneo/api:latest
+    restart: unless-stopped
+    ports:
+      - '${KANEO_API_PORT:-1337}:1337'
+    environment:
+      DATABASE_URL: postgresql://${KANEO_POSTGRES_USER:-kaneo}:${KANEO_POSTGRES_PASSWORD}@kaneo-postgres:5432/${KANEO_POSTGRES_DB:-kaneo}
+      AUTH_SECRET: ${KANEO_AUTH_SECRET:?KANEO_AUTH_SECRET is required}
+      KANEO_CLIENT_URL: ${KANEO_CLIENT_URL:-http://localhost:5173}
+      KANEO_API_URL: ${KANEO_API_URL:-http://localhost:1337}
+    depends_on:
+      kaneo-postgres:
+        condition: service_healthy
+
+  kaneo-web:
+    image: ghcr.io/usekaneo/web:latest
+    restart: unless-stopped
+    ports:
+      - '${KANEO_WEB_PORT:-5173}:5173'
+    environment:
+      KANEO_API_URL: ${KANEO_API_URL:-http://localhost:1337}
+      KANEO_CLIENT_URL: ${KANEO_CLIENT_URL:-http://localhost:5173}
+    depends_on:
+      - kaneo-api
 
 volumes:
   papai-data:
+  kaneo-postgres-data:
