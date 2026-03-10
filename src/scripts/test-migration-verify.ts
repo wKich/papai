@@ -1,8 +1,8 @@
-import type { KaneoConfig } from '../kaneo/client.js'
-import { kaneoFetch } from '../kaneo/client.js'
+import { z } from 'zod'
+
+import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
 import { parseRelationsFromDescription } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
-import type { KaneoLabel, KaneoTask } from './kaneo-import.js'
 import type { LinearIssue } from './linear-client.js'
 import type { MigrationResult } from './test-migration-migrate.js'
 
@@ -25,10 +25,13 @@ function record(checks: Check[], name: string, passed: boolean, detail: string):
   log[fn]({ check: name }, `${passed ? 'PASS' : 'FAIL'}: ${detail}`)
 }
 
-interface KaneoProject {
-  id: string
-  name: string
-}
+const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
+  description: z.string(),
+})
+
+const KaneoLabelLocalSchema = KaneoLabelSchema.extend({
+  taskId: z.string().optional(),
+})
 
 async function verifyProjects(
   config: KaneoConfig,
@@ -36,7 +39,14 @@ async function verifyProjects(
   migration: MigrationResult,
   checks: Check[],
 ): Promise<void> {
-  const kaneoProjects = await kaneoFetch<KaneoProject[]>(config, 'GET', '/project', undefined, { workspaceId })
+  const kaneoProjects = await kaneoFetch(
+    config,
+    'GET',
+    '/project',
+    undefined,
+    { workspaceId },
+    z.array(KaneoProjectSchema),
+  )
   const expected = new Set(migration.linearProjects.map((p) => p.name))
   if (migration.linearIssues.some((i) => i.project === null)) expected.add('Inbox')
   const actual = new Set(kaneoProjects.map((p) => p.name))
@@ -52,14 +62,24 @@ async function verifyProjects(
 async function verifyTasks(config: KaneoConfig, migration: MigrationResult, checks: Check[]): Promise<void> {
   const sampleSize = Math.min(5, migration.linearIssues.length)
   const sample = migration.linearIssues.slice(0, sampleSize)
-  let matched = 0
-  for (const issue of sample) {
+
+  const checkTask = async (issue: LinearIssue): Promise<boolean> => {
     const kaneoId = migration.linearIdToKaneoId.get(issue.id)
-    if (kaneoId === undefined) continue
-    // eslint-disable-next-line no-await-in-loop
-    const task = await kaneoFetch<KaneoTask>(config, 'GET', `/task/${kaneoId}`)
-    if (task.title === issue.title) matched++
+    if (kaneoId === undefined) return false
+    const task = await kaneoFetch(
+      config,
+      'GET',
+      `/task/${kaneoId}`,
+      undefined,
+      undefined,
+      KaneoTaskWithDescriptionSchema,
+    )
+    return task.title === issue.title
   }
+
+  const results = await Promise.all(sample.map(checkTask))
+  const matched = results.filter(Boolean).length
+
   record(
     checks,
     'Task titles match',
@@ -75,15 +95,25 @@ async function verifyRelations(config: KaneoConfig, migration: MigrationResult, 
     record(checks, 'Relations in frontmatter', true, 'No issues with relations to verify (skipped)')
     return
   }
-  let verified = 0
-  for (const issue of sample) {
+
+  const checkRelation = async (issue: LinearIssue): Promise<boolean> => {
     const kaneoId = migration.linearIdToKaneoId.get(issue.id)
-    if (kaneoId === undefined) continue
-    // eslint-disable-next-line no-await-in-loop
-    const task = await kaneoFetch<KaneoTask>(config, 'GET', `/task/${kaneoId}`)
+    if (kaneoId === undefined) return false
+    const task = await kaneoFetch(
+      config,
+      'GET',
+      `/task/${kaneoId}`,
+      undefined,
+      undefined,
+      KaneoTaskWithDescriptionSchema,
+    )
     const { relations } = parseRelationsFromDescription(task.description)
-    if (relations.length > 0) verified++
+    return relations.length > 0
   }
+
+  const results = await Promise.all(sample.map(checkRelation))
+  const verified = results.filter(Boolean).length
+
   record(
     checks,
     'Relations in frontmatter',
@@ -99,17 +129,27 @@ async function verifyParents(config: KaneoConfig, migration: MigrationResult, ch
     record(checks, 'Parent relations correct', true, 'No sub-issues to verify (skipped)')
     return
   }
-  let verified = 0
-  for (const issue of sample) {
+
+  const checkParent = async (issue: LinearIssue): Promise<boolean> => {
     const kaneoId = migration.linearIdToKaneoId.get(issue.id)
-    if (kaneoId === undefined) continue
-    // eslint-disable-next-line no-await-in-loop
-    const task = await kaneoFetch<KaneoTask>(config, 'GET', `/task/${kaneoId}`)
+    if (kaneoId === undefined) return false
+    const task = await kaneoFetch(
+      config,
+      'GET',
+      `/task/${kaneoId}`,
+      undefined,
+      undefined,
+      KaneoTaskWithDescriptionSchema,
+    )
     const { relations } = parseRelationsFromDescription(task.description)
     const parentRel = relations.find((r) => r.type === 'parent')
     const expected = issue.parent === null ? undefined : migration.linearIdToKaneoId.get(issue.parent.id)
-    if (parentRel !== undefined && parentRel.taskId === expected) verified++
+    return parentRel !== undefined && parentRel.taskId === expected
   }
+
+  const results = await Promise.all(sample.map(checkParent))
+  const verified = results.filter(Boolean).length
+
   record(
     checks,
     'Parent relations correct',
@@ -130,14 +170,24 @@ async function verifyArchived(
     return
   }
   const sample = archived.slice(0, Math.min(3, archived.length))
-  let ok = 0
-  for (const issue of sample) {
+
+  const checkArchived = async (issue: LinearIssue): Promise<boolean> => {
     const kaneoId = linearIdToKaneoId.get(issue.id)
-    if (kaneoId === undefined) continue
-    // eslint-disable-next-line no-await-in-loop
-    const taskLabels = await kaneoFetch<KaneoLabel[]>(config, 'GET', `/label/task/${kaneoId}`).catch(() => [])
-    if (taskLabels.some((l) => l.name.toLowerCase() === 'archived')) ok++
+    if (kaneoId === undefined) return false
+    const taskLabels = await kaneoFetch(
+      config,
+      'GET',
+      `/label/task/${kaneoId}`,
+      undefined,
+      undefined,
+      z.array(KaneoLabelLocalSchema),
+    ).catch(() => [])
+    return taskLabels.some((l) => l.name.toLowerCase() === 'archived')
   }
+
+  const results = await Promise.all(sample.map(checkArchived))
+  const ok = results.filter(Boolean).length
+
   record(
     checks,
     'Archived tasks labelled',
@@ -162,7 +212,14 @@ export async function verify(
 
   await verifyProjects(kaneoConfig, workspaceId, migration, checks)
 
-  const kaneoLabels = await kaneoFetch<KaneoLabel[]>(kaneoConfig, 'GET', `/label/workspace/${workspaceId}`)
+  const kaneoLabels = await kaneoFetch(
+    kaneoConfig,
+    'GET',
+    `/label/workspace/${workspaceId}`,
+    undefined,
+    undefined,
+    z.array(KaneoLabelLocalSchema),
+  )
   record(checks, 'Labels exist', kaneoLabels.length > 0, `${kaneoLabels.length} labels in workspace`)
 
   await verifyTasks(kaneoConfig, migration, checks)

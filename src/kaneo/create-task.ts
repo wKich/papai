@@ -1,16 +1,12 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:create-task' })
 
-interface KaneoTask {
-  id: string
-  title: string
-  number: number
-  status: string
-  priority: string
-}
+export type KaneoTask = z.infer<typeof KaneoTaskSchema>
 
 export async function createTask({
   config,
@@ -34,14 +30,21 @@ export async function createTask({
   log.debug({ projectId, title, priority, dueDate }, 'createTask called')
 
   try {
-    const task = await kaneoFetch<KaneoTask>(config, 'POST', `/task/${projectId}`, {
-      title,
-      description: description ?? '',
-      priority: priority ?? 'no-priority',
-      status: status ?? 'todo',
-      dueDate,
-      userId,
-    })
+    const task = await kaneoFetch(
+      config,
+      'POST',
+      `/task/${projectId}`,
+      {
+        title,
+        description: description ?? '',
+        priority: priority ?? 'no-priority',
+        status: status ?? 'todo',
+        dueDate,
+        userId,
+      },
+      undefined,
+      KaneoTaskSchema,
+    )
     log.info({ taskId: task.id, title, number: task.number }, 'Task created')
     return task
   } catch (error) {

@@ -1,15 +1,13 @@
+import { z } from 'zod'
+
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 
-interface KaneoLabel {
-  id: string
-  name: string
-  color: string
-}
+export type KaneoLabel = z.infer<typeof KaneoLabelSchema>
 
 export async function updateLabel({
   config,
@@ -21,7 +19,7 @@ export async function updateLabel({
   labelId: string
   name?: string
   color?: string
-}): Promise<{ id: string; name: string; color: string }> {
+}): Promise<KaneoLabel> {
   log.debug({ labelId, hasName: name !== undefined, hasColor: color !== undefined }, 'updateLabel called')
 
   if (name === undefined && color === undefined) {
@@ -36,9 +34,9 @@ export async function updateLabel({
     if (name !== undefined) body['name'] = name
     if (color !== undefined) body['color'] = color
 
-    const label = await kaneoFetch<KaneoLabel>(config, 'PUT', `/label/${labelId}`, body)
+    const label = await kaneoFetch(config, 'PUT', `/label/${labelId}`, body, undefined, KaneoLabelSchema)
     log.info({ labelId, name: label.name }, 'Label updated')
-    return { id: label.id, name: label.name, color: label.color }
+    return label
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), labelId }, 'updateLabel failed')
     throw classifyKaneoError(error)

@@ -1,15 +1,15 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
 import { removeRelation } from './frontmatter.js'
 
 const log = logger.child({ scope: 'kaneo:remove-task-relation' })
 
-interface KaneoTask {
-  id: string
-  title: string
-  description: string
-}
+const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
+  description: z.string(),
+})
 
 export async function removeTaskRelation({
   config,
@@ -23,12 +23,26 @@ export async function removeTaskRelation({
   log.debug({ taskId, relatedTaskId }, 'removeTaskRelation called')
 
   try {
-    const task = await kaneoFetch<KaneoTask>(config, 'GET', `/task/${taskId}`)
+    const task = await kaneoFetch(
+      config,
+      'GET',
+      `/task/${taskId}`,
+      undefined,
+      undefined,
+      KaneoTaskWithDescriptionSchema,
+    )
     const updatedDescription = removeRelation(task.description, relatedTaskId)
 
-    await kaneoFetch<KaneoTask>(config, 'PUT', `/task/description/${taskId}`, {
-      description: updatedDescription,
-    })
+    await kaneoFetch(
+      config,
+      'PUT',
+      `/task/description/${taskId}`,
+      {
+        description: updatedDescription,
+      },
+      undefined,
+      KaneoTaskSchema,
+    )
 
     log.info({ taskId, relatedTaskId }, 'Relation removed via frontmatter')
     return { taskId, relatedTaskId, success: true }

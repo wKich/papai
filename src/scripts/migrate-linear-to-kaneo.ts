@@ -131,13 +131,17 @@ async function importProjectGroup(
   const stateToColumnId = await ensureColumns(kaneoConfig, kaneoProjectId, workflowStates)
   stats.columns += stateToColumnId.size
 
-  for (const issue of issues) {
-    // eslint-disable-next-line no-await-in-loop
+  const processIssue = async (issue: LinearIssue): Promise<void> => {
     await createTaskFromIssue(kaneoConfig, kaneoProjectId, workspaceId, issue, labelIdMap, linearIdToKaneoId)
     stats.tasks++
     stats.comments += issue.comments.nodes.length
     if (issue.archivedAt !== null) stats.archived++
   }
+
+  await issues.reduce<Promise<void>>(async (accPromise, issue) => {
+    await accPromise
+    return processIssue(issue)
+  }, Promise.resolve())
 }
 
 type LinearData = {
@@ -169,10 +173,9 @@ async function writeToKaneo(
   const { issuesByProject, projectNameById } = groupIssuesByProject(data.issues, data.projects)
   const linearIdToKaneoId = new Map<string, string>()
 
-  for (const [linearProjectId, issues] of issuesByProject) {
+  const processProjectGroup = async ([linearProjectId, issues]: [string | null, LinearIssue[]]): Promise<void> => {
     const lp = linearProjectId === null ? undefined : projectNameById.get(linearProjectId)
     const name = lp?.name ?? (linearProjectId === null ? 'Inbox' : 'Untitled Project')
-    // eslint-disable-next-line no-await-in-loop
     await importProjectGroup(
       kaneoConfig,
       workspaceId,
@@ -185,6 +188,11 @@ async function writeToKaneo(
       stats,
     )
   }
+
+  await Array.from(issuesByProject).reduce<Promise<void>>(async (accPromise, projectGroup) => {
+    await accPromise
+    return processProjectGroup(projectGroup)
+  }, Promise.resolve())
 
   stats.relations = await patchRelations(kaneoConfig, data.issues, linearIdToKaneoId)
 }
@@ -247,7 +255,7 @@ async function main(): Promise<void> {
 
   const results: MigrationResult[] = []
 
-  for (const user of users) {
+  const processUser = async (user: UserRow): Promise<void> => {
     const config = getUserConfig(db, user.telegram_id)
 
     const linearKey = config.get('linear_key')
@@ -255,7 +263,7 @@ async function main(): Promise<void> {
     if (linearKey === undefined || linearTeamId === undefined) {
       log.warn({ userId: user.telegram_id }, 'Skipping — missing Linear credentials')
       results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Linear config' })
-      continue
+      return
     }
 
     const kaneoKey = config.get('kaneo_key')
@@ -264,11 +272,10 @@ async function main(): Promise<void> {
     if (kaneoKey === undefined || kaneoBaseUrl === undefined || kaneoWorkspaceId === undefined) {
       log.warn({ userId: user.telegram_id }, 'Skipping — missing Kaneo credentials')
       results.push({ userId: user.telegram_id, username: user.username, status: 'skipped: no Kaneo config' })
-      continue
+      return
     }
 
     try {
-      // eslint-disable-next-line no-await-in-loop
       const stats = await migrateUser(
         user.telegram_id,
         { apiKey: linearKey, teamId: linearTeamId },
@@ -282,6 +289,11 @@ async function main(): Promise<void> {
       results.push({ userId: user.telegram_id, username: user.username, status: `failed: ${msg}` })
     }
   }
+
+  await users.reduce<Promise<void>>(async (accPromise, user) => {
+    await accPromise
+    return processUser(user)
+  }, Promise.resolve())
 
   db.close()
   printSummary(results)

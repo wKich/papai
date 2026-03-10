@@ -1,16 +1,12 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoProjectSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:list-projects' })
 
-interface KaneoProject {
-  id: string
-  name: string
-  slug: string
-  icon: string
-  description: string | null
-}
+export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
 export async function listProjects({
   config,
@@ -18,14 +14,20 @@ export async function listProjects({
 }: {
   config: KaneoConfig
   workspaceId: string
-}): Promise<{ id: string; name: string; slug: string }[]> {
+}): Promise<KaneoProject[]> {
   log.debug({ workspaceId }, 'listProjects called')
 
   try {
-    const projects = await kaneoFetch<KaneoProject[]>(config, 'GET', '/project', undefined, { workspaceId })
-    const result = projects.map((p) => ({ id: p.id, name: p.name, slug: p.slug }))
-    log.info({ workspaceId, projectCount: result.length }, 'Projects listed')
-    return result
+    const projects = await kaneoFetch(
+      config,
+      'GET',
+      '/project',
+      undefined,
+      { workspaceId },
+      z.array(KaneoProjectSchema),
+    )
+    log.info({ workspaceId, projectCount: projects.length }, 'Projects listed')
+    return projects
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), workspaceId }, 'listProjects failed')
     throw classifyKaneoError(error)

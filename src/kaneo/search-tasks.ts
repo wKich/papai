@@ -1,26 +1,24 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 
-interface SearchResult {
-  tasks: Array<{
-    id: string
-    title: string
-    number: number
-    status: string
-    priority: string
-  }>
-}
+const TaskResultSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  number: z.number(),
+  status: z.string(),
+  priority: z.string(),
+})
 
-type TaskResult = {
-  id: string
-  title: string
-  number: number
-  status: string
-  priority: string
-}
+const SearchResultSchema = z.object({
+  tasks: z.array(TaskResultSchema),
+})
+
+type TaskResult = z.infer<typeof TaskResultSchema>
 
 export async function searchTasks({
   config,
@@ -45,7 +43,7 @@ export async function searchTasks({
       queryParams['projectId'] = projectId
     }
 
-    const result = await kaneoFetch<SearchResult>(config, 'GET', '/search', undefined, queryParams)
+    const result = await kaneoFetch(config, 'GET', '/search', undefined, queryParams, SearchResultSchema)
     const tasks = result.tasks ?? []
     log.info({ query, resultCount: tasks.length }, 'Tasks searched')
     return tasks

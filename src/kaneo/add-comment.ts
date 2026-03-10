@@ -1,14 +1,12 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoActivitySchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:add-comment' })
 
-interface KaneoActivity {
-  id: string
-  comment: string
-  createdAt: string
-}
+export type KaneoActivity = z.infer<typeof KaneoActivitySchema>
 
 export async function addComment({
   config,
@@ -22,10 +20,17 @@ export async function addComment({
   log.debug({ taskId, commentLength: comment.length }, 'addComment called')
 
   try {
-    const activity = await kaneoFetch<KaneoActivity>(config, 'POST', '/activity/comment', {
-      taskId,
-      comment,
-    })
+    const activity = await kaneoFetch(
+      config,
+      'POST',
+      '/activity/comment',
+      {
+        taskId,
+        comment,
+      },
+      undefined,
+      KaneoActivitySchema,
+    )
     log.info({ taskId, activityId: activity.id }, 'Comment added')
     return { id: activity.id, comment: activity.comment, createdAt: activity.createdAt }
   } catch (error) {

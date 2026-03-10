@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
@@ -14,7 +16,7 @@ export async function deleteTask({
   log.debug({ taskId }, 'deleteTask called')
 
   try {
-    await kaneoFetch<unknown>(config, 'DELETE', `/task/${taskId}`)
+    await kaneoFetch(config, 'DELETE', `/task/${taskId}`, undefined, undefined, z.unknown())
     log.info({ taskId }, 'Task deleted')
     return { id: taskId, success: true }
   } catch (error) {

@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
@@ -14,7 +16,7 @@ export async function removeComment({
   log.debug({ activityId }, 'removeComment called')
 
   try {
-    await kaneoFetch<unknown>(config, 'DELETE', '/activity/comment', { activityId })
+    await kaneoFetch(config, 'DELETE', '/activity/comment', { activityId }, undefined, z.unknown())
     log.info({ activityId }, 'Comment removed')
     return { id: activityId, success: true }
   } catch (error) {

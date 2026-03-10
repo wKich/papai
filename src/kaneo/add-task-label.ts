@@ -1,14 +1,16 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:add-task-label' })
 
-interface KaneoLabel {
-  id: string
-  name: string
-  color: string
-}
+const KaneoLabelWithTaskSchema = KaneoLabelSchema.extend({
+  taskId: z.string().optional(),
+})
+
+export type KaneoLabel = z.infer<typeof KaneoLabelSchema>
 
 export async function addTaskLabel({
   config,
@@ -25,15 +27,22 @@ export async function addTaskLabel({
 
   try {
     // Get the label details to know its name and color
-    const label = await kaneoFetch<KaneoLabel>(config, 'GET', `/label/${labelId}`)
+    const label = await kaneoFetch(config, 'GET', `/label/${labelId}`, undefined, undefined, KaneoLabelSchema)
 
     // Create a label instance attached to the task
-    await kaneoFetch<KaneoLabel>(config, 'POST', '/label', {
-      name: label.name,
-      color: label.color,
-      workspaceId,
-      taskId,
-    })
+    await kaneoFetch(
+      config,
+      'POST',
+      '/label',
+      {
+        name: label.name,
+        color: label.color,
+        workspaceId,
+        taskId,
+      },
+      undefined,
+      KaneoLabelWithTaskSchema,
+    )
 
     log.info({ taskId, labelId }, 'Label added to task')
     return { taskId, labelId }

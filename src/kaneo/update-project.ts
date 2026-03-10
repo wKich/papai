@@ -1,15 +1,13 @@
+import { z } from 'zod'
+
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoProjectSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:update-project' })
 
-interface KaneoProject {
-  id: string
-  name: string
-  slug: string
-}
+export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
 export async function updateProject({
   config,
@@ -21,7 +19,7 @@ export async function updateProject({
   projectId: string
   name?: string
   description?: string
-}): Promise<{ id: string; name: string; slug: string }> {
+}): Promise<KaneoProject> {
   log.debug(
     { projectId, hasName: name !== undefined, hasDescription: description !== undefined },
     'updateProject called',
@@ -39,9 +37,9 @@ export async function updateProject({
     if (name !== undefined) body['name'] = name
     if (description !== undefined) body['description'] = description
 
-    const project = await kaneoFetch<KaneoProject>(config, 'PUT', `/project/${projectId}`, body)
+    const project = await kaneoFetch(config, 'PUT', `/project/${projectId}`, body, undefined, KaneoProjectSchema)
     log.info({ projectId, name: project.name }, 'Project updated')
-    return { id: project.id, name: project.name, slug: project.slug }
+    return project
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'updateProject failed')
     throw classifyKaneoError(error)

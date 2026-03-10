@@ -37,13 +37,17 @@ async function importProjectGroup(
   const stateToColumnId = await ensureColumns(kaneoConfig, kaneoProjectId, states)
   stats['columns']! += stateToColumnId.size
 
-  for (const issue of issues) {
-    // eslint-disable-next-line no-await-in-loop
+  const processIssue = async (issue: LinearIssue): Promise<void> => {
     await createTaskFromIssue(kaneoConfig, kaneoProjectId, workspaceId, issue, labelIdMap, linearIdToKaneoId)
     stats['tasks']!++
     stats['comments']! += issue.comments.nodes.length
     if (issue.archivedAt !== null) stats['archived']!++
   }
+
+  await issues.reduce<Promise<void>>(async (accPromise, issue) => {
+    await accPromise
+    return processIssue(issue)
+  }, Promise.resolve())
 }
 
 export async function runMigration(
@@ -88,10 +92,12 @@ export async function runMigration(
   const projectNameById = new Map(projects.map((p) => [p.id, p]))
   const linearIdToKaneoId = new Map<string, string>()
 
-  for (const [linearProjectId, projectIssues] of issuesByProject) {
+  const processProjectGroup = async ([linearProjectId, projectIssues]: [
+    string | null,
+    LinearIssue[],
+  ]): Promise<void> => {
     const lp = linearProjectId === null ? undefined : projectNameById.get(linearProjectId)
     const name = lp?.name ?? (linearProjectId === null ? 'Inbox' : 'Untitled Project')
-    // eslint-disable-next-line no-await-in-loop
     await importProjectGroup(
       kaneoConfig,
       workspaceId,
@@ -104,6 +110,11 @@ export async function runMigration(
       stats,
     )
   }
+
+  await Array.from(issuesByProject).reduce<Promise<void>>(async (accPromise, projectGroup) => {
+    await accPromise
+    return processProjectGroup(projectGroup)
+  }, Promise.resolve())
 
   stats['relations'] = await patchRelations(kaneoConfig, issues, linearIdToKaneoId)
 

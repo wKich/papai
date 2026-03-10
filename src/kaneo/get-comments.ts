@@ -1,16 +1,12 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:get-comments' })
 
-interface KaneoActivity {
-  id: string
-  type: string
-  message: string | null
-  comment: string | null
-  createdAt: string
-}
+export type KaneoActivity = z.infer<typeof KaneoActivityWithTypeSchema>
 
 export async function getComments({
   config,
@@ -22,7 +18,14 @@ export async function getComments({
   log.debug({ taskId }, 'getComments called')
 
   try {
-    const activities = await kaneoFetch<KaneoActivity[]>(config, 'GET', `/activity/${taskId}`)
+    const activities = await kaneoFetch(
+      config,
+      'GET',
+      `/activity/${taskId}`,
+      undefined,
+      undefined,
+      z.array(KaneoActivityWithTypeSchema),
+    )
     const comments = activities
       .filter((a) => a.type === 'comment' && a.comment !== null)
       .map((a) => ({

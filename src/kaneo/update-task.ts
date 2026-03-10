@@ -1,16 +1,18 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:update-task' })
 
-interface KaneoTask {
-  id: string
-  title: string
-  number: number
-  status: string
-  priority: string
-}
+export type KaneoTask = z.infer<typeof KaneoTaskSchema>
+
+const FullTaskSchema = KaneoTaskResponseSchema.extend({
+  position: z.number(),
+})
+
+// FullTask type is used internally by fullUpdate function
 
 type UpdateParams = {
   title?: string
@@ -43,22 +45,35 @@ function trySingleFieldUpdate(
   const [fieldName, value] = setFields[0]!
   const endpoint = FIELD_ENDPOINTS.find((e) => e.field === fieldName)
   if (endpoint === undefined) return undefined
-  return kaneoFetch<KaneoTask>(config, 'PUT', `${endpoint.path}${taskId}`, { [endpoint.bodyKey]: value })
+  return kaneoFetch(
+    config,
+    'PUT',
+    `${endpoint.path}${taskId}`,
+    { [endpoint.bodyKey]: value },
+    undefined,
+    KaneoTaskSchema,
+  )
 }
 
 async function fullUpdate(config: KaneoConfig, taskId: string, params: UpdateParams): Promise<KaneoTask> {
-  type FullTask = KaneoTask & { description: string; dueDate: string | null; projectId: string; position: number }
-  const current = await kaneoFetch<FullTask>(config, 'GET', `/task/${taskId}`)
-  return kaneoFetch<KaneoTask>(config, 'PUT', `/task/${taskId}`, {
-    title: params.title ?? current.title,
-    description: params.description ?? current.description,
-    status: params.status ?? current.status,
-    priority: params.priority ?? current.priority,
-    dueDate: params.dueDate ?? current.dueDate,
-    projectId: params.projectId ?? current.projectId,
-    position: current.position,
-    userId: params.userId,
-  })
+  const current = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
+  return kaneoFetch(
+    config,
+    'PUT',
+    `/task/${taskId}`,
+    {
+      title: params.title ?? current.title,
+      description: params.description ?? current.description,
+      status: params.status ?? current.status,
+      priority: params.priority ?? current.priority,
+      dueDate: params.dueDate ?? current.dueDate,
+      projectId: params.projectId ?? current.projectId,
+      position: current.position,
+      userId: params.userId,
+    },
+    undefined,
+    KaneoTaskSchema,
+  )
 }
 
 export async function updateTask({

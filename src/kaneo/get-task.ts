@@ -1,22 +1,13 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 import { type TaskRelation, parseRelationsFromDescription } from './frontmatter.js'
 
 const log = logger.child({ scope: 'kaneo:get-task' })
 
-interface KaneoTaskResponse {
-  id: string
-  title: string
-  description: string
-  number: number
-  status: string
-  priority: string
-  dueDate: string | null
-  createdAt: string
-  projectId: string
-  userId: string | null
-}
+export type KaneoTaskResponse = z.infer<typeof KaneoTaskResponseSchema>
 
 export interface TaskDetails {
   id: string
@@ -36,7 +27,7 @@ export async function getTask({ config, taskId }: { config: KaneoConfig; taskId:
   log.debug({ taskId }, 'getTask called')
 
   try {
-    const task = await kaneoFetch<KaneoTaskResponse>(config, 'GET', `/task/${taskId}`)
+    const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, KaneoTaskResponseSchema)
     const { relations, body } = parseRelationsFromDescription(task.description)
     log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
     return {

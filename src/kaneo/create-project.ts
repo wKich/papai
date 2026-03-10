@@ -1,14 +1,12 @@
+import { z } from 'zod'
+
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoProjectSchema, kaneoFetch } from './client.js'
 
 const log = logger.child({ scope: 'kaneo:create-project' })
 
-interface KaneoProject {
-  id: string
-  name: string
-  slug: string
-}
+export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
 export async function createProject({
   config,
@@ -20,7 +18,7 @@ export async function createProject({
   workspaceId: string
   name: string
   description?: string
-}): Promise<{ id: string; name: string; slug: string }> {
+}): Promise<KaneoProject> {
   log.debug({ workspaceId, name, hasDescription: description !== undefined }, 'createProject called')
 
   const slug = name
@@ -29,20 +27,27 @@ export async function createProject({
     .replace(/^-|-$/g, '')
 
   try {
-    const project = await kaneoFetch<KaneoProject>(config, 'POST', '/project', {
-      name,
-      workspaceId,
-      icon: '',
-      slug,
-    })
+    const project = await kaneoFetch(
+      config,
+      'POST',
+      '/project',
+      {
+        name,
+        workspaceId,
+        icon: '',
+        slug,
+      },
+      undefined,
+      KaneoProjectSchema,
+    )
 
     // Update description if provided (create doesn't support description)
     if (description !== undefined) {
-      await kaneoFetch<KaneoProject>(config, 'PUT', `/project/${project.id}`, { description })
+      await kaneoFetch(config, 'PUT', `/project/${project.id}`, { description }, undefined, KaneoProjectSchema)
     }
 
     log.info({ workspaceId, projectId: project.id, name }, 'Project created')
-    return { id: project.id, name: project.name, slug: project.slug }
+    return project
   } catch (error) {
     log.error(
       { error: error instanceof Error ? error.message : String(error), workspaceId, name },

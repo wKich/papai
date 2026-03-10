@@ -1,7 +1,8 @@
 import { $ } from 'bun'
+import { z } from 'zod'
 
 import type { KaneoConfig } from '../kaneo/client.js'
-import { kaneoFetch } from '../kaneo/client.js'
+import { KaneoWorkspaceSchema, kaneoFetch } from '../kaneo/client.js'
 import { logger } from '../logger.js'
 import { AUTH_SECRET, COMPOSE_PROJECT, KANEO_BASE_URL, KANEO_PORT, POSTGRES_PASSWORD } from './test-migration.js'
 
@@ -29,38 +30,56 @@ export async function composeDown(): Promise<void> {
   log.info('Docker compose services torn down')
 }
 
+async function checkHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(`${KANEO_BASE_URL}/api/health`)
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function retryWithDelay(attempt: number): Promise<boolean> {
+  const isReady = await checkHealth()
+  if (isReady) {
+    log.info({ attempt }, 'Kaneo API is ready')
+    return true
+  }
+  log.debug({ attempt }, 'Kaneo not ready, retrying')
+  await Bun.sleep(2000)
+  return false
+}
+
 export async function waitForKaneo(maxAttempts = 30): Promise<void> {
   log.info({ maxAttempts }, 'Waiting for Kaneo API to be ready')
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const res = await fetch(`${KANEO_BASE_URL}/api/health`)
-      if (res.ok) {
-        log.info({ attempt }, 'Kaneo API is ready')
-        return
-      }
-    } catch {
-      // not ready yet
+  const attempt = async (currentAttempt: number): Promise<void> => {
+    if (currentAttempt > maxAttempts) {
+      throw new Error('Kaneo API did not become ready in time')
     }
-    log.debug({ attempt }, 'Kaneo not ready, retrying')
-    await Bun.sleep(2000)
+
+    const isReady = await retryWithDelay(currentAttempt)
+    if (isReady) {
+      return
+    }
+
+    return attempt(currentAttempt + 1)
   }
 
-  throw new Error('Kaneo API did not become ready in time')
+  await attempt(1)
 }
 
 // --- Auth + workspace ---
 
-interface AuthSession {
-  token: string
-  user: { id: string; email: string }
-}
+const AuthSessionSchema = z.object({
+  token: z.string(),
+  user: z.object({
+    id: z.string(),
+    email: z.string(),
+  }),
+})
 
-interface KaneoWorkspace {
-  id: string
-  name: string
-  slug: string
-}
+type AuthSession = z.infer<typeof AuthSessionSchema>
 
 const TEST_EMAIL = 'migration-test@example.com'
 const TEST_PASSWORD = 'test-password-123'
@@ -81,18 +100,29 @@ export async function signUp(): Promise<AuthSession> {
     throw new Error(`Kaneo sign-up failed (${res.status}): ${body}`)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- response.json() returns unknown, generic cast is intentional
-  const data = (await res.json()) as AuthSession
-  log.info({ userId: data.user.id }, 'Test user registered')
-  return data
+  const rawData: unknown = await res.json()
+  const result = AuthSessionSchema.safeParse(rawData)
+  if (!result.success) {
+    throw new Error(`Kaneo sign-up returned invalid data: ${JSON.stringify(result.error.issues)}`)
+  }
+
+  log.info({ userId: result.data.user.id }, 'Test user registered')
+  return result.data
 }
 
-export async function createWorkspace(config: KaneoConfig): Promise<KaneoWorkspace> {
+export async function createWorkspace(config: KaneoConfig): Promise<z.infer<typeof KaneoWorkspaceSchema>> {
   log.info({ name: WORKSPACE_NAME }, 'Creating test workspace')
-  const ws = await kaneoFetch<KaneoWorkspace>(config, 'POST', '/workspace', {
-    name: WORKSPACE_NAME,
-    slug: 'migration-test',
-  })
+  const ws = await kaneoFetch(
+    config,
+    'POST',
+    '/workspace',
+    {
+      name: WORKSPACE_NAME,
+      slug: 'migration-test',
+    },
+    undefined,
+    KaneoWorkspaceSchema,
+  )
   log.info({ workspaceId: ws.id }, 'Workspace created')
   return ws
 }
