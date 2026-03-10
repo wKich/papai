@@ -58,8 +58,8 @@ export function buildDescriptionWithRelations(body: string, relations: TaskRelat
 
   const grouped: Record<string, string[]> = {}
   for (const rel of relations) {
-    grouped[rel.type] ??= []
-    grouped[rel.type].push(rel.taskId)
+    const arr = (grouped[rel.type] ??= [])
+    arr.push(rel.taskId)
   }
 
   const lines: string[] = []
