@@ -2,20 +2,21 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { removeLabel } from '../linear/index.js'
+import type { KaneoConfig } from '../kaneo/client.js'
+import { removeLabel } from '../kaneo/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:remove-label' })
 
-export function makeRemoveLabelTool(linearKey: string): ToolSet[string] {
+export function makeRemoveLabelTool(kaneoConfig: KaneoConfig): ToolSet[string] {
   return tool({
-    description: 'Remove (delete) a Linear issue label.',
+    description: 'Remove (delete) a Kaneo label.',
     inputSchema: z.object({
-      labelId: z.string().describe('Linear label ID to remove'),
+      labelId: z.string().describe('Kaneo label ID to remove'),
     }),
     execute: async ({ labelId }) => {
       try {
-        return await removeLabel({ apiKey: linearKey, labelId })
+        return await removeLabel({ config: kaneoConfig, labelId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), labelId, tool: 'remove_label' },

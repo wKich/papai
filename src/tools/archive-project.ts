@@ -2,20 +2,21 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { archiveProject } from '../linear/index.js'
+import type { KaneoConfig } from '../kaneo/client.js'
+import { archiveProject } from '../kaneo/index.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:archive-project' })
 
-export function makeArchiveProjectTool(linearKey: string): ToolSet[string] {
+export function makeArchiveProjectTool(kaneoConfig: KaneoConfig): ToolSet[string] {
   return tool({
-    description: 'Archive a Linear project.',
+    description: 'Archive (delete) a Kaneo project.',
     inputSchema: z.object({
-      projectId: z.string().describe('Linear project ID'),
+      projectId: z.string().describe('Kaneo project ID'),
     }),
     execute: async ({ projectId }) => {
       try {
-        return await archiveProject({ apiKey: linearKey, projectId })
+        return await archiveProject({ config: kaneoConfig, projectId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'archive_project' },

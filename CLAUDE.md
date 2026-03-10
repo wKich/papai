@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a Telegram bot that manages Linear tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Linear operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
+papai is a Telegram bot that manages Kaneo tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Kaneo operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
 
 ## Commands
 
@@ -22,15 +22,15 @@ Copy `.env.example` to `.env`. Only two are required at startup (validated in `s
 
 `TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
 
-The remaining credentials (`linear_key`, `linear_team_id`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+The remaining credentials (`kaneo_key`, `kaneo_base_url`, `kaneo_workspace_id`, `kaneo_project_id`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
 
 ## Architecture
 
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
-                                              ├─ tools/ ─→ linear/ ─→ Linear SDK
-                                              │   22 tools, one file each
+                                              ├─ tools/ ─→ kaneo/ ─→ Kaneo REST API
+                                              │   24 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
@@ -42,36 +42,38 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 - **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
-- **`src/tools/`** — One file per tool. `index.ts` assembles all 22 into `makeTools`. Each tool imports its corresponding linear function.
-- **`src/linear/`** — One file per Linear SDK wrapper function. `index.ts` re-exports all 22. `classify-error.ts` contains the shared error classifier.
+- **`src/tools/`** — One file per tool. `index.ts` assembles all 24 into `makeTools`. Each tool imports its corresponding kaneo function.
+- **`src/kaneo/`** — One file per Kaneo REST API wrapper function. `index.ts` re-exports all. `client.ts` is the shared HTTP client. `classify-error.ts` contains the error classifier. `frontmatter.ts` handles relation storage in task descriptions.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
 
 ### Available tools
 
-| Tool                    | Description                                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------------------------- |
-| `create_issue`          | Create a new issue (supports title, description, priority, project, due date, labels, estimate) |
-| `update_issue`          | Update status, assignee, due date, labels, or estimate on an existing issue                     |
-| `search_issues`         | Search issues by keyword, optionally filtered by state                                          |
-| `get_issue`             | Fetch full details of a single issue including labels and relations                             |
-| `archive_issue`         | Archive an issue                                                                                |
-| `add_issue_comment`     | Add a Markdown comment to an issue                                                              |
-| `get_issue_comments`    | Read all comments on an issue                                                                   |
-| `update_issue_comment`  | Update an existing comment on an issue                                                          |
-| `remove_issue_comment`  | Remove a comment from an issue                                                                  |
-| `list_projects`         | List all teams and their projects                                                               |
-| `create_project`        | Create a new project in the team                                                                |
-| `update_project`        | Update an existing project (name, description)                                                  |
-| `archive_project`       | Archive a project                                                                               |
-| `list_labels`           | List all available labels in the team                                                           |
-| `create_label`          | Create a new label with optional hex color                                                      |
-| `update_label`          | Update an existing label (name, description, color)                                             |
-| `remove_label`          | Remove (delete) a label                                                                         |
-| `add_issue_label`       | Add a label to an issue                                                                         |
-| `remove_issue_label`    | Remove a label from an issue                                                                    |
-| `add_issue_relation`    | Create a blocks/duplicate/related relation between two issues                                   |
-| `update_issue_relation` | Update the type of an existing relation between two issues                                      |
-| `remove_issue_relation` | Remove a relation between two issues                                                            |
+| Tool                   | Description                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `create_task`          | Create a new task (title, description, priority, project, due date, status)          |
+| `update_task`          | Update status, priority, assignee, due date, title, or description on a task         |
+| `search_tasks`         | Search tasks by keyword                                                              |
+| `list_tasks`           | List all tasks in a project                                                          |
+| `get_task`             | Fetch full details of a single task including relations (from frontmatter)           |
+| `archive_task`         | Archive a task by adding the "archived" label                                        |
+| `add_comment`          | Add a comment to a task                                                              |
+| `get_comments`         | Read all comments on a task                                                          |
+| `update_comment`       | Update an existing comment on a task                                                 |
+| `remove_comment`       | Remove a comment from a task                                                         |
+| `list_projects`        | List all projects in the workspace                                                   |
+| `create_project`       | Create a new project in the workspace                                                |
+| `update_project`       | Update an existing project (name, description)                                       |
+| `archive_project`      | Archive (delete) a project                                                           |
+| `list_labels`          | List all available labels in the workspace                                           |
+| `create_label`         | Create a new label with optional hex color                                           |
+| `update_label`         | Update an existing label (name, color)                                               |
+| `remove_label`         | Remove (delete) a label                                                              |
+| `add_task_label`       | Add a label to a task                                                                |
+| `remove_task_label`    | Remove a label from a task                                                           |
+| `add_task_relation`    | Create a blocks/duplicate/related relation between two tasks (stored in frontmatter) |
+| `update_task_relation` | Update the type of an existing relation between two tasks                            |
+| `remove_task_relation` | Remove a relation between two tasks                                                  |
+| `list_columns`         | List all status columns in a project                                                 |
 
 ## Logging Requirements (HIGH PRIORITY)
 
@@ -94,10 +96,10 @@ Use for:
 
 Use for:
 
-- Successful completion of major operations (issue created/updated, search completed)
+- Successful completion of major operations (task created/updated, search completed)
 - External service calls with result summaries
 - User session lifecycle events
-- Example: `logger.info({ issueId, identifier }, 'Issue created')`
+- Example: `logger.info({ taskId, title }, 'Task created')`
 
 #### `logger.warn()` — Unexpected but recoverable
 
@@ -105,11 +107,11 @@ Use for:
 
 - Invalid input that won't crash the app
 - Missing optional data
-- Failed lookups (workflow states not found)
+- Failed lookups (columns not found)
 - Resource limits reached (history truncation)
 - Unauthorized access attempts
 - API returning incomplete data
-- Example: `logger.warn({ issueId, requestedStatus }, 'Workflow state not found')`
+- Example: `logger.warn({ taskId, requestedStatus }, 'Column not found')`
 
 #### `logger.error()` — Failures requiring attention
 
@@ -133,7 +135,7 @@ Use for:
 
 Every file must import and use the logger. Required log points:
 
-- All function entries in `src/linear/`
+- All function entries in `src/kaneo/`
 - All tool executions in `src/tools/`
 - Message lifecycle in `bot.ts` (receive, process, respond)
 - Authorization checks
@@ -151,7 +153,7 @@ tests/
 ├── logger.test.ts
 ├── migrate.test.ts
 ├── users.test.ts
-├── linear/           # Tests for src/linear/*
+├── kaneo/            # Tests for src/kaneo/*
 └── tools/            # Tests for src/tools/*
 ```
 

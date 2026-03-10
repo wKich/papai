@@ -17,24 +17,26 @@ import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
-const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Linear tasks directly from Telegram.
+const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Kaneo tasks directly from Telegram.
 
 You can:
-- Create new issues with titles, descriptions, priorities, and project associations
-- Update issue statuses and assignees
-- Search for issues by keyword or state
-- List available teams and projects
-- Fetch full details of a specific issue
-- Add and read comments on issues
-- Create labels, list available labels, view labels on an issue; apply or remove labels when creating/updating
-- Set due dates and estimates on issues
-- Create and read issue relations (blocks, duplicate, related)
-- Create new projects
-- Archive issues
+- Create new tasks with titles, descriptions, priorities, and project associations
+- Update task statuses, priorities, and assignees
+- Search for tasks by keyword
+- List all tasks in a project
+- List available projects and status columns
+- Fetch full details of a specific task
+- Add and read comments on tasks
+- Create labels, list available labels; apply or remove labels on tasks
+- Set due dates on tasks
+- Create and read task relations (blocks, duplicate, related) stored as frontmatter in descriptions
+- Create and manage projects
+- Archive tasks by applying an "archived" label
 
 Always confirm actions to the user in a friendly, concise manner. \
-When creating or updating tasks, summarize what was done and include the issue identifier and URL if available. \
-If you need context (like project IDs), call list_projects first.`
+When creating or updating tasks, summarize what was done and include the task ID if available. \
+If you need context (like project IDs), call list_projects first. \
+To see available status columns for a project, call list_columns.`
 
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
@@ -62,7 +64,15 @@ const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createO
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
 const checkRequiredConfig = (userId: number): string[] => {
-  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'linear_key', 'linear_team_id'] as const
+  const requiredKeys = [
+    'openai_key',
+    'openai_base_url',
+    'openai_model',
+    'kaneo_key',
+    'kaneo_base_url',
+    'kaneo_workspace_id',
+    'kaneo_project_id',
+  ] as const
   return requiredKeys.filter((k) => getConfig(userId, k) === null)
 }
 
@@ -105,10 +115,13 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   const openaiKey = getConfig(userId, 'openai_key')!
   const openaiBaseUrl = getConfig(userId, 'openai_base_url')!
   const openaiModel = getConfig(userId, 'openai_model')!
-  const linearKey = getConfig(userId, 'linear_key')!
-  const linearTeamId = getConfig(userId, 'linear_team_id')!
+  const kaneoKey = getConfig(userId, 'kaneo_key')!
+  const kaneoBaseUrl = getConfig(userId, 'kaneo_base_url')!
+  const kaneoWorkspaceId = getConfig(userId, 'kaneo_workspace_id')!
+  const kaneoProjectId = getConfig(userId, 'kaneo_project_id')!
   const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
-  const tools = makeTools({ linearKey, linearTeamId })
+  const kaneoConfig = { apiKey: kaneoKey, baseUrl: kaneoBaseUrl }
+  const tools = makeTools({ kaneoConfig, workspaceId: kaneoWorkspaceId, projectId: kaneoProjectId })
 
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
 

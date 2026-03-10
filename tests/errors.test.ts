@@ -1,48 +1,48 @@
 import { describe, expect, test } from 'bun:test'
 
-import { linearError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
+import { kaneoError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
 
-describe('linearError basic constructors', () => {
-  test('issueNotFound creates correct structure', () => {
-    const error = linearError.issueNotFound('ISS-123')
+describe('kaneoError basic constructors', () => {
+  test('taskNotFound creates correct structure', () => {
+    const error = kaneoError.taskNotFound('task-123')
     expect(error).toEqual({
-      type: 'linear',
-      code: 'issue-not-found',
-      issueId: 'ISS-123',
+      type: 'kaneo',
+      code: 'task-not-found',
+      taskId: 'task-123',
     })
   })
 
-  test('teamNotFound creates correct structure', () => {
-    const error = linearError.teamNotFound('TEAM-456')
+  test('workspaceNotFound creates correct structure', () => {
+    const error = kaneoError.workspaceNotFound('ws-456')
     expect(error).toEqual({
-      type: 'linear',
-      code: 'team-not-found',
-      teamId: 'TEAM-456',
+      type: 'kaneo',
+      code: 'workspace-not-found',
+      workspaceId: 'ws-456',
     })
   })
 
   test('authFailed creates correct structure', () => {
-    const error = linearError.authFailed()
+    const error = kaneoError.authFailed()
     expect(error).toEqual({
-      type: 'linear',
+      type: 'kaneo',
       code: 'auth-failed',
     })
   })
 
   test('rateLimited creates correct structure', () => {
-    const error = linearError.rateLimited()
+    const error = kaneoError.rateLimited()
     expect(error).toEqual({
-      type: 'linear',
+      type: 'kaneo',
       code: 'rate-limited',
     })
   })
 })
 
-describe('linearError advanced constructors', () => {
+describe('kaneoError advanced constructors', () => {
   test('validationFailed creates correct structure', () => {
-    const error = linearError.validationFailed('title', 'Title is required')
+    const error = kaneoError.validationFailed('title', 'Title is required')
     expect(error).toEqual({
-      type: 'linear',
+      type: 'kaneo',
       code: 'validation-failed',
       field: 'title',
       reason: 'Title is required',
@@ -50,9 +50,9 @@ describe('linearError advanced constructors', () => {
   })
 
   test('labelNotFound creates correct structure', () => {
-    const error = linearError.labelNotFound('urgent')
+    const error = kaneoError.labelNotFound('urgent')
     expect(error).toEqual({
-      type: 'linear',
+      type: 'kaneo',
       code: 'label-not-found',
       labelName: 'urgent',
     })
@@ -60,8 +60,8 @@ describe('linearError advanced constructors', () => {
 
   test('unknown creates correct structure', () => {
     const originalError = new Error('Something went wrong')
-    const error = linearError.unknown(originalError)
-    expect(error.type).toBe('linear')
+    const error = kaneoError.unknown(originalError)
+    expect(error.type).toBe('kaneo')
     expect(error.code).toBe('unknown')
     if (error.code === 'unknown') {
       expect(error.originalError).toBe(originalError)
@@ -118,11 +118,11 @@ describe('validationError constructors', () => {
 
 describe('systemError constructors', () => {
   test('configMissing creates correct structure', () => {
-    const error = systemError.configMissing('LINEAR_API_KEY')
+    const error = systemError.configMissing('KANEO_KEY')
     expect(error).toEqual({
       type: 'system',
       code: 'config-missing',
-      variable: 'LINEAR_API_KEY',
+      variable: 'KANEO_KEY',
     })
   })
 
@@ -148,7 +148,7 @@ describe('systemError constructors', () => {
 
 describe('isAppError type guard', () => {
   test('returns true for all valid error types', () => {
-    expect(isAppError(linearError.authFailed())).toBe(true)
+    expect(isAppError(kaneoError.authFailed())).toBe(true)
     expect(isAppError(llmError.timeout())).toBe(true)
     expect(isAppError(validationError.missingRequired('field'))).toBe(true)
     expect(isAppError(systemError.configMissing('VAR'))).toBe(true)
@@ -166,15 +166,15 @@ describe('isAppError type guard', () => {
   })
 })
 
-describe('getUserMessage for linear errors', () => {
+describe('getUserMessage for kaneo errors', () => {
   test('returns appropriate message for each error code', () => {
-    expect(getUserMessage(linearError.issueNotFound('ABC-123'))).toContain('ABC-123')
-    expect(getUserMessage(linearError.teamNotFound('TEAM-1'))).toContain('Team configuration')
-    expect(getUserMessage(linearError.authFailed())).toContain('Failed to connect')
-    expect(getUserMessage(linearError.rateLimited())).toContain('rate limit')
-    expect(getUserMessage(linearError.validationFailed('title', 'too short'))).toContain('title')
-    expect(getUserMessage(linearError.labelNotFound('bug'))).toContain('bug')
-    expect(getUserMessage(linearError.unknown(new Error('test')))).toContain('error occurred')
+    expect(getUserMessage(kaneoError.taskNotFound('task-123'))).toContain('task-123')
+    expect(getUserMessage(kaneoError.workspaceNotFound('ws-1'))).toContain('Workspace configuration')
+    expect(getUserMessage(kaneoError.authFailed())).toContain('Failed to connect')
+    expect(getUserMessage(kaneoError.rateLimited())).toContain('rate limit')
+    expect(getUserMessage(kaneoError.validationFailed('title', 'too short'))).toContain('title')
+    expect(getUserMessage(kaneoError.labelNotFound('bug'))).toContain('bug')
+    expect(getUserMessage(kaneoError.unknown(new Error('test')))).toContain('error occurred')
   })
 })
 

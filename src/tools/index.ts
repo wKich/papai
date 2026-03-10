@@ -1,53 +1,58 @@
 import type { ToolSet } from 'ai'
 
-import { makeAddIssueCommentTool } from './add-issue-comment.js'
-import { makeAddIssueLabelTool } from './add-issue-label.js'
-import { makeAddIssueRelationTool } from './add-issue-relation.js'
-import { makeArchiveIssueTool } from './archive-issue.js'
+import type { KaneoConfig } from '../kaneo/client.js'
+import { makeAddCommentTool } from './add-comment.js'
+import { makeAddTaskLabelTool } from './add-task-label.js'
+import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveProjectTool } from './archive-project.js'
-import { makeCreateIssueTool } from './create-issue.js'
+import { makeArchiveTaskTool } from './archive-task.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
-import { makeGetIssueCommentsTool } from './get-issue-comments.js'
-import { makeGetIssueTool } from './get-issue.js'
+import { makeCreateTaskTool } from './create-task.js'
+import { makeGetCommentsTool } from './get-comments.js'
+import { makeGetTaskTool } from './get-task.js'
+import { makeListColumnsTool } from './list-columns.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListProjectsTool } from './list-projects.js'
-import { makeRemoveIssueCommentTool } from './remove-issue-comment.js'
-import { makeRemoveIssueLabelTool } from './remove-issue-label.js'
-import { makeRemoveIssueRelationTool } from './remove-issue-relation.js'
+import { makeListTasksTool } from './list-tasks.js'
+import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
-import { makeSearchIssuesTool } from './search-issues.js'
-import { makeUpdateIssueCommentTool } from './update-issue-comment.js'
-import { makeUpdateIssueRelationTool } from './update-issue-relation.js'
-import { makeUpdateIssueTool } from './update-issue.js'
+import { makeRemoveTaskLabelTool } from './remove-task-label.js'
+import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
+import { makeSearchTasksTool } from './search-tasks.js'
+import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
+import { makeUpdateTaskRelationTool } from './update-task-relation.js'
+import { makeUpdateTaskTool } from './update-task.js'
 
-type ToolConfig = { linearKey: string; linearTeamId: string }
+type ToolConfig = { kaneoConfig: KaneoConfig; workspaceId: string; projectId: string }
 
-export function makeTools({ linearKey, linearTeamId }: ToolConfig): ToolSet {
+export function makeTools({ kaneoConfig, workspaceId, projectId }: ToolConfig): ToolSet {
   return {
-    create_issue: makeCreateIssueTool(linearKey, linearTeamId),
-    update_issue: makeUpdateIssueTool(linearKey),
-    search_issues: makeSearchIssuesTool(linearKey),
-    list_projects: makeListProjectsTool(linearKey),
-    update_project: makeUpdateProjectTool(linearKey),
-    archive_project: makeArchiveProjectTool(linearKey),
-    add_issue_comment: makeAddIssueCommentTool(linearKey),
-    get_issue_comments: makeGetIssueCommentsTool(linearKey),
-    update_issue_comment: makeUpdateIssueCommentTool(linearKey),
-    remove_issue_comment: makeRemoveIssueCommentTool(linearKey),
-    list_labels: makeListLabelsTool(linearKey, linearTeamId),
-    create_label: makeCreateLabelTool(linearKey, linearTeamId),
-    update_label: makeUpdateLabelTool(linearKey),
-    remove_label: makeRemoveLabelTool(linearKey),
-    add_issue_label: makeAddIssueLabelTool(linearKey),
-    remove_issue_label: makeRemoveIssueLabelTool(linearKey),
-    add_issue_relation: makeAddIssueRelationTool(linearKey),
-    update_issue_relation: makeUpdateIssueRelationTool(linearKey),
-    remove_issue_relation: makeRemoveIssueRelationTool(linearKey),
-    get_issue: makeGetIssueTool(linearKey),
-    create_project: makeCreateProjectTool(linearKey, linearTeamId),
-    archive_issue: makeArchiveIssueTool(linearKey),
+    create_task: makeCreateTaskTool(kaneoConfig, projectId),
+    update_task: makeUpdateTaskTool(kaneoConfig),
+    search_tasks: makeSearchTasksTool(kaneoConfig, workspaceId),
+    list_tasks: makeListTasksTool(kaneoConfig),
+    get_task: makeGetTaskTool(kaneoConfig),
+    archive_task: makeArchiveTaskTool(kaneoConfig, workspaceId),
+    list_projects: makeListProjectsTool(kaneoConfig, workspaceId),
+    create_project: makeCreateProjectTool(kaneoConfig, workspaceId),
+    update_project: makeUpdateProjectTool(kaneoConfig),
+    archive_project: makeArchiveProjectTool(kaneoConfig),
+    add_comment: makeAddCommentTool(kaneoConfig),
+    get_comments: makeGetCommentsTool(kaneoConfig),
+    update_comment: makeUpdateCommentTool(kaneoConfig),
+    remove_comment: makeRemoveCommentTool(kaneoConfig),
+    list_labels: makeListLabelsTool(kaneoConfig, workspaceId),
+    create_label: makeCreateLabelTool(kaneoConfig, workspaceId),
+    update_label: makeUpdateLabelTool(kaneoConfig),
+    remove_label: makeRemoveLabelTool(kaneoConfig),
+    add_task_label: makeAddTaskLabelTool(kaneoConfig, workspaceId),
+    remove_task_label: makeRemoveTaskLabelTool(kaneoConfig),
+    add_task_relation: makeAddTaskRelationTool(kaneoConfig),
+    update_task_relation: makeUpdateTaskRelationTool(kaneoConfig),
+    remove_task_relation: makeRemoveTaskRelationTool(kaneoConfig),
+    list_columns: makeListColumnsTool(kaneoConfig),
   }
 }
