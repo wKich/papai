@@ -1,13 +1,4 @@
-import { getConfig } from '../config.js'
 import { getDb } from '../db/index.js'
-
-// Helper function to get non-standard config keys for migration
-function getMigrationConfigValue(userId: number, key: string): string | null {
-  const row = getDb()
-    .query<{ value: string }, [number, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
-    .get(userId, key)
-  return row?.value ?? null
-}
 import { isIssueMigrated, recordMigratedIssue } from '../db/migrated-issues.js'
 import { getMigrationStatus, setMigrationStatus, isMigrationComplete } from '../db/migration-status.js'
 import { createIssue } from '../huly/create-issue.js'
@@ -16,34 +7,35 @@ import { getOrCreateUserProject } from '../huly/project-utils.js'
 import type { HulyClient } from '../huly/types.js'
 import { withClient } from '../huly/utils/with-client.js'
 import { logger } from '../logger.js'
+import { migrateComments } from './comment-migration.js'
+import { ensureHulyCredentials } from './huly-account.js'
 import { mapLinearIssueToHuly } from './issue-mapper.js'
+import { buildLabelCache } from './label-sync.js'
 import { createLinearClient, fetchUserIssues, type LinearIssue } from './linear-client.js'
 
 const log = logger.child({ scope: 'migration' })
+
+function getMigrationConfigValue(userId: number, key: string): string | null {
+  const row = getDb()
+    .query<{ value: string }, [number, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
+    .get(userId, key)
+  return row?.value ?? null
+}
 
 export interface MigrationResult {
   success: boolean
   migratedCount: number
   errors: string[]
 }
-
 interface UserMigrationResult {
   count: number
   error?: string
 }
-
 interface MigrationIssueResult {
   success: boolean
   issueId?: string
   skipped?: boolean
   error?: string
-}
-
-interface MigrationConfig {
-  linearKey: string
-  linearTeamId: string
-  hulyEmail: string
-  hulyPassword: string
 }
 
 export async function runLinearToHulyMigration(): Promise<MigrationResult> {
@@ -64,6 +56,7 @@ export async function runLinearToHulyMigration(): Promise<MigrationResult> {
     log.info({ userCount: users.length }, 'Found users with Linear credentials')
 
     for (const { user_id: userId } of users) {
+      // oxlint-disable-next-line no-await-in-loop
       const userResult = await migrateUserWithFaultTolerance(userId)
       migratedCount += userResult.count
       if (userResult.error !== undefined) {
@@ -105,8 +98,7 @@ function getUsersWithLinearCredentials(): Array<{ user_id: number }> {
 
 async function migrateUserWithFaultTolerance(userId: number): Promise<UserMigrationResult> {
   try {
-    const result = await migrateUserIssues(userId)
-    return result
+    return await migrateUserIssues(userId)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.error({ userId, error: message }, 'Failed to migrate user issues')
@@ -123,19 +115,22 @@ function finalizeMigration(migratedCount: number, errors: string[]): MigrationRe
     setMigrationStatus('linear_to_huly', 'failed', errors.join('; '))
     log.error({ errorCount: errors.length }, 'Migration completed with errors')
   }
-
   return { success, migratedCount, errors }
 }
 
 async function migrateUserIssues(userId: number): Promise<UserMigrationResult> {
   log.info({ userId }, 'Migrating user issues')
 
-  const config = getMigrationConfig(userId)
-  if (config.error !== undefined) {
-    return { count: 0, error: config.error }
+  const linearKey = getMigrationConfigValue(userId, 'linear_key')
+  const linearTeamId = getMigrationConfigValue(userId, 'linear_team_id')
+  if (linearKey === null || linearTeamId === null) {
+    return { count: 0, error: 'Missing Linear credentials' }
   }
 
-  const linearIssues = await fetchIssuesForUser(config.linearKey, config.linearTeamId)
+  // Ensure the user has a Huly account (creates one if absent)
+  await ensureHulyCredentials(userId)
+
+  const linearIssues = await fetchIssuesForUser(linearKey, linearTeamId)
   if (linearIssues.length === 0) {
     log.info({ userId }, 'No Linear issues to migrate')
     return { count: 0 }
@@ -144,54 +139,30 @@ async function migrateUserIssues(userId: number): Promise<UserMigrationResult> {
   return migrateIssuesWithClient(userId, linearIssues)
 }
 
-function getMigrationConfig(userId: number): MigrationConfig & { error?: string } {
-  const linearKey = getMigrationConfigValue(userId, 'linear_key')
-  const linearTeamId = getMigrationConfigValue(userId, 'linear_team_id')
-  const hulyEmail = getConfig(userId, 'huly_email')
-  const hulyPassword = getConfig(userId, 'huly_password')
-
-  if (linearKey === null || linearTeamId === null) {
-    return {
-      linearKey: linearKey ?? '',
-      linearTeamId: linearTeamId ?? '',
-      hulyEmail: hulyEmail ?? '',
-      hulyPassword: hulyPassword ?? '',
-      error: 'Missing Linear credentials',
-    }
-  }
-
-  if (hulyEmail === null || hulyPassword === null) {
-    return {
-      linearKey,
-      linearTeamId,
-      hulyEmail: hulyEmail ?? '',
-      hulyPassword: hulyPassword ?? '',
-      error: 'Missing Huly credentials',
-    }
-  }
-
-  return { linearKey, linearTeamId, hulyEmail, hulyPassword }
-}
-
-async function fetchIssuesForUser(linearKey: string, linearTeamId: string): Promise<LinearIssue[]> {
+function fetchIssuesForUser(linearKey: string, linearTeamId: string): Promise<LinearIssue[]> {
   const linearClient = createLinearClient(linearKey)
   return fetchUserIssues(linearClient, linearTeamId)
 }
 
 async function migrateIssuesWithClient(userId: number, linearIssues: LinearIssue[]): Promise<UserMigrationResult> {
   let migratedCount = 0
-  let projectId: string | undefined
 
   try {
     await withClient(userId, getHulyClient, async (hulyClient) => {
       const project = await getOrCreateUserProject(hulyClient, userId)
-      projectId = project._id
+      const projectId = project._id
+      const labelCache = await buildLabelCache(hulyClient, linearIssues)
 
       for (const linearIssue of linearIssues) {
-        const result = await migrateSingleIssueWithFaultTolerance(hulyClient, userId, linearIssue, projectId)
-        if (result.success) {
-          migratedCount++
-        }
+        // oxlint-disable-next-line no-await-in-loop
+        const result = await migrateSingleIssueWithFaultTolerance(
+          hulyClient,
+          userId,
+          linearIssue,
+          projectId,
+          labelCache,
+        )
+        if (result.success) migratedCount++
       }
     })
   } catch (error) {
@@ -208,10 +179,10 @@ async function migrateSingleIssueWithFaultTolerance(
   userId: number,
   linearIssue: LinearIssue,
   projectId: string,
+  labelCache: Map<string, string>,
 ): Promise<MigrationIssueResult> {
   try {
-    const result = await migrateSingleIssue(hulyClient, userId, linearIssue, projectId)
-    return result
+    return await migrateSingleIssue(hulyClient, userId, linearIssue, projectId, labelCache)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.error({ linearId: linearIssue.id, error: message }, 'Failed to migrate issue')
@@ -224,6 +195,7 @@ async function migrateSingleIssue(
   userId: number,
   linearIssue: LinearIssue,
   projectId: string,
+  labelCache: Map<string, string>,
 ): Promise<MigrationIssueResult> {
   log.debug({ linearId: linearIssue.id, userId }, 'Migrating single issue')
 
@@ -234,6 +206,7 @@ async function migrateSingleIssue(
 
   const hulyData = mapLinearIssueToHuly(linearIssue, projectId)
   const priority = mapPriorityToNumber(hulyData.priority)
+  const labelIds = hulyData.labels.map((l) => labelCache.get(l.name)).filter((id): id is string => id !== undefined)
 
   try {
     const result = await createIssue({
@@ -242,6 +215,9 @@ async function migrateSingleIssue(
       description: hulyData.description,
       priority,
       projectId: hulyData.project,
+      dueDate: hulyData.dueDate,
+      estimate: hulyData.estimate,
+      labelIds: labelIds.length > 0 ? labelIds : undefined,
     })
 
     if (result.id === undefined || result.id === null || result.id === '') {
@@ -252,6 +228,8 @@ async function migrateSingleIssue(
     recordMigratedIssue(userId, linearIssue.id, result.id)
     log.info({ linearId: linearIssue.id, hulyId: result.id }, 'Successfully migrated issue')
 
+    await migrateComments(hulyClient, projectId, result.id, linearIssue.comments)
+
     return { success: true, issueId: result.id }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -261,10 +239,6 @@ async function migrateSingleIssue(
 }
 
 function mapPriorityToNumber(priority: string | undefined): number | undefined {
-  if (priority === undefined) {
-    return undefined
-  }
-
   switch (priority) {
     case 'urgent':
       return 1
@@ -274,6 +248,8 @@ function mapPriorityToNumber(priority: string | undefined): number | undefined {
       return 3
     case 'low':
       return 4
+    case undefined:
+      return undefined
     default:
       return undefined
   }

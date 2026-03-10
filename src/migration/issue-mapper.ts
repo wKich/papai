@@ -9,7 +9,9 @@ export interface HulyIssueData {
   description?: string
   project: string
   priority?: IssuePriority
-  labels?: string[]
+  labels: { name: string; color: string }[]
+  dueDate?: string
+  estimate?: number
 }
 
 export function mapLinearPriorityToHuly(linearPriority: number): IssuePriority | undefined {
@@ -50,6 +52,8 @@ export function mapLinearIssueToHuly(linearIssue: LinearIssue, hulyProjectId: st
     description: linearIssue.description,
     project: hulyProjectId,
     priority: mapLinearPriorityToHuly(linearIssue.priority),
-    labels: linearIssue.labels.map((l) => l.name),
+    labels: linearIssue.labels,
+    dueDate: linearIssue.dueDate,
+    estimate: linearIssue.estimate,
   }
 }

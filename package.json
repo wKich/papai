@@ -22,6 +22,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.33",
     "@gramio/format": "^0.5.0",
+    "@hcengineering/account-client": "^0.7.25",
     "@hcengineering/api-client": "^0.7.0",
     "@hcengineering/core": "^0.7.0",
     "@hcengineering/rank": "^0.7.0",

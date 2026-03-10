@@ -10,6 +10,7 @@ const log = logger.child({ scope: 'huly:project-utils' })
 export interface ProjectQueryClient {
   findOne(classRef: unknown, query: Record<string, unknown>): Promise<unknown>
   createDoc(classRef: unknown, space: unknown, data: Record<string, unknown>, id?: string): Promise<unknown>
+  getAccount(): Promise<{ uuid: string }>
 }
 
 export function formatProjectIdentifier(userIdentifier: string | number): string {
@@ -40,15 +41,24 @@ export async function getOrCreateUserProject(
     return { _id: projectId, identifier: projectIdentifier }
   }
 
+  return createUserProject(client, userIdentifier, projectIdentifier)
+}
+
+async function createUserProject(
+  client: ProjectQueryClient,
+  userIdentifier: string | number,
+  projectIdentifier: string,
+): Promise<{ _id: string; identifier: string }> {
   log.info({ identifier: projectIdentifier }, 'Creating new project for user')
 
   const projectId = generateId()
-
   const workspaceSpace = await client.findOne(core.class.Space, { _id: core.space.Workspace })
 
   if (workspaceSpace === undefined || workspaceSpace === null) {
     throw classifyHulyError(new Error('Workspace space not found'))
   }
+
+  const account = await client.getAccount()
 
   await client.createDoc(
     tracker.class.Project,
@@ -57,15 +67,13 @@ export async function getOrCreateUserProject(
       name: `Project ${userIdentifier}`,
       identifier: projectIdentifier,
       description: `Auto-created project for user ${userIdentifier}`,
-      private: false,
-      // Will be set by Huly
+      private: true,
       defaultIssueStatus: null,
-      members: [],
+      members: [account.uuid],
     },
     projectId,
   )
 
   log.info({ projectId, identifier: projectIdentifier }, 'Created new project')
-
   return { _id: projectId, identifier: projectIdentifier }
 }

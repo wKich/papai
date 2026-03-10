@@ -11,7 +11,10 @@ describe('Issue Mapper', () => {
     description: 'Test description',
     state: { name: 'In Progress', type: 'started' },
     priority: 2,
-    labels: [{ name: 'bug' }],
+    labels: [{ name: 'bug', color: '#eb5757' }],
+    dueDate: '2024-06-01',
+    estimate: 3,
+    comments: [{ body: 'A comment', authorName: 'Alice' }],
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-02'),
   }
@@ -42,6 +45,6 @@ describe('Issue Mapper', () => {
     expect(result.description).toBe('Test description')
     expect(result.project).toBe('project-123')
     expect(result.priority).toBe('high')
-    expect(result.labels).toEqual(['bug'])
+    expect(result.labels).toEqual([{ name: 'bug', color: '#eb5757' }])
   })
 })

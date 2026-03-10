@@ -43,6 +43,7 @@ describe('getOrCreateUserProject', () => {
         createDocCalls.push({ classRef, space, data, id })
         return Promise.resolve()
       },
+      getAccount: (): Promise<{ uuid: string }> => Promise.resolve({ uuid: 'test-account-uuid' }),
     }
   })
 
@@ -101,6 +102,8 @@ describe('getOrCreateUserProject', () => {
     expect(call.data['identifier']).toBe('P-BOB')
     expect(call.data['name']).toBe('Project bob')
     expect(call.data['description']).toBe('Auto-created project for user bob')
+    expect(call.data['private']).toBe(true)
+    expect(call.data['members']).toEqual(['test-account-uuid'])
   })
 
   it('should throw error when workspace space not found', async () => {

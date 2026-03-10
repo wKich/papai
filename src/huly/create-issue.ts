@@ -261,3 +261,29 @@ export function createIssue({
     }
   })
 }
+
+export async function createIssueWithClient(
+  client: HulyClient,
+  params: Omit<CreateIssueParams, 'userId'>,
+): Promise<IssueResult> {
+  const { title, description, priority, projectId, dueDate, labelIds, estimate } = params
+  const { issue, url } = await createIssueCore(
+    client,
+    projectId,
+    title,
+    description,
+    priority,
+    dueDate,
+    labelIds,
+    estimate,
+  )
+
+  log.info({ issueId: issue.id, identifier: issue.identifier, title: issue.title }, 'Issue created')
+
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url,
+  }
+}
