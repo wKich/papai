@@ -16,7 +16,8 @@
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md",
-    "migrate:linear": "bun run src/scripts/migrate-linear-to-kaneo.ts"
+    "migrate:linear": "bun run src/scripts/migrate-linear-to-kaneo.ts",
+    "test:migration": "bun run src/scripts/test-migration.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.33",
