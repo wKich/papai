@@ -23,6 +23,7 @@ searchIssues(params): Promise<{ id: string; identifier: string; title: string; p
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 // Uses client.issueSearch(query, { filter }) or client.issues({ filter })
@@ -45,7 +46,7 @@ const client = new PlaneClient({ apiKey })
 const results = await client.workItems.search(
   workspaceSlug,
   query,
-  projectId,     // optional: scope to specific project
+  projectId, // optional: scope to specific project
 )
 // Returns WorkItemSearch results
 ```
@@ -56,7 +57,7 @@ const results = await client.workItems.search(
 
 ```typescript
 const results = await client.workItems.advancedSearch(workspaceSlug, {
-  query,              // keyword search
+  query, // keyword search
   filters: {
     and: [
       // Filter by state (requires state ID, not name)
@@ -66,13 +67,9 @@ const results = await client.workItems.advancedSearch(workspaceSlug, {
       labelId !== undefined ? { label_id: labelId } : undefined,
 
       // Filter by due date range
-      dueDateBefore !== undefined
-        ? { target_date: { lte: dueDateBefore } }
-        : undefined,
+      dueDateBefore !== undefined ? { target_date: { lte: dueDateBefore } } : undefined,
 
-      dueDateAfter !== undefined
-        ? { target_date: { gte: dueDateAfter } }
-        : undefined,
+      dueDateAfter !== undefined ? { target_date: { gte: dueDateAfter } } : undefined,
 
       // Filter by priority
       // (no direct estimate/relation filter in advancedSearch)
@@ -88,7 +85,7 @@ const results = await client.workItems.advancedSearch(workspaceSlug, {
 
 ```typescript
 const response = await client.workItems.list(workspaceSlug, projectId, {
-  state: stateId,       // state ID (not name)
+  state: stateId, // state ID (not name)
   limit: 100,
 })
 ```
@@ -97,15 +94,15 @@ const response = await client.workItems.list(workspaceSlug, projectId, {
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| State filter | State **name** string | State **ID** — must resolve name → ID via `client.states.list` |
-| Label filter | Name or ID | ID only in `advancedSearch` |
-| Date filter | `dueDate` field | `target_date` field |
-| Relation filter | `hasRelations`, `relationType` | Not supported in search filters |
-| Estimate filter | Direct `estimate` filter | Not supported in search/advanced search |
-| Return type | Flat `IssueResult[]` | `AdvancedSearchResult[]` or `PaginatedResponse<WorkItem>` |
-| Cross-project | Supported | `advancedSearch` is workspace-level; `list` is per-project |
+| Aspect          | Linear                         | Plane                                                          |
+| --------------- | ------------------------------ | -------------------------------------------------------------- |
+| State filter    | State **name** string          | State **ID** — must resolve name → ID via `client.states.list` |
+| Label filter    | Name or ID                     | ID only in `advancedSearch`                                    |
+| Date filter     | `dueDate` field                | `target_date` field                                            |
+| Relation filter | `hasRelations`, `relationType` | Not supported in search filters                                |
+| Estimate filter | Direct `estimate` filter       | Not supported in search/advanced search                        |
+| Return type     | Flat `IssueResult[]`           | `AdvancedSearchResult[]` or `PaginatedResponse<WorkItem>`      |
+| Cross-project   | Supported                      | `advancedSearch` is workspace-level; `list` is per-project     |
 
 ## Migration Notes
 

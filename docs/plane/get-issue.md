@@ -22,6 +22,7 @@ getIssue({ apiKey, issueId }): Promise<{
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const issue = await client.issue(issueId)
@@ -44,15 +45,11 @@ const workItem = await client.workItems.retrieve(
   workspaceSlug,
   projectId,
   workItemId,
-  ['state', 'assignees', 'labels']   // expand to get full objects, not just IDs
+  ['state', 'assignees', 'labels'], // expand to get full objects, not just IDs
 )
 
 // Retrieve relations separately
-const relations = await client.workItems.relations.list(
-  workspaceSlug,
-  projectId,
-  workItemId
-)
+const relations = await client.workItems.relations.list(workspaceSlug, projectId, workItemId)
 
 // Returns:
 // workItem: WorkItem with state/assignees/labels as objects
@@ -72,15 +69,15 @@ const url = `${baseUrl}/${workspaceSlug}/projects/${projectId}/issues/${workItem
 return {
   id: workItem.id,
   identifier,
-  name: workItem.name,              // Linear: title → Plane: name
-  description: workItem.description_html,  // HTML not Markdown
-  priority: workItem.priority,      // Plane: string enum, not integer
+  name: workItem.name, // Linear: title → Plane: name
+  description: workItem.description_html, // HTML not Markdown
+  priority: workItem.priority, // Plane: string enum, not integer
   url,
   target_date: workItem.target_date, // Linear: dueDate → Plane: target_date
   estimate_point: workItem.estimate_point,
   state: (workItem.state as State)?.name,
-  assignees: (workItem.assignees as User[])?.map(a => a.display_name),
-  labels: (workItem.labels as Label[])?.map(l => ({ id: l.id, name: l.name, color: l.color })),
+  assignees: (workItem.assignees as User[])?.map((a) => a.display_name),
+  labels: (workItem.labels as Label[])?.map((l) => ({ id: l.id, name: l.name, color: l.color })),
   relations,
 }
 ```
@@ -89,18 +86,18 @@ return {
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Scope | `issueId` only | `workspaceSlug` + `projectId` + `workItemId` |
-| Identifier | `identifier` (`ENG-42`) | Must construct from `sequence_id` + project prefix |
-| Description | Markdown string | HTML string (`description_html`) |
-| Priority | Integer `0–4` | String enum (`none`, `urgent`, `high`, `medium`, `low`) |
-| Due date | `dueDate` | `target_date` (YYYY-MM-DD) |
-| Estimate | `estimate` (number) | `estimate_point` (string) |
-| Assignee | Single `assignee` (string name) | `assignees` (array) |
-| Relations | Array with full objects | Grouped by type as `{ blocking: string[], ... }` |
-| URL | Direct `url` property | Must construct manually |
-| Expansion | Auto-resolved via lazy loading | Explicit `expand` array required |
+| Aspect      | Linear                          | Plane                                                   |
+| ----------- | ------------------------------- | ------------------------------------------------------- |
+| Scope       | `issueId` only                  | `workspaceSlug` + `projectId` + `workItemId`            |
+| Identifier  | `identifier` (`ENG-42`)         | Must construct from `sequence_id` + project prefix      |
+| Description | Markdown string                 | HTML string (`description_html`)                        |
+| Priority    | Integer `0–4`                   | String enum (`none`, `urgent`, `high`, `medium`, `low`) |
+| Due date    | `dueDate`                       | `target_date` (YYYY-MM-DD)                              |
+| Estimate    | `estimate` (number)             | `estimate_point` (string)                               |
+| Assignee    | Single `assignee` (string name) | `assignees` (array)                                     |
+| Relations   | Array with full objects         | Grouped by type as `{ blocking: string[], ... }`        |
+| URL         | Direct `url` property           | Must construct manually                                 |
+| Expansion   | Auto-resolved via lazy loading  | Explicit `expand` array required                        |
 
 ## Migration Notes
 

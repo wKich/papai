@@ -10,6 +10,7 @@ listLabels({ apiKey, teamId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const team = await client.team(teamId)
@@ -30,12 +31,12 @@ const client = new PlaneClient({ apiKey })
 
 const response = await client.labels.list(
   workspaceSlug,
-  projectId,       // Linear: teamId → Plane: projectId
-  { limit: 100 }
+  projectId, // Linear: teamId → Plane: projectId
+  { limit: 100 },
 )
 
 // Returns PaginatedResponse<Label>
-const labels = response.results.map(l => ({
+const labels = response.results.map((l) => ({
   id: l.id ?? '',
   name: l.name,
   color: l.color ?? '#000000',
@@ -46,13 +47,13 @@ const labels = response.results.map(l => ({
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Scope | `teamId` | `workspaceSlug` + `projectId` |
-| Navigation | `team.labels()` lazy relation | Direct `client.labels.list()` call |
-| Return type | Flat array | `PaginatedResponse<Label>` |
-| Extra fields | `id`, `name`, `color` | Also `description`, `parent`, `sort_order`, `external_source`, `external_id` |
-| Hierarchy | Flat | `parent` field enables nested label hierarchies |
+| Aspect       | Linear                        | Plane                                                                        |
+| ------------ | ----------------------------- | ---------------------------------------------------------------------------- |
+| Scope        | `teamId`                      | `workspaceSlug` + `projectId`                                                |
+| Navigation   | `team.labels()` lazy relation | Direct `client.labels.list()` call                                           |
+| Return type  | Flat array                    | `PaginatedResponse<Label>`                                                   |
+| Extra fields | `id`, `name`, `color`         | Also `description`, `parent`, `sort_order`, `external_source`, `external_id` |
+| Hierarchy    | Flat                          | `parent` field enables nested label hierarchies                              |
 
 ## Migration Notes
 

@@ -184,7 +184,7 @@ services:
           cpus: '0.5'
           memory: 1G
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
+      test: ['CMD-SHELL', 'pg_isready -U plane -d plane']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -203,7 +203,7 @@ services:
           cpus: '0.5'
           memory: 512M
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -228,7 +228,7 @@ services:
           cpus: '0.5'
           memory: 512M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -238,8 +238,8 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
+      - '${NGINX_HTTP_PORT:-80}:80'
+      - '${NGINX_HTTPS_PORT:-443}:443'
     depends_on:
       - web
       - api

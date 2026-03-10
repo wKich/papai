@@ -10,6 +10,7 @@ listProjects({ apiKey }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const teams = await client.teams()
@@ -24,6 +25,7 @@ const teams = await client.teams()
 ## Plane SDK Equivalent
 
 **Terminology mapping**:
+
 - Linear **Team** → Plane **Project**
 - Linear **Project** (grouping within a team) → Plane **Module**
 
@@ -37,7 +39,7 @@ const client = new PlaneClient({ apiKey })
 const response = await client.projects.list(workspaceSlug, { limit: 100 })
 
 // Returns PaginatedResponse<Project>
-const projects = response.results.map(p => ({
+const projects = response.results.map((p) => ({
   id: p.id,
   name: p.name,
   identifier: p.identifier,
@@ -59,9 +61,9 @@ const result = await Promise.all(
     return {
       projectId: project.id,
       projectName: project.name,
-      modules: modulesResponse.results.map(m => ({ id: m.id, name: m.name })),
+      modules: modulesResponse.results.map((m) => ({ id: m.id, name: m.name })),
     }
-  })
+  }),
 )
 // equivalent to: [{ teamId, teamName, projects: [...] }]
 ```
@@ -70,13 +72,13 @@ const result = await Promise.all(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Top-level entity | Team | Project |
-| Nested entity | Project (within team) | Module (within Project) |
-| Scope | Workspace-wide (no extra param) | Requires `workspaceSlug` |
-| Return type | Nested array | Paginated; need separate call per project for modules |
-| API calls | 1 (teams) + N (team.projects) | 1 (projects) + N (modules per project) |
+| Aspect           | Linear                          | Plane                                                 |
+| ---------------- | ------------------------------- | ----------------------------------------------------- |
+| Top-level entity | Team                            | Project                                               |
+| Nested entity    | Project (within team)           | Module (within Project)                               |
+| Scope            | Workspace-wide (no extra param) | Requires `workspaceSlug`                              |
+| Return type      | Nested array                    | Paginated; need separate call per project for modules |
+| API calls        | 1 (teams) + N (team.projects)   | 1 (projects) + N (modules per project)                |
 
 ## Migration Notes
 

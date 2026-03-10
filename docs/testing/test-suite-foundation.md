@@ -8,10 +8,12 @@
 ## Executive Summary
 
 This test suite validates:
+
 1. **Migration Tests**: Linear data correctly transforms and imports to Plane
 2. **Plane E2E Tests**: Plane implementation works correctly with real API calls
 
 **Key Principles:**
+
 1. Test against real APIs (no mocks)
 2. Focus on data transformation correctness
 3. Validate end-to-end Plane workflows
@@ -24,11 +26,11 @@ This test suite validates:
 
 ### Test Categories
 
-| Category | Purpose | Target |
-|----------|---------|--------|
-| **Migration Tests** | Validate Linear→Plane data transformation | 22 Linear methods mapped to Plane equivalents |
-| **Plane E2E Tests** | Test Plane API functionality end-to-end | Real Plane API workflows |
-| **Integration Tests** | Cross-system data flow | Linear export → Plane import |
+| Category              | Purpose                                   | Target                                        |
+| --------------------- | ----------------------------------------- | --------------------------------------------- |
+| **Migration Tests**   | Validate Linear→Plane data transformation | 22 Linear methods mapped to Plane equivalents |
+| **Plane E2E Tests**   | Test Plane API functionality end-to-end   | Real Plane API workflows                      |
+| **Integration Tests** | Cross-system data flow                    | Linear export → Plane import                  |
 
 ### Test Architecture
 
@@ -225,11 +227,7 @@ describe('createIssue Migration', () => {
     }
 
     // Create in Plane
-    const workItem = await client.workItems.create(
-      TEST_CONFIG.plane.workspaceSlug,
-      projectId,
-      planeInput
-    )
+    const workItem = await client.workItems.create(TEST_CONFIG.plane.workspaceSlug, projectId, planeInput)
 
     // Verify transformation
     expect(workItem.name).toBe(linearIssue.title)
@@ -244,11 +242,9 @@ describe('createIssue Migration', () => {
       teamId: 'team-123',
     }
 
-    const workItem = await client.workItems.create(
-      TEST_CONFIG.plane.workspaceSlug,
-      projectId,
-      { name: minimalLinearIssue.title }
-    )
+    const workItem = await client.workItems.create(TEST_CONFIG.plane.workspaceSlug, projectId, {
+      name: minimalLinearIssue.title,
+    })
 
     expect(workItem.name).toBe(minimalLinearIssue.title)
     expect(workItem.priority).toBeNull()
@@ -354,7 +350,7 @@ describe('Work Item CRUD', () => {
 
   test('lists work items', async () => {
     const response = await client.workItems.list(workspace, project, { limit: 10 })
-    
+
     expect(response.results).toBeDefined()
     expect(Array.isArray(response.results)).toBe(true)
     expect(response.count).toBeGreaterThanOrEqual(0)
@@ -452,16 +448,14 @@ import { describe, expect, test } from 'bun:test'
 describe('API Error Handling', () => {
   test('rejects invalid API key', async () => {
     const invalidClient = new PlaneClient({ apiKey: 'invalid-key' })
-    
-    await expect(
-      invalidClient.workItems.create(workspace, project, { name: 'Test' })
-    ).rejects.toThrow(/401|Unauthorized/)
+
+    await expect(invalidClient.workItems.create(workspace, project, { name: 'Test' })).rejects.toThrow(
+      /401|Unauthorized/,
+    )
   })
 
   test('rejects missing required fields', async () => {
-    await expect(
-      client.workItems.create(workspace, project, {} as any)
-    ).rejects.toThrow(/400|Bad Request|required/)
+    await expect(client.workItems.create(workspace, project, {} as any)).rejects.toThrow(/400|Bad Request|required/)
   })
 
   test('rejects invalid priority values', async () => {
@@ -469,14 +463,12 @@ describe('API Error Handling', () => {
       client.workItems.create(workspace, project, {
         name: 'Test',
         priority: 'invalid-priority' as any,
-      })
+      }),
     ).rejects.toThrow(/400|Invalid/)
   })
 
   test('returns 404 for non-existent items', async () => {
-    await expect(
-      client.workItems.retrieve(workspace, project, 'non-existent-id')
-    ).rejects.toThrow(/404|Not Found/)
+    await expect(client.workItems.retrieve(workspace, project, 'non-existent-id')).rejects.toThrow(/404|Not Found/)
   })
 })
 ```
@@ -506,26 +498,22 @@ import { PlaneClient } from '@makeplane/plane-node-sdk'
 import { TEST_CONFIG, skipIfNoPlaneApi } from '../../setup.js'
 
 // Helper to get session cookie via login
-async function getSessionCookie(
-  baseUrl: string,
-  email: string,
-  password: string
-): Promise<string> {
+async function getSessionCookie(baseUrl: string, email: string, password: string): Promise<string> {
   const loginResponse = await fetch(`${baseUrl}/api/sign-in/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
-  
+
   if (!loginResponse.ok) {
     throw new Error('Login failed')
   }
-  
+
   const setCookieHeader = loginResponse.headers.get('set-cookie')
   if (!setCookieHeader) {
     throw new Error('No session cookie returned')
   }
-  
+
   const sessionMatch = setCookieHeader.match(/sessionid=([^;]+)/)
   return sessionMatch ? sessionMatch[1] : ''
 }
@@ -543,13 +531,9 @@ describe('Internal Archive Endpoint', () => {
     client = new PlaneClient({ apiKey })
     workspace = TEST_CONFIG.plane.workspaceSlug
     project = TEST_CONFIG.plane.projectId
-    
+
     // Get session cookie for internal API access
-    sessionCookie = await getSessionCookie(
-      baseUrl,
-      process.env.PLANE_TEST_EMAIL!,
-      process.env.PLANE_TEST_PASSWORD!
-    )
+    sessionCookie = await getSessionCookie(baseUrl, process.env.PLANE_TEST_EMAIL!, process.env.PLANE_TEST_PASSWORD!)
   })
 
   test('archives completed work item via internal endpoint', async () => {
@@ -573,7 +557,7 @@ describe('Internal Archive Endpoint', () => {
     const response = await fetch(archiveUrl, {
       method: 'POST',
       headers: {
-        'Cookie': `sessionid=${sessionCookie}`,  // ← Session auth required
+        Cookie: `sessionid=${sessionCookie}`, // ← Session auth required
         'Content-Type': 'application/json',
       },
     })
@@ -594,7 +578,7 @@ describe('Internal Archive Endpoint', () => {
     const response = await fetch(archiveUrl, {
       method: 'POST',
       headers: {
-        'Cookie': `sessionid=${sessionCookie}`,  // ← Session auth required
+        Cookie: `sessionid=${sessionCookie}`, // ← Session auth required
         'Content-Type': 'application/json',
       },
     })
@@ -606,13 +590,13 @@ describe('Internal Archive Endpoint', () => {
 
   test('unarchives work item via internal endpoint', async () => {
     // Setup: Create, complete, and archive an issue first...
-    
+
     // Then unarchive using session cookie
     const unarchiveUrl = `${baseUrl}/api/workspaces/${workspace}/projects/${project}/issues/${issue.id}/archive/`
     const response = await fetch(unarchiveUrl, {
       method: 'DELETE',
       headers: {
-        'Cookie': `sessionid=${sessionCookie}`,  // ← Session auth required
+        Cookie: `sessionid=${sessionCookie}`, // ← Session auth required
       },
     })
 
@@ -630,6 +614,7 @@ PLANE_TEST_PASSWORD=your-password
 ```
 
 **Verification Notes**:
+
 - This endpoint is documented in `@docs/plane/conflicts/archive-issue.md`
 - The endpoint is **not** part of the public Plane API (`/api/v1/`)
 - URL uses `/issues/` path (deprecated in public API but still used internally)
@@ -664,7 +649,7 @@ services:
   plane:
     image: makeplane/plane-frontend:stable
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
     depends_on:
@@ -675,7 +660,7 @@ services:
   plane-api:
     image: makeplane/plane-backend:stable
     ports:
-      - "8000:8000"
+      - '8000:8000'
     environment:
       - DATABASE_URL=postgresql://plane:plane@plane-db:5432/plane
       - REDIS_URL=redis://plane-redis:6379
@@ -707,6 +692,7 @@ volumes:
 ### Phase 1: Foundation (Week 1)
 
 **Tasks:**
+
 1. Create directory structure
 2. Set up Plane SDK client wrapper
 3. Create data mapping files
@@ -714,6 +700,7 @@ volumes:
 5. Set up Docker Compose for local Plane instance
 
 **Deliverables:**
+
 - `tests/setup.ts` - Test configuration
 - `tests/fixtures/datasets/` - Priority, relation, state mappings
 - `tests/utils/plane-client.ts` - SDK wrapper
@@ -722,12 +709,14 @@ volumes:
 ### Phase 2: Migration Tests (Week 2)
 
 **Tasks:**
+
 1. Write data transformation tests for all 22 methods
 2. Test field mappings
 3. Test relation migrations
 4. Document edge cases
 
 **Deliverables:**
+
 - `tests/migration/*.test.ts` - 22 migration test files
 - `docs/migration/BEHAVIORAL_DIFFERENCES.md`
 - `docs/migration/EDGE_CASES.md`
@@ -735,12 +724,14 @@ volumes:
 ### Phase 3: Plane E2E Tests (Week 3)
 
 **Tasks:**
+
 1. Write CRUD tests for all Plane resources
 2. Write workflow tests
 3. Test error handling
 4. Test edge cases
 
 **Deliverables:**
+
 - `tests/e2e/work-items/*.test.ts`
 - `tests/e2e/projects/*.test.ts`
 - `tests/e2e/labels/*.test.ts`
@@ -749,12 +740,14 @@ volumes:
 ### Phase 4: CI/CD Integration (Week 4)
 
 **Tasks:**
+
 1. Set up CI pipeline with Plane instance
 2. Configure test runners
 3. Add test reporting
 4. Document usage
 
 **Deliverables:**
+
 - `.github/workflows/test.yml`
 - Test documentation
 - Coverage reports

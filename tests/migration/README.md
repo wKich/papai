@@ -5,6 +5,7 @@ Tests for validating Linear to Plane data transformations.
 ## Purpose
 
 These tests ensure that Linear data correctly maps to Plane format:
+
 - Field name mappings (title → name)
 - Value transformations (priority numbers → strings)
 - Format conversions (Markdown → HTML)
@@ -23,11 +24,12 @@ bun test tests/migration/create-issue.test.ts
 ## Test Structure
 
 Each test validates transformation logic:
+
 ```typescript
 test('transforms Linear priority to Plane', () => {
   const linearPriority = 2 // high
   const planePriority = LINEAR_TO_PLANE_PRIORITY[linearPriority]
-  
+
   expect(planePriority).toBe('high')
 })
 ```
@@ -35,8 +37,9 @@ test('transforms Linear priority to Plane', () => {
 ## Coverage
 
 22 Linear methods mapped to Plane equivalents:
+
 - Issues → Work Items
-- Projects → Projects  
+- Projects → Projects
 - Labels → Labels
 - Comments → Comments
 - Relations → Relations

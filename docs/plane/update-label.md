@@ -10,6 +10,7 @@ updateLabel({ apiKey, labelId, name, description, color }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.updateIssueLabel(labelId, { name, description, color })
@@ -36,13 +37,13 @@ if (name === undefined && description === undefined && color === undefined) {
 
 const updated = await client.labels.update(
   workspaceSlug,
-  projectId,      // required in Plane, not in Linear
+  projectId, // required in Plane, not in Linear
   labelId,
   {
     name,
     description,
     color,
-  }
+  },
 )
 
 // Returns Label { id, name, color, description, project, workspace, ... }
@@ -52,13 +53,13 @@ const updated = await client.labels.update(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Required params | `labelId` + at least one of `name/description/color` | Also requires `workspaceSlug` + `projectId` |
-| SDK call | `client.updateIssueLabel(labelId, data)` | `client.labels.update(slug, projectId, labelId, data)` |
-| Return value | `{ id, name, color }` | Full `Label` object (includes `description`, `parent`, etc.) |
-| Description | Supported | Supported |
-| Parent | Not supported | Can update `parent` label ID |
+| Aspect          | Linear                                               | Plane                                                        |
+| --------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| Required params | `labelId` + at least one of `name/description/color` | Also requires `workspaceSlug` + `projectId`                  |
+| SDK call        | `client.updateIssueLabel(labelId, data)`             | `client.labels.update(slug, projectId, labelId, data)`       |
+| Return value    | `{ id, name, color }`                                | Full `Label` object (includes `description`, `parent`, etc.) |
+| Description     | Supported                                            | Supported                                                    |
+| Parent          | Not supported                                        | Can update `parent` label ID                                 |
 
 ## Migration Notes
 

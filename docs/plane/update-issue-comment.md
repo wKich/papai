@@ -10,6 +10,7 @@ updateIssueComment({ apiKey, commentId, body }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.updateComment(commentId, { body })
@@ -31,11 +32,11 @@ const client = new PlaneClient({ apiKey })
 const updated = await client.workItems.comments.update(
   workspaceSlug,
   projectId,
-  workItemId,     // Linear does NOT require this — Plane does
+  workItemId, // Linear does NOT require this — Plane does
   commentId,
   {
-    comment_html: `<p>${body}</p>`,   // Linear: Markdown → Plane: HTML
-  }
+    comment_html: `<p>${body}</p>`, // Linear: Markdown → Plane: HTML
+  },
 )
 
 // Returns updated WorkItemComment
@@ -46,12 +47,12 @@ const updated = await client.workItems.comments.update(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Required params | `commentId` + `body` | `workspaceSlug` + `projectId` + `workItemId` + `commentId` + `comment_html` |
-| Body format | Markdown string `body` | HTML string `comment_html` |
-| Return value | `{ id, body, url }` | Full `WorkItemComment` object (no `url`) |
-| URL | Direct `url` property | Must construct manually |
+| Aspect          | Linear                 | Plane                                                                       |
+| --------------- | ---------------------- | --------------------------------------------------------------------------- |
+| Required params | `commentId` + `body`   | `workspaceSlug` + `projectId` + `workItemId` + `commentId` + `comment_html` |
+| Body format     | Markdown string `body` | HTML string `comment_html`                                                  |
+| Return value    | `{ id, body, url }`    | Full `WorkItemComment` object (no `url`)                                    |
+| URL             | Direct `url` property  | Must construct manually                                                     |
 
 ## Migration Notes
 

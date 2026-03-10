@@ -10,6 +10,7 @@ archiveIssue({ apiKey, issueId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.archiveIssue(issueId)
@@ -32,14 +33,9 @@ const client = new PlaneClient({ apiKey })
 
 const now = new Date().toISOString().split('T')[0] // YYYY-MM-DD
 
-const updated = await client.workItems.update(
-  workspaceSlug,
-  projectId,
-  workItemId,
-  {
-    archived_at: now,
-  }
-)
+const updated = await client.workItems.update(workspaceSlug, projectId, workItemId, {
+  archived_at: now,
+})
 
 // Returns updated WorkItem with archived_at set
 // { id, name, sequence_id, archived_at, ... }
@@ -51,13 +47,13 @@ To check if a work item is archived, inspect `workItem.archived_at !== null`.
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Operation | Dedicated `archiveIssue()` mutation | Set `archived_at` field via `update()` |
-| Return value | `{ id, identifier, title, archivedAt }` | Full `WorkItem` object |
-| Reversible | Linear has `unarchiveIssue()` | Set `archived_at: null` to unarchive |
-| Identifier | `identifier` e.g. `ENG-42` | Must construct from `${project.identifier}-${sequence_id}` |
-| Date format | ISO 8601 datetime string | YYYY-MM-DD string (date only) |
+| Aspect       | Linear                                  | Plane                                                      |
+| ------------ | --------------------------------------- | ---------------------------------------------------------- |
+| Operation    | Dedicated `archiveIssue()` mutation     | Set `archived_at` field via `update()`                     |
+| Return value | `{ id, identifier, title, archivedAt }` | Full `WorkItem` object                                     |
+| Reversible   | Linear has `unarchiveIssue()`           | Set `archived_at: null` to unarchive                       |
+| Identifier   | `identifier` e.g. `ENG-42`              | Must construct from `${project.identifier}-${sequence_id}` |
+| Date format  | ISO 8601 datetime string                | YYYY-MM-DD string (date only)                              |
 
 ## Migration Notes
 

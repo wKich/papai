@@ -251,14 +251,14 @@ This means `htmlToMarkdown` is not a general HTML→Markdown converter. It must 
 
 Practical implications for `turndown` configuration:
 
-| Turndown option          | Required value            | Reason                                                            |
-| ------------------------ | ------------------------- | ----------------------------------------------------------------- |
-| `headingStyle`           | `'atx'` (`# H1`)         | `marked` parses both, but ATX is the canonical form              |
-| `codeBlockStyle`         | `'fenced'`                | `marked` renders fenced blocks with `class="language-*"`          |
-| `fence`                  | `` '`\`\`' ``             | Match `marked`'s expected delimiter                               |
-| `bulletListMarker`       | `'-'`                     | `marked` handles all; `-` matches LLM output convention          |
-| `strongDelimiter`        | `'**'`                    | `marked` renders `**` as `<strong>`; `__` is also valid but avoid |
-| TipTap task list rule    | `- [ ]` / `- [x]`        | `marked` with `gfm: true` converts these to list items            |
+| Turndown option       | Required value    | Reason                                                            |
+| --------------------- | ----------------- | ----------------------------------------------------------------- |
+| `headingStyle`        | `'atx'` (`# H1`)  | `marked` parses both, but ATX is the canonical form               |
+| `codeBlockStyle`      | `'fenced'`        | `marked` renders fenced blocks with `class="language-*"`          |
+| `fence`               | ``'`\`\`'``       | Match `marked`'s expected delimiter                               |
+| `bulletListMarker`    | `'-'`             | `marked` handles all; `-` matches LLM output convention           |
+| `strongDelimiter`     | `'**'`            | `marked` renders `**` as `<strong>`; `__` is also valid but avoid |
+| TipTap task list rule | `- [ ]` / `- [x]` | `marked` with `gfm: true` converts these to list items            |
 
 The LLM reads Markdown and writes Markdown — it never sees HTML. The HTML is only an intermediate representation for Plane storage. As long as `htmlToMarkdown` outputs Markdown that `marked` processes identically to typical LLM Markdown output, the pipeline is consistent.
 

@@ -477,21 +477,23 @@ required for unarchiving. This mirrors Linear's `unarchiveIssue()` cleanly.
 
 ### Open Questions
 
-| Question                                                                                             | Status                                                                                                                                                                                                                                                                                     |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Does `/api/workspaces/.../work-items/{id}/archive/` exist in addition to the `/issues/` path?        | **VERIFIED**: The internal `/api/` endpoint uses `/issues/` path. No `/work-items/` variant is documented. The `/issues/` path is deprecated in the public API but still used internally.                                                                                                 |
-| Does passing `archived_at` via the standard `PATCH /api/v1/…/work-items/{id}/` actually work?        | **CONFIRMED NOT SUPPORTED** — The PATCH endpoint only accepts 13 fields as documented; `archived_at` is not among them. The backend will silently ignore this field.                                                                                                                       |
-| Will a future SDK version add `archived_at` to `UpdateWorkItem` or add `client.workItems.archive()`? | No open issue/PR found as of March 2026. Monitor SDK releases.                                                                                                                                                                                                                             |
-| Are there self-hosted Plane deployments where the `/api/` router is not accessible from API clients? | **VERIFIED**: The `/api/` router is available in self-hosted, BUT uses **session-based auth**, not API key auth. The public `/api/v1/` uses API keys. Calling `/api/` with API key may fail with 401/403.                                                                                                                                                          |
+| Question                                                                                             | Status                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does `/api/workspaces/.../work-items/{id}/archive/` exist in addition to the `/issues/` path?        | **VERIFIED**: The internal `/api/` endpoint uses `/issues/` path. No `/work-items/` variant is documented. The `/issues/` path is deprecated in the public API but still used internally.                 |
+| Does passing `archived_at` via the standard `PATCH /api/v1/…/work-items/{id}/` actually work?        | **CONFIRMED NOT SUPPORTED** — The PATCH endpoint only accepts 13 fields as documented; `archived_at` is not among them. The backend will silently ignore this field.                                      |
+| Will a future SDK version add `archived_at` to `UpdateWorkItem` or add `client.workItems.archive()`? | No open issue/PR found as of March 2026. Monitor SDK releases.                                                                                                                                            |
+| Are there self-hosted Plane deployments where the `/api/` router is not accessible from API clients? | **VERIFIED**: The `/api/` router is available in self-hosted, BUT uses **session-based auth**, not API key auth. The public `/api/v1/` uses API keys. Calling `/api/` with API key may fail with 401/403. |
 
 ### Self-Hosted Authentication Warning
 
 **CRITICAL**: The internal `/api/` endpoints (including the archive endpoint) use **session-based authentication**, not API key authentication.
 
 According to Plane's test documentation:
+
 > "Plane exposes two distinct types of API endpoints. The External API, available at `/api/v1/`, uses API key authentication via the `X-Api-Key` header... The Web App API, available at `/api/`, uses session-based authentication (with CSRF disabled) and is intended for the web application's frontend."
 
 **Implications**:
+
 1. The archive endpoint at `/api/.../archive/` may reject API key authentication
 2. Self-hosted instances have the same two-tier API structure as Plane Cloud
 3. Some internal endpoints MAY accept API keys, but this is undocumented
@@ -521,6 +523,7 @@ class BaseSessionAuthentication(SessionAuthentication):
 ```
 
 **What this means**:
+
 - `BaseSessionAuthentication` inherits from Django REST Framework's `SessionAuthentication`
 - It **only** reads the `sessionid` cookie from the request
 - It **never** checks `X-Api-Key` headers
@@ -562,11 +565,7 @@ class BaseSessionAuthentication(SessionAuthentication):
 If API keys don't work, use session cookies by logging in programmatically:
 
 ```typescript
-async function getSessionCookie(
-  baseUrl: string,
-  email: string,
-  password: string
-): Promise<string> {
+async function getSessionCookie(baseUrl: string, email: string, password: string): Promise<string> {
   // Step 1: Login to get session cookie
   const loginResponse = await fetch(`${baseUrl}/api/sign-in/`, {
     method: 'POST',
@@ -575,17 +574,17 @@ async function getSessionCookie(
     },
     body: JSON.stringify({ email, password }),
   })
-  
+
   if (!loginResponse.ok) {
     throw new Error('Login failed')
   }
-  
+
   // Extract session cookie from response
   const setCookieHeader = loginResponse.headers.get('set-cookie')
   if (!setCookieHeader) {
     throw new Error('No session cookie returned')
   }
-  
+
   // Parse sessionid from cookie string
   const sessionMatch = setCookieHeader.match(/sessionid=([^;]+)/)
   return sessionMatch ? sessionMatch[1] : ''
@@ -598,21 +597,21 @@ async function archiveWithSession(
   password: string,
   workspace: string,
   project: string,
-  issueId: string
+  issueId: string,
 ) {
   const sessionId = await getSessionCookie(baseUrl, email, password)
-  
+
   const response = await fetch(
     `${baseUrl}/api/workspaces/${workspace}/projects/${project}/issues/${issueId}/archive/`,
     {
       method: 'POST',
       headers: {
-        'Cookie': `sessionid=${sessionId}`,
+        Cookie: `sessionid=${sessionId}`,
         'Content-Type': 'application/json',
       },
-    }
+    },
   )
-  
+
   return response.json()
 }
 ```
@@ -634,7 +633,7 @@ const response = await client.workItems.update(
   issueId,
   {
     archived_at: new Date().toISOString().split('T')[0], // YYYY-MM-DD
-  } as any  // Type assertion to bypass TS
+  } as any, // Type assertion to bypass TS
 )
 
 // Verify it actually archived
@@ -656,25 +655,20 @@ if (issue?.archived_at) {
 If you can't actually archive, move to "completed" state as a workaround:
 
 ```typescript
-async function pseudoArchive(
-  client: PlaneClient,
-  workspace: string,
-  project: string,
-  issueId: string
-) {
+async function pseudoArchive(client: PlaneClient, workspace: string, project: string, issueId: string) {
   // Get "completed" state
   const states = await client.states.list(workspace, project)
-  const completedState = states.results.find(s => s.group === 'completed')
-  
+  const completedState = states.results.find((s) => s.group === 'completed')
+
   if (!completedState) {
     throw new Error('No completed state found')
   }
-  
+
   // Move to completed (closest we can get to archiving via public API)
   await client.workItems.update(workspace, project, issueId, {
     state: completedState.id,
   })
-  
+
   console.log('⚠️ Issue moved to completed state (not truly archived)')
 }
 ```
@@ -718,7 +712,7 @@ If you control the database:
 import { Pool } from 'pg'
 
 const pool = new Pool({
-  connectionString: process.env.PLANE_DATABASE_URL
+  connectionString: process.env.PLANE_DATABASE_URL,
 })
 
 async function archiveViaDb(issueId: string) {
@@ -730,9 +724,9 @@ async function archiveViaDb(issueId: string) {
          SELECT id FROM states WHERE "group" IN ('completed', 'cancelled')
        )
      RETURNING archived_at`,
-    [issueId]
+    [issueId],
   )
-  
+
   return result.rows[0]?.archived_at
 }
 ```
@@ -752,11 +746,11 @@ async function archiveViaDb(issueId: string) {
 
 **Decision Matrix**:
 
-| Deployment | Recommended Solution | Why |
-|------------|---------------------|-----|
+| Deployment      | Recommended Solution          | Why                            |
+| --------------- | ----------------------------- | ------------------------------ |
 | **Plane Cloud** | **Solution B** (session auth) | Only option that works via API |
-| **Self-hosted** | **Solution F** (DB access) | Most reliable, no auth issues |
-| **Both** | Submit feature request | Proper long-term fix
+| **Self-hosted** | **Solution F** (DB access)    | Most reliable, no auth issues  |
+| **Both**        | Submit feature request        | Proper long-term fix           |
 
 ### Testing Requirements
 

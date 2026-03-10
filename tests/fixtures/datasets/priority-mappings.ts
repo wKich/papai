@@ -1,6 +1,6 @@
 /**
  * Priority Mapping Between Linear and Plane
- * 
+ *
  * Linear: 0-4 (numeric)
  * Plane: 'none', 'urgent', 'high', 'medium', 'low' (string enum)
  */
@@ -24,8 +24,8 @@ export const PLANE_TO_LINEAR_PRIORITY: Record<string, number> = {
 export const VALID_LINEAR_PRIORITIES = [0, 1, 2, 3, 4] as const
 export const VALID_PLANE_PRIORITIES = ['none', 'urgent', 'high', 'medium', 'low'] as const
 
-export type LinearPriority = typeof VALID_LINEAR_PRIORITIES[number]
-export type PlanePriority = typeof VALID_PLANE_PRIORITIES[number]
+export type LinearPriority = (typeof VALID_LINEAR_PRIORITIES)[number]
+export type PlanePriority = (typeof VALID_PLANE_PRIORITIES)[number]
 
 /**
  * Convert Linear priority to Plane priority

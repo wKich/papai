@@ -1,6 +1,6 @@
 /**
  * Test Utilities and Helpers
- * 
+ *
  * Shared utilities for test setup, assertions, and helpers
  */
 
@@ -10,7 +10,7 @@ import { expect } from 'bun:test'
  * Wait for a specified duration
  */
 export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -18,12 +18,12 @@ export function sleep(ms: number): Promise<void> {
  */
 export async function retry<T>(
   fn: () => Promise<T>,
-  options: { maxRetries?: number; delay?: number } = {}
+  options: { maxRetries?: number; delay?: number } = {},
 ): Promise<T> {
   const { maxRetries = 3, delay = 100 } = options
-  
+
   let lastError: Error | undefined
-  
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn()
@@ -34,7 +34,7 @@ export async function retry<T>(
       }
     }
   }
-  
+
   throw lastError ?? new Error('Operation failed after retries')
 }
 
@@ -49,7 +49,9 @@ export function generateTestId(prefix: string = 'test'): string {
  * Generate a random string
  */
 export function generateRandomString(length: number = 10): string {
-  return Math.random().toString(36).substring(2, 2 + length)
+  return Math.random()
+    .toString(36)
+    .substring(2, 2 + length)
 }
 
 /**
@@ -57,17 +59,17 @@ export function generateRandomString(length: number = 10): string {
  */
 export function expectError(
   error: unknown,
-  expected: { code?: string; message?: string | RegExp; status?: number }
+  expected: { code?: string; message?: string | RegExp; status?: number },
 ): void {
   if (!(error instanceof Error)) {
     throw new Error(`Expected Error but got ${typeof error}`)
   }
-  
+
   if (expected.code !== undefined) {
     const errorCode = (error as any).code
     expect(errorCode).toBe(expected.code)
   }
-  
+
   if (expected.message !== undefined) {
     if (expected.message instanceof RegExp) {
       expect(error.message).toMatch(expected.message)
@@ -75,7 +77,7 @@ export function expectError(
       expect(error.message).toContain(expected.message)
     }
   }
-  
+
   if (expected.status !== undefined) {
     const errorStatus = (error as any).status
     expect(errorStatus).toBe(expected.status)
@@ -85,11 +87,7 @@ export function expectError(
 /**
  * Assert that two dates are close (within tolerance)
  */
-export function expectDatesClose(
-  actual: string | Date,
-  expected: string | Date,
-  toleranceMs: number = 1000
-): void {
+export function expectDatesClose(actual: string | Date, expected: string | Date, toleranceMs: number = 1000): void {
   const actualDate = typeof actual === 'string' ? new Date(actual) : actual
   const expectedDate = typeof expected === 'string' ? new Date(expected) : expected
   const diff = Math.abs(actualDate.getTime() - expectedDate.getTime())
@@ -108,7 +106,7 @@ export function expectUnique<T>(array: T[]): void {
  */
 export function expectShape(
   obj: Record<string, unknown>,
-  shape: Record<string, 'string' | 'number' | 'boolean' | 'object' | 'array' | 'undefined'>
+  shape: Record<string, 'string' | 'number' | 'boolean' | 'object' | 'array' | 'undefined'>,
 ): void {
   for (const [key, type] of Object.entries(shape)) {
     const value = obj[key]
@@ -155,8 +153,8 @@ export function markdownToHtml(markdown: string): string {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     // Paragraphs
     .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[hlu\/<])(.+)$/gim, '<p>$1</p>')
-  
+    .replace(/^(?!<[hlu/<])(.+)$/gim, '<p>$1</p>')
+
   return `<div>${html}</div>`
 }
 
@@ -199,7 +197,5 @@ export function isDefined<T>(value: T | null | undefined): value is T {
  * Filter out undefined/null values from object
  */
 export function compact<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => isDefined(v))
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => isDefined(v))) as Partial<T>
 }

@@ -10,6 +10,7 @@ createProject({ apiKey, teamId, name, description }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.createProject({ teamIds: [teamId], name, description })
@@ -32,15 +33,15 @@ const client = new PlaneClient({ apiKey })
 
 const module = await client.modules.create(
   workspaceSlug,
-  projectId,       // the Plane Project this module belongs to (= Linear teamId)
+  projectId, // the Plane Project this module belongs to (= Linear teamId)
   {
     name,
     description,
     // Optional timeline fields:
-    start_date: undefined,   // YYYY-MM-DD
-    target_date: undefined,  // YYYY-MM-DD
+    start_date: undefined, // YYYY-MM-DD
+    target_date: undefined, // YYYY-MM-DD
     status: 'IN_PROGRESS',
-  }
+  },
 )
 
 // Returns Module { id, name, description, start_date, target_date, status, ... }
@@ -49,15 +50,12 @@ const module = await client.modules.create(
 ### Option B — Create a Plane Project (≈ Linear Team)
 
 ```typescript
-const project = await client.projects.create(
-  workspaceSlug,
-  {
-    name,
-    description: description ?? '',
-    identifier,    // auto-generated from name if omitted; e.g. 'ENG'
-    network: 0,    // 0=secret, 2=public
-  }
-)
+const project = await client.projects.create(workspaceSlug, {
+  name,
+  description: description ?? '',
+  identifier, // auto-generated from name if omitted; e.g. 'ENG'
+  network: 0, // 0=secret, 2=public
+})
 
 // Returns Project { id, name, identifier, workspace, ... }
 ```
@@ -66,14 +64,14 @@ const project = await client.projects.create(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Concept | Project (feature grouping) | Module (if Linear Project) or Project (if Linear Team) |
-| Scope param | `teamIds: [teamId]` | `workspaceSlug` + `projectId` for Module |
-| URL field | `url` in return value | No `url` field — must construct manually |
-| Identifier | Auto-generated | Configurable `identifier` prefix (e.g. `ENG`) |
-| Status | Not applicable | Module has `status` field |
-| Timeline | Not in create | Module supports `start_date` + `target_date` |
+| Aspect      | Linear                     | Plane                                                  |
+| ----------- | -------------------------- | ------------------------------------------------------ |
+| Concept     | Project (feature grouping) | Module (if Linear Project) or Project (if Linear Team) |
+| Scope param | `teamIds: [teamId]`        | `workspaceSlug` + `projectId` for Module               |
+| URL field   | `url` in return value      | No `url` field — must construct manually               |
+| Identifier  | Auto-generated             | Configurable `identifier` prefix (e.g. `ENG`)          |
+| Status      | Not applicable             | Module has `status` field                              |
+| Timeline    | Not in create              | Module supports `start_date` + `target_date`           |
 
 ## Migration Notes
 

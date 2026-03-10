@@ -10,6 +10,7 @@ removeIssueComment({ apiKey, commentId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 await client.deleteComment(commentId)
@@ -30,7 +31,7 @@ const client = new PlaneClient({ apiKey })
 await client.workItems.comments.delete(
   workspaceSlug,
   projectId,
-  workItemId,    // Linear does NOT need this — Plane does
+  workItemId, // Linear does NOT need this — Plane does
   commentId,
 )
 
@@ -41,11 +42,11 @@ await client.workItems.comments.delete(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Required params | `commentId` only | `workspaceSlug` + `projectId` + `workItemId` + `commentId` |
-| Return value | `{ id, success: true }` | `void` |
-| Comment lookup | By comment ID globally | Comment ID must be within the known work item scope |
+| Aspect          | Linear                  | Plane                                                      |
+| --------------- | ----------------------- | ---------------------------------------------------------- |
+| Required params | `commentId` only        | `workspaceSlug` + `projectId` + `workItemId` + `commentId` |
+| Return value    | `{ id, success: true }` | `void`                                                     |
+| Comment lookup  | By comment ID globally  | Comment ID must be within the known work item scope        |
 
 ## Migration Notes
 

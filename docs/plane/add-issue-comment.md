@@ -10,6 +10,7 @@ addIssueComment({ apiKey, issueId, body }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.createComment({ issueId, body })
@@ -29,12 +30,12 @@ import { PlaneClient } from '@makeplane/plane-node-sdk'
 const client = new PlaneClient({ apiKey })
 
 const comment = await client.workItems.comments.create(
-  workspaceSlug,   // replaces apiKey-scoped workspace
-  projectId,       // Linear: issueId is enough; Plane: needs projectId too
-  workItemId,      // Linear: issueId → Plane: workItemId
+  workspaceSlug, // replaces apiKey-scoped workspace
+  projectId, // Linear: issueId is enough; Plane: needs projectId too
+  workItemId, // Linear: issueId → Plane: workItemId
   {
-    comment_html: `<p>${body}</p>`,  // Plane uses HTML, Linear uses Markdown body
-  }
+    comment_html: `<p>${body}</p>`, // Plane uses HTML, Linear uses Markdown body
+  },
 )
 
 // Returns: WorkItemComment
@@ -45,12 +46,12 @@ const comment = await client.workItems.comments.create(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Scope | `issueId` sufficient | Requires `workspaceSlug` + `projectId` + `workItemId` |
-| Body format | Plain Markdown string (`body`) | HTML string (`comment_html`) |
-| Return value | `{ id, body, url }` | `WorkItemComment` object (no `url` field) |
-| URL | Comment has direct `url` property | Must construct URL manually |
+| Aspect       | Linear                            | Plane                                                 |
+| ------------ | --------------------------------- | ----------------------------------------------------- |
+| Scope        | `issueId` sufficient              | Requires `workspaceSlug` + `projectId` + `workItemId` |
+| Body format  | Plain Markdown string (`body`)    | HTML string (`comment_html`)                          |
+| Return value | `{ id, body, url }`               | `WorkItemComment` object (no `url` field)             |
+| URL          | Comment has direct `url` property | Must construct URL manually                           |
 
 ## Migration Notes
 

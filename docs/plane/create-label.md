@@ -10,6 +10,7 @@ createLabel({ apiKey, teamId, name, color }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.createIssueLabel({ teamId, name, color })
@@ -29,13 +30,13 @@ import { PlaneClient } from '@makeplane/plane-node-sdk'
 const client = new PlaneClient({ apiKey })
 
 const label = await client.labels.create(
-  workspaceSlug,  // workspace identifier
-  projectId,      // Linear: teamId → Plane: projectId
+  workspaceSlug, // workspace identifier
+  projectId, // Linear: teamId → Plane: projectId
   {
-    name,         // same field name
-    color,        // same concept; hex string e.g. '#FF0000'
+    name, // same field name
+    color, // same concept; hex string e.g. '#FF0000'
     // description is optional in Plane, no equivalent in Linear
-  }
+  },
 )
 
 // Returns Label { id, name, color, description, project, workspace, ... }
@@ -45,13 +46,13 @@ const label = await client.labels.create(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Scope | `teamId` | `workspaceSlug` + `projectId` |
-| SDK call | `client.createIssueLabel` | `client.labels.create` |
-| Description | Not supported | Optional `description` field |
-| Return value | `{ id, name, color }` | Full `Label` object |
-| Parent label | Not available | Optional `parent` (label ID) — supports label hierarchy |
+| Aspect       | Linear                    | Plane                                                   |
+| ------------ | ------------------------- | ------------------------------------------------------- |
+| Scope        | `teamId`                  | `workspaceSlug` + `projectId`                           |
+| SDK call     | `client.createIssueLabel` | `client.labels.create`                                  |
+| Description  | Not supported             | Optional `description` field                            |
+| Return value | `{ id, name, color }`     | Full `Label` object                                     |
+| Parent label | Not available             | Optional `parent` (label ID) — supports label hierarchy |
 
 ## Migration Notes
 

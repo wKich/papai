@@ -10,6 +10,7 @@ addIssueLabel({ apiKey, issueId, labelId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.issueAddLabel(issueId, labelId)
@@ -35,20 +36,15 @@ const workItem = await client.workItems.retrieve(
   workspaceSlug,
   projectId,
   workItemId,
-  ['labels']  // expand labels to get full objects
+  ['labels'], // expand labels to get full objects
 )
 
 const currentLabelIds = workItem.labels ?? []
 
 // Step 2: Update with the new label appended
-const updated = await client.workItems.update(
-  workspaceSlug,
-  projectId,
-  workItemId,
-  {
-    labels: [...(currentLabelIds as string[]), labelId],
-  }
-)
+const updated = await client.workItems.update(workspaceSlug, projectId, workItemId, {
+  labels: [...(currentLabelIds as string[]), labelId],
+})
 
 // Returns updated WorkItem
 ```
@@ -57,12 +53,12 @@ const updated = await client.workItems.update(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Operation | Dedicated `issueAddLabel(issueId, labelId)` | Read-modify-write on `labels` array |
-| Atomicity | Single API call | Two API calls (retrieve + update) |
-| Return value | Updated issue `{ id, identifier, title, url }` | Updated `WorkItem` object |
-| Label scope | Labels are per-team | Labels are per-project |
+| Aspect       | Linear                                         | Plane                               |
+| ------------ | ---------------------------------------------- | ----------------------------------- |
+| Operation    | Dedicated `issueAddLabel(issueId, labelId)`    | Read-modify-write on `labels` array |
+| Atomicity    | Single API call                                | Two API calls (retrieve + update)   |
+| Return value | Updated issue `{ id, identifier, title, url }` | Updated `WorkItem` object           |
+| Label scope  | Labels are per-team                            | Labels are per-project              |
 
 ## Migration Notes
 

@@ -1,8 +1,8 @@
 /**
  * Relation Type Mappings Between Linear and Plane
- * 
+ *
  * Linear: 'blocks' | 'blockedBy' | 'duplicate' | 'related'
- * Plane: 'blocking' | 'blocked_by' | 'duplicate' | 'relates_to' | 
+ * Plane: 'blocking' | 'blocked_by' | 'duplicate' | 'relates_to' |
  *        'start_after' | 'start_before' | 'finish_after' | 'finish_before'
  */
 
@@ -21,12 +21,7 @@ export const PLANE_TO_LINEAR_RELATION: Record<string, string> = {
 }
 
 // Plane has additional relation types not in Linear
-export const PLANE_ONLY_RELATIONS = [
-  'start_after',
-  'start_before',
-  'finish_after',
-  'finish_before',
-] as const
+export const PLANE_ONLY_RELATIONS = ['start_after', 'start_before', 'finish_after', 'finish_before'] as const
 
 export const VALID_LINEAR_RELATIONS = ['blocks', 'blockedBy', 'duplicate', 'related'] as const
 export const VALID_PLANE_RELATIONS = [
@@ -37,8 +32,8 @@ export const VALID_PLANE_RELATIONS = [
   ...PLANE_ONLY_RELATIONS,
 ] as const
 
-export type LinearRelation = typeof VALID_LINEAR_RELATIONS[number]
-export type PlaneRelation = typeof VALID_PLANE_RELATIONS[number]
+export type LinearRelation = (typeof VALID_LINEAR_RELATIONS)[number]
+export type PlaneRelation = (typeof VALID_PLANE_RELATIONS)[number]
 
 /**
  * Convert Linear relation type to Plane
@@ -76,5 +71,5 @@ export function isValidPlaneRelation(relation: string): boolean {
  * Check if Plane relation has no Linear equivalent
  */
 export function isPlaneOnlyRelation(relation: string): boolean {
-  return PLANE_ONLY_RELATIONS.includes(relation as typeof PLANE_ONLY_RELATIONS[number])
+  return PLANE_ONLY_RELATIONS.includes(relation as (typeof PLANE_ONLY_RELATIONS)[number])
 }

@@ -10,6 +10,7 @@ removeIssueLabel({ apiKey, issueId, labelId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const payload = await client.issueRemoveLabel(issueId, labelId)
@@ -35,21 +36,16 @@ const workItem = await client.workItems.retrieve(
   workspaceSlug,
   projectId,
   workItemId,
-  ['labels']    // expand to get label objects or IDs
+  ['labels'], // expand to get label objects or IDs
 )
 
-const currentLabelIds = (workItem.labels as string[] ?? [])
+const currentLabelIds = (workItem.labels as string[]) ?? []
 const updatedLabelIds = currentLabelIds.filter((id) => id !== labelId)
 
 // Step 2: Update with the label removed
-const updated = await client.workItems.update(
-  workspaceSlug,
-  projectId,
-  workItemId,
-  {
-    labels: updatedLabelIds,
-  }
-)
+const updated = await client.workItems.update(workspaceSlug, projectId, workItemId, {
+  labels: updatedLabelIds,
+})
 
 // Returns updated WorkItem
 ```
@@ -58,12 +54,12 @@ const updated = await client.workItems.update(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Operation | Dedicated `issueRemoveLabel(issueId, labelId)` | Read-modify-write on `labels` array |
-| Atomicity | Single API call | Two API calls (retrieve + update) |
-| Return value | Updated issue `{ id, identifier, title, url }` | Updated `WorkItem` object |
-| Label scope | Per-team | Per-project |
+| Aspect       | Linear                                         | Plane                               |
+| ------------ | ---------------------------------------------- | ----------------------------------- |
+| Operation    | Dedicated `issueRemoveLabel(issueId, labelId)` | Read-modify-write on `labels` array |
+| Atomicity    | Single API call                                | Two API calls (retrieve + update)   |
+| Return value | Updated issue `{ id, identifier, title, url }` | Updated `WorkItem` object           |
+| Label scope  | Per-team                                       | Per-project                         |
 
 ## Migration Notes
 

@@ -32,26 +32,26 @@ docker-compose up -d
 
 ## System Requirements
 
-| Resource | Minimum | Recommended |
-|----------|-----------|-------------|
-| CPU | 2 cores | 4+ cores |
-| RAM | 4 GB | 8 GB |
-| Disk | 20 GB SSD | 50 GB SSD |
-| OS | Ubuntu 20.04+, Debian 11+, CentOS 8+, macOS, Windows WSL2 |
+| Resource | Minimum                                                   | Recommended |
+| -------- | --------------------------------------------------------- | ----------- |
+| CPU      | 2 cores                                                   | 4+ cores    |
+| RAM      | 4 GB                                                      | 8 GB        |
+| Disk     | 20 GB SSD                                                 | 50 GB SSD   |
+| OS       | Ubuntu 20.04+, Debian 11+, CentOS 8+, macOS, Windows WSL2 |
 
 ## Services Overview
 
-| Service | Image | Purpose | Port (Internal) |
-|---------|-------|---------|-----------------|
-| `web` | makeplane/plane-frontend | React frontend | 3000 |
-| `space` | makeplane/plane-space | Workspace app | 3000 |
-| `api` | makeplane/plane-backend | Django REST API | 8000 |
-| `worker` | makeplane/plane-worker | Background tasks | - |
-| `beat-worker` | makeplane/plane-worker | Scheduled tasks | - |
-| `postgres` | postgres:15-alpine | PostgreSQL database | 5432 |
-| `redis` | redis:7-alpine | Redis cache | 6379 |
-| `minio` | minio/minio | Object storage | 9000 |
-| `proxy` | nginx:alpine | Reverse proxy | 80, 443 |
+| Service       | Image                    | Purpose             | Port (Internal) |
+| ------------- | ------------------------ | ------------------- | --------------- |
+| `web`         | makeplane/plane-frontend | React frontend      | 3000            |
+| `space`       | makeplane/plane-space    | Workspace app       | 3000            |
+| `api`         | makeplane/plane-backend  | Django REST API     | 8000            |
+| `worker`      | makeplane/plane-worker   | Background tasks    | -               |
+| `beat-worker` | makeplane/plane-worker   | Scheduled tasks     | -               |
+| `postgres`    | postgres:15-alpine       | PostgreSQL database | 5432            |
+| `redis`       | redis:7-alpine           | Redis cache         | 6379            |
+| `minio`       | minio/minio              | Object storage      | 9000            |
+| `proxy`       | nginx:alpine             | Reverse proxy       | 80, 443         |
 
 ## Configuration
 

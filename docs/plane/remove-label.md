@@ -10,6 +10,7 @@ removeLabel({ apiKey, labelId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 await client.deleteIssueLabel(labelId)
@@ -29,7 +30,7 @@ const client = new PlaneClient({ apiKey })
 
 await client.labels.delete(
   workspaceSlug,
-  projectId,      // required in Plane; not needed in Linear
+  projectId, // required in Plane; not needed in Linear
   labelId,
 )
 
@@ -40,11 +41,11 @@ await client.labels.delete(
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Required params | `labelId` only | `workspaceSlug` + `projectId` + `labelId` |
-| Return value | `{ id, success: true }` | `void` |
-| SDK method | `client.deleteIssueLabel(labelId)` | `client.labels.delete(slug, projectId, labelId)` |
+| Aspect          | Linear                             | Plane                                            |
+| --------------- | ---------------------------------- | ------------------------------------------------ |
+| Required params | `labelId` only                     | `workspaceSlug` + `projectId` + `labelId`        |
+| Return value    | `{ id, success: true }`            | `void`                                           |
+| SDK method      | `client.deleteIssueLabel(labelId)` | `client.labels.delete(slug, projectId, labelId)` |
 
 ## Migration Notes
 

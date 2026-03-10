@@ -10,6 +10,7 @@ getIssueComments({ apiKey, issueId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const issue = await client.issue(issueId)
@@ -32,15 +33,15 @@ const response = await client.workItems.comments.list(
   workspaceSlug,
   projectId,
   workItemId,
-  { limit: 100 }    // optional pagination
+  { limit: 100 }, // optional pagination
 )
 
 // Returns PaginatedResponse<WorkItemComment>
 // { results: WorkItemComment[], total_count, next_cursor, ... }
 
-const comments = response.results.map(c => ({
+const comments = response.results.map((c) => ({
   id: c.id,
-  body: c.comment_html,               // HTML, not Markdown
+  body: c.comment_html, // HTML, not Markdown
   createdAt: new Date(c.created_at),
 }))
 ```
@@ -49,13 +50,13 @@ const comments = response.results.map(c => ({
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Scope | `issueId` only | `workspaceSlug` + `projectId` + `workItemId` |
-| Body field | `body` (Markdown) | `comment_html` (HTML) |
-| Pagination | Returns all (no pagination) | `PaginatedResponse` — paginate with `limit` + `offset` |
-| Return type | Flat array | Wrapped in `PaginatedResponse<WorkItemComment>` |
-| Author | `user.displayName` on comment | `created_by` is a user ID, not a name |
+| Aspect      | Linear                        | Plane                                                  |
+| ----------- | ----------------------------- | ------------------------------------------------------ |
+| Scope       | `issueId` only                | `workspaceSlug` + `projectId` + `workItemId`           |
+| Body field  | `body` (Markdown)             | `comment_html` (HTML)                                  |
+| Pagination  | Returns all (no pagination)   | `PaginatedResponse` — paginate with `limit` + `offset` |
+| Return type | Flat array                    | Wrapped in `PaginatedResponse<WorkItemComment>`        |
+| Author      | `user.displayName` on comment | `created_by` is a user ID, not a name                  |
 
 ## Migration Notes
 

@@ -10,6 +10,7 @@ archiveProject({ apiKey, projectId }):
 ```
 
 **Linear SDK call**:
+
 ```typescript
 const client = new LinearClient({ apiKey })
 const project = await client.project(projectId)
@@ -37,9 +38,9 @@ const client = new PlaneClient({ apiKey })
 // Mark module as completed (closest to "archived")
 const updated = await client.modules.update(
   workspaceSlug,
-  projectId,       // Plane Project ID (= Linear Team ID)
-  moduleId,        // Plane Module ID (= Linear Project ID)
-  { status: 'COMPLETED' }
+  projectId, // Plane Project ID (= Linear Team ID)
+  moduleId, // Plane Module ID (= Linear Project ID)
+  { status: 'COMPLETED' },
 )
 ```
 
@@ -55,23 +56,19 @@ await client.modules.delete(workspaceSlug, projectId, moduleId)
 Plane projects have an `archived_at` field; set it via update:
 
 ```typescript
-const updated = await client.projects.update(
-  workspaceSlug,
-  planeProjectId,
-  { archived_at: new Date() }
-)
+const updated = await client.projects.update(workspaceSlug, planeProjectId, { archived_at: new Date() })
 ```
 
 ---
 
 ## Key Differences
 
-| Aspect | Linear | Plane |
-|--------|--------|-------|
-| Terminology | "Project" | Module (if Linear Team→Project mapping), or Project (if Linear Project→Module mapping) |
-| Operation | Dedicated `archive()` method on project | No dedicated archive; use `update(status: 'COMPLETED')` or `delete()` |
-| Return value | `{ id, success: true }` | Updated Module/Project object or `void` |
-| Reversibility | Linear has `unarchiveProject()` | Set `status` back or restore via update |
+| Aspect        | Linear                                  | Plane                                                                                  |
+| ------------- | --------------------------------------- | -------------------------------------------------------------------------------------- |
+| Terminology   | "Project"                               | Module (if Linear Team→Project mapping), or Project (if Linear Project→Module mapping) |
+| Operation     | Dedicated `archive()` method on project | No dedicated archive; use `update(status: 'COMPLETED')` or `delete()`                  |
+| Return value  | `{ id, success: true }`                 | Updated Module/Project object or `void`                                                |
+| Reversibility | Linear has `unarchiveProject()`         | Set `status` back or restore via update                                                |
 
 ## Migration Notes
 

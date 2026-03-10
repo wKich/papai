@@ -1,12 +1,13 @@
 /**
  * Migration Test: createIssue
- * 
+ *
  * Tests that Linear issue data correctly transforms to Plane work item format
  */
 
 import { describe, expect, test, beforeAll } from 'bun:test'
-import { skipIfNoPlaneApi } from '../setup.js'
+
 import { LINEAR_TO_PLANE_PRIORITY } from '../fixtures/datasets/priority-mappings.js'
+import { skipIfNoPlaneApi } from '../setup.js'
 
 describe('createIssue Migration', () => {
   beforeAll(() => {

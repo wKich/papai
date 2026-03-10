@@ -5,6 +5,7 @@ Test suite for validating Linear to Plane migration and Plane E2E functionality.
 ## Overview
 
 This test suite focuses on:
+
 1. **Migration Tests**: Testing data transformation from Linear to Plane
 2. **Plane E2E Tests**: Testing actual Plane API functionality
 
@@ -109,15 +110,16 @@ Validate that Linear data correctly transforms and imports to Plane:
 - Date/estimate transformations
 
 Example:
+
 ```typescript
 test('transforms Linear issue to Plane work item', async () => {
   const linearIssue = { title: 'Bug', priority: 2 }
-  
+
   const planeWorkItem = await createPlaneWorkItem({
     name: linearIssue.title,
-    priority: LINEAR_TO_PLANE_PRIORITY[linearIssue.priority] // 'high'
+    priority: LINEAR_TO_PLANE_PRIORITY[linearIssue.priority], // 'high'
   })
-  
+
   expect(planeWorkItem.name).toBe('Bug')
   expect(planeWorkItem.priority).toBe('high')
 })
@@ -134,6 +136,7 @@ Test actual Plane API functionality:
 - Error handling
 
 Example:
+
 ```typescript
 test('creates work item with all fields', async () => {
   const workItem = await client.workItems.create(workspace, project, {
@@ -141,7 +144,7 @@ test('creates work item with all fields', async () => {
     priority: 'high',
     target_date: '2025-03-15',
   })
-  
+
   expect(workItem.id).toBeDefined()
   expect(workItem.name).toBe('Feature')
 })

@@ -1,6 +1,6 @@
 /**
  * Test Configuration
- * 
+ *
  * Shared configuration and utilities for all tests
  */
 
@@ -9,14 +9,14 @@
  */
 export const TEST_CONFIG = {
   plane: {
-    apiKey: process.env['PLANE_TEST_API_KEY'] || '',
-    workspaceSlug: process.env['PLANE_TEST_WORKSPACE'] || '',
-    projectId: process.env['PLANE_TEST_PROJECT_ID'] || '',
-    baseUrl: process.env['PLANE_TEST_URL'] || 'https://api.plane.so',
+    apiKey: process.env['PLANE_TEST_API_KEY'] ?? '',
+    workspaceSlug: process.env['PLANE_TEST_WORKSPACE'] ?? '',
+    projectId: process.env['PLANE_TEST_PROJECT_ID'] ?? '',
+    baseUrl: process.env['PLANE_TEST_URL'] ?? 'https://api.plane.so',
   },
   linear: {
-    apiKey: process.env['LINEAR_TEST_API_KEY'] || '',
-    teamId: process.env['LINEAR_TEST_TEAM_ID'] || '',
+    apiKey: process.env['LINEAR_TEST_API_KEY'] ?? '',
+    teamId: process.env['LINEAR_TEST_TEAM_ID'] ?? '',
   },
 }
 
@@ -24,20 +24,14 @@ export const TEST_CONFIG = {
  * Check if Plane API configuration is available
  */
 export function hasPlaneConfig(): boolean {
-  return Boolean(
-    TEST_CONFIG.plane.apiKey &&
-    TEST_CONFIG.plane.workspaceSlug
-  )
+  return Boolean(TEST_CONFIG.plane.apiKey && TEST_CONFIG.plane.workspaceSlug)
 }
 
 /**
  * Check if Linear API configuration is available
  */
 export function hasLinearConfig(): boolean {
-  return Boolean(
-    TEST_CONFIG.linear.apiKey &&
-    TEST_CONFIG.linear.teamId
-  )
+  return Boolean(TEST_CONFIG.linear.apiKey && TEST_CONFIG.linear.teamId)
 }
 
 /**
@@ -45,9 +39,7 @@ export function hasLinearConfig(): boolean {
  */
 export function skipIfNoPlaneApi(): void {
   if (!hasPlaneConfig()) {
-    throw new Error(
-      'Plane API not configured. Set PLANE_TEST_API_KEY and PLANE_TEST_WORKSPACE environment variables.'
-    )
+    throw new Error('Plane API not configured. Set PLANE_TEST_API_KEY and PLANE_TEST_WORKSPACE environment variables.')
   }
 }
 
@@ -56,9 +48,7 @@ export function skipIfNoPlaneApi(): void {
  */
 export function skipIfNoLinearApi(): void {
   if (!hasLinearConfig()) {
-    throw new Error(
-      'Linear API not configured. Set LINEAR_TEST_API_KEY and LINEAR_TEST_TEAM_ID environment variables.'
-    )
+    throw new Error('Linear API not configured. Set LINEAR_TEST_API_KEY and LINEAR_TEST_TEAM_ID environment variables.')
   }
 }
 
