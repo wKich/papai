@@ -220,6 +220,14 @@ function buildRelations(issue: LinearIssue, linearIdToKaneoId: Map<string, strin
       relations.push({ type, taskId: kaneoRelatedId })
     }
   }
+
+  if (issue.parent !== null) {
+    const kaneoParentId = linearIdToKaneoId.get(issue.parent.id)
+    if (kaneoParentId !== undefined) {
+      relations.push({ type: 'parent', taskId: kaneoParentId })
+    }
+  }
+
   return relations
 }
 

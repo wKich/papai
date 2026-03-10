@@ -85,6 +85,7 @@ export type LinearIssue = {
   comments: { nodes: LinearComment[] }
   relations: { nodes: LinearRelation[] }
   project: { id: string; name: string } | null
+  parent: { id: string; identifier: string } | null
 }
 
 // --- Fetchers ---
@@ -181,6 +182,7 @@ export async function fetchAllIssues(config: LinearConfig): Promise<LinearIssue[
               }
             }
             project { id name }
+            parent { id identifier }
           }
         }
       }

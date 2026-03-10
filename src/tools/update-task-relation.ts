@@ -15,8 +15,10 @@ export function makeUpdateTaskRelationTool(kaneoConfig: KaneoConfig): ToolSet[st
       taskId: z.string().describe('Kaneo task ID'),
       relatedTaskId: z.string().describe('Kaneo task ID of the related task'),
       type: z
-        .enum(['blocks', 'duplicate', 'related'])
-        .describe("'blocks': this task blocks the other; 'duplicate': marks as duplicate; 'related': general"),
+        .enum(['blocks', 'duplicate', 'related', 'parent'])
+        .describe(
+          "'blocks': this task blocks the other; 'duplicate': marks as duplicate; 'related': general; 'parent': this task is a child of the related task",
+        ),
     }),
     execute: async ({ taskId, relatedTaskId, type }) => {
       try {
