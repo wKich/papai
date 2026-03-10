@@ -28,6 +28,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@makeplane/plane-node-sdk": "^0.2.8",
     "@types/bun": "latest",
     "oxfmt": "^0.36.0",
     "oxlint": "latest",
