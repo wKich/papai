@@ -16,11 +16,11 @@ function isColumnItem(item: unknown): item is ColumnItem {
     item !== null &&
     typeof item === 'object' &&
     'id' in item &&
-    typeof (item as Record<string, unknown>).id === 'string' &&
+    typeof (item as Record<string, unknown>)['id'] === 'string' &&
     'name' in item &&
-    typeof (item as Record<string, unknown>).name === 'string' &&
+    typeof (item as Record<string, unknown>)['name'] === 'string' &&
     'position' in item &&
-    typeof (item as Record<string, unknown>).position === 'number'
+    typeof (item as Record<string, unknown>)['position'] === 'number'
   )
 }
 
@@ -51,13 +51,14 @@ describe('Column Tools', () => {
       }))
 
       const tool = makeListColumnsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isColumnArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(3)
-      expect(result[0].name).toBe('todo')
-      expect(result[1].name).toBe('in-progress')
-      expect(result[2].name).toBe('done')
+      expect(result[0]?.name).toBe('todo')
+      expect(result[1]?.name).toBe('in-progress')
+      expect(result[2]?.name).toBe('done')
     })
 
     test('returns empty array when no columns', async () => {
@@ -66,6 +67,7 @@ describe('Column Tools', () => {
       }))
 
       const tool = makeListColumnsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -82,6 +84,7 @@ describe('Column Tools', () => {
       }))
 
       const tool = makeListColumnsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ projectId: 'proj-123' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['projectId']).toBe('proj-123')
@@ -147,6 +150,7 @@ describe('Column Tools', () => {
       }))
 
       const tool = makeListColumnsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isColumnArray(result)) throw new Error('Invalid result')
 

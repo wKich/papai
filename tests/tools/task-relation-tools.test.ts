@@ -47,7 +47,7 @@ describe('Task Relation Tools', () => {
       }))
 
       const tool = makeAddTaskRelationTool(mockConfig)
-      const result: unknown = await tool.execute(
+      const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'blocks' },
         { toolCallId: '1', messages: [] },
       )
@@ -64,15 +64,15 @@ describe('Task Relation Tools', () => {
         addTaskRelation: mock((params: Record<string, unknown>) => {
           capturedParams = params
           return Promise.resolve({
-            taskId: String(params.taskId),
-            relatedTaskId: String(params.relatedTaskId),
-            type: String(params.type),
+            taskId: String(params['taskId']),
+            relatedTaskId: String(params['relatedTaskId']),
+            type: String(params['type']),
           })
         }),
       }))
 
       const tool = makeAddTaskRelationTool(mockConfig)
-      await tool.execute(
+      await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'duplicate' },
         { toolCallId: '1', messages: [] },
       )
@@ -86,15 +86,15 @@ describe('Task Relation Tools', () => {
         addTaskRelation: mock((params: Record<string, unknown>) => {
           capturedParams = params
           return Promise.resolve({
-            taskId: String(params.taskId),
-            relatedTaskId: String(params.relatedTaskId),
-            type: String(params.type),
+            taskId: String(params['taskId']),
+            relatedTaskId: String(params['relatedTaskId']),
+            type: String(params['type']),
           })
         }),
       }))
 
       const tool = makeAddTaskRelationTool(mockConfig)
-      await tool.execute(
+      await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' },
         { toolCallId: '1', messages: [] },
       )
@@ -108,15 +108,15 @@ describe('Task Relation Tools', () => {
         addTaskRelation: mock((params: Record<string, unknown>) => {
           capturedParams = params
           return Promise.resolve({
-            taskId: String(params.taskId),
-            relatedTaskId: String(params.relatedTaskId),
-            type: String(params.type),
+            taskId: String(params['taskId']),
+            relatedTaskId: String(params['relatedTaskId']),
+            type: String(params['type']),
           })
         }),
       }))
 
       const tool = makeAddTaskRelationTool(mockConfig)
-      await tool.execute(
+      await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'parent' },
         { toolCallId: '1', messages: [] },
       )
@@ -214,7 +214,7 @@ describe('Task Relation Tools', () => {
       }))
 
       const tool = makeUpdateTaskRelationTool(mockConfig)
-      const result: unknown = await tool.execute(
+      const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' },
         { toolCallId: '1', messages: [] },
       )
@@ -231,15 +231,15 @@ describe('Task Relation Tools', () => {
         updateTaskRelation: mock((params: Record<string, unknown>) => {
           capturedParams = params
           return Promise.resolve({
-            taskId: String(params.taskId),
-            relatedTaskId: String(params.relatedTaskId),
-            type: String(params.type),
+            taskId: String(params['taskId']),
+            relatedTaskId: String(params['relatedTaskId']),
+            type: String(params['type']),
           })
         }),
       }))
 
       const tool = makeUpdateTaskRelationTool(mockConfig)
-      await tool.execute(
+      await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'duplicate' },
         { toolCallId: '1', messages: [] },
       )
@@ -253,15 +253,15 @@ describe('Task Relation Tools', () => {
         updateTaskRelation: mock((params: Record<string, unknown>) => {
           capturedParams = params
           return Promise.resolve({
-            taskId: String(params.taskId),
-            relatedTaskId: String(params.relatedTaskId),
-            type: String(params.type),
+            taskId: String(params['taskId']),
+            relatedTaskId: String(params['relatedTaskId']),
+            type: String(params['type']),
           })
         }),
       }))
 
       const tool = makeUpdateTaskRelationTool(mockConfig)
-      await tool.execute(
+      await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'parent' },
         { toolCallId: '1', messages: [] },
       )
@@ -339,7 +339,7 @@ describe('Task Relation Tools', () => {
       }))
 
       const tool = makeRemoveTaskRelationTool(mockConfig)
-      const result: unknown = await tool.execute(
+      const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2' },
         { toolCallId: '1', messages: [] },
       )

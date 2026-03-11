@@ -20,11 +20,11 @@ function isLabelItem(item: unknown): item is LabelItem {
     item !== null &&
     typeof item === 'object' &&
     'id' in item &&
-    typeof (item as Record<string, unknown>).id === 'string' &&
+    typeof (item as Record<string, unknown>)['id'] === 'string' &&
     'name' in item &&
-    typeof (item as Record<string, unknown>).name === 'string' &&
+    typeof (item as Record<string, unknown>)['name'] === 'string' &&
     'color' in item &&
-    typeof (item as Record<string, unknown>).color === 'string'
+    typeof (item as Record<string, unknown>)['color'] === 'string'
   )
 }
 
@@ -37,11 +37,11 @@ function isLabel(val: unknown): val is LabelItem {
     val !== null &&
     typeof val === 'object' &&
     'id' in val &&
-    typeof (val as Record<string, unknown>).id === 'string' &&
+    typeof (val as Record<string, unknown>)['id'] === 'string' &&
     'name' in val &&
-    typeof (val as Record<string, unknown>).name === 'string' &&
+    typeof (val as Record<string, unknown>)['name'] === 'string' &&
     'color' in val &&
-    typeof (val as Record<string, unknown>).color === 'string'
+    typeof (val as Record<string, unknown>)['color'] === 'string'
   )
 }
 
@@ -72,12 +72,13 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeListLabelsTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
       if (!isLabelArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(3)
-      expect(result[0].name).toBe('bug')
-      expect(result[1].name).toBe('feature')
+      expect(result[0]?.['name']).toBe('bug')
+      expect(result[1]?.['name']).toBe('feature')
     })
 
     test('returns empty array when no labels', async () => {
@@ -86,6 +87,7 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeListLabelsTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -102,6 +104,7 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeListLabelsTool(mockConfig, 'ws-123')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({}, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['workspaceId']).toBe('ws-123')
@@ -141,12 +144,13 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeCreateLabelTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ name: 'new-label' }, { toolCallId: '1', messages: [] })
       if (!isLabel(result)) throw new Error('Invalid result')
 
-      expect(result.id).toBe('label-1')
-      expect(result.name).toBe('new-label')
-      expect(result.color).toBe('#6b7280')
+      expect(result['id']).toBe('label-1')
+      expect(result['name']).toBe('new-label')
+      expect(result['color']).toBe('#6b7280')
     })
 
     test('creates label with custom color', async () => {
@@ -156,13 +160,14 @@ describe('Label Tools', () => {
           capturedParams = params
           return Promise.resolve({
             id: 'label-1',
-            name: String(params.name),
-            color: String(params.color),
+            name: String(params['name']),
+            color: String(params['color']),
           })
         }),
       }))
 
       const tool = makeCreateLabelTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ name: 'urgent', color: '#ff0000' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['name']).toBe('urgent')
@@ -176,13 +181,14 @@ describe('Label Tools', () => {
           capturedParams = params
           return Promise.resolve({
             id: 'label-1',
-            name: String(params.name),
+            name: String(params['name']),
             color: '#6b7280',
           })
         }),
       }))
 
       const tool = makeCreateLabelTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ name: 'test-label' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['name']).toBe('test-label')
@@ -199,6 +205,7 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeCreateLabelTool(mockConfig, 'ws-123')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ name: 'test' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['workspaceId']).toBe('ws-123')
@@ -249,14 +256,15 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeUpdateLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { labelId: 'label-1', name: 'Updated Name' },
         { toolCallId: '1', messages: [] },
       )
       if (!isLabel(result)) throw new Error('Invalid result')
 
-      expect(result.id).toBe('label-1')
-      expect(result.name).toBe('Updated Name')
+      expect(result['id']).toBe('label-1')
+      expect(result['name']).toBe('Updated Name')
     })
 
     test('updates label color', async () => {
@@ -267,12 +275,13 @@ describe('Label Tools', () => {
           return Promise.resolve({
             id: 'label-1',
             name: 'test',
-            color: String(params.color),
+            color: String(params['color']),
           })
         }),
       }))
 
       const tool = makeUpdateLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ labelId: 'label-1', color: '#00ff00' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['color']).toBe('#00ff00')
@@ -285,13 +294,14 @@ describe('Label Tools', () => {
           capturedParams = params
           return Promise.resolve({
             id: 'label-1',
-            name: String(params.name),
-            color: String(params.color),
+            name: String(params['name']),
+            color: String(params['color']),
           })
         }),
       }))
 
       const tool = makeUpdateLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ labelId: 'label-1', name: 'New Name', color: '#0000ff' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['name']).toBe('New Name')
@@ -348,6 +358,7 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeRemoveLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ labelId: 'label-1' }, { toolCallId: '1', messages: [] })
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 

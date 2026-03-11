@@ -80,7 +80,7 @@ describe('Archive Label Management', () => {
           ),
         )
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const result = await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(result.name).toBe('archived')
@@ -109,7 +109,7 @@ describe('Archive Label Management', () => {
           ),
         )
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(capturedBody).toMatchObject({ color: '#808080' })
@@ -197,7 +197,7 @@ describe('Archive Label Management', () => {
         }
         return Promise.resolve(new Response('{}', { status: 200 }))
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
 
@@ -263,7 +263,7 @@ describe('Archive Label Management', () => {
 
         return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
 

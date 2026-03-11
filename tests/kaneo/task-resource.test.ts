@@ -80,7 +80,7 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -123,7 +123,7 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -156,7 +156,7 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -374,7 +374,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { status: 'done' })
@@ -404,7 +404,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { priority: 'high' })
@@ -434,7 +434,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { userId: 'user-123' })
@@ -464,7 +464,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { dueDate: '2026-12-31' })
@@ -494,7 +494,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { title: 'Updated Title' })
@@ -524,7 +524,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { description: 'Updated description' })
@@ -574,7 +574,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', {
@@ -630,7 +630,7 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch)
+        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', {
@@ -748,7 +748,7 @@ describe('TaskResource', () => {
         requestUrl = url
         return Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 }))
       })
-      setMockFetch(mockFetch)
+      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.search({

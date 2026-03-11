@@ -1,7 +1,16 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test, type Mock } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { ColumnResource } from '../../src/kaneo/index.js'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setMockFetch(mockFn: Mock<any>): void {
+  const originalFetch = globalThis.fetch
+  const mockWithProperties = Object.assign(mockFn, {
+    preconnect: originalFetch.preconnect,
+  })
+  globalThis.fetch = mockWithProperties as typeof globalThis.fetch
+}
 
 describe('ColumnResource', () => {
   const mockConfig: KaneoConfig = {
@@ -15,15 +24,17 @@ describe('ColumnResource', () => {
 
   describe('list', () => {
     test('returns all columns for project', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify([
-              { id: 'col-1', name: 'Todo', color: null, isFinal: false },
-              { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
-              { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
-            ]),
-            { status: 200 },
+      setMockFetch(
+        mock(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: 'col-1', name: 'Todo', color: null, isFinal: false },
+                { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
+                { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
+              ]),
+              { status: 200 },
+            ),
           ),
         ),
       )
@@ -32,21 +43,23 @@ describe('ColumnResource', () => {
       const result = await resource.list('proj-1')
 
       expect(result).toHaveLength(3)
-      expect(result[0].name).toBe('Todo')
-      expect(result[1].name).toBe('In Progress')
-      expect(result[2].name).toBe('Done')
+      expect(result[0]?.name).toBe('Todo')
+      expect(result[1]?.name).toBe('In Progress')
+      expect(result[2]?.name).toBe('Done')
     })
 
     test('returns columns with correct properties', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify([
-              { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
-              { id: 'col-1', name: 'Todo', color: null, isFinal: false },
-              { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
-            ]),
-            { status: 200 },
+      setMockFetch(
+        mock(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
+                { id: 'col-1', name: 'Todo', color: null, isFinal: false },
+                { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
+              ]),
+              { status: 200 },
+            ),
           ),
         ),
       )
@@ -67,7 +80,7 @@ describe('ColumnResource', () => {
     })
 
     test('returns empty array when no columns', async () => {
-      global.fetch = mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
+      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))))
 
       const resource = new ColumnResource(mockConfig)
       const result = await resource.list('proj-1')
@@ -77,10 +90,12 @@ describe('ColumnResource', () => {
 
     test('uses correct API endpoint', async () => {
       let requestUrl: string | undefined
-      global.fetch = mock((url: string) => {
-        requestUrl = url
-        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
-      })
+      setMockFetch(
+        mock((url: string) => {
+          requestUrl = url
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }),
+      )
 
       const resource = new ColumnResource(mockConfig)
       await resource.list('proj-1')
@@ -89,8 +104,8 @@ describe('ColumnResource', () => {
     })
 
     test('throws for 404', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 }))),
       )
 
       const resource = new ColumnResource(mockConfig)
@@ -100,8 +115,8 @@ describe('ColumnResource', () => {
     })
 
     test('throws on API error', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }))),
       )
 
       const resource = new ColumnResource(mockConfig)
@@ -111,8 +126,8 @@ describe('ColumnResource', () => {
     })
 
     test('throws on server error', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Server error' }), { status: 500 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Server error' }), { status: 500 }))),
       )
 
       const resource = new ColumnResource(mockConfig)

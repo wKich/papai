@@ -69,6 +69,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeCreateTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { title: 'Test Task', projectId: 'proj-1' },
         { toolCallId: '1', messages: [] },
@@ -88,14 +89,15 @@ describe('Task Tools', () => {
           capturedParams = params
           return Promise.resolve({
             id: 'task-1',
-            title: String(params.title),
+            title: String(params['title']),
             number: 1,
-            status: String(params.status),
+            status: String(params['status']),
           })
         }),
       }))
 
       const tool = makeCreateTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
           title: 'Test Task',
@@ -107,11 +109,11 @@ describe('Task Tools', () => {
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.title).toBe('Test Task')
-      expect(capturedParams?.description).toBe('Task description')
-      expect(capturedParams?.priority).toBe('high')
-      expect(capturedParams?.dueDate).toBe('2026-03-15')
-      expect(capturedParams?.status).toBe('in-progress')
+      expect(capturedParams?.['title']).toBe('Test Task')
+      expect(capturedParams?.['description']).toBe('Task description')
+      expect(capturedParams?.['priority']).toBe('high')
+      expect(capturedParams?.['dueDate']).toBe('2026-03-15')
+      expect(capturedParams?.['status']).toBe('in-progress')
     })
 
     test('propagates API errors', async () => {
@@ -160,6 +162,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeUpdateTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', status: 'done' },
         { toolCallId: '1', messages: [] },
@@ -178,23 +181,24 @@ describe('Task Tools', () => {
           capturedParams = params
           return Promise.resolve({
             id: 'task-1',
-            title: String(params.title),
+            title: String(params['title']),
             number: 42,
-            status: String(params.status),
+            status: String(params['status']),
           })
         }),
       }))
 
       const tool = makeUpdateTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         { taskId: 'task-1', title: 'New Title', priority: 'high', dueDate: '2026-12-31' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.taskId).toBe('task-1')
-      expect(capturedParams?.title).toBe('New Title')
-      expect(capturedParams?.priority).toBe('high')
-      expect(capturedParams?.dueDate).toBe('2026-12-31')
+      expect(capturedParams?.['taskId']).toBe('task-1')
+      expect(capturedParams?.['title']).toBe('New Title')
+      expect(capturedParams?.['priority']).toBe('high')
+      expect(capturedParams?.['dueDate']).toBe('2026-12-31')
     })
 
     test('propagates API errors including 404', async () => {
@@ -249,6 +253,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeGetTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
 
@@ -256,7 +261,7 @@ describe('Task Tools', () => {
       expect(result.title).toBe('Test Task')
       expect(result.number).toBe(42)
       expect(result.relations).toHaveLength(1)
-      expect(result.relations[0].type).toBe('blocks')
+      expect(result.relations[0]?.type).toBe('blocks')
     })
 
     test('handles task with no relations', async () => {
@@ -273,6 +278,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeGetTaskTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
 
@@ -323,12 +329,13 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeListTasksTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(2)
-      expect(result[0].title).toBe('Task 1')
-      expect(result[1].title).toBe('Task 2')
+      expect(result[0]?.title).toBe('Task 1')
+      expect(result[1]?.title).toBe('Task 2')
     })
 
     test('returns empty array when no tasks', async () => {
@@ -337,6 +344,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeListTasksTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -387,6 +395,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ query: 'bug' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -403,10 +412,11 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeSearchTasksTool(mockConfig, 'ws-123')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ query: 'test' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.workspaceId).toBe('ws-123')
-      expect(capturedParams?.query).toBe('test')
+      expect(capturedParams?.['workspaceId']).toBe('ws-123')
+      expect(capturedParams?.['query']).toBe('test')
     })
 
     test('filters by projectId when provided', async () => {
@@ -419,10 +429,11 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ query: 'test', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.query).toBe('test')
-      expect(capturedParams?.projectId).toBe('proj-1')
+      expect(capturedParams?.['query']).toBe('test')
+      expect(capturedParams?.['projectId']).toBe('proj-1')
     })
 
     test('returns empty array when no matches', async () => {
@@ -431,6 +442,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ query: 'nonexistent' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -456,6 +468,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTask(result)) throw new Error('Invalid result')
 
@@ -473,10 +486,11 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeArchiveTaskTool(mockConfig, 'ws-123')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.workspaceId).toBe('ws-123')
-      expect(capturedParams?.taskId).toBe('task-1')
+      expect(capturedParams?.['workspaceId']).toBe('ws-123')
+      expect(capturedParams?.['taskId']).toBe('task-1')
     })
 
     test('handles already archived task', async () => {
@@ -491,6 +505,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTask(result)) throw new Error('Invalid result')
 

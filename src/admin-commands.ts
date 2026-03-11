@@ -166,7 +166,6 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
   migrationRunning = true
   log.info({ singleUserId }, '/migrate run called')
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
-  const kaneoClientUrl = process.env['KANEO_CLIENT_URL']
   const lines: string[] = ['Creating backup...']
   const msg = await ctx.reply(lines.join('\n'))
   const appendLine = async (line: string): Promise<void> => {
@@ -176,7 +175,7 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
   try {
     const backupPath = createBackup()
     await appendLine(`Backup saved. Starting migration...`)
-    const results = await runMigration({ clearHistory: true, singleUserId, kaneoUrl, kaneoClientUrl }, appendLine)
+    const results = await runMigration({ clearHistory: true, singleUserId, kaneoUrl }, appendLine)
     const failed = results.filter((r) => r.status.startsWith('failed')).length
     const provisionedCount = results.filter((r) => r.kaneoEmail !== undefined).length
     const footer =
@@ -185,7 +184,7 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
         : `\nHistory cleared. Backup: ${backupPath}`
     const provisionNote = provisionedCount > 0 ? `\n${provisionedCount} account(s) auto-provisioned — DMs sent.` : ''
     await appendLine(`Migration complete.${footer}${provisionNote}`)
-    await notifyProvisionedUsers(ctx, results, process.env['KANEO_CLIENT_URL'] ?? null)
+    await notifyProvisionedUsers(ctx, results, kaneoUrl ?? null)
     log.info({ singleUserId }, '/migrate run complete')
   } catch (error: unknown) {
     const err = error instanceof Error ? error.message : String(error)

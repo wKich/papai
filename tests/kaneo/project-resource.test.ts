@@ -1,7 +1,16 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test, type Mock } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { ProjectResource } from '../../src/kaneo/index.js'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setMockFetch(mockFn: Mock<any>): void {
+  const originalFetch = globalThis.fetch
+  const mockWithProperties = Object.assign(mockFn, {
+    preconnect: originalFetch.preconnect,
+  })
+  globalThis.fetch = mockWithProperties as typeof globalThis.fetch
+}
 
 describe('ProjectResource', () => {
   const mockConfig: KaneoConfig = {
@@ -15,15 +24,17 @@ describe('ProjectResource', () => {
 
   describe('create', () => {
     test('creates project with required fields', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'My Project',
-              slug: 'my-project',
-            }),
-            { status: 200 },
+      setMockFetch(
+        mock(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'My Project',
+                slug: 'my-project',
+              }),
+              { status: 200 },
+            ),
           ),
         ),
       )
@@ -41,21 +52,23 @@ describe('ProjectResource', () => {
 
     test('auto-generates slug from name', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        if (options.method === 'POST') {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        }
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'My Project',
-              slug: 'my-project',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          if (options.method === 'POST') {
+            capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'My Project',
+                slug: 'my-project',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.create({
@@ -68,21 +81,23 @@ describe('ProjectResource', () => {
 
     test('generates slug with special characters', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        if (options.method === 'POST') {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        }
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'My Project @ Test!',
-              slug: 'my-project-test',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          if (options.method === 'POST') {
+            capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'My Project @ Test!',
+                slug: 'my-project-test',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.create({
@@ -95,19 +110,21 @@ describe('ProjectResource', () => {
 
     test('includes workspaceId and empty icon in request', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'Test',
-              slug: 'test',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Test',
+                slug: 'test',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.create({
@@ -127,24 +144,26 @@ describe('ProjectResource', () => {
       let lastUrl: string | undefined
       let lastBody: unknown
 
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        callCount++
-        if (options.method !== 'POST') {
-          lastUrl = _url
-          lastBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        }
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          callCount++
+          if (options.method !== 'POST') {
+            lastUrl = _url
+            lastBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          }
 
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'Test Project',
-              slug: 'test-project',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Test Project',
+                slug: 'test-project',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.create({
@@ -161,19 +180,21 @@ describe('ProjectResource', () => {
     test('creates project without description (no second call)', async () => {
       let callCount = 0
 
-      global.fetch = mock(() => {
-        callCount++
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'Test',
-              slug: 'test',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock(() => {
+          callCount++
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Test',
+                slug: 'test',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.create({
@@ -185,8 +206,8 @@ describe('ProjectResource', () => {
     })
 
     test('throws on API error during creation', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 }))),
       )
 
       const resource = new ProjectResource(mockConfig)
@@ -201,14 +222,16 @@ describe('ProjectResource', () => {
 
   describe('list', () => {
     test('returns all projects for workspace', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify([
-              { id: 'proj-1', name: 'Project 1', slug: 'project-1' },
-              { id: 'proj-2', name: 'Project 2', slug: 'project-2' },
-            ]),
-            { status: 200 },
+      setMockFetch(
+        mock(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: 'proj-1', name: 'Project 1', slug: 'project-1' },
+                { id: 'proj-2', name: 'Project 2', slug: 'project-2' },
+              ]),
+              { status: 200 },
+            ),
           ),
         ),
       )
@@ -217,12 +240,12 @@ describe('ProjectResource', () => {
       const result = await resource.list('ws-1')
 
       expect(result).toHaveLength(2)
-      expect(result[0].name).toBe('Project 1')
-      expect(result[1].name).toBe('Project 2')
+      expect(result[0]?.name).toBe('Project 1')
+      expect(result[1]?.name).toBe('Project 2')
     })
 
     test('returns empty array when no projects', async () => {
-      global.fetch = mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
+      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))))
 
       const resource = new ProjectResource(mockConfig)
       const result = await resource.list('ws-1')
@@ -232,10 +255,12 @@ describe('ProjectResource', () => {
 
     test('includes workspaceId in query params', async () => {
       let requestUrl: string | undefined
-      global.fetch = mock((url: string) => {
-        requestUrl = url
-        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
-      })
+      setMockFetch(
+        mock((url: string) => {
+          requestUrl = url
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.list('ws-1')
@@ -244,8 +269,8 @@ describe('ProjectResource', () => {
     })
 
     test('throws on API error', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }))),
       )
 
       const resource = new ProjectResource(mockConfig)
@@ -258,19 +283,21 @@ describe('ProjectResource', () => {
   describe('update', () => {
     test('updates only name', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'Updated Name',
-              slug: 'updated-name',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Test',
+                slug: 'test',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       const result = await resource.update('proj-1', { name: 'Updated Name' })
@@ -281,19 +308,21 @@ describe('ProjectResource', () => {
 
     test('updates only description', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'Test',
-              slug: 'test',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Test',
+                slug: 'test',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.update('proj-1', { description: 'New description' })
@@ -303,19 +332,21 @@ describe('ProjectResource', () => {
 
     test('updates both name and description', async () => {
       let capturedBody: unknown
-      global.fetch = mock((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: 'proj-1',
-              name: 'New Name',
-              slug: 'new-name',
-            }),
-            { status: 200 },
-          ),
-        )
-      })
+      setMockFetch(
+        mock((_url: string, options: RequestInit) => {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'proj-1',
+                name: 'Updated Name',
+                slug: 'updated-name',
+              }),
+              { status: 200 },
+            ),
+          )
+        }),
+      )
 
       const resource = new ProjectResource(mockConfig)
       await resource.update('proj-1', { name: 'New Name', description: 'New description' })
@@ -327,8 +358,8 @@ describe('ProjectResource', () => {
     })
 
     test('throws projectNotFound for 404', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 }))),
       )
 
       const resource = new ProjectResource(mockConfig)
@@ -342,7 +373,7 @@ describe('ProjectResource', () => {
 
   describe('archive', () => {
     test('archives project successfully', async () => {
-      global.fetch = mock(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 })))
+      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))))
 
       const resource = new ProjectResource(mockConfig)
       const result = await resource.archive('proj-1')
@@ -352,8 +383,8 @@ describe('ProjectResource', () => {
     })
 
     test('throws projectNotFound for 404', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 }))),
       )
 
       const resource = new ProjectResource(mockConfig)
@@ -365,8 +396,8 @@ describe('ProjectResource', () => {
     })
 
     test('throws on API error', async () => {
-      global.fetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'Server error' }), { status: 500 })),
+      setMockFetch(
+        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Server error' }), { status: 500 }))),
       )
 
       const resource = new ProjectResource(mockConfig)

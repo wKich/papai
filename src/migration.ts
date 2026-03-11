@@ -101,13 +101,12 @@ async function resolveKaneoConfig(
 ): Promise<ResolvedKaneoConfig | null> {
   const kaneoKey = config.get('kaneo_key')
   const kaneoWorkspaceId = getKaneoWorkspace(user.telegram_id)
-  const kaneoBaseUrl = opts.kaneoUrl ?? process.env['KANEO_CLIENT_URL']
+  const kaneoBaseUrl = opts.kaneoUrl
   if (kaneoKey !== undefined && kaneoWorkspaceId !== null && kaneoBaseUrl !== undefined) {
     return { kaneoKey, kaneoBaseUrl, kaneoWorkspaceId }
   }
   if (opts.dryRun === true || kaneoBaseUrl === undefined) return null
-  const clientUrl = opts.kaneoClientUrl ?? kaneoBaseUrl
-  const prov = await provisionKaneoUser(kaneoBaseUrl, clientUrl, user.telegram_id, user.username)
+  const prov = await provisionKaneoUser(kaneoBaseUrl, kaneoBaseUrl, user.telegram_id, user.username)
   setConfig(user.telegram_id, 'kaneo_key', prov.kaneoKey)
   setKaneoWorkspace(user.telegram_id, prov.workspaceId)
   return {

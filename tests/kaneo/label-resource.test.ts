@@ -63,7 +63,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -90,7 +90,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -118,7 +118,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -165,8 +165,8 @@ describe('LabelResource', () => {
       const result = await resource.list('ws-1')
 
       expect(result).toHaveLength(2)
-      expect(result[0].name).toBe('bug')
-      expect(result[1].name).toBe('feature')
+      expect(result[0]?.name).toBe('bug')
+      expect(result[1]?.name).toBe('feature')
     })
 
     test('returns empty array when no labels', async () => {
@@ -206,7 +206,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -231,7 +231,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -255,7 +255,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -341,7 +341,7 @@ describe('LabelResource', () => {
           }
 
           return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -397,7 +397,7 @@ describe('LabelResource', () => {
               { status: 200 },
             ),
           )
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -439,7 +439,7 @@ describe('LabelResource', () => {
           }
 
           return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -459,7 +459,7 @@ describe('LabelResource', () => {
             return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
           }
           return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)
@@ -479,7 +479,7 @@ describe('LabelResource', () => {
             )
           }
           return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }),
+        }) as unknown as (...args: unknown[]) => Promise<Response>,
       )
 
       const resource = new LabelResource(mockConfig)

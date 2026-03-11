@@ -47,6 +47,7 @@ describe('Task Label Tools', () => {
       }))
 
       const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
@@ -68,6 +69,7 @@ describe('Task Label Tools', () => {
       }))
 
       const tool = makeAddTaskLabelTool(mockConfig, 'ws-123')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ taskId: 'task-1', labelId: 'label-1' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['workspaceId']).toBe('ws-123')
@@ -141,6 +143,7 @@ describe('Task Label Tools', () => {
       }))
 
       const tool = makeRemoveTaskLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },

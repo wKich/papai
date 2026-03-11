@@ -48,6 +48,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeAddCommentTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', comment: 'New comment' },
         { toolCallId: '1', messages: [] },
@@ -70,6 +71,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeAddCommentTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1', comment: '' }, { toolCallId: '1', messages: [] })
       if (!isComment(result)) throw new Error('Invalid result')
 
@@ -89,6 +91,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeAddCommentTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', comment: longComment },
         { toolCallId: '1', messages: [] },
@@ -153,6 +156,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeGetCommentsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -167,6 +171,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeGetCommentsTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
@@ -218,6 +223,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeUpdateCommentTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { activityId: 'comment-1', comment: 'Updated comment' },
         { toolCallId: '1', messages: [] },
@@ -281,6 +287,7 @@ describe('Comment Tools', () => {
       }))
 
       const tool = makeRemoveCommentTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ activityId: 'comment-1' }, { toolCallId: '1', messages: [] })
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 

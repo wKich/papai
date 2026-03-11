@@ -61,9 +61,9 @@ Body`
     const desc = '---\nblocks: task-1 , task-2 ,  task-3  \n---\nBody'
     const result = parseRelationsFromDescription(desc)
     expect(result.relations).toHaveLength(3)
-    expect(result.relations[0].taskId).toBe('task-1')
-    expect(result.relations[1].taskId).toBe('task-2')
-    expect(result.relations[2].taskId).toBe('task-3')
+    expect(result.relations[0]?.taskId).toBe('task-1')
+    expect(result.relations[1]?.taskId).toBe('task-2')
+    expect(result.relations[2]?.taskId).toBe('task-3')
   })
 
   test('handles unclosed frontmatter', () => {
@@ -84,7 +84,7 @@ Body`
     const desc = '---\nblocks:\nrelated: task-1\n---\nBody'
     const result = parseRelationsFromDescription(desc)
     expect(result.relations).toHaveLength(1)
-    expect(result.relations[0].type).toBe('related')
+    expect(result.relations[0]?.type).toBe('related')
   })
 
   test('handles multiple comma-separated IDs', () => {
