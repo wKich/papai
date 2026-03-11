@@ -15,6 +15,7 @@ import {
   fetchWorkflowStates,
   type LinearConfig,
   type LinearIssue,
+  type LinearLabel,
   type LinearProject,
   type LinearState,
 } from './linear-client.js'
@@ -26,6 +27,7 @@ export interface MigrationResult {
   linearIdToKaneoId: Map<string, string>
   linearIssues: LinearIssue[]
   linearProjects: LinearProject[]
+  linearLabels: LinearLabel[]
 }
 
 async function processIssues(
@@ -163,5 +165,5 @@ export async function runMigration(
   }, Promise.resolve())
 
   stats['relations'] = await patchRelations(kaneoConfig, issues, linearIdToKaneoId)
-  return { stats, linearIdToKaneoId, linearIssues: issues, linearProjects: projects }
+  return { stats, linearIdToKaneoId, linearIssues: issues, linearProjects: projects, linearLabels: labels }
 }
