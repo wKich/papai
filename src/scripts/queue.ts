@@ -2,7 +2,7 @@
  * Sequential processing queue for async operations.
  *
  * Processes items one at a time to respect rate limits and avoid
- * overwhelming external APIs, while satisfying no-await-in-loop lint rule.
+ * overwhelming external APIs.
  */
 
 export interface QueueItem<T, R> {
@@ -15,39 +15,33 @@ export interface QueueOptions {
   delayMs?: number
 }
 
-/**
- * Process items sequentially using recursion instead of loops with await.
- * This satisfies the no-await-in-loop lint rule while maintaining sequential execution.
- */
-export async function processSequentially<T, R>(
+function makeDelay(options: QueueOptions): () => Promise<void> {
+  return () =>
+    options.delayMs !== undefined && options.delayMs > 0
+      ? new Promise<void>((resolve) => {
+          setTimeout(resolve, options.delayMs)
+        })
+      : Promise.resolve()
+}
+
+export function processSequentially<T, R>(
   items: readonly T[],
   processor: (item: T) => Promise<R>,
   options: QueueOptions = {},
 ): Promise<R[]> {
-  const results: R[] = []
-
-  async function processNext(index: number): Promise<void> {
-    if (index >= items.length) return
-
-    const item = items[index]
-    if (item === undefined) return
-
-    const result = await processor(item)
-    results.push(result)
-
-    if (options.delayMs !== undefined && options.delayMs > 0) {
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          resolve()
-        }, options.delayMs)
-      })
-    }
-
-    return processNext(index + 1)
-  }
-
-  await processNext(0)
-  return results
+  const delay = makeDelay(options)
+  return items.reduce(
+    (chain: Promise<R[]>, item: T) =>
+      chain.then((results) =>
+        processor(item).then((result) =>
+          delay().then(() => {
+            results.push(result)
+            return results
+          }),
+        ),
+      ),
+    Promise.resolve([] as R[]),
+  )
 }
 
 /**
@@ -60,26 +54,11 @@ export function processWithAccumulator<T, A>(
   processor: (item: T, accumulator: A) => Promise<A>,
   options: QueueOptions = {},
 ): Promise<A> {
-  async function processNext(index: number, accumulator: A): Promise<A> {
-    if (index >= items.length) return accumulator
-
-    const item = items[index]
-    if (item === undefined) return accumulator
-
-    const newAccumulator = await processor(item, accumulator)
-
-    if (options.delayMs !== undefined && options.delayMs > 0) {
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          resolve()
-        }, options.delayMs)
-      })
-    }
-
-    return processNext(index + 1, newAccumulator)
-  }
-
-  return processNext(0, initialAccumulator)
+  const delay = makeDelay(options)
+  return items.reduce(
+    (chain: Promise<A>, item: T) => chain.then((acc) => processor(item, acc).then((next) => delay().then(() => next))),
+    Promise.resolve(initialAccumulator),
+  )
 }
 
 /**
@@ -90,25 +69,10 @@ export function processAndCount<T>(
   processor: (item: T) => Promise<boolean>,
   options: QueueOptions = {},
 ): Promise<number> {
-  async function processNext(index: number, count: number): Promise<number> {
-    if (index >= items.length) return count
-
-    const item = items[index]
-    if (item === undefined) return count
-
-    const success = await processor(item)
-    const newCount = success ? count + 1 : count
-
-    if (options.delayMs !== undefined && options.delayMs > 0) {
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          resolve()
-        }, options.delayMs)
-      })
-    }
-
-    return processNext(index + 1, newCount)
-  }
-
-  return processNext(0, 0)
+  const delay = makeDelay(options)
+  return items.reduce(
+    (chain: Promise<number>, item: T) =>
+      chain.then((count) => processor(item).then((success) => delay().then(() => (success ? count + 1 : count)))),
+    Promise.resolve(0),
+  )
 }
