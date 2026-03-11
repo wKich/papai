@@ -106,7 +106,7 @@ export async function provisionKaneoUser(
   telegramId: number,
   username: string | null,
 ): Promise<ProvisionResult> {
-  const email = `papai_${telegramId}@papai.local`
+  const email = username === null ? `${telegramId}@pap.ai` : `${username}@pap.ai`
   const password = generatePassword()
   const name = username === null ? `User ${telegramId}` : `@${username}`
   const slug = `papai-${telegramId}`

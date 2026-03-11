@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **provision:** Fall back to session token from response body when Set-Cookie header is absent
+
 ## [3.0.5] - 2026-03-11
 
 ### Added
