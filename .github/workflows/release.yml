@@ -56,7 +56,7 @@ jobs:
           echo "Calculated next version: v$NEXT"
 
       - name: Generate CHANGELOG.md
-        run: git-cliff --unreleased --tag "${{ steps.version.outputs.next }}" -o CHANGELOG.md
+        run: git-cliff --unreleased --tag "${{ steps.version.outputs.next }}" --prepend CHANGELOG.md
 
       - name: Commit CHANGELOG.md
         run: |
