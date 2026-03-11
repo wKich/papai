@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.4] - 2026-03-11
+
+### Added
+
+- Disable Kaneo registration by default
+
+### Changed
+
+- Extract command handlers into src/commands/ directory
+
+### Documentation
+
+- Restore full changelog history
+
+### Fixed
+
+- Use --prepend to preserve existing changelog entries on release
+
+### Miscellaneous
+
+- Add CHANGELOG.md to oxfmt ignore
+
+### Security
+
+- Block SSO and OAuth callback paths in Caddy
 ## [3.0.3] - 2026-03-11
 
 ### Fixed
