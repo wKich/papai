@@ -22,8 +22,7 @@
     "typescript/prefer-literal-enum-member": "error",
     "typescript/promise-function-async": "off",
     "typescript/use-unknown-in-catch-callback-variable": "error",
-    "no-param-reassign": "error",
-    "no-await-in-loop": "off"
+    "no-param-reassign": "error"
   },
   "overrides": [
     {

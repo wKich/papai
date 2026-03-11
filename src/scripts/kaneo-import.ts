@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
 import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
-import { buildDescriptionWithRelations } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
 import { assignLabels, buildRelations, importComments, markArchived, patchRelations } from './kaneo-import-helpers.js'
 import type { LinearIssue, LinearLabel, LinearState } from './linear-client.js'
+import { processWithAccumulator } from './queue.js'
 
 const log = logger.child({ scope: 'kaneo-import' })
 
@@ -77,13 +77,16 @@ export async function ensureColumns(
   )
   const existingByName = new Map(existing.map((c) => [c.name.toLowerCase(), c.id]))
 
-  const stateToColumnId = new Map<string, string>()
-  for (const state of states) {
-    const columnId = await findOrCreateColumn(config, projectId, state, existingByName)
-    stateToColumnId.set(state.name, columnId)
-    existingByName.set(state.name.toLowerCase(), columnId)
-  }
-  return stateToColumnId
+  return processWithAccumulator(
+    states,
+    { stateToColumnId: new Map<string, string>(), existingByName },
+    async (state, acc) => {
+      const columnId = await findOrCreateColumn(config, projectId, state, acc.existingByName)
+      acc.stateToColumnId.set(state.name, columnId)
+      acc.existingByName.set(state.name.toLowerCase(), columnId)
+      return acc
+    },
+  ).then((acc) => acc.stateToColumnId)
 }
 
 async function findOrCreateLabel(
@@ -123,13 +126,16 @@ export async function ensureLabels(
   )
   const existingByName = new Map(existing.map((l) => [l.name.toLowerCase(), l.id]))
 
-  const labelIdMap = new Map<string, string>()
-  for (const label of linearLabels) {
-    const kaneoId = await findOrCreateLabel(config, workspaceId, label, existingByName)
-    labelIdMap.set(label.id, kaneoId)
-    existingByName.set(label.name.toLowerCase(), kaneoId)
-  }
-  return labelIdMap
+  return processWithAccumulator(
+    linearLabels,
+    { labelIdMap: new Map<string, string>(), existingByName },
+    async (label, acc) => {
+      const kaneoId = await findOrCreateLabel(config, workspaceId, label, acc.existingByName)
+      acc.labelIdMap.set(label.id, kaneoId)
+      acc.existingByName.set(label.name.toLowerCase(), kaneoId)
+      return acc
+    },
+  ).then((acc) => acc.labelIdMap)
 }
 
 function generateSlug(name: string): string {
@@ -177,9 +183,7 @@ export async function createTaskFromIssue(
   labelIdMap: Map<string, string>,
   linearIdToKaneoId: Map<string, string>,
 ): Promise<void> {
-  const relations = buildRelations(issue, linearIdToKaneoId)
-  const body = issue.description ?? ''
-  const description = relations.length > 0 ? buildDescriptionWithRelations(body, relations) : body
+  const description = issue.description ?? ''
 
   const task = await kaneoFetch(
     config,

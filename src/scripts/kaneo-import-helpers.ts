@@ -8,6 +8,7 @@ import {
 } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
 import type { LinearIssue, LinearLabel } from './linear-client.js'
+import { processAndCount } from './queue.js'
 
 const log = logger.child({ scope: 'kaneo-import-helpers' })
 
@@ -199,15 +200,10 @@ async function patchIssue(
   return false
 }
 
-export async function patchRelations(
+export function patchRelations(
   config: KaneoConfig,
   issues: LinearIssue[],
   linearIdToKaneoId: Map<string, string>,
 ): Promise<number> {
-  let patched = 0
-  for (const issue of issues) {
-    const wasPatched = await patchIssue(config, issue, linearIdToKaneoId)
-    if (wasPatched) patched++
-  }
-  return patched
+  return processAndCount(issues, (issue) => patchIssue(config, issue, linearIdToKaneoId))
 }
