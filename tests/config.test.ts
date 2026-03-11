@@ -76,16 +76,7 @@ describe('setConfig', () => {
   })
 
   test('handles all config keys', () => {
-    const allKeys: ConfigKey[] = [
-      'kaneo_key',
-      'kaneo_base_url',
-      'kaneo_workspace_id',
-      'kaneo_project_id',
-      'openai_key',
-      'openai_base_url',
-      'openai_model',
-      'memory_model',
-    ]
+    const allKeys: ConfigKey[] = ['kaneo_key', 'openai_key', 'openai_base_url', 'openai_model', 'memory_model']
     allKeys.forEach((key) => {
       setConfig(USER_A, key, `value-for-${key}`)
       expect(getConfig(USER_A, key)).toBe(`value-for-${key}`)
@@ -99,8 +90,8 @@ describe('getConfig', () => {
   })
 
   test('returns stored value', () => {
-    setConfig(USER_A, 'kaneo_base_url', 'team-abc')
-    expect(getConfig(USER_A, 'kaneo_base_url')).toBe('team-abc')
+    setConfig(USER_A, 'kaneo_key', 'key-abc')
+    expect(getConfig(USER_A, 'kaneo_key')).toBe('key-abc')
   })
 
   test('returns null for unset key', () => {
@@ -110,16 +101,7 @@ describe('getConfig', () => {
 
 describe('isConfigKey', () => {
   test('returns true for valid keys', () => {
-    const validKeys: ConfigKey[] = [
-      'kaneo_key',
-      'kaneo_base_url',
-      'kaneo_workspace_id',
-      'kaneo_project_id',
-      'openai_key',
-      'openai_base_url',
-      'openai_model',
-      'memory_model',
-    ]
+    const validKeys: ConfigKey[] = ['kaneo_key', 'openai_key', 'openai_base_url', 'openai_model', 'memory_model']
     validKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(true)
     })
@@ -161,7 +143,6 @@ describe('maskValue', () => {
   })
 
   test('returns unmasked value for non-sensitive keys', () => {
-    expect(maskValue('kaneo_base_url', 'team-123')).toBe('team-123')
     expect(maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
     expect(maskValue('openai_base_url', 'https://api.openai.com')).toBe('https://api.openai.com')
   })
@@ -175,9 +156,6 @@ describe('maskValue', () => {
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
     expect(CONFIG_KEYS).toContain('kaneo_key')
-    expect(CONFIG_KEYS).toContain('kaneo_base_url')
-    expect(CONFIG_KEYS).toContain('kaneo_workspace_id')
-    expect(CONFIG_KEYS).toContain('kaneo_project_id')
     expect(CONFIG_KEYS).toContain('openai_key')
     expect(CONFIG_KEYS).toContain('openai_base_url')
     expect(CONFIG_KEYS).toContain('openai_model')

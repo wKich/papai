@@ -1,16 +1,8 @@
-import { beforeEach, describe, expect, mock, test, type Mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { CommentResource } from '../../src/kaneo/index.js'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function setMockFetch(mockFn: Mock<any>): void {
-  const originalFetch = globalThis.fetch
-  const mockWithProperties = Object.assign(mockFn, {
-    preconnect: originalFetch.preconnect,
-  })
-  globalThis.fetch = mockWithProperties as typeof globalThis.fetch
-}
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('CommentResource', () => {
   const mockConfig: KaneoConfig = {
@@ -22,24 +14,26 @@ describe('CommentResource', () => {
     mock.restore()
   })
 
+  afterEach(() => {
+    restoreFetch()
+  })
+
   describe('add', () => {
     test('adds comment to task', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'comment-1',
-                comment: 'New comment',
-                createdAt: '2026-03-01T00:00:00Z',
-              }),
-              { status: 200 },
-            ),
-          )
-        }),
-      )
+      setMockFetch((_url: string, options: RequestInit) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-1',
+              comment: 'New comment',
+              createdAt: '2026-03-01T00:00:00Z',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new CommentResource(mockConfig)
       const result = await resource.add('task-1', 'New comment')
@@ -54,17 +48,15 @@ describe('CommentResource', () => {
     })
 
     test('handles empty comment', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'comment-1',
-                comment: '',
-                createdAt: '2026-03-01T00:00:00Z',
-              }),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-1',
+              comment: '',
+              createdAt: '2026-03-01T00:00:00Z',
+            }),
+            { status: 200 },
           ),
         ),
       )
@@ -77,17 +69,15 @@ describe('CommentResource', () => {
 
     test('handles long comment', async () => {
       const longComment = 'a'.repeat(1000)
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'comment-1',
-                comment: longComment,
-                createdAt: '2026-03-01T00:00:00Z',
-              }),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-1',
+              comment: longComment,
+              createdAt: '2026-03-01T00:00:00Z',
+            }),
+            { status: 200 },
           ),
         ),
       )
@@ -99,9 +89,7 @@ describe('CommentResource', () => {
     })
 
     test('throws taskNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Task not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Task not found' }), { status: 404 })))
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.add('invalid', 'Test')
@@ -114,35 +102,33 @@ describe('CommentResource', () => {
 
   describe('list', () => {
     test('filters only comment activities', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify([
-                {
-                  id: 'act-1',
-                  type: 'comment',
-                  comment: 'Comment 1',
-                  message: null,
-                  createdAt: '2026-03-01T00:00:00Z',
-                },
-                {
-                  id: 'act-2',
-                  type: 'status_change',
-                  comment: null,
-                  message: 'Status changed',
-                  createdAt: '2026-03-01T00:00:00Z',
-                },
-                {
-                  id: 'act-3',
-                  type: 'comment',
-                  comment: 'Comment 2',
-                  message: null,
-                  createdAt: '2026-03-02T00:00:00Z',
-                },
-              ]),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: 'act-1',
+                type: 'comment',
+                comment: 'Comment 1',
+                message: null,
+                createdAt: '2026-03-01T00:00:00Z',
+              },
+              {
+                id: 'act-2',
+                type: 'status_change',
+                comment: null,
+                message: 'Status changed',
+                createdAt: '2026-03-01T00:00:00Z',
+              },
+              {
+                id: 'act-3',
+                type: 'comment',
+                comment: 'Comment 2',
+                message: null,
+                createdAt: '2026-03-02T00:00:00Z',
+              },
+            ]),
+            { status: 200 },
           ),
         ),
       )
@@ -156,22 +142,20 @@ describe('CommentResource', () => {
     })
 
     test('excludes activities with null comment', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify([
-                {
-                  id: 'act-1',
-                  type: 'comment',
-                  comment: 'Valid comment',
-                  message: null,
-                  createdAt: '2026-03-01T00:00:00Z',
-                },
-                { id: 'act-2', type: 'comment', comment: null, message: null, createdAt: '2026-03-01T00:00:00Z' },
-              ]),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: 'act-1',
+                type: 'comment',
+                comment: 'Valid comment',
+                message: null,
+                createdAt: '2026-03-01T00:00:00Z',
+              },
+              { id: 'act-2', type: 'comment', comment: null, message: null, createdAt: '2026-03-01T00:00:00Z' },
+            ]),
+            { status: 200 },
           ),
         ),
       )
@@ -184,21 +168,19 @@ describe('CommentResource', () => {
     })
 
     test('returns empty array when no comments', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify([
-                {
-                  id: 'act-1',
-                  type: 'status_change',
-                  comment: null,
-                  message: 'Changed',
-                  createdAt: '2026-03-01T00:00:00Z',
-                },
-              ]),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: 'act-1',
+                type: 'status_change',
+                comment: null,
+                message: 'Changed',
+                createdAt: '2026-03-01T00:00:00Z',
+              },
+            ]),
+            { status: 200 },
           ),
         ),
       )
@@ -210,15 +192,13 @@ describe('CommentResource', () => {
     })
 
     test('maps to simplified structure', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify([
-                { id: 'act-1', type: 'comment', comment: 'Test', message: null, createdAt: '2026-03-01T12:00:00Z' },
-              ]),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { id: 'act-1', type: 'comment', comment: 'Test', message: null, createdAt: '2026-03-01T12:00:00Z' },
+            ]),
+            { status: 200 },
           ),
         ),
       )
@@ -234,9 +214,7 @@ describe('CommentResource', () => {
     })
 
     test('throws taskNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Task not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Task not found' }), { status: 404 })))
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.list('invalid')
@@ -250,20 +228,18 @@ describe('CommentResource', () => {
   describe('update', () => {
     test('updates existing comment', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'comment-1',
-                comment: 'Updated',
-              }),
-              { status: 200 },
-            ),
-          )
-        }),
-      )
+      setMockFetch((_url: string, options: RequestInit) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-1',
+              comment: 'Updated',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new CommentResource(mockConfig)
       const result = await resource.update('comment-1', 'Updated')
@@ -277,9 +253,7 @@ describe('CommentResource', () => {
     })
 
     test('throws commentNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Comment not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Comment not found' }), { status: 404 })))
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.update('invalid', 'Updated')
@@ -292,7 +266,7 @@ describe('CommentResource', () => {
 
   describe('remove', () => {
     test('removes comment successfully', async () => {
-      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))))
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 })))
 
       const resource = new CommentResource(mockConfig)
       const result = await resource.remove('comment-1')
@@ -302,9 +276,7 @@ describe('CommentResource', () => {
     })
 
     test('throws commentNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Comment not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Comment not found' }), { status: 404 })))
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.remove('invalid')

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { LabelResource } from '../../src/kaneo/index.js'
-import { setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('LabelResource', () => {
   const mockConfig: KaneoConfig = {
@@ -12,6 +12,10 @@ describe('LabelResource', () => {
 
   beforeEach(() => {
     mock.restore()
+  })
+
+  afterEach(() => {
+    restoreFetch()
   })
 
   describe('create', () => {
@@ -174,8 +178,12 @@ describe('LabelResource', () => {
   describe('update', () => {
     test('updates only name', async () => {
       let capturedBody: unknown
+      let callCount = 0
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        callCount++
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -191,14 +199,17 @@ describe('LabelResource', () => {
       const resource = new LabelResource(mockConfig)
       const result = await resource.update('label-1', { name: 'Updated Name' })
 
-      expect(capturedBody).toEqual({ name: 'Updated Name' })
+      expect(callCount).toBe(2)
+      expect(capturedBody).toEqual({ name: 'Updated Name', color: '#ff0000' })
       expect(result.name).toBe('Updated Name')
     })
 
     test('updates only color', async () => {
       let capturedBody: unknown
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -214,13 +225,15 @@ describe('LabelResource', () => {
       const resource = new LabelResource(mockConfig)
       await resource.update('label-1', { color: '#00ff00' })
 
-      expect(capturedBody).toEqual({ color: '#00ff00' })
+      expect(capturedBody).toEqual({ name: 'bug', color: '#00ff00' })
     })
 
     test('updates both name and color', async () => {
       let capturedBody: unknown
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { ProjectResource } from '../../src/kaneo/index.js'
-import { setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('ProjectResource', () => {
   const mockConfig: KaneoConfig = {
@@ -12,6 +12,10 @@ describe('ProjectResource', () => {
 
   beforeEach(() => {
     mock.restore()
+  })
+
+  afterEach(() => {
+    restoreFetch()
   })
 
   describe('create', () => {
@@ -156,7 +160,13 @@ describe('ProjectResource', () => {
 
       expect(callCount).toBe(2)
       expect(lastUrl).toContain('/project/proj-1')
-      expect(lastBody).toMatchObject({ description: 'Project description' })
+      expect(lastBody).toMatchObject({
+        name: 'Test Project',
+        icon: '',
+        slug: 'test-project',
+        description: 'Project description',
+        isPublic: false,
+      })
     })
 
     test('creates project without description (no second call)', async () => {
@@ -255,14 +265,21 @@ describe('ProjectResource', () => {
   describe('update', () => {
     test('updates only name', async () => {
       let capturedBody: unknown
+      let callCount = 0
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        callCount++
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
               id: 'proj-1',
               name: 'Updated Name',
-              slug: 'updated-name',
+              slug: 'old-slug',
+              icon: 'Layout',
+              description: 'Old description',
+              isPublic: false,
             }),
             { status: 200 },
           ),
@@ -272,20 +289,32 @@ describe('ProjectResource', () => {
       const resource = new ProjectResource(mockConfig)
       const result = await resource.update('proj-1', { name: 'Updated Name' })
 
-      expect(capturedBody).toEqual({ name: 'Updated Name' })
+      expect(callCount).toBe(2)
+      expect(capturedBody).toMatchObject({
+        name: 'Updated Name',
+        slug: 'old-slug',
+        icon: 'Layout',
+        description: 'Old description',
+        isPublic: false,
+      })
       expect(result.name).toBe('Updated Name')
     })
 
     test('updates only description', async () => {
       let capturedBody: unknown
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
               id: 'proj-1',
               name: 'Test',
               slug: 'test',
+              icon: '',
+              description: 'New description',
+              isPublic: false,
             }),
             { status: 200 },
           ),
@@ -295,19 +324,30 @@ describe('ProjectResource', () => {
       const resource = new ProjectResource(mockConfig)
       await resource.update('proj-1', { description: 'New description' })
 
-      expect(capturedBody).toEqual({ description: 'New description' })
+      expect(capturedBody).toMatchObject({
+        name: 'Test',
+        slug: 'test',
+        icon: '',
+        description: 'New description',
+        isPublic: false,
+      })
     })
 
     test('updates both name and description', async () => {
       let capturedBody: unknown
       setMockFetch((_url, options) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
               id: 'proj-1',
-              name: 'Updated Name',
-              slug: 'updated-name',
+              name: 'New Name',
+              slug: 'test',
+              icon: '',
+              description: 'New description',
+              isPublic: false,
             }),
             { status: 200 },
           ),

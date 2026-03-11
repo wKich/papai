@@ -7,7 +7,7 @@ import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:list-tasks' })
 
-const KaneoTaskListItemSchema = KaneoTaskSchema.extend({
+export const KaneoTaskListItemSchema = KaneoTaskSchema.extend({
   dueDate: z.string().nullable(),
 })
 

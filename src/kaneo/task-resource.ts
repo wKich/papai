@@ -4,26 +4,12 @@ import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, KaneoTaskSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
+import { type KaneoTaskListItem, KaneoTaskListItemSchema } from './list-tasks.js'
+import { type TaskResult, TaskSearchResultSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
-
-const KaneoTaskListItemSchema = KaneoTaskSchema.extend({
-  dueDate: z.string().nullable(),
-})
 
 const FullTaskSchema = KaneoTaskResponseSchema.extend({
   position: z.number(),
-})
-
-const TaskResultSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  number: z.number(),
-  status: z.string(),
-  priority: z.string(),
-})
-
-const TaskSearchResultSchema = z.object({
-  tasks: z.array(TaskResultSchema),
 })
 
 export { addTaskRelation, removeTaskRelation, updateTaskRelation } from './task-relations.js'
@@ -68,7 +54,7 @@ export class TaskResource {
     }
   }
 
-  async list(projectId: string): Promise<z.infer<typeof KaneoTaskListItemSchema>[]> {
+  async list(projectId: string): Promise<KaneoTaskListItem[]> {
     this.log.debug({ projectId }, 'Listing tasks')
 
     try {
@@ -230,11 +216,7 @@ export class TaskResource {
     }
   }
 
-  async search(params: {
-    query: string
-    workspaceId: string
-    projectId?: string
-  }): Promise<z.infer<typeof TaskResultSchema>[]> {
+  async search(params: { query: string; workspaceId: string; projectId?: string }): Promise<TaskResult[]> {
     this.log.debug(params, 'Searching tasks')
 
     try {

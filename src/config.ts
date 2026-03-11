@@ -3,21 +3,10 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
 
-export type ConfigKey =
-  | 'kaneo_key'
-  | 'kaneo_base_url'
-  | 'kaneo_workspace_id'
-  | 'kaneo_project_id'
-  | 'openai_key'
-  | 'openai_base_url'
-  | 'openai_model'
-  | 'memory_model'
+export type ConfigKey = 'kaneo_key' | 'openai_key' | 'openai_base_url' | 'openai_model' | 'memory_model'
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
   'kaneo_key',
-  'kaneo_base_url',
-  'kaneo_workspace_id',
-  'kaneo_project_id',
   'openai_key',
   'openai_base_url',
   'openai_model',

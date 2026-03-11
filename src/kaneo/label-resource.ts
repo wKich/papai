@@ -65,10 +65,11 @@ export class LabelResource {
     this.log.debug({ labelId, ...params }, 'Updating label')
 
     try {
-      const body: Record<string, string> = {}
-      if (params.name !== undefined) body['name'] = params.name
-      if (params.color !== undefined) body['color'] = params.color
-
+      const existing = await kaneoFetch(this.config, 'GET', `/label/${labelId}`, undefined, undefined, KaneoLabelSchema)
+      const body = {
+        name: params.name ?? existing.name,
+        color: params.color ?? existing.color,
+      }
       const label = await kaneoFetch(this.config, 'PUT', `/label/${labelId}`, body, undefined, KaneoLabelSchema)
       this.log.info({ labelId, name: label.name }, 'Label updated')
       return label

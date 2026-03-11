@@ -1,16 +1,20 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
 import { kaneoFetch, KaneoTaskSchema, EmptyResponseSchema } from '../../src/kaneo/client.js'
 import { KaneoApiError, KaneoValidationError } from '../../src/kaneo/errors.js'
-import { setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('kaneoFetch', () => {
   const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 
   beforeEach(() => {
     mock.restore()
+  })
+
+  afterEach(() => {
+    restoreFetch()
   })
 
   test('makes GET request with correct headers', async () => {

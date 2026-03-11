@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/index.js'
-import { setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('TaskResource', () => {
   const mockConfig: KaneoConfig = {
@@ -12,6 +12,10 @@ describe('TaskResource', () => {
 
   beforeEach(() => {
     mock.restore()
+  })
+
+  afterEach(() => {
+    restoreFetch()
   })
 
   describe('create', () => {

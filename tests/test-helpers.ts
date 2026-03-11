@@ -1,5 +1,11 @@
 import { mock } from 'bun:test'
 
+const originalFetch = globalThis.fetch
+
+export function restoreFetch(): void {
+  globalThis.fetch = originalFetch
+}
+
 export interface ToolExecutor {
   execute: (...args: unknown[]) => Promise<unknown>
 }
@@ -26,7 +32,6 @@ export function getToolExecutor(tool: unknown): (...args: unknown[]) => Promise<
  */
 export function setMockFetch(handler: (url: string, init: RequestInit) => Promise<Response>): void {
   const mocked = mock(handler)
-  const originalFetch = globalThis.fetch
   const wrapped = Object.assign(
     (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url

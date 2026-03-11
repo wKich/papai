@@ -51,12 +51,13 @@ export const KaneoProjectSchema = z.object({
   slug: z.string(),
 })
 
-export const KaneoProjectWithIconSchema = z.object({
+export const KaneoProjectFullSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
-  icon: z.string(),
+  icon: z.string().nullable(),
   description: z.string().nullable(),
+  isPublic: z.boolean().nullable(),
 })
 
 export const KaneoActivitySchema = z.object({

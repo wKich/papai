@@ -7,12 +7,16 @@ import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 
-const TaskResultSchema = z.object({
+export const TaskResultSchema = z.object({
   id: z.string(),
   title: z.string(),
   number: z.number(),
   status: z.string(),
   priority: z.string(),
+})
+
+export const TaskSearchResultSchema = z.object({
+  tasks: z.array(TaskResultSchema),
 })
 
 export type TaskResult = z.infer<typeof TaskResultSchema>

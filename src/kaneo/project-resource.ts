@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoProjectSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoProjectSchema, KaneoProjectFullSchema, kaneoFetch } from './client.js'
 
 function generateSlug(name: string): string {
   return name
@@ -43,7 +43,13 @@ export class ProjectResource {
           this.config,
           'PUT',
           `/project/${project.id}`,
-          { description: params.description },
+          {
+            name: project.name,
+            icon: '',
+            slug: project.slug,
+            description: params.description,
+            isPublic: false,
+          },
           undefined,
           KaneoProjectSchema,
         )
@@ -84,10 +90,21 @@ export class ProjectResource {
     this.log.debug({ projectId, ...params }, 'Updating project')
 
     try {
-      const body: Record<string, string> = {}
-      if (params.name !== undefined) body['name'] = params.name
-      if (params.description !== undefined) body['description'] = params.description
-
+      const existing = await kaneoFetch(
+        this.config,
+        'GET',
+        `/project/${projectId}`,
+        undefined,
+        undefined,
+        KaneoProjectFullSchema,
+      )
+      const body = {
+        name: params.name ?? existing.name,
+        icon: existing.icon ?? '',
+        slug: existing.slug,
+        description: params.description ?? existing.description ?? '',
+        isPublic: existing.isPublic ?? false,
+      }
       const project = await kaneoFetch(this.config, 'PUT', `/project/${projectId}`, body, undefined, KaneoProjectSchema)
       this.log.info({ projectId, name: project.name }, 'Project updated')
       return project
