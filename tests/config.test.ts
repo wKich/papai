@@ -163,6 +163,6 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(8)
+    expect(CONFIG_KEYS).toHaveLength(5)
   })
 })
