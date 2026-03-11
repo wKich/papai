@@ -24,6 +24,23 @@ export { updateProject } from './update-project.js'
 export { updateTask } from './update-task.js'
 export { updateTaskRelation } from './update-task-relation.js'
 
+// Error handling
+export { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
+export { KaneoApiError, KaneoValidationError } from './errors.js'
+
+// Frontmatter relation handling
+export {
+  addRelation,
+  buildDescriptionWithRelations,
+  parseRelationsFromDescription,
+  removeRelation,
+  updateRelation,
+  type TaskRelation,
+} from './frontmatter.js'
+
+// Archive label flow
+export { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
+
 // High-level client
 export {
   KaneoClient,

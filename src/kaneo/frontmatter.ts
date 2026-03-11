@@ -9,11 +9,11 @@ export interface TaskRelation {
 
 const FRONTMATTER_SEPARATOR = '---'
 
-export function parseRelationsFromDescription(description: string | undefined): {
+export function parseRelationsFromDescription(description: string | undefined | null): {
   relations: TaskRelation[]
   body: string
 } {
-  if (description === undefined || description.length === 0) {
+  if (description === undefined || description === null || description.length === 0) {
     return { relations: [], body: '' }
   }
 

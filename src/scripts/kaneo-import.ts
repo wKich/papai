@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
 import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
+import {
+  CreateColumnBodySchema,
+  CreateLabelBodySchema,
+  CreateProjectBodySchema,
+  CreateTaskBodySchema,
+  UpdateProjectBodySchema,
+} from '../kaneo/request-schemas.js'
 import { logger } from '../logger.js'
 import {
   assignLabels,
@@ -20,7 +27,7 @@ export { assignLabels, ensureArchivedLabel, markArchived, importComments, buildR
 export type { KaneoLabel }
 
 const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
-  taskId: z.string().optional(),
+  taskId: z.string().nullish(),
 })
 
 const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
@@ -63,7 +70,11 @@ async function findOrCreateColumn(
     config,
     'POST',
     `/column/${projectId}`,
-    { name: state.name, color: state.color, isFinal: state.type === 'completed' || state.type === 'canceled' },
+    CreateColumnBodySchema.parse({
+      name: state.name,
+      color: state.color,
+      isFinal: state.type === 'completed' || state.type === 'canceled',
+    }),
     undefined,
     KaneoColumnSchema,
   )
@@ -120,7 +131,7 @@ async function findOrCreateLabel(
     config,
     'POST',
     '/label',
-    { name: label.name, color: label.color, workspaceId },
+    CreateLabelBodySchema.parse({ name: label.name, color: label.color, workspaceId }),
     undefined,
     KaneoLabelSchemaLocal,
   )
@@ -179,13 +190,20 @@ export async function ensureProject(
     config,
     'POST',
     '/project',
-    { name, workspaceId, icon: '', slug: generateSlug(name) },
+    CreateProjectBodySchema.parse({ name, workspaceId, icon: '', slug: generateSlug(name) }),
     undefined,
     KaneoProjectSchema,
   )
 
   if (description !== undefined && description.length > 0) {
-    await kaneoFetch(config, 'PUT', `/project/${project.id}`, { description }, undefined, KaneoProjectSchema)
+    await kaneoFetch(
+      config,
+      'PUT',
+      `/project/${project.id}`,
+      UpdateProjectBodySchema.parse({ name, icon: '', slug: project.slug, description, isPublic: false }),
+      undefined,
+      KaneoProjectSchema,
+    )
   }
 
   return project.id
@@ -206,13 +224,13 @@ export async function createTaskFromIssue(
     config,
     'POST',
     `/task/${projectId}`,
-    {
+    CreateTaskBodySchema.parse({
       title: issue.title,
       description,
       priority: mapPriority(issue.priority),
       status: issue.state.name,
-      dueDate: issue.dueDate,
-    },
+      ...(issue.dueDate === null ? {} : { dueDate: issue.dueDate }),
+    }),
     undefined,
     KaneoTaskWithDescriptionSchema,
   )

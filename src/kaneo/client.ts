@@ -68,8 +68,8 @@ export const KaneoActivitySchema = z.object({
 export const KaneoActivityWithTypeSchema = z.object({
   id: z.string(),
   type: z.string(),
-  message: z.string().nullable(),
-  comment: z.string().nullable(),
+  message: z.string().nullish(),
+  comment: z.string().nullish(),
   createdAt: z.string(),
 })
 
@@ -109,6 +109,8 @@ export const EmptyResponseSchema = z.unknown()
 export type KaneoConfig = {
   apiKey: string
   baseUrl: string
+  /** Session cookie value (better-auth.session_token=...). When set, sent instead of Authorization: Bearer. */
+  sessionCookie?: string
 }
 
 export { KaneoApiError, KaneoValidationError } from './errors.js'
@@ -165,12 +167,16 @@ export async function kaneoFetch<T>(
 
   log.debug({ method, path, hasBody: body !== undefined }, 'Kaneo API request')
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (config.sessionCookie === undefined) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`
+  } else {
+    headers['Cookie'] = config.sessionCookie
+  }
+
   const response = await fetch(url.toString(), {
     method,
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 

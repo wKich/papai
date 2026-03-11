@@ -6,6 +6,11 @@ import {
   parseRelationsFromDescription,
   type TaskRelation,
 } from '../kaneo/frontmatter.js'
+import {
+  CreateCommentBodySchema,
+  CreateLabelBodySchema,
+  UpdateTaskDescriptionBodySchema,
+} from '../kaneo/request-schemas.js'
 import { logger } from '../logger.js'
 import type { LinearIssue, LinearLabel } from './linear-client.js'
 import { processAndCount } from './queue.js'
@@ -13,19 +18,13 @@ import { processAndCount } from './queue.js'
 const log = logger.child({ scope: 'kaneo-import-helpers' })
 
 const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
-  taskId: z.string().optional(),
+  taskId: z.string().nullish(),
 })
 
 const KaneoTaskWithDescriptionSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
-})
-
-const KaneoActivitySchema = z.object({
-  id: z.string(),
-  comment: z.string(),
-  createdAt: z.string(),
 })
 
 const RELATION_TYPE_MAP: Record<string, TaskRelation['type'] | undefined> = {
@@ -51,12 +50,12 @@ export async function assignLabels(
       config,
       'POST',
       '/label',
-      {
+      CreateLabelBodySchema.parse({
         name: label.name,
         color: label.color,
         workspaceId,
         taskId,
-      },
+      }),
       undefined,
       KaneoLabelSchemaLocal,
     )
@@ -88,7 +87,7 @@ export async function ensureArchivedLabel(config: KaneoConfig, workspaceId: stri
     config,
     'POST',
     '/label',
-    { name: 'archived', color: '#808080', workspaceId },
+    CreateLabelBodySchema.parse({ name: 'archived', color: '#808080', workspaceId }),
     undefined,
     KaneoLabelSchemaLocal,
   )
@@ -104,7 +103,7 @@ export async function markArchived(
     config,
     'POST',
     '/label',
-    { name: archivedLabel.name, color: archivedLabel.color, workspaceId, taskId },
+    CreateLabelBodySchema.parse({ name: archivedLabel.name, color: archivedLabel.color, workspaceId, taskId }),
     undefined,
     KaneoLabelSchemaLocal,
   )
@@ -123,9 +122,11 @@ export async function importComments(
       config,
       'POST',
       '/activity/comment',
-      { taskId, comment: comment.body },
+      CreateCommentBodySchema.parse({ taskId, comment: comment.body }),
       undefined,
-      KaneoActivitySchema,
+      // Kaneo's createComment controller uses db.insert().values() without .returning(),
+      // so the response is a raw Drizzle result — not an activity object.
+      z.unknown(),
     )
     log.debug({ taskId, commentLength: comment.body.length }, 'Comment added')
   }
@@ -193,7 +194,7 @@ async function patchIssue(
       config,
       'PUT',
       `/task/description/${kaneoTaskId}`,
-      { description: expected },
+      UpdateTaskDescriptionBodySchema.parse({ description: expected }),
       undefined,
       KaneoTaskWithDescriptionSchema,
     )

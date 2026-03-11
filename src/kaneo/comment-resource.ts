@@ -46,13 +46,10 @@ export class CommentResource {
         undefined,
         z.array(KaneoActivityWithTypeSchema),
       )
-      const comments = activities
-        .filter((a) => a.type === 'comment' && a.comment !== null)
-        .map((a) => ({
-          id: a.id,
-          comment: a.comment!,
-          createdAt: a.createdAt,
-        }))
+      const comments = activities.flatMap((a) => {
+        if (a.type !== 'comment' || a.comment === null || a.comment === undefined) return []
+        return [{ id: a.id, comment: a.comment, createdAt: a.createdAt }]
+      })
       this.log.info({ taskId, count: comments.length }, 'Comments listed')
       return comments
     } catch (error) {

@@ -5,7 +5,7 @@ import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
 
 const KaneoLabelWithTaskSchema = KaneoLabelSchema.extend({
-  taskId: z.string().optional(),
+  taskId: z.string().nullish(),
 })
 
 export class LabelResource {

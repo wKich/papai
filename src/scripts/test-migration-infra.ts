@@ -1,13 +1,12 @@
 import { $ } from 'bun'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { KaneoWorkspaceSchema, kaneoFetch } from '../kaneo/client.js'
 import { logger } from '../logger.js'
 import {
   AUTH_SECRET,
   COMPOSE_PROJECT,
   KANEO_BASE_URL,
+  KANEO_CLIENT_URL,
   KANEO_PORT,
   POSTGRES_PASSWORD,
 } from './test-migration-constants.js'
@@ -15,6 +14,7 @@ import {
 const log = logger.child({ scope: 'test-migration:infra' })
 
 const COMPOSE_ENV = {
+  ...process.env,
   KANEO_POSTGRES_PASSWORD: POSTGRES_PASSWORD,
   KANEO_AUTH_SECRET: AUTH_SECRET,
   KANEO_API_PORT: String(KANEO_PORT),
@@ -77,25 +77,31 @@ export async function waitForKaneo(maxAttempts = 30): Promise<void> {
 
 // --- Auth + workspace ---
 
-const AuthSessionSchema = z.object({
-  token: z.string(),
-  user: z.object({
-    id: z.string(),
-    email: z.string(),
-  }),
+const SignUpBodySchema = z.object({
+  user: z.object({ id: z.string() }),
 })
 
-type AuthSession = z.infer<typeof AuthSessionSchema>
+const OrgSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+})
+
+export interface AuthSession {
+  sessionCookie: string
+  userId: string
+}
 
 const TEST_EMAIL = 'migration-test@example.com'
 const TEST_PASSWORD = 'test-password-123'
 const TEST_NAME = 'Migration Test'
 const WORKSPACE_NAME = 'Migration Test Workspace'
+const WORKSPACE_SLUG = 'migration-test'
 
 export async function signUp(): Promise<AuthSession> {
   log.info({ email: TEST_EMAIL }, 'Registering test user on Kaneo')
 
-  const res = await fetch(`${KANEO_BASE_URL}/api/auth/sign-up`, {
+  const res = await fetch(`${KANEO_BASE_URL}/api/auth/sign-up/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, name: TEST_NAME }),
@@ -106,29 +112,47 @@ export async function signUp(): Promise<AuthSession> {
     throw new Error(`Kaneo sign-up failed (${res.status}): ${body}`)
   }
 
+  const setCookies = res.headers.getSetCookie()
+  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
+  if (sessionHeader === undefined) {
+    throw new Error('Kaneo sign-up response missing session cookie')
+  }
+  const sessionCookie = sessionHeader.split(';')[0]!
+
   const rawData: unknown = await res.json()
-  const result = AuthSessionSchema.safeParse(rawData)
-  if (!result.success) {
-    throw new Error(`Kaneo sign-up returned invalid data: ${JSON.stringify(result.error.issues)}`)
+  const parsed = SignUpBodySchema.safeParse(rawData)
+  if (!parsed.success) {
+    throw new Error(`Kaneo sign-up returned invalid data: ${JSON.stringify(parsed.error.issues)}`)
   }
 
-  log.info({ userId: result.data.user.id }, 'Test user registered')
-  return result.data
+  log.info({ userId: parsed.data.user.id }, 'Test user registered')
+  return { sessionCookie, userId: parsed.data.user.id }
 }
 
-export async function createWorkspace(config: KaneoConfig): Promise<z.infer<typeof KaneoWorkspaceSchema>> {
+export async function createWorkspace(sessionCookie: string): Promise<z.infer<typeof OrgSchema>> {
   log.info({ name: WORKSPACE_NAME }, 'Creating test workspace')
-  const ws = await kaneoFetch(
-    config,
-    'POST',
-    '/workspace',
-    {
-      name: WORKSPACE_NAME,
-      slug: 'migration-test',
+
+  const res = await fetch(`${KANEO_BASE_URL}/api/auth/organization/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: sessionCookie,
+      Origin: KANEO_CLIENT_URL,
     },
-    undefined,
-    KaneoWorkspaceSchema,
-  )
-  log.info({ workspaceId: ws.id }, 'Workspace created')
-  return ws
+    body: JSON.stringify({ name: WORKSPACE_NAME, slug: WORKSPACE_SLUG }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Kaneo workspace creation failed (${res.status}): ${body}`)
+  }
+
+  const rawData: unknown = await res.json()
+  const result = OrgSchema.safeParse(rawData)
+  if (!result.success) {
+    throw new Error(`Kaneo workspace creation returned invalid data: ${JSON.stringify(result.error.issues)}`)
+  }
+
+  log.info({ workspaceId: result.data.id }, 'Workspace created')
+  return result.data
 }

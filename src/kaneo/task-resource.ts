@@ -262,7 +262,11 @@ export class TaskResource {
     try {
       const archiveLabel = await getOrCreateArchiveLabel(this.config, workspaceId)
       const alreadyArchived = await isTaskArchived(this.config, taskId, archiveLabel.id)
-      if (!alreadyArchived) await addArchiveLabel(this.config, workspaceId, taskId)
+      if (alreadyArchived) {
+        this.log.debug({ taskId }, 'Task already has archive label, skipping')
+      } else {
+        await addArchiveLabel(this.config, workspaceId, taskId)
+      }
       this.log.info({ taskId, labelId: archiveLabel.id }, 'Task archived')
       return { id: taskId, archivedAt: new Date().toISOString() }
     } catch (error) {

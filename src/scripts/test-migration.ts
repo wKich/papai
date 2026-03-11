@@ -66,8 +66,8 @@ async function main(): Promise<void> {
     await waitForKaneo()
 
     const auth = await signUp()
-    const kaneoConfig: KaneoConfig = { apiKey: auth.token, baseUrl: KANEO_BASE_URL }
-    const workspace = await createWorkspace(kaneoConfig)
+    const kaneoConfig: KaneoConfig = { apiKey: '', baseUrl: KANEO_BASE_URL, sessionCookie: auth.sessionCookie }
+    const workspace = await createWorkspace(auth.sessionCookie)
 
     console.log('\n--- Running migration ---\n')
     const migration = await runMigration(linearConfig, kaneoConfig, workspace.id)

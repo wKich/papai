@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
+import {
+  type KaneoConfig,
+  KaneoActivityWithTypeSchema,
+  KaneoLabelSchema,
+  KaneoProjectSchema,
+  KaneoTaskSchema,
+  kaneoFetch,
+} from '../kaneo/client.js'
 import { parseRelationsFromDescription } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
 import { mapPriority, type KaneoTask } from './kaneo-import.js'
@@ -31,7 +38,7 @@ const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
 })
 
 const KaneoLabelLocalSchema = KaneoLabelSchema.extend({
-  taskId: z.string().optional(),
+  taskId: z.string().nullish(),
 })
 
 async function runSampleChecks(
@@ -174,12 +181,13 @@ async function verifyComments(config: KaneoConfig, migration: MigrationResult, c
     const activities = await kaneoFetch(
       config,
       'GET',
-      `/activity/comment/${kaneoId}`,
+      `/activity/${kaneoId}`,
       undefined,
       undefined,
-      z.array(z.object({ id: z.string(), comment: z.string() })),
+      z.array(KaneoActivityWithTypeSchema),
     ).catch(() => [])
-    return activities.length === issue.comments.nodes.length
+    const comments = activities.filter((a) => a.type === 'comment' && a.comment !== null)
+    return comments.length === issue.comments.nodes.length
   })
   record(
     checks,
@@ -258,14 +266,17 @@ export async function verify(
     undefined,
     z.array(KaneoLabelLocalSchema),
   )
-  const expectedLabelCount = migration.linearLabels.length
+  const workspaceLabels = kaneoLabels.filter((l) => l.taskId === null)
+  const hasArchivedIssues = migration.linearIssues.some((i) => i.archivedAt !== null)
+  const linearHasArchivedLabel = migration.linearLabels.some((l) => l.name.toLowerCase() === 'archived')
+  const expectedLabelCount = migration.linearLabels.length + (hasArchivedIssues && !linearHasArchivedLabel ? 1 : 0)
   record(
     checks,
     'Labels exist',
-    kaneoLabels.length === expectedLabelCount,
-    kaneoLabels.length === expectedLabelCount
+    workspaceLabels.length === expectedLabelCount,
+    workspaceLabels.length === expectedLabelCount
       ? `All ${expectedLabelCount} labels present in workspace`
-      : `Expected ${expectedLabelCount}, got ${kaneoLabels.length}`,
+      : `Expected ${expectedLabelCount}, got ${workspaceLabels.length}`,
   )
 
   await verifyTasks(kaneoConfig, migration, checks)

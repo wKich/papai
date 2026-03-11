@@ -173,7 +173,7 @@ git commit -m "refactor: extract migration test constants to break circular impo
 
 ---
 
-### Task 3: Add `blocked_by` Frontmatter Support and Import It
+### Task 3: Add `blocked_by` Frontmatter Support and Import It ✅
 
 **Files:**
 
@@ -402,7 +402,7 @@ git commit -m "feat: add blocked_by and duplicate_of frontmatter support and imp
 
 ---
 
-### Task 4: Fix `patchRelations` to Use `parseRelationsFromDescription`
+### Task 4: Fix `patchRelations` to Use `parseRelationsFromDescription` ✅
 
 **Files:**
 
@@ -495,7 +495,7 @@ git commit -m "fix: use parseRelationsFromDescription in patchRelations instead 
 
 ---
 
-### Task 5: Eliminate Wasted Pass-1 Frontmatter Write
+### Task 5: Eliminate Wasted Pass-1 Frontmatter Write ✅
 
 **Files:**
 
@@ -568,7 +568,7 @@ git commit -m "perf: skip pass-1 partial frontmatter write in createTaskFromIssu
 
 ---
 
-### Task 6: Fix `assignLabels` — Remove Redundant GET
+### Task 6: Fix `assignLabels` — Remove Redundant GET ✅
 
 **Files:**
 
@@ -642,7 +642,7 @@ git commit -m "perf: remove redundant GET /label in assignLabels, use LinearLabe
 
 ---
 
-### Task 7: Fix `markArchived` N+1 — Cache Archived Label
+### Task 7: Fix `markArchived` N+1 — Cache Archived Label ✅
 
 **Files:**
 
@@ -787,7 +787,7 @@ git commit -m "perf: cache archived label before task loop, eliminate N+1 GET in
 
 ---
 
-### Task 8: Fix `stats.columns` Overcount
+### Task 8: Fix `stats.columns` Overcount ✅
 
 **Files:**
 
@@ -946,7 +946,7 @@ git commit -m "fix: track only newly-created columns in stats.columns (was overc
 
 ---
 
-### Task 9: Add Pagination to Linear Label, State, and Project Fetchers
+### Task 9: Add Pagination to Linear Label, State, and Project Fetchers ✅
 
 **Files:**
 
@@ -1126,7 +1126,7 @@ git commit -m "fix: add cursor pagination to fetchLabels, fetchWorkflowStates, f
 
 ---
 
-### Task 10: Expand Verification Coverage
+### Task 10: Expand Verification Coverage ✅
 
 **Files:**
 
