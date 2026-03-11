@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **provision:** Add Origin header to all Better Auth requests and fix body token fallback
 - **provision:** Use username or telegramId as email local part on pap.ai domain
+
 ## [3.0.6] - 2026-03-11
 
 ### Fixed

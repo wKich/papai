@@ -6,6 +6,7 @@ const log = logger.child({ scope: 'kaneo:provision' })
 
 const SignUpResponseSchema = z.object({
   user: z.object({ id: z.string() }),
+  token: z.string(),
 })
 const OrgResponseSchema = z.object({ id: z.string(), slug: z.string() })
 const ApiKeyResponseSchema = z.object({ key: z.string() })
@@ -23,17 +24,11 @@ function generatePassword(): string {
   return `${uuid.slice(0, 20)}Aa1!`
 }
 
-async function doSignUp(
-  baseUrl: string,
-  clientUrl: string,
-  email: string,
-  password: string,
-  name: string,
-): Promise<string> {
+async function doSignUp(baseUrl: string, email: string, password: string, name: string): Promise<string> {
   log.debug({ email }, 'Kaneo sign-up')
   const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: clientUrl },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name }),
   })
   if (!res.ok) {
@@ -42,45 +37,16 @@ async function doSignUp(
   const rawData: unknown = await res.json()
   const parsed = SignUpResponseSchema.safeParse(rawData)
   if (!parsed.success) throw new Error('Sign-up returned invalid data')
-  const setCookies = res.headers.getSetCookie()
-  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
-  if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
-  // Set-Cookie was absent (Origin mismatch with trustedOrigins) — sign in to get a proper cookie.
-  // The user was just created so sign-in will succeed.
-  log.debug({ email }, 'Sign-up did not return session cookie; falling back to sign-in')
-  return doSignIn(baseUrl, clientUrl, email, password)
+  return parsed.data.token
 }
 
-async function doSignIn(baseUrl: string, clientUrl: string, email: string, password: string): Promise<string> {
-  log.debug({ email }, 'Kaneo sign-in')
-  const res = await fetch(`${baseUrl}/api/auth/sign-in/email`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: clientUrl },
-    body: JSON.stringify({ email, password }),
-  })
-  if (!res.ok) {
-    throw new Error(`Sign-in failed (${res.status}): ${await res.text()}`)
-  }
-  const setCookies = res.headers.getSetCookie()
-  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
-  if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
-  throw new Error('Sign-in response missing session cookie')
-}
-
-async function doCreateWorkspace(
-  baseUrl: string,
-  clientUrl: string,
-  sessionCookie: string,
-  name: string,
-  slug: string,
-): Promise<string> {
+async function doCreateWorkspace(baseUrl: string, bearerToken: string, name: string, slug: string): Promise<string> {
   log.debug({ name }, 'Creating Kaneo workspace')
   const res = await fetch(`${baseUrl}/api/auth/organization/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Cookie: sessionCookie,
-      Origin: clientUrl,
+      Authorization: `Bearer ${bearerToken}`,
     },
     body: JSON.stringify({ name, slug }),
   })
@@ -93,10 +59,10 @@ async function doCreateWorkspace(
   return parsed.data.id
 }
 
-async function doCreateApiKey(baseUrl: string, clientUrl: string, sessionCookie: string): Promise<string> {
+async function doCreateApiKey(baseUrl: string, bearerToken: string): Promise<string> {
   const res = await fetch(`${baseUrl}/api/auth/api-key/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie, Origin: clientUrl },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify({ name: 'papai-bot' }),
   })
   if (!res.ok) throw new Error(`API key creation failed (${res.status}): ${await res.text()}`)
@@ -114,8 +80,8 @@ async function doCreateApiKey(baseUrl: string, clientUrl: string, sessionCookie:
 export async function provisionKaneoUser(
   /** Internal API base URL (e.g. http://kaneo-api:1337) */
   baseUrl: string,
-  /** Public-facing web client URL used as Origin header (e.g. https://kaneo.example.com) */
-  clientUrl: string,
+  /** Public-facing web client URL (kept for backward compatibility with call sites) */
+  _clientUrl: string,
   telegramId: number,
   username: string | null,
 ): Promise<ProvisionResult> {
@@ -125,16 +91,16 @@ export async function provisionKaneoUser(
   const slug = `papai-${telegramId}`
 
   log.info({ telegramId, email }, 'Provisioning Kaneo user account')
-  const sessionCookie = await doSignUp(baseUrl, clientUrl, email, password, name)
-  const workspaceId = await doCreateWorkspace(baseUrl, clientUrl, sessionCookie, name, slug)
+  const bearerToken = await doSignUp(baseUrl, email, password, name)
+  const workspaceId = await doCreateWorkspace(baseUrl, bearerToken, name, slug)
 
-  let kaneoKey = sessionCookie
+  let kaneoKey = bearerToken
   try {
-    kaneoKey = await doCreateApiKey(baseUrl, clientUrl, sessionCookie)
+    kaneoKey = await doCreateApiKey(baseUrl, bearerToken)
     log.info({ telegramId }, 'Created API key for provisioned user')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    log.warn({ telegramId, error: msg }, 'API key endpoint unavailable — using session cookie as key')
+    log.warn({ telegramId, error: msg }, 'API key endpoint unavailable — using session token as key')
   }
 
   log.info({ telegramId, workspaceId }, 'Kaneo user provisioned')
