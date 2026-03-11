@@ -6,6 +6,8 @@ const log = logger.child({ scope: 'kaneo:provision' })
 
 const SignUpResponseSchema = z.object({
   user: z.object({ id: z.string() }),
+  // Better Auth returns the session token either at the top level or nested under session
+  token: z.string().optional(),
   session: z.object({ token: z.string() }).optional(),
 })
 const OrgResponseSchema = z.object({ id: z.string(), slug: z.string() })
@@ -24,11 +26,17 @@ function generatePassword(): string {
   return `${uuid.slice(0, 20)}Aa1!`
 }
 
-async function doSignUp(baseUrl: string, email: string, password: string, name: string): Promise<string> {
+async function doSignUp(
+  baseUrl: string,
+  clientUrl: string,
+  email: string,
+  password: string,
+  name: string,
+): Promise<string> {
   log.debug({ email }, 'Kaneo sign-up')
   const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: clientUrl },
     body: JSON.stringify({ email, password, name }),
   })
   if (!res.ok) {
@@ -41,7 +49,8 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
   const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
   if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
   // Better Auth also returns the session token in the response body — use it to build the cookie
-  if (parsed.data.session?.token !== undefined) return `better-auth.session_token=${parsed.data.session.token}`
+  const bodyToken = parsed.data.token ?? parsed.data.session?.token
+  if (bodyToken !== undefined) return `better-auth.session_token=${bodyToken}`
   throw new Error('Sign-up response missing session cookie')
 }
 
@@ -71,10 +80,10 @@ async function doCreateWorkspace(
   return parsed.data.id
 }
 
-async function doCreateApiKey(baseUrl: string, sessionCookie: string): Promise<string> {
+async function doCreateApiKey(baseUrl: string, clientUrl: string, sessionCookie: string): Promise<string> {
   const res = await fetch(`${baseUrl}/api/auth/api-key/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie, Origin: clientUrl },
     body: JSON.stringify({ name: 'papai-bot' }),
   })
   if (!res.ok) throw new Error(`API key creation failed (${res.status}): ${await res.text()}`)
@@ -103,12 +112,12 @@ export async function provisionKaneoUser(
   const slug = `papai-${telegramId}`
 
   log.info({ telegramId, email }, 'Provisioning Kaneo user account')
-  const sessionCookie = await doSignUp(baseUrl, email, password, name)
+  const sessionCookie = await doSignUp(baseUrl, clientUrl, email, password, name)
   const workspaceId = await doCreateWorkspace(baseUrl, clientUrl, sessionCookie, name, slug)
 
   let kaneoKey = sessionCookie
   try {
-    kaneoKey = await doCreateApiKey(baseUrl, sessionCookie)
+    kaneoKey = await doCreateApiKey(baseUrl, clientUrl, sessionCookie)
     log.info({ telegramId }, 'Created API key for provisioned user')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
