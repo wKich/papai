@@ -2,13 +2,22 @@ import { z } from 'zod'
 
 import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
 import { logger } from '../logger.js'
-import { assignLabels, buildRelations, importComments, markArchived, patchRelations } from './kaneo-import-helpers.js'
+import {
+  assignLabels,
+  buildRelations,
+  ensureArchivedLabel,
+  importComments,
+  markArchived,
+  patchRelations,
+  type KaneoLabel,
+} from './kaneo-import-helpers.js'
 import type { LinearIssue, LinearLabel, LinearState } from './linear-client.js'
 import { processWithAccumulator } from './queue.js'
 
 const log = logger.child({ scope: 'kaneo-import' })
 
-export { assignLabels, markArchived, importComments, buildRelations, patchRelations }
+export { assignLabels, ensureArchivedLabel, markArchived, importComments, buildRelations, patchRelations }
+export type { KaneoLabel }
 
 const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
   taskId: z.string().optional(),
@@ -18,7 +27,6 @@ const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
   description: z.string(),
 })
 
-export type KaneoLabel = z.infer<typeof KaneoLabelSchemaLocal>
 export type KaneoTask = z.infer<typeof KaneoTaskWithDescriptionSchema>
 
 const KaneoColumnSchema = z.object({
@@ -62,11 +70,16 @@ async function findOrCreateColumn(
   return column.id
 }
 
+export interface EnsureColumnsResult {
+  stateToColumnId: Map<string, string>
+  newCount: number
+}
+
 export async function ensureColumns(
   config: KaneoConfig,
   projectId: string,
   states: LinearState[],
-): Promise<Map<string, string>> {
+): Promise<EnsureColumnsResult> {
   const existing = await kaneoFetch(
     config,
     'GET',
@@ -79,14 +92,17 @@ export async function ensureColumns(
 
   return processWithAccumulator(
     states,
-    { stateToColumnId: new Map<string, string>(), existingByName },
+    { stateToColumnId: new Map<string, string>(), existingByName, newCount: 0 },
     async (state, acc) => {
+      const normalizedName = state.name.toLowerCase()
+      const isNew = !acc.existingByName.has(normalizedName)
       const columnId = await findOrCreateColumn(config, projectId, state, acc.existingByName)
       acc.stateToColumnId.set(state.name, columnId)
-      acc.existingByName.set(state.name.toLowerCase(), columnId)
+      acc.existingByName.set(normalizedName, columnId)
+      if (isNew) acc.newCount++
       return acc
     },
-  ).then((acc) => acc.stateToColumnId)
+  ).then(({ stateToColumnId, newCount }) => ({ stateToColumnId, newCount }))
 }
 
 async function findOrCreateLabel(
@@ -182,6 +198,7 @@ export async function createTaskFromIssue(
   issue: LinearIssue,
   labelIdMap: Map<string, string>,
   linearIdToKaneoId: Map<string, string>,
+  archivedLabel: KaneoLabel | undefined,
 ): Promise<void> {
   const description = issue.description ?? ''
 
@@ -205,8 +222,8 @@ export async function createTaskFromIssue(
 
   await assignLabels(config, task.id, workspaceId, issue.labels.nodes, labelIdMap)
 
-  if (issue.archivedAt !== null) {
-    await markArchived(config, task.id, workspaceId)
+  if (issue.archivedAt !== null && archivedLabel !== undefined) {
+    await markArchived(config, task.id, workspaceId, archivedLabel)
   }
 
   await importComments(config, task.id, issue.comments.nodes)

@@ -8,7 +8,14 @@ import { Database } from 'bun:sqlite'
 
 import { type KaneoConfig } from '../kaneo/client.js'
 import { logger } from '../logger.js'
-import { createTaskFromIssue, ensureColumns, ensureLabels, ensureProject, patchRelations } from './kaneo-import.js'
+import {
+  createTaskFromIssue,
+  ensureArchivedLabel,
+  ensureColumns,
+  ensureLabels,
+  ensureProject,
+  patchRelations,
+} from './kaneo-import.js'
 import {
   fetchAllIssues,
   fetchLabels,
@@ -120,11 +127,22 @@ async function importProjectGroup(
   const kaneoProjectId = await ensureProject(kaneoConfig, workspaceId, projectName, projectDescription)
   stats.projects++
 
-  const stateToColumnId = await ensureColumns(kaneoConfig, kaneoProjectId, workflowStates)
-  stats.columns += stateToColumnId.size
+  const { newCount: newColumnsCreated } = await ensureColumns(kaneoConfig, kaneoProjectId, workflowStates)
+  stats.columns += newColumnsCreated
+
+  const hasArchived = issues.some((i) => i.archivedAt !== null)
+  const archivedLabel = hasArchived ? await ensureArchivedLabel(kaneoConfig, workspaceId) : undefined
 
   const processIssue = async (issue: LinearIssue): Promise<void> => {
-    await createTaskFromIssue(kaneoConfig, kaneoProjectId, workspaceId, issue, labelIdMap, linearIdToKaneoId)
+    await createTaskFromIssue(
+      kaneoConfig,
+      kaneoProjectId,
+      workspaceId,
+      issue,
+      labelIdMap,
+      linearIdToKaneoId,
+      archivedLabel,
+    )
     stats.tasks++
     stats.comments += issue.comments.nodes.length
     if (issue.archivedAt !== null) stats.archived++

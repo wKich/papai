@@ -47,28 +47,20 @@ export async function assignLabels(
     const kaneoLabelId = labelIdMap.get(label.id)
     if (kaneoLabelId === undefined) return
 
-    const labelDetail = await kaneoFetch(
-      config,
-      'GET',
-      `/label/${kaneoLabelId}`,
-      undefined,
-      undefined,
-      KaneoLabelSchemaLocal,
-    )
     await kaneoFetch(
       config,
       'POST',
       '/label',
       {
-        name: labelDetail.name,
-        color: labelDetail.color,
+        name: label.name,
+        color: label.color,
         workspaceId,
         taskId,
       },
       undefined,
       KaneoLabelSchemaLocal,
     )
-    log.debug({ taskId, labelName: labelDetail.name }, 'Label assigned to task')
+    log.debug({ taskId, labelName: label.name }, 'Label assigned to task')
   }
 
   await issueLabels.reduce<Promise<void>>(async (accPromise, label) => {
@@ -77,7 +69,9 @@ export async function assignLabels(
   }, Promise.resolve())
 }
 
-export async function markArchived(config: KaneoConfig, taskId: string, workspaceId: string): Promise<void> {
+export type KaneoLabel = z.infer<typeof KaneoLabelSchemaLocal>
+
+export async function ensureArchivedLabel(config: KaneoConfig, workspaceId: string): Promise<KaneoLabel> {
   const allLabels = await kaneoFetch(
     config,
     'GET',
@@ -86,22 +80,31 @@ export async function markArchived(config: KaneoConfig, taskId: string, workspac
     undefined,
     z.array(KaneoLabelSchemaLocal),
   )
-  const archiveLabel =
-    allLabels.find((l) => l.name.toLowerCase() === 'archived') ??
-    (await kaneoFetch(
-      config,
-      'POST',
-      '/label',
-      { name: 'archived', color: '#808080', workspaceId },
-      undefined,
-      KaneoLabelSchemaLocal,
-    ))
+  const existing = allLabels.find((l) => l.name.toLowerCase() === 'archived')
+  if (existing !== undefined) return existing
 
+  log.info({ workspaceId }, 'Creating archived label')
+  return kaneoFetch(
+    config,
+    'POST',
+    '/label',
+    { name: 'archived', color: '#808080', workspaceId },
+    undefined,
+    KaneoLabelSchemaLocal,
+  )
+}
+
+export async function markArchived(
+  config: KaneoConfig,
+  taskId: string,
+  workspaceId: string,
+  archivedLabel: KaneoLabel,
+): Promise<void> {
   await kaneoFetch(
     config,
     'POST',
     '/label',
-    { name: archiveLabel.name, color: archiveLabel.color, workspaceId, taskId },
+    { name: archivedLabel.name, color: archivedLabel.color, workspaceId, taskId },
     undefined,
     KaneoLabelSchemaLocal,
   )

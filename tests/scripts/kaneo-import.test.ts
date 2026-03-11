@@ -110,7 +110,7 @@ describe('frontmatter round-trip in patchRelations context', () => {
 
 describe('EnsureColumnsResult interface', () => {
   test('EnsureColumnsResult interface has stateToColumnId and newCount', () => {
-    const result: { stateToColumnId: Map<string, string>; newCount: number } = {
+    const result: import('../../src/scripts/kaneo-import.js').EnsureColumnsResult = {
       stateToColumnId: new Map([['Todo', 'col-1']]),
       newCount: 1,
     }
