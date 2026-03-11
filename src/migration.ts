@@ -78,7 +78,8 @@ async function resolveKaneoConfig(
     return { kaneoKey, kaneoBaseUrl, kaneoWorkspaceId }
   }
   if (opts.dryRun === true || kaneoBaseUrl === undefined) return null
-  const prov = await provisionKaneoUser(kaneoBaseUrl, kaneoBaseUrl, user.telegram_id, user.username)
+  const provisionBaseUrl = opts.kaneoInternalUrl ?? kaneoBaseUrl
+  const prov = await provisionKaneoUser(provisionBaseUrl, kaneoBaseUrl, user.telegram_id, user.username)
   setConfig(user.telegram_id, 'kaneo_key', prov.kaneoKey)
   setKaneoWorkspace(user.telegram_id, prov.workspaceId)
   return {

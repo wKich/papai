@@ -58,6 +58,9 @@ jobs:
       - name: Generate CHANGELOG.md
         run: git-cliff --unreleased --tag "${{ steps.version.outputs.next }}" -o CHANGELOG.md
 
+      - name: Format CHANGELOG.md
+        run: bun run format
+
       - name: Commit CHANGELOG.md
         run: |
           git add CHANGELOG.md

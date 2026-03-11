@@ -86,7 +86,8 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
   if (kaneoUrl === undefined) return
   try {
     const { provisionKaneoUser } = await import('./kaneo/provision.js')
-    const prov = await provisionKaneoUser(kaneoUrl, kaneoUrl, userId, ctx.from?.username ?? null)
+    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
+    const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, ctx.from?.username ?? null)
     setConfig(userId, 'kaneo_key', prov.kaneoKey)
     setKaneoWorkspace(userId, prov.workspaceId)
     log.info({ userId }, 'Kaneo account provisioned on first use')

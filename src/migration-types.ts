@@ -24,6 +24,7 @@ export type MigrationOptions = {
   clearHistory?: boolean
   singleUserId?: number
   kaneoUrl?: string
+  kaneoInternalUrl?: string
 }
 
 export type ProgressCallback = (msg: string) => Promise<void>

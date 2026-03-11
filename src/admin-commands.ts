@@ -166,6 +166,7 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
   migrationRunning = true
   log.info({ singleUserId }, '/migrate run called')
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
+  const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL']
   const lines: string[] = ['Creating backup...']
   const msg = await ctx.reply(lines.join('\n'))
   const appendLine = async (line: string): Promise<void> => {
@@ -175,7 +176,7 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
   try {
     const backupPath = createBackup()
     await appendLine(`Backup saved. Starting migration...`)
-    const results = await runMigration({ clearHistory: true, singleUserId, kaneoUrl }, appendLine)
+    const results = await runMigration({ clearHistory: true, singleUserId, kaneoUrl, kaneoInternalUrl }, appendLine)
     const failed = results.filter((r) => r.status.startsWith('failed')).length
     const provisionedCount = results.filter((r) => r.kaneoEmail !== undefined).length
     const footer =
