@@ -1,0 +1,26 @@
+import { logger } from '../logger.js'
+import { classifyKaneoError } from './classify-error.js'
+import { type KaneoConfig } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
+
+const log = logger.child({ scope: 'kaneo:archive-project' })
+
+export async function archiveProject({
+  config,
+  projectId,
+}: {
+  config: KaneoConfig
+  projectId: string
+}): Promise<{ id: string; success: true }> {
+  log.debug({ projectId }, 'archiveProject called')
+
+  try {
+    const client = new KaneoClient(config)
+    const result = await client.projects.archive(projectId)
+    log.info({ projectId }, 'Project archived (deleted)')
+    return result
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'archiveProject failed')
+    throw classifyKaneoError(error)
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "papai",
   "private": true,
-  "description": "papai — an intelligent Telegram bot for managing Linear tasks with LLM.",
+  "description": "papai — an intelligent Telegram bot for managing Kaneo tasks with LLM.",
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
@@ -15,12 +15,14 @@
     "test:coverage": "bun test --coverage",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
-    "changelog:generate": "git-cliff -o CHANGELOG.md"
+    "changelog:generate": "git-cliff -o CHANGELOG.md",
+    "migrate:linear": "bun run src/scripts/migrate-linear-to-kaneo.ts",
+    "migrate:kaneo": "bash scripts/migrate-to-kaneo.sh",
+    "test:migration": "bun run src/scripts/test-migration.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.33",
     "@gramio/format": "^0.5.0",
-    "@linear/sdk": "^76.0.0",
     "ai": "^6.0.108",
     "grammy": "^1.41.1",
     "marked": "^17.0.4",

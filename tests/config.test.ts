@@ -58,32 +58,25 @@ describe('setConfig', () => {
   })
 
   test('stores value for user and key', () => {
-    setConfig(USER_A, 'linear_key', 'test-api-key')
-    expect(getConfig(USER_A, 'linear_key')).toBe('test-api-key')
+    setConfig(USER_A, 'kaneo_key', 'test-api-key')
+    expect(getConfig(USER_A, 'kaneo_key')).toBe('test-api-key')
   })
 
   test('updates existing value', () => {
-    setConfig(USER_A, 'linear_key', 'old-key')
-    setConfig(USER_A, 'linear_key', 'new-key')
-    expect(getConfig(USER_A, 'linear_key')).toBe('new-key')
+    setConfig(USER_A, 'kaneo_key', 'old-key')
+    setConfig(USER_A, 'kaneo_key', 'new-key')
+    expect(getConfig(USER_A, 'kaneo_key')).toBe('new-key')
   })
 
   test('isolates config between users', () => {
-    setConfig(USER_A, 'linear_key', 'key-a')
-    setConfig(USER_B, 'linear_key', 'key-b')
-    expect(getConfig(USER_A, 'linear_key')).toBe('key-a')
-    expect(getConfig(USER_B, 'linear_key')).toBe('key-b')
+    setConfig(USER_A, 'kaneo_key', 'key-a')
+    setConfig(USER_B, 'kaneo_key', 'key-b')
+    expect(getConfig(USER_A, 'kaneo_key')).toBe('key-a')
+    expect(getConfig(USER_B, 'kaneo_key')).toBe('key-b')
   })
 
   test('handles all config keys', () => {
-    const allKeys: ConfigKey[] = [
-      'linear_key',
-      'linear_team_id',
-      'openai_key',
-      'openai_base_url',
-      'openai_model',
-      'memory_model',
-    ]
+    const allKeys: ConfigKey[] = ['kaneo_key', 'openai_key', 'openai_base_url', 'openai_model', 'memory_model']
     allKeys.forEach((key) => {
       setConfig(USER_A, key, `value-for-${key}`)
       expect(getConfig(USER_A, key)).toBe(`value-for-${key}`)
@@ -97,8 +90,8 @@ describe('getConfig', () => {
   })
 
   test('returns stored value', () => {
-    setConfig(USER_A, 'linear_team_id', 'team-abc')
-    expect(getConfig(USER_A, 'linear_team_id')).toBe('team-abc')
+    setConfig(USER_A, 'kaneo_key', 'key-abc')
+    expect(getConfig(USER_A, 'kaneo_key')).toBe('key-abc')
   })
 
   test('returns null for unset key', () => {
@@ -108,21 +101,14 @@ describe('getConfig', () => {
 
 describe('isConfigKey', () => {
   test('returns true for valid keys', () => {
-    const validKeys: ConfigKey[] = [
-      'linear_key',
-      'linear_team_id',
-      'openai_key',
-      'openai_base_url',
-      'openai_model',
-      'memory_model',
-    ]
+    const validKeys: ConfigKey[] = ['kaneo_key', 'openai_key', 'openai_base_url', 'openai_model', 'memory_model']
     validKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(true)
     })
   })
 
   test('returns false for invalid keys', () => {
-    const invalidKeys = ['invalid', 'linear', 'openai', 'token', '']
+    const invalidKeys = ['invalid', 'linear', 'openai', 'token', '', 'linear_key']
     invalidKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(false)
     })
@@ -135,43 +121,41 @@ describe('getAllConfig', () => {
   })
 
   test('returns all set configs for user', () => {
-    setConfig(USER_A, 'linear_key', 'key-1')
+    setConfig(USER_A, 'kaneo_key', 'key-1')
     setConfig(USER_A, 'openai_model', 'gpt-4')
     const allConfig = getAllConfig(USER_A)
-    expect(allConfig.linear_key).toBe('key-1')
+    expect(allConfig.kaneo_key).toBe('key-1')
     expect(allConfig.openai_model).toBe('gpt-4')
   })
 
   test('does not leak config from other users', () => {
-    setConfig(USER_A, 'linear_key', 'key-a')
-    setConfig(USER_B, 'linear_key', 'key-b')
+    setConfig(USER_A, 'kaneo_key', 'key-a')
+    setConfig(USER_B, 'kaneo_key', 'key-b')
     const configA = getAllConfig(USER_A)
-    expect(configA.linear_key).toBe('key-a')
+    expect(configA.kaneo_key).toBe('key-a')
   })
 })
 
 describe('maskValue', () => {
   test('masks sensitive keys', () => {
-    expect(maskValue('linear_key', 'secret-key-1234')).toBe('****1234')
+    expect(maskValue('kaneo_key', 'secret-key-1234')).toBe('****1234')
     expect(maskValue('openai_key', 'sk-abc123')).toBe('****c123')
   })
 
   test('returns unmasked value for non-sensitive keys', () => {
-    expect(maskValue('linear_team_id', 'team-123')).toBe('team-123')
     expect(maskValue('openai_model', 'gpt-4')).toBe('gpt-4')
     expect(maskValue('openai_base_url', 'https://api.openai.com')).toBe('https://api.openai.com')
   })
 
   test('handles short values for sensitive keys', () => {
-    expect(maskValue('linear_key', 'ab')).toBe('****ab')
-    expect(maskValue('linear_key', '')).toBe('****')
+    expect(maskValue('kaneo_key', 'ab')).toBe('****ab')
+    expect(maskValue('kaneo_key', '')).toBe('****')
   })
 })
 
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
-    expect(CONFIG_KEYS).toContain('linear_key')
-    expect(CONFIG_KEYS).toContain('linear_team_id')
+    expect(CONFIG_KEYS).toContain('kaneo_key')
     expect(CONFIG_KEYS).toContain('openai_key')
     expect(CONFIG_KEYS).toContain('openai_base_url')
     expect(CONFIG_KEYS).toContain('openai_model')
@@ -179,6 +163,6 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(6)
+    expect(CONFIG_KEYS).toHaveLength(5)
   })
 })

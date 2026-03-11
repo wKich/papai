@@ -1,0 +1,6 @@
+{$KANEO_CLIENT_URL} {
+	handle_path /api/* {
+		reverse_proxy kaneo-api:1337
+	}
+	reverse_proxy kaneo-web:5173
+}

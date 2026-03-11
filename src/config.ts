@@ -3,24 +3,17 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
 
-export type ConfigKey =
-  | 'linear_key'
-  | 'linear_team_id'
-  | 'openai_key'
-  | 'openai_base_url'
-  | 'openai_model'
-  | 'memory_model'
+export type ConfigKey = 'kaneo_key' | 'openai_key' | 'openai_base_url' | 'openai_model' | 'memory_model'
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
-  'linear_key',
-  'linear_team_id',
+  'kaneo_key',
   'openai_key',
   'openai_base_url',
   'openai_model',
   'memory_model',
 ]
 
-const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['linear_key', 'openai_key'])
+const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['kaneo_key', 'openai_key'])
 
 export function setConfig(userId: number, key: ConfigKey, value: string): void {
   log.debug({ userId, key }, 'setConfig called')

@@ -1,8 +1,9 @@
 name: Deploy
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ['Release']
+    types: [completed]
 
 env:
   REGISTRY: ghcr.io
@@ -12,6 +13,7 @@ jobs:
   build-and-push:
     name: Build & Push
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -21,6 +23,10 @@ jobs:
       image_name: ${{ steps.lowercase.outputs.image_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Lowercase image name
         id: lowercase
@@ -43,7 +49,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.event.release.prerelease == false }}
+            type=raw,value=latest
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -79,6 +85,9 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ needs.build-and-push.outputs.image_name }}@${{ needs.build-and-push.outputs.digest }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          KANEO_POSTGRES_PASSWORD: ${{ secrets.KANEO_POSTGRES_PASSWORD }}
+          KANEO_AUTH_SECRET: ${{ secrets.KANEO_AUTH_SECRET }}
+          KANEO_CLIENT_URL: ${{ vars.KANEO_CLIENT_URL }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -88,13 +97,43 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" mkdir -p "~/${GITHUB_REPOSITORY##*/}"
           scp -i ~/.ssh/id_rsa -P "$SSH_PORT" docker-compose.yml "$SSH_USER@$SSH_HOST:~/${GITHUB_REPOSITORY##*/}/docker-compose.yml"
+          scp -i ~/.ssh/id_rsa -P "$SSH_PORT" Caddyfile "$SSH_USER@$SSH_HOST:~/${GITHUB_REPOSITORY##*/}/Caddyfile"
           ssh -i ~/.ssh/id_rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash << EOF
           set -e
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
           cd ~/${GITHUB_REPOSITORY##*/}
-          printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_USER_ID=%s\n' "${TELEGRAM_BOT_TOKEN}" "${TELEGRAM_USER_ID}" > .env
+          {
+            printf 'TELEGRAM_BOT_TOKEN=%s\n' "${TELEGRAM_BOT_TOKEN}"
+            printf 'TELEGRAM_USER_ID=%s\n' "${TELEGRAM_USER_ID}"
+            printf 'KANEO_POSTGRES_PASSWORD=%s\n' "${KANEO_POSTGRES_PASSWORD}"
+            printf 'KANEO_AUTH_SECRET=%s\n' "${KANEO_AUTH_SECRET}"
+            [ -n "${KANEO_CLIENT_URL}" ] && printf 'KANEO_CLIENT_URL=%s\n' "${KANEO_CLIENT_URL}"
+          } > .env
           chmod 600 .env
           IMAGE="${IMAGE}" docker compose pull
           IMAGE="${IMAGE}" docker compose up -d --remove-orphans
           docker image prune -f
+          echo "Waiting for services to become healthy..."
+          for i in \$(seq 1 18); do
+            status=\$(docker inspect \$(docker compose ps -q kaneo-api 2>/dev/null) --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)
+            if [ "\$status" = "healthy" ]; then
+              echo "kaneo-api is healthy"
+              break
+            fi
+            if [ "\$i" -eq 18 ]; then
+              echo "Health check timed out after 3 minutes" >&2
+              docker compose ps >&2
+              docker compose logs --tail=50 kaneo-api >&2
+              exit 1
+            fi
+            echo "  kaneo-api status: \$status (\$i/18, waiting 10s...)"
+            sleep 10
+          done
+          docker compose ps papai | grep -qiE "running|up" || {
+            echo "papai is not running" >&2
+            docker compose ps >&2
+            docker compose logs --tail=50 papai >&2
+            exit 1
+          }
+          echo "All services healthy"
           EOF

@@ -174,96 +174,95 @@ describe('buildMemoryContextMessage', () => {
   })
 
   test('returns system message with summary only', () => {
-    const result = buildMemoryContextMessage('User created ENG-42', [])
+    const result = buildMemoryContextMessage('User created #42', [])
     expect(result).not.toBeNull()
     expect(result!.role).toBe('system')
-    expect(result!.content).toContain('Summary: User created ENG-42')
+    expect(result!.content).toContain('Summary: User created #42')
     expect(result!.content).toContain('=== Memory context ===')
   })
 
   test('returns system message with facts only', () => {
     const facts = [
       {
-        identifier: 'ENG-42',
+        identifier: '#42',
         title: 'Fix login',
-        url: 'https://linear.app/ENG-42',
+        url: 'https://linear.app/#42',
         last_seen: '2026-03-01T00:00:00Z',
       },
     ]
     const result = buildMemoryContextMessage(null, facts)
     expect(result).not.toBeNull()
-    expect(result!.content).toContain('ENG-42')
+    expect(result!.content).toContain('#42')
     expect(result!.content).toContain('Fix login')
-    expect(result!.content).toContain('Recently accessed Linear entities')
+    expect(result!.content).toContain('Recently accessed Kaneo entities')
   })
 
   test('returns combined message with both summary and facts', () => {
-    const facts = [{ identifier: 'ENG-42', title: 'Fix login', url: '', last_seen: '2026-03-01T00:00:00Z' }]
+    const facts = [{ identifier: '#42', title: 'Fix login', url: '', last_seen: '2026-03-01T00:00:00Z' }]
     const result = buildMemoryContextMessage('Previous summary', facts)
     expect(result).not.toBeNull()
     expect(result!.content).toContain('Summary: Previous summary')
-    expect(result!.content).toContain('ENG-42')
+    expect(result!.content).toContain('#42')
   })
 
   test('formats last_seen date as YYYY-MM-DD', () => {
-    const facts = [{ identifier: 'ENG-1', title: 'Test', url: '', last_seen: '2026-03-05T14:30:00Z' }]
+    const facts = [{ identifier: '#1', title: 'Test', url: '', last_seen: '2026-03-05T14:30:00Z' }]
     const result = buildMemoryContextMessage(null, facts)
     expect(result!.content).toContain('last seen 2026-03-05')
   })
 })
 
 describe('extractFacts', () => {
-  test('extracts fact from create_issue result', () => {
+  test('extracts fact from create_task result', () => {
     const results = [
       {
-        toolName: 'create_issue',
-        result: { identifier: 'ENG-42', title: 'New issue', url: 'https://linear.app/ENG-42' },
+        toolName: 'create_task',
+        result: { id: 'task-42', title: 'New task', number: 42 },
       },
     ]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
-    expect(facts[0]!.identifier).toBe('ENG-42')
-    expect(facts[0]!.title).toBe('New issue')
-    expect(facts[0]!.url).toBe('https://linear.app/ENG-42')
+    expect(facts[0]!.identifier).toBe('#42')
+    expect(facts[0]!.title).toBe('New task')
   })
 
-  test('extracts fact from update_issue result', () => {
-    const results = [{ toolName: 'update_issue', result: { identifier: 'ENG-38', url: 'https://linear.app/ENG-38' } }]
+  test('extracts fact from update_task result', () => {
+    const results = [{ toolName: 'update_task', result: { id: 'task-38', number: 38 } }]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
-    expect(facts[0]!.identifier).toBe('ENG-38')
+    expect(facts[0]!.identifier).toBe('#38')
     // no title → falls back to identifier
-    expect(facts[0]!.title).toBe('ENG-38')
+    expect(facts[0]!.title).toBe('#38')
   })
 
-  test('extracts fact from get_issue result', () => {
-    const results = [{ toolName: 'get_issue', result: { identifier: 'ENG-10', title: 'Details', url: '' } }]
+  test('extracts fact from get_task result', () => {
+    const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
-    expect(facts[0]!.identifier).toBe('ENG-10')
+    expect(facts[0]!.identifier).toBe('#10')
   })
 
-  test('extracts up to 3 facts from search_issues result', () => {
+  test('extracts up to 3 facts from search_tasks result', () => {
     const items = [
-      { identifier: 'ENG-1', title: 'A' },
-      { identifier: 'ENG-2', title: 'B' },
-      { identifier: 'ENG-3', title: 'C' },
-      { identifier: 'ENG-4', title: 'D' },
+      { id: 'task-1', title: 'A', number: 1 },
+      { id: 'task-2', title: 'B', number: 2 },
+      { id: 'task-3', title: 'C', number: 3 },
+      { id: 'task-4', title: 'D', number: 4 },
     ]
-    const results = [{ toolName: 'search_issues', result: items }]
+    const results = [{ toolName: 'search_tasks', result: items }]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(3)
-    expect(facts.map((f) => f.identifier)).toEqual(['ENG-1', 'ENG-2', 'ENG-3'])
+    expect(facts.map((f) => f.identifier)).toEqual(['#1', '#2', '#3'])
   })
 
   test('returns empty array for unknown tool', () => {
-    const results = [{ toolName: 'unknown_tool', result: { identifier: 'X' } }]
+    const results = [{ toolName: 'unknown_tool', result: { id: 'X' } }]
     const facts = extractFacts([], results)
     expect(facts).toEqual([])
   })
 
   test('returns empty array for malformed result', () => {
-    const results = [{ toolName: 'create_issue', result: { no_identifier: true } }]
+    const results = [{ toolName: 'create_task', result: { no_id: true } }]
     const facts = extractFacts([], results)
     expect(facts).toEqual([])
   })
@@ -272,14 +271,14 @@ describe('extractFacts', () => {
     const results = [
       {
         toolName: 'create_project',
-        result: { id: 'proj-123', name: 'Backend Migration', url: 'https://linear.app/project/proj-123' },
+        result: { id: 'proj-123', name: 'Backend Migration', url: 'https://kaneo.app/project/proj-123' },
       },
     ]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('proj:proj-123')
     expect(facts[0]!.title).toBe('Backend Migration')
-    expect(facts[0]!.url).toBe('https://linear.app/project/proj-123')
+    expect(facts[0]!.url).toBe('https://kaneo.app/project/proj-123')
   })
 
   test('extracts create_project fact without url', () => {
@@ -310,9 +309,9 @@ describe('upsertFact eviction', () => {
     // Insert 52 facts (over the 50 cap)
     for (let i = 0; i < 52; i++) {
       upsertFact(userId, {
-        identifier: `ENG-${i}`,
-        title: `Issue ${i}`,
-        url: `https://linear.app/ENG-${i}`,
+        identifier: `#${i}`,
+        title: `Task ${i}`,
+        url: `https://kaneo.app/task/${i}`,
       })
     }
 
@@ -330,7 +329,7 @@ describe('upsertFact eviction', () => {
 
   test('updates last_seen on duplicate fact insert', async () => {
     const userId = 999
-    const fact = { identifier: 'ENG-100', title: 'Test Issue', url: '' }
+    const fact = { identifier: '#100', title: 'Test Task', url: '' }
 
     upsertFact(userId, fact)
     const firstLoad = loadFacts(userId)

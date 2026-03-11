@@ -1,17 +1,17 @@
 import { z } from 'zod'
 
 // Error categories using discriminated unions
-export type LinearError =
-  | { type: 'linear'; code: 'issue-not-found'; issueId: string }
-  | { type: 'linear'; code: 'team-not-found'; teamId: string }
-  | { type: 'linear'; code: 'auth-failed' }
-  | { type: 'linear'; code: 'rate-limited' }
-  | { type: 'linear'; code: 'validation-failed'; field: string; reason: string }
-  | { type: 'linear'; code: 'label-not-found'; labelName: string }
-  | { type: 'linear'; code: 'project-not-found'; projectId: string }
-  | { type: 'linear'; code: 'comment-not-found'; commentId: string }
-  | { type: 'linear'; code: 'relation-not-found'; issueId: string; relatedIssueId: string }
-  | { type: 'linear'; code: 'unknown'; originalError: Error }
+export type KaneoError =
+  | { type: 'kaneo'; code: 'task-not-found'; taskId: string }
+  | { type: 'kaneo'; code: 'workspace-not-found'; workspaceId: string }
+  | { type: 'kaneo'; code: 'auth-failed' }
+  | { type: 'kaneo'; code: 'rate-limited' }
+  | { type: 'kaneo'; code: 'validation-failed'; field: string; reason: string }
+  | { type: 'kaneo'; code: 'label-not-found'; labelName: string }
+  | { type: 'kaneo'; code: 'project-not-found'; projectId: string }
+  | { type: 'kaneo'; code: 'comment-not-found'; commentId: string }
+  | { type: 'kaneo'; code: 'relation-not-found'; taskId: string; relatedTaskId: string }
+  | { type: 'kaneo'; code: 'unknown'; originalError: Error }
 
 export type LlmError =
   | { type: 'llm'; code: 'api-error'; message: string }
@@ -28,30 +28,34 @@ export type SystemError =
   | { type: 'system'; code: 'network-error'; message: string }
   | { type: 'system'; code: 'unexpected'; originalError: Error }
 
-export type AppError = LinearError | LlmError | ValidationError | SystemError
+export type AppError = KaneoError | LlmError | ValidationError | SystemError
 
 // Error constructors
-export const linearError = {
-  issueNotFound: (issueId: string): AppError => ({ type: 'linear', code: 'issue-not-found', issueId }),
-  teamNotFound: (teamId: string): AppError => ({ type: 'linear', code: 'team-not-found', teamId }),
-  authFailed: (): AppError => ({ type: 'linear', code: 'auth-failed' }),
-  rateLimited: (): AppError => ({ type: 'linear', code: 'rate-limited' }),
+export const kaneoError = {
+  taskNotFound: (taskId: string): AppError => ({ type: 'kaneo', code: 'task-not-found', taskId }),
+  workspaceNotFound: (workspaceId: string): AppError => ({
+    type: 'kaneo',
+    code: 'workspace-not-found',
+    workspaceId,
+  }),
+  authFailed: (): AppError => ({ type: 'kaneo', code: 'auth-failed' }),
+  rateLimited: (): AppError => ({ type: 'kaneo', code: 'rate-limited' }),
   validationFailed: (field: string, reason: string): AppError => ({
-    type: 'linear',
+    type: 'kaneo',
     code: 'validation-failed',
     field,
     reason,
   }),
-  labelNotFound: (labelName: string): AppError => ({ type: 'linear', code: 'label-not-found', labelName }),
-  projectNotFound: (projectId: string): AppError => ({ type: 'linear', code: 'project-not-found', projectId }),
-  commentNotFound: (commentId: string): AppError => ({ type: 'linear', code: 'comment-not-found', commentId }),
-  relationNotFound: (issueId: string, relatedIssueId: string): AppError => ({
-    type: 'linear',
+  labelNotFound: (labelName: string): AppError => ({ type: 'kaneo', code: 'label-not-found', labelName }),
+  projectNotFound: (projectId: string): AppError => ({ type: 'kaneo', code: 'project-not-found', projectId }),
+  commentNotFound: (commentId: string): AppError => ({ type: 'kaneo', code: 'comment-not-found', commentId }),
+  relationNotFound: (taskId: string, relatedTaskId: string): AppError => ({
+    type: 'kaneo',
     code: 'relation-not-found',
-    issueId,
-    relatedIssueId,
+    taskId,
+    relatedTaskId,
   }),
-  unknown: (originalError: Error): AppError => ({ type: 'linear', code: 'unknown', originalError }),
+  unknown: (originalError: Error): AppError => ({ type: 'kaneo', code: 'unknown', originalError }),
 }
 
 export const llmError = {
@@ -77,22 +81,22 @@ export const systemError = {
   unexpected: (originalError: Error): AppError => ({ type: 'system', code: 'unexpected', originalError }),
 }
 
-const appErrorTypeSchema = z.object({ type: z.enum(['linear', 'llm', 'validation', 'system']) })
+const appErrorTypeSchema = z.object({ type: z.enum(['kaneo', 'llm', 'validation', 'system']) })
 
 // Type guard to check if error is an AppError
 export const isAppError = (error: unknown): error is AppError => appErrorTypeSchema.safeParse(error).success
 
 // Error message mappers
-const getLinearMessage = (error: LinearError): string => {
+const getKaneoMessage = (error: KaneoError): string => {
   switch (error.code) {
-    case 'issue-not-found':
-      return `Issue "${error.issueId}" was not found. Please check the issue ID and try again.`
-    case 'team-not-found':
-      return `Team configuration error. Please check LINEAR_TEAM_ID.`
+    case 'task-not-found':
+      return `Task "${error.taskId}" was not found. Please check the task ID and try again.`
+    case 'workspace-not-found':
+      return `Workspace configuration error. Please check KANEO_WORKSPACE_ID.`
     case 'auth-failed':
-      return `Failed to connect to Linear. Please check your LINEAR_API_KEY.`
+      return `Failed to connect to Kaneo. Please check your KANEO_KEY.`
     case 'rate-limited':
-      return `Linear API rate limit reached. Please wait a moment and try again.`
+      return `Kaneo API rate limit reached. Please wait a moment and try again.`
     case 'validation-failed':
       return `Invalid ${error.field}: ${error.reason}`
     case 'label-not-found':
@@ -102,9 +106,9 @@ const getLinearMessage = (error: LinearError): string => {
     case 'comment-not-found':
       return `Comment "${error.commentId}" was not found.`
     case 'relation-not-found':
-      return `Relation between issues "${error.issueId}" and "${error.relatedIssueId}" was not found.`
+      return `Relation between tasks "${error.taskId}" and "${error.relatedTaskId}" was not found.`
     case 'unknown':
-      return `Linear API error occurred. Please try again later.`
+      return `Kaneo API error occurred. Please try again later.`
   }
 }
 
@@ -143,8 +147,8 @@ const getSystemMessage = (error: SystemError): string => {
 
 export const getUserMessage = (error: AppError): string => {
   switch (error.type) {
-    case 'linear':
-      return getLinearMessage(error)
+    case 'kaneo':
+      return getKaneoMessage(error)
     case 'llm':
       return getLlmMessage(error)
     case 'validation':

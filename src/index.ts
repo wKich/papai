@@ -5,7 +5,7 @@ import { migrateToMultiUser } from './migrate.js'
 
 const log = logger.child({ scope: 'main' })
 
-const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID']
+const REQUIRED_ENV_VARS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_USER_ID', 'KANEO_CLIENT_URL']
 
 const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
 if (missing.length > 0) {

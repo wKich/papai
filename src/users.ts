@@ -66,3 +66,19 @@ export function listUsers(): UserRecord[] {
   log.debug('listUsers called')
   return getDb().query<UserRecord, []>('SELECT telegram_id, username, added_at, added_by FROM users').all()
 }
+
+export function getKaneoWorkspace(telegramId: number): string | null {
+  log.debug({ telegramId }, 'getKaneoWorkspace called')
+  const row = getDb()
+    .query<{ kaneo_workspace_id: string | null }, [number]>(
+      'SELECT kaneo_workspace_id FROM users WHERE telegram_id = ?',
+    )
+    .get(telegramId)
+  return row?.kaneo_workspace_id ?? null
+}
+
+export function setKaneoWorkspace(telegramId: number, workspaceId: string): void {
+  log.debug({ telegramId }, 'setKaneoWorkspace called')
+  getDb().run('UPDATE users SET kaneo_workspace_id = ? WHERE telegram_id = ?', [workspaceId, telegramId])
+  log.info({ telegramId }, 'Kaneo workspace ID stored')
+}

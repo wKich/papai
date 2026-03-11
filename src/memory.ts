@@ -101,10 +101,10 @@ export function clearFacts(userId: number): void {
 type ToolCallEntry = { toolName: string; args: unknown }
 type ToolResultEntry = { toolName: string; result: unknown }
 
-const IssueResultSchema = z.looseObject({
-  identifier: z.string(),
+const TaskResultSchema = z.looseObject({
+  id: z.string(),
   title: z.string().optional(),
-  url: z.string().optional(),
+  number: z.number().optional(),
 })
 
 const ProjectResultSchema = z.looseObject({
@@ -120,25 +120,27 @@ export function extractFacts(
   const facts: Omit<MemoryFact, 'last_seen'>[] = []
 
   for (const result of toolResults) {
-    if (['create_issue', 'update_issue', 'get_issue'].includes(result.toolName)) {
-      const parsed = IssueResultSchema.safeParse(result.result)
+    if (['create_task', 'update_task', 'get_task'].includes(result.toolName)) {
+      const parsed = TaskResultSchema.safeParse(result.result)
       if (parsed.success) {
+        const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
         facts.push({
-          identifier: parsed.data.identifier,
-          title: parsed.data.title ?? parsed.data.identifier,
-          url: parsed.data.url ?? '',
+          identifier: label,
+          title: parsed.data.title ?? label,
+          url: '',
         })
       }
     }
 
-    if (result.toolName === 'search_issues') {
-      const items = z.array(IssueResultSchema).safeParse(result.result)
+    if (result.toolName === 'search_tasks') {
+      const items = z.array(TaskResultSchema).safeParse(result.result)
       if (items.success) {
         for (const item of items.data.slice(0, 3)) {
+          const label = item.number === undefined ? item.id : `#${item.number}`
           facts.push({
-            identifier: item.identifier,
-            title: item.title ?? item.identifier,
-            url: item.url ?? '',
+            identifier: label,
+            title: item.title ?? label,
+            url: '',
           })
         }
       }
@@ -194,8 +196,8 @@ export type TrimResult = {
 const TRIM_PROMPT = `You are a conversation memory manager. The following conversation history has grown too long ({TOTAL} messages).
 
 Your task:
-1. Select between 50 and 100 message indices (0-based) to retain verbatim. Choose fewer (~50) when many threads are resolved and the history is repetitive. Choose more (~100) when conversations are active and many topics are still open. Prefer messages about active unresolved Linear issues, recent decisions, ongoing threads, and stated preferences. Drop messages about completed tasks, resolved clarifications, and abandoned threads.
-2. Write an updated summary (max 200 words) for all messages NOT retained. Incorporate the previous summary. Preserve: issue identifiers (e.g. ENG-42), project names, decisions, priorities, preferences.
+1. Select between 50 and 100 message indices (0-based) to retain verbatim. Choose fewer (~50) when many threads are resolved and the history is repetitive. Choose more (~100) when conversations are active and many topics are still open. Prefer messages about active unresolved Kaneo issues, recent decisions, ongoing threads, and stated preferences. Drop messages about completed tasks, resolved clarifications, and abandoned threads.
+2. Write an updated summary (max 200 words) for all messages NOT retained. Incorporate the previous summary. Preserve: task IDs and numbers, project names, decisions, priorities, preferences.
 
 Previous summary:
 {PREVIOUS_SUMMARY}
@@ -286,7 +288,7 @@ export function buildMemoryContextMessage(
 
   if (facts.length > 0) {
     const lines = facts.map((f) => `- ${f.identifier}: "${f.title}" — last seen ${f.last_seen.slice(0, 10)}`)
-    parts.push(`Recently accessed Linear entities:\n${lines.join('\n')}`)
+    parts.push(`Recently accessed Kaneo entities:\n${lines.join('\n')}`)
   }
 
   if (parts.length === 0) {
