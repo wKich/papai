@@ -37,6 +37,7 @@ services:
       KANEO_CLIENT_URL: ${KANEO_CLIENT_URL:?KANEO_CLIENT_URL is required}
       KANEO_API_URL: ${KANEO_CLIENT_URL:?KANEO_CLIENT_URL is required}/api
       DISABLE_REGISTRATION: ${KANEO_DISABLE_REGISTRATION:-false}
+      DISABLE_GUEST_ACCESS: ${KANEO_DISABLE_GUEST_ACCESS:-true}
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:1337/api/health']
       interval: 10s

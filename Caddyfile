@@ -5,6 +5,9 @@
 	handle /api/auth/sign-in/social {
 		respond 403
 	}
+	handle /api/auth/anonymous {
+		respond 403
+	}
 	handle /api/auth/callback/* {
 		respond 403
 	}

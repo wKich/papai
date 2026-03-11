@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Block SSO and OAuth callback paths in Caddy
+
 ## [3.0.3] - 2026-03-11
 
 ### Fixed

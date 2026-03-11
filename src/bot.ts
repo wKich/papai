@@ -8,6 +8,7 @@ import {
   registerAdminCommands,
   registerClearCommand,
   registerConfigCommand,
+  registerHelpCommand,
   registerSetCommand,
 } from './commands/index.js'
 import { getConfig, setConfig } from './config.js'
@@ -202,6 +203,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     }
   }
 }
+registerHelpCommand(bot, checkAuthorization, adminUserId)
 registerSetCommand(bot, checkAuthorization)
 registerConfigCommand(bot, checkAuthorization)
 registerClearCommand(bot, checkAuthorization, adminUserId)

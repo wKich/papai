@@ -1,4 +1,5 @@
 import { bot } from './bot.js'
+import { setCommands } from './commands/index.js'
 import { closeDb, initDb } from './db/index.js'
 import { logger } from './logger.js'
 import { migrateToMultiUser } from './migrate.js'
@@ -34,6 +35,7 @@ try {
 void bot.start({
   onStart: () => {
     log.info('papai is running and listening for messages.')
+    void setCommands(bot, adminId)
   },
 })
 
