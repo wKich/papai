@@ -4,7 +4,10 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'kaneo:provision' })
 
-const SignUpResponseSchema = z.object({ user: z.object({ id: z.string() }) })
+const SignUpResponseSchema = z.object({
+  user: z.object({ id: z.string() }),
+  session: z.object({ token: z.string() }).optional(),
+})
 const OrgResponseSchema = z.object({ id: z.string(), slug: z.string() })
 const ApiKeyResponseSchema = z.object({ key: z.string() })
 
@@ -36,8 +39,10 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
   if (!parsed.success) throw new Error('Sign-up returned invalid data')
   const setCookies = res.headers.getSetCookie()
   const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
-  if (sessionHeader === undefined) throw new Error('Sign-up response missing session cookie')
-  return sessionHeader.split(';')[0]!
+  if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
+  // Better Auth also returns the session token in the response body — use it to build the cookie
+  if (parsed.data.session?.token !== undefined) return `better-auth.session_token=${parsed.data.session.token}`
+  throw new Error('Sign-up response missing session cookie')
 }
 
 async function doCreateWorkspace(
