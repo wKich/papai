@@ -48,4 +48,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rollback codebase to v1.1 state
 
 [3.0.0]: https://github.com/wKich/papai/compare/v2.0.0...v3.0.0
-

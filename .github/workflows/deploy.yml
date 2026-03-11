@@ -111,7 +111,8 @@ jobs:
           } > .env
           chmod 600 .env
           IMAGE="${IMAGE}" docker compose pull
-          IMAGE="${IMAGE}" docker compose up -d --remove-orphans
+          docker compose down --remove-orphans
+          IMAGE="${IMAGE}" docker compose up -d
           docker image prune -f
           echo "Waiting for services to become healthy..."
           for i in \$(seq 1 18); do
