@@ -2,18 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/index.js'
-
-// Helper to set fetch mock
-// Object.assign returns 'any' which satisfies globalThis.fetch assignment
-function setMockFetch(mockFn: () => Promise<Response>): void {
-  const originalFetch = globalThis.fetch
-  // Assign required fetch properties to the mock function
-  const mockWithProperties = Object.assign(mockFn, {
-    preconnect: originalFetch.preconnect,
-  })
-  // Assignment is allowed because Object.assign returns 'any'
-  globalThis.fetch = mockWithProperties
-}
+import { setMockFetch } from '../test-helpers.js'
 
 describe('TaskResource', () => {
   const mockConfig: KaneoConfig = {
@@ -27,7 +16,7 @@ describe('TaskResource', () => {
 
   describe('create', () => {
     test('creates task with required fields', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -46,7 +35,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.create({
@@ -60,7 +48,7 @@ describe('TaskResource', () => {
 
     test('includes optional fields in request', async () => {
       let requestBody: unknown
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
@@ -80,7 +68,6 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -103,7 +90,7 @@ describe('TaskResource', () => {
 
     test('applies default priority when not provided', async () => {
       let requestBody: unknown
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
@@ -123,7 +110,6 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -136,7 +122,7 @@ describe('TaskResource', () => {
 
     test('applies default status when not provided', async () => {
       let requestBody: unknown
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
@@ -156,7 +142,6 @@ describe('TaskResource', () => {
           ),
         )
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.create({
@@ -168,7 +153,7 @@ describe('TaskResource', () => {
     })
 
     test('accepts priority low', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -187,7 +172,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.create({
@@ -200,7 +184,7 @@ describe('TaskResource', () => {
     })
 
     test('accepts priority high', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -219,7 +203,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.create({
@@ -232,7 +215,7 @@ describe('TaskResource', () => {
     })
 
     test('accepts priority urgent', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -251,7 +234,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.create({
@@ -266,7 +248,7 @@ describe('TaskResource', () => {
 
   describe('get', () => {
     test('fetches task with details', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -285,7 +267,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.get('task-1')
@@ -294,7 +275,7 @@ describe('TaskResource', () => {
     })
 
     test('parses relations from description frontmatter', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -313,7 +294,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.get('task-1')
@@ -323,7 +303,7 @@ describe('TaskResource', () => {
     })
 
     test('handles task with empty description', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -342,7 +322,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.get('task-1')
@@ -354,7 +333,7 @@ describe('TaskResource', () => {
     describe('single field updates', () => {
       test('uses status endpoint for status update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -374,7 +353,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { status: 'done' })
@@ -384,7 +362,7 @@ describe('TaskResource', () => {
 
       test('uses priority endpoint for priority update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -404,7 +382,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { priority: 'high' })
@@ -414,7 +391,7 @@ describe('TaskResource', () => {
 
       test('uses assign endpoint for userId update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -434,7 +411,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { userId: 'user-123' })
@@ -444,7 +420,7 @@ describe('TaskResource', () => {
 
       test('uses dueDate endpoint for dueDate update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -464,7 +440,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { dueDate: '2026-12-31' })
@@ -474,7 +449,7 @@ describe('TaskResource', () => {
 
       test('uses title endpoint for title update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -494,7 +469,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { title: 'Updated Title' })
@@ -504,7 +478,7 @@ describe('TaskResource', () => {
 
       test('uses description endpoint for description update', async () => {
         let requestUrl = ''
-        const mockFetch = mock((url: string, _options: RequestInit) => {
+        setMockFetch((url: string, _options: RequestInit) => {
           requestUrl = url
           return Promise.resolve(
             new Response(
@@ -524,7 +498,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', { description: 'Updated description' })
@@ -536,7 +509,7 @@ describe('TaskResource', () => {
     describe('multi-field updates', () => {
       test('fetches position before multi-field update', async () => {
         let requestCount = 0
-        const mockFetch = mock((url: string, options: RequestInit) => {
+        setMockFetch((url: string, options: RequestInit) => {
           requestCount++
           if (url.includes('/task/task-1') && options.method === 'GET') {
             return Promise.resolve(
@@ -574,7 +547,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', {
@@ -591,7 +563,7 @@ describe('TaskResource', () => {
         let requestUrl = ''
         let requestBody: unknown
 
-        const mockFetch = mock((url: string, options: RequestInit) => {
+        setMockFetch((url: string, options: RequestInit) => {
           if (url.includes('/task/task-1') && options.method === 'GET') {
             return Promise.resolve(
               new Response(
@@ -630,7 +602,6 @@ describe('TaskResource', () => {
             ),
           )
         })
-        setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
         const resource = new TaskResource(mockConfig)
         await resource.update('task-1', {
@@ -650,8 +621,7 @@ describe('TaskResource', () => {
 
   describe('delete', () => {
     test('deletes task successfully', async () => {
-      const mockFetch = mock(() => Promise.resolve(new Response('{}', { status: 200 })))
-      setMockFetch(mockFetch)
+      setMockFetch(() => Promise.resolve(new Response('{}', { status: 200 })))
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.delete('task-1')
@@ -662,7 +632,7 @@ describe('TaskResource', () => {
 
   describe('list', () => {
     test('lists tasks for project', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify([
@@ -687,7 +657,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.list('proj-1')
@@ -696,8 +665,7 @@ describe('TaskResource', () => {
     })
 
     test('returns empty array when no tasks', async () => {
-      const mockFetch = mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
-      setMockFetch(mockFetch)
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.list('empty-proj')
@@ -707,7 +675,7 @@ describe('TaskResource', () => {
 
   describe('search', () => {
     test('searches tasks by keyword', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -732,7 +700,6 @@ describe('TaskResource', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.search({
@@ -744,11 +711,10 @@ describe('TaskResource', () => {
 
     test('filters by projectId when provided', async () => {
       let requestUrl = ''
-      const mockFetch = mock((url: string) => {
+      setMockFetch((url: string) => {
         requestUrl = url
         return Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 }))
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const resource = new TaskResource(mockConfig)
       await resource.search({
@@ -761,8 +727,7 @@ describe('TaskResource', () => {
     })
 
     test('returns empty array when no matches', async () => {
-      const mockFetch = mock(() => Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 })))
-      setMockFetch(mockFetch)
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 })))
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.search({

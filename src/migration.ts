@@ -2,13 +2,11 @@ import path from 'node:path'
 
 import { setConfig } from './config.js'
 import { DB_PATH, closeDb, getDb, initDb } from './db/index.js'
-import { clearHistory } from './history.js'
 import { type KaneoConfig } from './kaneo/client.js'
 import { provisionKaneoUser } from './kaneo/provision.js'
 import { logger } from './logger.js'
-import { clearFacts, clearSummary } from './memory.js'
+import { clearUserHistoryInDb, deleteLinearConfig, getUserConfig, getUsers } from './migration-db.js'
 import type {
-  ConfigRow,
   LinearData,
   MigrationOptions,
   MigrationStats,
@@ -58,32 +56,6 @@ export async function restoreBackup(backupPath: string): Promise<void> {
   await Bun.write(DB_PATH, Bun.file(backupPath))
   initDb()
   log.info({ backupPath }, 'Database restored and reinitialized')
-}
-
-function getUsers(singleUserId: number | undefined): UserRow[] {
-  if (singleUserId !== undefined) {
-    return getDb()
-      .query<UserRow, [number]>('SELECT telegram_id, username FROM users WHERE telegram_id = ?')
-      .all(singleUserId)
-  }
-  return getDb().query<UserRow, []>('SELECT telegram_id, username FROM users').all()
-}
-
-function getUserConfig(userId: number): Map<string, string> {
-  const rows = getDb().query<ConfigRow, [number]>('SELECT key, value FROM user_config WHERE user_id = ?').all(userId)
-  return new Map(rows.map((r) => [r.key, r.value]))
-}
-
-function clearUserHistoryInDb(userId: number): void {
-  clearHistory(userId)
-  clearSummary(userId)
-  clearFacts(userId)
-  log.info({ userId }, 'Conversation history and memory cleared')
-}
-
-function deleteLinearConfig(userId: number): void {
-  getDb().run("DELETE FROM user_config WHERE user_id = ? AND key IN ('linear_key', 'linear_team_id')", [userId])
-  log.info({ userId }, 'Linear config removed after migration')
 }
 
 function getUserLabel(user: UserRow): string {

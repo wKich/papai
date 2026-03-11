@@ -2,15 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from '../../src/kaneo/index.js'
-
-// Helper to set fetch mock
-function setMockFetch(mockFn: () => Promise<Response>): void {
-  const originalFetch = globalThis.fetch
-  const mockWithProperties = Object.assign(mockFn, {
-    preconnect: originalFetch.preconnect,
-  })
-  globalThis.fetch = mockWithProperties
-}
+import { setMockFetch } from '../test-helpers.js'
 
 describe('Archive Label Management', () => {
   const mockConfig: KaneoConfig = {
@@ -24,7 +16,7 @@ describe('Archive Label Management', () => {
 
   describe('getOrCreateArchiveLabel', () => {
     test('returns existing archived label', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify([
@@ -35,7 +27,6 @@ describe('Archive Label Management', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const result = await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(result.id).toBe('label-archive')
@@ -43,14 +34,13 @@ describe('Archive Label Management', () => {
     })
 
     test('is case insensitive when finding label', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(JSON.stringify([{ id: 'label-1', name: 'ARCHIVED', color: '#808080', workspaceId: 'ws-1' }]), {
             status: 200,
           }),
         ),
       )
-      setMockFetch(mockFetch)
 
       const result = await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(result.id).toBe('label-1')
@@ -58,7 +48,7 @@ describe('Archive Label Management', () => {
 
     test('creates new label if not exists', async () => {
       let callCount = 0
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         callCount++
         if (options.method === 'GET') {
           return Promise.resolve(
@@ -80,7 +70,6 @@ describe('Archive Label Management', () => {
           ),
         )
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       const result = await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(result.name).toBe('archived')
@@ -90,7 +79,7 @@ describe('Archive Label Management', () => {
 
     test('uses correct archive label color', async () => {
       let capturedBody: unknown
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         if (options.method === 'GET') {
           return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
         }
@@ -109,7 +98,6 @@ describe('Archive Label Management', () => {
           ),
         )
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await getOrCreateArchiveLabel(mockConfig, 'ws-1')
       expect(capturedBody).toMatchObject({ color: '#808080' })
@@ -118,7 +106,7 @@ describe('Archive Label Management', () => {
 
   describe('isTaskArchived', () => {
     test('returns true when task has archive label', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify([
@@ -129,29 +117,26 @@ describe('Archive Label Management', () => {
           ),
         ),
       )
-      setMockFetch(mockFetch)
 
       const result = await isTaskArchived(mockConfig, 'task-1', 'label-archive')
       expect(result).toBe(true)
     })
 
     test('returns false when task has no archive label', async () => {
-      const mockFetch = mock(() =>
+      setMockFetch(() =>
         Promise.resolve(
           new Response(JSON.stringify([{ id: 'label-1', name: 'bug', color: '#ff0000', workspaceId: 'ws-1' }]), {
             status: 200,
           }),
         ),
       )
-      setMockFetch(mockFetch)
 
       const result = await isTaskArchived(mockConfig, 'task-1', 'label-archive')
       expect(result).toBe(false)
     })
 
     test('returns false when task has no labels', async () => {
-      const mockFetch = mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
-      setMockFetch(mockFetch)
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
 
       const result = await isTaskArchived(mockConfig, 'task-1', 'label-archive')
       expect(result).toBe(false)
@@ -161,7 +146,7 @@ describe('Archive Label Management', () => {
   describe('addArchiveLabel', () => {
     test('adds archive label to task', async () => {
       let requestBody: unknown
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         if (options.method === 'GET') {
           // First call: get archive label
           if (_url.includes('/label/workspace/')) {
@@ -197,7 +182,6 @@ describe('Archive Label Management', () => {
         }
         return Promise.resolve(new Response('{}', { status: 200 }))
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
 
@@ -210,7 +194,7 @@ describe('Archive Label Management', () => {
 
     test('creates archive label if not exists before adding', async () => {
       let callCount = 0
-      const mockFetch = mock((_url: string, options: RequestInit) => {
+      setMockFetch((_url: string, options: RequestInit) => {
         callCount++
 
         if (options.method === 'GET' && _url.includes('/label/workspace/')) {
@@ -263,7 +247,6 @@ describe('Archive Label Management', () => {
 
         return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
       })
-      setMockFetch(mockFetch as unknown as () => Promise<Response>)
 
       await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
 

@@ -70,10 +70,8 @@ describe('Project Tools', () => {
         ),
       }))
 
-      const tool = makeListProjectsTool(mockConfig, mockWorkspaceId) as unknown as {
-        execute: (...args: unknown[]) => unknown
-      }
-      const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeListProjectsTool(mockConfig, mockWorkspaceId))
+      const result: unknown = await execute({}, { toolCallId: '1', messages: [] })
       if (!isProjectArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(2)
@@ -86,10 +84,8 @@ describe('Project Tools', () => {
         listProjects: mock(() => Promise.resolve([])),
       }))
 
-      const tool = makeListProjectsTool(mockConfig, mockWorkspaceId) as unknown as {
-        execute: (...args: unknown[]) => unknown
-      }
-      const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeListProjectsTool(mockConfig, mockWorkspaceId))
+      const result: unknown = await execute({}, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(0)
@@ -104,8 +100,8 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const tool = makeListProjectsTool(mockConfig, 'ws-123') as unknown as { execute: (...args: unknown[]) => unknown }
-      await tool.execute({}, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeListProjectsTool(mockConfig, 'ws-123'))
+      await execute({}, { toolCallId: '1', messages: [] })
 
       expect(capturedParams !== undefined && capturedParams['workspaceId']).toBe('ws-123')
     })
@@ -143,10 +139,8 @@ describe('Project Tools', () => {
         ),
       }))
 
-      const tool = makeCreateProjectTool(mockConfig, mockWorkspaceId) as unknown as {
-        execute: (...args: unknown[]) => unknown
-      }
-      const result: unknown = await tool.execute({ name: 'New Project' }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, mockWorkspaceId))
+      const result: unknown = await execute({ name: 'New Project' }, { toolCallId: '1', messages: [] })
       if (!isProject(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('proj-1')
@@ -167,10 +161,8 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const tool = makeCreateProjectTool(mockConfig, mockWorkspaceId) as unknown as {
-        execute: (...args: unknown[]) => unknown
-      }
-      await tool.execute({ name: 'New Project', description: 'Project description' }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, mockWorkspaceId))
+      await execute({ name: 'New Project', description: 'Project description' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams !== undefined && capturedParams['name']).toBe('New Project')
       expect(capturedParams !== undefined && capturedParams['description']).toBe('Project description')
@@ -185,10 +177,8 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const tool = makeCreateProjectTool(mockConfig, 'ws-123') as unknown as {
-        execute: (...args: unknown[]) => unknown
-      }
-      await tool.execute({ name: 'Test' }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, 'ws-123'))
+      await execute({ name: 'Test' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams !== undefined && capturedParams['workspaceId']).toBe('ws-123')
     })
@@ -237,8 +227,8 @@ describe('Project Tools', () => {
         ),
       }))
 
-      const tool = makeUpdateProjectTool(mockConfig) as unknown as { execute: (...args: unknown[]) => unknown }
-      const result: unknown = await tool.execute(
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      const result: unknown = await execute(
         { projectId: 'proj-1', name: 'Updated Name' },
         { toolCallId: '1', messages: [] },
       )
@@ -262,8 +252,8 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const tool = makeUpdateProjectTool(mockConfig) as unknown as { execute: (...args: unknown[]) => unknown }
-      await tool.execute({ projectId: 'proj-1', description: 'New description' }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      await execute({ projectId: 'proj-1', description: 'New description' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams !== undefined && capturedParams['description']).toBe('New description')
     })
@@ -281,8 +271,8 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const tool = makeUpdateProjectTool(mockConfig) as unknown as { execute: (...args: unknown[]) => unknown }
-      await tool.execute(
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      await execute(
         { projectId: 'proj-1', name: 'New Name', description: 'New description' },
         { toolCallId: '1', messages: [] },
       )
@@ -340,8 +330,8 @@ describe('Project Tools', () => {
         archiveProject: mock(() => Promise.resolve({ success: true })),
       }))
 
-      const tool = makeArchiveProjectTool(mockConfig) as unknown as { execute: (...args: unknown[]) => unknown }
-      const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const result: unknown = await execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 
       expect(result.success).toBe(true)

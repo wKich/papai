@@ -2,14 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { LabelResource } from '../../src/kaneo/index.js'
-
-function setMockFetch(mockFn: (...args: unknown[]) => Promise<Response>): void {
-  const originalFetch = globalThis.fetch
-  const mockWithProperties = Object.assign(mockFn, {
-    preconnect: originalFetch.preconnect,
-  })
-  globalThis.fetch = mockWithProperties as typeof globalThis.fetch
-}
+import { setMockFetch } from '../test-helpers.js'
 
 describe('LabelResource', () => {
   const mockConfig: KaneoConfig = {
@@ -23,17 +16,15 @@ describe('LabelResource', () => {
 
   describe('create', () => {
     test('creates label with required fields', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'new-label',
-                color: '#6b7280',
-              }),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'new-label',
+              color: '#6b7280',
+            }),
+            { status: 200 },
           ),
         ),
       )
@@ -50,21 +41,19 @@ describe('LabelResource', () => {
 
     test('uses default color when not provided', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'new-label',
-                color: '#6b7280',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'new-label',
+              color: '#6b7280',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.create({
@@ -77,21 +66,19 @@ describe('LabelResource', () => {
 
     test('accepts custom color', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'urgent',
-                color: '#ff0000',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'urgent',
+              color: '#ff0000',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.create({
@@ -105,21 +92,19 @@ describe('LabelResource', () => {
 
     test('includes workspaceId in request', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'test',
-                color: '#6b7280',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'test',
+              color: '#6b7280',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.create({
@@ -131,9 +116,7 @@ describe('LabelResource', () => {
     })
 
     test('throws on API error', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 })))
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.create({
@@ -147,16 +130,14 @@ describe('LabelResource', () => {
 
   describe('list', () => {
     test('returns all labels for workspace', async () => {
-      setMockFetch(
-        mock(() =>
-          Promise.resolve(
-            new Response(
-              JSON.stringify([
-                { id: 'label-1', name: 'bug', color: '#ff0000' },
-                { id: 'label-2', name: 'feature', color: '#00ff00' },
-              ]),
-              { status: 200 },
-            ),
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { id: 'label-1', name: 'bug', color: '#ff0000' },
+              { id: 'label-2', name: 'feature', color: '#00ff00' },
+            ]),
+            { status: 200 },
           ),
         ),
       )
@@ -170,7 +151,7 @@ describe('LabelResource', () => {
     })
 
     test('returns empty array when no labels', async () => {
-      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))))
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.list('ws-1')
@@ -179,8 +160,8 @@ describe('LabelResource', () => {
     })
 
     test('throws on API error', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Workspace not found' }), { status: 404 }))),
+      setMockFetch(() =>
+        Promise.resolve(new Response(JSON.stringify({ error: 'Workspace not found' }), { status: 404 })),
       )
 
       const resource = new LabelResource(mockConfig)
@@ -193,21 +174,19 @@ describe('LabelResource', () => {
   describe('update', () => {
     test('updates only name', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'Updated Name',
-                color: '#ff0000',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'Updated Name',
+              color: '#ff0000',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.update('label-1', { name: 'Updated Name' })
@@ -218,21 +197,19 @@ describe('LabelResource', () => {
 
     test('updates only color', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'bug',
-                color: '#00ff00',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'bug',
+              color: '#00ff00',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.update('label-1', { color: '#00ff00' })
@@ -242,21 +219,19 @@ describe('LabelResource', () => {
 
     test('updates both name and color', async () => {
       let capturedBody: unknown
-      setMockFetch(
-        mock((_url: string, options: RequestInit) => {
-          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                id: 'label-1',
-                name: 'New Name',
-                color: '#0000ff',
-              }),
-              { status: 200 },
-            ),
-          )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((_url, options) => {
+        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'label-1',
+              name: 'New Name',
+              color: '#0000ff',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.update('label-1', { name: 'New Name', color: '#0000ff' })
@@ -268,9 +243,7 @@ describe('LabelResource', () => {
     })
 
     test('throws labelNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 })))
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.update('invalid', { name: 'Test' })
@@ -283,7 +256,7 @@ describe('LabelResource', () => {
 
   describe('remove', () => {
     test('removes label successfully', async () => {
-      setMockFetch(mock(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))))
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 })))
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.remove('label-1')
@@ -293,9 +266,7 @@ describe('LabelResource', () => {
     })
 
     test('throws labelNotFound for 404', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 })))
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.remove('invalid')
@@ -309,40 +280,38 @@ describe('LabelResource', () => {
   describe('addToTask', () => {
     test('fetches label and creates task-label', async () => {
       let callCount = 0
-      setMockFetch(
-        mock((url: string) => {
-          callCount++
+      setMockFetch((url) => {
+        callCount++
 
-          if (url.includes('/label/label-1') && !url.includes('/task')) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: 'label-1',
-                  name: 'bug',
-                  color: '#ff0000',
-                }),
-                { status: 200 },
-              ),
-            )
-          }
+        if (url.includes('/label/label-1') && !url.includes('/task')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'label-1',
+                name: 'bug',
+                color: '#ff0000',
+              }),
+              { status: 200 },
+            ),
+          )
+        }
 
-          if (url.includes('/label') && !url.includes('/label-1')) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: 'tl-1',
-                  name: 'bug',
-                  color: '#ff0000',
-                  taskId: 'task-1',
-                }),
-                { status: 200 },
-              ),
-            )
-          }
+        if (url.includes('/label') && !url.includes('/label-1')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'tl-1',
+                name: 'bug',
+                color: '#ff0000',
+                taskId: 'task-1',
+              }),
+              { status: 200 },
+            ),
+          )
+        }
 
-          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.addToTask('task-1', 'label-1', 'ws-1')
@@ -353,9 +322,7 @@ describe('LabelResource', () => {
     })
 
     test('throws labelNotFound when label does not exist', async () => {
-      setMockFetch(
-        mock(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 }))),
-      )
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 })))
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.addToTask('task-1', 'invalid-label', 'ws-1')
@@ -367,38 +334,36 @@ describe('LabelResource', () => {
 
     test('includes label details in task-label creation', async () => {
       let taskLabelBody: unknown
-      setMockFetch(
-        mock((url: string, options?: RequestInit) => {
-          if (url.includes('/label/label-1') && !url.includes('/task')) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: 'label-1',
-                  name: 'urgent',
-                  color: '#ff0000',
-                }),
-                { status: 200 },
-              ),
-            )
-          }
-
-          if (options?.method === 'POST') {
-            taskLabelBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          }
-
+      setMockFetch((url, options) => {
+        if (url.includes('/label/label-1') && !url.includes('/task')) {
           return Promise.resolve(
             new Response(
               JSON.stringify({
-                id: 'tl-1',
+                id: 'label-1',
                 name: 'urgent',
                 color: '#ff0000',
-                taskId: 'task-1',
               }),
               { status: 200 },
             ),
           )
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+        }
+
+        if (options.method === 'POST') {
+          taskLabelBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        }
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'tl-1',
+              name: 'urgent',
+              color: '#ff0000',
+              taskId: 'task-1',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
 
       const resource = new LabelResource(mockConfig)
       await resource.addToTask('task-1', 'label-1', 'ws-1')
@@ -417,30 +382,28 @@ describe('LabelResource', () => {
       let callCount = 0
       let deleteUrl: string | undefined
 
-      setMockFetch(
-        mock((url: string, options?: RequestInit) => {
-          callCount++
+      setMockFetch((url, options) => {
+        callCount++
 
-          if (url.includes('/label/task/task-1')) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify([
-                  { id: 'label-bug', name: 'bug', color: '#ff0000' },
-                  { id: 'label-urgent', name: 'urgent', color: '#ff0000' },
-                ]),
-                { status: 200 },
-              ),
-            )
-          }
+        if (url.includes('/label/task/task-1')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: 'label-bug', name: 'bug', color: '#ff0000' },
+                { id: 'label-urgent', name: 'urgent', color: '#ff0000' },
+              ]),
+              { status: 200 },
+            ),
+          )
+        }
 
-          if (options?.method === 'DELETE') {
-            deleteUrl = url
-            return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))
-          }
+        if (options.method === 'DELETE') {
+          deleteUrl = url
+          return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))
+        }
 
-          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.removeFromTask('task-1', 'label-bug')
@@ -453,14 +416,12 @@ describe('LabelResource', () => {
     })
 
     test('handles when task has no labels (returns success)', async () => {
-      setMockFetch(
-        mock((url: string) => {
-          if (url.includes('/label/task/')) {
-            return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
-          }
-          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((url) => {
+        if (url.includes('/label/task/')) {
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.removeFromTask('task-1', 'label-bug')
@@ -471,16 +432,14 @@ describe('LabelResource', () => {
     })
 
     test('handles when label not found on task', async () => {
-      setMockFetch(
-        mock((url: string) => {
-          if (url.includes('/label/task/')) {
-            return Promise.resolve(
-              new Response(JSON.stringify([{ id: 'label-other', name: 'other', color: '#ff0000' }]), { status: 200 }),
-            )
-          }
-          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-        }) as unknown as (...args: unknown[]) => Promise<Response>,
-      )
+      setMockFetch((url) => {
+        if (url.includes('/label/task/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify([{ id: 'label-other', name: 'other', color: '#ff0000' }]), { status: 200 }),
+          )
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
 
       const resource = new LabelResource(mockConfig)
       const result = await resource.removeFromTask('task-1', 'label-missing')
