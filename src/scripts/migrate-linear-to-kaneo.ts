@@ -1,8 +1,4 @@
-/**
- * Migration script: Linear → self-hosted Kaneo
- * For each bot user with Linear & Kaneo credentials, exports Linear data and creates matching entities in Kaneo.
- * Usage: bun run migrate:linear [--dry-run] [--user <telegram_id>]
- */
+// Migration script: Linear → Kaneo. Usage: bun run migrate:linear [--dry-run] [--user <telegram_id>]
 
 import { Database } from 'bun:sqlite'
 
@@ -30,14 +26,10 @@ import {
 
 const log = logger.child({ scope: 'migrate-l2k' })
 
-// --- CLI args ---
-
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const userFlagIdx = args.indexOf('--user')
 const singleUserId = userFlagIdx === -1 ? undefined : Number(args[userFlagIdx + 1])
-
-// --- DB access ---
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -64,8 +56,6 @@ function getUserConfig(db: Database, userId: number): Map<string, string> {
   return new Map(rows.map((r) => [r.key, r.value]))
 }
 
-// --- Stats ---
-
 export interface MigrationStats {
   labels: number
   projects: number
@@ -75,25 +65,6 @@ export interface MigrationStats {
   relations: number
   archived: number
 }
-
-function dryRunStats(
-  labelCount: number,
-  projectCount: number,
-  stateCount: number,
-  issues: Array<{ comments: { nodes: unknown[] }; relations: { nodes: unknown[] }; archivedAt: string | null }>,
-): MigrationStats {
-  return {
-    labels: labelCount,
-    projects: projectCount,
-    columns: stateCount,
-    tasks: issues.length,
-    comments: issues.reduce((s, i) => s + i.comments.nodes.length, 0),
-    relations: issues.reduce((s, i) => s + i.relations.nodes.length, 0),
-    archived: issues.filter((i) => i.archivedAt !== null).length,
-  }
-}
-
-// --- Per-user migration ---
 
 function groupIssuesByProject(
   linearIssues: LinearIssue[],
@@ -229,7 +200,15 @@ async function migrateUser(
 
   if (dryRun) {
     log.info({ userId }, 'Dry run — skipping Kaneo writes')
-    return dryRunStats(data.labels.length, data.projects.length, data.states.length, data.issues)
+    return {
+      labels: data.labels.length,
+      projects: data.projects.length,
+      columns: data.states.length,
+      tasks: data.issues.length,
+      comments: data.issues.reduce((s, i) => s + i.comments.nodes.length, 0),
+      relations: data.issues.reduce((s, i) => s + i.relations.nodes.length, 0),
+      archived: data.issues.filter((i) => i.archivedAt !== null).length,
+    }
   }
 
   const stats: MigrationStats = { labels: 0, projects: 0, columns: 0, tasks: 0, comments: 0, relations: 0, archived: 0 }
@@ -237,8 +216,6 @@ async function migrateUser(
   log.info({ userId, stats }, 'Migration complete')
   return stats
 }
-
-// --- Main ---
 
 type MigrationResult = { userId: number; username: string | null; status: string; stats?: MigrationStats }
 
