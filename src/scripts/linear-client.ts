@@ -29,10 +29,7 @@ async function linearQuery<T>(
 ): Promise<T> {
   const response = await fetch('https://api.linear.app/graphql', {
     method: 'POST',
-    headers: {
-      Authorization: apiKey,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),
   })
 
@@ -106,32 +103,12 @@ export const LinearRelationSchema = z.object({
 
 export type LinearRelation = z.infer<typeof LinearRelationSchema>
 
-const LinearLabelNodeSchema = z.object({
-  nodes: z.array(LinearLabelSchema),
-})
-
-const LinearCommentNodeSchema = z.object({
-  nodes: z.array(LinearCommentSchema),
-})
-
-const LinearRelationNodeSchema = z.object({
-  nodes: z.array(LinearRelationSchema),
-})
-
-const LinearStateInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-})
-
-const LinearProjectInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-})
-
-const LinearParentInfoSchema = z.object({
-  id: z.string(),
-  identifier: z.string(),
-})
+const LinearLabelNodeSchema = z.object({ nodes: z.array(LinearLabelSchema) })
+const LinearCommentNodeSchema = z.object({ nodes: z.array(LinearCommentSchema) })
+const LinearRelationNodeSchema = z.object({ nodes: z.array(LinearRelationSchema) })
+const LinearStateInfoSchema = z.object({ id: z.string(), name: z.string() })
+const LinearProjectInfoSchema = z.object({ id: z.string(), name: z.string() })
+const LinearParentInfoSchema = z.object({ id: z.string(), identifier: z.string() })
 
 export const LinearIssueSchema = z.object({
   id: z.string(),
@@ -260,9 +237,10 @@ const IssuesDataSchema = z.object({
   }),
 })
 
-export async function fetchAllIssues(config: LinearConfig): Promise<LinearIssue[]> {
-  log.info({ teamId: config.teamId }, 'Fetching Linear issues')
-
+async function fetchIssuesPage(
+  config: LinearConfig,
+  cursor: string | undefined,
+): Promise<{ nodes: LinearIssue[]; hasNextPage: boolean; endCursor: string | null }> {
   const query = `
     query($teamId: String!, $cursor: String) {
       team(id: $teamId) {
@@ -286,20 +264,19 @@ export async function fetchAllIssues(config: LinearConfig): Promise<LinearIssue[
       }
     }
   `
-
-  const fetchPage = async (
-    cursor: string | undefined,
-  ): Promise<{ nodes: LinearIssue[]; hasNextPage: boolean; endCursor: string | null }> => {
-    const data = await linearQuery(config.apiKey, query, { teamId: config.teamId, cursor }, IssuesDataSchema)
-    return {
-      nodes: data.team.issues.nodes,
-      hasNextPage: data.team.issues.pageInfo.hasNextPage,
-      endCursor: data.team.issues.pageInfo.endCursor,
-    }
+  const data = await linearQuery(config.apiKey, query, { teamId: config.teamId, cursor }, IssuesDataSchema)
+  return {
+    nodes: data.team.issues.nodes,
+    hasNextPage: data.team.issues.pageInfo.hasNextPage,
+    endCursor: data.team.issues.pageInfo.endCursor,
   }
+}
+
+export async function fetchAllIssues(config: LinearConfig): Promise<LinearIssue[]> {
+  log.info({ teamId: config.teamId }, 'Fetching Linear issues')
 
   const accumulateIssues = async (accumulator: LinearIssue[], cursor: string | undefined): Promise<LinearIssue[]> => {
-    const { nodes, hasNextPage, endCursor } = await fetchPage(cursor)
+    const { nodes, hasNextPage, endCursor } = await fetchIssuesPage(config, cursor)
     const updatedAccumulator = [...accumulator, ...nodes]
     log.debug({ fetched: nodes.length, total: updatedAccumulator.length }, 'Issues page fetched')
 

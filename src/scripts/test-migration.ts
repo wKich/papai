@@ -16,6 +16,7 @@
 import type { KaneoConfig } from '../kaneo/client.js'
 import { logger } from '../logger.js'
 import type { LinearConfig } from './linear-client.js'
+import { KANEO_BASE_URL } from './test-migration-constants.js'
 import { composeDown, composeUp, createWorkspace, signUp, waitForKaneo } from './test-migration-infra.js'
 import { runMigration } from './test-migration-migrate.js'
 import { verify } from './test-migration-verify.js'
@@ -44,13 +45,7 @@ if (linearKey === undefined || linearTeamId === undefined) {
 
 // --- Constants ---
 
-export {
-  KANEO_PORT,
-  KANEO_BASE_URL,
-  COMPOSE_PROJECT,
-  POSTGRES_PASSWORD,
-  AUTH_SECRET,
-} from './test-migration-constants.js'
+export { KANEO_PORT, COMPOSE_PROJECT, POSTGRES_PASSWORD, AUTH_SECRET } from './test-migration-constants.js'
 
 // --- Main ---
 

@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
 import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
-import { buildDescriptionWithRelations, type TaskRelation } from '../kaneo/frontmatter.js'
+import { buildDescriptionWithRelations } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
+import { assignLabels, buildRelations, importComments, markArchived, patchRelations } from './kaneo-import-helpers.js'
 import type { LinearIssue, LinearLabel, LinearState } from './linear-client.js'
 
 const log = logger.child({ scope: 'kaneo-import' })
+
+export { assignLabels, markArchived, importComments, buildRelations, patchRelations }
 
 const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
   taskId: z.string().optional(),
@@ -25,12 +28,6 @@ const KaneoColumnSchema = z.object({
 
 export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
-const KaneoActivitySchema = z.object({
-  id: z.string(),
-  comment: z.string(),
-  createdAt: z.string(),
-})
-
 const LINEAR_PRIORITY_MAP: Record<number, string> = {
   0: 'no-priority',
   1: 'urgent',
@@ -43,10 +40,26 @@ export function mapPriority(linearPriority: number): string {
   return LINEAR_PRIORITY_MAP[linearPriority] ?? 'no-priority'
 }
 
-const RELATION_TYPE_MAP: Record<string, TaskRelation['type'] | undefined> = {
-  blocks: 'blocks',
-  duplicate: 'duplicate',
-  related: 'related',
+async function findOrCreateColumn(
+  config: KaneoConfig,
+  projectId: string,
+  state: LinearState,
+  existingByName: Map<string, string>,
+): Promise<string> {
+  const normalizedName = state.name.toLowerCase()
+  const existingId = existingByName.get(normalizedName)
+  if (existingId !== undefined) return existingId
+
+  log.info({ projectId, columnName: state.name, stateType: state.type }, 'Creating column')
+  const column = await kaneoFetch(
+    config,
+    'POST',
+    `/column/${projectId}`,
+    { name: state.name, color: state.color, isFinal: state.type === 'completed' || state.type === 'canceled' },
+    undefined,
+    KaneoColumnSchema,
+  )
+  return column.id
 }
 
 export async function ensureColumns(
@@ -64,45 +77,35 @@ export async function ensureColumns(
   )
   const existingByName = new Map(existing.map((c) => [c.name.toLowerCase(), c.id]))
 
-  const processState = async (
-    accumulator: { stateToColumnId: Map<string, string>; existingByName: Map<string, string> },
-    state: LinearState,
-  ): Promise<{ stateToColumnId: Map<string, string>; existingByName: Map<string, string> }> => {
-    const normalizedName = state.name.toLowerCase()
-    const existingId = accumulator.existingByName.get(normalizedName)
-    if (existingId !== undefined) {
-      return {
-        stateToColumnId: new Map([...accumulator.stateToColumnId, [state.name, existingId]]),
-        existingByName: accumulator.existingByName,
-      }
-    }
-
-    log.info({ projectId, columnName: state.name, stateType: state.type }, 'Creating column')
-    const column = await kaneoFetch(
-      config,
-      'POST',
-      `/column/${projectId}`,
-      {
-        name: state.name,
-        color: state.color,
-        isFinal: state.type === 'completed' || state.type === 'canceled',
-      },
-      undefined,
-      KaneoColumnSchema,
-    )
-    return {
-      stateToColumnId: new Map([...accumulator.stateToColumnId, [state.name, column.id]]),
-      existingByName: new Map([...accumulator.existingByName, [normalizedName, column.id]]),
-    }
+  const stateToColumnId = new Map<string, string>()
+  for (const state of states) {
+    const columnId = await findOrCreateColumn(config, projectId, state, existingByName)
+    stateToColumnId.set(state.name, columnId)
+    existingByName.set(state.name.toLowerCase(), columnId)
   }
+  return stateToColumnId
+}
 
-  const initial = { stateToColumnId: new Map<string, string>(), existingByName }
-  const result = await states.reduce<Promise<typeof initial>>(async (accPromise, state) => {
-    const acc = await accPromise
-    return processState(acc, state)
-  }, Promise.resolve(initial))
+async function findOrCreateLabel(
+  config: KaneoConfig,
+  workspaceId: string,
+  label: LinearLabel,
+  existingByName: Map<string, string>,
+): Promise<string> {
+  const normalizedName = label.name.toLowerCase()
+  const existingId = existingByName.get(normalizedName)
+  if (existingId !== undefined) return existingId
 
-  return result.stateToColumnId
+  log.info({ workspaceId, labelName: label.name }, 'Creating label')
+  const created = await kaneoFetch(
+    config,
+    'POST',
+    '/label',
+    { name: label.name, color: label.color, workspaceId },
+    undefined,
+    KaneoLabelSchemaLocal,
+  )
+  return created.id
 }
 
 export async function ensureLabels(
@@ -120,45 +123,20 @@ export async function ensureLabels(
   )
   const existingByName = new Map(existing.map((l) => [l.name.toLowerCase(), l.id]))
 
-  const processLabel = async (
-    accumulator: { labelIdMap: Map<string, string>; existingByName: Map<string, string> },
-    label: LinearLabel,
-  ): Promise<{ labelIdMap: Map<string, string>; existingByName: Map<string, string> }> => {
-    const normalizedName = label.name.toLowerCase()
-    const existingId = accumulator.existingByName.get(normalizedName)
-    if (existingId !== undefined) {
-      return {
-        labelIdMap: new Map([...accumulator.labelIdMap, [label.id, existingId]]),
-        existingByName: accumulator.existingByName,
-      }
-    }
-
-    log.info({ workspaceId, labelName: label.name }, 'Creating label')
-    const created = await kaneoFetch(
-      config,
-      'POST',
-      '/label',
-      {
-        name: label.name,
-        color: label.color,
-        workspaceId,
-      },
-      undefined,
-      KaneoLabelSchemaLocal,
-    )
-    return {
-      labelIdMap: new Map([...accumulator.labelIdMap, [label.id, created.id]]),
-      existingByName: new Map([...accumulator.existingByName, [normalizedName, created.id]]),
-    }
+  const labelIdMap = new Map<string, string>()
+  for (const label of linearLabels) {
+    const kaneoId = await findOrCreateLabel(config, workspaceId, label, existingByName)
+    labelIdMap.set(label.id, kaneoId)
+    existingByName.set(label.name.toLowerCase(), kaneoId)
   }
+  return labelIdMap
+}
 
-  const initial = { labelIdMap: new Map<string, string>(), existingByName }
-  const result = await linearLabels.reduce<Promise<typeof initial>>(async (accPromise, label) => {
-    const acc = await accPromise
-    return processLabel(acc, label)
-  }, Promise.resolve(initial))
-
-  return result.labelIdMap
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 export async function ensureProject(
@@ -174,22 +152,12 @@ export async function ensureProject(
     return found.id
   }
 
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-
   log.info({ workspaceId, name }, 'Creating project')
   const project = await kaneoFetch(
     config,
     'POST',
     '/project',
-    {
-      name,
-      workspaceId,
-      icon: '',
-      slug,
-    },
+    { name, workspaceId, icon: '', slug: generateSlug(name) },
     undefined,
     KaneoProjectSchema,
   )
@@ -199,136 +167,6 @@ export async function ensureProject(
   }
 
   return project.id
-}
-
-async function assignLabels(
-  config: KaneoConfig,
-  taskId: string,
-  workspaceId: string,
-  issueLabels: LinearLabel[],
-  labelIdMap: Map<string, string>,
-): Promise<void> {
-  const assignLabel = async (label: LinearLabel): Promise<void> => {
-    const kaneoLabelId = labelIdMap.get(label.id)
-    if (kaneoLabelId === undefined) return
-
-    const labelDetail = await kaneoFetch(
-      config,
-      'GET',
-      `/label/${kaneoLabelId}`,
-      undefined,
-      undefined,
-      KaneoLabelSchemaLocal,
-    )
-    await kaneoFetch(
-      config,
-      'POST',
-      '/label',
-      {
-        name: labelDetail.name,
-        color: labelDetail.color,
-        workspaceId,
-        taskId,
-      },
-      undefined,
-      KaneoLabelSchemaLocal,
-    )
-    log.debug({ taskId, labelName: labelDetail.name }, 'Label assigned to task')
-  }
-
-  await issueLabels.reduce<Promise<void>>(async (accPromise, label) => {
-    await accPromise
-    return assignLabel(label)
-  }, Promise.resolve())
-}
-
-async function markArchived(config: KaneoConfig, taskId: string, workspaceId: string): Promise<void> {
-  const allLabels = await kaneoFetch(
-    config,
-    'GET',
-    `/label/workspace/${workspaceId}`,
-    undefined,
-    undefined,
-    z.array(KaneoLabelSchemaLocal),
-  )
-  const archiveLabel =
-    allLabels.find((l) => l.name.toLowerCase() === 'archived') ??
-    (await kaneoFetch(
-      config,
-      'POST',
-      '/label',
-      {
-        name: 'archived',
-        color: '#808080',
-        workspaceId,
-      },
-      undefined,
-      KaneoLabelSchemaLocal,
-    ))
-
-  await kaneoFetch(
-    config,
-    'POST',
-    '/label',
-    {
-      name: archiveLabel.name,
-      color: archiveLabel.color,
-      workspaceId,
-      taskId,
-    },
-    undefined,
-    KaneoLabelSchemaLocal,
-  )
-  log.debug({ taskId }, 'Task marked as archived')
-}
-
-async function importComments(
-  config: KaneoConfig,
-  taskId: string,
-  comments: LinearIssue['comments']['nodes'],
-): Promise<void> {
-  const sorted = [...comments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-
-  const importComment = async (comment: LinearIssue['comments']['nodes'][number]): Promise<void> => {
-    await kaneoFetch(
-      config,
-      'POST',
-      '/activity/comment',
-      {
-        taskId,
-        comment: comment.body,
-      },
-      undefined,
-      KaneoActivitySchema,
-    )
-    log.debug({ taskId, commentLength: comment.body.length }, 'Comment added')
-  }
-
-  await sorted.reduce<Promise<void>>(async (accPromise, comment) => {
-    await accPromise
-    return importComment(comment)
-  }, Promise.resolve())
-}
-
-function buildRelations(issue: LinearIssue, linearIdToKaneoId: Map<string, string>): TaskRelation[] {
-  const relations: TaskRelation[] = []
-  for (const rel of issue.relations.nodes) {
-    const type = RELATION_TYPE_MAP[rel.type]
-    if (type === undefined) continue
-    const kaneoRelatedId = linearIdToKaneoId.get(rel.relatedIssue.id)
-    if (kaneoRelatedId !== undefined) {
-      relations.push({ type, taskId: kaneoRelatedId })
-    }
-  }
-
-  if (issue.parent !== null) {
-    const kaneoParentId = linearIdToKaneoId.get(issue.parent.id)
-    if (kaneoParentId !== undefined) {
-      relations.push({ type: 'parent', taskId: kaneoParentId })
-    }
-  }
-
-  return relations
 }
 
 export async function createTaskFromIssue(
@@ -368,48 +206,4 @@ export async function createTaskFromIssue(
   }
 
   await importComments(config, task.id, issue.comments.nodes)
-}
-
-export function patchRelations(
-  config: KaneoConfig,
-  issues: LinearIssue[],
-  linearIdToKaneoId: Map<string, string>,
-): Promise<number> {
-  const processIssue = async (patched: number, issue: LinearIssue): Promise<number> => {
-    const kaneoTaskId = linearIdToKaneoId.get(issue.id)
-    if (kaneoTaskId === undefined) return patched
-
-    const pendingRelations = buildRelations(issue, linearIdToKaneoId)
-    if (pendingRelations.length === 0) return patched
-
-    const task = await kaneoFetch(
-      config,
-      'GET',
-      `/task/${kaneoTaskId}`,
-      undefined,
-      undefined,
-      KaneoTaskWithDescriptionSchema,
-    )
-    const cleanBody = task.description.replace(/^---\n[\s\S]*?\n---\n?/, '').trim()
-    const expected = buildDescriptionWithRelations(cleanBody, pendingRelations)
-
-    if (task.description !== expected) {
-      await kaneoFetch(
-        config,
-        'PUT',
-        `/task/description/${kaneoTaskId}`,
-        { description: expected },
-        undefined,
-        KaneoTaskWithDescriptionSchema,
-      )
-      log.debug({ taskId: kaneoTaskId, relationCount: pendingRelations.length }, 'Relations patched')
-      return patched + 1
-    }
-    return patched
-  }
-
-  return issues.reduce<Promise<number>>(async (accPromise, issue) => {
-    const acc = await accPromise
-    return processIssue(acc, issue)
-  }, Promise.resolve(0))
 }

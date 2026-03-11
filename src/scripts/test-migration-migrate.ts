@@ -100,6 +100,10 @@ async function migrateProjectGroup(
   )
 }
 
+function createStats(): Record<string, number> {
+  return { labels: 0, projects: 0, columns: 0, tasks: 0, comments: 0, relations: 0, archived: 0 }
+}
+
 export async function runMigration(
   linearConfig: LinearConfig,
   kaneoConfig: KaneoConfig,
@@ -112,22 +116,12 @@ export async function runMigration(
     fetchProjects(linearConfig),
     fetchAllIssues(linearConfig),
   ])
-
   log.info(
     { labels: labels.length, states: states.length, projects: projects.length, issues: issues.length },
-    'Linear data fetched',
+    'Data fetched',
   )
 
-  const stats: Record<string, number> = {
-    labels: 0,
-    projects: 0,
-    columns: 0,
-    tasks: 0,
-    comments: 0,
-    relations: 0,
-    archived: 0,
-  }
-
+  const stats = createStats()
   const labelIdMap = await ensureLabels(kaneoConfig, workspaceId, labels)
   stats['labels'] = labelIdMap.size
 
@@ -151,6 +145,5 @@ export async function runMigration(
   }, Promise.resolve())
 
   stats['relations'] = await patchRelations(kaneoConfig, issues, linearIdToKaneoId)
-
   return { stats, linearIdToKaneoId, linearIssues: issues, linearProjects: projects }
 }
