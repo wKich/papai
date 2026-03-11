@@ -6,9 +6,6 @@ const log = logger.child({ scope: 'kaneo:provision' })
 
 const SignUpResponseSchema = z.object({
   user: z.object({ id: z.string() }),
-  // Better Auth returns the session token either at the top level or nested under session
-  token: z.string().optional(),
-  session: z.object({ token: z.string() }).optional(),
 })
 const OrgResponseSchema = z.object({ id: z.string(), slug: z.string() })
 const ApiKeyResponseSchema = z.object({ key: z.string() })
@@ -48,10 +45,26 @@ async function doSignUp(
   const setCookies = res.headers.getSetCookie()
   const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
   if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
-  // Better Auth also returns the session token in the response body — use it to build the cookie
-  const bodyToken = parsed.data.token ?? parsed.data.session?.token
-  if (bodyToken !== undefined) return `better-auth.session_token=${bodyToken}`
-  throw new Error('Sign-up response missing session cookie')
+  // Set-Cookie was absent (Origin mismatch with trustedOrigins) — sign in to get a proper cookie.
+  // The user was just created so sign-in will succeed.
+  log.debug({ email }, 'Sign-up did not return session cookie; falling back to sign-in')
+  return doSignIn(baseUrl, clientUrl, email, password)
+}
+
+async function doSignIn(baseUrl: string, clientUrl: string, email: string, password: string): Promise<string> {
+  log.debug({ email }, 'Kaneo sign-in')
+  const res = await fetch(`${baseUrl}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: clientUrl },
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) {
+    throw new Error(`Sign-in failed (${res.status}): ${await res.text()}`)
+  }
+  const setCookies = res.headers.getSetCookie()
+  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
+  if (sessionHeader !== undefined) return sessionHeader.split(';')[0]!
+  throw new Error('Sign-in response missing session cookie')
 }
 
 async function doCreateWorkspace(
