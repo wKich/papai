@@ -26,11 +26,11 @@ import { makeUpdateProjectTool } from './update-project.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
-type ToolConfig = { kaneoConfig: KaneoConfig; workspaceId: string; projectId: string }
+type ToolConfig = { kaneoConfig: KaneoConfig; workspaceId: string }
 
-export function makeTools({ kaneoConfig, workspaceId, projectId }: ToolConfig): ToolSet {
+export function makeTools({ kaneoConfig, workspaceId }: ToolConfig): ToolSet {
   return {
-    create_task: makeCreateTaskTool(kaneoConfig, projectId),
+    create_task: makeCreateTaskTool(kaneoConfig),
     update_task: makeUpdateTaskTool(kaneoConfig),
     search_tasks: makeSearchTasksTool(kaneoConfig, workspaceId),
     list_tasks: makeListTasksTool(kaneoConfig),

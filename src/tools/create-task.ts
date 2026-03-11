@@ -8,22 +8,29 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:create-task' })
 
-export function makeCreateTaskTool(kaneoConfig: KaneoConfig, defaultProjectId: string): ToolSet[string] {
+export interface CreateTaskResult {
+  id: string
+  title: string
+  number: number
+  status: string
+}
+
+export function makeCreateTaskTool(kaneoConfig: KaneoConfig): ToolSet[string] {
   return tool({
-    description: 'Create a new task in Kaneo. Use this when the user wants to add a task or bug report.',
+    description: 'Create a new task in Kaneo. Call list_projects first to get a valid projectId.',
     inputSchema: z.object({
       title: z.string().describe('Short, descriptive task title'),
       description: z.string().optional().describe('Detailed description of the task'),
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('Priority level'),
-      projectId: z.string().optional().describe('Kaneo project ID (uses default project if not provided)'),
+      projectId: z.string().describe('Kaneo project ID — call list_projects first to obtain this'),
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
       status: z.string().optional().describe("Status column name (e.g. 'todo', 'in-progress')"),
     }),
-    execute: async ({ title, description, priority, projectId, dueDate, status }) => {
+    execute: async ({ title, description, priority, projectId, dueDate, status }): Promise<CreateTaskResult> => {
       try {
         const task = await createTask({
           config: kaneoConfig,
-          projectId: projectId ?? defaultProjectId,
+          projectId,
           title,
           description,
           priority,
