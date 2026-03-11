@@ -4,15 +4,20 @@ import { generateText, stepCountIs } from 'ai'
 import { type ModelMessage } from 'ai'
 import { Bot, type Context } from 'grammy'
 
-import { registerAdminCommands } from './admin-commands.js'
-import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from './config.js'
+import {
+  registerAdminCommands,
+  registerClearCommand,
+  registerConfigCommand,
+  registerSetCommand,
+} from './commands/index.js'
+import { getConfig, setConfig } from './config.js'
 import { buildMessagesWithMemory, trimAndSummarise } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
-import { clearHistory, loadHistory, saveHistory } from './history.js'
+import { loadHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
-import { clearFacts, clearSummary, extractFactsFromSdkResults, upsertFact } from './memory.js'
+import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { makeTools } from './tools/index.js'
-import { isAuthorized, listUsers, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspace } from './users.js'
+import { isAuthorized, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspace } from './users.js'
 import { formatLlmOutput } from './utils/format.js'
 const log = logger.child({ scope: 'bot' })
 const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Kaneo tasks directly from Telegram.
@@ -197,83 +202,9 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     }
   }
 }
-bot.command('set', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!checkAuthorization(userId, ctx.from?.username)) {
-    return
-  }
-  const match = ctx.match.trim()
-  const spaceIndex = match.indexOf(' ')
-  if (spaceIndex === -1) {
-    await ctx.reply(`Usage: /set <key> <value>\nValid keys: ${CONFIG_KEYS.join(', ')}`)
-    return
-  }
-  const key = match.slice(0, spaceIndex).trim()
-  const value = match.slice(spaceIndex + 1).trim()
-  if (!isConfigKey(key)) {
-    await ctx.reply(`Unknown key: ${key}\nValid keys: ${CONFIG_KEYS.join(', ')}`)
-    return
-  }
-  setConfig(userId, key, value)
-  log.info({ userId, key }, '/set command executed')
-  await ctx.reply(`Set ${key} successfully.`)
-})
-bot.command('config', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!checkAuthorization(userId, ctx.from?.username)) {
-    return
-  }
-  log.debug({ userId }, '/config command called')
-  const config = getAllConfig(userId)
-  const lines = CONFIG_KEYS.map((key) => {
-    const value = config[key]
-    if (value === undefined) {
-      return `${key}: (not set)`
-    }
-    return `${key}: ${maskValue(key, value)}`
-  })
-  log.info({ userId }, '/config command executed')
-  await ctx.reply(lines.join('\n'))
-})
-bot.command('clear', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!checkAuthorization(userId, ctx.from?.username)) return
-  log.debug({ userId }, '/clear command called')
-  const arg = ctx.match.trim()
-  if (arg === '') {
-    clearHistory(userId)
-    clearSummary(userId)
-    clearFacts(userId)
-    log.info({ userId }, '/clear command executed — all memory tiers cleared')
-    await ctx.reply('Conversation history and memory cleared.')
-    return
-  }
-  if (userId !== adminUserId) {
-    await ctx.reply("Only the admin can clear other users' history.")
-    return
-  }
-  if (arg === 'all') {
-    const users = listUsers()
-    for (const user of users) {
-      clearHistory(user.telegram_id)
-      clearSummary(user.telegram_id)
-      clearFacts(user.telegram_id)
-    }
-    log.info({ userId, clearedCount: users.length }, '/clear all executed')
-    await ctx.reply(`Cleared history and memory for all ${users.length} users.`)
-    return
-  }
-  const targetId = parseInt(arg, 10)
-  if (Number.isNaN(targetId)) {
-    await ctx.reply('Usage: /clear [all | <user_id>]')
-    return
-  }
-  clearHistory(targetId)
-  clearSummary(targetId)
-  clearFacts(targetId)
-  log.info({ userId, targetId }, '/clear <user_id> executed')
-  await ctx.reply(`Cleared history and memory for user ${targetId}.`)
-})
+registerSetCommand(bot, checkAuthorization)
+registerConfigCommand(bot, checkAuthorization)
+registerClearCommand(bot, checkAuthorization, adminUserId)
 registerAdminCommands(bot, adminUserId)
 bot.on('message:text', async (ctx) => {
   const userId = ctx.from?.id

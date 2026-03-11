@@ -1,4 +1,13 @@
 {$KANEO_CLIENT_URL} {
+	handle /api/auth/sign-up/* {
+		respond 403
+	}
+	handle /api/auth/sign-in/social {
+		respond 403
+	}
+	handle /api/auth/callback/* {
+		respond 403
+	}
 	handle /api/* {
 		reverse_proxy kaneo-api:1337
 	}
