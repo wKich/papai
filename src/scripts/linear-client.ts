@@ -130,9 +130,15 @@ export type LinearIssue = z.infer<typeof LinearIssueSchema>
 
 // --- Fetchers ---
 
+const PageInfoSchema = z.object({
+  hasNextPage: z.boolean(),
+  endCursor: z.string().nullable(),
+})
+
 const LabelsDataSchema = z.object({
   team: z.object({
     labels: z.object({
+      pageInfo: PageInfoSchema,
       nodes: z.array(LinearLabelSchema),
     }),
   }),
@@ -140,30 +146,32 @@ const LabelsDataSchema = z.object({
 
 export async function fetchLabels(config: LinearConfig): Promise<LinearLabel[]> {
   log.info({ teamId: config.teamId }, 'Fetching Linear labels')
-
-  const data = await linearQuery(
-    config.apiKey,
-    `
-    query($teamId: String!) {
+  const query = `
+    query($teamId: String!, $cursor: String) {
       team(id: $teamId) {
-        labels(first: 250) {
+        labels(first: 250, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
           nodes { id name color }
         }
       }
     }
-  `,
-    { teamId: config.teamId },
-    LabelsDataSchema,
-  )
-
-  const labels = data.team.labels.nodes
-  log.info({ count: labels.length }, 'Labels fetched')
-  return labels
+  `
+  const accumulate = async (acc: LinearLabel[], cursor: string | undefined): Promise<LinearLabel[]> => {
+    const data = await linearQuery(config.apiKey, query, { teamId: config.teamId, cursor }, LabelsDataSchema)
+    const { nodes, pageInfo } = data.team.labels
+    const updated = [...acc, ...nodes]
+    if (!pageInfo.hasNextPage || pageInfo.endCursor === null) return updated
+    return accumulate(updated, pageInfo.endCursor)
+  }
+  const allLabels = await accumulate([], undefined)
+  log.info({ count: allLabels.length }, 'Labels fetched')
+  return allLabels
 }
 
 const StatesDataSchema = z.object({
   team: z.object({
     states: z.object({
+      pageInfo: PageInfoSchema,
       nodes: z.array(LinearStateSchema),
     }),
   }),
@@ -171,30 +179,32 @@ const StatesDataSchema = z.object({
 
 export async function fetchWorkflowStates(config: LinearConfig): Promise<LinearState[]> {
   log.info({ teamId: config.teamId }, 'Fetching Linear workflow states')
-
-  const data = await linearQuery(
-    config.apiKey,
-    `
-    query($teamId: String!) {
+  const query = `
+    query($teamId: String!, $cursor: String) {
       team(id: $teamId) {
-        states(first: 50) {
+        states(first: 50, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
           nodes { id name color type position }
         }
       }
     }
-  `,
-    { teamId: config.teamId },
-    StatesDataSchema,
-  )
-
-  const states = data.team.states.nodes.sort((a, b) => a.position - b.position)
-  log.info({ count: states.length }, 'Workflow states fetched')
-  return states
+  `
+  const accumulate = async (acc: LinearState[], cursor: string | undefined): Promise<LinearState[]> => {
+    const data = await linearQuery(config.apiKey, query, { teamId: config.teamId, cursor }, StatesDataSchema)
+    const { nodes, pageInfo } = data.team.states
+    const updated = [...acc, ...nodes]
+    if (!pageInfo.hasNextPage || pageInfo.endCursor === null) return updated
+    return accumulate(updated, pageInfo.endCursor)
+  }
+  const allStates = await accumulate([], undefined)
+  log.info({ count: allStates.length }, 'Workflow states fetched')
+  return allStates.sort((a, b) => a.position - b.position)
 }
 
 const ProjectsDataSchema = z.object({
   team: z.object({
     projects: z.object({
+      pageInfo: PageInfoSchema,
       nodes: z.array(LinearProjectSchema),
     }),
   }),
@@ -202,31 +212,27 @@ const ProjectsDataSchema = z.object({
 
 export async function fetchProjects(config: LinearConfig): Promise<LinearProject[]> {
   log.info({ teamId: config.teamId }, 'Fetching Linear projects')
-
-  const data = await linearQuery(
-    config.apiKey,
-    `
-    query($teamId: String!) {
+  const query = `
+    query($teamId: String!, $cursor: String) {
       team(id: $teamId) {
-        projects(first: 100) {
+        projects(first: 100, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
           nodes { id name description state }
         }
       }
     }
-  `,
-    { teamId: config.teamId },
-    ProjectsDataSchema,
-  )
-
-  const projects = data.team.projects.nodes
-  log.info({ count: projects.length }, 'Projects fetched')
-  return projects
+  `
+  const accumulate = async (acc: LinearProject[], cursor: string | undefined): Promise<LinearProject[]> => {
+    const data = await linearQuery(config.apiKey, query, { teamId: config.teamId, cursor }, ProjectsDataSchema)
+    const { nodes, pageInfo } = data.team.projects
+    const updated = [...acc, ...nodes]
+    if (!pageInfo.hasNextPage || pageInfo.endCursor === null) return updated
+    return accumulate(updated, pageInfo.endCursor)
+  }
+  const allProjects = await accumulate([], undefined)
+  log.info({ count: allProjects.length }, 'Projects fetched')
+  return allProjects
 }
-
-const PageInfoSchema = z.object({
-  hasNextPage: z.boolean(),
-  endCursor: z.string().nullable(),
-})
 
 const IssuesDataSchema = z.object({
   team: z.object({
