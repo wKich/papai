@@ -95,7 +95,14 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
       `✅ Your Kaneo account has been created!\n🌐 ${kaneoUrl}\n📧 Email: ${prov.email}\n🔑 Password: ${prov.password}\n\nThe bot is already configured and ready to use.`,
     )
   } catch (err: unknown) {
-    log.warn({ userId, error: err instanceof Error ? err.message : String(err) }, 'Kaneo auto-provisioning failed')
+    const msg = err instanceof Error ? err.message : String(err)
+    const isRegistrationDisabled = msg.includes('sign-up') || msg.includes('registration') || msg.includes('Sign-up')
+    log.warn({ userId, error: msg }, 'Kaneo auto-provisioning failed')
+    if (isRegistrationDisabled) {
+      await ctx.reply(
+        'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
+      )
+    }
   }
 }
 const buildKaneoConfig = (userId: number): { apiKey: string; baseUrl: string; sessionCookie?: string } => {

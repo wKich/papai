@@ -62,6 +62,29 @@ done
 
 COMPOSE_CMD="docker compose"
 
+# --- Registration helpers ---
+set_registration() {
+  local value="$1"
+  if grep -q '^KANEO_DISABLE_REGISTRATION=' .env 2>/dev/null; then
+    sed -i "s/^KANEO_DISABLE_REGISTRATION=.*/KANEO_DISABLE_REGISTRATION=${value}/" .env
+  else
+    echo "KANEO_DISABLE_REGISTRATION=${value}" >> .env
+  fi
+  $COMPOSE_CMD up -d --force-recreate --no-deps kaneo-api
+  info "Waiting for kaneo-api to be healthy..."
+  local retries=20
+  while [[ $retries -gt 0 ]]; do
+    if docker inspect --format='{{.State.Health.Status}}' "$(docker compose ps -q kaneo-api)" 2>/dev/null | grep -q healthy; then
+      break
+    fi
+    sleep 3
+    retries=$((retries - 1))
+  done
+  if [[ $retries -eq 0 ]]; then
+    die "kaneo-api did not become healthy after restarting"
+  fi
+}
+
 # Build migration script flags
 MIGRATE_FLAGS="${USER_FLAG}"
 if $CLEAR_HISTORY; then
@@ -136,9 +159,16 @@ info "Stopping papai container..."
 $COMPOSE_CMD stop papai
 success "papai stopped"
 
-# --- Step 5: Run migration ---
+# --- Step 5: Enable registration for provisioning ---
 echo ""
-echo -e "${BOLD}=== Step 4: Run migration ===${RESET}"
+echo -e "${BOLD}=== Step 4: Enable Kaneo registration ===${RESET}"
+info "Temporarily enabling Kaneo registration for account provisioning..."
+set_registration false
+success "Registration enabled"
+
+# --- Step 6: Run migration ---
+echo ""
+echo -e "${BOLD}=== Step 5: Run migration ===${RESET}"
 info "Migrating data from Linear to Kaneo..."
 echo ""
 
@@ -148,7 +178,8 @@ $COMPOSE_CMD run --rm \
     MIGRATION_EXIT=$?
     error "Migration failed (exit code ${MIGRATION_EXIT})"
     echo ""
-    warn "Attempting to restart papai with the original data..."
+    warn "Disabling registration and attempting to restart papai..."
+    set_registration true || true
     $COMPOSE_CMD start papai || true
     echo ""
     if ! $SKIP_BACKUP; then
@@ -160,9 +191,16 @@ $COMPOSE_CMD run --rm \
 
 success "Migration complete"
 
-# --- Step 6: Start bot ---
+# --- Step 7: Disable registration ---
 echo ""
-echo -e "${BOLD}=== Step 5: Start papai ===${RESET}"
+echo -e "${BOLD}=== Step 6: Disable Kaneo registration ===${RESET}"
+info "Locking down Kaneo registration..."
+set_registration true
+success "Registration disabled"
+
+# --- Step 8: Start bot ---
+echo ""
+echo -e "${BOLD}=== Step 7: Start papai ===${RESET}"
 info "Starting papai..."
 $COMPOSE_CMD start papai
 success "papai started"
