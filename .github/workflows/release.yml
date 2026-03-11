@@ -28,9 +28,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: bun install
-
       - name: Install git-cliff
         run: bun add -g git-cliff
 
@@ -60,9 +57,6 @@ jobs:
 
       - name: Generate CHANGELOG.md
         run: git-cliff --unreleased --tag "${{ steps.version.outputs.next }}" -o CHANGELOG.md
-
-      - name: Format CHANGELOG.md
-        run: bun run format
 
       - name: Commit CHANGELOG.md
         run: |
