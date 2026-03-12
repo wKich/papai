@@ -24,17 +24,11 @@ function generatePassword(): string {
   return `${uuid.slice(0, 20)}Aa1!`
 }
 
-async function doSignUp(
-  baseUrl: string,
-  trustedOrigin: string,
-  email: string,
-  password: string,
-  name: string,
-): Promise<string> {
+async function doSignUp(baseUrl: string, email: string, password: string, name: string): Promise<string> {
   log.debug({ email }, 'Kaneo sign-up')
   const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: trustedOrigin },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name }),
   })
   if (!res.ok) {
@@ -112,7 +106,7 @@ export async function provisionKaneoUser(
 
   log.info({ telegramId, email }, 'Provisioning Kaneo user account')
   const trustedOrigin = publicUrl === '' ? baseUrl : publicUrl
-  const sessionCookie = await doSignUp(baseUrl, trustedOrigin, email, password, name)
+  const sessionCookie = await doSignUp(baseUrl, email, password, name)
   const workspaceId = await doCreateWorkspace(baseUrl, trustedOrigin, sessionCookie, name, slug)
 
   let kaneoKey = sessionCookie
