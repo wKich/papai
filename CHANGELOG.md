@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Match __Secure- prefixed session cookie in provision.ts
+- Match \_\_Secure- prefixed session cookie in provision.ts
+
 ## [3.0.13] - 2026-03-12
 
 ### Fixed

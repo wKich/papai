@@ -91,9 +91,10 @@ async function handleMigrateCommand(ctx: Context): Promise<void> {
   } else if (subcommand === 'run') {
     await handleMigrateRun(ctx, targetUserId)
   } else if (subcommand === 'rollback') {
-    await handleMigrateRollback(ctx)
+    const backupArg = parts[1]
+    await handleMigrateRollback(ctx, backupArg)
   } else {
-    await ctx.reply('Usage:\n/migrate dryrun [user_id]\n/migrate run [user_id]\n/migrate rollback')
+    await ctx.reply('Usage:\n/migrate dryrun [user_id]\n/migrate run [user_id]\n/migrate rollback [backup_path]')
   }
 }
 
@@ -196,10 +197,12 @@ async function handleMigrateRun(ctx: Context, singleUserId: number | undefined):
   }
 }
 
-async function handleMigrateRollback(ctx: Context): Promise<void> {
-  const backupPath = getLastBackupPath()
+async function handleMigrateRollback(ctx: Context, backupArg: string | undefined): Promise<void> {
+  const backupPath = backupArg ?? getLastBackupPath()
   if (backupPath === undefined) {
-    await ctx.reply('No backup available. Run /migrate run first (backup is created automatically).')
+    await ctx.reply(
+      'No backup available. Provide a path: /migrate rollback <backup_path>\nOr run /migrate run first (backup is created automatically).',
+    )
     return
   }
   log.info({ backupPath }, '/migrate rollback called')
