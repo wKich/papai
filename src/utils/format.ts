@@ -138,13 +138,24 @@ const preprocessTables = (markdown: string): string =>
     .join('')
 
 /**
+ * Ensures lists are properly separated from preceding text with a blank line.
+ * Markdown requires a blank line before lists to properly render them as separate blocks.
+ * Without this, markdownToFormattable may strip the newline, causing formatting issues like:
+ * "Your current projects are:- Work (work)" instead of "Your current projects are:\n\n- Work (work)"
+ */
+const preprocessLists = (markdown: string): string =>
+  // Add blank line before list items when preceded by non-list text
+  // Matches: text followed by single newline followed by list marker (-, *, +, or number.)
+  markdown.replace(/([^\n])\n([-*+]|\d+\.)\s/g, '$1\n\n$2 ')
+
+/**
  * Converts LLM Markdown response to Telegram-compatible format with grammy MessageEntity types
  * @param markdown - LLM output in Markdown format
  * @returns Object with text and entities compatible with grammy's reply method
  */
 export const formatLlmOutput = (markdown: string): { text: string; entities: MessageEntity[] } => {
   log.debug({ markdownLength: markdown.length }, 'Converting Markdown to entities')
-  const result = markdownToFormattable(preprocessTables(markdown))
+  const result = markdownToFormattable(preprocessTables(preprocessLists(markdown)))
   log.debug(
     {
       textLength: result.text.length,

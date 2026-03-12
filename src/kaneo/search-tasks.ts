@@ -13,6 +13,7 @@ export const TaskResultSchema = z.object({
   number: z.number(),
   status: z.string(),
   priority: z.string(),
+  projectId: z.string().optional(),
 })
 
 // Matches the actual Kaneo search API response: { results, totalCount, searchQuery }
@@ -42,17 +43,19 @@ export async function searchTasks({
   query,
   workspaceId,
   projectId,
+  limit,
 }: {
   config: KaneoConfig
   query: string
   workspaceId: string
   projectId?: string
+  limit?: number
 }): Promise<TaskResult[]> {
   log.debug({ query, workspaceId, projectId }, 'searchTasks called')
 
   try {
     const client = new KaneoClient(config)
-    const tasks = await client.tasks.search({ query, workspaceId, projectId })
+    const tasks = await client.tasks.search({ query, workspaceId, projectId, limit })
     log.info({ query, resultCount: tasks.length }, 'Tasks searched')
     return tasks
   } catch (error) {

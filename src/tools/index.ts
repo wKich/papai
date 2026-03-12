@@ -6,9 +6,11 @@ import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
+import { makeCreateColumnTool } from './create-column.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateTaskTool } from './create-task.js'
+import { makeDeleteColumnTool } from './delete-column.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeListColumnsTool } from './list-columns.js'
@@ -19,7 +21,9 @@ import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
+import { makeReorderColumnsTool } from './reorder-columns.js'
 import { makeSearchTasksTool } from './search-tasks.js'
+import { makeUpdateColumnTool } from './update-column.js'
 import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
@@ -30,15 +34,15 @@ type ToolConfig = { kaneoConfig: KaneoConfig; workspaceId: string }
 
 export function makeTools({ kaneoConfig, workspaceId }: ToolConfig): ToolSet {
   return {
-    create_task: makeCreateTaskTool(kaneoConfig),
-    update_task: makeUpdateTaskTool(kaneoConfig),
+    create_task: makeCreateTaskTool(kaneoConfig, workspaceId),
+    update_task: makeUpdateTaskTool(kaneoConfig, workspaceId),
     search_tasks: makeSearchTasksTool(kaneoConfig, workspaceId),
-    list_tasks: makeListTasksTool(kaneoConfig),
-    get_task: makeGetTaskTool(kaneoConfig),
+    list_tasks: makeListTasksTool(kaneoConfig, workspaceId),
+    get_task: makeGetTaskTool(kaneoConfig, workspaceId),
     archive_task: makeArchiveTaskTool(kaneoConfig, workspaceId),
     list_projects: makeListProjectsTool(kaneoConfig, workspaceId),
     create_project: makeCreateProjectTool(kaneoConfig, workspaceId),
-    update_project: makeUpdateProjectTool(kaneoConfig),
+    update_project: makeUpdateProjectTool(kaneoConfig, workspaceId),
     archive_project: makeArchiveProjectTool(kaneoConfig),
     add_comment: makeAddCommentTool(kaneoConfig),
     get_comments: makeGetCommentsTool(kaneoConfig),
@@ -54,5 +58,9 @@ export function makeTools({ kaneoConfig, workspaceId }: ToolConfig): ToolSet {
     update_task_relation: makeUpdateTaskRelationTool(kaneoConfig),
     remove_task_relation: makeRemoveTaskRelationTool(kaneoConfig),
     list_columns: makeListColumnsTool(kaneoConfig),
+    create_column: makeCreateColumnTool(kaneoConfig),
+    update_column: makeUpdateColumnTool(kaneoConfig),
+    delete_column: makeDeleteColumnTool(kaneoConfig),
+    reorder_columns: makeReorderColumnsTool(kaneoConfig),
   }
 }

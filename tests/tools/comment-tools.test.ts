@@ -8,7 +8,7 @@ import { getToolExecutor } from '../test-helpers.js'
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 
-function isComment(val: unknown): val is { id: string; comment: string; createdAt: string } {
+function isAddResult(val: unknown): val is { id: string; comment: string; createdAt: string } {
   return (
     val !== null &&
     typeof val === 'object' &&
@@ -42,7 +42,7 @@ describe('Comment Tools', () => {
           Promise.resolve({
             id: 'comment-1',
             comment: 'New comment',
-            createdAt: '2026-03-01T00:00:00Z',
+            createdAt: '2026-01-01T00:00:00Z',
           }),
         ),
       }))
@@ -53,7 +53,7 @@ describe('Comment Tools', () => {
         { taskId: 'task-1', comment: 'New comment' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isComment(result)) throw new Error('Invalid result')
+      if (!isAddResult(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('comment-1')
       expect(result.comment).toBe('New comment')
@@ -61,19 +61,13 @@ describe('Comment Tools', () => {
 
     test('handles empty comment', async () => {
       await mock.module('../../src/kaneo/index.js', () => ({
-        addComment: mock(() =>
-          Promise.resolve({
-            id: 'comment-1',
-            comment: '',
-            createdAt: '2026-03-01T00:00:00Z',
-          }),
-        ),
+        addComment: mock(() => Promise.resolve({ id: 'comment-1', comment: '', createdAt: '2026-01-01T00:00:00Z' })),
       }))
 
       const tool = makeAddCommentTool(mockConfig)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1', comment: '' }, { toolCallId: '1', messages: [] })
-      if (!isComment(result)) throw new Error('Invalid result')
+      if (!isAddResult(result)) throw new Error('Invalid result')
 
       expect(result.comment).toBe('')
     })
@@ -82,11 +76,7 @@ describe('Comment Tools', () => {
       const longComment = 'a'.repeat(1000)
       await mock.module('../../src/kaneo/index.js', () => ({
         addComment: mock(() =>
-          Promise.resolve({
-            id: 'comment-1',
-            comment: longComment,
-            createdAt: '2026-03-01T00:00:00Z',
-          }),
+          Promise.resolve({ id: 'comment-1', comment: longComment, createdAt: '2026-01-01T00:00:00Z' }),
         ),
       }))
 
@@ -96,7 +86,7 @@ describe('Comment Tools', () => {
         { taskId: 'task-1', comment: longComment },
         { toolCallId: '1', messages: [] },
       )
-      if (!isComment(result)) throw new Error('Invalid result')
+      if (!isAddResult(result)) throw new Error('Invalid result')
 
       expect(result.comment).toBe(longComment)
     })
@@ -217,7 +207,6 @@ describe('Comment Tools', () => {
           Promise.resolve({
             id: 'comment-1',
             comment: 'Updated comment',
-            createdAt: '2026-03-01T00:00:00Z',
           }),
         ),
       }))
@@ -228,7 +217,16 @@ describe('Comment Tools', () => {
         { activityId: 'comment-1', comment: 'Updated comment' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isComment(result)) throw new Error('Invalid result')
+      if (
+        result === null ||
+        typeof result !== 'object' ||
+        !('id' in result) ||
+        typeof result.id !== 'string' ||
+        !('comment' in result) ||
+        typeof result.comment !== 'string'
+      ) {
+        throw new Error('Invalid result')
+      }
 
       expect(result.id).toBe('comment-1')
       expect(result.comment).toBe('Updated comment')

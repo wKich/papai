@@ -85,9 +85,10 @@ export class ProjectResource {
 
   async update(
     projectId: string,
+    workspaceId: string,
     params: { name?: string; description?: string },
   ): Promise<z.infer<typeof KaneoProjectSchema>> {
-    this.log.debug({ projectId, ...params }, 'Updating project')
+    this.log.debug({ projectId, workspaceId, ...params }, 'Updating project')
 
     try {
       const existing = await kaneoFetch(
@@ -95,7 +96,7 @@ export class ProjectResource {
         'GET',
         `/project/${projectId}`,
         undefined,
-        undefined,
+        { workspaceId },
         KaneoProjectFullSchema,
       )
       const body = {

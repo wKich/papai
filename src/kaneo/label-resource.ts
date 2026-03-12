@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
+import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyKaneoError } from './classify-error.js'
+import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
 
 const KaneoLabelWithTaskSchema = KaneoLabelSchema.extend({
@@ -124,6 +125,17 @@ export class LabelResource {
     this.log.debug({ taskId, labelId }, 'Removing label from task')
 
     try {
+      // Resolve workspace label name first — task-scoped copies are created with a
+      // new ID (different from the workspace label ID), but preserve the same name.
+      const workspaceLabel = await kaneoFetch(
+        this.config,
+        'GET',
+        `/label/${labelId}`,
+        undefined,
+        undefined,
+        KaneoLabelSchema,
+      )
+
       const taskLabels = await kaneoFetch(
         this.config,
         'GET',
@@ -132,11 +144,18 @@ export class LabelResource {
         undefined,
         z.array(KaneoLabelSchema),
       )
-      const matchingLabel = taskLabels.find((l) => l.id === labelId)
 
-      if (matchingLabel !== undefined) {
-        await kaneoFetch(this.config, 'DELETE', `/label/${matchingLabel.id}`, undefined, undefined, z.unknown())
+      // Match by name because addToTask creates a task-scoped copy with a new ID
+      const matchingLabel = taskLabels.find((l) => l.name === workspaceLabel.name)
+
+      if (matchingLabel === undefined) {
+        throw new KaneoClassifiedError(
+          `Label ${labelId} not found on task ${taskId}`,
+          kaneoError.labelNotFound(labelId),
+        )
       }
+
+      await kaneoFetch(this.config, 'DELETE', `/label/${matchingLabel.id}`, undefined, undefined, z.unknown())
 
       this.log.info({ taskId, labelId }, 'Label removed from task')
       return { taskId, labelId, success: true }

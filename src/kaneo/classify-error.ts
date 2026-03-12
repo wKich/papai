@@ -34,7 +34,8 @@ const classifyApiError = (error: KaneoApiError): KaneoClassifiedError => {
     if (messageLower.includes('comment') || messageLower.includes('/activity/')) {
       return new KaneoClassifiedError(message, kaneoError.commentNotFound('unknown'))
     }
-    return new KaneoClassifiedError(message, kaneoError.taskNotFound('unknown'))
+    // Unknown resource type — avoid misreporting as task-not-found
+    return new KaneoClassifiedError(message, kaneoError.unknown(error))
   }
   if (statusCode === 400) {
     return new KaneoClassifiedError(message, kaneoError.validationFailed('unknown', message))

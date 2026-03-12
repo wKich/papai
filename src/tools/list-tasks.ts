@@ -4,11 +4,12 @@ import { z } from 'zod'
 
 import type { KaneoConfig } from '../kaneo/client.js'
 import { listTasks } from '../kaneo/index.js'
+import { buildTaskUrl } from '../kaneo/url-builder.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:list-tasks' })
 
-export function makeListTasksTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeListTasksTool(kaneoConfig: KaneoConfig, workspaceId: string): ToolSet[string] {
   return tool({
     description: 'List all tasks in a Kaneo project. Use this to see all tasks in a specific project.',
     inputSchema: z.object({
@@ -16,7 +17,12 @@ export function makeListTasksTool(kaneoConfig: KaneoConfig): ToolSet[string] {
     }),
     execute: async ({ projectId }) => {
       try {
-        return await listTasks({ config: kaneoConfig, projectId })
+        const tasks = await listTasks({ config: kaneoConfig, projectId })
+        log.info({ projectId, taskCount: tasks.length }, 'Tasks listed via tool')
+        return tasks.map((task) => ({
+          ...task,
+          url: buildTaskUrl(kaneoConfig.baseUrl, workspaceId, projectId, task.id),
+        }))
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'list_tasks' },

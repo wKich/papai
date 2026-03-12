@@ -639,24 +639,30 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify([
-              {
-                id: 'task-1',
-                title: 'Task 1',
-                number: 1,
-                status: 'todo',
-                priority: 'medium',
-                dueDate: null,
-              },
-              {
-                id: 'task-2',
-                title: 'Task 2',
-                number: 2,
-                status: 'done',
-                priority: 'high',
-                dueDate: '2026-12-31',
-              },
-            ]),
+            JSON.stringify({
+              id: 'proj-1',
+              name: 'Project 1',
+              columns: [
+                {
+                  id: 'col-1',
+                  name: 'Todo',
+                  isFinal: false,
+                  tasks: [
+                    { id: 'task-1', title: 'Task 1', number: 1, status: 'todo', priority: 'medium', dueDate: null },
+                    {
+                      id: 'task-2',
+                      title: 'Task 2',
+                      number: 2,
+                      status: 'done',
+                      priority: 'high',
+                      dueDate: '2026-12-31',
+                    },
+                  ],
+                },
+              ],
+              archivedTasks: [],
+              plannedTasks: [],
+            }),
             { status: 200 },
           ),
         ),
@@ -669,7 +675,20 @@ describe('TaskResource', () => {
     })
 
     test('returns empty array when no tasks', async () => {
-      setMockFetch(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })))
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'empty-proj',
+              name: 'Empty Project',
+              columns: [],
+              archivedTasks: [],
+              plannedTasks: [],
+            }),
+            { status: 200 },
+          ),
+        ),
+      )
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.list('empty-proj')
@@ -683,22 +702,30 @@ describe('TaskResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify({
-              tasks: [
+              results: [
                 {
                   id: 'task-1',
+                  type: 'task',
                   title: 'Fix bug',
-                  number: 1,
+                  taskNumber: 1,
                   status: 'todo',
                   priority: 'high',
+                  createdAt: '2026-01-01T00:00:00Z',
+                  relevanceScore: 1.0,
                 },
                 {
                   id: 'task-2',
+                  type: 'task',
                   title: 'Bug report',
-                  number: 2,
+                  taskNumber: 2,
                   status: 'done',
                   priority: 'medium',
+                  createdAt: '2026-01-02T00:00:00Z',
+                  relevanceScore: 0.8,
                 },
               ],
+              totalCount: 2,
+              searchQuery: 'bug',
             }),
             { status: 200 },
           ),
@@ -717,7 +744,9 @@ describe('TaskResource', () => {
       let requestUrl = ''
       setMockFetch((url: string) => {
         requestUrl = url
-        return Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 }))
+        return Promise.resolve(
+          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'test' }), { status: 200 }),
+        )
       })
 
       const resource = new TaskResource(mockConfig)
@@ -731,7 +760,11 @@ describe('TaskResource', () => {
     })
 
     test('returns empty array when no matches', async () => {
-      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 })))
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'nonexistent' }), { status: 200 }),
+        ),
+      )
 
       const resource = new TaskResource(mockConfig)
       const result = await resource.search({

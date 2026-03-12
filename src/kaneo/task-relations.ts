@@ -1,9 +1,16 @@
 import { z } from 'zod'
 
+import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
-import { classifyKaneoError } from './classify-error.js'
+import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
-import { addRelation, removeRelation, updateRelation, type TaskRelation } from './frontmatter.js'
+import {
+  addRelation,
+  parseRelationsFromDescription,
+  removeRelation,
+  updateRelation,
+  type TaskRelation,
+} from './frontmatter.js'
 
 const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
   description: z.string(),
@@ -20,6 +27,9 @@ export async function addTaskRelation(
   log.debug({ taskId, relatedTaskId, type }, 'Adding task relation')
 
   try {
+    // Validate that the related task exists
+    await kaneoFetch(config, 'GET', `/task/${relatedTaskId}`, undefined, undefined, KaneoTaskSchema)
+
     const task = await kaneoFetch(
       config,
       'GET',
@@ -63,6 +73,17 @@ export async function removeTaskRelation(
       undefined,
       KaneoTaskWithDescriptionSchema,
     )
+
+    // Check if relation exists before removing
+    const { relations } = parseRelationsFromDescription(task.description)
+    const existingRelation = relations.find((r) => r.taskId === relatedTaskId)
+    if (existingRelation === undefined) {
+      throw new KaneoClassifiedError(
+        `Relation between task ${taskId} and ${relatedTaskId} not found`,
+        kaneoError.relationNotFound(taskId, relatedTaskId),
+      )
+    }
+
     const updatedDescription = removeRelation(task.description, relatedTaskId)
 
     await kaneoFetch(
@@ -99,6 +120,17 @@ export async function updateTaskRelation(
       undefined,
       KaneoTaskWithDescriptionSchema,
     )
+
+    // Check if relation exists before updating
+    const { relations } = parseRelationsFromDescription(task.description)
+    const existingRelation = relations.find((r) => r.taskId === relatedTaskId)
+    if (existingRelation === undefined) {
+      throw new KaneoClassifiedError(
+        `Relation between task ${taskId} and ${relatedTaskId} not found`,
+        kaneoError.relationNotFound(taskId, relatedTaskId),
+      )
+    }
+
     const updatedDescription = updateRelation(task.description, relatedTaskId, type)
 
     await kaneoFetch(

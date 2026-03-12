@@ -146,6 +146,26 @@ describe('formatLlmOutput', () => {
     })
   })
 
+  describe('lists', () => {
+    test('single newline before list items gets converted to double newline', () => {
+      const result = formatLlmOutput('Your projects:\n- Project 1\n- Project 2')
+      expect(result.text).toBe('Your projects:\n\n- Project 1\n- Project 2')
+      expect(result.entities).toEqual([])
+    })
+
+    test('double newline before list items is preserved', () => {
+      const result = formatLlmOutput('Your projects:\n\n- Project 1\n- Project 2')
+      expect(result.text).toBe('Your projects:\n\n- Project 1\n- Project 2')
+      expect(result.entities).toEqual([])
+    })
+
+    test('numbered lists are also handled', () => {
+      const result = formatLlmOutput('Steps:\n1. First\n2. Second')
+      expect(result.text).toBe('Steps:\n\n1. First\n2. Second')
+      expect(result.entities).toEqual([])
+    })
+  })
+
   describe('edge cases', () => {
     test('plain text produces no entities', () => {
       const result = formatLlmOutput('just plain text')

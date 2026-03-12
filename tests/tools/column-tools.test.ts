@@ -8,7 +8,8 @@ const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 interface ColumnItem {
   id: string
   name: string
-  position: number
+  color: string | null
+  isFinal: boolean
 }
 
 function isColumnItem(item: unknown): item is ColumnItem {
@@ -19,8 +20,8 @@ function isColumnItem(item: unknown): item is ColumnItem {
     typeof (item as Record<string, unknown>)['id'] === 'string' &&
     'name' in item &&
     typeof (item as Record<string, unknown>)['name'] === 'string' &&
-    'position' in item &&
-    typeof (item as Record<string, unknown>)['position'] === 'number'
+    'isFinal' in item &&
+    typeof (item as Record<string, unknown>)['isFinal'] === 'boolean'
   )
 }
 
@@ -43,9 +44,9 @@ describe('Column Tools', () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         listColumns: mock(() =>
           Promise.resolve([
-            { id: 'col-1', name: 'todo', position: 0 },
-            { id: 'col-2', name: 'in-progress', position: 1 },
-            { id: 'col-3', name: 'done', position: 2 },
+            { id: 'col-1', name: 'todo', color: null, isFinal: false },
+            { id: 'col-2', name: 'in-progress', color: '#aaa', isFinal: false },
+            { id: 'col-3', name: 'done', color: '#0f0', isFinal: true },
           ]),
         ),
       }))
@@ -59,6 +60,7 @@ describe('Column Tools', () => {
       expect(result[0]?.name).toBe('todo')
       expect(result[1]?.name).toBe('in-progress')
       expect(result[2]?.name).toBe('done')
+      expect(result[2]?.isFinal).toBe(true)
     })
 
     test('returns empty array when no columns', async () => {
@@ -141,10 +143,10 @@ describe('Column Tools', () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         listColumns: mock(() =>
           Promise.resolve([
-            { id: 'col-1', name: 'Backlog', position: 0 },
-            { id: 'col-2', name: 'In Progress', position: 1 },
-            { id: 'col-3', name: 'Review', position: 2 },
-            { id: 'col-4', name: 'Done', position: 3 },
+            { id: 'col-1', name: 'Backlog', color: null, isFinal: false },
+            { id: 'col-2', name: 'In Progress', color: '#aaa', isFinal: false },
+            { id: 'col-3', name: 'Review', color: '#ff0', isFinal: false },
+            { id: 'col-4', name: 'Done', color: '#0f0', isFinal: true },
           ]),
         ),
       }))
@@ -158,8 +160,8 @@ describe('Column Tools', () => {
       for (const column of result) {
         expect(column).toHaveProperty('id')
         expect(column).toHaveProperty('name')
-        expect(column).toHaveProperty('position')
-        expect(typeof column.position).toBe('number')
+        expect(column).toHaveProperty('isFinal')
+        expect(typeof column.isFinal).toBe('boolean')
       }
     })
   })

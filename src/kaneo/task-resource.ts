@@ -2,7 +2,13 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
+import {
+  type KaneoConfig,
+  KaneoTaskSchema,
+  KaneoTaskWithProjectIdSchema,
+  KaneoTaskResponseSchema,
+  kaneoFetch,
+} from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
@@ -120,7 +126,7 @@ export class TaskResource {
       projectId?: string
       userId?: string
     },
-  ): Promise<z.infer<typeof KaneoTaskSchema>> {
+  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
     this.log.debug({ taskId, ...params }, 'Updating task')
 
     try {
@@ -133,7 +139,11 @@ export class TaskResource {
     }
   }
 
-  private singleFieldUpdate(taskId: string, field: string, value: unknown): Promise<z.infer<typeof KaneoTaskSchema>> {
+  private singleFieldUpdate(
+    taskId: string,
+    field: string,
+    value: unknown,
+  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
     const endpoints: Record<string, { path: string; key: string }> = {
       status: { path: '/task/status/', key: 'status' },
       priority: { path: '/task/priority/', key: 'priority' },
@@ -150,7 +160,7 @@ export class TaskResource {
       `${endpoint.path}${taskId}`,
       { [endpoint.key]: value },
       undefined,
-      KaneoTaskSchema,
+      KaneoTaskWithProjectIdSchema,
     )
   }
 
@@ -165,7 +175,7 @@ export class TaskResource {
       projectId?: string
       userId?: string
     },
-  ): Promise<z.infer<typeof KaneoTaskSchema>> {
+  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
     const current = await kaneoFetch(this.config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
     return kaneoFetch(
       this.config,
@@ -182,7 +192,7 @@ export class TaskResource {
         userId: params.userId,
       },
       undefined,
-      KaneoTaskSchema,
+      KaneoTaskWithProjectIdSchema,
     )
   }
 
@@ -197,7 +207,7 @@ export class TaskResource {
       projectId?: string
       userId?: string
     },
-  ): Promise<z.infer<typeof KaneoTaskSchema>> {
+  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
     const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
     if (setFields.length === 1) {
       return this.singleFieldUpdate(taskId, setFields[0]![0], setFields[0]![1])
@@ -218,19 +228,21 @@ export class TaskResource {
     }
   }
 
-  async search(params: { query: string; workspaceId: string; projectId?: string }): Promise<TaskResult[]> {
+  async search(params: {
+    query: string
+    workspaceId: string
+    projectId?: string
+    limit?: number
+  }): Promise<TaskResult[]> {
     this.log.debug(params, 'Searching tasks')
-
     try {
       const queryParams: Record<string, string> = {
         q: params.query,
         type: 'tasks',
         workspaceId: params.workspaceId,
+        ...(params.projectId !== undefined ? { projectId: params.projectId } : {}),
+        ...(params.limit !== undefined ? { limit: String(params.limit) } : {}),
       }
-      if (params.projectId !== undefined) {
-        queryParams['projectId'] = params.projectId
-      }
-
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
       const tasks: TaskResult[] = result.results
         .filter((r) => r.type === 'task')
@@ -240,6 +252,7 @@ export class TaskResource {
           number: r.taskNumber ?? 0,
           status: r.status ?? '',
           priority: r.priority ?? '',
+          projectId: r.projectId,
         }))
       this.log.info({ count: tasks.length }, 'Tasks searched')
       return tasks
@@ -254,9 +267,7 @@ export class TaskResource {
     try {
       const archiveLabel = await getOrCreateArchiveLabel(this.config, workspaceId)
       const alreadyArchived = await isTaskArchived(this.config, taskId, archiveLabel.id)
-      if (alreadyArchived) {
-        this.log.debug({ taskId }, 'Task already has archive label, skipping')
-      } else {
+      if (!alreadyArchived) {
         await addArchiveLabel(this.config, workspaceId, taskId)
       }
       this.log.info({ taskId, labelId: archiveLabel.id }, 'Task archived')
@@ -271,22 +282,19 @@ export class TaskResource {
     relatedTaskId: string,
     type: TaskRelation['type'],
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
-    const { addTaskRelation } = await import('./task-relations.js')
-    return addTaskRelation(this.config, taskId, relatedTaskId, type)
+    return (await import('./task-relations.js')).addTaskRelation(this.config, taskId, relatedTaskId, type)
   }
   async removeRelation(
     taskId: string,
     relatedTaskId: string,
   ): Promise<{ taskId: string; relatedTaskId: string; success: true }> {
-    const { removeTaskRelation } = await import('./task-relations.js')
-    return removeTaskRelation(this.config, taskId, relatedTaskId)
+    return (await import('./task-relations.js')).removeTaskRelation(this.config, taskId, relatedTaskId)
   }
   async updateRelation(
     taskId: string,
     relatedTaskId: string,
     type: TaskRelation['type'],
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
-    const { updateTaskRelation } = await import('./task-relations.js')
-    return updateTaskRelation(this.config, taskId, relatedTaskId, type)
+    return (await import('./task-relations.js')).updateTaskRelation(this.config, taskId, relatedTaskId, type)
   }
 }

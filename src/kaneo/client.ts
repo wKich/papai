@@ -14,6 +14,10 @@ export const KaneoTaskSchema = z.object({
   priority: z.string(),
 })
 
+export const KaneoTaskWithProjectIdSchema = KaneoTaskSchema.extend({
+  projectId: z.string().optional(),
+})
+
 export const KaneoTaskWithDetailsSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -71,12 +75,13 @@ export const KaneoActivityWithTypeSchema = z.object({
   type: z.string(),
   message: z.string().nullish(),
   comment: z.string().nullish(),
-  createdAt: z.string(),
+  createdAt: z.string().nullish(),
 })
 
 export const KaneoColumnSchema = z.object({
   id: z.string(),
   name: z.string(),
+  icon: z.string().nullable(),
   color: z.string().nullable(),
   isFinal: z.boolean(),
 })

@@ -391,19 +391,30 @@ describe('LabelResource', () => {
   })
 
   describe('removeFromTask', () => {
-    test('finds and deletes task label', async () => {
+    test('finds task-label copy by name and deletes it', async () => {
+      // Task-scoped label copies have a DIFFERENT id from the workspace label.
+      // removeFromTask receives the workspace label id, fetches its name, then
+      // finds the task copy by matching name.
       let callCount = 0
       let deleteUrl: string | undefined
 
       setMockFetch((url, options) => {
         callCount++
 
+        // GET workspace label by id
+        if (url.includes('/label/ws-label-1') && !url.includes('/task')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: 'ws-label-1', name: 'bug', color: '#ff0000' }), { status: 200 }),
+          )
+        }
+
+        // GET task-scoped label copies — note: copy id differs from workspace id
         if (url.includes('/label/task/task-1')) {
           return Promise.resolve(
             new Response(
               JSON.stringify([
-                { id: 'label-bug', name: 'bug', color: '#ff0000' },
-                { id: 'label-urgent', name: 'urgent', color: '#ff0000' },
+                { id: 'copy-bug-1', name: 'bug', color: '#ff0000' },
+                { id: 'copy-urgent-1', name: 'urgent', color: '#ff0000' },
               ]),
               { status: 200 },
             ),
@@ -419,47 +430,46 @@ describe('LabelResource', () => {
       })
 
       const resource = new LabelResource(mockConfig)
-      const result = await resource.removeFromTask('task-1', 'label-bug')
+      const result = await resource.removeFromTask('task-1', 'ws-label-1')
 
-      expect(callCount).toBe(2)
-      expect(deleteUrl).toContain('/label/label-bug')
+      // 3 calls: GET workspace label, GET task labels, DELETE copy
+      expect(callCount).toBe(3)
+      // Deletes the COPY id, not the workspace label id
+      expect(deleteUrl).toContain('/label/copy-bug-1')
       expect(result.taskId).toBe('task-1')
-      expect(result.labelId).toBe('label-bug')
+      // Returns the workspace label id passed in
+      expect(result.labelId).toBe('ws-label-1')
       expect(result.success).toBe(true)
     })
 
-    test('handles when task has no labels (returns success)', async () => {
-      setMockFetch((url) => {
-        if (url.includes('/label/task/')) {
-          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
-        }
-        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-      })
+    test('throws when workspace label is not found', async () => {
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Label not found' }), { status: 404 })))
 
       const resource = new LabelResource(mockConfig)
-      const result = await resource.removeFromTask('task-1', 'label-bug')
-
-      expect(result.taskId).toBe('task-1')
-      expect(result.labelId).toBe('label-bug')
-      expect(result.success).toBe(true)
+      const promise = resource.removeFromTask('task-1', 'invalid-label')
+      expect(promise).rejects.toMatchObject({ appError: { code: 'label-not-found' } })
+      await promise.catch(() => {})
     })
 
-    test('handles when label not found on task', async () => {
+    test('throws when task has no labels with matching name', async () => {
       setMockFetch((url) => {
-        if (url.includes('/label/task/')) {
+        if (url.includes('/label/ws-label-1') && !url.includes('/task')) {
           return Promise.resolve(
-            new Response(JSON.stringify([{ id: 'label-other', name: 'other', color: '#ff0000' }]), { status: 200 }),
+            new Response(JSON.stringify({ id: 'ws-label-1', name: 'bug', color: '#ff0000' }), { status: 200 }),
           )
         }
-        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+        if (url.includes('/label/task/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify([{ id: 'copy-other', name: 'other', color: '#aaa' }]), { status: 200 }),
+          )
+        }
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
       })
 
       const resource = new LabelResource(mockConfig)
-      const result = await resource.removeFromTask('task-1', 'label-missing')
-
-      expect(result.taskId).toBe('task-1')
-      expect(result.labelId).toBe('label-missing')
-      expect(result.success).toBe(true)
+      const promise = resource.removeFromTask('task-1', 'ws-label-1')
+      expect(promise).rejects.toThrow()
+      await promise.catch(() => {})
     })
   })
 })

@@ -8,8 +8,8 @@
     "start": "bun run src/index.ts",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
-    "format": "oxfmt --write .",
-    "format:check": "oxfmt --check .",
+    "format": "oxfmt --write . --ignore-path=.oxfmtignore",
+    "format:check": "oxfmt --check . --ignore-path=.oxfmtignore",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
@@ -21,9 +21,9 @@
     "test:migration": "bun run src/scripts/test-migration.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^2.0.33",
+    "@ai-sdk/openai-compatible": "^2.0.35",
     "@gramio/format": "^0.5.0",
-    "ai": "^6.0.108",
+    "ai": "^6.0.116",
     "grammy": "^1.41.1",
     "marked": "^17.0.4",
     "pino": "^10.3.1",
@@ -31,8 +31,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "oxfmt": "^0.36.0",
-    "oxlint": "latest",
+    "oxfmt": "^0.40.0",
+    "oxlint": "1.55.0",
     "oxlint-tsgolint": "^0.16.0",
     "typescript": "latest"
   }

@@ -24,9 +24,9 @@ describe('ColumnResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              { id: 'col-1', name: 'Todo', color: null, isFinal: false },
-              { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
-              { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
+              { id: 'col-1', name: 'Todo', icon: null, color: null, isFinal: false },
+              { id: 'col-2', name: 'In Progress', icon: null, color: null, isFinal: false },
+              { id: 'col-3', name: 'Done', icon: 'Check', color: '#00ff00', isFinal: true },
             ]),
             { status: 200 },
           ),
@@ -47,9 +47,9 @@ describe('ColumnResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              { id: 'col-3', name: 'Done', color: '#00ff00', isFinal: true },
-              { id: 'col-1', name: 'Todo', color: null, isFinal: false },
-              { id: 'col-2', name: 'In Progress', color: null, isFinal: false },
+              { id: 'col-3', name: 'Done', icon: 'Check', color: '#00ff00', isFinal: true },
+              { id: 'col-1', name: 'Todo', icon: null, color: null, isFinal: false },
+              { id: 'col-2', name: 'In Progress', icon: null, color: null, isFinal: false },
             ]),
             { status: 200 },
           ),

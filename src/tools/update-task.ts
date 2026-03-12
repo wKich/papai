@@ -4,11 +4,12 @@ import { z } from 'zod'
 
 import type { KaneoConfig } from '../kaneo/client.js'
 import { updateTask } from '../kaneo/index.js'
+import { buildTaskUrl } from '../kaneo/url-builder.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:update-task' })
 
-export function makeUpdateTaskTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeUpdateTaskTool(kaneoConfig: KaneoConfig, workspaceId: string): ToolSet[string] {
   return tool({
     description:
       "Update an existing Kaneo task's status, priority, assignee, due date, title, description, or project.",
@@ -35,8 +36,13 @@ export function makeUpdateTaskTool(kaneoConfig: KaneoConfig): ToolSet[string] {
           userId,
           projectId,
         })
+        const resolvedProjectId = task.projectId
+        const url =
+          resolvedProjectId === undefined
+            ? undefined
+            : buildTaskUrl(kaneoConfig.baseUrl, workspaceId, resolvedProjectId, task.id)
         log.info({ taskId, number: task.number }, 'Task updated via tool')
-        return { id: task.id, title: task.title, number: task.number, status: task.status }
+        return { id: task.id, title: task.title, number: task.number, status: task.status, url }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'update_task' },

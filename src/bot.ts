@@ -22,6 +22,7 @@ import { isAuthorized, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspa
 import { formatLlmOutput } from './utils/format.js'
 const log = logger.child({ scope: 'bot' })
 const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Kaneo tasks directly from Telegram.
+Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 You can:
 - Create new tasks with titles, descriptions, priorities, and project associations
 - Update task statuses, priorities, and assignees

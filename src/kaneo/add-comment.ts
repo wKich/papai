@@ -1,13 +1,9 @@
-import { z } from 'zod'
-
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoActivitySchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:add-comment' })
-
-export type KaneoActivity = z.infer<typeof KaneoActivitySchema>
 
 export async function addComment({
   config,
@@ -23,7 +19,7 @@ export async function addComment({
   try {
     const client = new KaneoClient(config)
     const result = await client.comments.add(taskId, comment)
-    log.info({ taskId, activityId: result.id }, 'Comment added')
+    log.info({ taskId }, 'Comment added')
     return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'addComment failed')

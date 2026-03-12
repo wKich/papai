@@ -12,17 +12,19 @@ export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
 export async function updateProject({
   config,
+  workspaceId,
   projectId,
   name,
   description,
 }: {
   config: KaneoConfig
+  workspaceId: string
   projectId: string
   name?: string
   description?: string
 }): Promise<KaneoProject> {
   log.debug(
-    { projectId, hasName: name !== undefined, hasDescription: description !== undefined },
+    { projectId, workspaceId, hasName: name !== undefined, hasDescription: description !== undefined },
     'updateProject called',
   )
 
@@ -35,11 +37,14 @@ export async function updateProject({
 
   try {
     const client = new KaneoClient(config)
-    const project = await client.projects.update(projectId, { name, description })
-    log.info({ projectId, name: project.name }, 'Project updated')
+    const project = await client.projects.update(projectId, workspaceId, { name, description })
+    log.info({ projectId, workspaceId, name: project.name }, 'Project updated')
     return project
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'updateProject failed')
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), projectId, workspaceId },
+      'updateProject failed',
+    )
     throw classifyKaneoError(error)
   }
 }

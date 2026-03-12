@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { makeAddTaskRelationTool } from '../../src/tools/add-task-relation.js'
 import { makeRemoveTaskRelationTool } from '../../src/tools/remove-task-relation.js'
@@ -26,6 +26,10 @@ function isSuccessResult(val: unknown): val is { success: boolean } {
 
 describe('Task Relation Tools', () => {
   beforeEach(() => {
+    mock.restore()
+  })
+
+  afterEach(() => {
     mock.restore()
   })
 

@@ -13,7 +13,7 @@ export async function updateComment({
   config: KaneoConfig
   activityId: string
   comment: string
-}): Promise<{ id: string; comment: string }> {
+}): Promise<{ id: string; comment: string; createdAt: string }> {
   log.debug({ activityId, commentLength: comment.length }, 'updateComment called')
 
   try {

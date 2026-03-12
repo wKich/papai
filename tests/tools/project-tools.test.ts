@@ -212,7 +212,7 @@ describe('Project Tools', () => {
 
   describe('makeUpdateProjectTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateProjectTool(mockConfig)
+      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
       expect(tool.description).toContain('Update an existing Kaneo project')
     })
 
@@ -227,7 +227,7 @@ describe('Project Tools', () => {
         ),
       }))
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
       const result: unknown = await execute(
         { projectId: 'proj-1', name: 'Updated Name' },
         { toolCallId: '1', messages: [] },
@@ -252,7 +252,7 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
       await execute({ projectId: 'proj-1', description: 'New description' }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams !== undefined && capturedParams['description']).toBe('New description')
@@ -271,7 +271,7 @@ describe('Project Tools', () => {
         }),
       }))
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig))
+      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
       await execute(
         { projectId: 'proj-1', name: 'New Name', description: 'New description' },
         { toolCallId: '1', messages: [] },
@@ -286,7 +286,7 @@ describe('Project Tools', () => {
         updateProject: mock(() => Promise.reject(new Error('Project not found'))),
       }))
 
-      const tool = makeUpdateProjectTool(mockConfig)
+      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
       const promise = getToolExecutor(tool)({ projectId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Project not found')
       try {
@@ -297,7 +297,7 @@ describe('Project Tools', () => {
     })
 
     test('validates projectId is required', async () => {
-      const tool = makeUpdateProjectTool(mockConfig)
+      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
       const promise = getToolExecutor(tool)({ name: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {
@@ -308,7 +308,7 @@ describe('Project Tools', () => {
     })
 
     test('validates at least one field is provided', async () => {
-      const tool = makeUpdateProjectTool(mockConfig)
+      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
       const promise = getToolExecutor(tool)({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {

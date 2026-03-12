@@ -287,7 +287,7 @@ describe('ProjectResource', () => {
       })
 
       const resource = new ProjectResource(mockConfig)
-      const result = await resource.update('proj-1', { name: 'Updated Name' })
+      const result = await resource.update('proj-1', 'ws-1', { name: 'Updated Name' })
 
       expect(callCount).toBe(2)
       expect(capturedBody).toMatchObject({
@@ -322,7 +322,7 @@ describe('ProjectResource', () => {
       })
 
       const resource = new ProjectResource(mockConfig)
-      await resource.update('proj-1', { description: 'New description' })
+      await resource.update('proj-1', 'ws-1', { description: 'New description' })
 
       expect(capturedBody).toMatchObject({
         name: 'Test',
@@ -355,7 +355,7 @@ describe('ProjectResource', () => {
       })
 
       const resource = new ProjectResource(mockConfig)
-      await resource.update('proj-1', { name: 'New Name', description: 'New description' })
+      await resource.update('proj-1', 'ws-1', { name: 'New Name', description: 'New description' })
 
       expect(capturedBody).toMatchObject({
         name: 'New Name',
@@ -367,7 +367,7 @@ describe('ProjectResource', () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })))
 
       const resource = new ProjectResource(mockConfig)
-      const promise = resource.update('invalid', { name: 'Test' })
+      const promise = resource.update('invalid', 'ws-1', { name: 'Test' })
       expect(promise).rejects.toMatchObject({
         appError: { code: 'project-not-found' },
       })

@@ -2,11 +2,12 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoActivitySchema, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
 
 const UpdateActivitySchema = z.object({
   id: z.string(),
   comment: z.string(),
+  createdAt: z.string(),
 })
 
 export class CommentResource {
@@ -18,16 +19,20 @@ export class CommentResource {
     this.log.debug({ taskId, commentLength: comment.length }, 'Adding comment')
 
     try {
-      const activity = await kaneoFetch(
-        this.config,
-        'POST',
-        '/activity/comment',
-        { taskId, comment },
-        undefined,
-        KaneoActivitySchema,
-      )
-      this.log.info({ taskId, activityId: activity.id }, 'Comment added')
-      return { id: activity.id, comment: activity.comment, createdAt: activity.createdAt }
+      // Kaneo's createComment controller uses db.insert().values() without .returning(),
+      // so the response is a raw Drizzle result — not an activity object.
+      // We need to fetch the comment after creation to get its ID.
+      await kaneoFetch(this.config, 'POST', '/activity/comment', { taskId, comment }, undefined, z.unknown())
+
+      // Fetch the newly created comment to get its ID and createdAt
+      const comments = await this.list(taskId)
+      const newComment = comments.find((c) => c.comment === comment)
+      if (newComment === undefined) {
+        throw new Error('Failed to retrieve created comment')
+      }
+
+      this.log.info({ taskId, commentId: newComment.id }, 'Comment added')
+      return { id: newComment.id, comment: newComment.comment, createdAt: newComment.createdAt }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')
       throw classifyKaneoError(error)
@@ -48,7 +53,7 @@ export class CommentResource {
       )
       const comments = activities.flatMap((a) => {
         if (a.type !== 'comment' || a.comment === null || a.comment === undefined) return []
-        return [{ id: a.id, comment: a.comment, createdAt: a.createdAt }]
+        return [{ id: a.id, comment: a.comment, createdAt: a.createdAt ?? '' }]
       })
       this.log.info({ taskId, count: comments.length }, 'Comments listed')
       return comments
@@ -58,7 +63,7 @@ export class CommentResource {
     }
   }
 
-  async update(activityId: string, comment: string): Promise<{ id: string; comment: string }> {
+  async update(activityId: string, comment: string): Promise<{ id: string; comment: string; createdAt: string }> {
     this.log.debug({ activityId, commentLength: comment.length }, 'Updating comment')
 
     try {
@@ -71,7 +76,7 @@ export class CommentResource {
         UpdateActivitySchema,
       )
       this.log.info({ activityId }, 'Comment updated')
-      return { id: activity.id, comment: activity.comment }
+      return { id: activity.id, comment: activity.comment, createdAt: activity.createdAt }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update comment')
       throw classifyKaneoError(error)

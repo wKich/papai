@@ -53,10 +53,10 @@ describe('classifyKaneoError', () => {
     expect(result.appError.code).toBe('comment-not-found')
   })
 
-  test('returns taskNotFound as default for 404 without context', () => {
+  test('returns unknown for 404 without recognisable resource context', () => {
     const error = new KaneoApiError('Not found', 404, { error: 'Not found' })
     const result = classifyKaneoError(error)
-    expect(result.appError.code).toBe('task-not-found')
+    expect(result.appError.code).toBe('unknown')
   })
 
   test('returns rateLimited for 429', () => {

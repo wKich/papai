@@ -7,12 +7,10 @@ import { getToolExecutor } from '../test-helpers.js'
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 const mockWorkspaceId = 'ws-1'
 
-function isTaskLabel(val: unknown): val is { id: string; taskId: string; labelId: string } {
+function isTaskLabel(val: unknown): val is { taskId: string; labelId: string } {
   return (
     val !== null &&
     typeof val === 'object' &&
-    'id' in val &&
-    typeof val.id === 'string' &&
     'taskId' in val &&
     typeof val.taskId === 'string' &&
     'labelId' in val &&
@@ -39,7 +37,6 @@ describe('Task Label Tools', () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         addTaskLabel: mock(() =>
           Promise.resolve({
-            id: 'tl-1',
             taskId: 'task-1',
             labelId: 'label-1',
           }),
@@ -54,7 +51,6 @@ describe('Task Label Tools', () => {
       )
       if (!isTaskLabel(result)) throw new Error('Invalid result')
 
-      expect(result.id).toBe('tl-1')
       expect(result.taskId).toBe('task-1')
       expect(result.labelId).toBe('label-1')
     })
@@ -64,7 +60,7 @@ describe('Task Label Tools', () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         addTaskLabel: mock((params: Record<string, unknown>) => {
           capturedParams = params
-          return Promise.resolve({ id: 'tl-1', taskId: 'task-1', labelId: 'label-1' })
+          return Promise.resolve({ taskId: 'task-1', labelId: 'label-1' })
         }),
       }))
 

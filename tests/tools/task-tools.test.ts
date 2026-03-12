@@ -52,7 +52,7 @@ describe('Task Tools', () => {
 
   describe('makeCreateTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeCreateTaskTool(mockConfig)
+      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
       expect(tool.description).toContain('Create a new task')
     })
 
@@ -68,7 +68,7 @@ describe('Task Tools', () => {
         ),
       }))
 
-      const tool = makeCreateTaskTool(mockConfig)
+      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { title: 'Test Task', projectId: 'proj-1' },
@@ -96,7 +96,7 @@ describe('Task Tools', () => {
         }),
       }))
 
-      const tool = makeCreateTaskTool(mockConfig)
+      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
@@ -121,7 +121,7 @@ describe('Task Tools', () => {
         createTask: mock(() => Promise.reject(new Error('API Error'))),
       }))
 
-      const tool = makeCreateTaskTool(mockConfig)
+      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({ title: 'Test', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('API Error')
       try {
@@ -132,7 +132,7 @@ describe('Task Tools', () => {
     })
 
     test('validates required title parameter', async () => {
-      const tool = makeCreateTaskTool(mockConfig)
+      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {
@@ -145,7 +145,7 @@ describe('Task Tools', () => {
 
   describe('makeUpdateTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateTaskTool(mockConfig)
+      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
       expect(tool.description).toContain("Update an existing Kaneo task's")
     })
 
@@ -161,7 +161,7 @@ describe('Task Tools', () => {
         ),
       }))
 
-      const tool = makeUpdateTaskTool(mockConfig)
+      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', status: 'done' },
@@ -188,7 +188,7 @@ describe('Task Tools', () => {
         }),
       }))
 
-      const tool = makeUpdateTaskTool(mockConfig)
+      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         { taskId: 'task-1', title: 'New Title', priority: 'high', dueDate: '2026-12-31' },
@@ -209,7 +209,7 @@ describe('Task Tools', () => {
         }),
       }))
 
-      const tool = makeUpdateTaskTool(mockConfig)
+      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', status: 'done' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -220,7 +220,7 @@ describe('Task Tools', () => {
     })
 
     test('validates taskId is required', async () => {
-      const tool = makeUpdateTaskTool(mockConfig)
+      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({ status: 'done' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {
@@ -233,7 +233,7 @@ describe('Task Tools', () => {
 
   describe('makeGetTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeGetTaskTool(mockConfig)
+      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
       expect(tool.description).toContain('Fetch full details')
     })
 
@@ -252,7 +252,7 @@ describe('Task Tools', () => {
         ),
       }))
 
-      const tool = makeGetTaskTool(mockConfig)
+      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
@@ -277,7 +277,7 @@ describe('Task Tools', () => {
         ),
       }))
 
-      const tool = makeGetTaskTool(mockConfig)
+      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
@@ -290,7 +290,7 @@ describe('Task Tools', () => {
         getTask: mock(() => Promise.reject(new Error('Task not found'))),
       }))
 
-      const tool = makeGetTaskTool(mockConfig)
+      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -301,7 +301,7 @@ describe('Task Tools', () => {
     })
 
     test('validates taskId is required', async () => {
-      const tool = makeGetTaskTool(mockConfig)
+      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {
@@ -314,7 +314,7 @@ describe('Task Tools', () => {
 
   describe('makeListTasksTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeListTasksTool(mockConfig)
+      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
       expect(tool.description).toContain('List all tasks')
     })
 
@@ -328,7 +328,7 @@ describe('Task Tools', () => {
         ),
       }))
 
-      const tool = makeListTasksTool(mockConfig)
+      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskArray(result)) throw new Error('Invalid result')
@@ -343,7 +343,7 @@ describe('Task Tools', () => {
         listTasks: mock(() => Promise.resolve([])),
       }))
 
-      const tool = makeListTasksTool(mockConfig)
+      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -356,7 +356,7 @@ describe('Task Tools', () => {
         listTasks: mock(() => Promise.reject(new Error('Project not found'))),
       }))
 
-      const tool = makeListTasksTool(mockConfig)
+      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({ projectId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Project not found')
       try {
@@ -367,7 +367,7 @@ describe('Task Tools', () => {
     })
 
     test('validates projectId is required', async () => {
-      const tool = makeListTasksTool(mockConfig)
+      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow()
       try {
