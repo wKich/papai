@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Migration column slug, API schemas, and e2e test verification
+
 ## [3.0.14] - 2026-03-12
 
 ### Fixed

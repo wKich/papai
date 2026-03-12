@@ -34,22 +34,29 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
   if (!res.ok) {
     throw new Error(`Sign-up failed (${res.status}): ${await res.text()}`)
   }
-  const setCookies = res.headers.getSetCookie()
-  // In HTTPS deployments better-auth prefixes the cookie name with __Secure-,
-  // so match on substring rather than exact prefix.
-  const sessionHeader = setCookies.find((h) => h.includes('better-auth.session_token='))
-  if (sessionHeader === undefined) {
-    throw new Error('Sign-up response missing session cookie')
-  }
-  // Extract just the name=value pair (drop Secure/HttpOnly/Path/Max-Age attrs).
-  // Keep the full cookie name including any __Secure- prefix — the name must
-  // match exactly when sent back in the Cookie header.
-  const sessionCookie = sessionHeader.split(';')[0]!
   const rawData: unknown = await res.json()
   const parsed = SignUpResponseSchema.safeParse(rawData)
   if (!parsed.success) throw new Error('Sign-up returned invalid data')
   log.debug({ userId: parsed.data.user.id }, 'Kaneo sign-up complete')
-  return sessionCookie
+
+  const setCookies = res.headers.getSetCookie()
+  // In HTTPS deployments better-auth prefixes the cookie name with __Secure-,
+  // so match on substring rather than exact prefix.
+  const sessionHeader = setCookies.find((h) => h.includes('better-auth.session_token='))
+  if (sessionHeader !== undefined) {
+    // Extract just the name=value pair (drop Secure/HttpOnly/Path/Max-Age attrs).
+    // Keep the full cookie name including any __Secure- prefix — the name must
+    // match exactly when sent back in the Cookie header.
+    return sessionHeader.split(';')[0]!
+  }
+
+  // better-auth may not set a cookie when called from a server-side context
+  // (e.g. behind a reverse proxy with no client IP). Fall back to constructing
+  // the cookie from the token returned in the JSON body.
+  // Use the __Secure- prefix when the endpoint is HTTPS, matching better-auth behaviour.
+  const cookieName = baseUrl.startsWith('https://') ? '__Secure-better-auth.session_token' : 'better-auth.session_token'
+  log.debug({ email, cookieName }, 'No session cookie in sign-up response; constructing from JSON token')
+  return `${cookieName}=${parsed.data.token}`
 }
 
 async function doCreateWorkspace(
