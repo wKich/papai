@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Correct kaneo-db-fix command YAML and provision auth
+
 ## [3.0.11] - 2026-03-12
 
 ### Fixed

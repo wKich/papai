@@ -35,10 +35,15 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
     throw new Error(`Sign-up failed (${res.status}): ${await res.text()}`)
   }
   const setCookies = res.headers.getSetCookie()
-  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
+  // In HTTPS deployments better-auth prefixes the cookie name with __Secure-,
+  // so match on substring rather than exact prefix.
+  const sessionHeader = setCookies.find((h) => h.includes('better-auth.session_token='))
   if (sessionHeader === undefined) {
     throw new Error('Sign-up response missing session cookie')
   }
+  // Extract just the name=value pair (drop Secure/HttpOnly/Path/Max-Age attrs).
+  // Keep the full cookie name including any __Secure- prefix — the name must
+  // match exactly when sent back in the Cookie header.
   const sessionCookie = sessionHeader.split(';')[0]!
   const rawData: unknown = await res.json()
   const parsed = SignUpResponseSchema.safeParse(rawData)
