@@ -24,7 +24,13 @@ const COMPOSE_ENV = {
 
 export async function composeUp(): Promise<void> {
   log.info('Starting Kaneo services via docker compose')
-  await $`docker compose -p ${COMPOSE_PROJECT} -f docker-compose.yml up -d kaneo-postgres kaneo-api --wait`.env(
+  await $`docker compose -p ${COMPOSE_PROJECT} -f docker-compose.yml -f docker-compose.test.yml up -d kaneo-postgres kaneo-api --wait`.env(
+    COMPOSE_ENV,
+  )
+  // Run the one-shot DB fix service (blocks until it exits).
+  // Not included in --wait above because compose exits 1 when any listed
+  // service exits, even successfully.
+  await $`docker compose -p ${COMPOSE_PROJECT} -f docker-compose.yml -f docker-compose.test.yml up kaneo-db-fix`.env(
     COMPOSE_ENV,
   )
   log.info('Docker compose services started')
@@ -32,7 +38,9 @@ export async function composeUp(): Promise<void> {
 
 export async function composeDown(): Promise<void> {
   log.info('Tearing down docker compose services')
-  await $`docker compose -p ${COMPOSE_PROJECT} down -v --remove-orphans`.env(COMPOSE_ENV)
+  await $`docker compose -p ${COMPOSE_PROJECT} -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans`.env(
+    COMPOSE_ENV,
+  )
   log.info('Docker compose services torn down')
 }
 

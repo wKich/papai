@@ -34,19 +34,33 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
   if (!res.ok) {
     throw new Error(`Sign-up failed (${res.status}): ${await res.text()}`)
   }
+  const setCookies = res.headers.getSetCookie()
+  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
+  if (sessionHeader === undefined) {
+    throw new Error('Sign-up response missing session cookie')
+  }
+  const sessionCookie = sessionHeader.split(';')[0]!
   const rawData: unknown = await res.json()
   const parsed = SignUpResponseSchema.safeParse(rawData)
   if (!parsed.success) throw new Error('Sign-up returned invalid data')
-  return parsed.data.token
+  log.debug({ userId: parsed.data.user.id }, 'Kaneo sign-up complete')
+  return sessionCookie
 }
 
-async function doCreateWorkspace(baseUrl: string, bearerToken: string, name: string, slug: string): Promise<string> {
+async function doCreateWorkspace(
+  baseUrl: string,
+  trustedOrigin: string,
+  sessionCookie: string,
+  name: string,
+  slug: string,
+): Promise<string> {
   log.debug({ name }, 'Creating Kaneo workspace')
   const res = await fetch(`${baseUrl}/api/auth/organization/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${bearerToken}`,
+      Cookie: sessionCookie,
+      Origin: trustedOrigin,
     },
     body: JSON.stringify({ name, slug }),
   })
@@ -59,10 +73,10 @@ async function doCreateWorkspace(baseUrl: string, bearerToken: string, name: str
   return parsed.data.id
 }
 
-async function doCreateApiKey(baseUrl: string, bearerToken: string): Promise<string> {
+async function doCreateApiKey(baseUrl: string, trustedOrigin: string, sessionCookie: string): Promise<string> {
   const res = await fetch(`${baseUrl}/api/auth/api-key/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearerToken}` },
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie, Origin: trustedOrigin },
     body: JSON.stringify({ name: 'papai-bot' }),
   })
   if (!res.ok) throw new Error(`API key creation failed (${res.status}): ${await res.text()}`)
@@ -81,7 +95,7 @@ export async function provisionKaneoUser(
   /** Internal API base URL (e.g. http://kaneo-api:1337) */
   baseUrl: string,
   /** Public-facing web client URL (kept for backward compatibility with call sites) */
-  _clientUrl: string,
+  publicUrl: string,
   telegramId: number,
   username: string | null,
 ): Promise<ProvisionResult> {
@@ -91,12 +105,13 @@ export async function provisionKaneoUser(
   const slug = `papai-${telegramId}`
 
   log.info({ telegramId, email }, 'Provisioning Kaneo user account')
-  const bearerToken = await doSignUp(baseUrl, email, password, name)
-  const workspaceId = await doCreateWorkspace(baseUrl, bearerToken, name, slug)
+  const sessionCookie = await doSignUp(baseUrl, email, password, name)
+  const trustedOrigin = publicUrl === '' ? baseUrl : publicUrl
+  const workspaceId = await doCreateWorkspace(baseUrl, trustedOrigin, sessionCookie, name, slug)
 
-  let kaneoKey = bearerToken
+  let kaneoKey = sessionCookie
   try {
-    kaneoKey = await doCreateApiKey(baseUrl, bearerToken)
+    kaneoKey = await doCreateApiKey(baseUrl, trustedOrigin, sessionCookie)
     log.info({ telegramId }, 'Created API key for provisioned user')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

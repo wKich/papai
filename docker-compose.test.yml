@@ -1,0 +1,7 @@
+# Overlay for local integration tests.
+# Exposes kaneo-api to the host on KANEO_API_PORT (default 11337) so test
+# scripts (test-provision.ts, test-migration.ts) can reach it at localhost.
+services:
+  kaneo-api:
+    ports:
+      - '${KANEO_API_PORT:-11337}:1337'

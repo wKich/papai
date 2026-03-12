@@ -1,4 +1,23 @@
 services:
+  # One-shot service that patches a missing Kaneo DB migration:
+  # migration 0008 created `user_id text NOT NULL` on the apikey table
+  # but the @better-auth/api-key plugin only writes `reference_id`, never
+  # `user_id`, so every API key creation returns 500. This drops the NOT
+  # NULL constraint idempotently after Kaneo has run its own migrations.
+  kaneo-db-fix:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      PGPASSWORD: ${KANEO_POSTGRES_PASSWORD:?KANEO_POSTGRES_PASSWORD is required}
+    command: >
+      psql -h kaneo-postgres
+           -U ${KANEO_POSTGRES_USER:-kaneo}
+           -d ${KANEO_POSTGRES_DB:-kaneo}
+           -c "ALTER TABLE apikey ALTER COLUMN user_id DROP NOT NULL"
+    depends_on:
+      kaneo-api:
+        condition: service_healthy
+
   papai:
     image: ${IMAGE:-ghcr.io/wkich/papai:latest}
     restart: unless-stopped
@@ -12,6 +31,8 @@ services:
     depends_on:
       kaneo-api:
         condition: service_healthy
+      kaneo-db-fix:
+        condition: service_completed_successfully
 
   kaneo-postgres:
     image: postgres:16-alpine

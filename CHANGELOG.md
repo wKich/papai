@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **provision:** Use Bearer token from response body instead of Set-Cookie
+
 ## [3.0.8] - 2026-03-11
 
 ### Fixed
 
 - **provision:** Replace body-token fallback with sign-in fallback
+
 ## [3.0.7] - 2026-03-11
 
 ### Fixed
