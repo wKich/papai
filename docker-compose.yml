@@ -6,14 +6,18 @@ services:
   # NULL constraint idempotently after Kaneo has run its own migrations.
   kaneo-db-fix:
     image: postgres:16-alpine
-    restart: on-failure
     environment:
       PGPASSWORD: ${KANEO_POSTGRES_PASSWORD:?KANEO_POSTGRES_PASSWORD is required}
-    command: >
-      psql -h kaneo-postgres
-           -U ${KANEO_POSTGRES_USER:-kaneo}
-           -d ${KANEO_POSTGRES_DB:-kaneo}
-           -c "ALTER TABLE apikey ALTER COLUMN user_id DROP NOT NULL"
+    command:
+      - sh
+      - -c
+      - >-
+        until psql -v ON_ERROR_STOP=1
+        -h kaneo-postgres
+        -U ${KANEO_POSTGRES_USER:-kaneo}
+        -d ${KANEO_POSTGRES_DB:-kaneo}
+        -c 'ALTER TABLE apikey ALTER COLUMN user_id DROP NOT NULL';
+        do echo 'Waiting for Kaneo migrations...'; sleep 3; done
     depends_on:
       kaneo-api:
         condition: service_healthy

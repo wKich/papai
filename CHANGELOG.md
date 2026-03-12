@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Send Origin header on sign-up to ensure session cookie is returned
+
 ## [3.0.10] - 2026-03-12
 
 ### Fixed
 
 - Patch kaneo apikey.user_id NOT NULL to enable API key creation
+
 ## [3.0.9] - 2026-03-11
 
 ### Fixed
