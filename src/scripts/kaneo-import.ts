@@ -39,6 +39,7 @@ export type KaneoTask = z.infer<typeof KaneoTaskWithDescriptionSchema>
 const KaneoColumnSchema = z.object({
   id: z.string(),
   name: z.string(),
+  slug: z.string(),
 })
 
 export type KaneoProject = z.infer<typeof KaneoProjectSchema>
@@ -78,7 +79,7 @@ async function findOrCreateColumn(
     undefined,
     KaneoColumnSchema,
   )
-  return column.id
+  return column.slug
 }
 
 export interface EnsureColumnsResult {
@@ -99,7 +100,7 @@ export async function ensureColumns(
     undefined,
     z.array(KaneoColumnSchema),
   )
-  const existingByName = new Map(existing.map((c) => [c.name.toLowerCase(), c.id]))
+  const existingByName = new Map(existing.map((c) => [c.name.toLowerCase(), c.slug]))
 
   return processWithAccumulator(
     states,
@@ -217,8 +218,15 @@ export async function createTaskFromIssue(
   labelIdMap: Map<string, string>,
   linearIdToKaneoId: Map<string, string>,
   archivedLabel: KaneoLabel | undefined,
+  stateToColumnId: Map<string, string>,
 ): Promise<void> {
   const description = issue.description ?? ''
+  const statusSlug =
+    stateToColumnId.get(issue.state.name) ??
+    issue.state.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
 
   const task = await kaneoFetch(
     config,
@@ -228,7 +236,7 @@ export async function createTaskFromIssue(
       title: issue.title,
       description,
       priority: mapPriority(issue.priority),
-      status: issue.state.name,
+      status: statusSlug,
       ...(issue.dueDate === null ? {} : { dueDate: issue.dueDate }),
     }),
     undefined,

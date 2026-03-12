@@ -15,8 +15,24 @@ export const TaskResultSchema = z.object({
   priority: z.string(),
 })
 
-export const TaskSearchResultSchema = z.object({
-  tasks: z.array(TaskResultSchema),
+// Matches the actual Kaneo search API response: { results, totalCount, searchQuery }
+export const KaneoSearchResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      id: z.string(),
+      type: z.string(),
+      title: z.string(),
+      description: z.string().optional(),
+      projectId: z.string().optional(),
+      taskNumber: z.number().optional(),
+      priority: z.string().optional(),
+      status: z.string().optional(),
+      createdAt: z.string().or(z.date()),
+      relevanceScore: z.number(),
+    }),
+  ),
+  totalCount: z.number(),
+  searchQuery: z.string(),
 })
 
 export type TaskResult = z.infer<typeof TaskResultSchema>

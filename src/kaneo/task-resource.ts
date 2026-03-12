@@ -4,9 +4,10 @@ import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, KaneoTaskSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
-import { type KaneoTaskListItem, KaneoTaskListItemSchema } from './list-tasks.js'
-import { type TaskResult, TaskSearchResultSchema } from './search-tasks.js'
+import { type KaneoTaskListItem } from './list-tasks.js'
+import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
+import { GetTasksResponseSchema } from './task-list-schema.js'
 
 const FullTaskSchema = KaneoTaskResponseSchema.extend({
   position: z.number(),
@@ -58,14 +59,15 @@ export class TaskResource {
     this.log.debug({ projectId }, 'Listing tasks')
 
     try {
-      const tasks = await kaneoFetch(
+      const result = await kaneoFetch(
         this.config,
         'GET',
         `/task/tasks/${projectId}`,
         undefined,
         undefined,
-        z.array(KaneoTaskListItemSchema),
+        GetTasksResponseSchema,
       )
+      const tasks = result.columns.flatMap((col) => col.tasks).concat(result.plannedTasks)
       this.log.info({ count: tasks.length }, 'Tasks listed')
       return tasks
     } catch (error) {
@@ -229,8 +231,16 @@ export class TaskResource {
         queryParams['projectId'] = params.projectId
       }
 
-      const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, TaskSearchResultSchema)
-      const tasks = result.tasks ?? []
+      const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
+      const tasks: TaskResult[] = result.results
+        .filter((r) => r.type === 'task')
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          number: r.taskNumber ?? 0,
+          status: r.status ?? '',
+          priority: r.priority ?? '',
+        }))
       this.log.info({ count: tasks.length }, 'Tasks searched')
       return tasks
     } catch (error) {

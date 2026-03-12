@@ -38,6 +38,7 @@ async function processIssues(
   labelIdMap: Map<string, string>,
   linearIdToKaneoId: Map<string, string>,
   stats: Record<string, number>,
+  stateToColumnId: Map<string, string>,
 ): Promise<void> {
   const hasArchived = issues.some((i) => i.archivedAt !== null)
   const archivedLabel = hasArchived ? await ensureArchivedLabel(kaneoConfig, workspaceId) : undefined
@@ -51,6 +52,7 @@ async function processIssues(
       labelIdMap,
       linearIdToKaneoId,
       archivedLabel,
+      stateToColumnId,
     )
     stats['tasks']!++
     stats['comments']! += issue.comments.nodes.length
@@ -77,10 +79,19 @@ async function importProjectGroup(
   const kaneoProjectId = await ensureProject(kaneoConfig, workspaceId, projectName, projectDescription)
   stats['projects']!++
 
-  const { newCount: newColumnsCreated } = await ensureColumns(kaneoConfig, kaneoProjectId, states)
+  const { newCount: newColumnsCreated, stateToColumnId } = await ensureColumns(kaneoConfig, kaneoProjectId, states)
   stats['columns']! += newColumnsCreated
 
-  await processIssues(issues, kaneoConfig, kaneoProjectId, workspaceId, labelIdMap, linearIdToKaneoId, stats)
+  await processIssues(
+    issues,
+    kaneoConfig,
+    kaneoProjectId,
+    workspaceId,
+    labelIdMap,
+    linearIdToKaneoId,
+    stats,
+    stateToColumnId,
+  )
 }
 
 function groupIssuesByProject(issues: LinearIssue[]): Map<string | null, LinearIssue[]> {

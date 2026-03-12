@@ -103,8 +103,10 @@ export interface AuthSession {
 const TEST_EMAIL = 'migration-test@example.com'
 const TEST_PASSWORD = 'test-password-123'
 const TEST_NAME = 'Migration Test'
-const WORKSPACE_NAME = 'Migration Test Workspace'
-const WORKSPACE_SLUG = 'migration-test'
+
+function makeWorkspaceSlug(): string {
+  return `migration-test-${Date.now()}`
+}
 
 export async function signUp(): Promise<AuthSession> {
   log.info({ email: TEST_EMAIL }, 'Registering test user on Kaneo')
@@ -117,6 +119,11 @@ export async function signUp(): Promise<AuthSession> {
 
   if (!res.ok) {
     const body = await res.text()
+    // If user already exists from a previous run, sign in instead
+    if (res.status === 422 && body.includes('USER_ALREADY_EXISTS')) {
+      log.info({ email: TEST_EMAIL }, 'User already exists, signing in')
+      return signIn()
+    }
     throw new Error(`Kaneo sign-up failed (${res.status}): ${body}`)
   }
 
@@ -137,8 +144,38 @@ export async function signUp(): Promise<AuthSession> {
   return { sessionCookie, userId: parsed.data.user.id }
 }
 
+async function signIn(): Promise<AuthSession> {
+  const res = await fetch(`${KANEO_BASE_URL}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Kaneo sign-in failed (${res.status}): ${body}`)
+  }
+
+  const setCookies = res.headers.getSetCookie()
+  const sessionHeader = setCookies.find((h) => h.startsWith('better-auth.session_token='))
+  if (sessionHeader === undefined) {
+    throw new Error('Kaneo sign-in response missing session cookie')
+  }
+  const sessionCookie = sessionHeader.split(';')[0]!
+
+  const rawData: unknown = await res.json()
+  const parsed = SignUpBodySchema.safeParse(rawData)
+  if (!parsed.success) {
+    throw new Error(`Kaneo sign-in returned invalid data: ${JSON.stringify(parsed.error.issues)}`)
+  }
+
+  log.info({ userId: parsed.data.user.id }, 'Test user signed in')
+  return { sessionCookie, userId: parsed.data.user.id }
+}
+
 export async function createWorkspace(sessionCookie: string): Promise<z.infer<typeof OrgSchema>> {
-  log.info({ name: WORKSPACE_NAME }, 'Creating test workspace')
+  const slug = makeWorkspaceSlug()
+  log.info({ name: slug }, 'Creating test workspace')
 
   const res = await fetch(`${KANEO_BASE_URL}/api/auth/organization/create`, {
     method: 'POST',
@@ -147,7 +184,7 @@ export async function createWorkspace(sessionCookie: string): Promise<z.infer<ty
       Cookie: sessionCookie,
       Origin: KANEO_CLIENT_URL,
     },
-    body: JSON.stringify({ name: WORKSPACE_NAME, slug: WORKSPACE_SLUG }),
+    body: JSON.stringify({ name: slug, slug }),
   })
 
   if (!res.ok) {

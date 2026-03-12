@@ -114,7 +114,7 @@ async function importProjectGroup(
 ): Promise<void> {
   const kaneoProjectId = await ensureProject(kaneoConfig, workspaceId, projectName, projectDescription)
   stats.projects++
-  const { newCount } = await ensureColumns(kaneoConfig, kaneoProjectId, workflowStates)
+  const { newCount, stateToColumnId } = await ensureColumns(kaneoConfig, kaneoProjectId, workflowStates)
   stats.columns += newCount
   const hasArchived = issues.some((i) => i.archivedAt !== null)
   const archivedLabel = hasArchived ? await ensureArchivedLabel(kaneoConfig, workspaceId) : undefined
@@ -130,6 +130,7 @@ async function importProjectGroup(
         labelIdMap,
         linearIdToKaneoId,
         archivedLabel,
+        stateToColumnId,
       )
       return {
         tasks: acc.tasks + 1,

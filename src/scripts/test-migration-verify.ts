@@ -10,17 +10,17 @@ import {
 } from '../kaneo/client.js'
 import { parseRelationsFromDescription } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
-import { mapPriority, type KaneoTask } from './kaneo-import.js'
 import type { LinearIssue } from './linear-client.js'
 import type { MigrationResult } from './test-migration-migrate.js'
+import {
+  type Check,
+  verifyPriorities,
+  verifyTaskStatuses,
+  verifyTasksInColumns,
+  verifyWorkspaceLabels,
+} from './test-migration-verify-extra.js'
 
 const log = logger.child({ scope: 'test-migration:verify' })
-
-interface Check {
-  name: string
-  passed: boolean
-  detail: string
-}
 
 export interface VerificationResult {
   passed: boolean
@@ -223,25 +223,6 @@ async function verifyLabelAssignments(config: KaneoConfig, migration: MigrationR
   )
 }
 
-async function verifyPriorities(config: KaneoConfig, migration: MigrationResult, checks: Check[]): Promise<void> {
-  const sampleSize = Math.min(3, migration.linearIssues.length)
-  if (sampleSize === 0) {
-    record(checks, 'Task priorities match', true, 'No issues to verify (skipped)')
-    return
-  }
-  const sample = migration.linearIssues.slice(0, sampleSize)
-  const { verified } = await runSampleChecks(sample, migration.linearIdToKaneoId, async (issue, kaneoId) => {
-    const task = await getTask(config, kaneoId)
-    return (task as KaneoTask).priority === mapPriority(issue.priority)
-  })
-  record(
-    checks,
-    'Task priorities match',
-    verified === sampleSize,
-    `${verified}/${sampleSize} sampled tasks have correct priority`,
-  )
-}
-
 export async function verify(
   kaneoConfig: KaneoConfig,
   workspaceId: string,
@@ -257,28 +238,7 @@ export async function verify(
   )
 
   await verifyProjects(kaneoConfig, workspaceId, migration, checks)
-
-  const kaneoLabels = await kaneoFetch(
-    kaneoConfig,
-    'GET',
-    `/label/workspace/${workspaceId}`,
-    undefined,
-    undefined,
-    z.array(KaneoLabelLocalSchema),
-  )
-  const workspaceLabels = kaneoLabels.filter((l) => l.taskId === null)
-  const hasArchivedIssues = migration.linearIssues.some((i) => i.archivedAt !== null)
-  const linearHasArchivedLabel = migration.linearLabels.some((l) => l.name.toLowerCase() === 'archived')
-  const expectedLabelCount = migration.linearLabels.length + (hasArchivedIssues && !linearHasArchivedLabel ? 1 : 0)
-  record(
-    checks,
-    'Labels exist',
-    workspaceLabels.length === expectedLabelCount,
-    workspaceLabels.length === expectedLabelCount
-      ? `All ${expectedLabelCount} labels present in workspace`
-      : `Expected ${expectedLabelCount}, got ${workspaceLabels.length}`,
-  )
-
+  await verifyWorkspaceLabels(kaneoConfig, workspaceId, migration, checks)
   await verifyTasks(kaneoConfig, migration, checks)
   await verifyRelations(kaneoConfig, migration, checks)
   await verifyParents(kaneoConfig, migration, checks)
@@ -286,6 +246,8 @@ export async function verify(
   await verifyComments(kaneoConfig, migration, checks)
   await verifyLabelAssignments(kaneoConfig, migration, checks)
   await verifyPriorities(kaneoConfig, migration, checks)
+  await verifyTaskStatuses(kaneoConfig, migration, checks)
+  await verifyTasksInColumns(kaneoConfig, workspaceId, migration, checks)
 
   return { passed: checks.every((c) => c.passed), checks }
 }
