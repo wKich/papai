@@ -24,11 +24,17 @@ function generatePassword(): string {
   return `${uuid.slice(0, 20)}Aa1!`
 }
 
-async function doSignUp(baseUrl: string, email: string, password: string, name: string): Promise<string> {
+async function doSignUp(
+  baseUrl: string,
+  trustedOrigin: string,
+  email: string,
+  password: string,
+  name: string,
+): Promise<string> {
   log.debug({ email }, 'Kaneo sign-up')
   const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: trustedOrigin },
     body: JSON.stringify({ email, password, name }),
   })
   if (!res.ok) {
@@ -94,7 +100,7 @@ async function doCreateApiKey(baseUrl: string, trustedOrigin: string, sessionCoo
 export async function provisionKaneoUser(
   /** Internal API base URL (e.g. http://kaneo-api:1337) */
   baseUrl: string,
-  /** Public-facing web client URL (kept for backward compatibility with call sites) */
+  /** Public-facing web client URL — used as the trusted Origin for all auth requests. */
   publicUrl: string,
   telegramId: number,
   username: string | null,
@@ -105,8 +111,8 @@ export async function provisionKaneoUser(
   const slug = `papai-${telegramId}`
 
   log.info({ telegramId, email }, 'Provisioning Kaneo user account')
-  const sessionCookie = await doSignUp(baseUrl, email, password, name)
   const trustedOrigin = publicUrl === '' ? baseUrl : publicUrl
+  const sessionCookie = await doSignUp(baseUrl, trustedOrigin, email, password, name)
   const workspaceId = await doCreateWorkspace(baseUrl, trustedOrigin, sessionCookie, name, slug)
 
   let kaneoKey = sessionCookie
