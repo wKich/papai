@@ -255,6 +255,40 @@ Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
 
 - `E2E_KANEO_URL` - URL of the Kaneo instance (defaults to `KANEO_INTERNAL_URL` or `http://localhost:11337`)
 
+### E2E Test Coverage
+
+All Kaneo API operations are covered by E2E tests:
+
+#### Task Operations
+
+- `task-lifecycle.test.ts` - Create, read, update tasks
+- `task-comments.test.ts` - Add, get, update, remove comments
+- `task-relations.test.ts` - blocks, blocked_by, duplicate, related, parent relations
+- `task-archive.test.ts` - Archive with labels
+- `task-search.test.ts` - Search by keyword, status, priority, filters
+
+#### Project Operations
+
+- `project-lifecycle.test.ts` - Create, list, update
+- `project-archive.test.ts` - Archive projects
+
+#### Column Operations
+
+- `column-management.test.ts` - Create, update, delete, reorder columns
+
+#### Label Operations
+
+- `label-management.test.ts` - Create, update labels, add/remove from tasks
+- `label-operations.test.ts` - Full label CRUD and task associations
+
+#### Error Handling
+
+- `error-handling.test.ts` - 404, 400, validation errors, edge cases
+
+#### User Workflows
+
+- `user-workflows.test.ts` - Full lifecycle, project setup, dependencies, sprints, bulk ops
+
 ## Key Conventions
 
 - Runtime: **Bun** (not Node)

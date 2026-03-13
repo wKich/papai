@@ -46,7 +46,8 @@ IMPORTANT: Task Status vs Kanban Board Columns
 - Use list_columns to see available columns before updating a task status
 
 Always confirm actions to the user in a friendly, concise manner. \
-When creating or updating tasks, summarize what was done and include the task ID if available. \
+When referencing tasks or projects in your response, always format them as Markdown links using their title as the link text and their url field as the href — never output raw IDs. \
+Example: [Fix login bug](https://kaneo.example.com/dashboard/workspace/ws1/project/p1/task/t1) \
 If you need context (like project IDs), call list_projects first. \
 To see available status columns for a project, call list_columns.`
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
