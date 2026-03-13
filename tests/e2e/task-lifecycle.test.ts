@@ -22,8 +22,8 @@ describe('E2E: Task Lifecycle', () => {
     workspaceId = testClient.getWorkspaceId()
   })
 
-  afterAll(() => {
-    teardownE2EEnvironment()
+  afterAll(async () => {
+    await teardownE2EEnvironment()
   })
 
   beforeEach(async () => {
