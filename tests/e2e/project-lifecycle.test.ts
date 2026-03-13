@@ -1,11 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { listColumns } from '../../src/kaneo/list-columns.js'
 import { listProjects } from '../../src/kaneo/list-projects.js'
 import { updateProject } from '../../src/kaneo/update-project.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment } from './setup.js'
+import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Project Lifecycle', () => {
   let testClient: KaneoTestClient
@@ -15,6 +15,10 @@ describe('E2E: Project Lifecycle', () => {
     await setupE2EEnvironment()
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
+  })
+
+  afterAll(async () => {
+    await teardownE2EEnvironment()
   })
 
   beforeEach(async () => {
