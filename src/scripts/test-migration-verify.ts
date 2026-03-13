@@ -186,7 +186,7 @@ async function verifyComments(config: KaneoConfig, migration: MigrationResult, c
       undefined,
       z.array(KaneoActivityWithTypeSchema),
     ).catch(() => [])
-    const comments = activities.filter((a) => a.type === 'comment' && a.comment !== null)
+    const comments = activities.filter((a) => a.type === 'comment' && a.message !== null && a.message !== undefined)
     return comments.length === issue.comments.nodes.length
   })
   record(

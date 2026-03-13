@@ -60,8 +60,11 @@ export class CommentResource {
         z.array(KaneoActivityWithTypeSchema),
       )
       const comments = activities.flatMap((a) => {
-        if (a.type !== 'comment' || a.comment === null || a.comment === undefined) return []
-        return [{ id: a.id, comment: a.comment, createdAt: a.createdAt ?? '' }]
+        if (a.type !== 'comment') return []
+        // Kaneo stores comment text in the 'message' field, not 'comment'
+        const commentText = a.message
+        if (commentText === null || commentText === undefined) return []
+        return [{ id: a.id, comment: commentText, createdAt: a.createdAt ?? '' }]
       })
       this.log.info({ taskId, count: comments.length }, 'Comments listed')
       return comments

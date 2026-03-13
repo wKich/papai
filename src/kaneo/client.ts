@@ -74,7 +74,6 @@ export const KaneoActivityWithTypeSchema = z.object({
   id: z.string(),
   type: z.string(),
   message: z.string().nullish(),
-  comment: z.string().nullish(),
   createdAt: z.string().nullish(),
 })
 
