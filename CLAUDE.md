@@ -223,8 +223,9 @@ Example:
 
 ```typescript
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import type { KaneoConfig } from '../../src/kaneo/client.js'
+import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 import { setupE2EEnvironment } from './setup.js'
-import { createTestClient } from './kaneo-test-client.js'
 
 describe('My Feature', () => {
   let testClient: KaneoTestClient
@@ -241,7 +242,9 @@ describe('My Feature', () => {
   })
 
   test('does something', async () => {
-    // Your test here
+    // Your test here - example:
+    // const task = await createTask(kaneoConfig, { title: 'Test', projectId })
+    // testClient.trackTask(task.id)
   })
 })
 ```
