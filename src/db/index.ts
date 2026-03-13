@@ -6,6 +6,7 @@ import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
 import { migration003MultiuserSupport } from './migrations/003_multiuser_support.js'
 import { migration004KaneoWorkspace } from './migrations/004_kaneo_workspace.js'
+import { migration005RenameConfigKeys } from './migrations/005_rename_config_keys.js'
 
 export const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -37,6 +38,7 @@ const MIGRATIONS = [
   migration002ConversationHistory,
   migration003MultiuserSupport,
   migration004KaneoWorkspace,
+  migration005RenameConfigKeys,
 ] as const
 
 export const initDb = (): void => {
