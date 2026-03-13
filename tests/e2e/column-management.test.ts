@@ -43,27 +43,29 @@ describe('E2E: Column Management', () => {
   })
 
   test('creates a column with all properties', async () => {
+    const columnName = `In Review ${Date.now()}`
     const column = await createColumn({
       config: kaneoConfig,
       projectId,
-      name: 'In Review',
+      name: columnName,
       icon: '👀',
       color: '#FFA500',
       isFinal: false,
     })
     createdColumnIds.push(column.id)
 
-    expect(column.name).toBe('In Review')
+    expect(column.name).toBe(columnName)
     expect(column.icon).toBe('👀')
     expect(column.color).toBe('#FFA500')
     expect(column.isFinal).toBe(false)
   })
 
   test('creates a final column', async () => {
+    const columnName = `Done ${Date.now()}`
     const column = await createColumn({
       config: kaneoConfig,
       projectId,
-      name: 'Done',
+      name: columnName,
       isFinal: true,
     })
     createdColumnIds.push(column.id)
@@ -73,20 +75,23 @@ describe('E2E: Column Management', () => {
 
   test('lists columns in project', async () => {
     // Create some custom columns
-    const col1 = await createColumn({ config: kaneoConfig, projectId, name: 'Backlog' })
-    const col2 = await createColumn({ config: kaneoConfig, projectId, name: 'In Progress' })
+    const col1Name = `Backlog ${Date.now()}`
+    const col2Name = `In Progress ${Date.now()}`
+    const col1 = await createColumn({ config: kaneoConfig, projectId, name: col1Name })
+    const col2 = await createColumn({ config: kaneoConfig, projectId, name: col2Name })
     createdColumnIds.push(col1.id, col2.id)
 
     const columns = await listColumns({ config: kaneoConfig, projectId })
 
     expect(columns.length).toBeGreaterThanOrEqual(2)
     const names = columns.map((c) => c.name)
-    expect(names).toContain('Backlog')
-    expect(names).toContain('In Progress')
+    expect(names).toContain(col1Name)
+    expect(names).toContain(col2Name)
   })
 
   test('updates column name', async () => {
-    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Old Name' })
+    const columnName = `Old Name ${Date.now()}`
+    const column = await createColumn({ config: kaneoConfig, projectId, name: columnName })
     createdColumnIds.push(column.id)
 
     const updated = await updateColumn({
@@ -99,7 +104,8 @@ describe('E2E: Column Management', () => {
   })
 
   test('updates column color and icon', async () => {
-    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Status' })
+    const columnName = `Status ${Date.now()}`
+    const column = await createColumn({ config: kaneoConfig, projectId, name: columnName })
     createdColumnIds.push(column.id)
 
     const updated = await updateColumn({
@@ -114,9 +120,9 @@ describe('E2E: Column Management', () => {
   })
 
   test('reorders columns', async () => {
-    const col1 = await createColumn({ config: kaneoConfig, projectId, name: 'First' })
-    const col2 = await createColumn({ config: kaneoConfig, projectId, name: 'Second' })
-    const col3 = await createColumn({ config: kaneoConfig, projectId, name: 'Third' })
+    const col1 = await createColumn({ config: kaneoConfig, projectId, name: `First ${Date.now()}` })
+    const col2 = await createColumn({ config: kaneoConfig, projectId, name: `Second ${Date.now()}` })
+    const col3 = await createColumn({ config: kaneoConfig, projectId, name: `Third ${Date.now()}` })
     createdColumnIds.push(col1.id, col2.id, col3.id)
 
     // Reverse the order
@@ -139,7 +145,7 @@ describe('E2E: Column Management', () => {
   })
 
   test('deletes a column', async () => {
-    const column = await createColumn({ config: kaneoConfig, projectId, name: 'To Delete' })
+    const column = await createColumn({ config: kaneoConfig, projectId, name: `To Delete ${Date.now()}` })
 
     await deleteColumn({ config: kaneoConfig, columnId: column.id })
 
@@ -149,10 +155,11 @@ describe('E2E: Column Management', () => {
   })
 
   test('creates column without optional properties', async () => {
-    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Simple Column' })
+    const columnName = `Simple Column ${Date.now()}`
+    const column = await createColumn({ config: kaneoConfig, projectId, name: columnName })
     createdColumnIds.push(column.id)
 
-    expect(column.name).toBe('Simple Column')
+    expect(column.name).toBe(columnName)
     expect(column.id).toBeDefined()
   })
 })
