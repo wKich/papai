@@ -28,15 +28,16 @@ function delay(ms: number): Promise<void> {
   })
 }
 
-async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
+function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
   const healthUrl = `${baseUrl}/api/health`
   log.info({ healthUrl }, 'Waiting for Kaneo server to be healthy')
 
-  let attempt = 1
+  const tryConnect = async (attempt: number): Promise<void> => {
+    if (attempt > maxAttempts) {
+      throw new Error(`Kaneo server failed to become healthy after ${maxAttempts} attempts`)
+    }
 
-  while (attempt <= maxAttempts) {
     try {
-      // eslint-disable-next-line no-await-in-loop -- Intentional sequential polling
       const response = await fetch(healthUrl, { method: 'GET' })
       if (response.ok) {
         log.info({ attempts: attempt }, 'Kaneo server is healthy')
@@ -48,14 +49,13 @@ async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
 
     if (attempt < maxAttempts) {
       log.debug({ attempt, maxAttempts }, 'Server not ready, waiting...')
-      // eslint-disable-next-line no-await-in-loop -- Intentional delay between polling attempts
       await delay(1000)
     }
 
-    attempt++
+    return tryConnect(attempt + 1)
   }
 
-  throw new Error(`Kaneo server failed to become healthy after ${maxAttempts} attempts`)
+  return tryConnect(1)
 }
 
 export async function setupE2EEnvironment(): Promise<void> {
