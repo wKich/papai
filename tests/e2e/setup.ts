@@ -38,7 +38,9 @@ async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
     if (attempt < maxAttempts) {
       log.debug({ attempt, maxAttempts }, 'Server not ready, waiting...')
       await new Promise((resolve) => {
-        setTimeout(() =>{  resolve(undefined); }, 1000)
+        setTimeout(() => {
+          resolve(undefined)
+        }, 1000)
       })
     }
   }
