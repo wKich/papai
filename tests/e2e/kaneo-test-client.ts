@@ -57,29 +57,31 @@ export class KaneoTestClient {
 
     log.info({ projectCount, taskCount }, 'Starting cleanup')
 
-    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional to avoid overwhelming API
-    for (const taskId of this.createdTaskIds) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await deleteTask({ config: this.kaneoConfig, taskId })
-        log.debug({ taskId }, 'Task deleted during cleanup')
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        log.warn({ taskId, error: message }, 'Failed to delete task during cleanup')
-      }
-    }
+    // Delete all tasks in parallel
+    await Promise.all(
+      this.createdTaskIds.map(async (taskId) => {
+        try {
+          await deleteTask({ config: this.kaneoConfig, taskId })
+          log.debug({ taskId }, 'Task deleted during cleanup')
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          log.warn({ taskId, error: message }, 'Failed to delete task during cleanup')
+        }
+      }),
+    )
 
-    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional to avoid overwhelming API
-    for (const projectId of this.createdProjectIds) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await archiveProject({ config: this.kaneoConfig, projectId })
-        log.debug({ projectId }, 'Project archived during cleanup')
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        log.warn({ projectId, error: message }, 'Failed to archive project during cleanup')
-      }
-    }
+    // Archive all projects in parallel
+    await Promise.all(
+      this.createdProjectIds.map(async (projectId) => {
+        try {
+          await archiveProject({ config: this.kaneoConfig, projectId })
+          log.debug({ projectId }, 'Project archived during cleanup')
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          log.warn({ projectId, error: message }, 'Failed to archive project during cleanup')
+        }
+      }),
+    )
 
     this.createdTaskIds.length = 0
     this.createdProjectIds.length = 0

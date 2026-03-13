@@ -30,16 +30,16 @@ describe('E2E: Label Management', () => {
   beforeEach(async () => {
     await testClient.cleanup()
 
-    // Clean up labels from previous test
-    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional
-    for (const labelId of createdLabelIds) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await removeLabel({ config: kaneoConfig, labelId })
-      } catch {
-        // ignore cleanup errors
-      }
-    }
+    // Clean up labels from previous test in parallel
+    await Promise.all(
+      createdLabelIds.map(async (labelId) => {
+        try {
+          await removeLabel({ config: kaneoConfig, labelId })
+        } catch {
+          // ignore cleanup errors
+        }
+      }),
+    )
     createdLabelIds.length = 0
 
     const project = await testClient.createTestProject(`Label Test ${Date.now()}`)

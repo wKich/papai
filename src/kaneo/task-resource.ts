@@ -174,17 +174,14 @@ export class TaskResource {
     // (The full /task/:id endpoint doesn't actually update fields)
     const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
 
-    // Apply updates sequentially to avoid overwhelming API
-    // eslint-disable-next-line no-await-in-loop -- Sequential updates are intentional
-    let result: z.infer<typeof KaneoTaskWithProjectIdSchema> | undefined
-    for (const [field, value] of setFields) {
-      // eslint-disable-next-line no-await-in-loop
-      result = await this.singleFieldUpdate(taskId, field, value)
-    }
+    // Apply updates in parallel for all changed fields
+    const updatePromises = setFields.map(([field, value]) => this.singleFieldUpdate(taskId, field, value))
+    const results = await Promise.all(updatePromises)
 
     // Return the last result, or fetch current if no updates
-    if (result !== undefined) {
-      return result
+    const lastResult = results[results.length - 1]
+    if (lastResult !== undefined) {
+      return lastResult
     }
 
     // If no fields to update, just return current task
