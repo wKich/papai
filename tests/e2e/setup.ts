@@ -1,5 +1,3 @@
-import { afterAll, beforeAll } from 'bun:test'
-
 import { provisionKaneoUser } from '../../src/kaneo/provision.js'
 import { logger } from '../../src/logger.js'
 
@@ -22,11 +20,17 @@ export function getE2EConfig(): E2EConfig {
 
 export async function setupE2EEnvironment(): Promise<void> {
   const baseUrl = process.env['E2E_KANEO_URL'] ?? process.env['KANEO_INTERNAL_URL'] ?? 'http://localhost:11337'
+  // Use KANEO_CLIENT_URL as the public/trusted origin for auth requests
+  const publicUrl = process.env['KANEO_CLIENT_URL'] ?? baseUrl
 
-  log.info({ baseUrl }, 'Setting up E2E environment')
+  log.info({ baseUrl, publicUrl }, 'Setting up E2E environment')
 
   try {
-    const result = await provisionKaneoUser(baseUrl, baseUrl, 999999999, 'e2e-test')
+    // Use unique identifiers to avoid conflicts from previous test runs
+    const uniqueSuffix = Date.now()
+    const uniqueUsername = `e2e-test-${uniqueSuffix}`
+    const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000) // Ensure unique telegram ID
+    const result = await provisionKaneoUser(baseUrl, publicUrl, uniqueTelegramId, uniqueUsername)
 
     e2eConfig = {
       baseUrl,
@@ -46,11 +50,3 @@ export async function teardownE2EEnvironment(): Promise<void> {
   log.info('Tearing down E2E environment')
   e2eConfig = undefined
 }
-
-beforeAll(async () => {
-  await setupE2EEnvironment()
-})
-
-afterAll(async () => {
-  await teardownE2EEnvironment()
-})

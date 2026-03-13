@@ -158,7 +158,7 @@ export class TaskResource {
     )
   }
 
-  private async fullUpdate(
+  private async performUpdate(
     taskId: string,
     params: {
       title?: string
@@ -170,43 +170,23 @@ export class TaskResource {
       userId?: string
     },
   ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
-    const current = await kaneoFetch(this.config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
-    return kaneoFetch(
-      this.config,
-      'PUT',
-      `/task/${taskId}`,
-      {
-        title: params.title ?? current.title,
-        description: params.description ?? current.description,
-        status: params.status ?? current.status,
-        priority: params.priority ?? current.priority,
-        dueDate: params.dueDate ?? current.dueDate,
-        projectId: params.projectId ?? current.projectId,
-        position: current.position,
-        userId: params.userId,
-      },
-      undefined,
-      KaneoTaskWithProjectIdSchema,
-    )
-  }
-
-  private performUpdate(
-    taskId: string,
-    params: {
-      title?: string
-      description?: string
-      status?: string
-      priority?: string
-      dueDate?: string
-      projectId?: string
-      userId?: string
-    },
-  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
+    // Use single-field endpoints for each field being updated
+    // (The full /task/:id endpoint doesn't actually update fields)
     const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
-    if (setFields.length === 1) {
-      return this.singleFieldUpdate(taskId, setFields[0]![0], setFields[0]![1])
+
+    // Apply updates sequentially
+    let result: z.infer<typeof KaneoTaskWithProjectIdSchema> | undefined
+    for (const [field, value] of setFields) {
+      result = await this.singleFieldUpdate(taskId, field, value)
     }
-    return this.fullUpdate(taskId, params)
+
+    // Return the last result, or fetch current if no updates
+    if (result !== undefined) {
+      return result
+    }
+
+    // If no fields to update, just return current task
+    return kaneoFetch(this.config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
   }
 
   async delete(taskId: string): Promise<{ id: string; success: true }> {
