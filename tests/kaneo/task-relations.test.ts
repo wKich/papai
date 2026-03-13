@@ -75,7 +75,7 @@ describe('Task Relations', () => {
       expect(result.taskId).toBe('task-1')
       expect(result.relatedTaskId).toBe('task-2')
       expect(result.type).toBe('blocks')
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
     })
 
     test('adds relation with type "related"', async () => {
@@ -98,7 +98,7 @@ describe('Task Relations', () => {
       const resource = new TaskResource(mockConfig)
       const result = await resource.addRelation('task-1', 'task-2', 'related')
       expect(result.type).toBe('related')
-      expect(putBody).toMatchObject({ description: expect.stringContaining('related') })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('related') as unknown })
     })
 
     test('adds relation with type "duplicate"', async () => {
@@ -166,8 +166,8 @@ describe('Task Relations', () => {
       const resource = new TaskResource(mockConfig)
       await resource.addRelation('task-1', 'task-2', 'blocks')
 
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') })
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') as unknown })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
     })
   })
 
@@ -195,7 +195,7 @@ describe('Task Relations', () => {
       expect(result.taskId).toBe('task-1')
       expect(result.relatedTaskId).toBe('task-2')
       expect(result.success).toBe(true)
-      expect(putBody).not.toMatchObject({ description: expect.stringContaining('task-2') })
+      expect(putBody).not.toMatchObject({ description: expect.stringContaining('task-2') as unknown })
     })
 
     test('throws relationNotFound when relation does not exist on task', async () => {
@@ -262,8 +262,8 @@ describe('Task Relations', () => {
       expect(result.taskId).toBe('task-1')
       expect(result.relatedTaskId).toBe('task-2')
       expect(result.type).toBe('related')
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') })
-      expect(putBody).not.toMatchObject({ description: expect.stringContaining('blocks:') })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
+      expect(putBody).not.toMatchObject({ description: expect.stringContaining('blocks:') as unknown })
     })
 
     test('throws relationNotFound when relation does not exist', async () => {
@@ -311,8 +311,8 @@ describe('Task Relations', () => {
       const resource = new TaskResource(mockConfig)
       await resource.updateRelation('task-1', 'task-2', 'duplicate')
 
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') })
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') as unknown })
+      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
     })
   })
 })

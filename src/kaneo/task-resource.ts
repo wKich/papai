@@ -240,8 +240,8 @@ export class TaskResource {
         q: params.query,
         type: 'tasks',
         workspaceId: params.workspaceId,
-        ...(params.projectId !== undefined ? { projectId: params.projectId } : {}),
-        ...(params.limit !== undefined ? { limit: String(params.limit) } : {}),
+        ...(params.projectId === undefined ? {} : { projectId: params.projectId }),
+        ...(params.limit === undefined ? {} : { limit: String(params.limit) }),
       }
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
       const tasks: TaskResult[] = result.results

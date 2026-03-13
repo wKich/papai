@@ -22,7 +22,11 @@ Copy `.env.example` to `.env`. Only two are required at startup (validated in `s
 
 `TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
 
-The remaining credentials (`kaneo_key`, `kaneo_base_url`, `kaneo_workspace_id`, `kaneo_project_id`, `openai_key`, `openai_base_url`, `openai_model`, `memory_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+The remaining credentials (`kaneo_apikey`, `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+
+Additional environment variables used by the bot:
+
+- `KANEO_CLIENT_URL` — Kaneo instance URL (required, set in `.env`)
 
 ## Architecture
 
@@ -30,20 +34,24 @@ The remaining credentials (`kaneo_key`, `kaneo_base_url`, `kaneo_workspace_id`, 
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
                                               ├─ tools/ ─→ kaneo/ ─→ Kaneo REST API
-                                              │   24 tools, one file each
+                                              │   28 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
 
 - **`src/index.ts`** — entry point; validates env vars, runs migrations, starts the bot.
 - **`src/bot.ts`** — Grammy bot setup, per-user conversation history, LLM orchestration with up to 25 tool-calling steps. Multi-user authorization via `users` table.
-- **`src/admin-commands.ts`** — Admin-only Telegram commands (`/user add`, `/user remove`, `/users`) registered on the bot.
+- **`src/admin-commands.ts`** — Legacy admin command registration (handlers moved to `src/commands/`).
 - **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 - **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
-- **`src/tools/`** — One file per tool. `index.ts` assembles all 24 into `makeTools`. Each tool imports its corresponding kaneo function.
+- **`src/tools/`** — One file per tool. `index.ts` assembles all 28 into `makeTools`. Each tool imports its corresponding kaneo function.
 - **`src/kaneo/`** — One file per Kaneo REST API wrapper function. `index.ts` re-exports all. `client.ts` is the shared HTTP client. `classify-error.ts` contains the error classifier. `frontmatter.ts` handles relation storage in task descriptions.
+- **`src/commands/`** — Telegram command handlers extracted from bot.ts. Includes `/help`, `/set`, `/config`, `/clear`, and admin commands.
+- **`src/conversation.ts`** — Conversation history management with smart trimming and rolling summaries for multi-turn interactions.
+- **`src/history.ts`** — Persistent conversation history storage (SQLite-backed per-user).
+- **`src/memory.ts`** — Fact extraction and persistence from tool results for long-term context.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
 
 ### Available tools
@@ -74,6 +82,10 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 | `update_task_relation` | Update the type of an existing relation between two tasks                            |
 | `remove_task_relation` | Remove a relation between two tasks                                                  |
 | `list_columns`         | List all status columns in a project                                                 |
+| `create_column`        | Create a new status column in a project                                              |
+| `update_column`        | Update an existing column (name, order)                                              |
+| `delete_column`        | Delete a status column from a project                                                |
+| `reorder_columns`      | Reorder columns in a project                                                         |
 
 ## Logging Requirements (HIGH PRIORITY)
 

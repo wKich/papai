@@ -41,18 +41,18 @@ export const trimAndSummarise = async (
   const reason = hardCapTrim ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
   log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered')
 
-  const openaiKey = getConfig(userId, 'openai_key')
-  const openaiBaseUrl = getConfig(userId, 'openai_base_url')
-  const openaiModel = getConfig(userId, 'openai_model')
-  const memoryModel = getConfig(userId, 'memory_model') ?? openaiModel
+  const llmApiKey = getConfig(userId, 'llm_apikey')
+  const llmBaseUrl = getConfig(userId, 'llm_baseurl')
+  const mainModel = getConfig(userId, 'main_model')
+  const smallModel = getConfig(userId, 'small_model') ?? mainModel
 
-  if (openaiKey !== null && openaiBaseUrl !== null && memoryModel !== null) {
+  if (llmApiKey !== null && llmBaseUrl !== null && smallModel !== null) {
     try {
       const existing = loadSummary(userId)
       const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, {
-        apiKey: openaiKey,
-        baseUrl: openaiBaseUrl,
-        model: memoryModel,
+        apiKey: llmApiKey,
+        baseUrl: llmBaseUrl,
+        model: smallModel,
       })
       saveSummary(userId, summary)
       log.info({ userId, retained: trimmedMessages.length }, 'Smart trim complete')

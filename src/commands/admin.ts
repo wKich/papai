@@ -229,7 +229,7 @@ async function provisionUserKaneo(ctx: { reply: (text: string) => Promise<unknow
     const { provisionKaneoUser } = await import('../kaneo/provision.js')
     const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
     const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, null)
-    setConfig(userId, 'kaneo_key', prov.kaneoKey)
+    setConfig(userId, 'kaneo_apikey', prov.kaneoKey)
     setKaneoWorkspace(userId, prov.workspaceId)
     log.info({ userId }, 'Kaneo account provisioned for new user')
     await ctx.reply(`Kaneo account created.\n📧 Email: ${prov.email}\n🔑 Password: ${prov.password}\n🌐 ${kaneoUrl}`)

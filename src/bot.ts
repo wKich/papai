@@ -36,6 +36,15 @@ You can:
 - Create and read task relations (blocks, duplicate, related) stored as frontmatter in descriptions
 - Create and manage projects
 - Archive tasks by applying an "archived" label
+- Manage kanban board columns: create, update, delete, and reorder columns in projects
+
+IMPORTANT: Task Status vs Kanban Board Columns
+- Columns represent the kanban board structure (e.g., "Todo", "In Progress", "Done") - they define how tasks are organized visually
+- Task status is which column a task currently belongs to - it's the column name stored on the task itself
+- To move a task to a different column, update its status field with the column name
+- To change the board layout itself (add/remove/rename/reorder columns), use the column management tools
+- Use list_columns to see available columns before updating a task status
+
 Always confirm actions to the user in a friendly, concise manner. \
 When creating or updating tasks, summarize what was done and include the task ID if available. \
 If you need context (like project IDs), call list_projects first. \
@@ -62,7 +71,7 @@ const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 const checkRequiredConfig = (userId: number): string[] => {
-  const requiredKeys = ['openai_key', 'openai_base_url', 'openai_model', 'kaneo_key'] as const
+  const requiredKeys = ['llm_apikey', 'llm_baseurl', 'main_model', 'kaneo_apikey'] as const
   return requiredKeys.filter((k) => getConfig(userId, k) === null)
 }
 const persistFactsFromResults = (
@@ -88,14 +97,14 @@ const withTypingIndicator = async <T>(ctx: Context, fn: () => Promise<T>): Promi
   }
 }
 const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> => {
-  if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_key') !== null) return
+  if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_apikey') !== null) return
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
   if (kaneoUrl === undefined) return
   try {
     const { provisionKaneoUser } = await import('./kaneo/provision.js')
     const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
     const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, ctx.from?.username ?? null)
-    setConfig(userId, 'kaneo_key', prov.kaneoKey)
+    setConfig(userId, 'kaneo_apikey', prov.kaneoKey)
     setKaneoWorkspace(userId, prov.workspaceId)
     log.info({ userId }, 'Kaneo account provisioned on first use')
     await ctx.reply(
@@ -113,7 +122,7 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
   }
 }
 const buildKaneoConfig = (userId: number): { apiKey: string; baseUrl: string; sessionCookie?: string } => {
-  const kaneoKey = getConfig(userId, 'kaneo_key')!
+  const kaneoKey = getConfig(userId, 'kaneo_apikey')!
   const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
   const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
   return isSessionCookie
@@ -144,11 +153,11 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     return
   }
-  const openaiKey = getConfig(userId, 'openai_key')!
-  const openaiBaseUrl = getConfig(userId, 'openai_base_url')!
-  const openaiModel = getConfig(userId, 'openai_model')!
+  const llmApiKey = getConfig(userId, 'llm_apikey')!
+  const llmBaseUrl = getConfig(userId, 'llm_baseurl')!
+  const mainModel = getConfig(userId, 'main_model')!
   const kaneoWorkspaceId = getKaneoWorkspace(userId)!
-  const model = buildOpenAI(openaiKey, openaiBaseUrl)(openaiModel)
+  const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const kaneoConfig = buildKaneoConfig(userId)
   const tools = makeTools({ kaneoConfig, workspaceId: kaneoWorkspaceId })
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)

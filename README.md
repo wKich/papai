@@ -1,25 +1,28 @@
 # papai
 
-Telegram bot that manages Linear tasks via natural language, powered by any OpenAI-compatible LLM.
+Telegram bot that manages Kaneo tasks via natural language, powered by any OpenAI-compatible LLM.
 
 ## Features
 
-- **Issue creation** — create issues with title, description, priority, project, due date, labels, and estimate
-- **Issue updates** — change status, assignee, due date, labels, or estimate
-- **Search** — find issues by keyword or filter by workflow state
-- **Issue details** — fetch full details of any issue
-- **Comments** — add and read comments on issues
-- **Labels** — list, create, and apply labels when creating or updating issues
-- **Relations** — create and view blocks/duplicate/related relations between issues
-- **Projects** — list all teams and projects, or create new projects
+- **Task creation** — create tasks with title, description, priority, project, due date, labels, and status
+- **Task updates** — change status, priority, assignee, due date, title, description, or labels
+- **Search** — find tasks by keyword
+- **Task details** — fetch full details of any task including relations
+- **Comments** — add, read, update, and remove comments on tasks
+- **Labels** — list, create, update, and apply labels to tasks
+- **Relations** — create and view blocks/duplicate/related relations between tasks
+- **Projects** — list, create, and update projects in your workspace
+- **Columns** — manage kanban board columns (create, update, delete, reorder)
+- **Auto-provisioning** — automatic Kaneo account creation on first use (when enabled)
 - **Conversation memory** — maintains per-user chat history with smart trimming and rolling summaries for multi-turn interactions
+- **Long-term memory** — extracts and persists facts from tool results for better context
 - **Multi-user support** — admin can authorize multiple Telegram users, each with isolated credentials and conversation history
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime
 - Telegram bot token (from [@BotFather](https://t.me/BotFather))
-- [Linear](https://linear.app) API key
+- Kaneo instance (self-hosted or managed)
 - API key for any OpenAI-compatible LLM provider (OpenAI, Anthropic, Mistral, local Ollama, etc.)
 
 ## Setup
@@ -35,22 +38,23 @@ bun run start
 
 ## Environment Variables
 
-Two variables are required at startup:
+Three variables are required at startup:
 
 | Variable             | Description                                                      | Where to get it                          |
 | -------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot API token                                           | [@BotFather](https://t.me/BotFather)     |
 | `TELEGRAM_USER_ID`   | Admin Telegram user ID (auto-authorized, can manage other users) | [@userinfobot](https://t.me/userinfobot) |
+| `KANEO_CLIENT_URL`   | Your Kaneo instance URL                                          | Your Kaneo deployment URL                |
 
 The remaining credentials are configured at runtime via the `/set` command:
 
-| Key               | Description                        | Where to get it                                                           |
-| ----------------- | ---------------------------------- | ------------------------------------------------------------------------- |
-| `linear_key`      | Linear personal API key            | Linear Settings → API → Personal API keys                                 |
-| `linear_team_id`  | Default team ID for issue creation | Run `list_projects` in the bot, or find it in Linear URL                  |
-| `openai_key`      | API key for your LLM provider      | Your provider's API key (use any value for keyless local endpoints)       |
-| `openai_base_url` | OpenAI-compatible base URL         | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`             |
-| `openai_model`    | Model name to use                  | e.g. `gpt-5.2`, `claude-opus-4-6`, `qwen3.5`, `kimi-k2.5`, `minimax-m2.5` |
+| Key            | Description                           | Where to get it                                                           |
+| -------------- | ------------------------------------- | ------------------------------------------------------------------------- |
+| `kaneo_apikey` | Kaneo API key or session token        | Kaneo Settings → API Keys, or auto-provisioned                            |
+| `llm_apikey`   | API key for your LLM provider         | Your provider's API key (use any value for keyless local endpoints)       |
+| `llm_baseurl`  | OpenAI-compatible base URL            | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`             |
+| `main_model`   | Model name to use                     | e.g. `gpt-5.2`, `claude-opus-4-6`, `qwen3.5`, `kimi-k2.5`, `minimax-m2.5` |
+| `small_model`  | Optional: model for memory extraction | Same as `main_model` if not specified                                     |
 
 Use `/config` to view current values, and `/set <key> <value>` to update them. Each user's credentials are isolated.
 
@@ -68,46 +72,52 @@ The admin user (from `TELEGRAM_USER_ID`) can manage authorized users:
 
 Send natural language messages to the bot in Telegram:
 
-- **"Create a bug report: login page crashes on Safari"** — creates a new issue
-- **"What tasks are in progress?"** — searches issues filtered by state
-- **"Move PAP-42 to Done"** — updates an issue's workflow state
-- **"List all projects"** — shows available teams and projects
-- **"Create a high-priority task in the Backend project: fix API timeout"** — creates an issue with priority and project
-- **"Show me the details of PAP-42"** — fetches full issue details
-- **"Add a comment to PAP-42: blocked by the auth refactor"** — adds a comment
-- **"What labels are available?"** — lists all team labels
-- **"Mark PAP-42 as blocking PAP-55"** — creates a blocks relation
-- **"Set the due date on PAP-42 to March 15"** — updates the due date
+- **"Create a bug report: login page crashes on Safari"** — creates a new task
+- **"What tasks are in progress?"** — searches tasks by keyword
+- **"Move task 42 to Done"** — updates a task's status
+- **"List all projects"** — shows available projects
+- **"Create a high-priority task in the Backend project: fix API timeout"** — creates a task with priority and project
+- **"Show me the details of task 42"** — fetches full task details with relations
+- **"Add a comment to task 42: blocked by the auth refactor"** — adds a comment
+- **"What labels are available?"** — lists all workspace labels
+- **"Mark task 42 as blocking task 55"** — creates a blocks relation
+- **"Set the due date on task 42 to March 15"** — updates the due date
+- **"Create a new column called Review in the Frontend project"** — manages kanban columns
+- **"Archive task 42"** — archives a completed task
 
 ## Architecture
 
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
-                                              ├─ src/tools/ ─→ src/linear/ ─→ Linear SDK
-                                              │   15 tools, one file each
+                                              ├─ tools/ ─→ kaneo/ ─→ Kaneo REST API
+                                              │   28 tools, one file each
                                               │
                                               └─→ response back to Telegram
 ```
 
-| Path             | Role                                                                                   |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| `src/index.ts`   | Entry point; validates env vars, starts the bot                                        |
-| `src/bot.ts`     | Grammy bot setup, conversation history, LLM orchestration (up to 5 tool-calling steps) |
-| `src/config.ts`  | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers     |
-| `src/users.ts`   | User authorization store; admin commands for adding/removing users                     |
-| `src/migrate.ts` | One-time migration: seeds admin, copies legacy config to per-user table                |
-| `src/errors.ts`  | Discriminated union error types, constructors, and user-facing message mapper          |
-| `src/tools/`     | One file per tool; `index.ts` assembles all 15 into `makeTools`                        |
-| `src/linear/`    | One file per Linear SDK wrapper; `index.ts` re-exports all 15                          |
-| `src/logger.ts`  | pino logger instance                                                                   |
+| Path                  | Role                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `src/index.ts`        | Entry point; validates env vars, runs migrations, starts the bot                         |
+| `src/bot.ts`          | Grammy bot setup, per-user conversation history, LLM orchestration (up to 25 tool steps) |
+| `src/config.ts`       | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers       |
+| `src/users.ts`        | User authorization store; admin commands for adding/removing users                       |
+| `src/migrate.ts`      | One-time migration: seeds admin, copies legacy config to per-user table                  |
+| `src/errors.ts`       | Discriminated union error types, constructors, and user-facing message mapper            |
+| `src/tools/`          | One file per tool; `index.ts` assembles all 28 into `makeTools`                          |
+| `src/kaneo/`          | One file per Kaneo REST API wrapper; `index.ts` re-exports all                           |
+| `src/commands/`       | Telegram command handlers: `/help`, `/set`, `/config`, `/clear`, admin commands          |
+| `src/conversation.ts` | Conversation history management with smart trimming and rolling summaries                |
+| `src/history.ts`      | Persistent conversation history storage (SQLite-backed per-user)                         |
+| `src/memory.ts`       | Fact extraction and persistence from tool results for long-term context                  |
+| `src/logger.ts`       | pino logger instance                                                                     |
 
 ## Tech Stack
 
 - **Runtime** — [Bun](https://bun.sh)
 - **Bot framework** — [Grammy](https://grammy.dev)
 - **LLM integration** — [Vercel AI SDK](https://sdk.vercel.ai) via `@ai-sdk/openai-compatible`
-- **Task management** — [Linear SDK](https://developers.linear.app/docs/sdk/getting-started)
+- **Task management** — [Kaneo](https://github.com/usekaneo/kaneo) REST API
 - **Validation** — [Zod v4](https://zod.dev)
 - **Linting/formatting** — oxlint / oxfmt
 
@@ -180,11 +190,10 @@ bun run start
 After starting, configure credentials via Telegram:
 
 ```
-/set linear_key lin_api_xxxxxxxxxxxx
-/set linear_team_id <team-id>
-/set openai_key sk-xxxxxxxxxxxx
-/set openai_base_url https://api.openai.com/v1
-/set openai_model o3
+/set kaneo_apikey <your-kaneo-api-key>
+/set llm_apikey sk-xxxxxxxxxxxx
+/set llm_baseurl https://api.openai.com/v1
+/set main_model o3
 ```
 
 ## Development
@@ -207,18 +216,15 @@ tests/
 ├── config.test.ts
 ├── errors.test.ts
 ├── logger.test.ts
-├── linear/
-│   ├── add-comment.test.ts
-│   ├── archive-issue.test.ts
-│   ├── classify-error.test.ts
-│   ├── create-issue.test.ts
-│   └── ... (14 more)
-└── tools/
-    ├── create-issue.test.ts
-    └── index.test.ts
+├── history.test.ts
+├── memory.test.ts
+├── migrate.test.ts
+├── users.test.ts
+├── kaneo/            # Tests for src/kaneo/*
+└── tools/            # Tests for src/tools/*
 ```
 
-Run all tests with `bun test` or `bun run test`.
+Run tests with `bun test` or `bun run test`.
 
 ## Releasing
 

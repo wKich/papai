@@ -69,10 +69,10 @@ describe('migrateToMultiUser', () => {
 
   test('migrates existing config rows to admin user_config', () => {
     store.configRows.set('linear_key', 'lin_xxx')
-    store.configRows.set('openai_model', 'gpt-4o')
+    store.configRows.set('main_model', 'gpt-4o')
     migrateToMultiUser(12345)
     expect(store.userConfigRows.get('12345:linear_key')).toBe('lin_xxx')
-    expect(store.userConfigRows.get('12345:openai_model')).toBe('gpt-4o')
+    expect(store.userConfigRows.get('12345:main_model')).toBe('gpt-4o')
   })
 
   test('skips migration when config table does not exist', () => {

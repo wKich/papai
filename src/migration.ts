@@ -71,7 +71,7 @@ async function resolveKaneoConfig(
   config: Map<string, string>,
   opts: MigrationOptions,
 ): Promise<ResolvedKaneoConfig | null> {
-  const kaneoKey = config.get('kaneo_key')
+  const kaneoKey = config.get('kaneo_apikey')
   const kaneoWorkspaceId = getKaneoWorkspace(user.telegram_id)
   const kaneoBaseUrl = opts.kaneoUrl
   if (kaneoKey !== undefined && kaneoWorkspaceId !== null && kaneoBaseUrl !== undefined) {
@@ -80,7 +80,7 @@ async function resolveKaneoConfig(
   if (opts.dryRun === true || kaneoBaseUrl === undefined) return null
   const provisionBaseUrl = opts.kaneoInternalUrl ?? kaneoBaseUrl
   const prov = await provisionKaneoUser(provisionBaseUrl, kaneoBaseUrl, user.telegram_id, user.username)
-  setConfig(user.telegram_id, 'kaneo_key', prov.kaneoKey)
+  setConfig(user.telegram_id, 'kaneo_apikey', prov.kaneoKey)
   setKaneoWorkspace(user.telegram_id, prov.workspaceId)
   return {
     kaneoKey: prov.kaneoKey,
