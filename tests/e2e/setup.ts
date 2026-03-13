@@ -28,7 +28,7 @@ function delay(ms: number): Promise<void> {
   })
 }
 
-function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
+function waitForServer(baseUrl: string, maxAttempts = 60): Promise<void> {
   const healthUrl = `${baseUrl}/api/health`
   log.info({ healthUrl }, 'Waiting for Kaneo server to be healthy')
 
