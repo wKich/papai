@@ -76,7 +76,7 @@ describe('E2E: Task Lifecycle', () => {
     })
 
     // NOTE: Title update works, but priority update is broken in Kaneo API
-    // See: PUT /task/priority/:id returns 200 but doesn't update
+    // See docs/KANEO_API_BUGS.md - Bug #2 for details
     expect(updated.title).toBe(updatedTitle)
     // expect(updated.priority).toBe(updatedPriority) // Skipped due to API bug
 
@@ -89,6 +89,8 @@ describe('E2E: Task Lifecycle', () => {
     // expect(retrieved.priority).toBe(updatedPriority) // Skipped due to API bug
   })
 
+  // Skipped: Kaneo API bug - listTasks returns empty array
+  // See docs/KANEO_API_BUGS.md - Bug #3 for details
   test.skip('lists tasks in a project', async () => {
     const task1 = await createTask({
       config: kaneoConfig,

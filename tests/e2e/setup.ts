@@ -29,7 +29,8 @@ export async function setupE2EEnvironment(): Promise<void> {
     // Use unique identifiers to avoid conflicts from previous test runs
     const uniqueSuffix = Date.now()
     const uniqueUsername = `e2e-test-${uniqueSuffix}`
-    const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000) // Ensure unique telegram ID
+    // Ensure unique telegram ID to avoid workspace slug conflicts
+    const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000)
     const result = await provisionKaneoUser(baseUrl, publicUrl, uniqueTelegramId, uniqueUsername)
 
     e2eConfig = {
