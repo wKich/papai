@@ -1,15 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { addComment } from '../../src/kaneo/add-comment.js'
-import { addTaskLabel } from '../../src/kaneo/add-task-label.js'
 import { addTaskRelation } from '../../src/kaneo/add-task-relation.js'
 import { archiveTask } from '../../src/kaneo/archive-task.js'
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { createColumn } from '../../src/kaneo/create-column.js'
-import { createLabel } from '../../src/kaneo/create-label.js'
 import { createTask } from '../../src/kaneo/create-task.js'
 import { getTask } from '../../src/kaneo/get-task.js'
-import { listLabels } from '../../src/kaneo/list-labels.js'
 import { listTasks } from '../../src/kaneo/list-tasks.js'
 import { updateTask } from '../../src/kaneo/update-task.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
@@ -114,27 +111,5 @@ describe('E2E: User Workflows', () => {
 
     const finalTask = await getTask({ config: kaneoConfig, taskId: task.id })
     expect(finalTask.status).toBe('in_review')
-  })
-
-  test('label assignment workflow', async () => {
-    const label = await createLabel({
-      config: kaneoConfig,
-      workspaceId: testClient.getWorkspaceId(),
-      name: 'Workflow Label',
-      color: '#FF5733',
-    })
-
-    const task = await createTask({ config: kaneoConfig, projectId, title: 'Labeled task' })
-    testClient.trackTask(task.id)
-
-    await addTaskLabel({
-      config: kaneoConfig,
-      taskId: task.id,
-      labelId: label.id,
-      workspaceId: testClient.getWorkspaceId(),
-    })
-
-    const labels = await listLabels({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
-    expect(labels.some((l) => l.id === label.id)).toBe(true)
   })
 })

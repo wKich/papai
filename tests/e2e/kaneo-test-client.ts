@@ -2,6 +2,7 @@ import { archiveProject } from '../../src/kaneo/archive-project.js'
 import { type KaneoConfig } from '../../src/kaneo/client.js'
 import { createProject } from '../../src/kaneo/create-project.js'
 import { deleteTask } from '../../src/kaneo/delete-task.js'
+import { removeLabel } from '../../src/kaneo/remove-label.js'
 import { logger } from '../../src/logger.js'
 import { getE2EConfig, type E2EConfig } from './setup.js'
 
@@ -12,6 +13,7 @@ export class KaneoTestClient {
   private readonly kaneoConfig: KaneoConfig
   private readonly createdProjectIds: string[]
   private readonly createdTaskIds: string[]
+  private readonly createdLabelIds: string[]
 
   constructor() {
     this.config = getE2EConfig()
@@ -21,6 +23,7 @@ export class KaneoTestClient {
     }
     this.createdProjectIds = []
     this.createdTaskIds = []
+    this.createdLabelIds = []
   }
 
   async createTestProject(name: string): Promise<{ id: string; name: string; slug: string }> {
@@ -43,6 +46,11 @@ export class KaneoTestClient {
     log.debug({ taskId }, 'Task tracked for cleanup')
   }
 
+  trackLabel(labelId: string): void {
+    this.createdLabelIds.push(labelId)
+    log.debug({ labelId }, 'Label tracked for cleanup')
+  }
+
   getKaneoConfig(): KaneoConfig {
     return { ...this.kaneoConfig }
   }
@@ -54,8 +62,9 @@ export class KaneoTestClient {
   async cleanup(): Promise<void> {
     const projectCount = this.createdProjectIds.length
     const taskCount = this.createdTaskIds.length
+    const labelCount = this.createdLabelIds.length
 
-    log.info({ projectCount, taskCount }, 'Starting cleanup')
+    log.info({ projectCount, taskCount, labelCount }, 'Starting cleanup')
 
     // Delete all tasks in parallel
     await Promise.all(
@@ -83,10 +92,24 @@ export class KaneoTestClient {
       }),
     )
 
+    // Remove all labels in parallel
+    await Promise.all(
+      this.createdLabelIds.map(async (labelId) => {
+        try {
+          await removeLabel({ config: this.kaneoConfig, labelId })
+          log.debug({ labelId }, 'Label removed during cleanup')
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          log.warn({ labelId, error: message }, 'Failed to remove label during cleanup')
+        }
+      }),
+    )
+
     this.createdTaskIds.length = 0
     this.createdProjectIds.length = 0
+    this.createdLabelIds.length = 0
 
-    log.info({ projectCount, taskCount }, 'Cleanup complete')
+    log.info({ projectCount, taskCount, labelCount }, 'Cleanup complete')
   }
 }
 

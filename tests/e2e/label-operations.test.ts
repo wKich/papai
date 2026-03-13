@@ -15,7 +15,6 @@ describe('E2E: Label Operations', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
   let projectId: string
-  const createdLabelIds: string[] = []
 
   beforeAll(async () => {
     await setupE2EEnvironment()
@@ -30,18 +29,6 @@ describe('E2E: Label Operations', () => {
   beforeEach(async () => {
     await testClient.cleanup()
 
-    // Clean up labels from previous test in parallel
-    await Promise.all(
-      createdLabelIds.map(async (labelId) => {
-        try {
-          await removeLabel({ config: kaneoConfig, labelId })
-        } catch {
-          /* ignore */
-        }
-      }),
-    )
-    createdLabelIds.length = 0
-
     const project = await testClient.createTestProject(`Label Ops Test ${Date.now()}`)
     projectId = project.id
   })
@@ -53,7 +40,7 @@ describe('E2E: Label Operations', () => {
       name: 'Bug',
       color: '#FF0000',
     })
-    createdLabelIds.push(label.id)
+    testClient.trackLabel(label.id)
     expect(label.name).toBe('Bug')
     expect(label.color).toBe('#FF0000')
   })
@@ -65,7 +52,7 @@ describe('E2E: Label Operations', () => {
       name: 'Old Name',
       color: '#000000',
     })
-    createdLabelIds.push(label.id)
+    testClient.trackLabel(label.id)
 
     const updated = await updateLabel({
       config: kaneoConfig,
@@ -84,7 +71,7 @@ describe('E2E: Label Operations', () => {
       workspaceId: testClient.getWorkspaceId(),
       name: `Label ${Date.now()}`,
     })
-    createdLabelIds.push(label.id)
+    testClient.trackLabel(label.id)
 
     const labels = await listLabels({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
     const ids = labels.map((l) => l.id)
@@ -111,7 +98,7 @@ describe('E2E: Label Operations', () => {
       workspaceId: testClient.getWorkspaceId(),
       name: 'Test Label',
     })
-    createdLabelIds.push(label.id)
+    testClient.trackLabel(label.id)
 
     const task = await createTask({ config: kaneoConfig, projectId, title: 'Task with label' })
     testClient.trackTask(task.id)
