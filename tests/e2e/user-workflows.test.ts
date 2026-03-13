@@ -53,9 +53,9 @@ describe('E2E: User Workflows', () => {
   })
 
   test('project setup workflow', async () => {
-    await createColumn({ config: kaneoConfig, projectId, name: 'To Do' })
-    await createColumn({ config: kaneoConfig, projectId, name: 'In Progress' })
-    await createColumn({ config: kaneoConfig, projectId, name: 'Done', isFinal: true })
+    await createColumn({ config: kaneoConfig, projectId, name: `To Do ${Date.now()}` })
+    await createColumn({ config: kaneoConfig, projectId, name: `In Progress ${Date.now()}` })
+    await createColumn({ config: kaneoConfig, projectId, name: `Done ${Date.now()}`, isFinal: true })
 
     const task1 = await createTask({ config: kaneoConfig, projectId, title: 'Task 1' })
     const task2 = await createTask({ config: kaneoConfig, projectId, title: 'Task 2' })

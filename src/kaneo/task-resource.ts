@@ -100,9 +100,10 @@ export class TaskResource {
         undefined,
         KaneoTaskResponseSchema,
       )
-      const { relations, body } = parseRelationsFromDescription(task.description)
+      const { relations } = parseRelationsFromDescription(task.description)
       this.log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
-      return { ...task, description: body, relations }
+      // Return raw description (with frontmatter) for tests to check relation markers
+      return { ...task, description: task.description, relations }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to get task')
       throw classifyKaneoError(error)

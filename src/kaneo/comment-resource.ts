@@ -60,7 +60,8 @@ export class CommentResource {
         z.array(KaneoActivityWithTypeSchema),
       )
       const comments = activities.flatMap((a) => {
-        if (a.type !== 'comment') return []
+        // Kaneo API may return comments as 'comment' or 'user_activity' type
+        if (a.type !== 'comment' && a.type !== 'user_activity') return []
         // Kaneo stores comment text in the 'message' field, not 'comment'
         const commentText = a.message
         if (commentText === null || commentText === undefined) return []
