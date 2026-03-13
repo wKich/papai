@@ -37,8 +37,7 @@ describe('CommentResource', () => {
               {
                 id: 'comment-1',
                 type: 'comment',
-                comment: 'New comment',
-                message: null,
+                message: 'New comment',
                 createdAt: '2026-03-01T00:00:00Z',
               },
             ]),
@@ -72,8 +71,7 @@ describe('CommentResource', () => {
               {
                 id: 'comment-1',
                 type: 'comment',
-                comment: '',
-                message: null,
+                message: '',
                 createdAt: '2026-03-01T00:00:00Z',
               },
             ]),
@@ -104,8 +102,7 @@ describe('CommentResource', () => {
               {
                 id: 'comment-1',
                 type: 'comment',
-                comment: longComment,
-                message: null,
+                message: longComment,
                 createdAt: '2026-03-01T00:00:00Z',
               },
             ]),
@@ -143,22 +140,19 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'comment',
-                comment: 'Comment 1',
-                message: null,
+                message: 'Comment 1',
                 createdAt: '2026-03-01T00:00:00Z',
               },
               {
                 id: 'act-2',
                 type: 'status_change',
-                comment: null,
                 message: 'Status changed',
                 createdAt: '2026-03-01T00:00:00Z',
               },
               {
                 id: 'act-3',
                 type: 'comment',
-                comment: 'Comment 2',
-                message: null,
+                message: 'Comment 2',
                 createdAt: '2026-03-02T00:00:00Z',
               },
             ]),
@@ -175,7 +169,7 @@ describe('CommentResource', () => {
       expect(result[1]?.comment).toBe('Comment 2')
     })
 
-    test('excludes activities with null comment', async () => {
+    test('excludes activities with null message', async () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
@@ -183,11 +177,10 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'comment',
-                comment: 'Valid comment',
-                message: null,
+                message: 'Valid comment',
                 createdAt: '2026-03-01T00:00:00Z',
               },
-              { id: 'act-2', type: 'comment', comment: null, message: null, createdAt: '2026-03-01T00:00:00Z' },
+              { id: 'act-2', type: 'comment', message: null, createdAt: '2026-03-01T00:00:00Z' },
             ]),
             { status: 200 },
           ),
@@ -209,7 +202,6 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'status_change',
-                comment: null,
                 message: 'Changed',
                 createdAt: '2026-03-01T00:00:00Z',
               },
@@ -230,7 +222,7 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              { id: 'act-1', type: 'comment', comment: 'Test', message: null, createdAt: '2026-03-01T12:00:00Z' },
+              { id: 'act-1', type: 'comment', message: 'Test', createdAt: '2026-03-01T12:00:00Z' },
             ]),
             { status: 200 },
           ),
