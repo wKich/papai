@@ -30,7 +30,7 @@ describe('E2E: Error Handling', () => {
 
   test('throws error for non-existent task', async () => {
     const promise = getTask({ config: kaneoConfig, taskId: 'non-existent-id' })
-    expect(promise).rejects.toThrow()
+    await expect(promise).rejects.toThrow()
   })
 
   test('throws error when updating non-existent task', async () => {
@@ -39,7 +39,7 @@ describe('E2E: Error Handling', () => {
       taskId: 'non-existent-id',
       title: 'New title',
     })
-    expect(promise).rejects.toThrow()
+    await expect(promise).rejects.toThrow()
   })
 
   test('handles special characters in task title', async () => {
