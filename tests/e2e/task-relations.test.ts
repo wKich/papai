@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { addTaskRelation } from '../../src/kaneo/add-task-relation.js'
 import type { KaneoConfig } from '../../src/kaneo/client.js'
@@ -6,8 +6,8 @@ import { createTask } from '../../src/kaneo/create-task.js'
 import { getTask } from '../../src/kaneo/get-task.js'
 import { removeTaskRelation } from '../../src/kaneo/remove-task-relation.js'
 import { updateTaskRelation } from '../../src/kaneo/update-task-relation.js'
-import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment } from './setup.js'
+import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
+import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Task Relations', () => {
   let testClient: KaneoTestClient
@@ -24,6 +24,10 @@ describe('E2E: Task Relations', () => {
     await testClient.cleanup()
     const project = await testClient.createTestProject(`Relations Test ${Date.now()}`)
     projectId = project.id
+  })
+
+  afterAll(async () => {
+    await teardownE2EEnvironment()
   })
 
   test('adds blocks relation between tasks', async () => {
@@ -141,6 +145,8 @@ describe('E2E: Task Relations', () => {
     const task1WithRels = await getTask({ config: kaneoConfig, taskId: task1.id })
     expect(task1WithRels.description).toContain('related:')
     expect(task1WithRels.description).toContain('blocked_by:')
+    expect(task1WithRels.description).toContain(task2.id)
+    expect(task1WithRels.description).toContain(task3.id)
   })
 
   test('error when relating to non-existent task', async () => {
