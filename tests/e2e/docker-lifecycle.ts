@@ -28,11 +28,11 @@ export function startKaneoServer(): Promise<void> {
     let stdout = ''
     let stderr = ''
 
-    dockerUp.stdout?.on('data', (data) => {
+    dockerUp.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
     })
 
-    dockerUp.stderr?.on('data', (data) => {
+    dockerUp.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
 
@@ -74,7 +74,7 @@ export function stopKaneoServer(): Promise<void> {
   return new Promise((resolve) => {
     let stderr = ''
 
-    dockerDown.stderr?.on('data', (data) => {
+    dockerDown.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
 

@@ -20,12 +20,23 @@ export function getE2EConfig(): E2EConfig {
   return e2eConfig
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve()
+    }, ms)
+  })
+}
+
 async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
   const healthUrl = `${baseUrl}/api/health`
   log.info({ healthUrl }, 'Waiting for Kaneo server to be healthy')
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  let attempt = 1
+
+  while (attempt <= maxAttempts) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- Intentional sequential polling
       const response = await fetch(healthUrl, { method: 'GET' })
       if (response.ok) {
         log.info({ attempts: attempt }, 'Kaneo server is healthy')
@@ -37,12 +48,11 @@ async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
 
     if (attempt < maxAttempts) {
       log.debug({ attempt, maxAttempts }, 'Server not ready, waiting...')
-      await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(undefined)
-        }, 1000)
-      })
+      // eslint-disable-next-line no-await-in-loop -- Intentional delay between polling attempts
+      await delay(1000)
     }
+
+    attempt++
   }
 
   throw new Error(`Kaneo server failed to become healthy after ${maxAttempts} attempts`)
@@ -109,14 +119,16 @@ process.on('exit', () => {
   }
 })
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   log.info('Received SIGINT, cleaning up...')
-  await teardownE2EEnvironment()
-  process.exit(0)
+  teardownE2EEnvironment()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1))
 })
 
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
   log.info('Received SIGTERM, cleaning up...')
-  await teardownE2EEnvironment()
-  process.exit(0)
+  teardownE2EEnvironment()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1))
 })

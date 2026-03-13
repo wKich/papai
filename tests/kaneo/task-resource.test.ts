@@ -515,8 +515,8 @@ describe('TaskResource', () => {
         const requests: Array<{ url: string; method: string; body?: unknown }> = []
 
         setMockFetch((url: string, options: RequestInit) => {
-          const body = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          requests.push({ url, method: options.method ?? 'GET', body })
+          const parsedBody: unknown = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          requests.push({ url, method: options.method ?? 'GET', body: parsedBody })
 
           // Return success for any single-field endpoint
           return Promise.resolve(
@@ -556,8 +556,8 @@ describe('TaskResource', () => {
         const requests: Array<{ url: string; body?: unknown }> = []
 
         setMockFetch((url: string, options: RequestInit) => {
-          const body = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          requests.push({ url, body })
+          const parsedBody: unknown = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          requests.push({ url, body: parsedBody })
 
           return Promise.resolve(
             new Response(
