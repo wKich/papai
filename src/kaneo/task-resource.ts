@@ -174,14 +174,19 @@ export class TaskResource {
     // (The full /task/:id endpoint doesn't actually update fields)
     const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
 
-    // Apply updates in parallel for all changed fields
-    const updatePromises = setFields.map(([field, value]) => this.singleFieldUpdate(taskId, field, value))
-    const results = await Promise.all(updatePromises)
+    // Apply updates sequentially using reduce to chain promises
+    // This avoids await-in-loop while maintaining sequential execution
+    const result = await setFields.reduce<Promise<z.infer<typeof KaneoTaskWithProjectIdSchema> | undefined>>(
+      async (previousPromise, [field, value]) => {
+        await previousPromise
+        return this.singleFieldUpdate(taskId, field, value)
+      },
+      Promise.resolve(undefined),
+    )
 
-    // Return the last result, or fetch current if no updates
-    const lastResult = results[results.length - 1]
-    if (lastResult !== undefined) {
-      return lastResult
+    // Return the result, or fetch current if no updates
+    if (result !== undefined) {
+      return result
     }
 
     // If no fields to update, just return current task

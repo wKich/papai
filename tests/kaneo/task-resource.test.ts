@@ -511,30 +511,14 @@ describe('TaskResource', () => {
     })
 
     describe('multi-field updates', () => {
-      test('fetches position before multi-field update', async () => {
-        let requestCount = 0
+      test('calls single-field endpoints for each field', async () => {
+        const requests: Array<{ url: string; method: string; body?: unknown }> = []
+
         setMockFetch((url: string, options: RequestInit) => {
-          requestCount++
-          if (url.includes('/task/task-1') && options.method === 'GET') {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: 'task-1',
-                  title: 'Old',
-                  number: 1,
-                  status: 'todo',
-                  priority: 'medium',
-                  description: 'Old desc',
-                  createdAt: '2026-03-01T00:00:00Z',
-                  dueDate: null,
-                  projectId: 'proj-1',
-                  position: 42,
-                  userId: null,
-                }),
-                { status: 200 },
-              ),
-            )
-          }
+          const body = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          requests.push({ url, method: options.method ?? 'GET', body })
+
+          // Return success for any single-field endpoint
           return Promise.resolve(
             new Response(
               JSON.stringify({
@@ -560,36 +544,21 @@ describe('TaskResource', () => {
           description: 'New desc',
         })
 
-        expect(requestCount).toBe(2)
+        // Should make 4 requests - one for each field
+        expect(requests.length).toBe(4)
+        expect(requests[0]?.url).toContain('/task/title/task-1')
+        expect(requests[1]?.url).toContain('/task/status/task-1')
+        expect(requests[2]?.url).toContain('/task/priority/task-1')
+        expect(requests[3]?.url).toContain('/task/description/task-1')
       })
 
-      test('uses PUT /task/task-1 for multi-field update', async () => {
-        let requestUrl = ''
-        let requestBody: unknown
+      test('uses correct endpoints for each field type', async () => {
+        const requests: Array<{ url: string; body?: unknown }> = []
 
         setMockFetch((url: string, options: RequestInit) => {
-          if (url.includes('/task/task-1') && options.method === 'GET') {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  id: 'task-1',
-                  title: 'Old',
-                  number: 1,
-                  status: 'todo',
-                  priority: 'medium',
-                  description: 'Old',
-                  createdAt: '2026-03-01T00:00:00Z',
-                  dueDate: null,
-                  projectId: 'proj-1',
-                  position: 0,
-                  userId: null,
-                }),
-                { status: 200 },
-              ),
-            )
-          }
-          requestUrl = url
-          requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          const body = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          requests.push({ url, body })
+
           return Promise.resolve(
             new Response(
               JSON.stringify({
@@ -613,12 +582,11 @@ describe('TaskResource', () => {
           status: 'done',
         })
 
-        expect(requestUrl).toContain('/task/task-1')
-        expect(requestBody).toMatchObject({
-          title: 'New',
-          status: 'done',
-          position: 0,
-        })
+        expect(requests.length).toBe(2)
+        expect(requests[0]?.url).toContain('/task/title/task-1')
+        expect(requests[0]?.body).toMatchObject({ title: 'New' })
+        expect(requests[1]?.url).toContain('/task/status/task-1')
+        expect(requests[1]?.body).toMatchObject({ status: 'done' })
       })
     })
   })
