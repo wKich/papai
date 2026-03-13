@@ -4,6 +4,19 @@ import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/kaneo-client.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
+interface UpdateDescriptionBody {
+  description: string
+}
+
+function isUpdateDescriptionBody(value: unknown): value is UpdateDescriptionBody {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'description' in value &&
+    typeof (value as Record<string, unknown>)['description'] === 'string'
+  )
+}
+
 describe('Task Relations', () => {
   const mockConfig: KaneoConfig = {
     apiKey: 'test-key',
@@ -166,8 +179,11 @@ describe('Task Relations', () => {
       const resource = new TaskResource(mockConfig)
       await resource.addRelation('task-1', 'task-2', 'blocks')
 
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') as unknown })
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
+      if (!isUpdateDescriptionBody(putBody)) {
+        throw new Error('putBody is not UpdateDescriptionBody')
+      }
+      expect(putBody.description).toContain('task-3')
+      expect(putBody.description).toContain('task-2')
     })
   })
 
@@ -311,8 +327,11 @@ describe('Task Relations', () => {
       const resource = new TaskResource(mockConfig)
       await resource.updateRelation('task-1', 'task-2', 'duplicate')
 
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-3') as unknown })
-      expect(putBody).toMatchObject({ description: expect.stringContaining('task-2') as unknown })
+      if (!isUpdateDescriptionBody(putBody)) {
+        throw new Error('putBody is not UpdateDescriptionBody')
+      }
+      expect(putBody.description).toContain('task-3')
+      expect(putBody.description).toContain('task-2')
     })
   })
 })
