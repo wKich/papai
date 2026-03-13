@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { KaneoConfig } from '../kaneo/client.js'
 import { removeLabel } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:remove-label' })
 
@@ -13,8 +14,16 @@ export function makeRemoveLabelTool(kaneoConfig: KaneoConfig): ToolSet[string] {
     description: 'Remove (delete) a Kaneo label.',
     inputSchema: z.object({
       labelId: z.string().describe('Kaneo label ID to remove'),
+      label: z.string().optional().describe('Human-readable label name for the confirmation message (e.g. "urgent")'),
+      confidence: confidenceField,
     }),
-    execute: async ({ labelId }) => {
+    execute: async ({ labelId, label, confidence }) => {
+      log.debug({ labelId, confidence }, 'remove_label called')
+      const gate = checkConfidence(confidence, `Remove label "${label ?? labelId}"`)
+      if (gate !== null) {
+        log.warn({ labelId, confidence }, 'remove_label blocked — confirmation required')
+        return gate
+      }
       try {
         return await removeLabel({ config: kaneoConfig, labelId })
       } catch (error) {

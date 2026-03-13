@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { makeDeleteColumnTool } from '../../src/tools/delete-column.js'
 import { makeListColumnsTool } from '../../src/tools/list-columns.js'
 import { getToolExecutor } from '../test-helpers.js'
 
@@ -163,6 +164,69 @@ describe('Column Tools', () => {
         expect(column).toHaveProperty('isFinal')
         expect(typeof column.isFinal).toBe('boolean')
       }
+    })
+  })
+
+  describe('makeDeleteColumnTool', () => {
+    test('returns tool with correct structure', () => {
+      const tool = makeDeleteColumnTool(mockConfig)
+      expect(tool.description).toContain('Delete a status column')
+    })
+
+    test('deletes column successfully with high confidence', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        deleteColumn: mock(() => Promise.resolve({ success: true })),
+      }))
+
+      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const result: unknown = await execute({ columnId: 'col-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+
+      expect(result).toMatchObject({ success: true })
+    })
+
+    test('returns confirmation_required when confidence is below threshold', async () => {
+      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const result: unknown = await execute(
+        { columnId: 'col-1', label: 'In Progress', confidence: 0.6 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      expect((result as { message: string }).message).toContain('In Progress')
+      expect((result as { message: string }).message).not.toContain('0.6')
+      expect((result as { message: string }).message).not.toContain('0.85')
+    })
+
+    test('executes when confidence exactly meets threshold (0.85)', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        deleteColumn: mock(() => Promise.resolve({ success: true })),
+      }))
+
+      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const result: unknown = await execute({ columnId: 'col-1', confidence: 0.85 }, { toolCallId: '1', messages: [] })
+
+      expect(result).toMatchObject({ success: true })
+    })
+
+    test('propagates column not found error', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        deleteColumn: mock(() => Promise.reject(new Error('Column not found'))),
+      }))
+
+      const tool = makeDeleteColumnTool(mockConfig)
+      const promise = getToolExecutor(tool)({ columnId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('Column not found')
+      try {
+        await promise
+      } catch {
+        // ignore
+      }
+    })
+
+    test('validates columnId is required', () => {
+      const tool = makeDeleteColumnTool(mockConfig)
+      const schema = tool.inputSchema as { safeParse: (v: unknown) => { success: boolean } }
+      expect(schema.safeParse({ confidence: 0.9 }).success).toBe(false)
     })
   })
 })

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { KaneoConfig } from '../kaneo/client.js'
 import { archiveTask } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:archive-task' })
 
@@ -13,8 +14,19 @@ export function makeArchiveTaskTool(kaneoConfig: KaneoConfig, workspaceId: strin
     description: 'Archive a Kaneo task by adding the "archived" label. Use this when the user wants to archive a task.',
     inputSchema: z.object({
       taskId: z.string().describe('The Kaneo task ID to archive'),
+      label: z
+        .string()
+        .optional()
+        .describe('Human-readable task title for the confirmation message (e.g. "Fix login bug")'),
+      confidence: confidenceField,
     }),
-    execute: async ({ taskId }) => {
+    execute: async ({ taskId, label, confidence }) => {
+      log.debug({ taskId, confidence }, 'archive_task called')
+      const gate = checkConfidence(confidence, `Archive "${label ?? taskId}"`)
+      if (gate !== null) {
+        log.warn({ taskId, confidence }, 'archive_task blocked — confirmation required')
+        return gate
+      }
       try {
         return await archiveTask({ config: kaneoConfig, taskId, workspaceId })
       } catch (error) {

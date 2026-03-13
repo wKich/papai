@@ -352,14 +352,47 @@ describe('Label Tools', () => {
       expect(tool.description).toContain('Remove (delete) a Kaneo label')
     })
 
-    test('removes label successfully', async () => {
+    test('removes label successfully with high confidence', async () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         removeLabel: mock(() => Promise.resolve({ success: true })),
       }))
 
       const tool = makeRemoveLabelTool(mockConfig)
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute({ labelId: 'label-1' }, { toolCallId: '1', messages: [] })
+      const result: unknown = await tool.execute(
+        { labelId: 'label-1', confidence: 0.9 },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isSuccessResult(result)) throw new Error('Invalid result')
+
+      expect(result.success).toBe(true)
+    })
+
+    test('returns confirmation_required when confidence is below threshold', async () => {
+      const tool = makeRemoveLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { labelId: 'label-1', label: 'urgent', confidence: 0.5 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      expect((result as { message: string }).message).toContain('urgent')
+      expect((result as { message: string }).message).not.toContain('0.5')
+      expect((result as { message: string }).message).not.toContain('0.85')
+    })
+
+    test('executes when confidence exactly meets threshold (0.85)', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        removeLabel: mock(() => Promise.resolve({ success: true })),
+      }))
+
+      const tool = makeRemoveLabelTool(mockConfig)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { labelId: 'label-1', confidence: 0.85 },
+        { toolCallId: '1', messages: [] },
+      )
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 
       expect(result.success).toBe(true)
@@ -371,7 +404,7 @@ describe('Label Tools', () => {
       }))
 
       const tool = makeRemoveLabelTool(mockConfig)
-      const promise = getToolExecutor(tool)({ labelId: 'invalid' }, { toolCallId: '1', messages: [] })
+      const promise = getToolExecutor(tool)({ labelId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Label not found')
       try {
         await promise
@@ -380,15 +413,10 @@ describe('Label Tools', () => {
       }
     })
 
-    test('validates labelId is required', async () => {
+    test('validates labelId is required', () => {
       const tool = makeRemoveLabelTool(mockConfig)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+      const schema = tool.inputSchema as { safeParse: (v: unknown) => { success: boolean } }
+      expect(schema.safeParse({ confidence: 0.9 }).success).toBe(false)
     })
   })
 })

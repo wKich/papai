@@ -456,7 +456,7 @@ describe('Task Tools', () => {
       expect(tool.description).toContain('Archive a Kaneo task')
     })
 
-    test('archives task successfully', async () => {
+    test('archives task successfully with high confidence', async () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         archiveTask: mock(() =>
           Promise.resolve({
@@ -469,11 +469,43 @@ describe('Task Tools', () => {
 
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', confidence: 0.9 },
+        { toolCallId: '1', messages: [] },
+      )
       if (!isTask(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('task-1')
       expect(result.status).toBe('archived')
+    })
+
+    test('returns confirmation_required when confidence is below threshold', async () => {
+      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', label: 'Fix login bug', confidence: 0.6 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      expect((result as { message: string }).message).toContain('Fix login bug')
+      expect((result as { message: string }).message).not.toContain('0.6')
+      expect((result as { message: string }).message).not.toContain('0.85')
+    })
+
+    test('executes when confidence exactly meets threshold (0.85)', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        archiveTask: mock(() => Promise.resolve({ id: 'task-1', title: 'T', status: 'archived' })),
+      }))
+
+      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', confidence: 0.85 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect((result as { status: string }).status).toBe('archived')
     })
 
     test('includes workspaceId in archive call', async () => {
@@ -487,7 +519,7 @@ describe('Task Tools', () => {
 
       const tool = makeArchiveTaskTool(mockConfig, 'ws-123')
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+      await tool.execute({ taskId: 'task-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
 
       expect(capturedParams?.['workspaceId']).toBe('ws-123')
       expect(capturedParams?.['taskId']).toBe('task-1')
@@ -506,7 +538,10 @@ describe('Task Tools', () => {
 
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', confidence: 0.9 },
+        { toolCallId: '1', messages: [] },
+      )
       if (!isTask(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('task-1')
@@ -518,7 +553,7 @@ describe('Task Tools', () => {
       }))
 
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
+      const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
@@ -527,15 +562,10 @@ describe('Task Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
+    test('validates taskId is required', () => {
       const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+      const schema = tool.inputSchema as { safeParse: (v: unknown) => { success: boolean } }
+      expect(schema.safeParse({ confidence: 0.9 }).success).toBe(false)
     })
   })
 })

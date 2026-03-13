@@ -325,13 +325,41 @@ describe('Project Tools', () => {
       expect(tool.description).toContain('Archive (delete) a Kaneo project')
     })
 
-    test('archives project successfully', async () => {
+    test('archives project successfully with high confidence', async () => {
       await mock.module('../../src/kaneo/index.js', () => ({
         archiveProject: mock(() => Promise.resolve({ success: true })),
       }))
 
       const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
-      const result: unknown = await execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
+      const result: unknown = await execute({ projectId: 'proj-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      if (!isSuccessResult(result)) throw new Error('Invalid result')
+
+      expect(result.success).toBe(true)
+    })
+
+    test('returns confirmation_required when confidence is below threshold', async () => {
+      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const result: unknown = await execute(
+        { projectId: 'proj-1', label: 'Backend', confidence: 0.6 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      expect((result as { message: string }).message).toContain('Backend')
+      expect((result as { message: string }).message).not.toContain('0.6')
+      expect((result as { message: string }).message).not.toContain('0.85')
+    })
+
+    test('executes when confidence exactly meets threshold (0.85)', async () => {
+      await mock.module('../../src/kaneo/index.js', () => ({
+        archiveProject: mock(() => Promise.resolve({ success: true })),
+      }))
+
+      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const result: unknown = await execute(
+        { projectId: 'proj-1', confidence: 0.85 },
+        { toolCallId: '1', messages: [] },
+      )
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 
       expect(result.success).toBe(true)
@@ -343,7 +371,10 @@ describe('Project Tools', () => {
       }))
 
       const tool = makeArchiveProjectTool(mockConfig)
-      const promise = getToolExecutor(tool)({ projectId: 'invalid' }, { toolCallId: '1', messages: [] })
+      const promise = getToolExecutor(tool)(
+        { projectId: 'invalid', confidence: 0.9 },
+        { toolCallId: '1', messages: [] },
+      )
       expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
@@ -352,15 +383,10 @@ describe('Project Tools', () => {
       }
     })
 
-    test('validates projectId is required', async () => {
+    test('validates projectId is required', () => {
       const tool = makeArchiveProjectTool(mockConfig)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+      const schema = tool.inputSchema as { safeParse: (v: unknown) => { success: boolean } }
+      expect(schema.safeParse({ confidence: 0.9 }).success).toBe(false)
     })
   })
 })
