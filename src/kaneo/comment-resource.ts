@@ -25,13 +25,21 @@ export class CommentResource {
       await kaneoFetch(this.config, 'POST', '/activity/comment', { taskId, comment }, undefined, z.unknown())
 
       // Fetch the newly created comment to get its ID and createdAt
+      // We find the most recent comment instead of matching by text,
+      // because the API may transform text (trim whitespace, etc.) and
+      // text-based matching is fragile with duplicates
       const comments = await this.list(taskId)
-      const newComment = comments.find((c) => c.comment === comment)
-      if (newComment === undefined) {
-        throw new Error('Failed to retrieve created comment')
+      if (comments.length === 0) {
+        throw new Error('Failed to retrieve created comment: no comments found')
       }
+      // Sort by createdAt descending to get the newest comment first
+      const sortedComments = comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      const newComment = sortedComments[0]!
 
-      this.log.info({ taskId, commentId: newComment.id }, 'Comment added')
+      this.log.info(
+        { taskId, commentId: newComment.id, commentText: newComment.comment.substring(0, 50) },
+        'Comment added',
+      )
       return { id: newComment.id, comment: newComment.comment, createdAt: newComment.createdAt }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')
