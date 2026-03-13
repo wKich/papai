@@ -1,21 +1,25 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
+import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { createTask } from '../../src/kaneo/create-task.js'
 import { getTask } from '../../src/kaneo/get-task.js'
 import { listTasks } from '../../src/kaneo/list-tasks.js'
 import { searchTasks } from '../../src/kaneo/search-tasks.js'
 import { updateTask } from '../../src/kaneo/update-task.js'
-import { createTestClient } from './kaneo-test-client.js'
+import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
 import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Task Lifecycle', () => {
-  const testClient = createTestClient()
-  const kaneoConfig = testClient.getKaneoConfig()
-  const workspaceId = testClient.getWorkspaceId()
+  let testClient: KaneoTestClient
+  let kaneoConfig: KaneoConfig
+  let workspaceId: string
   let projectId: string
 
   beforeAll(async () => {
     await setupE2EEnvironment()
+    testClient = createTestClient()
+    kaneoConfig = testClient.getKaneoConfig()
+    workspaceId = testClient.getWorkspaceId()
   })
 
   afterAll(async () => {
