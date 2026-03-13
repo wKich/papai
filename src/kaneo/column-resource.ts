@@ -43,7 +43,7 @@ export class ColumnResource {
         {
           name: params.name,
           icon: params.icon ?? '',
-          color: params.color ?? null,
+          color: params.color ?? '',
           isFinal: params.isFinal ?? false,
         },
         undefined,

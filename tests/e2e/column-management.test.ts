@@ -11,13 +11,14 @@ import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Column Management', () => {
   let testClient: KaneoTestClient
+  let kaneoConfig: KaneoConfig
   let projectId: string
-  const kaneoConfig = (): KaneoConfig => testClient.getKaneoConfig()
   const createdColumnIds: string[] = []
 
   beforeAll(async () => {
     await setupE2EEnvironment()
     testClient = createTestClient()
+    kaneoConfig = testClient.getKaneoConfig()
   })
 
   afterAll(async () => {
@@ -30,8 +31,7 @@ describe('E2E: Column Management', () => {
     // Clean up columns - sequential is intentional to handle individual errors
     for (const columnId of createdColumnIds) {
       try {
-        // eslint-disable-next-line no-await-in-loop
-        await deleteColumn({ config: kaneoConfig(), columnId })
+        await deleteColumn({ config: kaneoConfig, columnId })
       } catch {
         /* ignore */
       }
@@ -44,7 +44,7 @@ describe('E2E: Column Management', () => {
 
   test('creates a column with all properties', async () => {
     const column = await createColumn({
-      config: kaneoConfig(),
+      config: kaneoConfig,
       projectId,
       name: 'In Review',
       icon: '👀',
@@ -61,7 +61,7 @@ describe('E2E: Column Management', () => {
 
   test('creates a final column', async () => {
     const column = await createColumn({
-      config: kaneoConfig(),
+      config: kaneoConfig,
       projectId,
       name: 'Done',
       isFinal: true,
@@ -73,11 +73,11 @@ describe('E2E: Column Management', () => {
 
   test('lists columns in project', async () => {
     // Create some custom columns
-    const col1 = await createColumn({ config: kaneoConfig(), projectId, name: 'Backlog' })
-    const col2 = await createColumn({ config: kaneoConfig(), projectId, name: 'In Progress' })
+    const col1 = await createColumn({ config: kaneoConfig, projectId, name: 'Backlog' })
+    const col2 = await createColumn({ config: kaneoConfig, projectId, name: 'In Progress' })
     createdColumnIds.push(col1.id, col2.id)
 
-    const columns = await listColumns({ config: kaneoConfig(), projectId })
+    const columns = await listColumns({ config: kaneoConfig, projectId })
 
     expect(columns.length).toBeGreaterThanOrEqual(2)
     const names = columns.map((c) => c.name)
@@ -86,11 +86,11 @@ describe('E2E: Column Management', () => {
   })
 
   test('updates column name', async () => {
-    const column = await createColumn({ config: kaneoConfig(), projectId, name: 'Old Name' })
+    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Old Name' })
     createdColumnIds.push(column.id)
 
     const updated = await updateColumn({
-      config: kaneoConfig(),
+      config: kaneoConfig,
       columnId: column.id,
       name: 'New Name',
     })
@@ -99,11 +99,11 @@ describe('E2E: Column Management', () => {
   })
 
   test('updates column color and icon', async () => {
-    const column = await createColumn({ config: kaneoConfig(), projectId, name: 'Status' })
+    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Status' })
     createdColumnIds.push(column.id)
 
     const updated = await updateColumn({
-      config: kaneoConfig(),
+      config: kaneoConfig,
       columnId: column.id,
       color: '#00FF00',
       icon: '✅',
@@ -114,14 +114,14 @@ describe('E2E: Column Management', () => {
   })
 
   test('reorders columns', async () => {
-    const col1 = await createColumn({ config: kaneoConfig(), projectId, name: 'First' })
-    const col2 = await createColumn({ config: kaneoConfig(), projectId, name: 'Second' })
-    const col3 = await createColumn({ config: kaneoConfig(), projectId, name: 'Third' })
+    const col1 = await createColumn({ config: kaneoConfig, projectId, name: 'First' })
+    const col2 = await createColumn({ config: kaneoConfig, projectId, name: 'Second' })
+    const col3 = await createColumn({ config: kaneoConfig, projectId, name: 'Third' })
     createdColumnIds.push(col1.id, col2.id, col3.id)
 
     // Reverse the order
     await reorderColumns({
-      config: kaneoConfig(),
+      config: kaneoConfig,
       projectId,
       columns: [
         { id: col3.id, position: 0 },
@@ -130,7 +130,7 @@ describe('E2E: Column Management', () => {
       ],
     })
 
-    const columns = await listColumns({ config: kaneoConfig(), projectId })
+    const columns = await listColumns({ config: kaneoConfig, projectId })
     const customColumns = columns.filter((c) => [col1.id, col2.id, col3.id].includes(c.id))
 
     expect(customColumns[0]?.id).toBe(col3.id)
@@ -139,17 +139,17 @@ describe('E2E: Column Management', () => {
   })
 
   test('deletes a column', async () => {
-    const column = await createColumn({ config: kaneoConfig(), projectId, name: 'To Delete' })
+    const column = await createColumn({ config: kaneoConfig, projectId, name: 'To Delete' })
 
-    await deleteColumn({ config: kaneoConfig(), columnId: column.id })
+    await deleteColumn({ config: kaneoConfig, columnId: column.id })
 
-    const columns = await listColumns({ config: kaneoConfig(), projectId })
+    const columns = await listColumns({ config: kaneoConfig, projectId })
     const found = columns.find((c) => c.id === column.id)
     expect(found).toBeUndefined()
   })
 
   test('creates column without optional properties', async () => {
-    const column = await createColumn({ config: kaneoConfig(), projectId, name: 'Simple Column' })
+    const column = await createColumn({ config: kaneoConfig, projectId, name: 'Simple Column' })
     createdColumnIds.push(column.id)
 
     expect(column.name).toBe('Simple Column')
