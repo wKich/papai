@@ -23,16 +23,18 @@ describe('E2E: Label Management', () => {
     kaneoConfig = testClient.getKaneoConfig()
   })
 
-  afterAll(async () => {
-    await teardownE2EEnvironment()
+  afterAll(() => {
+    teardownE2EEnvironment()
   })
 
   beforeEach(async () => {
     await testClient.cleanup()
 
     // Clean up labels from previous test
+    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional
     for (const labelId of createdLabelIds) {
       try {
+        // eslint-disable-next-line no-await-in-loop
         await removeLabel({ config: kaneoConfig, labelId })
       } catch {
         // ignore cleanup errors

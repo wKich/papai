@@ -57,8 +57,10 @@ export class KaneoTestClient {
 
     log.info({ projectCount, taskCount }, 'Starting cleanup')
 
+    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional to avoid overwhelming API
     for (const taskId of this.createdTaskIds) {
       try {
+        // eslint-disable-next-line no-await-in-loop
         await deleteTask({ config: this.kaneoConfig, taskId })
         log.debug({ taskId }, 'Task deleted during cleanup')
       } catch (error) {
@@ -67,8 +69,10 @@ export class KaneoTestClient {
       }
     }
 
+    // eslint-disable-next-line no-await-in-loop -- Sequential cleanup is intentional to avoid overwhelming API
     for (const projectId of this.createdProjectIds) {
       try {
+        // eslint-disable-next-line no-await-in-loop
         await archiveProject({ config: this.kaneoConfig, projectId })
         log.debug({ projectId }, 'Project archived during cleanup')
       } catch (error) {

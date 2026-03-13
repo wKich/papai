@@ -47,7 +47,7 @@ export async function setupE2EEnvironment(): Promise<void> {
   }
 }
 
-export async function teardownE2EEnvironment(): Promise<void> {
+export function teardownE2EEnvironment(): void {
   log.info('Tearing down E2E environment')
   e2eConfig = undefined
 }

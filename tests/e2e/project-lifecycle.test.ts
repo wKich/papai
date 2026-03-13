@@ -17,8 +17,8 @@ describe('E2E: Project Lifecycle', () => {
     kaneoConfig = testClient.getKaneoConfig()
   })
 
-  afterAll(async () => {
-    await teardownE2EEnvironment()
+  afterAll(() => {
+    teardownE2EEnvironment()
   })
 
   beforeEach(async () => {
