@@ -2,13 +2,7 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import {
-  type KaneoConfig,
-  KaneoTaskSchema,
-  KaneoTaskWithProjectIdSchema,
-  KaneoTaskResponseSchema,
-  kaneoFetch,
-} from './client.js'
+import { type KaneoConfig, KaneoTaskWithProjectIdSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
@@ -34,7 +28,7 @@ export class TaskResource {
     status?: string
     dueDate?: string
     userId?: string
-  }): Promise<z.infer<typeof KaneoTaskSchema>> {
+  }): Promise<z.infer<typeof KaneoTaskResponseSchema>> {
     this.log.debug({ projectId: params.projectId, title: params.title }, 'Creating task')
 
     try {
@@ -51,7 +45,7 @@ export class TaskResource {
           userId: params.userId,
         },
         undefined,
-        KaneoTaskSchema,
+        KaneoTaskResponseSchema,
       )
       this.log.info({ taskId: task.id, number: task.number }, 'Task created')
       return task

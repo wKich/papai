@@ -40,6 +40,7 @@ describe('E2E: Task Lifecycle', () => {
 
     expect(task.title).toBe(title)
     expect(task.number).toBeGreaterThan(0)
+    expect(task.projectId).toBe(projectId)
 
     const retrieved = await getTask({
       config: kaneoConfig,
@@ -48,6 +49,7 @@ describe('E2E: Task Lifecycle', () => {
 
     expect(retrieved.id).toBe(task.id)
     expect(retrieved.title).toBe(title)
+    expect(retrieved.projectId).toBe(projectId)
   })
 
   test('updates a task', async () => {

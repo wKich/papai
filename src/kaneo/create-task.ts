@@ -2,12 +2,12 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskSchema } from './client.js'
+import { type KaneoConfig, KaneoTaskResponseSchema } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:create-task' })
 
-export type KaneoTask = z.infer<typeof KaneoTaskSchema>
+export type KaneoTask = z.infer<typeof KaneoTaskResponseSchema>
 
 export async function createTask({
   config,
