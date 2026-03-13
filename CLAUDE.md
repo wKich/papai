@@ -171,6 +171,87 @@ tests/
 
 Run tests with `bun test` or `bun run test`.
 
+## E2E Testing
+
+E2E tests run against a real Kaneo instance in Docker using the existing `docker-compose.yml` setup. They verify the actual integration between papai's tools and the Kaneo API.
+
+### Prerequisites
+
+Ensure your `.env` file has the required Kaneo environment variables:
+
+- `KANEO_POSTGRES_PASSWORD`
+- `KANEO_AUTH_SECRET`
+- `KANEO_CLIENT_URL`
+
+### Running E2E Tests
+
+```bash
+# Start the Kaneo test environment (uses existing docker-compose files)
+docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d
+
+# Wait for services to be ready
+sleep 15
+
+# Run e2e tests
+bun test tests/e2e
+
+# Clean up
+docker-compose -f docker-compose.yml -f docker-compose.test.yml down -v
+```
+
+Or use the convenience script:
+
+```bash
+npm run test:e2e:full
+```
+
+### E2E Test Structure
+
+- `tests/e2e/setup.ts` - Environment setup and provisioning
+- `tests/e2e/kaneo-test-client.ts` - Test utilities and cleanup
+- `tests/e2e/*.test.ts` - Actual e2e test files
+- Uses existing `docker-compose.yml` + `docker-compose.test.yml` (no new compose files needed)
+
+### Writing E2E Tests
+
+1. Import setup utilities from `./setup.js`
+2. Use `KaneoTestClient` for resource management
+3. Call `testClient.trackTask(taskId)` for automatic cleanup
+4. Clean up in `beforeEach` for test isolation
+
+Example:
+
+```typescript
+import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { setupE2EEnvironment } from './setup.js'
+import { createTestClient } from './kaneo-test-client.js'
+
+describe('My Feature', () => {
+  let testClient: KaneoTestClient
+  let kaneoConfig: KaneoConfig
+
+  beforeAll(async () => {
+    await setupE2EEnvironment()
+    testClient = createTestClient()
+    kaneoConfig = testClient.getKaneoConfig()
+  })
+
+  beforeEach(async () => {
+    await testClient.cleanup()
+  })
+
+  test('does something', async () => {
+    // Your test here
+  })
+})
+```
+
+### Environment Variables
+
+Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
+
+- `E2E_KANEO_URL` - URL of the Kaneo instance (defaults to `KANEO_INTERNAL_URL` or `http://localhost:11337`)
+
 ## Key Conventions
 
 - Runtime: **Bun** (not Node)
