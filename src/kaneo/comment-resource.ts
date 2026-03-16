@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, CreateCommentResponseSchema, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
 
 const UpdateActivitySchema = z.object({
   id: z.string(),
@@ -19,19 +19,21 @@ export class CommentResource {
     this.log.debug({ taskId, commentLength: comment.length }, 'Adding comment')
 
     try {
-      // Kaneo's createComment controller uses db.insert().values() without .returning(),
-      // so the response is a raw Drizzle result — not an activity object.
-      // The GET /activity/{taskId} endpoint is broken and doesn't return message field,
-      // so we cannot fetch the comment after creation to get its ID.
-      await kaneoFetch(this.config, 'POST', '/activity/comment', { taskId, comment }, undefined, z.unknown())
+      // Create comment and parse response per API documentation
+      const response = await kaneoFetch(
+        this.config,
+        'POST',
+        '/activity/comment',
+        { taskId, comment },
+        undefined,
+        CreateCommentResponseSchema,
+      )
 
-      // Return a placeholder since we can't get the actual ID from the broken API
-      // The comment was created successfully, we just can't retrieve it
-      this.log.info({ taskId, commentLength: comment.length }, 'Comment added (ID unavailable due to API limitation)')
+      this.log.info({ taskId, activityId: response.id }, 'Comment added')
       return {
-        id: 'pending',
-        comment: comment,
-        createdAt: new Date().toISOString(),
+        id: response.id,
+        comment: response.content ?? comment,
+        createdAt: response.createdAt,
       }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')

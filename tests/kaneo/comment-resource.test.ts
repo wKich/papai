@@ -23,9 +23,24 @@ describe('CommentResource', () => {
       let capturedBody: unknown
       setMockFetch((_url: string, options: RequestInit) => {
         capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        // Kaneo returns a raw Drizzle insert result, not an activity object
-        // API doesn't return comment ID, so we return 'pending'
-        return Promise.resolve(new Response(JSON.stringify({ rowCount: 1 }), { status: 200 }))
+        // API returns activity object with all fields per documentation
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-1',
+              taskId: 'task-1',
+              type: 'comment',
+              createdAt: '2026-03-01T00:00:00Z',
+              userId: 'user-1',
+              content: 'New comment',
+              externalUserName: null,
+              externalUserAvatar: null,
+              externalSource: null,
+              externalUrl: null,
+            }),
+            { status: 200 },
+          ),
+        )
       })
 
       const resource = new CommentResource(mockConfig)
@@ -35,38 +50,68 @@ describe('CommentResource', () => {
         taskId: 'task-1',
         comment: 'New comment',
       })
-      expect(result.id).toBe('pending')
+      expect(result.id).toBe('comment-1')
       expect(result.comment).toBe('New comment')
-      expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(result.createdAt).toBe('2026-03-01T00:00:00Z')
     })
 
     test('handles empty comment', async () => {
       setMockFetch(() => {
-        // API doesn't return comment ID, so we return 'pending'
-        return Promise.resolve(new Response(JSON.stringify({ rowCount: 1 }), { status: 200 }))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-2',
+              taskId: 'task-1',
+              type: 'comment',
+              createdAt: '2026-03-01T00:00:00Z',
+              userId: 'user-1',
+              content: '',
+              externalUserName: null,
+              externalUserAvatar: null,
+              externalSource: null,
+              externalUrl: null,
+            }),
+            { status: 200 },
+          ),
+        )
       })
 
       const resource = new CommentResource(mockConfig)
       const result = await resource.add('task-1', '')
 
       expect(result.comment).toBe('')
-      expect(result.id).toBe('pending')
-      expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(result.id).toBe('comment-2')
+      expect(result.createdAt).toBe('2026-03-01T00:00:00Z')
     })
 
     test('handles long comment', async () => {
       const longComment = 'a'.repeat(1000)
       setMockFetch(() => {
-        // API doesn't return comment ID, so we return 'pending'
-        return Promise.resolve(new Response(JSON.stringify({ rowCount: 1 }), { status: 200 }))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'comment-3',
+              taskId: 'task-1',
+              type: 'comment',
+              createdAt: '2026-03-01T00:00:00Z',
+              userId: 'user-1',
+              content: longComment,
+              externalUserName: null,
+              externalUserAvatar: null,
+              externalSource: null,
+              externalUrl: null,
+            }),
+            { status: 200 },
+          ),
+        )
       })
 
       const resource = new CommentResource(mockConfig)
       const result = await resource.add('task-1', longComment)
 
       expect(result.comment).toBe(longComment)
-      expect(result.id).toBe('pending')
-      expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(result.id).toBe('comment-3')
+      expect(result.createdAt).toBe('2026-03-01T00:00:00Z')
     })
 
     test('throws taskNotFound for 404', async () => {

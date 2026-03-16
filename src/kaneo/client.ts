@@ -77,6 +77,20 @@ export const KaneoActivityWithTypeSchema = z.object({
   createdAt: z.string().nullish(),
 })
 
+// Schema for POST /activity/comment response (per API docs)
+export const CreateCommentResponseSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  type: z.string(),
+  createdAt: z.string(),
+  userId: z.string().nullable(),
+  content: z.string().nullable(),
+  externalUserName: z.string().nullable(),
+  externalUserAvatar: z.string().nullable(),
+  externalSource: z.string().nullable(),
+  externalUrl: z.string().nullable(),
+})
+
 export const KaneoColumnSchema = z.object({
   id: z.string(),
   name: z.string(),

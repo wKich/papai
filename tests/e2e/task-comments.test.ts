@@ -77,9 +77,19 @@ describe('E2E: Task Comments', () => {
 
     const comment = await addComment({ config: kaneoConfig, taskId: task.id, comment: 'Original text' })
 
-    // Kaneo API doesn't return comment IDs on creation (GET doesn't include message field),
-    // so we can't test update with real ID
-    expect(comment.id).toBe('pending')
+    // API now returns real ID, so we can test update
+    expect(comment.id).not.toBe('pending')
+    expect(comment.id).toBeDefined()
+
+    // Update the comment
+    const { updateComment } = await import('../../src/kaneo/update-comment.js')
+    const updated = await updateComment({
+      config: kaneoConfig,
+      activityId: comment.id,
+      comment: 'Updated text',
+    })
+
+    expect(updated.comment).toBe('Updated text')
 
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
@@ -91,9 +101,18 @@ describe('E2E: Task Comments', () => {
 
     const comment = await addComment({ config: kaneoConfig, taskId: task.id, comment: 'To be deleted' })
 
-    // Kaneo API doesn't return comment IDs on creation (GET doesn't include message field),
-    // so we can't test remove with real ID
-    expect(comment.id).toBe('pending')
+    // API now returns real ID, so we can test remove
+    expect(comment.id).not.toBe('pending')
+    expect(comment.id).toBeDefined()
+
+    // Remove the comment
+    const { removeComment } = await import('../../src/kaneo/remove-comment.js')
+    const removed = await removeComment({
+      config: kaneoConfig,
+      activityId: comment.id,
+    })
+
+    expect(removed.success).toBe(true)
 
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
