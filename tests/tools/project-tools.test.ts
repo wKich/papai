@@ -1,10 +1,14 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 const mockWorkspaceId = 'ws-1'
