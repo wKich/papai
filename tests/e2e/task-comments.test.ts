@@ -62,10 +62,10 @@ describe('E2E: Task Comments', () => {
     // Comments should now be retrievable (fixed content field access)
     const comments = await getComments({ config: kaneoConfig, taskId: task.id })
 
-    // Both comments should be retrieved
+    // Both comments should be retrieved (in reverse chronological order - newest first)
     expect(comments.length).toBe(2)
-    expect(comments[0]?.comment).toBe('First comment')
-    expect(comments[1]?.comment).toBe('Second comment')
+    expect(comments[0]?.comment).toBe('Second comment')
+    expect(comments[1]?.comment).toBe('First comment')
 
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
