@@ -44,6 +44,7 @@ void mock.module('../src/db/index.js', () => ({
 import type { ModelMessage } from 'ai'
 
 import { loadHistory, saveHistory, clearHistory } from '../src/history.js'
+import { flushMicrotasks } from './test-helpers.js'
 
 describe('loadHistory', () => {
   beforeEach(() => {
@@ -103,18 +104,24 @@ describe('saveHistory', () => {
     runCalls.length = 0
   })
 
-  test('persists messages as JSON', () => {
+  test('persists messages as JSON', async () => {
     const messages: ModelMessage[] = [{ role: 'user', content: 'test' }]
     saveHistory(10, messages)
+
+    // Wait for background DB sync
+    await flushMicrotasks()
 
     const saved = mockStore.get(10)
     expect(saved).toBeDefined()
     expect(JSON.parse(saved!)).toEqual(messages)
   })
 
-  test('calls INSERT OR REPLACE', () => {
+  test('calls INSERT OR REPLACE', async () => {
     const empty: ModelMessage[] = []
     saveHistory(10, empty)
+
+    // Wait for background DB sync
+    await flushMicrotasks()
 
     const insertCall = runCalls.find((c) => c.sql.includes('INSERT OR REPLACE INTO conversation_history'))
     expect(insertCall).toBeDefined()
