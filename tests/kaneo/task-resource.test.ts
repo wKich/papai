@@ -4,6 +4,16 @@ import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/index.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
+void mock.module('../../src/kaneo/list-columns.js', () => ({
+  listColumns: mock(() =>
+    Promise.resolve([
+      { id: 'col-1', name: 'to-do', order: 1 },
+      { id: 'col-2', name: 'in-progress', order: 2 },
+      { id: 'col-3', name: 'done', order: 3 },
+    ]),
+  ),
+}))
+
 describe('TaskResource', () => {
   const mockConfig: KaneoConfig = {
     apiKey: 'test-key',
@@ -153,7 +163,7 @@ describe('TaskResource', () => {
         title: 'Test',
       })
 
-      expect(requestBody).toMatchObject({ status: 'todo' })
+      expect(requestBody).toMatchObject({ status: 'to-do' })
     })
 
     test('accepts priority low', async () => {
@@ -530,6 +540,8 @@ describe('TaskResource', () => {
                 description: 'New desc',
                 dueDate: null,
                 projectId: 'proj-1',
+                createdAt: '2026-03-01T00:00:00Z',
+                userId: null,
               }),
               { status: 200 },
             ),
@@ -544,12 +556,14 @@ describe('TaskResource', () => {
           description: 'New desc',
         })
 
-        // Should make 4 requests - one for each field
-        expect(requests.length).toBe(4)
-        expect(requests[0]?.url).toContain('/task/title/task-1')
-        expect(requests[1]?.url).toContain('/task/status/task-1')
-        expect(requests[2]?.url).toContain('/task/priority/task-1')
-        expect(requests[3]?.url).toContain('/task/description/task-1')
+        // Should make 5 requests - one GET for validation + one for each field
+        expect(requests.length).toBe(5)
+        // GET request for projectId lookup
+        expect(requests[0]?.url).toContain('/task/task-1')
+        expect(requests[1]?.url).toContain('/task/title/task-1')
+        expect(requests[2]?.url).toContain('/task/status/task-1')
+        expect(requests[3]?.url).toContain('/task/priority/task-1')
+        expect(requests[4]?.url).toContain('/task/description/task-1')
       })
 
       test('uses correct endpoints for each field type', async () => {
@@ -570,6 +584,8 @@ describe('TaskResource', () => {
                 description: 'New',
                 dueDate: null,
                 projectId: 'proj-1',
+                createdAt: '2026-03-01T00:00:00Z',
+                userId: null,
               }),
               { status: 200 },
             ),
@@ -582,11 +598,13 @@ describe('TaskResource', () => {
           status: 'done',
         })
 
-        expect(requests.length).toBe(2)
-        expect(requests[0]?.url).toContain('/task/title/task-1')
-        expect(requests[0]?.body).toMatchObject({ title: 'New' })
-        expect(requests[1]?.url).toContain('/task/status/task-1')
-        expect(requests[1]?.body).toMatchObject({ status: 'done' })
+        expect(requests.length).toBe(3)
+        // GET request for projectId lookup
+        expect(requests[0]?.url).toContain('/task/task-1')
+        expect(requests[1]?.url).toContain('/task/title/task-1')
+        expect(requests[1]?.body).toMatchObject({ title: 'New' })
+        expect(requests[2]?.url).toContain('/task/status/task-1')
+        expect(requests[2]?.body).toMatchObject({ status: 'done' })
       })
     })
   })
