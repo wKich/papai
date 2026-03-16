@@ -7,7 +7,7 @@ import { restoreFetch, setMockFetch, createMockTask, createMockColumn } from '..
 void mock.module('../../src/kaneo/list-columns.js', () => ({
   listColumns: mock(() =>
     Promise.resolve([
-      createMockColumn({ id: 'col-1', name: 'Todo' }),
+      createMockColumn({ id: 'col-1', name: 'To Do' }),
       createMockColumn({ id: 'col-2', name: 'In Progress' }),
       createMockColumn({ id: 'col-3', name: 'Done', isFinal: true }),
     ]),
@@ -153,7 +153,7 @@ describe('TaskResource', () => {
         title: 'Test',
       })
 
-      expect(requestBody).toMatchObject({ status: 'todo' })
+      expect(requestBody).toMatchObject({ status: 'to-do' })
     })
 
     test('accepts priority low', async () => {
