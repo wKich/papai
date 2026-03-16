@@ -43,9 +43,9 @@ export function setMockFetch(handler: (url: string, init: RequestInit) => Promis
 }
 
 // Module mock restoration helpers
-const originalModules = new Map<string, unknown>()
+const originalModules = new Map<string, Record<string, unknown>>()
 
-export function storeOriginalModule(path: string, original: unknown): void {
+export function storeOriginalModule(path: string, original: Record<string, unknown>): void {
   if (!originalModules.has(path)) {
     originalModules.set(path, original)
   }
@@ -54,16 +54,14 @@ export function storeOriginalModule(path: string, original: unknown): void {
 export function restoreModule(path: string): void {
   const original = originalModules.get(path)
   if (original !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    void mock.module(path, () => original as Record<string, unknown>)
+    void mock.module(path, () => original)
     originalModules.delete(path)
   }
 }
 
 export function restoreAllModules(): void {
   for (const [path, original] of originalModules) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    void mock.module(path, () => original as Record<string, unknown>)
+    void mock.module(path, () => original)
   }
   originalModules.clear()
 }
