@@ -5,6 +5,87 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-03-16
+
+### Added
+
+- Add e2e tests for labels and projects
+- **e2e:** Add automatic Docker lifecycle management for E2E tests
+- Add e2e tests for task comments
+- Add e2e tests for task relations
+- Add e2e tests for column management
+- Add e2e tests for task archiving
+- Add e2e tests for error handling
+- Add e2e tests for user workflows
+- Add e2e tests for label operations
+- Add e2e tests for project archive
+
+### Changed
+
+- Remove eslint-disable comments from setup.ts
+- Migrate to API-generated Zod schemas
+
+### Documentation
+
+- Add e2e testing documentation using existing docker-compose
+- Fix e2e documentation code example
+- Add Kaneo API bugs documentation
+- Mark test coverage plan as completed
+- Move completed test coverage plan to done directory
+- Update CLAUDE.md with comprehensive e2e test coverage
+- Research Kaneo column API endpoint patterns
+- Document E2E test isolation issue with mock.module
+
+### Fixed
+
+- Add missing afterAll hooks to e2e tests
+- E2e test verification and API fixes
+- Resolve all lint warnings and type errors
+- Remove eslint-disable comments and use Promise.all()
+- Update unit tests for new multi-field update behavior
+- **e2e:** Improve task-relations test quality
+- Column color default and test config pattern
+- Remove extra test from user workflows
+- Correct comment retrieval filtering
+- Update comment-resource test mocks to use correct schema
+- Add await to error handling test assertions
+- **tests:** Remove async/await from Bun expect().rejects.toThrow() calls
+- Use unique column names to avoid conflicts with defaults
+- Increase Docker startup timeout
+- Address remaining E2E test failures
+- Remove eslint-disable comments by fixing type annotations
+- Correct activity field from 'message' to 'content' per API docs
+- Parse actual API response for comment creation
+- Resolve E2E test failures by aligning schemas with actual API responses
+- Align types and test mocks with actual resource return types
+- **e2e:** Use docker compose (v2) instead of docker-compose (v1)
+- **ci:** Run unit tests only in the test job
+- **kaneo:** Use 'todo' as default status when creating a task
+- **tests:** Align task-resource mock columns with real Kaneo naming
+- **kaneo:** Restore 'to-do' default status; fix column name mocks
+
+### Miscellaneous
+
+- Update e2e tests to reference bugs doc
+- Add lint suppression check to pre-commit hook
+
+### Styling
+
+- Fix lint issues in test files
+
+### Testing
+
+- Complete comprehensive e2e test suite
+- Run E2E suite and capture results
+- Complete E2E test fixes - all criteria met
+- Add mock restoration and microtask flush helpers
+- Add mock restoration to project-tools.test.ts
+- Add mock restoration to all tool tests
+- Fix history persistence test for async caching
+- Fix config cache test by clearing user cache
+- Update task resource mocks to include to-do column
+- Update comment resource tests for pending ID behavior
+- Fix comment order in E2E test (newest first)
 ## [3.1.1] - 2026-03-13
 
 ### Added
