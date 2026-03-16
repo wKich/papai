@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { makeAddTaskRelationTool } from '../../src/tools/add-task-relation.js'
 import { makeRemoveTaskRelationTool } from '../../src/tools/remove-task-relation.js'
 import { makeUpdateTaskRelationTool } from '../../src/tools/update-task-relation.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 
@@ -30,7 +30,7 @@ describe('Task Relation Tools', () => {
   })
 
   afterEach(() => {
-    mock.restore()
+    restoreAllModules()
   })
 
   describe('makeAddTaskRelationTool', () => {

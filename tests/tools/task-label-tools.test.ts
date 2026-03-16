@@ -1,8 +1,12 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeAddTaskLabelTool } from '../../src/tools/add-task-label.js'
 import { makeRemoveTaskLabelTool } from '../../src/tools/remove-task-label.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 const mockWorkspaceId = 'ws-1'

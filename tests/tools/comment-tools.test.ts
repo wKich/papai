@@ -1,10 +1,14 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeAddCommentTool } from '../../src/tools/add-comment.js'
 import { makeGetCommentsTool } from '../../src/tools/get-comments.js'
 import { makeRemoveCommentTool } from '../../src/tools/remove-comment.js'
 import { makeUpdateCommentTool } from '../../src/tools/update-comment.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 

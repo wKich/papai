@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
@@ -6,7 +6,11 @@ import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 const mockWorkspaceId = 'ws-1'

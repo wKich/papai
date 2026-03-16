@@ -1,8 +1,12 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeDeleteColumnTool } from '../../src/tools/delete-column.js'
 import { makeListColumnsTool } from '../../src/tools/list-columns.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 

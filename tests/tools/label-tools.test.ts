@@ -1,10 +1,14 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeCreateLabelTool } from '../../src/tools/create-label.js'
 import { makeListLabelsTool } from '../../src/tools/list-labels.js'
 import { makeRemoveLabelTool } from '../../src/tools/remove-label.js'
 import { makeUpdateLabelTool } from '../../src/tools/update-label.js'
-import { getToolExecutor } from '../test-helpers.js'
+import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+
+afterEach(() => {
+  restoreAllModules()
+})
 
 const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
 const mockWorkspaceId = 'ws-1'
