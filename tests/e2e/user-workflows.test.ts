@@ -65,8 +65,6 @@ describe('E2E: User Workflows', () => {
     testClient.trackTask(task.id)
 
     await updateTask({ config: kaneoConfig, taskId: task.id, title: 'Updated task title', status: 'in-progress' })
-    // Note: Comment API is broken - GET /activity/{taskId} doesn't return message field
-    // Skipping addComment test due to API limitation
     await archiveTask({ config: kaneoConfig, taskId: task.id, workspaceId: testClient.getWorkspaceId() })
 
     const finalTask = await getTask({ config: kaneoConfig, taskId: task.id })
@@ -126,8 +124,6 @@ describe('E2E: User Workflows', () => {
     testClient.trackTask(task.id)
 
     await updateTask({ config: kaneoConfig, taskId: task.id, description: 'Updated with technical notes' })
-    // Note: Comment API is broken - GET /activity/{taskId} doesn't return message field
-    // Skipping addComment test due to API limitation
     await updateTask({ config: kaneoConfig, taskId: task.id, status: 'in-review' })
 
     const finalTask = await getTask({ config: kaneoConfig, taskId: task.id })

@@ -44,8 +44,7 @@ describe('E2E: Task Comments', () => {
 
     const comment = await addComment({ config: kaneoConfig, taskId: task.id, comment: 'This is a test comment' })
 
-    // Kaneo API GET /activity/{taskId} doesn't return message field,
-    // so we can only verify the comment was sent successfully
+    // Comment added successfully (returns 'pending' ID since API doesn't return it)
     expect(comment.comment).toBe('This is a test comment')
     expect(comment.createdAt).toBeDefined()
 
@@ -60,12 +59,13 @@ describe('E2E: Task Comments', () => {
     await addComment({ config: kaneoConfig, taskId: task.id, comment: 'First comment' })
     await addComment({ config: kaneoConfig, taskId: task.id, comment: 'Second comment' })
 
-    // Kaneo API GET /activity/{taskId} is broken and doesn't return message field,
-    // so getComments will always return empty array
+    // Comments should now be retrievable (fixed content field access)
     const comments = await getComments({ config: kaneoConfig, taskId: task.id })
 
-    // API limitation: comments exist but can't be retrieved
-    expect(comments.length).toBe(0)
+    // Both comments should be retrieved
+    expect(comments.length).toBe(2)
+    expect(comments[0]?.comment).toBe('First comment')
+    expect(comments[1]?.comment).toBe('Second comment')
 
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })

@@ -1,0 +1,139 @@
+/**
+ * Global E2E test setup - shared across all test files
+ *
+ * This module ensures Docker containers start only once for all E2E tests,
+ * eliminating the overhead of restarting containers for each test file.
+ */
+
+import { provisionKaneoUser } from '../../src/kaneo/provision.js'
+import { logger } from '../../src/logger.js'
+import { startKaneoServer, stopKaneoServer } from './docker-lifecycle.js'
+
+const log = logger.child({ scope: 'e2e:global-setup' })
+
+export type E2EConfig = {
+  baseUrl: string
+  apiKey: string
+  workspaceId: string
+}
+
+let e2eConfig: E2EConfig | undefined
+let setupPromise: Promise<E2EConfig> | undefined
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function waitForServer(baseUrl: string, maxAttempts = 60): Promise<void> {
+  const healthUrl = `${baseUrl}/api/health`
+  log.info({ healthUrl }, 'Waiting for Kaneo server to be healthy')
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(healthUrl, { method: 'GET' })
+      if (response.ok) {
+        log.info({ attempts: attempt }, 'Kaneo server is healthy')
+        return
+      }
+    } catch {
+      // Server not ready yet
+    }
+
+    if (attempt < maxAttempts) {
+      log.debug({ attempt, maxAttempts }, 'Server not ready, waiting...')
+      await delay(1000)
+    }
+  }
+
+  throw new Error(`Kaneo server failed to become healthy after ${maxAttempts} attempts`)
+}
+
+async function performSetup(): Promise<E2EConfig> {
+  const baseUrl = process.env['E2E_KANEO_URL'] ?? process.env['KANEO_INTERNAL_URL'] ?? 'http://localhost:11337'
+  const publicUrl = process.env['KANEO_CLIENT_URL'] ?? baseUrl
+
+  log.info({ baseUrl, publicUrl }, 'Starting global E2E setup')
+
+  try {
+    await startKaneoServer()
+    await waitForServer(baseUrl)
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to start Kaneo server')
+    throw error
+  }
+
+  try {
+    // Use unique identifiers to avoid conflicts from previous test runs
+    const uniqueSuffix = Date.now()
+    const uniqueUsername = `e2e-test-${uniqueSuffix}`
+    const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000)
+    const result = await provisionKaneoUser(baseUrl, publicUrl, uniqueTelegramId, uniqueUsername)
+
+    e2eConfig = {
+      baseUrl,
+      apiKey: result.kaneoKey,
+      workspaceId: result.workspaceId,
+    }
+
+    log.info({ workspaceId: result.workspaceId }, 'Global E2E setup complete')
+    return e2eConfig
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log.error({ error: message, baseUrl }, 'Failed to provision Kaneo user')
+    throw error
+  }
+}
+
+/**
+ * Get or initialize the global E2E configuration.
+ * This ensures setup runs only once across all test files.
+ */
+export function getE2EConfig(): Promise<E2EConfig> {
+  if (e2eConfig !== undefined) {
+    return Promise.resolve(e2eConfig)
+  }
+
+  setupPromise ??= performSetup()
+
+  return setupPromise
+}
+
+/**
+ * Get the current E2E configuration (synchronous, throws if not initialized)
+ */
+export function getE2EConfigSync(): E2EConfig {
+  if (e2eConfig === undefined) {
+    throw new Error('E2E environment not initialized. Call getE2EConfig() first.')
+  }
+  return e2eConfig
+}
+
+/**
+ * Clean up global E2E resources. Should be called once after all tests.
+ */
+export async function cleanupE2E(): Promise<void> {
+  log.info('Starting global E2E cleanup')
+  e2eConfig = undefined
+  setupPromise = undefined
+  await stopKaneoServer()
+  log.info('Global E2E cleanup complete')
+}
+
+// Auto-cleanup on process exit
+process.on('exit', () => {
+  if (e2eConfig !== undefined) {
+    log.warn('Process exiting with E2E environment still active')
+  }
+})
+
+process.on('SIGINT', () => {
+  log.info('Received SIGINT, cleaning up...')
+  void cleanupE2E().then(() => process.exit(0))
+})
+
+process.on('SIGTERM', () => {
+  log.info('Received SIGTERM, cleaning up...')
+  void cleanupE2E().then(() => process.exit(0))
+})

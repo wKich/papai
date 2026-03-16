@@ -90,19 +90,19 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'comment',
-                message: 'Comment 1',
+                content: 'Comment 1',
                 createdAt: '2026-03-01T00:00:00Z',
               },
               {
                 id: 'act-2',
                 type: 'status_change',
-                message: 'Status changed',
+                content: 'Status changed',
                 createdAt: '2026-03-01T00:00:00Z',
               },
               {
                 id: 'act-3',
                 type: 'comment',
-                message: 'Comment 2',
+                content: 'Comment 2',
                 createdAt: '2026-03-02T00:00:00Z',
               },
             ]),
@@ -119,7 +119,7 @@ describe('CommentResource', () => {
       expect(result[1]?.comment).toBe('Comment 2')
     })
 
-    test('excludes activities with null message', async () => {
+    test('excludes activities with null content', async () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
@@ -127,10 +127,10 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'comment',
-                message: 'Valid comment',
+                content: 'Valid comment',
                 createdAt: '2026-03-01T00:00:00Z',
               },
-              { id: 'act-2', type: 'comment', message: null, createdAt: '2026-03-01T00:00:00Z' },
+              { id: 'act-2', type: 'comment', content: null, createdAt: '2026-03-01T00:00:00Z' },
             ]),
             { status: 200 },
           ),
@@ -152,7 +152,7 @@ describe('CommentResource', () => {
               {
                 id: 'act-1',
                 type: 'status_change',
-                message: 'Changed',
+                content: 'Changed',
                 createdAt: '2026-03-01T00:00:00Z',
               },
             ]),
@@ -171,7 +171,7 @@ describe('CommentResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify([{ id: 'act-1', type: 'comment', message: 'Test', createdAt: '2026-03-01T12:00:00Z' }]),
+            JSON.stringify([{ id: 'act-1', type: 'comment', content: 'Test', createdAt: '2026-03-01T12:00:00Z' }]),
             { status: 200 },
           ),
         ),

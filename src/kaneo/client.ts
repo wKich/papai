@@ -73,7 +73,7 @@ export const KaneoActivitySchema = z.object({
 export const KaneoActivityWithTypeSchema = z.object({
   id: z.string(),
   type: z.string(),
-  message: z.string().nullish(),
+  content: z.string().nullish(),
   createdAt: z.string().nullish(),
 })
 

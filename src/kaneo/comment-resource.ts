@@ -52,22 +52,15 @@ export class CommentResource {
         z.array(KaneoActivityWithTypeSchema),
       )
 
-      // NOTE: Kaneo API GET /activity/{taskId} is broken - it returns activities
-      // without the 'message' field, so we cannot retrieve comment text.
-      // See: https://github.com/usekaneo/kaneo/issues (if reported)
+      // Filter and extract comments from activities
       const comments = activities.flatMap((a) => {
         // Kaneo API may return comments as 'comment' or 'user_activity' type
         if (a.type !== 'comment' && a.type !== 'user_activity') {
           return []
         }
-        // Check for comment text in various possible fields
-        const raw = a as Record<string, unknown>
-        const commentValue = a.message ?? raw['comment'] ?? raw['content'] ?? raw['text']
+        // Comment text is in 'content' field per API documentation
+        const commentValue = a.content
         if (commentValue === null || commentValue === undefined) {
-          return []
-        }
-        // API may return various types due to broken endpoint - only accept strings
-        if (typeof commentValue !== 'string') {
           return []
         }
         return [{ id: a.id, comment: commentValue, createdAt: a.createdAt ?? '' }]
