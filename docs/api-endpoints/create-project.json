@@ -1,0 +1,72 @@
+{
+  "endpoint": "createProject",
+  "description": "Create a new project in a workspace",
+  "httpMethod": "POST",
+  "path": "/project",
+  "parameters": [],
+  "requestBody": {
+    "contentType": "application/json",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        }
+      },
+      "required": ["name", "workspaceId", "icon", "slug"]
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "contentType": "application/json",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "nullable": true
+        },
+        "createdAt": {},
+        "isPublic": {
+          "type": "boolean",
+          "nullable": true
+        }
+      },
+      "required": ["id", "workspaceId", "slug", "icon", "name", "description", "createdAt", "isPublic"]
+    }
+  },
+  "enums": {},
+  "constants": {},
+  "security": {
+    "bearerAuth": {
+      "type": "http",
+      "scheme": "bearer",
+      "description": "Bearer token authentication"
+    }
+  }
+}

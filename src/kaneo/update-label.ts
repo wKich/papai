@@ -1,14 +1,13 @@
-import { z } from 'zod'
-
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import type { UpdateLabelResponse } from './schemas/update-label.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 
-export type KaneoLabel = z.infer<typeof KaneoLabelSchema>
+export type KaneoLabel = UpdateLabelResponse
 
 export async function updateLabel({
   config,

@@ -1,0 +1,299 @@
+{
+  "endpoints": [
+    {
+      "name": "createActivity",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/activity/createActivity.md",
+      "category": "activity"
+    },
+    {
+      "name": "createComment",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/activity/createComment.md",
+      "category": "activity"
+    },
+    {
+      "name": "deleteComment",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/activity/deleteComment.md",
+      "category": "activity"
+    },
+    {
+      "name": "getActivities",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/activity/getActivities.md",
+      "category": "activity"
+    },
+    {
+      "name": "updateComment",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/activity/updateComment.md",
+      "category": "activity"
+    },
+    {
+      "name": "createColumn",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/columns/createColumn.md",
+      "category": "columns"
+    },
+    {
+      "name": "deleteColumn",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/columns/deleteColumn.md",
+      "category": "columns"
+    },
+    {
+      "name": "getColumns",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/columns/getColumns.md",
+      "category": "columns"
+    },
+    {
+      "name": "reorderColumns",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/columns/reorderColumns.md",
+      "category": "columns"
+    },
+    {
+      "name": "updateColumn",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/columns/updateColumn.md",
+      "category": "columns"
+    },
+    {
+      "name": "getConfig",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/config/getConfig.md",
+      "category": "config"
+    },
+    {
+      "name": "getExternalLinksByTask",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/external-links/getExternalLinksByTask.md",
+      "category": "external-links"
+    },
+    {
+      "name": "createGitHubIntegration",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/createGitHubIntegration.md",
+      "category": "github"
+    },
+    {
+      "name": "deleteGitHubIntegration",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/deleteGitHubIntegration.md",
+      "category": "github"
+    },
+    {
+      "name": "getGitHubAppInfo",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/getGitHubAppInfo.md",
+      "category": "github"
+    },
+    {
+      "name": "getGitHubIntegration",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/getGitHubIntegration.md",
+      "category": "github"
+    },
+    {
+      "name": "importGitHubIssues",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/importGitHubIssues.md",
+      "category": "github"
+    },
+    {
+      "name": "listGitHubRepositories",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/listGitHubRepositories.md",
+      "category": "github"
+    },
+    {
+      "name": "updateGitHubIntegration",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/updateGitHubIntegration.md",
+      "category": "github"
+    },
+    {
+      "name": "verifyGitHubInstallation",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/github/verifyGitHubInstallation.md",
+      "category": "github"
+    },
+    {
+      "name": "getInvitationDetails",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/invitations/getInvitationDetails.md",
+      "category": "invitations"
+    },
+    {
+      "name": "getUserPendingInvitations",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/invitations/getUserPendingInvitations.md",
+      "category": "invitations"
+    },
+    {
+      "name": "createLabel",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/createLabel.md",
+      "category": "labels"
+    },
+    {
+      "name": "deleteLabel",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/deleteLabel.md",
+      "category": "labels"
+    },
+    {
+      "name": "getLabel",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/getLabel.md",
+      "category": "labels"
+    },
+    {
+      "name": "getTaskLabels",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/getTaskLabels.md",
+      "category": "labels"
+    },
+    {
+      "name": "getWorkspaceLabels",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/getWorkspaceLabels.md",
+      "category": "labels"
+    },
+    {
+      "name": "updateLabel",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/labels/updateLabel.md",
+      "category": "labels"
+    },
+    {
+      "name": "clearAllNotifications",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/notifications/clearAllNotifications.md",
+      "category": "notifications"
+    },
+    {
+      "name": "createNotification",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/notifications/createNotification.md",
+      "category": "notifications"
+    },
+    {
+      "name": "listNotifications",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/notifications/listNotifications.md",
+      "category": "notifications"
+    },
+    {
+      "name": "markAllNotificationsAsRead",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/notifications/markAllNotificationsAsRead.md",
+      "category": "notifications"
+    },
+    {
+      "name": "markNotificationAsRead",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/notifications/markNotificationAsRead.md",
+      "category": "notifications"
+    },
+    {
+      "name": "createProject",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/projects/createProject.md",
+      "category": "projects"
+    },
+    {
+      "name": "deleteProject",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/projects/deleteProject.md",
+      "category": "projects"
+    },
+    {
+      "name": "getProject",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/projects/getProject.md",
+      "category": "projects"
+    },
+    {
+      "name": "listProjects",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/projects/listProjects.md",
+      "category": "projects"
+    },
+    {
+      "name": "updateProject",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/projects/updateProject.md",
+      "category": "projects"
+    },
+    {
+      "name": "globalSearch",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/search/globalSearch.md",
+      "category": "search"
+    },
+    {
+      "name": "createTask",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/createTask.md",
+      "category": "tasks"
+    },
+    {
+      "name": "deleteTask",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/deleteTask.md",
+      "category": "tasks"
+    },
+    {
+      "name": "exportTasks",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/exportTasks.md",
+      "category": "tasks"
+    },
+    {
+      "name": "getTask",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/getTask.md",
+      "category": "tasks"
+    },
+    {
+      "name": "importTasks",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/importTasks.md",
+      "category": "tasks"
+    },
+    {
+      "name": "listTasks",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/listTasks.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTask",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTask.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskAssignee",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskAssignee.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskDescription",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskDescription.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskDueDate",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskDueDate.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskPriority",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskPriority.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskStatus",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskStatus.md",
+      "category": "tasks"
+    },
+    {
+      "name": "updateTaskTitle",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/tasks/updateTaskTitle.md",
+      "category": "tasks"
+    },
+    {
+      "name": "createTimeEntry",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/time-entries/createTimeEntry.md",
+      "category": "time-entries"
+    },
+    {
+      "name": "getTaskTimeEntries",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/time-entries/getTaskTimeEntries.md",
+      "category": "time-entries"
+    },
+    {
+      "name": "getTimeEntry",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/time-entries/getTimeEntry.md",
+      "category": "time-entries"
+    },
+    {
+      "name": "updateTimeEntry",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/time-entries/updateTimeEntry.md",
+      "category": "time-entries"
+    },
+    {
+      "name": "deleteWorkflowRule",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/workflow-rules/deleteWorkflowRule.md",
+      "category": "workflow-rules"
+    },
+    {
+      "name": "getWorkflowRules",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/workflow-rules/getWorkflowRules.md",
+      "category": "workflow-rules"
+    },
+    {
+      "name": "upsertWorkflowRule",
+      "url": "https://kaneo.app/docs/api-reference/endpoints/workflow-rules/upsertWorkflowRule.md",
+      "category": "workflow-rules"
+    }
+  ]
+}

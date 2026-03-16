@@ -1,0 +1,51 @@
+{
+  "name": "listNotifications",
+  "description": "Get all notifications for the current user",
+  "method": "GET",
+  "path": "/notification",
+  "parameters": [],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "userId", "title", "content", "type", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "title": { "type": "string" },
+          "content": { "type": "string", "nullable": true },
+          "type": {
+            "enum": [
+              "info",
+              "task_created",
+              "workspace_created",
+              "task_status_changed",
+              "task_assignee_changed",
+              "time_entry_created"
+            ]
+          },
+          "isRead": { "type": "boolean" },
+          "resourceId": { "type": "string" },
+          "resourceType": {
+            "enum": ["task", "workspace"]
+          },
+          "createdAt": {}
+        }
+      }
+    }
+  },
+  "enums": {
+    "NotificationType": [
+      "info",
+      "task_created",
+      "workspace_created",
+      "task_status_changed",
+      "task_assignee_changed",
+      "time_entry_created"
+    ],
+    "ResourceType": ["task", "workspace"]
+  },
+  "tags": ["Notifications"]
+}

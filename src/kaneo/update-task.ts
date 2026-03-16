@@ -1,13 +1,10 @@
-import { z } from 'zod'
-
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskWithProjectIdSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import type { CreateTaskResponse } from './schemas/createTask.js'
 
 const log = logger.child({ scope: 'kaneo:update-task' })
-
-export type KaneoTaskWithProjectId = z.infer<typeof KaneoTaskWithProjectIdSchema>
 
 type UpdateParams = {
   title?: string
@@ -23,7 +20,7 @@ export async function updateTask({
   config,
   taskId,
   ...params
-}: UpdateParams & { config: KaneoConfig; taskId: string }): Promise<KaneoTaskWithProjectId> {
+}: UpdateParams & { config: KaneoConfig; taskId: string }): Promise<CreateTaskResponse> {
   log.debug(
     { taskId, status: params.status, priority: params.priority, projectId: params.projectId },
     'updateTask called',

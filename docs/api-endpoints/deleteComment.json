@@ -1,0 +1,70 @@
+{
+  "endpoint": "deleteComment",
+  "method": "DELETE",
+  "path": "/activity/comment",
+  "description": "Delete a comment",
+  "requestBody": {
+    "type": "object",
+    "properties": {
+      "activityId": { "type": "string" }
+    },
+    "required": ["activityId"]
+  },
+  "responseBody": {
+    "type": "object",
+    "properties": {
+      "id": { "type": "string" },
+      "taskId": { "type": "string" },
+      "type": {
+        "type": "string",
+        "enum": [
+          "comment",
+          "task",
+          "status_changed",
+          "priority_changed",
+          "unassigned",
+          "assignee_changed",
+          "due_date_changed",
+          "title_changed",
+          "description_changed",
+          "create"
+        ]
+      },
+      "createdAt": { "type": "object" },
+      "userId": { "type": "string", "nullable": true },
+      "content": { "type": "string", "nullable": true },
+      "externalUserName": { "type": "string", "nullable": true },
+      "externalUserAvatar": { "type": "string", "nullable": true },
+      "externalSource": { "type": "string", "nullable": true },
+      "externalUrl": { "type": "string", "nullable": true }
+    },
+    "required": [
+      "id",
+      "taskId",
+      "type",
+      "createdAt",
+      "userId",
+      "content",
+      "externalUserName",
+      "externalUserAvatar",
+      "externalSource",
+      "externalUrl"
+    ]
+  },
+  "pathParameters": [],
+  "queryParameters": [],
+  "enums": {
+    "ActivityType": [
+      "comment",
+      "task",
+      "status_changed",
+      "priority_changed",
+      "unassigned",
+      "assignee_changed",
+      "due_date_changed",
+      "title_changed",
+      "description_changed",
+      "create"
+    ]
+  }
+}

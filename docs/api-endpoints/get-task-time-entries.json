@@ -1,0 +1,36 @@
+{
+  "name": "getTaskTimeEntries",
+  "description": "Get all time entries for a specific task",
+  "method": "GET",
+  "path": "/time-entry/task/{taskId}",
+  "parameters": [
+    {
+      "name": "taskId",
+      "in": "path",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "taskId", "userId", "description", "startTime", "duration", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "taskId": { "type": "string" },
+          "userId": { "type": "string", "nullable": true },
+          "description": { "type": "string", "nullable": true },
+          "startTime": {},
+          "endTime": {},
+          "duration": { "type": "number", "nullable": true },
+          "createdAt": {}
+        }
+      }
+    }
+  },
+  "enums": {},
+  "tags": ["Time Entries"]
+}

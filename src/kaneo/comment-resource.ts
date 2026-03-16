@@ -2,13 +2,10 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, CreateCommentResponseSchema, KaneoActivityWithTypeSchema, kaneoFetch } from './client.js'
-
-const UpdateActivitySchema = z.object({
-  id: z.string(),
-  comment: z.string(),
-  createdAt: z.string(),
-})
+import { type KaneoConfig, kaneoFetch } from './client.js'
+import { CreateCommentResponseSchema } from './schemas/createComment.js'
+import { ActivityItemSchema } from './schemas/getActivities.js'
+import { UpdateCommentResponseSchema } from './schemas/updateComment.js'
 
 export class CommentResource {
   private log = logger.child({ scope: 'kaneo:comment-resource' })
@@ -33,7 +30,7 @@ export class CommentResource {
       return {
         id: response.id,
         comment: response.content ?? comment,
-        createdAt: response.createdAt,
+        createdAt: typeof response.createdAt === 'string' ? response.createdAt : JSON.stringify(response.createdAt),
       }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')
@@ -51,13 +48,13 @@ export class CommentResource {
         `/activity/${taskId}`,
         undefined,
         undefined,
-        z.array(KaneoActivityWithTypeSchema),
+        z.array(ActivityItemSchema),
       )
 
       // Filter and extract comments from activities
       const comments = activities.flatMap((a) => {
-        // Kaneo API may return comments as 'comment' or 'user_activity' type
-        if (a.type !== 'comment' && a.type !== 'user_activity') {
+        // Kaneo API may return comments as 'comment' type
+        if (a.type !== 'comment') {
           return []
         }
         // Comment text is in 'content' field per API documentation
@@ -65,7 +62,13 @@ export class CommentResource {
         if (commentValue === null || commentValue === undefined) {
           return []
         }
-        return [{ id: a.id, comment: commentValue, createdAt: a.createdAt ?? '' }]
+        return [
+          {
+            id: a.id,
+            comment: commentValue,
+            createdAt: typeof a.createdAt === 'string' ? a.createdAt : JSON.stringify(a.createdAt),
+          },
+        ]
       })
       this.log.info({ taskId, count: comments.length, rawCount: activities.length }, 'Comments listed')
       return comments
@@ -85,10 +88,14 @@ export class CommentResource {
         '/activity/comment',
         { activityId, comment },
         undefined,
-        UpdateActivitySchema,
+        UpdateCommentResponseSchema,
       )
       this.log.info({ activityId }, 'Comment updated')
-      return { id: activity.id, comment: activity.comment, createdAt: activity.createdAt }
+      return {
+        id: activity.id,
+        comment: activity.content ?? comment,
+        createdAt: typeof activity.createdAt === 'string' ? activity.createdAt : JSON.stringify(activity.createdAt),
+      }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update comment')
       throw classifyKaneoError(error)

@@ -1,0 +1,54 @@
+{
+  "name": "updateGitHubIntegration",
+  "description": "Update GitHub integration settings",
+  "method": "PATCH",
+  "path": "/github-integration/project/{projectId}",
+  "parameters": [
+    {
+      "name": "projectId",
+      "in": "path",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "requestBody": {
+    "type": "object",
+    "properties": {
+      "isActive": { "type": "boolean" }
+    }
+  },
+  "responses": {
+    "200": {
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "repositoryOwner",
+        "repositoryName",
+        "installationId",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "repositoryOwner": { "type": "string" },
+        "repositoryName": { "type": "string" },
+        "installationId": { "type": "number", "nullable": true },
+        "isActive": { "type": "boolean", "nullable": true },
+        "createdAt": {},
+        "updatedAt": {}
+      }
+    },
+    "404": {
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "enums": {},
+  "tags": ["GitHub"]
+}

@@ -2,7 +2,9 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoProjectSchema, KaneoProjectFullSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
+import { GetProjectResponseSchema } from './schemas/get-project.js'
+import { UpdateProjectResponseSchema } from './schemas/update-project.js'
 
 function generateSlug(name: string): string {
   return name
@@ -10,6 +12,10 @@ function generateSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 }
+
+// Use schemas from schema directory
+const KaneoProjectSchema = UpdateProjectResponseSchema
+const KaneoProjectFullSchema = GetProjectResponseSchema
 
 export class ProjectResource {
   private log = logger.child({ scope: 'kaneo:project-resource' })

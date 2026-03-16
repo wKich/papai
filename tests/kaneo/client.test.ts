@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { kaneoFetch, KaneoTaskSchema, EmptyResponseSchema } from '../../src/kaneo/client.js'
+import { kaneoFetch, KaneoTaskResponseSchema, EmptyResponseSchema } from '../../src/kaneo/client.js'
 import { KaneoApiError, KaneoValidationError } from '../../src/kaneo/errors.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockTask } from '../test-helpers.js'
 
 describe('kaneoFetch', () => {
   const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
@@ -22,13 +22,13 @@ describe('kaneoFetch', () => {
     setMockFetch((_url, options) => {
       capturedOptions = options
       return Promise.resolve(
-        new Response(JSON.stringify({ id: '1', title: 'Test', number: 1, status: 'todo', priority: 'medium' }), {
+        new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), {
           status: 200,
         }),
       )
     })
 
-    await kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskSchema)
+    await kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
 
     expect(capturedOptions).toBeDefined()
     expect(capturedOptions?.headers).toBeDefined()
@@ -37,7 +37,7 @@ describe('kaneoFetch', () => {
   test('throws KaneoApiError on non-ok response', async () => {
     setMockFetch(() => Promise.resolve(new Response('Not found', { status: 404 })))
 
-    const promise = kaneoFetch(mockConfig, 'GET', '/tasks/1', undefined, {}, KaneoTaskSchema)
+    const promise = kaneoFetch(mockConfig, 'GET', '/tasks/1', undefined, {}, KaneoTaskResponseSchema)
     expect(promise).rejects.toBeInstanceOf(KaneoApiError)
     await promise.catch(() => {})
   })
@@ -45,7 +45,7 @@ describe('kaneoFetch', () => {
   test('throws KaneoValidationError on schema mismatch', async () => {
     setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ invalid: 'data' }), { status: 200 })))
 
-    const promise = kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskSchema)
+    const promise = kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
     expect(promise).rejects.toBeInstanceOf(KaneoValidationError)
     await promise.catch(() => {})
   })
@@ -54,7 +54,7 @@ describe('kaneoFetch', () => {
     setMockFetch(() => Promise.resolve(new Response('Plain text error', { status: 500 })))
 
     try {
-      await kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskSchema)
+      await kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
     } catch (error) {
       expect(error).toBeInstanceOf(KaneoApiError)
       if (error instanceof KaneoApiError) {
@@ -77,7 +77,7 @@ describe('kaneoFetch', () => {
       '/tasks',
       undefined,
       { search: 'hello world', special: 'a&b=c' },
-      z.array(KaneoTaskSchema),
+      z.array(KaneoTaskResponseSchema),
     )
 
     expect(capturedUrl).toContain('search=hello+world')
@@ -96,13 +96,13 @@ describe('kaneoFetch', () => {
     setMockFetch((_url, options) => {
       capturedBody = options.body
       return Promise.resolve(
-        new Response(JSON.stringify({ id: '1', title: 'New Task', number: 1, status: 'todo', priority: 'medium' }), {
+        new Response(JSON.stringify(createMockTask({ id: '1', title: 'New Task', number: 1 })), {
           status: 200,
         }),
       )
     })
 
-    await kaneoFetch(mockConfig, 'POST', '/tasks', { title: 'New Task' }, {}, KaneoTaskSchema)
+    await kaneoFetch(mockConfig, 'POST', '/tasks', { title: 'New Task' }, {}, KaneoTaskResponseSchema)
 
     expect(capturedBody).toBe(JSON.stringify({ title: 'New Task' }))
   })
@@ -129,13 +129,13 @@ describe('kaneoFetch', () => {
     setMockFetch((_url, options) => {
       capturedOptions = options
       return Promise.resolve(
-        new Response(JSON.stringify({ id: '1', title: 'Test', number: 1, status: 'todo', priority: 'medium' }), {
+        new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), {
           status: 200,
         }),
       )
     })
 
-    await kaneoFetch(configWithCookie, 'GET', '/tasks', undefined, {}, KaneoTaskSchema)
+    await kaneoFetch(configWithCookie, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
 
     expect(capturedOptions).toBeDefined()
     expect(capturedOptions?.headers).toBeDefined()
@@ -145,7 +145,7 @@ describe('kaneoFetch', () => {
     setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })))
 
     try {
-      await kaneoFetch(mockConfig, 'GET', '/tasks/1', undefined, {}, KaneoTaskSchema)
+      await kaneoFetch(mockConfig, 'GET', '/tasks/1', undefined, {}, KaneoTaskResponseSchema)
     } catch (error) {
       expect(error).toBeInstanceOf(KaneoApiError)
       if (error instanceof KaneoApiError) {

@@ -1,10 +1,14 @@
 import { z } from 'zod'
 
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskWithProjectIdSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
+import { CreateTaskResponseSchema } from './schemas/createTask.js'
 import { denormalizeStatus } from './task-status.js'
 
-const FullTaskSchema = KaneoTaskWithProjectIdSchema.extend({
+// Local schema for task with projectId (for update responses)
+const TaskWithProjectIdSchema = CreateTaskResponseSchema
+
+const FullTaskSchema = TaskWithProjectIdSchema.extend({
   position: z.number(),
 })
 
@@ -26,7 +30,7 @@ export function singleFieldUpdate(
   taskId: string,
   field: string,
   value: unknown,
-): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
+): Promise<z.infer<typeof TaskWithProjectIdSchema>> {
   const endpoints: Record<string, { path: string; key: string }> = {
     status: { path: '/task/status/', key: 'status' },
     priority: { path: '/task/priority/', key: 'priority' },
@@ -43,7 +47,7 @@ export function singleFieldUpdate(
     `${endpoint.path}${taskId}`,
     { [endpoint.key]: value },
     undefined,
-    KaneoTaskWithProjectIdSchema,
+    TaskWithProjectIdSchema,
   )
 }
 
@@ -54,14 +58,14 @@ export async function performUpdate(
   config: KaneoConfig,
   taskId: string,
   params: TaskUpdateParams,
-): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
+): Promise<z.infer<typeof TaskWithProjectIdSchema>> {
   // Use single-field endpoints for each field being updated
   // (The full /task/:id endpoint doesn't actually update fields)
   const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
 
   // Apply updates sequentially using reduce to chain promises
   // This avoids await-in-loop while maintaining sequential execution
-  const result = await setFields.reduce<Promise<z.infer<typeof KaneoTaskWithProjectIdSchema> | undefined>>(
+  const result = await setFields.reduce<Promise<z.infer<typeof TaskWithProjectIdSchema> | undefined>>(
     async (previousPromise, [field, value]) => {
       await previousPromise
       return singleFieldUpdate(config, taskId, field, value)

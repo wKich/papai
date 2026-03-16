@@ -1,21 +1,70 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from '../kaneo/client.js'
+import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
 import {
   buildDescriptionWithRelations,
   parseRelationsFromDescription,
   type TaskRelation,
 } from '../kaneo/frontmatter.js'
-import {
-  CreateCommentBodySchema,
-  CreateLabelBodySchema,
-  UpdateTaskDescriptionBodySchema,
-} from '../kaneo/request-schemas.js'
+// Schema definitions are local to this file
 import { logger } from '../logger.js'
 import type { LinearIssue, LinearLabel } from './linear-client.js'
 import { processAndCount } from './queue.js'
 
 const log = logger.child({ scope: 'kaneo-import-helpers' })
+
+// Local schemas for API request bodies
+export const CreateLabelBodySchema = z.object({
+  name: z.string(),
+  color: z.string(),
+  workspaceId: z.string(),
+  taskId: z.string().optional(),
+})
+
+export const CreateCommentBodySchema = z.object({
+  taskId: z.string(),
+  comment: z.string(),
+})
+
+export const UpdateTaskDescriptionBodySchema = z.object({
+  description: z.string(),
+})
+
+export const CreateColumnBodySchema = z.object({
+  name: z.string(),
+  color: z.string().optional(),
+  isFinal: z.boolean().optional(),
+})
+
+export const CreateProjectBodySchema = z.object({
+  name: z.string(),
+  workspaceId: z.string(),
+  icon: z.string(),
+  slug: z.string(),
+})
+
+export const UpdateProjectBodySchema = z.object({
+  name: z.string(),
+  icon: z.string(),
+  slug: z.string(),
+  description: z.string().optional(),
+  isPublic: z.boolean(),
+})
+
+export const CreateTaskBodySchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  dueDate: z.string().optional(),
+  priority: z.string(),
+  status: z.string(),
+})
+
+// Label schema for API responses
+const KaneoLabelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
+})
 
 const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
   taskId: z.string().nullish(),

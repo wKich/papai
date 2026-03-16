@@ -1,0 +1,50 @@
+{
+  "endpoint": "updateLabel",
+  "description": "Update an existing label",
+  "method": "PUT",
+  "path": "/label/{id}",
+  "pathParameters": {
+    "id": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "requestBody": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "color": {
+        "type": "string"
+      }
+    },
+    "required": ["name", "color"]
+  },
+  "response": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "color": {
+        "type": "string"
+      },
+      "createdAt": {},
+      "taskId": {
+        "type": "string",
+        "nullable": true
+      },
+      "workspaceId": {
+        "type": "string",
+        "nullable": true
+      }
+    },
+    "required": ["id", "name", "color", "createdAt", "taskId", "workspaceId"]
+  },
+  "enums": {},
+  "constants": {}
+}

@@ -2,9 +2,10 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
+import { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
 import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
@@ -68,7 +69,15 @@ export class TaskResource {
         undefined,
         GetTasksResponseSchema,
       )
-      const tasks = result.columns.flatMap((col) => col.tasks).concat(result.plannedTasks)
+      const rawTasks = result.columns.flatMap((col) => col.tasks).concat(result.plannedTasks)
+      const tasks: KaneoTaskListItem[] = rawTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        number: task.number,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate ?? null,
+      }))
       // Denormalize status from column slug to normalized slug for each task
       for (const task of tasks) {
         const column = result.columns.find((c) => c.id === task.status)
@@ -110,10 +119,22 @@ export class TaskResource {
       )
       // Denormalize status from column ID to slug
       task.status = await denormalizeStatus(this.config, task.projectId, task.status)
-      const { relations } = parseRelationsFromDescription(task.description)
+      const { relations } = parseRelationsFromDescription(task.description ?? '')
       this.log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
       // Return raw description (with frontmatter) for tests to check relation markers
-      return { ...task, description: task.description, relations }
+      return {
+        ...task,
+        number: task.number ?? 0,
+        description: task.description ?? '',
+        relations,
+        createdAt: typeof task.createdAt === 'string' ? task.createdAt : '',
+        dueDate:
+          task.dueDate === null || task.dueDate === undefined
+            ? null
+            : typeof task.dueDate === 'string'
+              ? task.dueDate
+              : JSON.stringify(task.dueDate),
+      }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to get task')
       throw classifyKaneoError(error)
@@ -128,7 +149,6 @@ export class TaskResource {
       status?: string
       priority?: string
       dueDate?: string
-      projectId?: string
       userId?: string
     },
   ): Promise<z.infer<typeof KaneoTaskResponseSchema>> {
@@ -178,16 +198,14 @@ export class TaskResource {
         ...(params.limit === undefined ? {} : { limit: String(params.limit) }),
       }
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
-      const tasks: TaskResult[] = result.results
-        .filter((r) => r.type === 'task')
-        .map((r) => ({
-          id: r.id,
-          title: r.title,
-          number: r.taskNumber ?? 0,
-          status: r.status ?? '',
-          priority: r.priority ?? '',
-          projectId: r.projectId,
-        }))
+      const tasks: TaskResult[] = result.tasks.map((r) => ({
+        id: r.id,
+        title: r.title,
+        number: r.number ?? 0,
+        status: r.status ?? '',
+        priority: r.priority ?? '',
+        projectId: r.projectId,
+      }))
       this.log.info({ count: tasks.length }, 'Tasks searched')
       return tasks
     } catch (error) {

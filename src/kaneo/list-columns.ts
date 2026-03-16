@@ -2,12 +2,13 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoColumnSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { ColumnSchema } from './schemas/listTasks.js'
 
 const log = logger.child({ scope: 'kaneo:list-columns' })
 
-export type KaneoColumn = z.infer<typeof KaneoColumnSchema>
+export type KaneoColumn = z.infer<typeof ColumnSchema>
 
 export async function listColumns({
   config,

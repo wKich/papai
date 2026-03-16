@@ -1,0 +1,42 @@
+{
+  "endpoint": "getTaskLabels",
+  "description": "Get all labels assigned to a specific task",
+  "method": "GET",
+  "path": "/label/task/{taskId}",
+  "pathParameters": {
+    "taskId": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "requestBody": null,
+  "response": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "createdAt": {},
+        "taskId": {
+          "type": "string",
+          "nullable": true
+        },
+        "workspaceId": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      "required": ["id", "name", "color", "createdAt", "taskId", "workspaceId"]
+    }
+  },
+  "enums": {},
+  "constants": {}
+}

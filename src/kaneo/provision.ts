@@ -4,6 +4,7 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'kaneo:provision' })
 
+// Provision-specific schemas kept local as they are for auth endpoints, not Kaneo API
 const SignUpResponseSchema = z.object({
   user: z.object({ id: z.string() }),
   token: z.string(),

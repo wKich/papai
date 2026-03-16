@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { CommentResource } from '../../src/kaneo/index.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockActivity, createMockActivityForList } from '../test-helpers.js'
 
 describe('CommentResource', () => {
   const mockConfig: KaneoConfig = {
@@ -26,18 +26,15 @@ describe('CommentResource', () => {
         // API returns activity object with all fields per documentation
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'comment-1',
-              taskId: 'task-1',
-              type: 'comment',
-              createdAt: '2026-03-01T00:00:00Z',
-              userId: 'user-1',
-              content: 'New comment',
-              externalUserName: null,
-              externalUserAvatar: null,
-              externalSource: null,
-              externalUrl: null,
-            }),
+            JSON.stringify(
+              createMockActivity({
+                id: 'comment-1',
+                taskId: 'task-1',
+                type: 'comment',
+                userId: 'user-1',
+                content: 'New comment',
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -59,18 +56,15 @@ describe('CommentResource', () => {
       setMockFetch(() => {
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'comment-2',
-              taskId: 'task-1',
-              type: 'comment',
-              createdAt: '2026-03-01T00:00:00Z',
-              userId: 'user-1',
-              content: '',
-              externalUserName: null,
-              externalUserAvatar: null,
-              externalSource: null,
-              externalUrl: null,
-            }),
+            JSON.stringify(
+              createMockActivity({
+                id: 'comment-2',
+                taskId: 'task-1',
+                type: 'comment',
+                userId: 'user-1',
+                content: '',
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -89,18 +83,15 @@ describe('CommentResource', () => {
       setMockFetch(() => {
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'comment-3',
-              taskId: 'task-1',
-              type: 'comment',
-              createdAt: '2026-03-01T00:00:00Z',
-              userId: 'user-1',
-              content: longComment,
-              externalUserName: null,
-              externalUserAvatar: null,
-              externalSource: null,
-              externalUrl: null,
-            }),
+            JSON.stringify(
+              createMockActivity({
+                id: 'comment-3',
+                taskId: 'task-1',
+                type: 'comment',
+                userId: 'user-1',
+                content: longComment,
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -132,24 +123,24 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              {
+              createMockActivityForList({
                 id: 'act-1',
                 type: 'comment',
                 content: 'Comment 1',
                 createdAt: '2026-03-01T00:00:00Z',
-              },
-              {
+              }),
+              createMockActivityForList({
                 id: 'act-2',
-                type: 'status_change',
+                type: 'status_changed',
                 content: 'Status changed',
                 createdAt: '2026-03-01T00:00:00Z',
-              },
-              {
+              }),
+              createMockActivityForList({
                 id: 'act-3',
                 type: 'comment',
                 content: 'Comment 2',
                 createdAt: '2026-03-02T00:00:00Z',
-              },
+              }),
             ]),
             { status: 200 },
           ),
@@ -169,13 +160,18 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              {
+              createMockActivityForList({
                 id: 'act-1',
                 type: 'comment',
                 content: 'Valid comment',
                 createdAt: '2026-03-01T00:00:00Z',
-              },
-              { id: 'act-2', type: 'comment', content: null, createdAt: '2026-03-01T00:00:00Z' },
+              }),
+              createMockActivityForList({
+                id: 'act-2',
+                type: 'comment',
+                content: null,
+                createdAt: '2026-03-01T00:00:00Z',
+              }),
             ]),
             { status: 200 },
           ),
@@ -194,12 +190,12 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              {
+              createMockActivityForList({
                 id: 'act-1',
-                type: 'status_change',
+                type: 'status_changed',
                 content: 'Changed',
                 createdAt: '2026-03-01T00:00:00Z',
-              },
+              }),
             ]),
             { status: 200 },
           ),
@@ -216,7 +212,14 @@ describe('CommentResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify([{ id: 'act-1', type: 'comment', content: 'Test', createdAt: '2026-03-01T12:00:00Z' }]),
+            JSON.stringify([
+              createMockActivityForList({
+                id: 'act-1',
+                type: 'comment',
+                content: 'Test',
+                createdAt: '2026-03-01T12:00:00Z',
+              }),
+            ]),
             { status: 200 },
           ),
         ),
@@ -251,11 +254,12 @@ describe('CommentResource', () => {
         capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'comment-1',
-              comment: 'Updated',
-              createdAt: '2026-03-01T00:00:00Z',
-            }),
+            JSON.stringify(
+              createMockActivity({
+                id: 'comment-1',
+                content: 'Updated',
+              }),
+            ),
             { status: 200 },
           ),
         )

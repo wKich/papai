@@ -1,0 +1,98 @@
+{
+  "name": "updateTaskPriority",
+  "description": "Update only the priority of a task",
+  "method": "PUT",
+  "path": "/task/priority/{id}",
+  "parameters": [
+    {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    }
+  ],
+  "requestBody": {
+    "required": true,
+    "content": {
+      "application/json": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "priority": {
+              "type": "string"
+            }
+          },
+          "required": ["priority"]
+        }
+      }
+    }
+  },
+  "responses": {
+    "200": {
+      "description": "Task priority updated successfully",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "position": {
+                "type": "number",
+                "nullable": true
+              },
+              "number": {
+                "type": "number",
+                "nullable": true
+              },
+              "userId": {
+                "type": "string",
+                "nullable": true
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "nullable": true
+              },
+              "status": {
+                "type": "string"
+              },
+              "priority": {
+                "enum": ["no-priority", "low", "medium", "high", "urgent"]
+              },
+              "dueDate": {
+                "type": "object"
+              },
+              "createdAt": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "projectId",
+              "position",
+              "number",
+              "userId",
+              "title",
+              "description",
+              "status",
+              "priority",
+              "createdAt"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "enums": {
+    "priority": ["no-priority", "low", "medium", "high", "urgent"]
+  }
+}

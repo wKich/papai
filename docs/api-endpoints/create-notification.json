@@ -1,0 +1,59 @@
+{
+  "name": "createNotification",
+  "description": "Create a new notification for a user",
+  "method": "POST",
+  "path": "/notification",
+  "parameters": [],
+  "requestBody": {
+    "type": "object",
+    "required": ["userId", "title", "message", "type"],
+    "properties": {
+      "userId": { "type": "string" },
+      "title": { "type": "string" },
+      "message": { "type": "string" },
+      "type": { "type": "string" },
+      "relatedEntityId": { "type": "string" },
+      "relatedEntityType": { "type": "string" }
+    }
+  },
+  "responses": {
+    "200": {
+      "type": "object",
+      "required": ["id", "userId", "title", "content", "type", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string", "nullable": true },
+        "type": {
+          "enum": [
+            "info",
+            "task_created",
+            "workspace_created",
+            "task_status_changed",
+            "task_assignee_changed",
+            "time_entry_created"
+          ]
+        },
+        "isRead": { "type": "boolean" },
+        "resourceId": { "type": "string" },
+        "resourceType": {
+          "enum": ["task", "workspace"]
+        },
+        "createdAt": {}
+      }
+    }
+  },
+  "enums": {
+    "NotificationType": [
+      "info",
+      "task_created",
+      "workspace_created",
+      "task_status_changed",
+      "task_assignee_changed",
+      "time_entry_created"
+    ],
+    "ResourceType": ["task", "workspace"]
+  },
+  "tags": ["Notifications"]
+}

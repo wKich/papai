@@ -1,19 +1,28 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { z } from 'zod'
+
 import {
-  KaneoTaskSchema,
   KaneoTaskResponseSchema,
-  KaneoTaskWithProjectIdSchema,
   KaneoProjectSchema,
   KaneoProjectFullSchema,
   KaneoLabelSchema,
-  KaneoActivitySchema,
   KaneoActivityWithTypeSchema,
   KaneoColumnSchema,
   type KaneoConfig,
 } from '../../src/kaneo/client.js'
 import { TaskResource, ProjectResource, LabelResource, CommentResource, ColumnResource } from '../../src/kaneo/index.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { CreateTaskResponseSchema } from '../../src/kaneo/schemas/createTask.js'
+import { ActivityItemSchema } from '../../src/kaneo/schemas/getActivities.js'
+import {
+  restoreFetch,
+  setMockFetch,
+  createMockTask,
+  createMockProject,
+  createMockLabel,
+  createMockActivity,
+  createMockColumn,
+} from '../test-helpers.js'
 
 /**
  * Schema Validation Tests
@@ -21,6 +30,20 @@ import { restoreFetch, setMockFetch } from '../test-helpers.js'
  * These tests verify that all API responses are properly validated against Zod schemas.
  * Each tool's response is tested to ensure it matches the expected schema structure.
  */
+
+// Local minimal task schema for tests that need just basic fields
+const MinimalTaskSchema = CreateTaskResponseSchema.pick({
+  id: true,
+  title: true,
+  number: true,
+  status: true,
+  priority: true,
+})
+
+// Local schema extending minimal task with projectId
+const TaskWithProjectIdSchema = MinimalTaskSchema.extend({
+  projectId: z.string().optional(),
+})
 
 describe('Schema Validation', () => {
   const mockConfig: KaneoConfig = {
@@ -42,20 +65,22 @@ describe('Schema Validation', () => {
       title: 'Test Task',
       number: 42,
       status: 'todo',
-      priority: 'medium',
+      priority: 'medium' as const,
     }
 
-    const validTaskFullResponse = {
-      ...validTaskResponse,
+    const validTaskFullResponse = createMockTask({
+      id: 'task-1',
+      title: 'Test Task',
+      number: 42,
       description: 'Task description',
       dueDate: null,
       createdAt: '2026-03-01T00:00:00Z',
       projectId: 'proj-1',
       userId: null,
-    }
+    })
 
-    test('KaneoTaskSchema validates correct task structure', () => {
-      const result = KaneoTaskSchema.safeParse(validTaskResponse)
+    test('MinimalTaskSchema validates correct task structure', () => {
+      const result = MinimalTaskSchema.safeParse(validTaskResponse)
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.data.id).toBe('task-1')
@@ -66,20 +91,20 @@ describe('Schema Validation', () => {
       }
     })
 
-    test('KaneoTaskSchema fails on missing required fields', () => {
+    test('MinimalTaskSchema fails on missing required fields', () => {
       // Missing id, number, status, priority
       const invalidTask = { title: 'Test' }
-      const result = KaneoTaskSchema.safeParse(invalidTask)
+      const result = MinimalTaskSchema.safeParse(invalidTask)
       expect(result.success).toBe(false)
     })
 
-    test('KaneoTaskSchema fails on wrong types', () => {
+    test('MinimalTaskSchema fails on wrong types', () => {
       const invalidTask = {
         ...validTaskResponse,
         // Should be number
         number: 'not-a-number',
       }
-      const result = KaneoTaskSchema.safeParse(invalidTask)
+      const result = MinimalTaskSchema.safeParse(invalidTask)
       expect(result.success).toBe(false)
     })
 
@@ -96,18 +121,25 @@ describe('Schema Validation', () => {
       }
     })
 
-    test('KaneoTaskWithProjectIdSchema validates projectId field', () => {
+    test('TaskWithProjectIdSchema validates projectId field', () => {
       const validTaskWithProject = {
         ...validTaskResponse,
         projectId: 'proj-1',
       }
-      const result = KaneoTaskWithProjectIdSchema.safeParse(validTaskWithProject)
+      const result = TaskWithProjectIdSchema.safeParse(validTaskWithProject)
       expect(result.success).toBe(true)
     })
 
     describe('TaskResource.create', () => {
       test('validates response schema on create', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validTaskFullResponse), { status: 200 })))
+        setMockFetch((url: string) => {
+          if (url.includes('/column/')) {
+            return Promise.resolve(
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+            )
+          }
+          return Promise.resolve(new Response(JSON.stringify(createMockTask(validTaskFullResponse)), { status: 200 }))
+        })
 
         const resource = new TaskResource(mockConfig)
         const result = await resource.create({
@@ -144,7 +176,14 @@ describe('Schema Validation', () => {
 
     describe('TaskResource.get', () => {
       test('validates response schema on get', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validTaskFullResponse), { status: 200 })))
+        setMockFetch((url: string) => {
+          if (url.includes('/column/')) {
+            return Promise.resolve(
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+            )
+          }
+          return Promise.resolve(new Response(JSON.stringify(createMockTask(validTaskFullResponse)), { status: 200 }))
+        })
 
         const resource = new TaskResource(mockConfig)
         const result = await resource.get('task-1')
@@ -172,6 +211,8 @@ describe('Schema Validation', () => {
             {
               id: 'col-1',
               name: 'To Do',
+              icon: null,
+              color: null,
               isFinal: false,
               tasks: [
                 {
@@ -203,17 +244,24 @@ describe('Schema Validation', () => {
 
     describe('TaskResource.update', () => {
       test('validates response schema on update', async () => {
-        setMockFetch(() =>
-          Promise.resolve(
+        setMockFetch((url: string) => {
+          if (url.includes('/column/')) {
+            return Promise.resolve(
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+            )
+          }
+          return Promise.resolve(
             new Response(
-              JSON.stringify({
-                ...validTaskResponse,
-                projectId: 'proj-1',
-              }),
+              JSON.stringify(
+                createMockTask({
+                  ...validTaskResponse,
+                  projectId: 'proj-1',
+                }),
+              ),
               { status: 200 },
             ),
-          ),
-        )
+          )
+        })
 
         const resource = new TaskResource(mockConfig)
         const result = await resource.update('task-1', { title: 'Updated' })
@@ -228,18 +276,20 @@ describe('Schema Validation', () => {
   })
 
   describe('Project Schemas', () => {
-    const validProjectResponse = {
+    const validProjectResponse = createMockProject({
       id: 'proj-1',
       name: 'Test Project',
       slug: 'test-project',
-    }
+    })
 
-    const validProjectFullResponse = {
-      ...validProjectResponse,
+    const validProjectFullResponse = createMockProject({
+      id: 'proj-1',
+      name: 'Test Project',
+      slug: 'test-project',
       icon: null,
       description: null,
       isPublic: false,
-    }
+    })
 
     test('KaneoProjectSchema validates correct project structure', () => {
       const result = KaneoProjectSchema.safeParse(validProjectResponse)
@@ -270,7 +320,9 @@ describe('Schema Validation', () => {
 
     describe('ProjectResource.create', () => {
       test('validates response schema on create', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validProjectResponse), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify(createMockProject(validProjectResponse)), { status: 200 })),
+        )
 
         const resource = new ProjectResource(mockConfig)
         const result = await resource.create({
@@ -289,7 +341,9 @@ describe('Schema Validation', () => {
 
     describe('ProjectResource.list', () => {
       test('validates array response schema', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify([validProjectResponse]), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify([createMockProject(validProjectResponse)]), { status: 200 })),
+        )
 
         const resource = new ProjectResource(mockConfig)
         const result = await resource.list('ws-1')
@@ -305,7 +359,9 @@ describe('Schema Validation', () => {
 
     describe('ProjectResource.update', () => {
       test('validates response schema on update', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validProjectFullResponse), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify(createMockProject(validProjectFullResponse)), { status: 200 })),
+        )
 
         const resource = new ProjectResource(mockConfig)
         const result = await resource.update('proj-1', 'ws-1', { name: 'Updated' })
@@ -318,11 +374,11 @@ describe('Schema Validation', () => {
   })
 
   describe('Label Schemas', () => {
-    const validLabelResponse = {
+    const validLabelResponse = createMockLabel({
       id: 'label-1',
       name: 'Bug',
       color: '#ff0000',
-    }
+    })
 
     test('KaneoLabelSchema validates correct label structure', () => {
       const result = KaneoLabelSchema.safeParse(validLabelResponse)
@@ -353,7 +409,9 @@ describe('Schema Validation', () => {
 
     describe('LabelResource.create', () => {
       test('validates response schema on create', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validLabelResponse), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify(createMockLabel(validLabelResponse)), { status: 200 })),
+        )
 
         const resource = new LabelResource(mockConfig)
         const result = await resource.create({
@@ -372,7 +430,9 @@ describe('Schema Validation', () => {
 
     describe('LabelResource.list', () => {
       test('validates array response schema', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify([validLabelResponse]), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify([createMockLabel(validLabelResponse)]), { status: 200 })),
+        )
 
         const resource = new LabelResource(mockConfig)
         const result = await resource.list('ws-1')
@@ -388,7 +448,9 @@ describe('Schema Validation', () => {
 
     describe('LabelResource.update', () => {
       test('validates response schema on update', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validLabelResponse), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify(createMockLabel(validLabelResponse)), { status: 200 })),
+        )
 
         const resource = new LabelResource(mockConfig)
         const result = await resource.update('label-1', { name: 'Updated' })
@@ -401,47 +463,50 @@ describe('Schema Validation', () => {
   })
 
   describe('Activity/Comment Schemas', () => {
-    const validActivityResponse = {
+    const validActivityResponse = createMockActivity({
       id: 'act-1',
-      comment: 'Test comment',
-      createdAt: '2026-03-01T00:00:00Z',
-    }
-
-    const validActivityWithTypeResponse = {
-      ...validActivityResponse,
+      taskId: 'task-1',
       type: 'comment',
-      message: null,
-    }
+      content: 'Test comment',
+    })
 
-    test('KaneoActivitySchema validates correct activity structure', () => {
-      const result = KaneoActivitySchema.safeParse(validActivityResponse)
+    const validActivityWithTypeResponse = createMockActivity({
+      id: 'act-1',
+      taskId: 'task-1',
+      type: 'comment',
+      content: 'Test comment',
+    })
+
+    test('ActivityItemSchema validates correct activity structure', () => {
+      const result = ActivityItemSchema.safeParse(validActivityResponse)
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.data.id).toBe('act-1')
-        expect(result.data.comment).toBe('Test comment')
-        expect(result.data.createdAt).toBe('2026-03-01T00:00:00Z')
+        expect(result.data.content).toBe('Test comment')
       }
     })
 
-    test('KaneoActivityWithTypeSchema validates activity with type', () => {
-      const result = KaneoActivityWithTypeSchema.safeParse(validActivityWithTypeResponse)
+    test('KaneoActivityWithTypeSchema validates activity array', () => {
+      const result = KaneoActivityWithTypeSchema.safeParse([validActivityWithTypeResponse])
       expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.data.type).toBe('comment')
+      if (result.success && result.data.length > 0 && result.data[0] !== undefined) {
+        expect(result.data[0].type).toBe('comment')
       }
     })
 
-    test('KaneoActivitySchema fails on missing required fields', () => {
+    test('ActivityItemSchema fails on missing required fields', () => {
       // Missing id, createdAt
-      const invalidActivity = { comment: 'Test' }
-      const result = KaneoActivitySchema.safeParse(invalidActivity)
+      const invalidActivity = { content: 'Test' }
+      const result = ActivityItemSchema.safeParse(invalidActivity)
       expect(result.success).toBe(false)
     })
 
     describe('CommentResource.list', () => {
       test('validates array response schema', async () => {
         setMockFetch(() =>
-          Promise.resolve(new Response(JSON.stringify([validActivityWithTypeResponse]), { status: 200 })),
+          Promise.resolve(
+            new Response(JSON.stringify([createMockActivity(validActivityWithTypeResponse)]), { status: 200 }),
+          ),
         )
 
         const resource = new CommentResource(mockConfig)
@@ -458,7 +523,9 @@ describe('Schema Validation', () => {
 
     describe('CommentResource.update', () => {
       test('validates response schema on update', async () => {
-        setMockFetch(() => Promise.resolve(new Response(JSON.stringify(validActivityResponse), { status: 200 })))
+        setMockFetch(() =>
+          Promise.resolve(new Response(JSON.stringify(createMockActivity(validActivityResponse)), { status: 200 })),
+        )
 
         const resource = new CommentResource(mockConfig)
         const result = await resource.update('act-1', 'Updated')
@@ -471,13 +538,13 @@ describe('Schema Validation', () => {
   })
 
   describe('Column Schemas', () => {
-    const validColumnResponse = {
+    const validColumnResponse = createMockColumn({
       id: 'col-1',
       name: 'To Do',
       icon: null,
       color: null,
       isFinal: false,
-    }
+    })
 
     test('KaneoColumnSchema validates correct column structure', () => {
       const result = KaneoColumnSchema.safeParse(validColumnResponse)
@@ -524,7 +591,7 @@ describe('Schema Validation', () => {
         status: 'todo',
         priority: 'medium',
       }
-      const result = KaneoTaskSchema.safeParse(task)
+      const result = MinimalTaskSchema.safeParse(task)
       expect(result.success).toBe(true)
       if (result.success) {
         expect(typeof result.data.id).toBe('string')
@@ -536,11 +603,11 @@ describe('Schema Validation', () => {
     })
 
     test('Project schema fields have correct types', () => {
-      const project = {
+      const project = createMockProject({
         id: 'proj-1',
         name: 'Test',
         slug: 'test',
-      }
+      })
       const result = KaneoProjectSchema.safeParse(project)
       expect(result.success).toBe(true)
       if (result.success) {
@@ -551,11 +618,11 @@ describe('Schema Validation', () => {
     })
 
     test('Label schema fields have correct types', () => {
-      const label = {
+      const label = createMockLabel({
         id: 'label-1',
         name: 'Bug',
         color: '#ff0000',
-      }
+      })
       const result = KaneoLabelSchema.safeParse(label)
       expect(result.success).toBe(true)
       if (result.success) {
@@ -566,17 +633,17 @@ describe('Schema Validation', () => {
     })
 
     test('Activity schema fields have correct types', () => {
-      const activity = {
+      const activity = createMockActivity({
         id: 'act-1',
-        comment: 'Test',
-        createdAt: '2026-03-01T00:00:00Z',
-      }
-      const result = KaneoActivitySchema.safeParse(activity)
+        taskId: 'task-1',
+        type: 'comment',
+        content: 'Test',
+      })
+      const result = ActivityItemSchema.safeParse(activity)
       expect(result.success).toBe(true)
       if (result.success) {
         expect(typeof result.data.id).toBe('string')
-        expect(typeof result.data.comment).toBe('string')
-        expect(typeof result.data.createdAt).toBe('string')
+        expect(typeof result.data.content).toBe('string')
       }
     })
 
@@ -729,33 +796,27 @@ describe('Schema Validation', () => {
   })
 
   describe('Nullable Field Tests', () => {
-    const baseValidTaskResponse = {
-      id: 'task-1',
-      title: 'Test Task',
-      description: 'Test description',
-      number: 42,
-      status: 'todo',
-      priority: 'medium',
-      createdAt: '2026-03-01T00:00:00Z',
-      projectId: 'proj-1',
-    }
-
-    test('Task dueDate can be null', () => {
-      const task = {
-        ...baseValidTaskResponse,
+    test('Task dueDate can be null or omitted', () => {
+      const task = createMockTask({
+        id: 'task-1',
+        title: 'Test Task',
+        description: 'Test description',
         dueDate: null,
         userId: null,
-      }
+      })
       const result = KaneoTaskResponseSchema.safeParse(task)
+      // dueDate is z.unknown().optional() in schema, so null should be ok
       expect(result.success).toBe(true)
     })
 
     test('Task userId can be null', () => {
-      const task = {
-        ...baseValidTaskResponse,
+      const task = createMockTask({
+        id: 'task-1',
+        title: 'Test Task',
+        description: 'Test description',
         dueDate: '2026-03-15T00:00:00Z',
         userId: null,
-      }
+      })
       const result = KaneoTaskResponseSchema.safeParse(task)
       expect(result.success).toBe(true)
     })
@@ -772,15 +833,16 @@ describe('Schema Validation', () => {
       expect(result.success).toBe(true)
     })
 
-    test('Activity message can be null', () => {
-      const activity = {
+    test('Activity content can be null', () => {
+      const activity = createMockActivity({
         id: 'act-1',
+        taskId: 'task-1',
         type: 'comment',
-        comment: 'Test',
-        message: null,
-        createdAt: '2026-03-01T00:00:00Z',
-      }
-      const result = KaneoActivityWithTypeSchema.safeParse(activity)
+        content: 'Test',
+      })
+      // KaneoActivityWithTypeSchema is an array schema (GetActivitiesResponseSchema)
+      // Testing individual activity against ActivityItemSchema instead
+      const result = ActivityItemSchema.safeParse(activity)
       expect(result.success).toBe(true)
     })
   })

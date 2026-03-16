@@ -2,14 +2,15 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoColumnSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
+import { ColumnSchema } from './schemas/listTasks.js'
 
 export class ColumnResource {
   private log = logger.child({ scope: 'kaneo:column-resource' })
 
   constructor(private config: KaneoConfig) {}
 
-  async list(projectId: string): Promise<z.infer<typeof KaneoColumnSchema>[]> {
+  async list(projectId: string): Promise<z.infer<typeof ColumnSchema>[]> {
     this.log.debug({ projectId }, 'Listing columns')
 
     try {
@@ -19,7 +20,7 @@ export class ColumnResource {
         `/column/${projectId}`,
         undefined,
         undefined,
-        z.array(KaneoColumnSchema),
+        z.array(ColumnSchema),
       )
       this.log.info({ projectId, count: columns.length }, 'Columns listed')
       return columns
@@ -32,7 +33,7 @@ export class ColumnResource {
   async create(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<z.infer<typeof KaneoColumnSchema>> {
+  ): Promise<z.infer<typeof ColumnSchema>> {
     this.log.debug({ projectId, name: params.name }, 'Creating column')
 
     try {
@@ -47,7 +48,7 @@ export class ColumnResource {
           isFinal: params.isFinal ?? false,
         },
         undefined,
-        KaneoColumnSchema,
+        ColumnSchema,
       )
       this.log.info({ columnId: column.id, name: column.name, projectId }, 'Column created')
       return column
@@ -63,7 +64,7 @@ export class ColumnResource {
   async update(
     columnId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<z.infer<typeof KaneoColumnSchema>> {
+  ): Promise<z.infer<typeof ColumnSchema>> {
     this.log.debug({ columnId, ...params }, 'Updating column')
 
     try {
@@ -73,7 +74,7 @@ export class ColumnResource {
       if (params.color !== undefined) body['color'] = params.color
       if (params.isFinal !== undefined) body['isFinal'] = params.isFinal
 
-      const column = await kaneoFetch(this.config, 'PUT', `/column/${columnId}`, body, undefined, KaneoColumnSchema)
+      const column = await kaneoFetch(this.config, 'PUT', `/column/${columnId}`, body, undefined, ColumnSchema)
       this.log.info({ columnId, name: column.name }, 'Column updated')
       return column
     } catch (error) {

@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
+import { CreateLabelResponseSchema } from './schemas/createLabel.js'
 
-const KaneoLabelWithTaskSchema = KaneoLabelSchema.extend({
-  taskId: z.string().nullish(),
-})
+// Extended schema for labels with task association
+const KaneoLabelWithTaskSchema = CreateLabelResponseSchema
 
 export class LabelResource {
   private log = logger.child({ scope: 'kaneo:label-resource' })
@@ -18,7 +18,7 @@ export class LabelResource {
     workspaceId: string
     name: string
     color?: string
-  }): Promise<z.infer<typeof KaneoLabelSchema>> {
+  }): Promise<z.infer<typeof CreateLabelResponseSchema>> {
     this.log.debug({ workspaceId: params.workspaceId, name: params.name }, 'Creating label')
 
     try {
@@ -32,7 +32,7 @@ export class LabelResource {
           workspaceId: params.workspaceId,
         },
         undefined,
-        KaneoLabelSchema,
+        CreateLabelResponseSchema,
       )
       this.log.info({ labelId: label.id, name: label.name }, 'Label created')
       return label
@@ -42,7 +42,7 @@ export class LabelResource {
     }
   }
 
-  async list(workspaceId: string): Promise<z.infer<typeof KaneoLabelSchema>[]> {
+  async list(workspaceId: string): Promise<z.infer<typeof CreateLabelResponseSchema>[]> {
     this.log.debug({ workspaceId }, 'Listing labels')
 
     try {
@@ -52,7 +52,7 @@ export class LabelResource {
         `/label/workspace/${workspaceId}`,
         undefined,
         undefined,
-        z.array(KaneoLabelSchema),
+        z.array(CreateLabelResponseSchema),
       )
       this.log.info({ count: labels.length }, 'Labels listed')
       return labels
@@ -62,16 +62,33 @@ export class LabelResource {
     }
   }
 
-  async update(labelId: string, params: { name?: string; color?: string }): Promise<z.infer<typeof KaneoLabelSchema>> {
+  async update(
+    labelId: string,
+    params: { name?: string; color?: string },
+  ): Promise<z.infer<typeof CreateLabelResponseSchema>> {
     this.log.debug({ labelId, ...params }, 'Updating label')
 
     try {
-      const existing = await kaneoFetch(this.config, 'GET', `/label/${labelId}`, undefined, undefined, KaneoLabelSchema)
+      const existing = await kaneoFetch(
+        this.config,
+        'GET',
+        `/label/${labelId}`,
+        undefined,
+        undefined,
+        CreateLabelResponseSchema,
+      )
       const body = {
         name: params.name ?? existing.name,
         color: params.color ?? existing.color,
       }
-      const label = await kaneoFetch(this.config, 'PUT', `/label/${labelId}`, body, undefined, KaneoLabelSchema)
+      const label = await kaneoFetch(
+        this.config,
+        'PUT',
+        `/label/${labelId}`,
+        body,
+        undefined,
+        CreateLabelResponseSchema,
+      )
       this.log.info({ labelId, name: label.name }, 'Label updated')
       return label
     } catch (error) {
@@ -97,7 +114,14 @@ export class LabelResource {
     this.log.debug({ taskId, labelId }, 'Adding label to task')
 
     try {
-      const label = await kaneoFetch(this.config, 'GET', `/label/${labelId}`, undefined, undefined, KaneoLabelSchema)
+      const label = await kaneoFetch(
+        this.config,
+        'GET',
+        `/label/${labelId}`,
+        undefined,
+        undefined,
+        CreateLabelResponseSchema,
+      )
 
       await kaneoFetch(
         this.config,
@@ -133,7 +157,7 @@ export class LabelResource {
         `/label/${labelId}`,
         undefined,
         undefined,
-        KaneoLabelSchema,
+        CreateLabelResponseSchema,
       )
 
       const taskLabels = await kaneoFetch(
@@ -142,7 +166,7 @@ export class LabelResource {
         `/label/task/${taskId}`,
         undefined,
         undefined,
-        z.array(KaneoLabelSchema),
+        z.array(CreateLabelResponseSchema),
       )
 
       // Match by name because addToTask creates a task-scoped copy with a new ID

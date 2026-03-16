@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/index.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockTask, createMockColumn } from '../test-helpers.js'
 
 void mock.module('../../src/kaneo/list-columns.js', () => ({
   listColumns: mock(() =>
     Promise.resolve([
-      { id: 'col-1', name: 'to-do', order: 1 },
-      { id: 'col-2', name: 'in-progress', order: 2 },
-      { id: 'col-3', name: 'done', order: 3 },
+      createMockColumn({ id: 'col-1', name: 'to-do' }),
+      createMockColumn({ id: 'col-2', name: 'in-progress' }),
+      createMockColumn({ id: 'col-3', name: 'done', isFinal: true }),
     ]),
   ),
 }))
@@ -33,18 +33,15 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test Task',
-              number: 42,
-              status: 'todo',
-              priority: 'no-priority',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test Task',
+                number: 42,
+                priority: 'no-priority',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -66,18 +63,17 @@ describe('TaskResource', () => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'high',
-              description: 'Description',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: '2026-03-15',
-              projectId: 'proj-1',
-              userId: 'user-1',
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'high',
+                description: 'Description',
+                dueDate: '2026-03-15',
+                userId: 'user-1',
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -108,18 +104,15 @@ describe('TaskResource', () => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'no-priority',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'no-priority',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -140,18 +133,15 @@ describe('TaskResource', () => {
         requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'no-priority',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'no-priority',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         )
@@ -170,18 +160,15 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'low',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'low',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -201,18 +188,15 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'high',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'high',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -232,18 +216,15 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'urgent',
-              description: '',
-              createdAt: '2026-03-01T00:00:00Z',
-              dueDate: null,
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                priority: 'urgent',
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -265,18 +246,14 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'medium',
-              description: 'Details',
-              dueDate: null,
-              createdAt: '2026-03-01T00:00:00Z',
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                description: 'Details',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -292,18 +269,14 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'medium',
-              description: '---\nblocks: task-2\nrelated: task-3\n---\nTask details',
-              dueDate: null,
-              createdAt: '2026-03-01T00:00:00Z',
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                description: '---\nblocks: task-2\nrelated: task-3\n---\nTask details',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -320,18 +293,14 @@ describe('TaskResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: 'task-1',
-              title: 'Test',
-              number: 1,
-              status: 'todo',
-              priority: 'medium',
-              description: '',
-              dueDate: null,
-              createdAt: '2026-03-01T00:00:00Z',
-              projectId: 'proj-1',
-              userId: null,
-            }),
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                title: 'Test',
+                number: 1,
+                description: '',
+              }),
+            ),
             { status: 200 },
           ),
         ),
@@ -351,18 +320,15 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Test',
-                number: 1,
-                status: 'done',
-                priority: 'medium',
-                description: '',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: null,
-                projectId: 'proj-1',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Test',
+                  number: 1,
+                  status: 'done',
+                  description: '',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -380,18 +346,15 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Test',
-                number: 1,
-                status: 'todo',
-                priority: 'high',
-                description: '',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: null,
-                projectId: 'proj-1',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Test',
+                  number: 1,
+                  priority: 'high',
+                  description: '',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -409,18 +372,15 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Test',
-                number: 1,
-                status: 'todo',
-                priority: 'medium',
-                description: '',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: null,
-                projectId: 'proj-1',
-                userId: 'user-123',
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Test',
+                  number: 1,
+                  description: '',
+                  userId: 'user-123',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -438,18 +398,15 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Test',
-                number: 1,
-                status: 'todo',
-                priority: 'medium',
-                description: '',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: '2026-12-31',
-                projectId: 'proj-1',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Test',
+                  number: 1,
+                  description: '',
+                  dueDate: '2026-12-31',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -467,18 +424,14 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Updated Title',
-                number: 1,
-                status: 'todo',
-                priority: 'medium',
-                description: '',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: null,
-                projectId: 'proj-1',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Updated Title',
+                  number: 1,
+                  description: '',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -496,18 +449,14 @@ describe('TaskResource', () => {
           requestUrl = url
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'Test',
-                number: 1,
-                status: 'todo',
-                priority: 'medium',
-                description: 'Updated description',
-                createdAt: '2026-03-01T00:00:00Z',
-                dueDate: null,
-                projectId: 'proj-1',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'Test',
+                  number: 1,
+                  description: 'Updated description',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -531,18 +480,16 @@ describe('TaskResource', () => {
           // Return success for any single-field endpoint
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'New Title',
-                number: 1,
-                status: 'done',
-                priority: 'high',
-                description: 'New desc',
-                dueDate: null,
-                projectId: 'proj-1',
-                createdAt: '2026-03-01T00:00:00Z',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'New Title',
+                  number: 1,
+                  status: 'done',
+                  priority: 'high',
+                  description: 'New desc',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -575,18 +522,16 @@ describe('TaskResource', () => {
 
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                id: 'task-1',
-                title: 'New',
-                number: 1,
-                status: 'done',
-                priority: 'high',
-                description: 'New',
-                dueDate: null,
-                projectId: 'proj-1',
-                createdAt: '2026-03-01T00:00:00Z',
-                userId: null,
-              }),
+              JSON.stringify(
+                createMockTask({
+                  id: 'task-1',
+                  title: 'New',
+                  number: 1,
+                  status: 'done',
+                  priority: 'high',
+                  description: 'New',
+                }),
+              ),
               { status: 200 },
             ),
           )
@@ -632,6 +577,8 @@ describe('TaskResource', () => {
                 {
                   id: 'col-1',
                   name: 'Todo',
+                  icon: null,
+                  color: null,
                   isFinal: false,
                   tasks: [
                     { id: 'task-1', title: 'Task 1', number: 1, status: 'todo', priority: 'medium', dueDate: null },
@@ -688,30 +635,36 @@ describe('TaskResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify({
-              results: [
+              tasks: [
                 {
                   id: 'task-1',
-                  type: 'task',
+                  projectId: 'proj-1',
+                  position: 0,
+                  number: 1,
+                  userId: null,
                   title: 'Fix bug',
-                  taskNumber: 1,
+                  description: null,
                   status: 'todo',
                   priority: 'high',
                   createdAt: '2026-01-01T00:00:00Z',
-                  relevanceScore: 1.0,
                 },
                 {
                   id: 'task-2',
-                  type: 'task',
+                  projectId: 'proj-1',
+                  position: 0,
+                  number: 2,
+                  userId: null,
                   title: 'Bug report',
-                  taskNumber: 2,
+                  description: null,
                   status: 'done',
                   priority: 'medium',
                   createdAt: '2026-01-02T00:00:00Z',
-                  relevanceScore: 0.8,
                 },
               ],
-              totalCount: 2,
-              searchQuery: 'bug',
+              projects: [],
+              workspaces: [],
+              comments: [],
+              activities: [],
             }),
             { status: 200 },
           ),
@@ -731,7 +684,9 @@ describe('TaskResource', () => {
       setMockFetch((url: string) => {
         requestUrl = url
         return Promise.resolve(
-          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'test' }), { status: 200 }),
+          new Response(JSON.stringify({ tasks: [], projects: [], workspaces: [], comments: [], activities: [] }), {
+            status: 200,
+          }),
         )
       })
 
@@ -748,7 +703,9 @@ describe('TaskResource', () => {
     test('returns empty array when no matches', async () => {
       setMockFetch(() =>
         Promise.resolve(
-          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'nonexistent' }), { status: 200 }),
+          new Response(JSON.stringify({ tasks: [], projects: [], workspaces: [], comments: [], activities: [] }), {
+            status: 200,
+          }),
         ),
       )
 

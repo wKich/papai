@@ -1,0 +1,113 @@
+{
+  "name": "createTask",
+  "description": "Create a new task in a project",
+  "method": "POST",
+  "path": "/task/{projectId}",
+  "parameters": [
+    {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    }
+  ],
+  "requestBody": {
+    "required": true,
+    "content": {
+      "application/json": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "dueDate": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "userId": {
+              "type": "string"
+            }
+          },
+          "required": ["title", "description", "priority", "status"]
+        }
+      }
+    }
+  },
+  "responses": {
+    "200": {
+      "description": "Task created successfully",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "position": {
+                "type": "number",
+                "nullable": true
+              },
+              "number": {
+                "type": "number",
+                "nullable": true
+              },
+              "userId": {
+                "type": "string",
+                "nullable": true
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "nullable": true
+              },
+              "status": {
+                "type": "string"
+              },
+              "priority": {
+                "enum": ["no-priority", "low", "medium", "high", "urgent"]
+              },
+              "dueDate": {
+                "type": "object"
+              },
+              "createdAt": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "projectId",
+              "position",
+              "number",
+              "userId",
+              "title",
+              "description",
+              "status",
+              "priority",
+              "createdAt"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "enums": {
+    "priority": ["no-priority", "low", "medium", "high", "urgent"]
+  }
+}

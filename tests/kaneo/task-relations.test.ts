@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { TaskResource } from '../../src/kaneo/kaneo-client.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockTask } from '../test-helpers.js'
 
 interface UpdateDescriptionBody {
   description: string
@@ -23,31 +23,19 @@ describe('Task Relations', () => {
     baseUrl: 'https://api.test.com',
   }
 
-  const taskBase = {
+  const taskBase = createMockTask({
     id: 'task-1',
     title: 'Source Task',
     number: 1,
-    status: 'todo',
-    priority: 'medium',
     description: '',
-    createdAt: '2026-03-01T00:00:00Z',
-    dueDate: null,
-    projectId: 'proj-1',
-    userId: null,
-  }
+  })
 
-  const relatedTaskBase = {
+  const relatedTaskBase = createMockTask({
     id: 'task-2',
     title: 'Related Task',
     number: 2,
-    status: 'todo',
-    priority: 'medium',
     description: '',
-    createdAt: '2026-03-01T00:00:00Z',
-    dueDate: null,
-    projectId: 'proj-1',
-    userId: null,
-  }
+  })
 
   beforeEach(() => {
     mock.restore()

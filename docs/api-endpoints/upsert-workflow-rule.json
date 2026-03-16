@@ -1,0 +1,30 @@
+{
+  "name": "upsertWorkflowRule",
+  "description": "Create or update a workflow rule",
+  "method": "PUT",
+  "path": "/workflow-rule/{projectId}",
+  "parameters": [
+    {
+      "name": "projectId",
+      "in": "path",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "requestBody": {
+    "type": "object",
+    "required": ["integrationType", "eventType", "columnId"],
+    "properties": {
+      "integrationType": { "type": "string" },
+      "eventType": { "type": "string" },
+      "columnId": { "type": "string" }
+    }
+  },
+  "responses": {
+    "200": {
+      "type": "object"
+    }
+  },
+  "enums": {},
+  "tags": ["Workflow Rules"]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "getWorkflowRules",
+  "description": "Get all workflow rules for a project",
+  "method": "GET",
+  "path": "/workflow-rule/{projectId}",
+  "parameters": [
+    {
+      "name": "projectId",
+      "in": "path",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "object"
+    }
+  },
+  "enums": {},
+  "tags": ["Workflow Rules"]
+}

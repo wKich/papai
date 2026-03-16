@@ -1,0 +1,35 @@
+{
+  "name": "createTimeEntry",
+  "description": "Create a new time entry for a task",
+  "method": "POST",
+  "path": "/time-entry",
+  "parameters": [],
+  "requestBody": {
+    "type": "object",
+    "required": ["taskId", "startTime"],
+    "properties": {
+      "taskId": { "type": "string" },
+      "startTime": { "type": "string" },
+      "endTime": { "type": "string" },
+      "description": { "type": "string" }
+    }
+  },
+  "responses": {
+    "200": {
+      "type": "object",
+      "required": ["id", "taskId", "userId", "description", "startTime", "duration", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "userId": { "type": "string", "nullable": true },
+        "description": { "type": "string", "nullable": true },
+        "startTime": {},
+        "endTime": {},
+        "duration": { "type": "number", "nullable": true },
+        "createdAt": {}
+      }
+    }
+  },
+  "enums": {},
+  "tags": ["Time Entries"]
+}

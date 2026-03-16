@@ -1,13 +1,6 @@
 import { z } from 'zod'
 
-import {
-  type KaneoConfig,
-  KaneoActivityWithTypeSchema,
-  KaneoLabelSchema,
-  KaneoProjectSchema,
-  KaneoTaskSchema,
-  kaneoFetch,
-} from '../kaneo/client.js'
+import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
 import { parseRelationsFromDescription } from '../kaneo/frontmatter.js'
 import { logger } from '../logger.js'
 import type { LinearIssue } from './linear-client.js'
@@ -33,12 +26,43 @@ function record(checks: Check[], name: string, passed: boolean, detail: string):
   log[fn]({ check: name }, `${passed ? 'PASS' : 'FAIL'}: ${detail}`)
 }
 
+// Task schema for API responses
+const KaneoTaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  number: z.number(),
+  status: z.string(),
+  priority: z.string(),
+})
+
 const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
   description: z.string(),
 })
 
+// Label schema for API responses
+const KaneoLabelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
+})
+
 const KaneoLabelLocalSchema = KaneoLabelSchema.extend({
   taskId: z.string().nullish(),
+})
+
+// Project schema for API responses
+const KaneoProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+})
+
+// Activity schema for API responses
+const KaneoActivityWithTypeSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  message: z.string().nullish(),
+  createdAt: z.string().nullish(),
 })
 
 async function runSampleChecks(

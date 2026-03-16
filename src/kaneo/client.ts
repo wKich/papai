@@ -5,123 +5,6 @@ import { KaneoApiError, KaneoValidationError } from './errors.js'
 
 const log = logger.child({ scope: 'kaneo:client' })
 
-// Zod schemas for Kaneo API types
-export const KaneoTaskSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  number: z.number(),
-  status: z.string(),
-  priority: z.string(),
-})
-
-export const KaneoTaskWithProjectIdSchema = KaneoTaskSchema.extend({
-  projectId: z.string().optional(),
-})
-
-export const KaneoTaskWithDetailsSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  number: z.number(),
-  status: z.string(),
-  priority: z.string(),
-  description: z.string(),
-  dueDate: z.string().nullable(),
-  projectId: z.string(),
-  position: z.number(),
-})
-
-export const KaneoTaskResponseSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string(),
-  number: z.number(),
-  status: z.string(),
-  priority: z.string(),
-  dueDate: z.string().nullable(),
-  createdAt: z.string(),
-  projectId: z.string(),
-  userId: z.string().nullable(),
-})
-
-export const KaneoLabelSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  color: z.string(),
-})
-
-export const KaneoProjectSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-})
-
-export const KaneoProjectFullSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-  icon: z.string().nullable(),
-  description: z.string().nullable(),
-  isPublic: z.boolean().nullable(),
-})
-
-export const KaneoActivitySchema = z.object({
-  id: z.string(),
-  comment: z.string(),
-  createdAt: z.string(),
-})
-
-export const KaneoActivityWithTypeSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  content: z.string().nullish(),
-  createdAt: z.string().nullish(),
-})
-
-// Schema for POST /activity/comment response (per API docs)
-export const CreateCommentResponseSchema = z.object({
-  id: z.string(),
-  taskId: z.string(),
-  type: z.string(),
-  createdAt: z.string(),
-  userId: z.string().nullable(),
-  content: z.string().nullable(),
-  externalUserName: z.string().nullable(),
-  externalUserAvatar: z.string().nullable(),
-  externalSource: z.string().nullable(),
-  externalUrl: z.string().nullable(),
-})
-
-export const KaneoColumnSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  icon: z.string().nullable(),
-  color: z.string().nullable(),
-  isFinal: z.boolean(),
-})
-
-export const KaneoColumnSimpleSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-})
-
-export const KaneoWorkspaceSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-})
-
-export const SearchResultSchema = z.object({
-  tasks: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      number: z.number(),
-      status: z.string(),
-      priority: z.string(),
-    }),
-  ),
-})
-
 // Schema for operations that return empty/unknown responses (DELETE, etc.)
 export const EmptyResponseSchema = z.unknown()
 
@@ -207,3 +90,11 @@ export async function kaneoFetch<T>(
 
   return validateResponse(rawData, schema, method, path, response.status)
 }
+
+// Re-export schemas for backward compatibility
+export { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
+export { CreateProjectResponseSchema as KaneoProjectSchema } from './schemas/create-project.js'
+export { GetProjectResponseSchema as KaneoProjectFullSchema } from './schemas/get-project.js'
+export { CreateLabelResponseSchema as KaneoLabelSchema } from './schemas/createLabel.js'
+export { ColumnSchema as KaneoColumnSchema } from './schemas/listTasks.js'
+export { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from './schemas/getActivities.js'

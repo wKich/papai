@@ -1,0 +1,19 @@
+{
+  "name": "getGitHubAppInfo",
+  "description": "Get GitHub app configuration information",
+  "method": "GET",
+  "path": "/github-integration/app-info",
+  "parameters": [],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "object",
+      "required": ["appName"],
+      "properties": {
+        "appName": { "type": "string", "nullable": true }
+      }
+    }
+  },
+  "enums": {},
+  "tags": ["GitHub"]
+}

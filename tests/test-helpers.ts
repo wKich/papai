@@ -1,5 +1,11 @@
 import { mock } from 'bun:test'
 
+import type { Column } from '../src/kaneo/schemas/column.js'
+import type { CreateProjectResponse } from '../src/kaneo/schemas/create-project.js'
+import type { CreateLabelResponse } from '../src/kaneo/schemas/createLabel.js'
+import type { CreateTaskResponse } from '../src/kaneo/schemas/createTask.js'
+import type { ActivityItem } from '../src/kaneo/schemas/getActivities.js'
+
 const originalFetch = globalThis.fetch
 
 export function restoreFetch(): void {
@@ -24,6 +30,99 @@ export function getToolExecutor(tool: unknown): (...args: unknown[]) => Promise<
     return tool.execute
   }
   throw new Error('Tool does not have an execute method')
+}
+
+// Complete task mock matching CreateTaskResponseSchema
+export function createMockTask(overrides: Partial<CreateTaskResponse> = {}): CreateTaskResponse {
+  return {
+    id: 'task-1',
+    projectId: 'proj-1',
+    position: 0,
+    number: 42,
+    userId: null,
+    title: 'Test Task',
+    description: 'Test description',
+    status: 'todo',
+    priority: 'medium',
+    createdAt: '2026-03-01T00:00:00Z',
+    dueDate: null,
+    ...overrides,
+  }
+}
+
+// Complete project mock matching CreateProjectResponseSchema
+export function createMockProject(overrides: Partial<CreateProjectResponse> = {}): CreateProjectResponse {
+  return {
+    id: 'proj-1',
+    workspaceId: 'ws-1',
+    name: 'Test Project',
+    slug: 'test-project',
+    icon: null,
+    description: null,
+    createdAt: '2026-03-01T00:00:00Z',
+    isPublic: false,
+    ...overrides,
+  }
+}
+
+// Complete label mock matching CreateLabelResponseSchema
+export function createMockLabel(overrides: Partial<CreateLabelResponse> = {}): CreateLabelResponse {
+  return {
+    id: 'label-1',
+    name: 'Bug',
+    color: '#ff0000',
+    createdAt: '2026-03-01T00:00:00Z',
+    taskId: null,
+    workspaceId: 'ws-1',
+    ...overrides,
+  }
+}
+
+// Complete activity mock matching CreateCommentResponseSchema (for add/update)
+// or ActivityItemSchema (for list) - both have same structure
+export function createMockActivity(overrides: Partial<ActivityItem> = {}): ActivityItem {
+  return {
+    id: 'act-1',
+    taskId: 'task-1',
+    type: 'comment',
+    createdAt: '2026-03-01T00:00:00Z',
+    userId: null,
+    content: 'Test comment',
+    externalUserName: null,
+    externalUserAvatar: null,
+    externalSource: null,
+    externalUrl: null,
+    ...overrides,
+  }
+}
+
+// Activity mock with string createdAt for list endpoint
+export function createMockActivityForList(overrides: Partial<ActivityItem> = {}): ActivityItem {
+  return {
+    id: 'act-1',
+    taskId: 'task-1',
+    type: 'comment',
+    createdAt: '2026-03-01T00:00:00Z',
+    userId: null,
+    content: 'Test comment',
+    externalUserName: null,
+    externalUserAvatar: null,
+    externalSource: null,
+    externalUrl: null,
+    ...overrides,
+  } as ActivityItem
+}
+
+// Complete column mock matching ColumnSchema
+export function createMockColumn(overrides: Partial<Column> = {}): Column {
+  return {
+    id: 'col-1',
+    name: 'To Do',
+    icon: null,
+    color: null,
+    isFinal: false,
+    ...overrides,
+  }
 }
 
 /**

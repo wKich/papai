@@ -1,22 +1,21 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, KaneoLabelSchema, KaneoProjectSchema, KaneoTaskSchema, kaneoFetch } from '../kaneo/client.js'
-import {
-  CreateColumnBodySchema,
-  CreateLabelBodySchema,
-  CreateProjectBodySchema,
-  CreateTaskBodySchema,
-  UpdateProjectBodySchema,
-} from '../kaneo/request-schemas.js'
+import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
+// Schema definitions are local to this file
 import { logger } from '../logger.js'
 import {
   assignLabels,
   buildRelations,
+  CreateColumnBodySchema,
+  CreateLabelBodySchema,
+  CreateProjectBodySchema,
+  CreateTaskBodySchema,
   ensureArchivedLabel,
   importComments,
   markArchived,
   patchRelations,
   type KaneoLabel,
+  UpdateProjectBodySchema,
 } from './kaneo-import-helpers.js'
 import type { LinearIssue, LinearLabel, LinearState } from './linear-client.js'
 import { processWithAccumulator } from './queue.js'
@@ -26,8 +25,21 @@ const log = logger.child({ scope: 'kaneo-import' })
 export { assignLabels, ensureArchivedLabel, markArchived, importComments, buildRelations, patchRelations }
 export type { KaneoLabel }
 
-const KaneoLabelSchemaLocal = KaneoLabelSchema.extend({
+// Label schema for API responses
+const KaneoLabelSchemaLocal = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
   taskId: z.string().nullish(),
+})
+
+// Task schema for API responses
+const KaneoTaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  number: z.number(),
+  status: z.string(),
+  priority: z.string(),
 })
 
 const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
@@ -37,6 +49,13 @@ const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
 export type KaneoTask = z.infer<typeof KaneoTaskWithDescriptionSchema>
 
 const KaneoColumnSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+})
+
+// Project schema for API responses
+const KaneoProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),

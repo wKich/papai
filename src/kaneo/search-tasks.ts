@@ -4,37 +4,22 @@ import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { GlobalSearchResponseSchema, SearchTaskSchema } from './schemas/global-search.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 
-export const TaskResultSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  number: z.number(),
-  status: z.string(),
-  priority: z.string(),
-  projectId: z.string().optional(),
+// Simplified task result schema for search results
+export const TaskResultSchema = SearchTaskSchema.pick({
+  id: true,
+  title: true,
+  number: true,
+  status: true,
+  priority: true,
+  projectId: true,
 })
 
-// Matches the actual Kaneo search API response: { results, totalCount, searchQuery }
-export const KaneoSearchResponseSchema = z.object({
-  results: z.array(
-    z.object({
-      id: z.string(),
-      type: z.string(),
-      title: z.string(),
-      description: z.string().optional(),
-      projectId: z.string().optional(),
-      taskNumber: z.number().optional(),
-      priority: z.string().optional(),
-      status: z.string().optional(),
-      createdAt: z.string().or(z.date()),
-      relevanceScore: z.number(),
-    }),
-  ),
-  totalCount: z.number(),
-  searchQuery: z.string(),
-})
+// Use global search response schema
+export const KaneoSearchResponseSchema = GlobalSearchResponseSchema
 
 export type TaskResult = z.infer<typeof TaskResultSchema>
 

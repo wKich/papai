@@ -2,12 +2,14 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoProjectSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { CreateProjectResponseSchema } from './schemas/create-project.js'
 
 const log = logger.child({ scope: 'kaneo:create-project' })
 
-export type KaneoProject = z.infer<typeof KaneoProjectSchema>
+export type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>
+export type KaneoProject = CreateProjectResponse
 
 export async function createProject({
   config,

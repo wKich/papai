@@ -1,0 +1,222 @@
+{
+  "name": "globalSearch",
+  "description": "Search across tasks, projects, workspaces, comments, and activities",
+  "method": "GET",
+  "path": "/search",
+  "parameters": [
+    {
+      "name": "q",
+      "in": "query",
+      "type": "string",
+      "minLength": 1,
+      "required": true
+    },
+    {
+      "name": "type",
+      "in": "query",
+      "enum": ["all", "tasks", "projects", "workspaces", "comments", "activities"],
+      "default": "all"
+    },
+    {
+      "name": "workspaceId",
+      "in": "query",
+      "type": "string"
+    },
+    {
+      "name": "projectId",
+      "in": "query",
+      "type": "string"
+    },
+    {
+      "name": "limit",
+      "in": "query",
+      "type": "string",
+      "minimum": 1,
+      "maximum": 50,
+      "default": "20"
+    },
+    {
+      "name": "userEmail",
+      "in": "query",
+      "type": "string",
+      "format": "email"
+    }
+  ],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "projectId",
+              "position",
+              "number",
+              "userId",
+              "title",
+              "description",
+              "status",
+              "priority",
+              "createdAt"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "projectId": { "type": "string" },
+              "position": { "type": "number", "nullable": true },
+              "number": { "type": "number", "nullable": true },
+              "userId": { "type": "string", "nullable": true },
+              "title": { "type": "string" },
+              "description": { "type": "string", "nullable": true },
+              "status": { "type": "string" },
+              "priority": {
+                "enum": ["no-priority", "low", "medium", "high", "urgent"]
+              },
+              "dueDate": {},
+              "createdAt": {}
+            }
+          }
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "workspaceId", "slug", "icon", "name", "description", "createdAt", "isPublic"],
+            "properties": {
+              "id": { "type": "string" },
+              "workspaceId": { "type": "string" },
+              "slug": { "type": "string" },
+              "icon": { "type": "string", "nullable": true },
+              "name": { "type": "string" },
+              "description": { "type": "string", "nullable": true },
+              "createdAt": {},
+              "isPublic": { "type": "boolean", "nullable": true }
+            }
+          }
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "slug", "logo", "metadata", "description", "createdAt"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "slug": { "type": "string" },
+              "logo": { "type": "string", "nullable": true },
+              "metadata": { "type": "string", "nullable": true },
+              "description": { "type": "string", "nullable": true },
+              "createdAt": {}
+            }
+          }
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "taskId",
+              "type",
+              "createdAt",
+              "userId",
+              "content",
+              "externalUserName",
+              "externalUserAvatar",
+              "externalSource",
+              "externalUrl"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "taskId": { "type": "string" },
+              "type": {
+                "enum": [
+                  "comment",
+                  "task",
+                  "status_changed",
+                  "priority_changed",
+                  "unassigned",
+                  "assignee_changed",
+                  "due_date_changed",
+                  "title_changed",
+                  "description_changed",
+                  "create"
+                ]
+              },
+              "createdAt": {},
+              "userId": { "type": "string", "nullable": true },
+              "content": { "type": "string", "nullable": true },
+              "externalUserName": { "type": "string", "nullable": true },
+              "externalUserAvatar": { "type": "string", "nullable": true },
+              "externalSource": { "type": "string", "nullable": true },
+              "externalUrl": { "type": "string", "nullable": true }
+            }
+          }
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "taskId",
+              "type",
+              "createdAt",
+              "userId",
+              "content",
+              "externalUserName",
+              "externalUserAvatar",
+              "externalSource",
+              "externalUrl"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "taskId": { "type": "string" },
+              "type": {
+                "enum": [
+                  "comment",
+                  "task",
+                  "status_changed",
+                  "priority_changed",
+                  "unassigned",
+                  "assignee_changed",
+                  "due_date_changed",
+                  "title_changed",
+                  "description_changed",
+                  "create"
+                ]
+              },
+              "createdAt": {},
+              "userId": { "type": "string", "nullable": true },
+              "content": { "type": "string", "nullable": true },
+              "externalUserName": { "type": "string", "nullable": true },
+              "externalUserAvatar": { "type": "string", "nullable": true },
+              "externalSource": { "type": "string", "nullable": true },
+              "externalUrl": { "type": "string", "nullable": true }
+            }
+          }
+        }
+      }
+    }
+  },
+  "enums": {
+    "SearchType": ["all", "tasks", "projects", "workspaces", "comments", "activities"],
+    "TaskPriority": ["no-priority", "low", "medium", "high", "urgent"],
+    "CommentType": [
+      "comment",
+      "task",
+      "status_changed",
+      "priority_changed",
+      "unassigned",
+      "assignee_changed",
+      "due_date_changed",
+      "title_changed",
+      "description_changed",
+      "create"
+    ]
+  },
+  "tags": ["Search"]
+}

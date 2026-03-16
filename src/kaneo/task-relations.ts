@@ -1,9 +1,7 @@
-import { z } from 'zod'
-
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
 import {
   addRelation,
   parseRelationsFromDescription,
@@ -11,10 +9,7 @@ import {
   updateRelation,
   type TaskRelation,
 } from './frontmatter.js'
-
-const KaneoTaskWithDescriptionSchema = KaneoTaskSchema.extend({
-  description: z.string(),
-})
+import { GetTaskResponseSchema } from './schemas/getTask.js'
 
 const log = logger.child({ scope: 'kaneo:task-relations' })
 
@@ -28,17 +23,10 @@ export async function addTaskRelation(
 
   try {
     // Validate that the related task exists
-    await kaneoFetch(config, 'GET', `/task/${relatedTaskId}`, undefined, undefined, KaneoTaskSchema)
+    await kaneoFetch(config, 'GET', `/task/${relatedTaskId}`, undefined, undefined, GetTaskResponseSchema)
 
-    const task = await kaneoFetch(
-      config,
-      'GET',
-      `/task/${taskId}`,
-      undefined,
-      undefined,
-      KaneoTaskWithDescriptionSchema,
-    )
-    const updatedDescription = addRelation(task.description, { type, taskId: relatedTaskId })
+    const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, GetTaskResponseSchema)
+    const updatedDescription = addRelation(task.description ?? '', { type, taskId: relatedTaskId })
 
     await kaneoFetch(
       config,
@@ -46,7 +34,7 @@ export async function addTaskRelation(
       `/task/description/${taskId}`,
       { description: updatedDescription },
       undefined,
-      KaneoTaskSchema,
+      GetTaskResponseSchema,
     )
 
     log.info({ taskId, relatedTaskId, type }, 'Relation added')
@@ -65,14 +53,7 @@ export async function removeTaskRelation(
   log.debug({ taskId, relatedTaskId }, 'Removing task relation')
 
   try {
-    const task = await kaneoFetch(
-      config,
-      'GET',
-      `/task/${taskId}`,
-      undefined,
-      undefined,
-      KaneoTaskWithDescriptionSchema,
-    )
+    const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, GetTaskResponseSchema)
 
     // Check if relation exists before removing
     const { relations } = parseRelationsFromDescription(task.description)
@@ -84,7 +65,7 @@ export async function removeTaskRelation(
       )
     }
 
-    const updatedDescription = removeRelation(task.description, relatedTaskId)
+    const updatedDescription = removeRelation(task.description ?? '', relatedTaskId)
 
     await kaneoFetch(
       config,
@@ -92,7 +73,7 @@ export async function removeTaskRelation(
       `/task/description/${taskId}`,
       { description: updatedDescription },
       undefined,
-      KaneoTaskSchema,
+      GetTaskResponseSchema,
     )
 
     log.info({ taskId, relatedTaskId }, 'Relation removed')
@@ -112,14 +93,7 @@ export async function updateTaskRelation(
   log.debug({ taskId, relatedTaskId, type }, 'Updating task relation')
 
   try {
-    const task = await kaneoFetch(
-      config,
-      'GET',
-      `/task/${taskId}`,
-      undefined,
-      undefined,
-      KaneoTaskWithDescriptionSchema,
-    )
+    const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, GetTaskResponseSchema)
 
     // Check if relation exists before updating
     const { relations } = parseRelationsFromDescription(task.description)
@@ -131,7 +105,7 @@ export async function updateTaskRelation(
       )
     }
 
-    const updatedDescription = updateRelation(task.description, relatedTaskId, type)
+    const updatedDescription = updateRelation(task.description ?? '', relatedTaskId, type)
 
     await kaneoFetch(
       config,
@@ -139,7 +113,7 @@ export async function updateTaskRelation(
       `/task/description/${taskId}`,
       { description: updatedDescription },
       undefined,
-      KaneoTaskSchema,
+      GetTaskResponseSchema,
     )
 
     log.info({ taskId, relatedTaskId, type }, 'Relation updated')

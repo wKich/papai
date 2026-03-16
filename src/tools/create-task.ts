@@ -12,7 +12,7 @@ const log = logger.child({ scope: 'tool:create-task' })
 export interface CreateTaskResult {
   id: string
   title: string
-  number: number
+  number: number | null
   status: string
   url: string
 }

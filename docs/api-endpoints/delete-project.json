@@ -1,0 +1,61 @@
+{
+  "endpoint": "deleteProject",
+  "description": "Delete a project by ID",
+  "httpMethod": "DELETE",
+  "path": "/project/{id}",
+  "parameters": [
+    {
+      "name": "id",
+      "in": "path",
+      "schema": {
+        "type": "string"
+      },
+      "required": true
+    }
+  ],
+  "requestBody": null,
+  "response": {
+    "statusCode": 200,
+    "contentType": "application/json",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "nullable": true
+        },
+        "createdAt": {},
+        "isPublic": {
+          "type": "boolean",
+          "nullable": true
+        }
+      },
+      "required": ["id", "workspaceId", "slug", "icon", "name", "description", "createdAt", "isPublic"]
+    }
+  },
+  "enums": {},
+  "constants": {},
+  "security": {
+    "bearerAuth": {
+      "type": "http",
+      "scheme": "bearer",
+      "description": "Bearer token authentication"
+    }
+  }
+}

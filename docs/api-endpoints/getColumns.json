@@ -1,0 +1,25 @@
+{
+  "endpoint": "getColumns",
+  "description": "Get all columns for a project",
+  "httpMethod": "GET",
+  "path": "/column/{projectId}",
+  "pathParameters": [
+    {
+      "name": "projectId",
+      "in": "path",
+      "schema": {
+        "type": "string"
+      },
+      "required": true
+    }
+  ],
+  "requestBody": null,
+  "response": {
+    "statusCode": 200,
+    "description": "List of columns ordered by position",
+    "schema": {}
+  },
+  "enums": {},
+  "constants": {},
+  "authentication": "bearerAuth"
+}

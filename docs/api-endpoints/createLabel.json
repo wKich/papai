@@ -1,0 +1,50 @@
+{
+  "endpoint": "createLabel",
+  "description": "Create a new label in a workspace",
+  "method": "POST",
+  "path": "/label",
+  "requestBody": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "color": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "taskId": {
+        "type": "string"
+      }
+    },
+    "required": ["name", "color", "workspaceId"]
+  },
+  "response": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "color": {
+        "type": "string"
+      },
+      "createdAt": {},
+      "taskId": {
+        "type": "string",
+        "nullable": true
+      },
+      "workspaceId": {
+        "type": "string",
+        "nullable": true
+      }
+    },
+    "required": ["id", "name", "color", "createdAt", "taskId", "workspaceId"]
+  },
+  "enums": {},
+  "constants": {}
+}

@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { type KaneoConfig, KaneoColumnSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { ColumnSchema } from './schemas/listTasks.js'
 
 const log = logger.child({ scope: 'kaneo:create-column' })
+
+export type CreateColumnResponse = z.infer<typeof ColumnSchema>
 
 export async function createColumn({
   config,
@@ -20,7 +23,7 @@ export async function createColumn({
   icon?: string
   color?: string
   isFinal?: boolean
-}): Promise<z.infer<typeof KaneoColumnSchema>> {
+}): Promise<CreateColumnResponse> {
   log.debug(
     { projectId, name, hasIcon: icon !== undefined, hasColor: color !== undefined, isFinal },
     'createColumn called',

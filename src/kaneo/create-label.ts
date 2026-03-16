@@ -2,12 +2,14 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoLabelSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { CreateLabelResponseSchema } from './schemas/createLabel.js'
 
 const log = logger.child({ scope: 'kaneo:create-label' })
 
-export type KaneoLabel = z.infer<typeof KaneoLabelSchema>
+export type CreateLabelResponse = z.infer<typeof CreateLabelResponseSchema>
+export type KaneoLabel = CreateLabelResponse
 
 export async function createLabel({
   config,

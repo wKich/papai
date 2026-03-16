@@ -1,0 +1,33 @@
+{
+  "name": "listGitHubRepositories",
+  "description": "List all accessible GitHub repositories",
+  "method": "GET",
+  "path": "/github-integration/repositories",
+  "parameters": [],
+  "requestBody": null,
+  "responses": {
+    "200": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "full_name", "owner", "private", "html_url"],
+        "properties": {
+          "id": { "type": "number" },
+          "name": { "type": "string" },
+          "full_name": { "type": "string" },
+          "owner": {
+            "type": "object",
+            "required": ["login"],
+            "properties": {
+              "login": { "type": "string" }
+            }
+          },
+          "private": { "type": "boolean" },
+          "html_url": { "type": "string" }
+        }
+      }
+    }
+  },
+  "enums": {},
+  "tags": ["GitHub"]
+}

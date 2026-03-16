@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { type KaneoConfig, KaneoLabelSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, kaneoFetch } from './client.js'
 import { LabelResource } from './label-resource.js'
+import { CreateLabelResponseSchema } from './schemas/createLabel.js'
 
 const ARCHIVE_LABEL_NAME = 'archived'
 const ARCHIVE_LABEL_COLOR = '#808080'
@@ -12,7 +13,7 @@ const log = logger.child({ scope: 'kaneo:task-archive' })
 export async function getOrCreateArchiveLabel(
   config: KaneoConfig,
   workspaceId: string,
-): Promise<z.infer<typeof KaneoLabelSchema>> {
+): Promise<z.infer<typeof CreateLabelResponseSchema>> {
   log.debug({ workspaceId }, 'Getting or creating archive label')
 
   const labels = await kaneoFetch(
@@ -21,7 +22,7 @@ export async function getOrCreateArchiveLabel(
     `/label/workspace/${workspaceId}`,
     undefined,
     undefined,
-    z.array(KaneoLabelSchema),
+    z.array(CreateLabelResponseSchema),
   )
   const existing = labels.find((l) => l.name.toLowerCase() === ARCHIVE_LABEL_NAME)
   if (existing !== undefined) {
@@ -49,7 +50,7 @@ export async function isTaskArchived(config: KaneoConfig, taskId: string, archiv
     `/label/task/${taskId}`,
     undefined,
     undefined,
-    z.array(KaneoLabelSchema),
+    z.array(CreateLabelResponseSchema),
   )
   const isArchived = labels.some((l) => l.id === archiveLabelId)
   log.debug({ taskId, isArchived }, 'Task archive status checked')

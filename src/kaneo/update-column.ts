@@ -1,10 +1,14 @@
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { type KaneoConfig, KaneoColumnSchema } from './client.js'
+import { classifyKaneoError } from './classify-error.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { ColumnSchema } from './schemas/listTasks.js'
 
 const log = logger.child({ scope: 'kaneo:update-column' })
+
+export type UpdateColumnResponse = z.infer<typeof ColumnSchema>
 
 export async function updateColumn({
   config,
@@ -20,7 +24,7 @@ export async function updateColumn({
   icon?: string
   color?: string
   isFinal?: boolean
-}): Promise<z.infer<typeof KaneoColumnSchema>> {
+}): Promise<UpdateColumnResponse> {
   log.debug(
     { columnId, hasName: name !== undefined, hasIcon: icon !== undefined, hasColor: color !== undefined, isFinal },
     'updateColumn called',
@@ -33,6 +37,6 @@ export async function updateColumn({
     return column
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), columnId }, 'updateColumn failed')
-    throw error
+    throw classifyKaneoError(error)
   }
 }

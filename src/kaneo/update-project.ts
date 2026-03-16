@@ -3,12 +3,14 @@ import { z } from 'zod'
 import { kaneoError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig, KaneoProjectSchema } from './client.js'
+import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { UpdateProjectResponseSchema } from './schemas/update-project.js'
 
 const log = logger.child({ scope: 'kaneo:update-project' })
 
-export type KaneoProject = z.infer<typeof KaneoProjectSchema>
+export type UpdateProjectResponse = z.infer<typeof UpdateProjectResponseSchema>
+export type KaneoProject = UpdateProjectResponse
 
 export async function updateProject({
   config,

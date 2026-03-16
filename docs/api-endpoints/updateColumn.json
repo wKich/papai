@@ -1,0 +1,47 @@
+{
+  "endpoint": "updateColumn",
+  "description": "Update a column",
+  "httpMethod": "PUT",
+  "path": "/column/{id}",
+  "pathParameters": [
+    {
+      "name": "id",
+      "in": "path",
+      "schema": {
+        "type": "string"
+      },
+      "required": true
+    }
+  ],
+  "requestBody": {
+    "required": true,
+    "contentType": "application/json",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true
+        },
+        "color": {
+          "type": "string",
+          "nullable": true
+        },
+        "isFinal": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "description": "Column updated successfully",
+    "schema": {}
+  },
+  "enums": {},
+  "constants": {},
+  "authentication": "bearerAuth"
+}
