@@ -31,7 +31,7 @@ export class TaskResource {
     this.log.debug({ projectId: params.projectId, title: params.title }, 'Creating task')
 
     try {
-      const status = await validateStatus(this.config, params.projectId, params.status ?? 'to-do')
+      const status = await validateStatus(this.config, params.projectId, params.status ?? 'todo')
       const task = await kaneoFetch(
         this.config,
         'POST',
