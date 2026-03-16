@@ -3,7 +3,7 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import type { KaneoConfig } from '../kaneo/client.js'
-import { archiveProject } from '../kaneo/index.js'
+import { deleteProject } from '../kaneo/index.js'
 import { logger } from '../logger.js'
 import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
@@ -28,7 +28,7 @@ export function makeArchiveProjectTool(kaneoConfig: KaneoConfig): ToolSet[string
         return gate
       }
       try {
-        return await archiveProject({ config: kaneoConfig, projectId })
+        return await deleteProject({ config: kaneoConfig, projectId })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'archive_project' },

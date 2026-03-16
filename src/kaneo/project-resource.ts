@@ -115,15 +115,15 @@ export class ProjectResource {
     }
   }
 
-  async archive(projectId: string): Promise<{ id: string; success: true }> {
-    this.log.debug({ projectId }, 'Archiving project')
+  async delete(projectId: string): Promise<{ id: string; success: true }> {
+    this.log.debug({ projectId }, 'Deleting project')
 
     try {
       await kaneoFetch(this.config, 'DELETE', `/project/${projectId}`, undefined, undefined, z.unknown())
-      this.log.info({ projectId }, 'Project archived')
+      this.log.info({ projectId }, 'Project deleted')
       return { id: projectId, success: true }
     } catch (error) {
-      this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to archive project')
+      this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to delete project')
       throw classifyKaneoError(error)
     }
   }

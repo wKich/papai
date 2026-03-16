@@ -21,26 +21,18 @@ export class CommentResource {
     try {
       // Kaneo's createComment controller uses db.insert().values() without .returning(),
       // so the response is a raw Drizzle result — not an activity object.
-      // We need to fetch the comment after creation to get its ID.
+      // The GET /activity/{taskId} endpoint is broken and doesn't return message field,
+      // so we cannot fetch the comment after creation to get its ID.
       await kaneoFetch(this.config, 'POST', '/activity/comment', { taskId, comment }, undefined, z.unknown())
 
-      // Fetch the newly created comment to get its ID and createdAt
-      // We find the most recent comment instead of matching by text,
-      // because the API may transform text (trim whitespace, etc.) and
-      // text-based matching is fragile with duplicates
-      const comments = await this.list(taskId)
-      if (comments.length === 0) {
-        throw new Error('Failed to retrieve created comment: no comments found')
+      // Return a placeholder since we can't get the actual ID from the broken API
+      // The comment was created successfully, we just can't retrieve it
+      this.log.info({ taskId, commentLength: comment.length }, 'Comment added (ID unavailable due to API limitation)')
+      return {
+        id: 'pending',
+        comment: comment,
+        createdAt: new Date().toISOString(),
       }
-      // Sort by createdAt descending to get the newest comment first
-      const sortedComments = comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      const newComment = sortedComments[0]!
-
-      this.log.info(
-        { taskId, commentId: newComment.id, commentText: newComment.comment.substring(0, 50) },
-        'Comment added',
-      )
-      return { id: newComment.id, comment: newComment.comment, createdAt: newComment.createdAt }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')
       throw classifyKaneoError(error)
@@ -59,15 +51,28 @@ export class CommentResource {
         undefined,
         z.array(KaneoActivityWithTypeSchema),
       )
+
+      // NOTE: Kaneo API GET /activity/{taskId} is broken - it returns activities
+      // without the 'message' field, so we cannot retrieve comment text.
+      // See: https://github.com/usekaneo/kaneo/issues (if reported)
       const comments = activities.flatMap((a) => {
         // Kaneo API may return comments as 'comment' or 'user_activity' type
-        if (a.type !== 'comment' && a.type !== 'user_activity') return []
-        // Kaneo stores comment text in the 'message' field, not 'comment'
-        const commentText = a.message
-        if (commentText === null || commentText === undefined) return []
-        return [{ id: a.id, comment: commentText, createdAt: a.createdAt ?? '' }]
+        if (a.type !== 'comment' && a.type !== 'user_activity') {
+          return []
+        }
+        // Check for comment text in various possible fields
+        const raw = a as Record<string, unknown>
+        const commentValue = a.message ?? raw['comment'] ?? raw['content'] ?? raw['text']
+        if (commentValue === null || commentValue === undefined) {
+          return []
+        }
+        // API may return various types due to broken endpoint - only accept strings
+        if (typeof commentValue !== 'string') {
+          return []
+        }
+        return [{ id: a.id, comment: commentValue, createdAt: a.createdAt ?? '' }]
       })
-      this.log.info({ taskId, count: comments.length }, 'Comments listed')
+      this.log.info({ taskId, count: comments.length, rawCount: activities.length }, 'Comments listed')
       return comments
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to list comments')

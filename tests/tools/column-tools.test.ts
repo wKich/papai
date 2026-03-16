@@ -192,9 +192,14 @@ describe('Column Tools', () => {
       )
 
       expect(result).toMatchObject({ status: 'confirmation_required' })
-      expect((result as { message: string }).message).toContain('In Progress')
-      expect((result as { message: string }).message).not.toContain('0.6')
-      expect((result as { message: string }).message).not.toContain('0.85')
+      if (typeof result === 'object' && result !== null && 'message' in result) {
+        const message = (result as Record<string, unknown>)['message']
+        expect(typeof message === 'string' && message.includes('In Progress')).toBe(true)
+        expect(typeof message === 'string' && !message.includes('0.6')).toBe(true)
+        expect(typeof message === 'string' && !message.includes('0.85')).toBe(true)
+      } else {
+        throw new Error('Expected result to have a message string')
+      }
     })
 
     test('executes when confidence exactly meets threshold (0.85)', async () => {
@@ -225,8 +230,19 @@ describe('Column Tools', () => {
 
     test('validates columnId is required', () => {
       const tool = makeDeleteColumnTool(mockConfig)
-      const schema = tool.inputSchema as { safeParse: (v: unknown) => { success: boolean } }
-      expect(schema.safeParse({ confidence: 0.9 }).success).toBe(false)
+      const schema = tool.inputSchema
+      expect(typeof schema === 'object' && schema !== null && 'safeParse' in schema).toBe(true)
+      if (
+        typeof schema === 'object' &&
+        schema !== null &&
+        'safeParse' in schema &&
+        typeof schema.safeParse === 'function'
+      ) {
+        const parseResult = schema.safeParse({ confidence: 0.9 })
+        expect(
+          typeof parseResult === 'object' && parseResult !== null && 'success' in parseResult && parseResult.success,
+        ).toBe(false)
+      }
     })
   })
 })

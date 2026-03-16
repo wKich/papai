@@ -2,16 +2,14 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig, KaneoTaskWithProjectIdSchema, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
+import { type KaneoConfig, KaneoTaskResponseSchema, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
-
-const FullTaskSchema = KaneoTaskResponseSchema.extend({
-  position: z.number(),
-})
+import { denormalizeStatus, validateStatus } from './task-status.js'
+import { performUpdate } from './task-update-helpers.js'
 
 export { addTaskRelation, removeTaskRelation, updateTaskRelation } from './task-relations.js'
 
@@ -32,6 +30,7 @@ export class TaskResource {
     this.log.debug({ projectId: params.projectId, title: params.title }, 'Creating task')
 
     try {
+      const status = await validateStatus(this.config, params.projectId, params.status ?? 'to-do')
       const task = await kaneoFetch(
         this.config,
         'POST',
@@ -40,13 +39,15 @@ export class TaskResource {
           title: params.title,
           description: params.description ?? '',
           priority: params.priority ?? 'no-priority',
-          status: params.status ?? 'todo',
+          status,
           dueDate: params.dueDate,
           userId: params.userId,
         },
         undefined,
         KaneoTaskResponseSchema,
       )
+      // Denormalize status from column ID to slug
+      task.status = await denormalizeStatus(this.config, params.projectId, task.status)
       this.log.info({ taskId: task.id, number: task.number }, 'Task created')
       return task
     } catch (error) {
@@ -68,6 +69,13 @@ export class TaskResource {
         GetTasksResponseSchema,
       )
       const tasks = result.columns.flatMap((col) => col.tasks).concat(result.plannedTasks)
+      // Denormalize status from column slug to normalized slug for each task
+      for (const task of tasks) {
+        const column = result.columns.find((c) => c.id === task.status)
+        if (column !== undefined) {
+          task.status = column.name.toLowerCase().replace(/\s+/g, '-')
+        }
+      }
       this.log.info({ count: tasks.length }, 'Tasks listed')
       return tasks
     } catch (error) {
@@ -100,6 +108,8 @@ export class TaskResource {
         undefined,
         KaneoTaskResponseSchema,
       )
+      // Denormalize status from column ID to slug
+      task.status = await denormalizeStatus(this.config, task.projectId, task.status)
       const { relations } = parseRelationsFromDescription(task.description)
       this.log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
       // Return raw description (with frontmatter) for tests to check relation markers
@@ -121,77 +131,22 @@ export class TaskResource {
       projectId?: string
       userId?: string
     },
-  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
+  ): Promise<z.infer<typeof KaneoTaskResponseSchema>> {
     this.log.debug({ taskId, ...params }, 'Updating task')
 
     try {
-      const task = await this.performUpdate(taskId, params)
+      // Validate and normalize status if being updated
+      if (params.status !== undefined) {
+        const existingTask = await this.get(taskId)
+        params.status = await validateStatus(this.config, existingTask.projectId, params.status)
+      }
+      const task = await performUpdate(this.config, taskId, params)
       this.log.info({ taskId, number: task.number }, 'Task updated')
       return task
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update task')
       throw classifyKaneoError(error)
     }
-  }
-
-  private singleFieldUpdate(
-    taskId: string,
-    field: string,
-    value: unknown,
-  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
-    const endpoints: Record<string, { path: string; key: string }> = {
-      status: { path: '/task/status/', key: 'status' },
-      priority: { path: '/task/priority/', key: 'priority' },
-      userId: { path: '/task/assignee/', key: 'userId' },
-      dueDate: { path: '/task/due-date/', key: 'dueDate' },
-      title: { path: '/task/title/', key: 'title' },
-      description: { path: '/task/description/', key: 'description' },
-    }
-    const endpoint = endpoints[field]
-    if (endpoint === undefined) throw new Error(`Unknown field: ${field}`)
-    return kaneoFetch(
-      this.config,
-      'PUT',
-      `${endpoint.path}${taskId}`,
-      { [endpoint.key]: value },
-      undefined,
-      KaneoTaskWithProjectIdSchema,
-    )
-  }
-
-  private async performUpdate(
-    taskId: string,
-    params: {
-      title?: string
-      description?: string
-      status?: string
-      priority?: string
-      dueDate?: string
-      projectId?: string
-      userId?: string
-    },
-  ): Promise<z.infer<typeof KaneoTaskWithProjectIdSchema>> {
-    // Use single-field endpoints for each field being updated
-    // (The full /task/:id endpoint doesn't actually update fields)
-    const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
-
-    // Apply updates sequentially using reduce to chain promises
-    // This avoids await-in-loop while maintaining sequential execution
-    const result = await setFields.reduce<Promise<z.infer<typeof KaneoTaskWithProjectIdSchema> | undefined>>(
-      async (previousPromise, [field, value]) => {
-        await previousPromise
-        return this.singleFieldUpdate(taskId, field, value)
-      },
-      Promise.resolve(undefined),
-    )
-
-    // Return the result, or fetch current if no updates
-    if (result !== undefined) {
-      return result
-    }
-
-    // If no fields to update, just return current task
-    return kaneoFetch(this.config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
   }
 
   async delete(taskId: string): Promise<{ id: string; success: true }> {

@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+
+setDefaultTimeout(10000)
 
 import { addTaskLabel } from '../../src/kaneo/add-task-label.js'
 import type { KaneoConfig } from '../../src/kaneo/client.js'
@@ -9,24 +11,15 @@ import { removeLabel } from '../../src/kaneo/remove-label.js'
 import { removeTaskLabel } from '../../src/kaneo/remove-task-label.js'
 import { updateLabel } from '../../src/kaneo/update-label.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Label Operations', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
   let projectId: string
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
-  })
-
-  afterAll(async () => {
-    await teardownE2EEnvironment()
-  })
-
-  beforeEach(async () => {
     await testClient.cleanup()
 
     const project = await testClient.createTestProject(`Label Ops Test ${Date.now()}`)

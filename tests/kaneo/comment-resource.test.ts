@@ -221,9 +221,7 @@ describe('CommentResource', () => {
       setMockFetch(() =>
         Promise.resolve(
           new Response(
-            JSON.stringify([
-              { id: 'act-1', type: 'comment', message: 'Test', createdAt: '2026-03-01T12:00:00Z' },
-            ]),
+            JSON.stringify([{ id: 'act-1', type: 'comment', message: 'Test', createdAt: '2026-03-01T12:00:00Z' }]),
             { status: 200 },
           ),
         ),

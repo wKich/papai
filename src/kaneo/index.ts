@@ -1,7 +1,7 @@
 export { addComment } from './add-comment.js'
 export { addTaskLabel } from './add-task-label.js'
 export { addTaskRelation } from './add-task-relation.js'
-export { archiveProject } from './archive-project.js'
+export { deleteProject } from './delete-project.js'
 export { archiveTask } from './archive-task.js'
 export { createColumn } from './create-column.js'
 export { createLabel } from './create-label.js'

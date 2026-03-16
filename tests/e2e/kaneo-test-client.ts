@@ -1,10 +1,11 @@
-import { archiveProject } from '../../src/kaneo/archive-project.js'
 import { type KaneoConfig } from '../../src/kaneo/client.js'
 import { createProject } from '../../src/kaneo/create-project.js'
+import { deleteProject } from '../../src/kaneo/delete-project.js'
 import { deleteTask } from '../../src/kaneo/delete-task.js'
 import { removeLabel } from '../../src/kaneo/remove-label.js'
 import { logger } from '../../src/logger.js'
-import { getE2EConfig, type E2EConfig } from './setup.js'
+import { getE2EConfigSync, type E2EConfig } from './global-setup.js'
+import { generateUniqueSuffix } from './test-helpers.js'
 
 const log = logger.child({ scope: 'e2e:client' })
 
@@ -16,7 +17,7 @@ export class KaneoTestClient {
   private readonly createdLabelIds: string[]
 
   constructor() {
-    this.config = getE2EConfig()
+    this.config = getE2EConfigSync()
     this.kaneoConfig = {
       apiKey: this.config.apiKey,
       baseUrl: this.config.baseUrl,
@@ -26,17 +27,18 @@ export class KaneoTestClient {
     this.createdLabelIds = []
   }
 
-  async createTestProject(name: string): Promise<{ id: string; name: string; slug: string }> {
-    log.debug({ name }, 'createTestProject called')
+  async createTestProject(name?: string): Promise<{ id: string; name: string; slug: string }> {
+    const projectName = name ?? `Test Project ${generateUniqueSuffix()}`
+    log.debug({ name: projectName }, 'createTestProject called')
 
     const project = await createProject({
       config: this.kaneoConfig,
       workspaceId: this.config.workspaceId,
-      name,
+      name: projectName,
     })
 
     this.createdProjectIds.push(project.id)
-    log.info({ projectId: project.id, name }, 'Test project created')
+    log.info({ projectId: project.id, name: projectName }, 'Test project created')
 
     return project
   }
@@ -66,44 +68,38 @@ export class KaneoTestClient {
 
     log.info({ projectCount, taskCount, labelCount }, 'Starting cleanup')
 
-    // Delete all tasks in parallel
-    await Promise.all(
-      this.createdTaskIds.map(async (taskId) => {
-        try {
-          await deleteTask({ config: this.kaneoConfig, taskId })
-          log.debug({ taskId }, 'Task deleted during cleanup')
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          log.warn({ taskId, error: message }, 'Failed to delete task during cleanup')
-        }
-      }),
-    )
+    // Delete all tasks
+    for (const taskId of this.createdTaskIds) {
+      try {
+        await deleteTask({ config: this.kaneoConfig, taskId })
+        log.debug({ taskId }, 'Task deleted during cleanup')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.warn({ taskId, error: message }, 'Failed to delete task during cleanup')
+      }
+    }
 
-    // Archive all projects in parallel
-    await Promise.all(
-      this.createdProjectIds.map(async (projectId) => {
-        try {
-          await archiveProject({ config: this.kaneoConfig, projectId })
-          log.debug({ projectId }, 'Project archived during cleanup')
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          log.warn({ projectId, error: message }, 'Failed to archive project during cleanup')
-        }
-      }),
-    )
+    // Delete all projects
+    for (const projectId of this.createdProjectIds) {
+      try {
+        await deleteProject({ config: this.kaneoConfig, projectId })
+        log.debug({ projectId }, 'Project deleted during cleanup')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.warn({ projectId, error: message }, 'Failed to delete project during cleanup')
+      }
+    }
 
-    // Remove all labels in parallel
-    await Promise.all(
-      this.createdLabelIds.map(async (labelId) => {
-        try {
-          await removeLabel({ config: this.kaneoConfig, labelId })
-          log.debug({ labelId }, 'Label removed during cleanup')
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          log.warn({ labelId, error: message }, 'Failed to remove label during cleanup')
-        }
-      }),
-    )
+    // Remove all labels
+    for (const labelId of this.createdLabelIds) {
+      try {
+        await removeLabel({ config: this.kaneoConfig, labelId })
+        log.debug({ labelId }, 'Label removed during cleanup')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.warn({ labelId, error: message }, 'Failed to remove label during cleanup')
+      }
+    }
 
     this.createdTaskIds.length = 0
     this.createdProjectIds.length = 0

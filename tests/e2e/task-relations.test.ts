@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+
+setDefaultTimeout(10000)
 
 import { addTaskRelation } from '../../src/kaneo/add-task-relation.js'
 import type { KaneoConfig } from '../../src/kaneo/client.js'
@@ -7,27 +9,17 @@ import { getTask } from '../../src/kaneo/get-task.js'
 import { removeTaskRelation } from '../../src/kaneo/remove-task-relation.js'
 import { updateTaskRelation } from '../../src/kaneo/update-task-relation.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Task Relations', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
   let projectId: string
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
-  })
-
-  beforeEach(async () => {
-    await testClient.cleanup()
     const project = await testClient.createTestProject(`Relations Test ${Date.now()}`)
     projectId = project.id
-  })
-
-  afterAll(async () => {
-    await teardownE2EEnvironment()
   })
 
   test('adds blocks relation between tasks', async () => {

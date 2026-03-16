@@ -67,20 +67,12 @@ export class ColumnResource {
     this.log.debug({ columnId, ...params }, 'Updating column')
 
     try {
-      const existing = await kaneoFetch(
-        this.config,
-        'GET',
-        `/column/${columnId}`,
-        undefined,
-        undefined,
-        KaneoColumnSchema,
-      )
-      const body = {
-        name: params.name ?? existing.name,
-        icon: params.icon ?? existing.icon ?? '',
-        color: params.color ?? existing.color,
-        isFinal: params.isFinal ?? existing.isFinal,
-      }
+      const body: Record<string, unknown> = {}
+      if (params.name !== undefined) body['name'] = params.name
+      if (params.icon !== undefined) body['icon'] = params.icon
+      if (params.color !== undefined) body['color'] = params.color
+      if (params.isFinal !== undefined) body['isFinal'] = params.isFinal
+
       const column = await kaneoFetch(this.config, 'PUT', `/column/${columnId}`, body, undefined, KaneoColumnSchema)
       this.log.info({ columnId, name: column.name }, 'Column updated')
       return column

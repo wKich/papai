@@ -1,37 +1,30 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
-import { archiveProject } from '../../src/kaneo/archive-project.js'
+setDefaultTimeout(10000)
+
 import type { KaneoConfig } from '../../src/kaneo/client.js'
+import { deleteProject } from '../../src/kaneo/delete-project.js'
 import { listProjects } from '../../src/kaneo/list-projects.js'
 import { updateProject } from '../../src/kaneo/update-project.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Project Archive', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
-  })
-
-  afterAll(async () => {
-    await teardownE2EEnvironment()
-  })
-
-  beforeEach(async () => {
     await testClient.cleanup()
   })
 
-  test('archives a project', async () => {
-    const project = await testClient.createTestProject(`To Archive ${Date.now()}`)
-    await archiveProject({ config: kaneoConfig, projectId: project.id })
+  test('deletes a project', async () => {
+    const project = await testClient.createTestProject(`To Delete ${Date.now()}`)
+    await deleteProject({ config: kaneoConfig, projectId: project.id })
 
     const projects = await listProjects({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
     const found = projects.find((p) => p.id === project.id)
-    expect(found).toBeDefined()
+    expect(found).toBeUndefined()
   })
 
   test('updates project name and description', async () => {

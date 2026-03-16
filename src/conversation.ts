@@ -1,15 +1,11 @@
 import { type ModelMessage } from 'ai'
 
-import { getConfig } from './config.js'
+import { getCachedConfig, getCachedHistory, setCachedHistory } from './cache.js'
 import { logger } from './logger.js'
 import { buildMemoryContextMessage, loadFacts, loadSummary, saveSummary, trimWithMemoryModel } from './memory.js'
 
 const log = logger.child({ scope: 'conversation' })
 
-// Working memory limits - based on typical LLM context window constraints
-// WORKING_MEMORY_CAP: Hard ceiling to prevent unbounded token growth (100 messages ≈ 10-20k tokens)
-// TRIM_MIN/TRIM_MAX: Range for smart trim - keeps enough context (50) while allowing flexibility (100)
-// SMART_TRIM_INTERVAL: Trigger trim every N user messages to balance cost vs. relevance
 const WORKING_MEMORY_CAP = 100
 const TRIM_MIN = 50
 const TRIM_MAX = 100
@@ -24,27 +20,23 @@ export const buildMessagesWithMemory = (userId: number, history: readonly ModelM
   return { messages: memoryMsg === null ? [...history] : [memoryMsg, ...history], memoryMsg }
 }
 
-export const trimAndSummarise = async (
-  history: readonly ModelMessage[],
-  userId: number,
-): Promise<readonly ModelMessage[]> => {
-  log.debug({ userId, historyLength: history.length }, 'trimAndSummarise called')
-
+export const shouldTriggerTrim = (history: readonly ModelMessage[]): boolean => {
   const userMessageCount = history.filter((m) => m.role === 'user').length
   const periodicTrim = userMessageCount > 0 && userMessageCount % SMART_TRIM_INTERVAL === 0 && history.length > TRIM_MIN
   const hardCapTrim = history.length >= WORKING_MEMORY_CAP
+  return periodicTrim || hardCapTrim
+}
 
-  if (!periodicTrim && !hardCapTrim) {
-    return history
-  }
+export const runTrimInBackground = async (userId: number, history: readonly ModelMessage[]): Promise<void> => {
+  const userMessageCount = history.filter((m) => m.role === 'user').length
+  const reason =
+    history.length >= WORKING_MEMORY_CAP ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
+  log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered (running in background)')
 
-  const reason = hardCapTrim ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
-  log.warn({ userId, historyLength: history.length, reason }, 'Smart trim triggered')
-
-  const llmApiKey = getConfig(userId, 'llm_apikey')
-  const llmBaseUrl = getConfig(userId, 'llm_baseurl')
-  const mainModel = getConfig(userId, 'main_model')
-  const smallModel = getConfig(userId, 'small_model') ?? mainModel
+  const llmApiKey = getCachedConfig(userId, 'llm_apikey')
+  const llmBaseUrl = getCachedConfig(userId, 'llm_baseurl')
+  const mainModel = getCachedConfig(userId, 'main_model')
+  const smallModel = getCachedConfig(userId, 'small_model') ?? mainModel
 
   if (llmApiKey !== null && llmBaseUrl !== null && smallModel !== null) {
     try {
@@ -55,17 +47,39 @@ export const trimAndSummarise = async (
         model: smallModel,
       })
       saveSummary(userId, summary)
+      setCachedHistory(userId, trimmedMessages)
       log.info({ userId, retained: trimmedMessages.length }, 'Smart trim complete')
-      return trimmedMessages
     } catch (error) {
       log.warn(
         { userId, error: error instanceof Error ? error.message : String(error) },
-        'Smart trim failed — falling back to positional slice',
+        'Smart trim failed in background',
       )
     }
   } else {
-    log.warn({ userId }, 'LLM config not available — falling back to positional slice')
+    log.warn({ userId }, 'LLM config not available for background trim')
+  }
+}
+
+export const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
+  log.debug({ userId }, 'getOrCreateHistory called')
+  const history = getCachedHistory(userId)
+  log.debug({ userId, messageCount: history.length }, 'Conversation history loaded from cache')
+  if (history.length === 0) {
+    log.info({ userId }, 'No existing conversation history')
+  }
+  return history
+}
+
+export const trimAndSummarise = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
+  log.debug({ userId, historyLength: history.length }, 'trimAndSummarise called (now non-blocking)')
+
+  if (!shouldTriggerTrim(history)) {
+    return history
   }
 
-  return history.slice(-WORKING_MEMORY_CAP)
+  // Run trim in background without blocking
+  void runTrimInBackground(userId, history)
+
+  // Return current history immediately
+  return history
 }

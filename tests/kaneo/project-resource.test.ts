@@ -375,12 +375,12 @@ describe('ProjectResource', () => {
     })
   })
 
-  describe('archive', () => {
-    test('archives project successfully', async () => {
+  describe('delete', () => {
+    test('deletes project successfully', async () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 })))
 
       const resource = new ProjectResource(mockConfig)
-      const result = await resource.archive('proj-1')
+      const result = await resource.delete('proj-1')
 
       expect(result.id).toBe('proj-1')
       expect(result.success).toBe(true)
@@ -390,7 +390,7 @@ describe('ProjectResource', () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })))
 
       const resource = new ProjectResource(mockConfig)
-      const promise = resource.archive('invalid')
+      const promise = resource.delete('invalid')
       expect(promise).rejects.toMatchObject({
         appError: { code: 'project-not-found' },
       })
@@ -401,7 +401,7 @@ describe('ProjectResource', () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Server error' }), { status: 500 })))
 
       const resource = new ProjectResource(mockConfig)
-      const promise = resource.archive('proj-1')
+      const promise = resource.delete('proj-1')
       expect(promise).rejects.toThrow()
       await promise.catch(() => {})
     })

@@ -17,7 +17,10 @@ export function makeUpdateTaskTool(kaneoConfig: KaneoConfig, workspaceId: string
       taskId: z.string().describe('The Kaneo task ID'),
       title: z.string().optional().describe('New task title'),
       description: z.string().optional().describe('New task description'),
-      status: z.string().optional().describe("New status column name (e.g. 'in-progress', 'done')"),
+      status: z
+        .string()
+        .optional()
+        .describe("New status column slug (e.g. 'to-do', 'in-progress', 'in-review', 'done')"),
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('New priority level'),
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
       userId: z.string().optional().describe('User ID to assign the task to'),

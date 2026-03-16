@@ -37,9 +37,9 @@ bun test tests/e2e/task-lifecycle.test.ts
 
 The E2E setup automatically manages the Kaneo server:
 
-1. **Before tests**: `setupE2EEnvironment()` starts the Docker containers and waits for the server to be healthy
+1. **Before tests**: `getE2EConfig()` starts the Docker containers and waits for the server to be healthy
 2. **During tests**: Tests run against the live Kaneo API at `localhost:11337`
-3. **After tests**: `teardownE2EEnvironment()` stops and removes the Docker containers
+3. **After tests**: `cleanupE2E()` stops and removes the Docker containers
 
 ### Docker Services
 
@@ -65,16 +65,16 @@ Each E2E test file follows this pattern:
 
 ```typescript
 import { beforeAll, afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
+import { getE2EConfig, cleanupE2E } from './global-setup.js'
 
 describe('E2E: Feature Name', () => {
   beforeAll(async () => {
-    await setupE2EEnvironment()
+    await getE2EConfig()
     // ... create test client
   })
 
   afterAll(async () => {
-    await teardownE2EEnvironment()
+    await cleanupE2E()
   })
 
   beforeEach(async () => {
@@ -170,7 +170,7 @@ docker-compose -f docker-compose.yml -f docker-compose.test.yml ps
 
 ## Files
 
-- `setup.ts` - E2E environment setup and teardown
+- `global-setup.ts` - E2E environment setup and teardown
 - `docker-lifecycle.ts` - Docker Compose management
 - `kaneo-test-client.ts` - Test client for resource management
 - `task-lifecycle.test.ts` - Task CRUD tests

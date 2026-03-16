@@ -13,6 +13,7 @@
 ## Task 1: Research Kaneo Column API Endpoints
 
 **Files:**
+
 - Research: Existing working code in `src/kaneo/`
 - Check: `src/kaneo/column-resource.ts`
 - Check: Other resource files for pattern comparison
@@ -29,10 +30,12 @@ Look at how other resources structure their API calls:
 **Step 2: Identify the correct column API pattern**
 
 Check if column endpoints should be:
+
 - `/column/${projectId}` (current) or
 - `/project/${projectId}/column` (alternative)
 
 Also check if individual column operations should be:
+
 - `/column/${columnId}` or
 - `/project/${projectId}/column/${columnId}`
 
@@ -52,13 +55,15 @@ git commit -m "docs: research Kaneo column API endpoint patterns"
 ## Task 2: Fix Column Resource API Endpoints
 
 **Files:**
+
 - Modify: `src/kaneo/column-resource.ts:19,42,73,84,100`
 
 **Step 1: Fix the list endpoint**
 
 Current (line 19):
+
 ```typescript
-`/column/${projectId}`
+;`/column/${projectId}`
 ```
 
 Change to correct endpoint if different.
@@ -66,8 +71,9 @@ Change to correct endpoint if different.
 **Step 2: Fix the create endpoint**
 
 Current (line 42):
+
 ```typescript
-`/column/${projectId}`
+;`/column/${projectId}`
 ```
 
 Verify this is correct or update.
@@ -75,8 +81,9 @@ Verify this is correct or update.
 **Step 3: Fix the GET endpoint for update**
 
 Current (line 73):
+
 ```typescript
-`/column/${columnId}`
+;`/column/${columnId}`
 ```
 
 The test shows this returns 400. Check if it needs projectId.
@@ -84,8 +91,9 @@ The test shows this returns 400. Check if it needs projectId.
 **Step 4: Fix the DELETE endpoint**
 
 Current (line 100):
+
 ```typescript
-`/column/${columnId}`
+;`/column/${columnId}`
 ```
 
 Update if needed.
@@ -107,6 +115,7 @@ git commit -m "fix: correct column API endpoint URLs"
 ## Task 3: Fix Comment Resource Retrieval
 
 **Files:**
+
 - Modify: `src/kaneo/comment-resource.ts` (if exists) or `src/kaneo/get-comments.ts`
 - Check: `src/kaneo/add-comment.ts` for comparison
 
@@ -141,11 +150,13 @@ git commit -m "fix: correct comment retrieval filtering"
 ## Task 4: Update Error Handling Tests
 
 **Files:**
+
 - Modify: `tests/e2e/error-handling.test.ts:31-34,36-43`
 
 **Step 1: Add await to first error test**
 
 Line 31-34, change from:
+
 ```typescript
 test('throws error for non-existent task', async () => {
   const promise = getTask({ config: kaneoConfig, taskId: 'non-existent-id' })
@@ -154,6 +165,7 @@ test('throws error for non-existent task', async () => {
 ```
 
 To:
+
 ```typescript
 test('throws error for non-existent task', async () => {
   const promise = getTask({ config: kaneoConfig, taskId: 'non-existent-id' })
@@ -182,6 +194,7 @@ git commit -m "fix: add await to error handling test assertions"
 ## Task 5: Update Column Management Tests
 
 **Files:**
+
 - Modify: `tests/e2e/column-management.test.ts`
 
 **Step 1: Make column names unique**
@@ -201,6 +214,7 @@ Apply to all tests creating columns.
 **Step 2: Update column name tests**
 
 Line ~72, update test:
+
 ```typescript
 const column = await createColumn({ config: kaneoConfig, projectId, name: `Old Name ${Date.now()}` })
 ```
@@ -222,6 +236,7 @@ git commit -m "fix: use unique column names to avoid conflicts"
 ## Task 6: Increase Docker Startup Timeout
 
 **Files:**
+
 - Modify: `tests/e2e/setup.ts`
 
 **Step 1: Find timeout configuration**
@@ -231,6 +246,7 @@ Look for test timeout settings in setup.ts.
 **Step 2: Increase timeout**
 
 Change from 5000ms to 10000ms:
+
 ```typescript
 // Look for timeout settings and increase
 ```
@@ -256,6 +272,7 @@ git commit -m "fix: increase Docker startup timeout"
 ## Task 7: Run E2E Tests and Verify Fixes
 
 **Files:**
+
 - All modified files
 
 **Step 1: Run full E2E suite**
@@ -284,6 +301,7 @@ git commit -m "test: run E2E suite and capture results"
 ## Task 8: Fix Any Remaining Issues
 
 **Files:**
+
 - TBD based on test results
 
 **Step 1: Review failing tests**
@@ -311,6 +329,7 @@ git commit -m "fix: address remaining E2E test failures"
 ## Task 9: Final Verification
 
 **Files:**
+
 - All E2E test files
 
 **Step 1: Run lint**
@@ -343,6 +362,7 @@ git commit -m "test: complete E2E test fixes - all criteria met" --allow-empty
 ## Summary
 
 This plan addresses all E2E test failures through:
+
 1. Fixing column API endpoint bugs (Task 2)
 2. Fixing comment retrieval (Task 3)
 3. Adding missing awaits to tests (Task 4)

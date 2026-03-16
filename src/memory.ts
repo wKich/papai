@@ -3,12 +3,11 @@ import { generateText, Output } from 'ai'
 import { type ModelMessage } from 'ai'
 import { z } from 'zod'
 
+import { getCachedFacts, getCachedSummary, setCachedSummary, upsertCachedFact } from './cache.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'memory' })
-
-const FACTS_CAP = 50
 
 export type MemoryFact = {
   readonly identifier: string
@@ -23,71 +22,37 @@ export type ModelConfig = {
   readonly model: string
 }
 
-// --- Summary persistence ---
+// --- Summary persistence (now uses cache) ---
 
 export function loadSummary(userId: number): string | null {
   log.debug({ userId }, 'loadSummary called')
-  const row = getDb()
-    .query<{ summary: string }, [number]>('SELECT summary FROM memory_summary WHERE user_id = ?')
-    .get(userId)
-  return row?.summary ?? null
+  return getCachedSummary(userId)
 }
 
 export function saveSummary(userId: number, summary: string): void {
   log.debug({ userId, summaryLength: summary.length }, 'saveSummary called')
-  getDb().run('INSERT OR REPLACE INTO memory_summary (user_id, summary, updated_at) VALUES (?, ?, ?)', [
-    userId,
-    summary,
-    new Date().toISOString(),
-  ])
-  log.info({ userId, summaryLength: summary.length }, 'Summary saved')
+  setCachedSummary(userId, summary)
+  log.info({ userId, summaryLength: summary.length }, 'Summary saved to cache (DB sync in background)')
 }
 
 export function clearSummary(userId: number): void {
   log.debug({ userId }, 'clearSummary called')
+  setCachedSummary(userId, '')
   getDb().run('DELETE FROM memory_summary WHERE user_id = ?', [userId])
   log.info({ userId }, 'Summary cleared')
 }
 
-// --- Fact persistence ---
+// --- Fact persistence (now uses cache) ---
 
 export function loadFacts(userId: number): readonly MemoryFact[] {
   log.debug({ userId }, 'loadFacts called')
-  const rows = getDb()
-    .query<MemoryFact, [number]>(
-      'SELECT identifier, title, url, last_seen FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC',
-    )
-    .all(userId)
-  return rows
+  return getCachedFacts(userId)
 }
 
 export function upsertFact(userId: number, fact: Omit<MemoryFact, 'last_seen'>): void {
   log.debug({ userId, identifier: fact.identifier }, 'upsertFact called')
-  const now = new Date().toISOString()
-  const db = getDb()
-
-  // Atomic transaction: insert/replace fact then evict oldest beyond cap
-  db.run('BEGIN TRANSACTION')
-  try {
-    db.run('INSERT OR REPLACE INTO memory_facts (user_id, identifier, title, url, last_seen) VALUES (?, ?, ?, ?, ?)', [
-      userId,
-      fact.identifier,
-      fact.title,
-      fact.url,
-      now,
-    ])
-    db.run(
-      `DELETE FROM memory_facts WHERE user_id = ? AND identifier NOT IN (
-        SELECT identifier FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC LIMIT ?
-      )`,
-      [userId, userId, FACTS_CAP],
-    )
-    db.run('COMMIT')
-    log.info({ userId, identifier: fact.identifier }, 'Fact upserted')
-  } catch (error) {
-    db.run('ROLLBACK')
-    throw error
-  }
+  upsertCachedFact(userId, fact)
+  log.info({ userId, identifier: fact.identifier }, 'Fact upserted to cache (DB sync in background)')
 }
 
 export function clearFacts(userId: number): void {

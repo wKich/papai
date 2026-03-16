@@ -446,13 +446,12 @@ Add to package.json scripts section:
 {
   "scripts": {
     "test:e2e": "bun test tests/e2e",
-    "test:e2e:watch": "bun test tests/e2e --watch",
-    "test:e2e:setup": "docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d",
-    "test:e2e:teardown": "docker-compose -f docker-compose.yml -f docker-compose.test.yml down -v",
-    "test:e2e:full": "npm run test:e2e:setup && sleep 15 && bun test tests/e2e; npm run test:e2e:teardown"
+    "test:e2e:watch": "bun test tests/e2e --watch"
   }
 }
 ```
+
+Docker containers are automatically managed by `global-setup.ts` - no manual setup/teardown needed.
 
 **Step 2: Commit**
 
@@ -489,24 +488,11 @@ Ensure your `.env` file has the required Kaneo environment variables:
 ### Running E2E Tests
 
 ```bash
-# Start the Kaneo test environment (uses existing docker-compose files)
-docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d
-
-# Wait for services to be ready
-sleep 15
-
-# Run e2e tests
+# Run all e2e tests (Docker containers start/stop automatically)
 bun test tests/e2e
 
-# Clean up
-docker-compose -f docker-compose.yml -f docker-compose.test.yml down -v
-```
-````
-
-Or use the convenience script:
-
-```bash
-npm run test:e2e:full
+# Run in watch mode
+bun test tests/e2e --watch
 ```
 
 ### E2E Test Structure
@@ -553,7 +539,6 @@ describe('My Feature', () => {
 Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
 
 - `E2E_KANEO_URL` - URL of the Kaneo instance (defaults to `KANEO_INTERNAL_URL` or `http://localhost:11337`)
-
 ````
 
 **Step 2: Commit**
@@ -561,7 +546,7 @@ Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
 ```bash
 git add CLAUDE.md
 git commit -m "docs: add e2e testing documentation using existing docker-compose"
-````
+```
 
 ---
 

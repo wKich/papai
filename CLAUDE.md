@@ -155,18 +155,14 @@ Every file must import and use the logger. Required log points:
 
 ## Testing
 
-Tests are located in the `tests/` directory with the same structure as `src/`:
+Tests are located in the `tests/` directory:
 
 ```
 tests/
-├── bot.test.ts
-├── config.test.ts
-├── errors.test.ts
-├── logger.test.ts
-├── migrate.test.ts
-├── users.test.ts
-├── kaneo/            # Tests for src/kaneo/*
-└── tools/            # Tests for src/tools/*
+├── *.test.ts         # Unit tests (run with bun test)
+├── kaneo/            # Unit tests for src/kaneo/*
+├── tools/            # Unit tests for src/tools/*
+└── e2e/              # E2E tests (run with bun run test:e2e)
 ```
 
 Run tests with `bun test` or `bun run test`.
@@ -186,58 +182,45 @@ Ensure your `.env` file has the required Kaneo environment variables:
 ### Running E2E Tests
 
 ```bash
-# Start the Kaneo test environment (uses existing docker-compose files)
-docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d
+# Run all e2e tests (Docker containers start/stop automatically)
+bun run test:e2e
 
-# Wait for services to be ready
-sleep 15
-
-# Run e2e tests
-bun test tests/e2e
-
-# Clean up
-docker-compose -f docker-compose.yml -f docker-compose.test.yml down -v
-```
-
-Or use the convenience script:
-
-```bash
-npm run test:e2e:full
+# Run in watch mode
+bun run test:e2e:watch
 ```
 
 ### E2E Test Structure
 
-- `tests/e2e/setup.ts` - Environment setup and provisioning
-- `tests/e2e/kaneo-test-client.ts` - Test utilities and cleanup
-- `tests/e2e/*.test.ts` - Actual e2e test files
+- `tests/e2e/bun-test-setup.ts` - Global setup (Docker, provisioning) loaded via `--preload`
+- `tests/e2e/global-setup.ts` - Setup logic and config management
+- `tests/e2e/e2e.test.ts` - Orchestrator that imports all test suites
+- `tests/e2e/kaneo-test-client.ts` - Test utilities and resource cleanup
+- `tests/e2e/*.test.ts` - Individual e2e test files (no setup/teardown needed)
 - Uses existing `docker-compose.yml` + `docker-compose.test.yml` (no new compose files needed)
 
 ### Writing E2E Tests
 
-1. Import setup utilities from `./setup.js`
-2. Use `KaneoTestClient` for resource management
-3. Call `testClient.trackTask(taskId)` for automatic cleanup
-4. Clean up in `beforeEach` for test isolation
+Global setup is handled automatically by `bun-test-setup.ts`. Individual test files only need to focus on test logic:
+
+1. Use `KaneoTestClient` for resource management
+2. Call `testClient.trackTask(taskId)` for automatic cleanup
+3. Clean up in `beforeEach` for test isolation
+4. No need for `beforeAll`/`afterAll` - setup is global
 
 Example:
 
 ```typescript
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment } from './setup.js'
 
 describe('My Feature', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
-  })
-
-  beforeEach(async () => {
     await testClient.cleanup()
   })
 
@@ -254,6 +237,16 @@ describe('My Feature', () => {
 Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
 
 - `E2E_KANEO_URL` - URL of the Kaneo instance (defaults to `KANEO_INTERNAL_URL` or `http://localhost:11337`)
+
+### Running E2E Tests in CI
+
+E2E tests run automatically in GitHub Actions on every push and PR. The CI workflow:
+
+1. Sets up Docker using `docker/setup-buildx-action`
+2. Creates required environment variables (`KANEO_POSTGRES_PASSWORD`, `KANEO_AUTH_SECRET`, `KANEO_CLIENT_URL`)
+3. Runs `bun run test:e2e` which automatically manages Docker containers
+
+The CI configuration is in `.github/workflows/ci.yml`.
 
 ### E2E Test Coverage
 

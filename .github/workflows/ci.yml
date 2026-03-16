@@ -58,3 +58,25 @@ jobs:
         run: bun install
       - name: Test
         run: bun test
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+      - name: Install dependencies
+        run: bun install
+      - name: Create env file
+        run: |
+          echo "KANEO_POSTGRES_PASSWORD=test-password" >> .env
+          echo "KANEO_AUTH_SECRET=test-auth-secret-for-ci-environment" >> .env
+          echo "KANEO_CLIENT_URL=http://localhost:11337" >> .env
+      - name: Run E2E tests
+        run: bun run test:e2e
+        env:
+          E2E_KANEO_URL: http://localhost:11337

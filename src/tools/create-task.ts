@@ -26,7 +26,7 @@ export function makeCreateTaskTool(kaneoConfig: KaneoConfig, workspaceId: string
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('Priority level'),
       projectId: z.string().describe('Kaneo project ID — call list_projects first to obtain this'),
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
-      status: z.string().optional().describe("Status column name (e.g. 'todo', 'in-progress')"),
+      status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
     }),
     execute: async ({ title, description, priority, projectId, dueDate, status }): Promise<CreateTaskResult> => {
       try {

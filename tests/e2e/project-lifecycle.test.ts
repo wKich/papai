@@ -1,27 +1,20 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+
+setDefaultTimeout(10000)
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { listColumns } from '../../src/kaneo/list-columns.js'
 import { listProjects } from '../../src/kaneo/list-projects.js'
 import { updateProject } from '../../src/kaneo/update-project.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Project Lifecycle', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
-  })
-
-  afterAll(async () => {
-    await teardownE2EEnvironment()
-  })
-
-  beforeEach(async () => {
     await testClient.cleanup()
   })
 

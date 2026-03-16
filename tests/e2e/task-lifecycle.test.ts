@@ -1,4 +1,6 @@
-import { beforeAll, afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+
+setDefaultTimeout(10000)
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { createTask } from '../../src/kaneo/create-task.js'
@@ -7,7 +9,6 @@ import { listTasks } from '../../src/kaneo/list-tasks.js'
 import { searchTasks } from '../../src/kaneo/search-tasks.js'
 import { updateTask } from '../../src/kaneo/update-task.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
-import { setupE2EEnvironment, teardownE2EEnvironment } from './setup.js'
 
 describe('E2E: Task Lifecycle', () => {
   let testClient: KaneoTestClient
@@ -15,18 +16,10 @@ describe('E2E: Task Lifecycle', () => {
   let workspaceId: string
   let projectId: string
 
-  beforeAll(async () => {
-    await setupE2EEnvironment()
+  beforeEach(async () => {
     testClient = createTestClient()
     kaneoConfig = testClient.getKaneoConfig()
     workspaceId = testClient.getWorkspaceId()
-  })
-
-  afterAll(async () => {
-    await teardownE2EEnvironment()
-  })
-
-  beforeEach(async () => {
     await testClient.cleanup()
     const project = await testClient.createTestProject(`E2E Test ${Date.now()}`)
     projectId = project.id
@@ -89,9 +82,7 @@ describe('E2E: Task Lifecycle', () => {
     // expect(retrieved.priority).toBe(updatedPriority) // Skipped due to API bug
   })
 
-  // Skipped: Kaneo API bug - listTasks returns empty array
-  // See docs/KANEO_API_BUGS.md - Bug #3 for details
-  test.skip('lists tasks in a project', async () => {
+  test('lists tasks in a project', async () => {
     const task1 = await createTask({
       config: kaneoConfig,
       projectId,
@@ -145,7 +136,7 @@ describe('E2E: Task Lifecycle', () => {
     const title = 'Full Task'
     const description = 'This is a full description'
     const priority = 'high'
-    const status = 'in_progress'
+    const status = 'in-progress'
 
     const task = await createTask({
       config: kaneoConfig,
