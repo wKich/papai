@@ -3,11 +3,11 @@ import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
-import type { UpdateLabelResponse } from './schemas/update-label.js'
+import { type CreateLabelResponse } from './schemas/createLabel.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 
-export type KaneoLabel = UpdateLabelResponse
+export type KaneoLabel = CreateLabelResponse
 
 export async function updateLabel({
   config,

@@ -523,12 +523,18 @@ describe('Schema Validation', () => {
 
     describe('CommentResource.update', () => {
       test('validates response schema on update', async () => {
-        setMockFetch(() =>
-          Promise.resolve(new Response(JSON.stringify(createMockActivity(validActivityResponse)), { status: 200 })),
-        )
+        // PUT returns {} (Kaneo bug), then GET returns array — differentiate by method
+        setMockFetch((_url: string, options: RequestInit) => {
+          if (options.method === 'PUT') {
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+          }
+          return Promise.resolve(
+            new Response(JSON.stringify([createMockActivity(validActivityResponse)]), { status: 200 }),
+          )
+        })
 
         const resource = new CommentResource(mockConfig)
-        const result = await resource.update('act-1', 'Updated')
+        const result = await resource.update('task-1', 'act-1', 'Updated')
 
         expect(result).toHaveProperty('id')
         expect(result).toHaveProperty('comment')
@@ -765,7 +771,7 @@ describe('Schema Validation', () => {
       )
 
       const resource = new CommentResource(mockConfig)
-      const promise = resource.update('act-1', 'Updated')
+      const promise = resource.update('task-1', 'act-1', 'Updated')
       expect(promise).rejects.toThrow()
       await promise.catch(() => {})
     })

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/kaneo/client.js'
 import { CommentResource } from '../../src/kaneo/index.js'
-import { restoreFetch, setMockFetch, createMockActivity, createMockActivityForList } from '../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockActivityForList } from '../test-helpers.js'
 
 describe('CommentResource', () => {
   const mockConfig: KaneoConfig = {
@@ -20,21 +20,27 @@ describe('CommentResource', () => {
 
   describe('add', () => {
     test('adds comment to task', async () => {
+      // POST /activity/comment returns {} due to Kaneo bug (missing .returning() on Drizzle insert).
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/create-comment.ts
+      // Code does POST then GET /activity/:taskId to retrieve the actual created comment.
       let capturedBody: unknown
       setMockFetch((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-        // API returns activity object with all fields per documentation
+        if (options.method === 'POST') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+        }
+        // GET /activity/:taskId — return array with the created comment
         return Promise.resolve(
           new Response(
-            JSON.stringify(
-              createMockActivity({
+            JSON.stringify([
+              createMockActivityForList({
                 id: 'comment-1',
                 taskId: 'task-1',
                 type: 'comment',
                 userId: 'user-1',
                 content: 'New comment',
               }),
-            ),
+            ]),
             { status: 200 },
           ),
         )
@@ -53,18 +59,21 @@ describe('CommentResource', () => {
     })
 
     test('handles empty comment', async () => {
-      setMockFetch(() => {
+      setMockFetch((_url: string, options: RequestInit) => {
+        if (options.method === 'POST') {
+          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+        }
         return Promise.resolve(
           new Response(
-            JSON.stringify(
-              createMockActivity({
+            JSON.stringify([
+              createMockActivityForList({
                 id: 'comment-2',
                 taskId: 'task-1',
                 type: 'comment',
                 userId: 'user-1',
                 content: '',
               }),
-            ),
+            ]),
             { status: 200 },
           ),
         )
@@ -80,18 +89,21 @@ describe('CommentResource', () => {
 
     test('handles long comment', async () => {
       const longComment = 'a'.repeat(1000)
-      setMockFetch(() => {
+      setMockFetch((_url: string, options: RequestInit) => {
+        if (options.method === 'POST') {
+          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+        }
         return Promise.resolve(
           new Response(
-            JSON.stringify(
-              createMockActivity({
+            JSON.stringify([
+              createMockActivityForList({
                 id: 'comment-3',
                 taskId: 'task-1',
                 type: 'comment',
                 userId: 'user-1',
                 content: longComment,
               }),
-            ),
+            ]),
             { status: 200 },
           ),
         )
@@ -249,24 +261,33 @@ describe('CommentResource', () => {
 
   describe('update', () => {
     test('updates existing comment', async () => {
+      // PUT /activity/comment returns {} due to Kaneo bug (missing .returning() on Drizzle update).
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/update-comment.ts
+      // Code does PUT then GET /activity/:taskId to retrieve the actual updated comment.
       let capturedBody: unknown
       setMockFetch((_url: string, options: RequestInit) => {
-        capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+        if (options.method === 'PUT') {
+          capturedBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+        }
+        // GET /activity/:taskId — return array with the updated comment
         return Promise.resolve(
           new Response(
-            JSON.stringify(
-              createMockActivity({
+            JSON.stringify([
+              createMockActivityForList({
                 id: 'comment-1',
+                taskId: 'task-1',
+                type: 'comment',
                 content: 'Updated',
               }),
-            ),
+            ]),
             { status: 200 },
           ),
         )
       })
 
       const resource = new CommentResource(mockConfig)
-      const result = await resource.update('comment-1', 'Updated')
+      const result = await resource.update('task-1', 'comment-1', 'Updated')
 
       expect(capturedBody).toMatchObject({
         activityId: 'comment-1',
@@ -281,7 +302,7 @@ describe('CommentResource', () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Comment not found' }), { status: 404 })))
 
       const resource = new CommentResource(mockConfig)
-      const promise = resource.update('invalid', 'Updated')
+      const promise = resource.update('task-1', 'invalid', 'Updated')
       expect(promise).rejects.toMatchObject({
         appError: { code: 'comment-not-found' },
       })

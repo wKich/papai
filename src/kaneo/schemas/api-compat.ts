@@ -88,7 +88,7 @@ export const SearchResultItemSchema = z.object({
   id: z.string(),
   type: z.enum(['task', 'project', 'workspace', 'comment', 'activity']),
   title: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   content: z.string().optional(),
   projectId: z.string().optional(),
   projectName: z.string().optional(),
