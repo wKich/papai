@@ -176,13 +176,17 @@ const sendLlmResponse = async (
   )
 }
 
-const callLlm = async (ctx: Context, userId: number, history: readonly ModelMessage[]): Promise<void> => {
+const callLlm = async (
+  ctx: Context,
+  userId: number,
+  history: readonly ModelMessage[],
+): Promise<{ response: { messages: ModelMessage[] } }> => {
   await maybeProvisionKaneo(ctx, userId)
   const missing = checkRequiredConfig(userId)
   if (missing.length > 0) {
     log.warn({ userId, missing }, 'Missing required config keys')
     await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
-    return
+    throw new Error('Missing configuration')
   }
   const llmApiKey = getConfig(userId, 'llm_apikey')!
   const llmBaseUrl = getConfig(userId, 'llm_baseurl')!
@@ -203,6 +207,7 @@ const callLlm = async (ctx: Context, userId: number, history: readonly ModelMess
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
   await sendLlmResponse(ctx, userId, result)
+  return result
 }
 
 const handleMessageError = async (ctx: Context, userId: number, error: unknown): Promise<void> => {
@@ -244,12 +249,21 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   const history = [...baseHistory, newMessage]
 
   appendHistory(userId, [newMessage])
-  const needsTrim = shouldTriggerTrim(history)
 
   try {
-    await callLlm(ctx, userId, history)
+    const result = await callLlm(ctx, userId, history)
+
+    // Append assistant response to history
+    const assistantMessages = result.response.messages.slice(history.length)
+    if (assistantMessages.length > 0) {
+      appendHistory(userId, assistantMessages)
+      log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
+    }
+
+    // Trigger trim only after successful response
+    const needsTrim = shouldTriggerTrim([...history, ...assistantMessages])
     if (needsTrim) {
-      void runTrimInBackground(userId, history)
+      void runTrimInBackground(userId, [...history, ...assistantMessages])
     }
   } catch (error) {
     saveHistory(userId, baseHistory)
