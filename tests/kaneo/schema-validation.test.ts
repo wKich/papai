@@ -135,7 +135,7 @@ describe('Schema Validation', () => {
         setMockFetch((url: string) => {
           if (url.includes('/column/')) {
             return Promise.resolve(
-              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'To Do' })]), { status: 200 }),
             )
           }
           return Promise.resolve(new Response(JSON.stringify(createMockTask(validTaskFullResponse)), { status: 200 }))
@@ -179,7 +179,7 @@ describe('Schema Validation', () => {
         setMockFetch((url: string) => {
           if (url.includes('/column/')) {
             return Promise.resolve(
-              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'To Do' })]), { status: 200 }),
             )
           }
           return Promise.resolve(new Response(JSON.stringify(createMockTask(validTaskFullResponse)), { status: 200 }))
@@ -247,7 +247,7 @@ describe('Schema Validation', () => {
         setMockFetch((url: string) => {
           if (url.includes('/column/')) {
             return Promise.resolve(
-              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'Todo' })]), { status: 200 }),
+              new Response(JSON.stringify([createMockColumn({ id: 'col-1', name: 'To Do' })]), { status: 200 }),
             )
           }
           return Promise.resolve(

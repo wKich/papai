@@ -14,10 +14,10 @@ export function startKaneoServer(): Promise<void> {
 
   log.info('Starting Kaneo server via Docker Compose')
 
-  // Start docker-compose in detached mode
+  // Start docker compose in detached mode
   const dockerUp = spawn(
-    'docker-compose',
-    ['-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'up', '-d', '--wait'],
+    'docker',
+    ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'up', '-d', '--wait'],
     {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -48,7 +48,7 @@ export function startKaneoServer(): Promise<void> {
     })
 
     dockerUp.on('error', (error) => {
-      log.error({ error: error.message }, 'Failed to spawn docker-compose')
+      log.error({ error: error.message }, 'Failed to spawn docker compose')
       reject(error)
     })
   })
@@ -63,8 +63,8 @@ export function stopKaneoServer(): Promise<void> {
   log.info('Stopping Kaneo server')
 
   const dockerDown = spawn(
-    'docker-compose',
-    ['-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'down', '-v'],
+    'docker',
+    ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'down', '-v'],
     {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
