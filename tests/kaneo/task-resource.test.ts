@@ -631,40 +631,40 @@ describe('TaskResource', () => {
 
   describe('search', () => {
     test('searches tasks by keyword', async () => {
+      // API returns flat { results, totalCount, searchQuery } — not per-type arrays.
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/search/controllers/global-search.ts
       setMockFetch(() =>
         Promise.resolve(
           new Response(
             JSON.stringify({
-              tasks: [
+              results: [
                 {
                   id: 'task-1',
-                  projectId: 'proj-1',
-                  position: 0,
-                  number: 1,
-                  userId: null,
+                  type: 'task',
                   title: 'Fix bug',
                   description: null,
+                  projectId: 'proj-1',
+                  taskNumber: 1,
                   status: 'todo',
                   priority: 'high',
+                  relevanceScore: 3,
                   createdAt: '2026-01-01T00:00:00Z',
                 },
                 {
                   id: 'task-2',
-                  projectId: 'proj-1',
-                  position: 0,
-                  number: 2,
-                  userId: null,
+                  type: 'task',
                   title: 'Bug report',
                   description: null,
+                  projectId: 'proj-1',
+                  taskNumber: 2,
                   status: 'done',
                   priority: 'medium',
+                  relevanceScore: 2,
                   createdAt: '2026-01-02T00:00:00Z',
                 },
               ],
-              projects: [],
-              workspaces: [],
-              comments: [],
-              activities: [],
+              totalCount: 2,
+              searchQuery: 'bug',
             }),
             { status: 200 },
           ),
@@ -684,9 +684,7 @@ describe('TaskResource', () => {
       setMockFetch((url: string) => {
         requestUrl = url
         return Promise.resolve(
-          new Response(JSON.stringify({ tasks: [], projects: [], workspaces: [], comments: [], activities: [] }), {
-            status: 200,
-          }),
+          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'test' }), { status: 200 }),
         )
       })
 
@@ -703,9 +701,7 @@ describe('TaskResource', () => {
     test('returns empty array when no matches', async () => {
       setMockFetch(() =>
         Promise.resolve(
-          new Response(JSON.stringify({ tasks: [], projects: [], workspaces: [], comments: [], activities: [] }), {
-            status: 200,
-          }),
+          new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: 'nonexistent' }), { status: 200 }),
         ),
       )
 

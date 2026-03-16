@@ -4,11 +4,13 @@ import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
-import { GlobalSearchResponseSchema, SearchTaskSchema } from './schemas/global-search.js'
+// GlobalSearchResponseCompatSchema matches the real flat API response — see api-compat.ts.
+import { GlobalSearchResponseCompatSchema } from './schemas/api-compat.js'
+import { SearchTaskSchema } from './schemas/global-search.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 
-// Simplified task result schema for search results
+// Simplified task result schema for search results (output shape, not API shape)
 export const TaskResultSchema = SearchTaskSchema.pick({
   id: true,
   title: true,
@@ -18,8 +20,8 @@ export const TaskResultSchema = SearchTaskSchema.pick({
   projectId: true,
 })
 
-// Use global search response schema
-export const KaneoSearchResponseSchema = GlobalSearchResponseSchema
+// Real API returns flat { results, totalCount, searchQuery } — not per-type arrays.
+export const KaneoSearchResponseSchema = GlobalSearchResponseCompatSchema
 
 export type TaskResult = z.infer<typeof TaskResultSchema>
 

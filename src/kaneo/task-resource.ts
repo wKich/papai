@@ -6,7 +6,7 @@ import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
-import { type TaskResult, KaneoSearchResponseSchema } from './search-tasks.js'
+import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
 import { denormalizeStatus, validateStatus } from './task-status.js'
@@ -198,14 +198,21 @@ export class TaskResource {
         ...(params.limit === undefined ? {} : { limit: String(params.limit) }),
       }
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
-      const tasks: TaskResult[] = result.tasks.map((r) => ({
-        id: r.id,
-        title: r.title,
-        number: r.number ?? 0,
-        status: r.status ?? '',
-        priority: r.priority ?? '',
-        projectId: r.projectId,
-      }))
+      // API returns a flat results array — filter to tasks only and remap taskNumber → number.
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/search/controllers/global-search.ts
+      const tasks: TaskResult[] = result.results
+        .filter((r) => r.type === 'task')
+        .map((r) => {
+          const priorityParsed = TaskResultSchema.shape.priority.safeParse(r.priority)
+          return {
+            id: r.id,
+            title: r.title,
+            number: r.taskNumber ?? 0,
+            status: r.status ?? '',
+            priority: priorityParsed.success ? priorityParsed.data : 'no-priority',
+            projectId: r.projectId ?? '',
+          }
+        })
       this.log.info({ count: tasks.length }, 'Tasks searched')
       return tasks
     } catch (error) {

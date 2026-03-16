@@ -50,8 +50,8 @@ export const ListTasksResponseSchema = z.object({
   plannedTasks: z.array(ListTaskSchema),
 })
 
-// Export column schema for reuse
-export { ColumnSchema }
+// Export schemas for reuse (including internals needed by api-compat.ts)
+export { ColumnSchema, ColumnWithTasksSchema, ListTaskSchema }
 
 // TypeScript types
 export type ListTasksPath = z.infer<typeof ListTasksPathSchema>

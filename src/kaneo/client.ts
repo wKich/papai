@@ -96,5 +96,5 @@ export { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/c
 export { CreateProjectResponseSchema as KaneoProjectSchema } from './schemas/create-project.js'
 export { GetProjectResponseSchema as KaneoProjectFullSchema } from './schemas/get-project.js'
 export { CreateLabelResponseSchema as KaneoLabelSchema } from './schemas/createLabel.js'
-export { ColumnSchema as KaneoColumnSchema } from './schemas/listTasks.js'
+export { ColumnCompatSchema as KaneoColumnSchema } from './schemas/api-compat.js'
 export { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from './schemas/getActivities.js'

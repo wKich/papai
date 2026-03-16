@@ -12,12 +12,13 @@ export function makeUpdateCommentTool(kaneoConfig: KaneoConfig): ToolSet[string]
   return tool({
     description: 'Update an existing comment on a Kaneo task.',
     inputSchema: z.object({
+      taskId: z.string().describe('Kaneo task ID the comment belongs to'),
       activityId: z.string().describe('Kaneo activity/comment ID'),
       comment: z.string().describe('New comment text'),
     }),
-    execute: async ({ activityId, comment }) => {
+    execute: async ({ taskId, activityId, comment }) => {
       try {
-        return await updateComment({ config: kaneoConfig, activityId, comment })
+        return await updateComment({ config: kaneoConfig, taskId, activityId, comment })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), activityId, tool: 'update_comment' },

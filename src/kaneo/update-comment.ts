@@ -7,19 +7,21 @@ const log = logger.child({ scope: 'kaneo:update-comment' })
 
 export async function updateComment({
   config,
+  taskId,
   activityId,
   comment,
 }: {
   config: KaneoConfig
+  taskId: string
   activityId: string
   comment: string
 }): Promise<{ id: string; comment: string; createdAt: string }> {
-  log.debug({ activityId, commentLength: comment.length }, 'updateComment called')
+  log.debug({ taskId, activityId, commentLength: comment.length }, 'updateComment called')
 
   try {
     const client = new KaneoClient(config)
-    const result = await client.comments.update(activityId, comment)
-    log.info({ activityId }, 'Comment updated')
+    const result = await client.comments.update(taskId, activityId, comment)
+    log.info({ taskId, activityId }, 'Comment updated')
     return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), activityId }, 'updateComment failed')

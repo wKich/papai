@@ -3,9 +3,10 @@ import { z } from 'zod'
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
-import { CreateCommentResponseSchema } from './schemas/createComment.js'
+// Both compat schemas accept {} from buggy endpoints lacking .returning().
+// See src/kaneo/schemas/api-compat.ts for upstream bug references.
+import { CreateCommentResponseCompatSchema, UpdateCommentResponseCompatSchema } from './schemas/api-compat.js'
 import { ActivityItemSchema } from './schemas/getActivities.js'
-import { UpdateCommentResponseSchema } from './schemas/updateComment.js'
 
 export class CommentResource {
   private log = logger.child({ scope: 'kaneo:comment-resource' })
@@ -16,21 +17,38 @@ export class CommentResource {
     this.log.debug({ taskId, commentLength: comment.length }, 'Adding comment')
 
     try {
-      // Create comment and parse response per API documentation
-      const response = await kaneoFetch(
+      // POST /activity/comment returns {} due to a missing .returning() in the Kaneo API.
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/create-comment.ts
+      // We discard the response and immediately fetch the activity list to get the real created comment.
+      await kaneoFetch(
         this.config,
         'POST',
         '/activity/comment',
         { taskId, comment },
         undefined,
-        CreateCommentResponseSchema,
+        CreateCommentResponseCompatSchema,
       )
 
-      this.log.info({ taskId, activityId: response.id }, 'Comment added')
+      const activities = await kaneoFetch(
+        this.config,
+        'GET',
+        `/activity/${taskId}`,
+        undefined,
+        undefined,
+        z.array(ActivityItemSchema),
+      )
+
+      // The newest comment is first in the list; find the first matching content.
+      const created = activities.find((a) => a.type === 'comment' && a.content === comment)
+      if (created === undefined) {
+        throw new Error('Comment was posted but could not be found in subsequent activity fetch')
+      }
+
+      this.log.info({ taskId, activityId: created.id }, 'Comment added')
       return {
-        id: response.id,
-        comment: response.content ?? comment,
-        createdAt: typeof response.createdAt === 'string' ? response.createdAt : JSON.stringify(response.createdAt),
+        id: created.id,
+        comment: created.content ?? comment,
+        createdAt: typeof created.createdAt === 'string' ? created.createdAt : new Date().toISOString(),
       }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to add comment')
@@ -78,23 +96,45 @@ export class CommentResource {
     }
   }
 
-  async update(activityId: string, comment: string): Promise<{ id: string; comment: string; createdAt: string }> {
-    this.log.debug({ activityId, commentLength: comment.length }, 'Updating comment')
+  async update(
+    taskId: string,
+    activityId: string,
+    comment: string,
+  ): Promise<{ id: string; comment: string; createdAt: string }> {
+    this.log.debug({ taskId, activityId, commentLength: comment.length }, 'Updating comment')
 
     try {
-      const activity = await kaneoFetch(
+      // PUT /activity/comment returns {} due to a missing .returning() in the Kaneo API.
+      // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/update-comment.ts
+      // We discard the response and fetch the activity list to confirm and return the updated comment.
+      await kaneoFetch(
         this.config,
         'PUT',
         '/activity/comment',
         { activityId, comment },
         undefined,
-        UpdateCommentResponseSchema,
+        UpdateCommentResponseCompatSchema,
       )
-      this.log.info({ activityId }, 'Comment updated')
+
+      const activities = await kaneoFetch(
+        this.config,
+        'GET',
+        `/activity/${taskId}`,
+        undefined,
+        undefined,
+        z.array(ActivityItemSchema),
+      )
+
+      const updated = activities.find((a) => a.id === activityId)
+      if (updated === undefined) {
+        throw new Error('Comment was updated but could not be found in subsequent activity fetch')
+      }
+
+      this.log.info({ taskId, activityId }, 'Comment updated')
       return {
-        id: activity.id,
-        comment: activity.content ?? comment,
-        createdAt: typeof activity.createdAt === 'string' ? activity.createdAt : JSON.stringify(activity.createdAt),
+        id: updated.id,
+        comment: updated.content ?? comment,
+        createdAt: typeof updated.createdAt === 'string' ? updated.createdAt : new Date().toISOString(),
       }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update comment')

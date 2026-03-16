@@ -3,14 +3,15 @@ import { z } from 'zod'
 import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
-import { ColumnSchema } from './schemas/listTasks.js'
+// ColumnCompatSchema accepts undefined icon/color — see src/kaneo/schemas/api-compat.ts for upstream bug reference.
+import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 export class ColumnResource {
   private log = logger.child({ scope: 'kaneo:column-resource' })
 
   constructor(private config: KaneoConfig) {}
 
-  async list(projectId: string): Promise<z.infer<typeof ColumnSchema>[]> {
+  async list(projectId: string): Promise<z.infer<typeof ColumnCompatSchema>[]> {
     this.log.debug({ projectId }, 'Listing columns')
 
     try {
@@ -20,7 +21,7 @@ export class ColumnResource {
         `/column/${projectId}`,
         undefined,
         undefined,
-        z.array(ColumnSchema),
+        z.array(ColumnCompatSchema),
       )
       this.log.info({ projectId, count: columns.length }, 'Columns listed')
       return columns
@@ -33,7 +34,7 @@ export class ColumnResource {
   async create(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<z.infer<typeof ColumnSchema>> {
+  ): Promise<z.infer<typeof ColumnCompatSchema>> {
     this.log.debug({ projectId, name: params.name }, 'Creating column')
 
     try {
@@ -48,7 +49,7 @@ export class ColumnResource {
           isFinal: params.isFinal ?? false,
         },
         undefined,
-        ColumnSchema,
+        ColumnCompatSchema,
       )
       this.log.info({ columnId: column.id, name: column.name, projectId }, 'Column created')
       return column
@@ -64,7 +65,7 @@ export class ColumnResource {
   async update(
     columnId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<z.infer<typeof ColumnSchema>> {
+  ): Promise<z.infer<typeof ColumnCompatSchema>> {
     this.log.debug({ columnId, ...params }, 'Updating column')
 
     try {
@@ -74,7 +75,7 @@ export class ColumnResource {
       if (params.color !== undefined) body['color'] = params.color
       if (params.isFinal !== undefined) body['isFinal'] = params.isFinal
 
-      const column = await kaneoFetch(this.config, 'PUT', `/column/${columnId}`, body, undefined, ColumnSchema)
+      const column = await kaneoFetch(this.config, 'PUT', `/column/${columnId}`, body, undefined, ColumnCompatSchema)
       this.log.info({ columnId, name: column.name }, 'Column updated')
       return column
     } catch (error) {

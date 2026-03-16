@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { logger } from '../logger.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
-import { ColumnSchema } from './schemas/listTasks.js'
+import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:create-column' })
 
-export type CreateColumnResponse = z.infer<typeof ColumnSchema>
+export type CreateColumnResponse = z.infer<typeof ColumnCompatSchema>
 
 export async function createColumn({
   config,

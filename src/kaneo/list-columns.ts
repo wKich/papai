@@ -4,11 +4,11 @@ import { logger } from '../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
-import { ColumnSchema } from './schemas/listTasks.js'
+import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:list-columns' })
 
-export type KaneoColumn = z.infer<typeof ColumnSchema>
+export type KaneoColumn = z.infer<typeof ColumnCompatSchema>
 
 export async function listColumns({
   config,
