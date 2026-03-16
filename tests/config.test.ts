@@ -46,6 +46,7 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
+import { clearUserCache } from '../src/cache.js'
 import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import type { ConfigKey } from '../src/config.js'
 
@@ -55,6 +56,8 @@ const USER_B = 222
 describe('setConfig', () => {
   beforeEach(() => {
     store.data.clear()
+    clearUserCache(USER_A)
+    clearUserCache(USER_B)
   })
 
   test('stores value for user and key', () => {
@@ -87,6 +90,8 @@ describe('setConfig', () => {
 describe('getConfig', () => {
   beforeEach(() => {
     store.data.clear()
+    clearUserCache(USER_A)
+    clearUserCache(USER_B)
   })
 
   test('returns stored value', () => {
@@ -118,6 +123,8 @@ describe('isConfigKey', () => {
 describe('getAllConfig', () => {
   beforeEach(() => {
     store.data.clear()
+    clearUserCache(USER_A)
+    clearUserCache(USER_B)
   })
 
   test('returns all set configs for user', () => {

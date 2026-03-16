@@ -1,5 +1,7 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
+import { flushMicrotasks } from './test-helpers.js'
+
 // --- bun:sqlite mock (must come before importing memory.ts) ---
 const mockSummaryStore = new Map<number, string>()
 const mockFactsStore = new Map<string, Array<{ identifier: string; title: string; url: string; last_seen: string }>>()
@@ -91,6 +93,7 @@ void mock.module('ai', () => ({
 }))
 // --- end mocks ---
 
+import { clearUserCache } from '../src/cache.js'
 import {
   buildMemoryContextMessage,
   extractFacts,
@@ -125,13 +128,15 @@ describe('saveSummary', () => {
     runCalls.length = 0
   })
 
-  test('persists summary', () => {
+  test('persists summary', async () => {
     saveSummary(1, 'Test summary')
+    await flushMicrotasks()
     expect(mockSummaryStore.get(1)).toBe('Test summary')
   })
 
-  test('calls INSERT OR REPLACE', () => {
+  test('calls INSERT OR REPLACE', async () => {
     saveSummary(1, 'Test')
+    await flushMicrotasks()
     const call = runCalls.find((c) => c.sql.includes('INSERT OR REPLACE INTO memory_summary'))
     expect(call).toBeDefined()
   })
@@ -298,13 +303,15 @@ describe('extractFacts', () => {
 })
 
 describe('upsertFact eviction', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockFactsStore.clear()
     mockSummaryStore.clear()
     runCalls.length = 0
+    clearUserCache(999)
+    await flushMicrotasks()
   })
 
-  test('evicts oldest facts when exceeding FACTS_CAP', () => {
+  test('evicts oldest facts when exceeding FACTS_CAP', async () => {
     const userId = 999
     // Insert 52 facts (over the 50 cap)
     for (let i = 0; i < 52; i++) {
@@ -314,6 +321,7 @@ describe('upsertFact eviction', () => {
         url: `https://kaneo.app/task/${i}`,
       })
     }
+    await flushMicrotasks()
 
     const facts = loadFacts(userId)
     // Should be capped at 50 (FACTS_CAP)
@@ -325,6 +333,8 @@ describe('upsertFact eviction', () => {
 
     // Cleanup
     clearFacts(userId)
+    clearUserCache(userId)
+    await flushMicrotasks()
   })
 
   test('updates last_seen on duplicate fact insert', async () => {
@@ -332,6 +342,7 @@ describe('upsertFact eviction', () => {
     const fact = { identifier: '#100', title: 'Test Task', url: '' }
 
     upsertFact(userId, fact)
+    await flushMicrotasks()
     const firstLoad = loadFacts(userId)
     const firstSeen = firstLoad[0]!.last_seen
 
@@ -339,6 +350,7 @@ describe('upsertFact eviction', () => {
     await Bun.sleep(10)
 
     upsertFact(userId, fact)
+    await flushMicrotasks()
     const secondLoad = loadFacts(userId)
     const secondSeen = secondLoad[0]!.last_seen
 
@@ -347,6 +359,8 @@ describe('upsertFact eviction', () => {
 
     // Cleanup
     clearFacts(userId)
+    clearUserCache(userId)
+    await flushMicrotasks()
   })
 })
 
