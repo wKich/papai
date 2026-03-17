@@ -181,7 +181,7 @@ const callLlm = async (
   ctx: Context,
   userId: number,
   history: readonly ModelMessage[],
-): Promise<{ response: { messages: ModelMessage[] }; inputMessageCount: number }> => {
+): Promise<{ response: { messages: ModelMessage[] } }> => {
   await maybeProvisionKaneo(ctx, userId)
   const missing = checkRequiredConfig(userId)
   if (missing.length > 0) {
@@ -208,7 +208,7 @@ const callLlm = async (
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
   await sendLlmResponse(ctx, userId, result)
-  return { ...result, inputMessageCount: messagesWithMemory.length }
+  return result
 }
 
 const handleMessageError = async (ctx: Context, userId: number, error: unknown): Promise<void> => {
@@ -254,10 +254,11 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   try {
     const result = await callLlm(ctx, userId, history)
 
-    // Append assistant response to history
-    // Slice from inputMessageCount (not history.length) because callLlm may have prepended
-    // a memory system message, which shifts all indices in result.response.messages.
-    const assistantMessages = result.response.messages.slice(result.inputMessageCount)
+    // result.response.messages contains ONLY the newly generated messages (assistant + tool
+    // messages from all steps). The Vercel AI SDK does NOT include input messages there —
+    // it starts an empty array and pushes generated messages as steps complete.
+    // So we append all of them directly, no slicing needed.
+    const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(userId, assistantMessages)
       log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
