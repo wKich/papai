@@ -293,6 +293,17 @@ export function clearCachedTools(userId: number): void {
   getOrCreateCache(userId).tools = null
 }
 
+export function clearCachedFacts(userId: number): void {
+  const cache = userCaches.get(userId)
+  if (cache === undefined) {
+    log.debug({ userId }, 'No facts cache to clear (cache not initialized)')
+    return
+  }
+  cache.facts = []
+  cache.config.delete('facts_loaded')
+  log.debug({ userId }, 'Facts cache cleared')
+}
+
 export function clearUserCache(userId: number): void {
   userCaches.delete(userId)
   log.info({ userId }, 'User cache cleared')

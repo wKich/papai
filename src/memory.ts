@@ -3,7 +3,7 @@ import { generateText, Output } from 'ai'
 import { type ModelMessage } from 'ai'
 import { z } from 'zod'
 
-import { getCachedFacts, getCachedSummary, setCachedSummary, upsertCachedFact } from './cache.js'
+import { getCachedFacts, getCachedSummary, setCachedSummary, clearCachedFacts, upsertCachedFact } from './cache.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 
@@ -57,6 +57,7 @@ export function upsertFact(userId: number, fact: Omit<MemoryFact, 'last_seen'>):
 
 export function clearFacts(userId: number): void {
   log.debug({ userId }, 'clearFacts called')
+  clearCachedFacts(userId)
   getDb().run('DELETE FROM memory_facts WHERE user_id = ?', [userId])
   log.info({ userId }, 'Facts cleared')
 }

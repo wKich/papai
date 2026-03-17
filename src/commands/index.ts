@@ -1,5 +1,6 @@
 export { registerAdminCommands } from './admin.js'
 export { registerClearCommand } from './clear.js'
 export { registerConfigCommand } from './config.js'
+export { registerContextCommand } from './context.js'
 export { registerHelpCommand, setCommands } from './help.js'
 export { registerSetCommand } from './set.js'

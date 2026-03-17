@@ -12,6 +12,7 @@ export const USER_COMMANDS = [
 ] as const
 
 export const ADMIN_COMMANDS = [
+  { command: 'context', description: 'Show current memory context (summary and known entities)' },
   { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
   { command: 'users', description: 'List authorized users' },
   { command: 'migrate', description: 'Run data migrations' },
@@ -32,6 +33,7 @@ const USER_HELP = [
 const ADMIN_HELP = [
   '',
   'Admin commands:',
+  '/context — Show current memory context (summary and known entities)',
   '/user add <id|@username> — Authorize a user',
   '/user remove <id|@username> — Revoke access',
   '/users — List authorized users',
