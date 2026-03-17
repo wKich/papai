@@ -9,6 +9,7 @@ import {
   registerAdminCommands,
   registerClearCommand,
   registerConfigCommand,
+  registerContextCommand,
   registerHelpCommand,
   registerSetCommand,
 } from './commands/index.js'
@@ -260,6 +261,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
 registerHelpCommand(bot, checkAuthorization, adminUserId)
 registerSetCommand(bot, checkAuthorization)
 registerConfigCommand(bot, checkAuthorization)
+registerContextCommand(bot, checkAuthorization)
 registerClearCommand(bot, checkAuthorization, adminUserId)
 registerAdminCommands(bot, adminUserId)
 

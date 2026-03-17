@@ -8,6 +8,7 @@ export const USER_COMMANDS = [
   { command: 'help', description: 'Show available commands' },
   { command: 'set', description: 'Set a config value — /set <key> <value>' },
   { command: 'config', description: 'View current configuration' },
+  { command: 'context', description: 'Show current memory context (summary and known entities)' },
   { command: 'clear', description: 'Clear conversation history and memory' },
 ] as const
 
@@ -24,6 +25,7 @@ const USER_HELP = [
   '/help — Show this message',
   '/set <key> <value> — Set a config value',
   '/config — View current configuration',
+  '/context — Show current memory context (summary and known entities)',
   '/clear — Clear conversation history and memory',
   '',
   'Any other message is sent to the AI assistant.',
