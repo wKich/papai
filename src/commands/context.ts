@@ -39,7 +39,15 @@ export function registerContextCommand(
       lines.push('', 'Known entities: (none)')
     }
 
-    log.info({ userId, historyLength: history.length, factsCount: facts.length, hasSummary: summary !== null && summary.length > 0 }, '/context command executed')
+    log.info(
+      {
+        userId,
+        historyLength: history.length,
+        factsCount: facts.length,
+        hasSummary: summary !== null && summary.length > 0,
+      },
+      '/context command executed',
+    )
     await ctx.reply(lines.join('\n'))
   })
 }
