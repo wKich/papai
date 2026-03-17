@@ -1,6 +1,5 @@
-import type { KaneoConfig } from '../kaneo/client.js'
 import { logger } from '../logger.js'
-import { KaneoProvider } from './kaneo/index.js'
+import { KaneoProvider, type KaneoConfig } from './kaneo/index.js'
 import type { TaskProvider } from './types.js'
 
 const log = logger.child({ scope: 'provider:registry' })

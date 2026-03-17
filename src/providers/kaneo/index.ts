@@ -326,3 +326,6 @@ export class KaneoProvider implements TaskProvider {
     ].join('\n')
   }
 }
+
+/** Re-export KaneoConfig so the registry imports from the provider layer. */
+export type { KaneoConfig }
