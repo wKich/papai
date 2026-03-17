@@ -1,6 +1,6 @@
 import type { ToolSet } from 'ai'
 
-import type { KaneoConfig } from '../kaneo/client.js'
+import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
@@ -30,37 +30,62 @@ import { makeUpdateProjectTool } from './update-project.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
-type ToolConfig = { kaneoConfig: KaneoConfig; workspaceId: string }
-
-export function makeTools({ kaneoConfig, workspaceId }: ToolConfig): ToolSet {
-  return {
-    create_task: makeCreateTaskTool(kaneoConfig, workspaceId),
-    update_task: makeUpdateTaskTool(kaneoConfig, workspaceId),
-    search_tasks: makeSearchTasksTool(kaneoConfig, workspaceId),
-    list_tasks: makeListTasksTool(kaneoConfig, workspaceId),
-    get_task: makeGetTaskTool(kaneoConfig, workspaceId),
-    archive_task: makeArchiveTaskTool(kaneoConfig, workspaceId),
-    list_projects: makeListProjectsTool(kaneoConfig, workspaceId),
-    create_project: makeCreateProjectTool(kaneoConfig, workspaceId),
-    update_project: makeUpdateProjectTool(kaneoConfig, workspaceId),
-    archive_project: makeArchiveProjectTool(kaneoConfig),
-    add_comment: makeAddCommentTool(kaneoConfig),
-    get_comments: makeGetCommentsTool(kaneoConfig),
-    update_comment: makeUpdateCommentTool(kaneoConfig),
-    remove_comment: makeRemoveCommentTool(kaneoConfig),
-    list_labels: makeListLabelsTool(kaneoConfig, workspaceId),
-    create_label: makeCreateLabelTool(kaneoConfig, workspaceId),
-    update_label: makeUpdateLabelTool(kaneoConfig),
-    remove_label: makeRemoveLabelTool(kaneoConfig),
-    add_task_label: makeAddTaskLabelTool(kaneoConfig, workspaceId),
-    remove_task_label: makeRemoveTaskLabelTool(kaneoConfig),
-    add_task_relation: makeAddTaskRelationTool(kaneoConfig),
-    update_task_relation: makeUpdateTaskRelationTool(kaneoConfig),
-    remove_task_relation: makeRemoveTaskRelationTool(kaneoConfig),
-    list_columns: makeListColumnsTool(kaneoConfig),
-    create_column: makeCreateColumnTool(kaneoConfig),
-    update_column: makeUpdateColumnTool(kaneoConfig),
-    delete_column: makeDeleteColumnTool(kaneoConfig),
-    reorder_columns: makeReorderColumnsTool(kaneoConfig),
+export function makeTools(provider: TaskProvider): ToolSet {
+  const tools: ToolSet = {
+    // Core task operations — always present
+    create_task: makeCreateTaskTool(provider),
+    update_task: makeUpdateTaskTool(provider),
+    search_tasks: makeSearchTasksTool(provider),
+    list_tasks: makeListTasksTool(provider),
+    get_task: makeGetTaskTool(provider),
   }
+
+  // tasks.archive
+  if (provider.capabilities.has('tasks.archive')) {
+    tools['archive_task'] = makeArchiveTaskTool(provider)
+  }
+
+  // projects.crud
+  if (provider.capabilities.has('projects.crud')) {
+    tools['list_projects'] = makeListProjectsTool(provider)
+    tools['create_project'] = makeCreateProjectTool(provider)
+    tools['update_project'] = makeUpdateProjectTool(provider)
+    tools['archive_project'] = makeArchiveProjectTool(provider)
+  }
+
+  // comments.crud
+  if (provider.capabilities.has('comments.crud')) {
+    tools['add_comment'] = makeAddCommentTool(provider)
+    tools['get_comments'] = makeGetCommentsTool(provider)
+    tools['update_comment'] = makeUpdateCommentTool(provider)
+    tools['remove_comment'] = makeRemoveCommentTool(provider)
+  }
+
+  // labels.crud
+  if (provider.capabilities.has('labels.crud')) {
+    tools['list_labels'] = makeListLabelsTool(provider)
+    tools['create_label'] = makeCreateLabelTool(provider)
+    tools['update_label'] = makeUpdateLabelTool(provider)
+    tools['remove_label'] = makeRemoveLabelTool(provider)
+    tools['add_task_label'] = makeAddTaskLabelTool(provider)
+    tools['remove_task_label'] = makeRemoveTaskLabelTool(provider)
+  }
+
+  // tasks.relations
+  if (provider.capabilities.has('tasks.relations')) {
+    tools['add_task_relation'] = makeAddTaskRelationTool(provider)
+    tools['update_task_relation'] = makeUpdateTaskRelationTool(provider)
+    tools['remove_task_relation'] = makeRemoveTaskRelationTool(provider)
+  }
+
+  // columns.crud
+  if (provider.capabilities.has('columns.crud')) {
+    tools['list_columns'] = makeListColumnsTool(provider)
+    tools['create_column'] = makeCreateColumnTool(provider)
+    tools['update_column'] = makeUpdateColumnTool(provider)
+    tools['delete_column'] = makeDeleteColumnTool(provider)
+    tools['reorder_columns'] = makeReorderColumnsTool(provider)
+  }
+
+  return tools
 }

@@ -1,15 +1,9 @@
-import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeAddTaskLabelTool } from '../../src/tools/add-task-label.js'
 import { makeRemoveTaskLabelTool } from '../../src/tools/remove-task-label.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
-
-afterEach(() => {
-  restoreAllModules()
-})
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
-const mockWorkspaceId = 'ws-1'
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
 function isTaskLabel(val: unknown): val is { taskId: string; labelId: string } {
   return (
@@ -22,10 +16,6 @@ function isTaskLabel(val: unknown): val is { taskId: string; labelId: string } {
   )
 }
 
-function isSuccessResult(val: unknown): val is { success: boolean } {
-  return val !== null && typeof val === 'object' && 'success' in val && typeof val.success === 'boolean'
-}
-
 describe('Task Label Tools', () => {
   beforeEach(() => {
     mock.restore()
@@ -33,21 +23,22 @@ describe('Task Label Tools', () => {
 
   describe('makeAddTaskLabelTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeAddTaskLabelTool(provider)
       expect(tool.description).toContain('Add a label to a Kaneo task')
     })
 
     test('adds label to task', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addTaskLabel: mock(() =>
           Promise.resolve({
             taskId: 'task-1',
             labelId: 'label-1',
           }),
         ),
-      }))
+      })
 
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
+      const tool = makeAddTaskLabelTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', labelId: 'label-1' },
@@ -59,28 +50,24 @@ describe('Task Label Tools', () => {
       expect(result.labelId).toBe('label-1')
     })
 
-    test('includes workspaceId in add call', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskLabel: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({ taskId: 'task-1', labelId: 'label-1' })
-        }),
-      }))
+    test('calls provider addTaskLabel with correct params', async () => {
+      const addTaskLabel = mock(() => Promise.resolve({ taskId: 'task-1', labelId: 'label-1' }))
+      const provider = createMockProvider({ addTaskLabel })
 
-      const tool = makeAddTaskLabelTool(mockConfig, 'ws-123')
+      const tool = makeAddTaskLabelTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ taskId: 'task-1', labelId: 'label-1' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.['workspaceId']).toBe('ws-123')
+      expect(addTaskLabel).toHaveBeenCalledTimes(1)
+      expect(addTaskLabel).toHaveBeenCalledWith('task-1', 'label-1')
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addTaskLabel: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
+      const tool = makeAddTaskLabelTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'invalid', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
@@ -94,11 +81,11 @@ describe('Task Label Tools', () => {
     })
 
     test('propagates label not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addTaskLabel: mock(() => Promise.reject(new Error('Label not found'))),
-      }))
+      })
 
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
+      const tool = makeAddTaskLabelTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'task-1', labelId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Label not found')
       try {
@@ -108,57 +95,61 @@ describe('Task Label Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({ labelId: 'label-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskLabelTool(provider)
+      expect(schemaValidates(tool, { labelId: 'label-1' })).toBe(false)
     })
 
-    test('validates labelId is required', async () => {
-      const tool = makeAddTaskLabelTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates labelId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskLabelTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     })
   })
 
   describe('makeRemoveTaskLabelTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeRemoveTaskLabelTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskLabelTool(provider)
       expect(tool.description).toContain('Remove a label from a Kaneo task')
     })
 
     test('removes label from task', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        removeTaskLabel: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        removeTaskLabel: mock(() => Promise.resolve({ taskId: 'task-1', labelId: 'label-1' })),
+      })
 
-      const tool = makeRemoveTaskLabelTool(mockConfig)
+      const tool = makeRemoveTaskLabelTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isSuccessResult(result)) throw new Error('Invalid result')
+      if (!isTaskLabel(result)) throw new Error('Invalid result')
 
-      expect(result.success).toBe(true)
+      expect(result.taskId).toBe('task-1')
+      expect(result.labelId).toBe('label-1')
+    })
+
+    test('calls provider removeTaskLabel with correct params', async () => {
+      const removeTaskLabel = mock(() => Promise.resolve({ taskId: 'task-1', labelId: 'label-1' }))
+      const provider = createMockProvider({ removeTaskLabel })
+
+      const tool = makeRemoveTaskLabelTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ taskId: 'task-1', labelId: 'label-1' }, { toolCallId: '1', messages: [] })
+
+      expect(removeTaskLabel).toHaveBeenCalledTimes(1)
+      expect(removeTaskLabel).toHaveBeenCalledWith('task-1', 'label-1')
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         removeTaskLabel: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeRemoveTaskLabelTool(mockConfig)
+      const tool = makeRemoveTaskLabelTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'invalid', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
@@ -172,11 +163,11 @@ describe('Task Label Tools', () => {
     })
 
     test('propagates label not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         removeTaskLabel: mock(() => Promise.reject(new Error('Label not found'))),
-      }))
+      })
 
-      const tool = makeRemoveTaskLabelTool(mockConfig)
+      const tool = makeRemoveTaskLabelTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'task-1', labelId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Label not found')
       try {
@@ -186,26 +177,16 @@ describe('Task Label Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeRemoveTaskLabelTool(mockConfig)
-      const promise = getToolExecutor(tool)({ labelId: 'label-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskLabelTool(provider)
+      expect(schemaValidates(tool, { labelId: 'label-1' })).toBe(false)
     })
 
-    test('validates labelId is required', async () => {
-      const tool = makeRemoveTaskLabelTool(mockConfig)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates labelId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskLabelTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     })
   })
 })

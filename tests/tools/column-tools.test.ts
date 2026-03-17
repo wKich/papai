@@ -1,20 +1,18 @@
-import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { makeCreateColumnTool } from '../../src/tools/create-column.js'
 import { makeDeleteColumnTool } from '../../src/tools/delete-column.js'
 import { makeListColumnsTool } from '../../src/tools/list-columns.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
-
-afterEach(() => {
-  restoreAllModules()
-})
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
+import { makeReorderColumnsTool } from '../../src/tools/reorder-columns.js'
+import { makeUpdateColumnTool } from '../../src/tools/update-column.js'
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
 interface ColumnItem {
   id: string
   name: string
-  color: string | null
-  isFinal: boolean
+  color?: string | null
+  isFinal?: boolean
 }
 
 function isColumnItem(item: unknown): item is ColumnItem {
@@ -24,9 +22,7 @@ function isColumnItem(item: unknown): item is ColumnItem {
     'id' in item &&
     typeof (item as Record<string, unknown>)['id'] === 'string' &&
     'name' in item &&
-    typeof (item as Record<string, unknown>)['name'] === 'string' &&
-    'isFinal' in item &&
-    typeof (item as Record<string, unknown>)['isFinal'] === 'boolean'
+    typeof (item as Record<string, unknown>)['name'] === 'string'
   )
 }
 
@@ -41,22 +37,23 @@ describe('Column Tools', () => {
 
   describe('makeListColumnsTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeListColumnsTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeListColumnsTool(provider)
       expect(tool.description).toContain('List all status columns')
     })
 
     test('lists all columns in project', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listColumns: mock(() =>
           Promise.resolve([
-            { id: 'col-1', name: 'todo', color: null, isFinal: false },
-            { id: 'col-2', name: 'in-progress', color: '#aaa', isFinal: false },
-            { id: 'col-3', name: 'done', color: '#0f0', isFinal: true },
+            { id: 'col-1', name: 'todo' },
+            { id: 'col-2', name: 'in-progress' },
+            { id: 'col-3', name: 'done', isFinal: true },
           ]),
         ),
-      }))
+      })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isColumnArray(result)) throw new Error('Invalid result')
@@ -65,15 +62,14 @@ describe('Column Tools', () => {
       expect(result[0]?.name).toBe('todo')
       expect(result[1]?.name).toBe('in-progress')
       expect(result[2]?.name).toBe('done')
-      expect(result[2]?.isFinal).toBe(true)
     })
 
     test('returns empty array when no columns', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listColumns: mock(() => Promise.resolve([])),
-      }))
+      })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -82,27 +78,22 @@ describe('Column Tools', () => {
     })
 
     test('includes projectId in list call', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        listColumns: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve([])
-        }),
-      }))
+      const listColumns = mock((_projectId: string) => Promise.resolve([]))
+      const provider = createMockProvider({ listColumns })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ projectId: 'proj-123' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.['projectId']).toBe('proj-123')
+      expect(listColumns).toHaveBeenCalledWith('proj-123')
     })
 
     test('propagates project not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listColumns: mock((): Promise<never> => Promise.reject(new Error('Project not found'))),
-      }))
+      })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       const promise: Promise<unknown> = getToolExecutor(tool)(
         { projectId: 'invalid' },
         { toolCallId: '1', messages: [] },
@@ -116,11 +107,11 @@ describe('Column Tools', () => {
     })
 
     test('propagates API errors', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listColumns: mock(() => Promise.reject(new Error('API Error'))),
-      }))
+      })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       const promise: Promise<unknown> = getToolExecutor(tool)(
         { projectId: 'proj-1' },
         { toolCallId: '1', messages: [] },
@@ -133,30 +124,25 @@ describe('Column Tools', () => {
       }
     })
 
-    test('validates projectId is required', async () => {
-      const tool = makeListColumnsTool(mockConfig)
-      const promise: Promise<unknown> = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeListColumnsTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
 
     test('returns columns with correct structure', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listColumns: mock(() =>
           Promise.resolve([
-            { id: 'col-1', name: 'Backlog', color: null, isFinal: false },
-            { id: 'col-2', name: 'In Progress', color: '#aaa', isFinal: false },
-            { id: 'col-3', name: 'Review', color: '#ff0', isFinal: false },
-            { id: 'col-4', name: 'Done', color: '#0f0', isFinal: true },
+            { id: 'col-1', name: 'Backlog' },
+            { id: 'col-2', name: 'In Progress' },
+            { id: 'col-3', name: 'Review' },
+            { id: 'col-4', name: 'Done', isFinal: true },
           ]),
         ),
-      }))
+      })
 
-      const tool = makeListColumnsTool(mockConfig)
+      const tool = makeListColumnsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isColumnArray(result)) throw new Error('Invalid result')
@@ -165,31 +151,197 @@ describe('Column Tools', () => {
       for (const column of result) {
         expect(column).toHaveProperty('id')
         expect(column).toHaveProperty('name')
-        expect(column).toHaveProperty('isFinal')
-        expect(typeof column.isFinal).toBe('boolean')
       }
+    })
+  })
+
+  describe('makeCreateColumnTool', () => {
+    test('returns tool with correct structure', () => {
+      const provider = createMockProvider()
+      const tool = makeCreateColumnTool(provider)
+      expect(tool.description).toContain('Create a new status column')
+    })
+
+    test('creates column with required fields', async () => {
+      const provider = createMockProvider({
+        createColumn: mock(() =>
+          Promise.resolve({
+            id: 'col-new',
+            name: 'In Progress',
+          }),
+        ),
+      })
+
+      const tool = makeCreateColumnTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { projectId: 'proj-1', name: 'In Progress' },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isColumnItem(result)) throw new Error('Invalid result')
+
+      expect(result.id).toBe('col-new')
+      expect(result.name).toBe('In Progress')
+    })
+
+    test('creates column with all optional fields', async () => {
+      const createColumn = mock(
+        (_projectId: string, params: { name: string; icon?: string; color?: string; isFinal?: boolean }) =>
+          Promise.resolve({
+            id: 'col-new',
+            name: params.name,
+            isFinal: params.isFinal,
+          }),
+      )
+      const provider = createMockProvider({ createColumn })
+
+      const tool = makeCreateColumnTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { projectId: 'proj-1', name: 'Done', icon: 'check', color: '#00ff00', isFinal: true },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(createColumn).toHaveBeenCalledWith('proj-1', {
+        name: 'Done',
+        icon: 'check',
+        color: '#00ff00',
+        isFinal: true,
+      })
+    })
+
+    test('propagates API errors', async () => {
+      const provider = createMockProvider({
+        createColumn: mock(() => Promise.reject(new Error('API Error'))),
+      })
+
+      const tool = makeCreateColumnTool(provider)
+      const promise = getToolExecutor(tool)({ projectId: 'proj-1', name: 'Test' }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('API Error')
+      try {
+        await promise
+      } catch {
+        // ignore
+      }
+    })
+
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeCreateColumnTool(provider)
+      expect(schemaValidates(tool, { name: 'Test' })).toBe(false)
+    })
+
+    test('validates name is required', () => {
+      const provider = createMockProvider()
+      const tool = makeCreateColumnTool(provider)
+      expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
+    })
+  })
+
+  describe('makeUpdateColumnTool', () => {
+    test('returns tool with correct structure', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateColumnTool(provider)
+      expect(tool.description).toContain('Update an existing status column')
+    })
+
+    test('updates column name', async () => {
+      const provider = createMockProvider({
+        updateColumn: mock(() =>
+          Promise.resolve({
+            id: 'col-1',
+            name: 'Updated Name',
+          }),
+        ),
+      })
+
+      const tool = makeUpdateColumnTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { columnId: 'col-1', name: 'Updated Name' },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isColumnItem(result)) throw new Error('Invalid result')
+
+      expect(result.id).toBe('col-1')
+      expect(result.name).toBe('Updated Name')
+    })
+
+    test('updates column with multiple fields', async () => {
+      const updateColumn = mock(
+        (_columnId: string, params: { name?: string; icon?: string; color?: string; isFinal?: boolean }) =>
+          Promise.resolve({
+            id: 'col-1',
+            name: params.name ?? 'Test',
+            isFinal: params.isFinal,
+          }),
+      )
+      const provider = createMockProvider({ updateColumn })
+
+      const tool = makeUpdateColumnTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { columnId: 'col-1', name: 'Done', color: '#00ff00', isFinal: true },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(updateColumn).toHaveBeenCalledWith('col-1', {
+        name: 'Done',
+        icon: undefined,
+        color: '#00ff00',
+        isFinal: true,
+      })
+    })
+
+    test('propagates column not found error', async () => {
+      const provider = createMockProvider({
+        updateColumn: mock(() => Promise.reject(new Error('Column not found'))),
+      })
+
+      const tool = makeUpdateColumnTool(provider)
+      const promise = getToolExecutor(tool)({ columnId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('Column not found')
+      try {
+        await promise
+      } catch {
+        // ignore
+      }
+    })
+
+    test('validates columnId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateColumnTool(provider)
+      expect(schemaValidates(tool, { name: 'Test' })).toBe(false)
+    })
+
+    test('validates at least one field is provided', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateColumnTool(provider)
+      expect(schemaValidates(tool, { columnId: 'col-1' })).toBe(false)
     })
   })
 
   describe('makeDeleteColumnTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeDeleteColumnTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeDeleteColumnTool(provider)
       expect(tool.description).toContain('Delete a status column')
     })
 
     test('deletes column successfully with high confidence', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        deleteColumn: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        deleteColumn: mock(() => Promise.resolve({ id: 'col-1' })),
+      })
 
-      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const execute = getToolExecutor(makeDeleteColumnTool(provider))
       const result: unknown = await execute({ columnId: 'col-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
 
-      expect(result).toMatchObject({ success: true })
+      expect(result).toMatchObject({ id: 'col-1' })
     })
 
     test('returns confirmation_required when confidence is below threshold', async () => {
-      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const provider = createMockProvider()
+      const execute = getToolExecutor(makeDeleteColumnTool(provider))
       const result: unknown = await execute(
         { columnId: 'col-1', label: 'In Progress', confidence: 0.6 },
         { toolCallId: '1', messages: [] },
@@ -207,22 +359,22 @@ describe('Column Tools', () => {
     })
 
     test('executes when confidence exactly meets threshold (0.85)', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        deleteColumn: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        deleteColumn: mock(() => Promise.resolve({ id: 'col-1' })),
+      })
 
-      const execute = getToolExecutor(makeDeleteColumnTool(mockConfig))
+      const execute = getToolExecutor(makeDeleteColumnTool(provider))
       const result: unknown = await execute({ columnId: 'col-1', confidence: 0.85 }, { toolCallId: '1', messages: [] })
 
-      expect(result).toMatchObject({ success: true })
+      expect(result).toMatchObject({ id: 'col-1' })
     })
 
     test('propagates column not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         deleteColumn: mock(() => Promise.reject(new Error('Column not found'))),
-      }))
+      })
 
-      const tool = makeDeleteColumnTool(mockConfig)
+      const tool = makeDeleteColumnTool(provider)
       const promise = getToolExecutor(tool)({ columnId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Column not found')
       try {
@@ -233,20 +385,77 @@ describe('Column Tools', () => {
     })
 
     test('validates columnId is required', () => {
-      const tool = makeDeleteColumnTool(mockConfig)
-      const schema = tool.inputSchema
-      expect(typeof schema === 'object' && schema !== null && 'safeParse' in schema).toBe(true)
-      if (
-        typeof schema === 'object' &&
-        schema !== null &&
-        'safeParse' in schema &&
-        typeof schema.safeParse === 'function'
-      ) {
-        const parseResult = schema.safeParse({ confidence: 0.9 })
-        expect(
-          typeof parseResult === 'object' && parseResult !== null && 'success' in parseResult && parseResult.success,
-        ).toBe(false)
+      const provider = createMockProvider()
+      const tool = makeDeleteColumnTool(provider)
+      expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
+    })
+  })
+
+  describe('makeReorderColumnsTool', () => {
+    test('returns tool with correct structure', () => {
+      const provider = createMockProvider()
+      const tool = makeReorderColumnsTool(provider)
+      expect(tool.description).toContain('Reorder status columns')
+    })
+
+    test('reorders columns successfully', async () => {
+      const reorderColumns = mock((_projectId: string, _columns: { id: string; position: number }[]) =>
+        Promise.resolve(),
+      )
+      const provider = createMockProvider({ reorderColumns })
+
+      const tool = makeReorderColumnsTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        {
+          projectId: 'proj-1',
+          columns: [
+            { id: 'col-2', position: 0 },
+            { id: 'col-1', position: 1 },
+            { id: 'col-3', position: 2 },
+          ],
+        },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(reorderColumns).toHaveBeenCalledWith('proj-1', [
+        { id: 'col-2', position: 0 },
+        { id: 'col-1', position: 1 },
+        { id: 'col-3', position: 2 },
+      ])
+    })
+
+    test('propagates API errors', async () => {
+      const provider = createMockProvider({
+        reorderColumns: mock(() => Promise.reject(new Error('API Error'))),
+      })
+
+      const tool = makeReorderColumnsTool(provider)
+      const promise = getToolExecutor(tool)(
+        {
+          projectId: 'proj-1',
+          columns: [{ id: 'col-1', position: 0 }],
+        },
+        { toolCallId: '1', messages: [] },
+      )
+      expect(promise).rejects.toThrow('API Error')
+      try {
+        await promise
+      } catch {
+        // ignore
       }
+    })
+
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeReorderColumnsTool(provider)
+      expect(schemaValidates(tool, { columns: [{ id: 'col-1', position: 0 }] })).toBe(false)
+    })
+
+    test('validates columns is required', () => {
+      const provider = createMockProvider()
+      const tool = makeReorderColumnsTool(provider)
+      expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
   })
 })

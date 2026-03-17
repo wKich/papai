@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { addComment } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:add-comment' })
 
-export function makeAddCommentTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeAddCommentTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Add a comment to a Kaneo task.',
     inputSchema: z.object({
@@ -17,7 +16,7 @@ export function makeAddCommentTool(kaneoConfig: KaneoConfig): ToolSet[string] {
     }),
     execute: async ({ taskId, comment }) => {
       try {
-        return await addComment({ config: kaneoConfig, taskId, comment })
+        return await provider.addComment!(taskId, comment)
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'add_comment' },

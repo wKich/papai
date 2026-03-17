@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { createColumn } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:create-column' })
 
-export function makeCreateColumnTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeCreateColumnTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Create a new status column in a Kaneo project.',
     inputSchema: z.object({
@@ -20,7 +19,7 @@ export function makeCreateColumnTool(kaneoConfig: KaneoConfig): ToolSet[string] 
     }),
     execute: async ({ projectId, name, icon, color, isFinal }) => {
       try {
-        return await createColumn({ config: kaneoConfig, projectId, name, icon, color, isFinal })
+        return await provider.createColumn!(projectId, { name, icon, color, isFinal })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, name, tool: 'create_column' },

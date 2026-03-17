@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { updateTaskRelation } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:update-task-relation' })
 
-export function makeUpdateTaskRelationTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeUpdateTaskRelationTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Update the type of an existing relation between two Kaneo tasks.',
     inputSchema: z.object({
@@ -22,7 +21,7 @@ export function makeUpdateTaskRelationTool(kaneoConfig: KaneoConfig): ToolSet[st
     }),
     execute: async ({ taskId, relatedTaskId, type }) => {
       try {
-        return await updateTaskRelation({ config: kaneoConfig, taskId, relatedTaskId, type })
+        return await provider.updateRelation!(taskId, relatedTaskId, type)
       } catch (error) {
         log.error(
           {

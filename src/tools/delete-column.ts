@@ -2,14 +2,13 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { deleteColumn } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:delete-column' })
 
-export function makeDeleteColumnTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeDeleteColumnTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Delete a status column from a Kaneo project.',
     inputSchema: z.object({
@@ -28,7 +27,7 @@ export function makeDeleteColumnTool(kaneoConfig: KaneoConfig): ToolSet[string] 
         return gate
       }
       try {
-        return await deleteColumn({ config: kaneoConfig, columnId })
+        return await provider.deleteColumn!(columnId)
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), columnId, tool: 'delete_column' },

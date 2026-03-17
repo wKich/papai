@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { reorderColumns } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:reorder-columns' })
 
-export function makeReorderColumnsTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeReorderColumnsTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Reorder status columns in a Kaneo project. Provide the new order of columns with their positions.',
     inputSchema: z.object({
@@ -24,7 +23,9 @@ export function makeReorderColumnsTool(kaneoConfig: KaneoConfig): ToolSet[string
     }),
     execute: async ({ projectId, columns }) => {
       try {
-        return await reorderColumns({ config: kaneoConfig, projectId, columns })
+        await provider.reorderColumns!(projectId, columns)
+        log.info({ projectId, columnCount: columns.length }, 'Columns reordered via tool')
+        return { success: true }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, tool: 'reorder_columns' },

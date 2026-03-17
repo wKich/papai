@@ -19,6 +19,8 @@ import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
+import { createProvider } from './providers/registry.js'
+import type { TaskProvider } from './providers/types.js'
 import { makeTools } from './tools/index.js'
 import { isAuthorized, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspace } from './users.js'
 import { formatLlmOutput } from './utils/format.js'
@@ -134,30 +136,28 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
   }
 }
 
-const buildKaneoConfig = (userId: number): { apiKey: string; baseUrl: string; sessionCookie?: string } => {
+const buildProvider = (userId: number): TaskProvider => {
   const kaneoKey = getConfig(userId, 'kaneo_apikey')!
   const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
+  const workspaceId = getKaneoWorkspace(userId)!
   const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
-  return isSessionCookie
-    ? { apiKey: '', baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey }
-    : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl }
+  const config: Record<string, string> = isSessionCookie
+    ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
+    : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
+  return createProvider('kaneo', config)
 }
 
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (
-  userId: number,
-  kaneoConfig: { apiKey: string; baseUrl: string; sessionCookie?: string },
-  workspaceId: string,
-): ToolSet => {
+const getOrCreateTools = (userId: number, provider: TaskProvider): ToolSet => {
   const cachedTools = getCachedTools(userId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
     log.debug({ userId }, 'Using cached tools')
     return cachedTools
   }
   log.debug({ userId }, 'Building tools (cache miss)')
-  const tools = makeTools({ kaneoConfig, workspaceId })
+  const tools = makeTools(provider)
   setCachedTools(userId, tools)
   return tools
 }
@@ -192,10 +192,9 @@ const callLlm = async (
   const llmApiKey = getConfig(userId, 'llm_apikey')!
   const llmBaseUrl = getConfig(userId, 'llm_baseurl')!
   const mainModel = getConfig(userId, 'main_model')!
-  const kaneoWorkspaceId = getKaneoWorkspace(userId)!
   const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const kaneoConfig = buildKaneoConfig(userId)
-  const tools = getOrCreateTools(userId, kaneoConfig, kaneoWorkspaceId)
+  const provider = buildProvider(userId)
+  const tools = getOrCreateTools(userId, provider)
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
   log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({

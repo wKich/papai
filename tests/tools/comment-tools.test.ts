@@ -1,32 +1,27 @@
-import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeAddCommentTool } from '../../src/tools/add-comment.js'
 import { makeGetCommentsTool } from '../../src/tools/get-comments.js'
 import { makeRemoveCommentTool } from '../../src/tools/remove-comment.js'
 import { makeUpdateCommentTool } from '../../src/tools/update-comment.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
-afterEach(() => {
-  restoreAllModules()
-})
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
-
-function isAddResult(val: unknown): val is { id: string; comment: string; createdAt: string } {
+function isAddResult(val: unknown): val is { id: string; body: string; createdAt: string } {
   return (
     val !== null &&
     typeof val === 'object' &&
     'id' in val &&
     typeof val.id === 'string' &&
-    'comment' in val &&
-    typeof val.comment === 'string' &&
+    'body' in val &&
+    typeof val.body === 'string' &&
     'createdAt' in val &&
     typeof val.createdAt === 'string'
   )
 }
 
-function isSuccessResult(val: unknown): val is { success: boolean } {
-  return val !== null && typeof val === 'object' && 'success' in val && typeof val.success === 'boolean'
+function isSuccessResult(val: unknown): val is { id: string } {
+  return val !== null && typeof val === 'object' && 'id' in val && typeof val.id === 'string'
 }
 
 describe('Comment Tools', () => {
@@ -36,22 +31,23 @@ describe('Comment Tools', () => {
 
   describe('makeAddCommentTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeAddCommentTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeAddCommentTool(provider)
       expect(tool.description).toContain('Add a comment')
     })
 
     test('adds comment to task', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addComment: mock(() =>
           Promise.resolve({
             id: 'comment-1',
-            comment: 'New comment',
+            body: 'New comment',
             createdAt: '2026-01-01T00:00:00Z',
           }),
         ),
-      }))
+      })
 
-      const tool = makeAddCommentTool(mockConfig)
+      const tool = makeAddCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', comment: 'New comment' },
@@ -60,31 +56,31 @@ describe('Comment Tools', () => {
       if (!isAddResult(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('comment-1')
-      expect(result.comment).toBe('New comment')
+      expect(result.body).toBe('New comment')
     })
 
     test('handles empty comment', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addComment: mock(() => Promise.resolve({ id: 'comment-1', comment: '', createdAt: '2026-01-01T00:00:00Z' })),
-      }))
+      const provider = createMockProvider({
+        addComment: mock(() => Promise.resolve({ id: 'comment-1', body: '', createdAt: '2026-01-01T00:00:00Z' })),
+      })
 
-      const tool = makeAddCommentTool(mockConfig)
+      const tool = makeAddCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1', comment: '' }, { toolCallId: '1', messages: [] })
       if (!isAddResult(result)) throw new Error('Invalid result')
 
-      expect(result.comment).toBe('')
+      expect(result.body).toBe('')
     })
 
     test('handles very long comment', async () => {
       const longComment = 'a'.repeat(1000)
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addComment: mock(() =>
-          Promise.resolve({ id: 'comment-1', comment: longComment, createdAt: '2026-01-01T00:00:00Z' }),
+          Promise.resolve({ id: 'comment-1', body: longComment, createdAt: '2026-01-01T00:00:00Z' }),
         ),
-      }))
+      })
 
-      const tool = makeAddCommentTool(mockConfig)
+      const tool = makeAddCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', comment: longComment },
@@ -92,15 +88,15 @@ describe('Comment Tools', () => {
       )
       if (!isAddResult(result)) throw new Error('Invalid result')
 
-      expect(result.comment).toBe(longComment)
+      expect(result.body).toBe(longComment)
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         addComment: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeAddCommentTool(mockConfig)
+      const tool = makeAddCommentTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', comment: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -110,46 +106,37 @@ describe('Comment Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeAddCommentTool(mockConfig)
-      const promise = getToolExecutor(tool)({ comment: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddCommentTool(provider)
+      expect(schemaValidates(tool, { comment: 'Test' })).toBe(false)
     })
 
-    test('validates comment is required', async () => {
-      const tool = makeAddCommentTool(mockConfig)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates comment is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddCommentTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     })
   })
 
   describe('makeGetCommentsTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeGetCommentsTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeGetCommentsTool(provider)
       expect(tool.description).toContain('Get all comments')
     })
 
     test('gets all comments on task', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getComments: mock(() =>
           Promise.resolve([
-            { id: 'comment-1', comment: 'Comment 1', createdAt: '2026-03-01T00:00:00Z' },
-            { id: 'comment-2', comment: 'Comment 2', createdAt: '2026-03-02T00:00:00Z' },
+            { id: 'comment-1', body: 'Comment 1', createdAt: '2026-03-01T00:00:00Z' },
+            { id: 'comment-2', body: 'Comment 2', createdAt: '2026-03-02T00:00:00Z' },
           ]),
         ),
-      }))
+      })
 
-      const tool = makeGetCommentsTool(mockConfig)
+      const tool = makeGetCommentsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -158,13 +145,13 @@ describe('Comment Tools', () => {
     })
 
     test('filters non-comment activities', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getComments: mock(() =>
-          Promise.resolve([{ id: 'act-1', comment: 'Comment 1', createdAt: '2026-03-01T00:00:00Z' }]),
+          Promise.resolve([{ id: 'act-1', body: 'Comment 1', createdAt: '2026-03-01T00:00:00Z' }]),
         ),
-      }))
+      })
 
-      const tool = makeGetCommentsTool(mockConfig)
+      const tool = makeGetCommentsTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -173,11 +160,11 @@ describe('Comment Tools', () => {
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getComments: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeGetCommentsTool(mockConfig)
+      const tool = makeGetCommentsTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -187,35 +174,31 @@ describe('Comment Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeGetCommentsTool(mockConfig)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeGetCommentsTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 
   describe('makeUpdateCommentTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateCommentTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeUpdateCommentTool(provider)
       expect(tool.description).toContain('Update an existing comment')
     })
 
     test('updates existing comment', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateComment: mock(() =>
           Promise.resolve({
             id: 'comment-1',
-            comment: 'Updated comment',
+            body: 'Updated comment',
           }),
         ),
-      }))
+      })
 
-      const tool = makeUpdateCommentTool(mockConfig)
+      const tool = makeUpdateCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { activityId: 'comment-1', comment: 'Updated comment' },
@@ -226,22 +209,22 @@ describe('Comment Tools', () => {
         typeof result !== 'object' ||
         !('id' in result) ||
         typeof result.id !== 'string' ||
-        !('comment' in result) ||
-        typeof result.comment !== 'string'
+        !('body' in result) ||
+        typeof result.body !== 'string'
       ) {
         throw new Error('Invalid result')
       }
 
       expect(result.id).toBe('comment-1')
-      expect(result.comment).toBe('Updated comment')
+      expect(result.body).toBe('Updated comment')
     })
 
     test('propagates comment not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateComment: mock(() => Promise.reject(new Error('Comment not found'))),
-      }))
+      })
 
-      const tool = makeUpdateCommentTool(mockConfig)
+      const tool = makeUpdateCommentTool(provider)
       const promise = getToolExecutor(tool)(
         { activityId: 'invalid', comment: 'Test' },
         { toolCallId: '1', messages: [] },
@@ -254,54 +237,45 @@ describe('Comment Tools', () => {
       }
     })
 
-    test('validates activityId is required', async () => {
-      const tool = makeUpdateCommentTool(mockConfig)
-      const promise = getToolExecutor(tool)({ comment: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates activityId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateCommentTool(provider)
+      expect(schemaValidates(tool, { comment: 'Test' })).toBe(false)
     })
 
-    test('validates comment is required', async () => {
-      const tool = makeUpdateCommentTool(mockConfig)
-      const promise = getToolExecutor(tool)({ activityId: 'comment-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates comment is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateCommentTool(provider)
+      expect(schemaValidates(tool, { activityId: 'comment-1' })).toBe(false)
     })
   })
 
   describe('makeRemoveCommentTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeRemoveCommentTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeRemoveCommentTool(provider)
       expect(tool.description).toContain('Remove a comment')
     })
 
     test('removes comment successfully', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        removeComment: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        removeComment: mock(() => Promise.resolve({ id: 'comment-1' })),
+      })
 
-      const tool = makeRemoveCommentTool(mockConfig)
+      const tool = makeRemoveCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ activityId: 'comment-1' }, { toolCallId: '1', messages: [] })
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 
-      expect(result.success).toBe(true)
+      expect(result.id).toBe('comment-1')
     })
 
     test('propagates comment not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         removeComment: mock(() => Promise.reject(new Error('Comment not found'))),
-      }))
+      })
 
-      const tool = makeRemoveCommentTool(mockConfig)
+      const tool = makeRemoveCommentTool(provider)
       const promise = getToolExecutor(tool)({ activityId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Comment not found')
       try {
@@ -311,15 +285,10 @@ describe('Comment Tools', () => {
       }
     })
 
-    test('validates activityId is required', async () => {
-      const tool = makeRemoveCommentTool(mockConfig)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        /* ignore */
-      }
+    test('validates activityId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveCommentTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 })

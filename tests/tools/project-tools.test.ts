@@ -1,56 +1,32 @@
-import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
-afterEach(() => {
-  restoreAllModules()
-})
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
-const mockWorkspaceId = 'ws-1'
-
-interface ProjectItem {
+interface Project {
   id: string
   name: string
-  slug: string
+  description?: string
+  url?: string
 }
 
-function isProjectItem(item: unknown): item is ProjectItem {
-  return (
-    item !== null &&
-    typeof item === 'object' &&
-    'id' in item &&
-    typeof (item as Record<string, unknown>)['id'] === 'string' &&
-    'name' in item &&
-    typeof (item as Record<string, unknown>)['name'] === 'string' &&
-    'slug' in item &&
-    typeof (item as Record<string, unknown>)['slug'] === 'string'
-  )
-}
-
-function isProjectArray(val: unknown): val is ProjectItem[] {
-  return Array.isArray(val) && val.every(isProjectItem)
-}
-
-function isProject(val: unknown): val is ProjectItem {
+function isProject(val: unknown): val is Project {
   return (
     val !== null &&
     typeof val === 'object' &&
     'id' in val &&
     typeof (val as Record<string, unknown>)['id'] === 'string' &&
     'name' in val &&
-    typeof (val as Record<string, unknown>)['name'] === 'string' &&
-    'slug' in val &&
-    typeof (val as Record<string, unknown>)['slug'] === 'string'
+    typeof (val as Record<string, unknown>)['name'] === 'string'
   )
 }
 
-function isSuccessResult(val: unknown): val is { success: boolean } {
-  return val !== null && typeof val === 'object' && 'success' in val && typeof val.success === 'boolean'
+function isProjectArray(val: unknown): val is Project[] {
+  return Array.isArray(val) && val.every(isProject)
 }
 
 describe('Project Tools', () => {
@@ -60,22 +36,24 @@ describe('Project Tools', () => {
 
   describe('makeListProjectsTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeListProjectsTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeListProjectsTool(provider)
       expect(tool.description).toContain('List all available projects')
     })
 
     test('lists all projects in workspace', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listProjects: mock(() =>
           Promise.resolve([
-            { id: 'proj-1', name: 'Project 1', slug: 'project-1' },
-            { id: 'proj-2', name: 'Project 2', slug: 'project-2' },
+            { id: 'proj-1', name: 'Project 1' },
+            { id: 'proj-2', name: 'Project 2' },
           ]),
         ),
-      }))
+      })
 
-      const execute = getToolExecutor(makeListProjectsTool(mockConfig, mockWorkspaceId))
-      const result: unknown = await execute({}, { toolCallId: '1', messages: [] })
+      const tool = makeListProjectsTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
       if (!isProjectArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(2)
@@ -84,38 +62,35 @@ describe('Project Tools', () => {
     })
 
     test('returns empty array when no projects', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listProjects: mock(() => Promise.resolve([])),
-      }))
+      })
 
-      const execute = getToolExecutor(makeListProjectsTool(mockConfig, mockWorkspaceId))
-      const result: unknown = await execute({}, { toolCallId: '1', messages: [] })
+      const tool = makeListProjectsTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(0)
     })
 
-    test('includes workspaceId in list call', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        listProjects: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve([])
-        }),
-      }))
+    test('calls provider listProjects', async () => {
+      const listProjects = mock(() => Promise.resolve([]))
+      const provider = createMockProvider({ listProjects })
 
-      const execute = getToolExecutor(makeListProjectsTool(mockConfig, 'ws-123'))
-      await execute({}, { toolCallId: '1', messages: [] })
+      const tool = makeListProjectsTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({}, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams !== undefined && capturedParams['workspaceId']).toBe('ws-123')
+      expect(listProjects).toHaveBeenCalledTimes(1)
     })
 
     test('propagates API errors', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listProjects: mock(() => Promise.reject(new Error('API Error'))),
-      }))
+      })
 
-      const tool = makeListProjectsTool(mockConfig, mockWorkspaceId)
+      const tool = makeListProjectsTool(provider)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('API Error')
       try {
@@ -128,71 +103,69 @@ describe('Project Tools', () => {
 
   describe('makeCreateProjectTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeCreateProjectTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeCreateProjectTool(provider)
       expect(tool.description).toContain('Create a new project')
     })
 
     test('creates project with required name', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         createProject: mock(() =>
           Promise.resolve({
             id: 'proj-1',
             name: 'New Project',
-            slug: 'new-project',
           }),
         ),
-      }))
+      })
 
-      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, mockWorkspaceId))
-      const result: unknown = await execute({ name: 'New Project' }, { toolCallId: '1', messages: [] })
+      const tool = makeCreateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({ name: 'New Project' }, { toolCallId: '1', messages: [] })
       if (!isProject(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('proj-1')
       expect(result.name).toBe('New Project')
-      expect(result.slug).toBe('new-project')
     })
 
     test('creates project with description', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        createProject: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            id: 'proj-1',
-            name: String(params['name']),
-            slug: 'new-project',
-          })
+      const createProject = mock((params: { name: string; description?: string }) =>
+        Promise.resolve({
+          id: 'proj-1',
+          name: params.name,
+          description: params.description,
         }),
-      }))
+      )
+      const provider = createMockProvider({ createProject })
 
-      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, mockWorkspaceId))
-      await execute({ name: 'New Project', description: 'Project description' }, { toolCallId: '1', messages: [] })
+      const tool = makeCreateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ name: 'New Project', description: 'Project description' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams !== undefined && capturedParams['name']).toBe('New Project')
-      expect(capturedParams !== undefined && capturedParams['description']).toBe('Project description')
+      expect(createProject).toHaveBeenCalledWith({ name: 'New Project', description: 'Project description' })
     })
 
-    test('includes workspaceId in create call', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        createProject: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({ id: 'proj-1', name: 'Test', slug: 'test' })
+    test('passes undefined description when not provided', async () => {
+      const createProject = mock((params: { name: string; description?: string }) =>
+        Promise.resolve({
+          id: 'proj-1',
+          name: params.name,
         }),
-      }))
+      )
+      const provider = createMockProvider({ createProject })
 
-      const execute = getToolExecutor(makeCreateProjectTool(mockConfig, 'ws-123'))
-      await execute({ name: 'Test' }, { toolCallId: '1', messages: [] })
+      const tool = makeCreateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ name: 'Test' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams !== undefined && capturedParams['workspaceId']).toBe('ws-123')
+      expect(createProject).toHaveBeenCalledWith({ name: 'Test', description: undefined })
     })
 
     test('propagates API errors', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         createProject: mock(() => Promise.reject(new Error('API Error'))),
-      }))
+      })
 
-      const tool = makeCreateProjectTool(mockConfig, mockWorkspaceId)
+      const tool = makeCreateProjectTool(provider)
       const promise = getToolExecutor(tool)({ name: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('API Error')
       try {
@@ -202,37 +175,33 @@ describe('Project Tools', () => {
       }
     })
 
-    test('validates name is required', async () => {
-      const tool = makeCreateProjectTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates name is required', () => {
+      const provider = createMockProvider()
+      const tool = makeCreateProjectTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 
   describe('makeUpdateProjectTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
+      const provider = createMockProvider()
+      const tool = makeUpdateProjectTool(provider)
       expect(tool.description).toContain('Update an existing Kaneo project')
     })
 
     test('updates project name', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateProject: mock(() =>
           Promise.resolve({
             id: 'proj-1',
             name: 'Updated Name',
-            slug: 'updated-name',
           }),
         ),
-      }))
+      })
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
-      const result: unknown = await execute(
+      const tool = makeUpdateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
         { projectId: 'proj-1', name: 'Updated Name' },
         { toolCallId: '1', messages: [] },
       )
@@ -240,57 +209,51 @@ describe('Project Tools', () => {
 
       expect(result.id).toBe('proj-1')
       expect(result.name).toBe('Updated Name')
-      expect(result.slug).toBe('updated-name')
     })
 
     test('updates project description', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateProject: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            id: 'proj-1',
-            name: 'Test',
-            slug: 'test',
-          })
+      const updateProject = mock((_projectId: string, params: { name?: string; description?: string }) =>
+        Promise.resolve({
+          id: 'proj-1',
+          name: 'Test',
+          description: params.description,
         }),
-      }))
+      )
+      const provider = createMockProvider({ updateProject })
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
-      await execute({ projectId: 'proj-1', description: 'New description' }, { toolCallId: '1', messages: [] })
+      const tool = makeUpdateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ projectId: 'proj-1', description: 'New description' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams !== undefined && capturedParams['description']).toBe('New description')
+      expect(updateProject).toHaveBeenCalledWith('proj-1', { name: undefined, description: 'New description' })
     })
 
     test('updates both name and description', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateProject: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            id: 'proj-1',
-            name: String(params['name']),
-            slug: 'new-name',
-          })
+      const updateProject = mock((_projectId: string, params: { name?: string; description?: string }) =>
+        Promise.resolve({
+          id: 'proj-1',
+          name: params.name ?? 'Test',
+          description: params.description,
         }),
-      }))
+      )
+      const provider = createMockProvider({ updateProject })
 
-      const execute = getToolExecutor(makeUpdateProjectTool(mockConfig, 'ws-1'))
-      await execute(
+      const tool = makeUpdateProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
         { projectId: 'proj-1', name: 'New Name', description: 'New description' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams !== undefined && capturedParams['name']).toBe('New Name')
-      expect(capturedParams !== undefined && capturedParams['description']).toBe('New description')
+      expect(updateProject).toHaveBeenCalledWith('proj-1', { name: 'New Name', description: 'New description' })
     })
 
     test('propagates project not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateProject: mock(() => Promise.reject(new Error('Project not found'))),
-      }))
+      })
 
-      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
+      const tool = makeUpdateProjectTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Project not found')
       try {
@@ -300,49 +263,40 @@ describe('Project Tools', () => {
       }
     })
 
-    test('validates projectId is required', async () => {
-      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
-      const promise = getToolExecutor(tool)({ name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateProjectTool(provider)
+      expect(schemaValidates(tool, { name: 'Test' })).toBe(false)
     })
 
-    test('validates at least one field is provided', async () => {
-      const tool = makeUpdateProjectTool(mockConfig, 'ws-1')
-      const promise = getToolExecutor(tool)({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates at least one field is provided', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateProjectTool(provider)
+      expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
   })
 
   describe('makeArchiveProjectTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeArchiveProjectTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeArchiveProjectTool(provider)
       expect(tool.description).toContain('Archive (delete) a Kaneo project')
     })
 
     test('archives project successfully with high confidence', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        deleteProject: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
+      })
 
-      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const execute = getToolExecutor(makeArchiveProjectTool(provider))
       const result: unknown = await execute({ projectId: 'proj-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      if (!isSuccessResult(result)) throw new Error('Invalid result')
 
-      expect(result.success).toBe(true)
+      expect(result).toMatchObject({ id: 'proj-1' })
     })
 
     test('returns confirmation_required when confidence is below threshold', async () => {
-      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const provider = createMockProvider()
+      const execute = getToolExecutor(makeArchiveProjectTool(provider))
       const result: unknown = await execute(
         { projectId: 'proj-1', label: 'Backend', confidence: 0.6 },
         { toolCallId: '1', messages: [] },
@@ -360,26 +314,25 @@ describe('Project Tools', () => {
     })
 
     test('executes when confidence exactly meets threshold (0.85)', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        deleteProject: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
+      })
 
-      const execute = getToolExecutor(makeArchiveProjectTool(mockConfig))
+      const execute = getToolExecutor(makeArchiveProjectTool(provider))
       const result: unknown = await execute(
         { projectId: 'proj-1', confidence: 0.85 },
         { toolCallId: '1', messages: [] },
       )
-      if (!isSuccessResult(result)) throw new Error('Invalid result')
 
-      expect(result.success).toBe(true)
+      expect(result).toMatchObject({ id: 'proj-1' })
     })
 
     test('propagates project not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        deleteProject: mock(() => Promise.reject(new Error('Project not found'))),
-      }))
+      const provider = createMockProvider({
+        archiveProject: mock(() => Promise.reject(new Error('Project not found'))),
+      })
 
-      const tool = makeArchiveProjectTool(mockConfig)
+      const tool = makeArchiveProjectTool(provider)
       const promise = getToolExecutor(tool)(
         { projectId: 'invalid', confidence: 0.9 },
         { toolCallId: '1', messages: [] },
@@ -393,20 +346,9 @@ describe('Project Tools', () => {
     })
 
     test('validates projectId is required', () => {
-      const tool = makeArchiveProjectTool(mockConfig)
-      const schema = tool.inputSchema
-      expect(typeof schema === 'object' && schema !== null && 'safeParse' in schema).toBe(true)
-      if (
-        typeof schema === 'object' &&
-        schema !== null &&
-        'safeParse' in schema &&
-        typeof schema.safeParse === 'function'
-      ) {
-        const parseResult = schema.safeParse({ confidence: 0.9 })
-        expect(
-          typeof parseResult === 'object' && parseResult !== null && 'success' in parseResult && parseResult.success,
-        ).toBe(false)
-      }
+      const provider = createMockProvider()
+      const tool = makeArchiveProjectTool(provider)
+      expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
     })
   })
 })

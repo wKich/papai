@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, mock, beforeEach } from 'bun:test'
+import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
@@ -6,16 +6,10 @@ import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
-afterEach(() => {
-  restoreAllModules()
-})
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
-const mockWorkspaceId = 'ws-1'
-
-function isTask(val: unknown): val is { id: string; title: string; number?: number; status: string } {
+function isTask(val: unknown): val is { id: string; title: string; status: string } {
   return (
     val !== null &&
     typeof val === 'object' &&
@@ -30,7 +24,7 @@ function isTask(val: unknown): val is { id: string; title: string; number?: numb
 
 function isTaskWithRelations(
   val: unknown,
-): val is { id: string; title: string; number: number; relations: Array<{ type: string; taskId: string }> } {
+): val is { id: string; title: string; relations: Array<{ type: string; taskId: string }> } {
   return (
     val !== null &&
     typeof val === 'object' &&
@@ -38,8 +32,6 @@ function isTaskWithRelations(
     typeof val.id === 'string' &&
     'title' in val &&
     typeof val.title === 'string' &&
-    'number' in val &&
-    typeof val.number === 'number' &&
     'relations' in val &&
     Array.isArray(val.relations)
   )
@@ -56,23 +48,24 @@ describe('Task Tools', () => {
 
   describe('makeCreateTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeCreateTaskTool(provider)
       expect(tool.description).toContain('Create a new task')
     })
 
     test('creates task with required title', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         createTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
             title: 'Test Task',
-            number: 42,
             status: 'todo',
+            url: 'https://test.com/task/1',
           }),
         ),
-      }))
+      })
 
-      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeCreateTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { title: 'Test Task', projectId: 'proj-1' },
@@ -82,25 +75,28 @@ describe('Task Tools', () => {
 
       expect(result.id).toBe('task-1')
       expect(result.title).toBe('Test Task')
-      expect(result.number).toBe(42)
       expect(result.status).toBe('todo')
     })
 
     test('includes optional fields in request', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        createTask: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
+      const createTask = mock(
+        (params: {
+          projectId: string
+          title: string
+          description?: string
+          priority?: string
+          status?: string
+          dueDate?: string
+        }) =>
+          Promise.resolve({
             id: 'task-1',
-            title: String(params['title']),
-            number: 1,
-            status: String(params['status']),
-          })
-        }),
-      }))
+            title: params.title,
+            status: params.status ?? 'todo',
+          }),
+      )
+      const provider = createMockProvider({ createTask })
 
-      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeCreateTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
@@ -113,19 +109,23 @@ describe('Task Tools', () => {
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['title']).toBe('Test Task')
-      expect(capturedParams?.['description']).toBe('Task description')
-      expect(capturedParams?.['priority']).toBe('high')
-      expect(capturedParams?.['dueDate']).toBe('2026-03-15')
-      expect(capturedParams?.['status']).toBe('in-progress')
+      expect(createTask).toHaveBeenCalledTimes(1)
+      const call = createTask.mock.calls[0]
+      if (!call) throw new Error('Expected call')
+      const params = call[0] as Record<string, unknown>
+      expect(params['title']).toBe('Test Task')
+      expect(params['description']).toBe('Task description')
+      expect(params['priority']).toBe('high')
+      expect(params['dueDate']).toBe('2026-03-15')
+      expect(params['status']).toBe('in-progress')
     })
 
     test('propagates API errors', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         createTask: mock(() => Promise.reject(new Error('API Error'))),
-      }))
+      })
 
-      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeCreateTaskTool(provider)
       const promise = getToolExecutor(tool)({ title: 'Test', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('API Error')
       try {
@@ -135,37 +135,33 @@ describe('Task Tools', () => {
       }
     })
 
-    test('validates required title parameter', async () => {
-      const tool = makeCreateTaskTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates required title parameter', () => {
+      const provider = createMockProvider()
+      const tool = makeCreateTaskTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 
   describe('makeUpdateTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskTool(provider)
       expect(tool.description).toContain("Update an existing Kaneo task's")
     })
 
     test('updates task with single field', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
             title: 'Updated Task',
-            number: 42,
             status: 'done',
+            url: 'https://test.com/task/1',
           }),
         ),
-      }))
+      })
 
-      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeUpdateTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', status: 'done' },
@@ -174,46 +170,54 @@ describe('Task Tools', () => {
       if (!isTask(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('task-1')
-      expect(result.number).toBe(42)
       expect(result.status).toBe('done')
     })
 
     test('updates task with multiple fields', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateTask: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
+      const updateTask = mock(
+        (
+          _taskId: string,
+          params: {
+            title?: string
+            priority?: string
+            dueDate?: string
+            status?: string
+          },
+        ) =>
+          Promise.resolve({
             id: 'task-1',
-            title: String(params['title']),
-            number: 42,
-            status: String(params['status']),
-          })
-        }),
-      }))
+            title: params.title ?? 'Test',
+            status: params.status ?? 'todo',
+          }),
+      )
+      const provider = createMockProvider({ updateTask })
 
-      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeUpdateTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         { taskId: 'task-1', title: 'New Title', priority: 'high', dueDate: '2026-12-31' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['taskId']).toBe('task-1')
-      expect(capturedParams?.['title']).toBe('New Title')
-      expect(capturedParams?.['priority']).toBe('high')
-      expect(capturedParams?.['dueDate']).toBe('2026-12-31')
+      expect(updateTask).toHaveBeenCalledTimes(1)
+      const call = updateTask.mock.calls[0]
+      if (!call) throw new Error('Expected call')
+      expect(call[0]).toBe('task-1')
+      const params = call[1] as Record<string, unknown>
+      expect(params['title']).toBe('New Title')
+      expect(params['priority']).toBe('high')
+      expect(params['dueDate']).toBe('2026-12-31')
     })
 
     test('propagates API errors including 404', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         updateTask: mock(() => {
           const error = Object.assign(new Error('Task not found'), { code: 'task-not-found' })
           return Promise.reject(error)
         }),
-      }))
+      })
 
-      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeUpdateTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', status: 'done' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -223,65 +227,58 @@ describe('Task Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeUpdateTaskTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({ status: 'done' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskTool(provider)
+      expect(schemaValidates(tool, { status: 'done' })).toBe(false)
     })
   })
 
   describe('makeGetTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeGetTaskTool(provider)
       expect(tool.description).toContain('Fetch full details')
     })
 
     test('fetches task with details', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
             title: 'Test Task',
-            number: 42,
             status: 'todo',
             priority: 'high',
             description: 'Task details',
-            relations: [{ type: 'blocks', taskId: 'task-2' }],
+            relations: [{ type: 'blocks' as const, taskId: 'task-2' }],
           }),
         ),
-      }))
+      })
 
-      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeGetTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('task-1')
       expect(result.title).toBe('Test Task')
-      expect(result.number).toBe(42)
       expect(result.relations).toHaveLength(1)
       expect(result.relations[0]?.type).toBe('blocks')
     })
 
     test('handles task with no relations', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
             title: 'Test Task',
-            number: 42,
             status: 'todo',
             relations: [],
           }),
         ),
-      }))
+      })
 
-      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeGetTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskWithRelations(result)) throw new Error('Invalid result')
@@ -290,11 +287,11 @@ describe('Task Tools', () => {
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         getTask: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeGetTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -304,35 +301,32 @@ describe('Task Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeGetTaskTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeGetTaskTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 
   describe('makeListTasksTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeListTasksTool(provider)
       expect(tool.description).toContain('List all tasks')
     })
 
     test('lists tasks for project', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listTasks: mock(() =>
           Promise.resolve([
             { id: 'task-1', title: 'Task 1', number: 1, status: 'todo', priority: 'medium' },
             { id: 'task-2', title: 'Task 2', number: 2, status: 'done', priority: 'high' },
           ]),
         ),
-      }))
+        buildTaskUrl: mock(() => 'https://test.com/task/1'),
+      })
 
-      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeListTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
       if (!isTaskArray(result)) throw new Error('Invalid result')
@@ -343,11 +337,11 @@ describe('Task Tools', () => {
     })
 
     test('returns empty array when no tasks', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listTasks: mock(() => Promise.resolve([])),
-      }))
+      })
 
-      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeListTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -356,11 +350,11 @@ describe('Task Tools', () => {
     })
 
     test('propagates project not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         listTasks: mock(() => Promise.reject(new Error('Project not found'))),
-      }))
+      })
 
-      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeListTasksTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'invalid' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Project not found')
       try {
@@ -370,35 +364,31 @@ describe('Task Tools', () => {
       }
     })
 
-    test('validates projectId is required', async () => {
-      const tool = makeListTasksTool(mockConfig, mockWorkspaceId)
-      const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeListTasksTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 
   describe('makeSearchTasksTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeSearchTasksTool(provider)
       expect(tool.description).toContain('Search for tasks')
     })
 
     test('searches tasks by keyword', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         searchTasks: mock(() =>
           Promise.resolve([
             { id: 'task-1', title: 'Fix bug', number: 1, status: 'todo', priority: 'high' },
             { id: 'task-2', title: 'Bug report', number: 2, status: 'done', priority: 'medium' },
           ]),
         ),
-      }))
+      })
 
-      const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeSearchTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ query: 'bug' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -406,46 +396,43 @@ describe('Task Tools', () => {
       expect(result).toHaveLength(2)
     })
 
-    test('includes workspaceId in search', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        searchTasks: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve([])
-        }),
-      }))
+    test('passes query to provider searchTasks', async () => {
+      const searchTasks = mock((_params: { query: string; projectId?: string }) => Promise.resolve([]))
+      const provider = createMockProvider({ searchTasks })
 
-      const tool = makeSearchTasksTool(mockConfig, 'ws-123')
+      const tool = makeSearchTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ query: 'test' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.['workspaceId']).toBe('ws-123')
-      expect(capturedParams?.['query']).toBe('test')
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      const call = searchTasks.mock.calls[0]
+      if (!call) throw new Error('Expected call')
+      const params = call[0] as Record<string, unknown>
+      expect(params['query']).toBe('test')
     })
 
     test('filters by projectId when provided', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        searchTasks: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve([])
-        }),
-      }))
+      const searchTasks = mock((_params: { query: string; projectId?: string }) => Promise.resolve([]))
+      const provider = createMockProvider({ searchTasks })
 
-      const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeSearchTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ query: 'test', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.['query']).toBe('test')
-      expect(capturedParams?.['projectId']).toBe('proj-1')
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      const call = searchTasks.mock.calls[0]
+      if (!call) throw new Error('Expected call')
+      const params = call[0] as Record<string, unknown>
+      expect(params['query']).toBe('test')
+      expect(params['projectId']).toBe('proj-1')
     })
 
     test('returns empty array when no matches', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         searchTasks: mock(() => Promise.resolve([])),
-      }))
+      })
 
-      const tool = makeSearchTasksTool(mockConfig, mockWorkspaceId)
+      const tool = makeSearchTasksTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ query: 'nonexistent' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -456,35 +443,33 @@ describe('Task Tools', () => {
 
   describe('makeArchiveTaskTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeArchiveTaskTool(provider)
       expect(tool.description).toContain('Archive a Kaneo task')
     })
 
     test('archives task successfully with high confidence', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         archiveTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
-            title: 'Test Task',
-            status: 'archived',
           }),
         ),
-      }))
+      })
 
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeArchiveTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', confidence: 0.9 },
         { toolCallId: '1', messages: [] },
       )
-      if (!isTask(result)) throw new Error('Invalid result')
 
-      expect(result.id).toBe('task-1')
-      expect(result.status).toBe('archived')
+      expect(result).toMatchObject({ id: 'task-1' })
     })
 
     test('returns confirmation_required when confidence is below threshold', async () => {
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const provider = createMockProvider()
+      const tool = makeArchiveTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', label: 'Fix login bug', confidence: 0.6 },
@@ -503,70 +488,57 @@ describe('Task Tools', () => {
     })
 
     test('executes when confidence exactly meets threshold (0.85)', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        archiveTask: mock(() => Promise.resolve({ id: 'task-1', title: 'T', status: 'archived' })),
-      }))
+      const provider = createMockProvider({
+        archiveTask: mock(() => Promise.resolve({ id: 'task-1' })),
+      })
 
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeArchiveTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', confidence: 0.85 },
         { toolCallId: '1', messages: [] },
       )
 
-      if (typeof result === 'object' && result !== null && 'status' in result) {
-        const status = (result as Record<string, unknown>)['status']
-        expect(status).toBe('archived')
-      } else {
-        throw new Error('Expected result to have a status string')
-      }
+      expect(result).toMatchObject({ id: 'task-1' })
     })
 
-    test('includes workspaceId in archive call', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        archiveTask: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({ id: 'task-1' })
-        }),
-      }))
+    test('calls provider archiveTask with taskId', async () => {
+      const archiveTask = mock(() => Promise.resolve({ id: 'task-1' }))
+      const provider = createMockProvider({ archiveTask })
 
-      const tool = makeArchiveTaskTool(mockConfig, 'ws-123')
+      const tool = makeArchiveTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ taskId: 'task-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
 
-      expect(capturedParams?.['workspaceId']).toBe('ws-123')
-      expect(capturedParams?.['taskId']).toBe('task-1')
+      expect(archiveTask).toHaveBeenCalledTimes(1)
+      expect(archiveTask).toHaveBeenCalledWith('task-1')
     })
 
     test('handles already archived task', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         archiveTask: mock(() =>
           Promise.resolve({
             id: 'task-1',
-            title: 'Test Task',
-            status: 'archived',
           }),
         ),
-      }))
+      })
 
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeArchiveTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { taskId: 'task-1', confidence: 0.9 },
         { toolCallId: '1', messages: [] },
       )
-      if (!isTask(result)) throw new Error('Invalid result')
 
-      expect(result.id).toBe('task-1')
+      expect(result).toMatchObject({ id: 'task-1' })
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
+      const provider = createMockProvider({
         archiveTask: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      })
 
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
+      const tool = makeArchiveTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('Task not found')
       try {
@@ -577,20 +549,9 @@ describe('Task Tools', () => {
     })
 
     test('validates taskId is required', () => {
-      const tool = makeArchiveTaskTool(mockConfig, mockWorkspaceId)
-      const schema = tool.inputSchema
-      expect(typeof schema === 'object' && schema !== null && 'safeParse' in schema).toBe(true)
-      if (
-        typeof schema === 'object' &&
-        schema !== null &&
-        'safeParse' in schema &&
-        typeof schema.safeParse === 'function'
-      ) {
-        const parseResult = schema.safeParse({ confidence: 0.9 })
-        expect(
-          typeof parseResult === 'object' && parseResult !== null && 'success' in parseResult && parseResult.success,
-        ).toBe(false)
-      }
+      const provider = createMockProvider()
+      const tool = makeArchiveTaskTool(provider)
+      expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
     })
   })
 })

@@ -2,14 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { updateProject } from '../kaneo/index.js'
-import { buildProjectUrl } from '../kaneo/url-builder.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:update-project' })
 
-export function makeUpdateProjectTool(kaneoConfig: KaneoConfig, workspaceId: string): ToolSet[string] {
+export function makeUpdateProjectTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Update an existing Kaneo project.',
     inputSchema: z
@@ -24,16 +22,14 @@ export function makeUpdateProjectTool(kaneoConfig: KaneoConfig, workspaceId: str
       ),
     execute: async ({ projectId, name, description }) => {
       try {
-        const project = await updateProject({ config: kaneoConfig, workspaceId, projectId, name, description })
-        const url = buildProjectUrl(kaneoConfig.baseUrl, workspaceId, project.id)
+        const project = await provider.updateProject!(projectId, { name, description })
         log.info({ projectId, name: project.name }, 'Project updated via tool')
-        return { ...project, url }
+        return project
       } catch (error) {
         log.error(
           {
             error: error instanceof Error ? error.message : String(error),
             projectId,
-            workspaceId,
             tool: 'update_project',
           },
           'Tool execution failed',

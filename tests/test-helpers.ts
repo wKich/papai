@@ -12,6 +12,23 @@ export function restoreFetch(): void {
   globalThis.fetch = originalFetch
 }
 
+interface SafeParseable {
+  safeParse: (data: unknown) => { success: boolean }
+}
+
+function isSafeParseable(val: unknown): val is SafeParseable {
+  return typeof val === 'object' && val !== null && 'safeParse' in val && typeof val.safeParse === 'function'
+}
+
+/** Test whether a tool's inputSchema accepts or rejects given data. */
+export function schemaValidates(tool: { inputSchema: unknown }, data: unknown): boolean {
+  const schema = tool.inputSchema
+  if (!isSafeParseable(schema)) {
+    throw new Error('Tool inputSchema does not have safeParse')
+  }
+  return schema.safeParse(data).success
+}
+
 export interface ToolExecutor {
   execute: (...args: unknown[]) => Promise<unknown>
 }
