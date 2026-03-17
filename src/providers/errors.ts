@@ -1,0 +1,93 @@
+/**
+ * Provider-agnostic error type that will replace KaneoError in the AppError union.
+ *
+ * Each provider maps its native errors to these codes via its classifyError() method.
+ * The codes mirror the current KaneoError codes but are provider-neutral.
+ */
+export type ProviderError =
+  | { type: 'provider'; code: 'task-not-found'; taskId: string }
+  | { type: 'provider'; code: 'project-not-found'; projectId: string }
+  | { type: 'provider'; code: 'workspace-not-found'; workspaceId: string }
+  | { type: 'provider'; code: 'comment-not-found'; commentId: string }
+  | { type: 'provider'; code: 'label-not-found'; labelName: string }
+  | { type: 'provider'; code: 'relation-not-found'; taskId: string; relatedTaskId: string }
+  | { type: 'provider'; code: 'auth-failed' }
+  | { type: 'provider'; code: 'rate-limited' }
+  | { type: 'provider'; code: 'validation-failed'; field: string; reason: string }
+  | { type: 'provider'; code: 'unsupported-operation'; operation: string }
+  | { type: 'provider'; code: 'unknown'; originalError: Error }
+
+/** Error constructors for ProviderError. */
+export const providerError = {
+  taskNotFound: (taskId: string): ProviderError => ({ type: 'provider', code: 'task-not-found', taskId }),
+  projectNotFound: (projectId: string): ProviderError => ({ type: 'provider', code: 'project-not-found', projectId }),
+  workspaceNotFound: (workspaceId: string): ProviderError => ({
+    type: 'provider',
+    code: 'workspace-not-found',
+    workspaceId,
+  }),
+  commentNotFound: (commentId: string): ProviderError => ({ type: 'provider', code: 'comment-not-found', commentId }),
+  labelNotFound: (labelName: string): ProviderError => ({ type: 'provider', code: 'label-not-found', labelName }),
+  relationNotFound: (taskId: string, relatedTaskId: string): ProviderError => ({
+    type: 'provider',
+    code: 'relation-not-found',
+    taskId,
+    relatedTaskId,
+  }),
+  authFailed: (): ProviderError => ({ type: 'provider', code: 'auth-failed' }),
+  rateLimited: (): ProviderError => ({ type: 'provider', code: 'rate-limited' }),
+  validationFailed: (field: string, reason: string): ProviderError => ({
+    type: 'provider',
+    code: 'validation-failed',
+    field,
+    reason,
+  }),
+  unsupportedOperation: (operation: string): ProviderError => ({
+    type: 'provider',
+    code: 'unsupported-operation',
+    operation,
+  }),
+  unknown: (originalError: Error): ProviderError => ({ type: 'provider', code: 'unknown', originalError }),
+}
+
+/** User-facing message mapper for ProviderError. */
+export const getProviderMessage = (error: ProviderError): string => {
+  switch (error.code) {
+    case 'task-not-found':
+      return `Task "${error.taskId}" was not found. Please check the task ID and try again.`
+    case 'project-not-found':
+      return `Project "${error.projectId}" was not found.`
+    case 'workspace-not-found':
+      return `Workspace configuration error. Please check your workspace settings.`
+    case 'comment-not-found':
+      return `Comment "${error.commentId}" was not found.`
+    case 'label-not-found':
+      return `Label "${error.labelName}" was not found. Use list_labels to see available labels.`
+    case 'relation-not-found':
+      return `Relation between tasks "${error.taskId}" and "${error.relatedTaskId}" was not found.`
+    case 'auth-failed':
+      return `Failed to connect to the task tracker. Please check your API key.`
+    case 'rate-limited':
+      return `API rate limit reached. Please wait a moment and try again.`
+    case 'validation-failed':
+      return `Invalid ${error.field}: ${error.reason}`
+    case 'unsupported-operation':
+      return `Operation "${error.operation}" is not supported by this provider.`
+    case 'unknown':
+      return `Task tracker API error occurred. Please try again later.`
+  }
+}
+
+/**
+ * Error class for wrapping classified provider errors, analogous to KaneoClassifiedError.
+ * Providers use this to throw errors that carry both a message and a ProviderError payload.
+ */
+export class ProviderClassifiedError extends Error {
+  constructor(
+    message: string,
+    public readonly error: ProviderError,
+  ) {
+    super(message)
+    this.name = 'ProviderClassifiedError'
+  }
+}
