@@ -3,9 +3,10 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'config' })
 
-export type ConfigKey = 'kaneo_apikey' | 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model'
+export type ConfigKey = 'provider' | 'kaneo_apikey' | 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model'
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
+  'provider',
   'kaneo_apikey',
   'llm_apikey',
   'llm_baseurl',

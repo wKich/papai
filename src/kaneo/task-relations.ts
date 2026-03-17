@@ -1,4 +1,4 @@
-import { kaneoError } from '../errors.js'
+import { providerError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
@@ -61,7 +61,7 @@ export async function removeTaskRelation(
     if (existingRelation === undefined) {
       throw new KaneoClassifiedError(
         `Relation between task ${taskId} and ${relatedTaskId} not found`,
-        kaneoError.relationNotFound(taskId, relatedTaskId),
+        providerError.relationNotFound(taskId, relatedTaskId),
       )
     }
 
@@ -101,7 +101,7 @@ export async function updateTaskRelation(
     if (existingRelation === undefined) {
       throw new KaneoClassifiedError(
         `Relation between task ${taskId} and ${relatedTaskId} not found`,
-        kaneoError.relationNotFound(taskId, relatedTaskId),
+        providerError.relationNotFound(taskId, relatedTaskId),
       )
     }
 

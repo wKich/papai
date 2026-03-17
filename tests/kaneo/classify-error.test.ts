@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { kaneoError } from '../../src/errors.js'
+import { providerError } from '../../src/errors.js'
 import { KaneoApiError } from '../../src/kaneo/errors.js'
 import { classifyKaneoError, KaneoClassifiedError } from '../../src/kaneo/index.js'
 
@@ -8,13 +8,13 @@ describe('classifyKaneoError', () => {
   test('returns authFailed for 401', () => {
     const error = new KaneoApiError('Unauthorized', 401, { error: 'Unauthorized' })
     const result = classifyKaneoError(error)
-    expect(result.appError).toEqual(kaneoError.authFailed())
+    expect(result.appError).toEqual(providerError.authFailed())
   })
 
   test('returns authFailed for 403', () => {
     const error = new KaneoApiError('Forbidden', 403, { error: 'Forbidden' })
     const result = classifyKaneoError(error)
-    expect(result.appError).toEqual(kaneoError.authFailed())
+    expect(result.appError).toEqual(providerError.authFailed())
   })
 
   test('returns authFailed for 401 with auth message', () => {
@@ -62,7 +62,7 @@ describe('classifyKaneoError', () => {
   test('returns rateLimited for 429', () => {
     const error = new KaneoApiError('Too many requests', 429, { error: 'Rate limited' })
     const result = classifyKaneoError(error)
-    expect(result.appError).toEqual(kaneoError.rateLimited())
+    expect(result.appError).toEqual(providerError.rateLimited())
   })
 
   test('returns rateLimited for generic error with rate limit message', () => {
@@ -102,10 +102,10 @@ describe('classifyKaneoError', () => {
   })
 
   test('returns already classified errors unchanged', () => {
-    const classified = new KaneoClassifiedError('test', kaneoError.taskNotFound('task-1'))
+    const classified = new KaneoClassifiedError('test', providerError.taskNotFound('task-1'))
     const result = classifyKaneoError(classified)
     expect(result).toBe(classified)
-    expect(result.appError).toEqual(kaneoError.taskNotFound('task-1'))
+    expect(result.appError).toEqual(providerError.taskNotFound('task-1'))
   })
 
   test('handles non-Error objects', () => {

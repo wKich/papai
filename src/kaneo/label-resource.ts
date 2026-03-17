@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { kaneoError } from '../errors.js'
+import { providerError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
@@ -175,7 +175,7 @@ export class LabelResource {
       if (matchingLabel === undefined) {
         throw new KaneoClassifiedError(
           `Label ${labelId} not found on task ${taskId}`,
-          kaneoError.labelNotFound(labelId),
+          providerError.labelNotFound(labelId),
         )
       }
 

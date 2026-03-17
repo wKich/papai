@@ -49,7 +49,11 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     reorderColumns: mock(() => Promise.resolve()),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),
-    classifyError: mock(() => ({ type: 'kaneo' as const, code: 'unknown' as const, originalError: new Error('test') })),
+    classifyError: mock(() => ({
+      type: 'provider' as const,
+      code: 'unknown' as const,
+      originalError: new Error('test'),
+    })),
     getPromptAddendum: mock(() => ''),
     ...overrides,
   }

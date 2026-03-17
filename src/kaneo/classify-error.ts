@@ -1,4 +1,4 @@
-import { type AppError, kaneoError, systemError } from '../errors.js'
+import { type AppError, providerError, systemError } from '../errors.js'
 import { KaneoApiError, KaneoValidationError } from './errors.js'
 
 export class KaneoClassifiedError extends Error {
@@ -16,29 +16,29 @@ const classifyApiError = (error: KaneoApiError): KaneoClassifiedError => {
   const messageLower = message.toLowerCase()
 
   if (statusCode === 401 || statusCode === 403) {
-    return new KaneoClassifiedError(message, kaneoError.authFailed())
+    return new KaneoClassifiedError(message, providerError.authFailed())
   }
   if (statusCode === 429) {
-    return new KaneoClassifiedError(message, kaneoError.rateLimited())
+    return new KaneoClassifiedError(message, providerError.rateLimited())
   }
   if (statusCode === 404) {
     if (messageLower.includes('task') || messageLower.includes('/task/')) {
-      return new KaneoClassifiedError(message, kaneoError.taskNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.taskNotFound('unknown'))
     }
     if (messageLower.includes('project') || messageLower.includes('/project/')) {
-      return new KaneoClassifiedError(message, kaneoError.projectNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.projectNotFound('unknown'))
     }
     if (messageLower.includes('label') || messageLower.includes('/label/')) {
-      return new KaneoClassifiedError(message, kaneoError.labelNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.labelNotFound('unknown'))
     }
     if (messageLower.includes('comment') || messageLower.includes('/activity/')) {
-      return new KaneoClassifiedError(message, kaneoError.commentNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.commentNotFound('unknown'))
     }
     // Unknown resource type — avoid misreporting as task-not-found
-    return new KaneoClassifiedError(message, kaneoError.unknown(error))
+    return new KaneoClassifiedError(message, providerError.unknown(error))
   }
   if (statusCode === 400) {
-    return new KaneoClassifiedError(message, kaneoError.validationFailed('unknown', message))
+    return new KaneoClassifiedError(message, providerError.validationFailed('unknown', message))
   }
   return new KaneoClassifiedError(message, systemError.unexpected(error))
 }
@@ -51,15 +51,15 @@ export const classifyKaneoError = (error: unknown): KaneoClassifiedError => {
     return classifyApiError(error)
   }
   if (error instanceof KaneoValidationError) {
-    return new KaneoClassifiedError(error.message, kaneoError.validationFailed('response', error.message))
+    return new KaneoClassifiedError(error.message, providerError.validationFailed('response', error.message))
   }
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
     if (message.includes('authentication') || message.includes('unauthorized')) {
-      return new KaneoClassifiedError(error.message, kaneoError.authFailed())
+      return new KaneoClassifiedError(error.message, providerError.authFailed())
     }
     if (message.includes('rate limit') || message.includes('429')) {
-      return new KaneoClassifiedError(error.message, kaneoError.rateLimited())
+      return new KaneoClassifiedError(error.message, providerError.rateLimited())
     }
   }
 

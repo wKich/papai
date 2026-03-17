@@ -27,7 +27,7 @@ import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
-const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Kaneo workspace directly from Telegram.
+const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks directly from Telegram.
 Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
@@ -37,11 +37,6 @@ WORKFLOW:
 2. Gather context if needed (e.g. call list_projects to resolve a project name, call list_columns before setting a task status).
 3. Call the appropriate tool(s) to fulfil the request.
 4. Reply with a concise confirmation.
-
-IMPORTANT — Task status vs kanban columns:
-- Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.
-- To move a task, update its status to the target column name. To change the board structure, use the column management tools.
-- Always call list_columns before updating a task status to make sure the column exists.
 
 AMBIGUITY — When the user's phrasing implies a single target (uses "the task", "it", "that one", or a specific title) but the search returns multiple equally-likely candidates, ask ONE short question to disambiguate before acting. When the phrasing implies multiple targets ("all", "every", "these", plural nouns), operate on all matches without asking. For referential phrases ("move it", "close that"), resolve from conversation context first; only ask if truly unresolvable.
 
@@ -63,6 +58,12 @@ OUTPUT RULES:
 - When referencing tasks or projects, format them as Markdown links: [Task title](url). Never output raw IDs.
 - Keep replies short and friendly.
 - Don't use tables.`
+
+const buildSystemPrompt = (provider: TaskProvider): string => {
+  const addendum = provider.getPromptAddendum()
+  if (addendum === '') return BASE_SYSTEM_PROMPT
+  return `${BASE_SYSTEM_PROMPT}\n\n${addendum}`
+}
 
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
@@ -137,14 +138,21 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
 }
 
 const buildProvider = (userId: number): TaskProvider => {
-  const kaneoKey = getConfig(userId, 'kaneo_apikey')!
-  const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
-  const workspaceId = getKaneoWorkspace(userId)!
-  const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
-  const config: Record<string, string> = isSessionCookie
-    ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
-    : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
-  return createProvider('kaneo', config)
+  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
+  log.debug({ userId, providerName }, 'Building provider')
+
+  if (providerName === 'kaneo') {
+    const kaneoKey = getConfig(userId, 'kaneo_apikey')!
+    const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
+    const workspaceId = getKaneoWorkspace(userId)!
+    const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
+    const config: Record<string, string> = isSessionCookie
+      ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
+      : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
+    return createProvider('kaneo', config)
+  }
+
+  return createProvider(providerName, {})
 }
 
 const isToolSet = (value: unknown): value is ToolSet =>
@@ -199,7 +207,7 @@ const callLlm = async (
   log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
     model,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(provider),
     messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),

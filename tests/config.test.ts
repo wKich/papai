@@ -162,6 +162,7 @@ describe('maskValue', () => {
 
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
+    expect(CONFIG_KEYS).toContain('provider')
     expect(CONFIG_KEYS).toContain('kaneo_apikey')
     expect(CONFIG_KEYS).toContain('llm_apikey')
     expect(CONFIG_KEYS).toContain('llm_baseurl')
@@ -170,6 +171,6 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(5)
+    expect(CONFIG_KEYS).toHaveLength(6)
   })
 })

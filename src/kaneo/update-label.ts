@@ -1,4 +1,4 @@
-import { kaneoError } from '../errors.js'
+import { providerError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
@@ -25,7 +25,7 @@ export async function updateLabel({
   if (name === undefined && color === undefined) {
     throw new KaneoClassifiedError(
       'At least one field (name or color) must be provided to update a label',
-      kaneoError.validationFailed('fields', 'No update fields provided'),
+      providerError.validationFailed('fields', 'No update fields provided'),
     )
   }
 

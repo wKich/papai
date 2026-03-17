@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { kaneoError } from '../errors.js'
+import { providerError } from '../errors.js'
 import { logger } from '../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
@@ -33,7 +33,7 @@ export async function updateProject({
   if (name === undefined && description === undefined) {
     throw new KaneoClassifiedError(
       'At least one field (name or description) must be provided to update a project',
-      kaneoError.validationFailed('fields', 'No update fields provided'),
+      providerError.validationFailed('fields', 'No update fields provided'),
     )
   }
 
