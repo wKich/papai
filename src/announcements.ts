@@ -1,13 +1,14 @@
+import packageJson from '../package.json' with { type: 'json' }
 import { bot } from './bot.js'
+import { readChangelogFile } from './changelog-reader.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
-import packageJson from '../package.json' with { type: 'json' }
 
 const log = logger.child({ scope: 'announcements' })
 
 const VERSION: string = packageJson.version
 
-function extractChangelogSection(version: string, content: string): string | null {
+export function extractChangelogSection(version: string, content: string): string | null {
   const lines = content.split('\n')
   const headerPrefix = `## [${version}]`
   const startIdx = lines.findIndex((line) => line.startsWith(headerPrefix))
@@ -16,13 +17,6 @@ function extractChangelogSection(version: string, content: string): string | nul
   const endIdx = lines.findIndex((line, idx) => idx > startIdx && line.startsWith('## ['))
   const sectionLines = endIdx === -1 ? lines.slice(startIdx + 1) : lines.slice(startIdx + 1, endIdx)
   return sectionLines.join('\n').trim()
-}
-
-function isVersionAnnounced(version: string): boolean {
-  const row = getDb()
-    .query<{ version: string }, [string]>('SELECT version FROM version_announcements WHERE version = ?')
-    .get(version)
-  return row !== null
 }
 
 function markVersionAnnounced(version: string): boolean {
@@ -49,7 +43,7 @@ export async function announceNewVersion(): Promise<void> {
 
   let changelogContent: string
   try {
-    changelogContent = await Bun.file(new URL('../CHANGELOG.md', import.meta.url)).text()
+    changelogContent = await readChangelogFile()
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not read CHANGELOG.md')
     return
