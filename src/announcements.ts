@@ -25,12 +25,16 @@ function isVersionAnnounced(version: string): boolean {
   return row !== null
 }
 
-function markVersionAnnounced(version: string): void {
-  getDb().run('INSERT OR IGNORE INTO version_announcements (version, announced_at) VALUES (?, ?)', [
+function markVersionAnnounced(version: string): boolean {
+  const result = getDb().run('INSERT OR IGNORE INTO version_announcements (version, announced_at) VALUES (?, ?)', [
     version,
     new Date().toISOString(),
   ])
-  log.info({ version }, 'Version marked as announced')
+  const inserted = typeof result.changes === 'number' ? result.changes > 0 : false
+  if (inserted) {
+    log.info({ version }, 'Version marked as announced')
+  }
+  return inserted
 }
 
 function getUsersWithKaneoAccount(): number[] {
@@ -42,11 +46,6 @@ function getUsersWithKaneoAccount(): number[] {
 
 export async function announceNewVersion(): Promise<void> {
   log.debug({ version: VERSION }, 'Checking if version announcement is needed')
-
-  if (isVersionAnnounced(VERSION)) {
-    log.debug({ version: VERSION }, 'Version already announced, skipping')
-    return
-  }
 
   let changelogContent: string
   try {
@@ -66,6 +65,12 @@ export async function announceNewVersion(): Promise<void> {
   if (users.length === 0) {
     log.info({ version: VERSION }, 'No users with Kaneo account, skipping announcement')
     markVersionAnnounced(VERSION)
+    return
+  }
+
+  const claimed = markVersionAnnounced(VERSION)
+  if (!claimed) {
+    log.debug({ version: VERSION }, 'Version already announced, skipping')
     return
   }
 
@@ -89,6 +94,5 @@ export async function announceNewVersion(): Promise<void> {
     }
   }
 
-  markVersionAnnounced(VERSION)
   log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
 }
