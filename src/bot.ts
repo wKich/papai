@@ -254,8 +254,11 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   try {
     const result = await callLlm(ctx, userId, history)
 
-    // Append assistant response to history
-    const assistantMessages = result.response.messages.slice(history.length)
+    // result.response.messages contains ONLY the newly generated messages (assistant + tool
+    // messages from all steps). The Vercel AI SDK does NOT include input messages there —
+    // it starts an empty array and pushes generated messages as steps complete.
+    // So we append all of them directly, no slicing needed.
+    const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(userId, assistantMessages)
       log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
