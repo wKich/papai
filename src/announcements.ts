@@ -1,7 +1,7 @@
 import type { MessageEntity } from '@grammyjs/types'
+import type { Bot } from 'grammy'
 
 import packageJson from '../package.json' with { type: 'json' }
-import { bot } from './bot.js'
 import { readChangelogFile } from './changelog-reader.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
@@ -44,11 +44,12 @@ function getUsersWithKaneoAccount(): number[] {
 async function sendAnnouncementsToUsers(
   userIds: number[],
   formatted: { text: string; entities: MessageEntity[] },
+  botInstance: Bot,
 ): Promise<number> {
   const results = await Promise.allSettled(
     userIds.map(async (userId) => {
       try {
-        await bot.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
+        await botInstance.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
         log.debug({ userId, version: VERSION }, 'Announcement sent to user')
         return true
       } catch (error) {
@@ -72,7 +73,7 @@ function shouldSkipAnnouncement(users: number[]): boolean {
   return false
 }
 
-export async function announceNewVersion(): Promise<void> {
+export async function announceNewVersion(botInstance: Bot): Promise<void> {
   log.debug({ version: VERSION }, 'Checking if version announcement is needed')
 
   const changelogSection = await loadChangelogSection()
@@ -92,7 +93,7 @@ export async function announceNewVersion(): Promise<void> {
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
   const formatted = formatLlmOutput(message)
 
-  const successCount = await sendAnnouncementsToUsers(users, formatted)
+  const successCount = await sendAnnouncementsToUsers(users, formatted, botInstance)
 
   log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
 }

@@ -37,7 +37,7 @@ void bot.start({
   onStart: () => {
     log.info('papai is running and listening for messages.')
     void setCommands(bot, adminId)
-    void announceNewVersion()
+    void announceNewVersion(bot)
   },
 })
 
