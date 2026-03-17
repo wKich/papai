@@ -1,12 +1,13 @@
 import { logger } from '../logger.js'
 import { KaneoProvider, type KaneoConfig } from './kaneo/index.js'
 import type { TaskProvider } from './types.js'
+import { YouTrackProvider } from './youtrack/index.js'
 
 const log = logger.child({ scope: 'provider:registry' })
 
-export type ProviderName = 'kaneo'
+export type ProviderName = 'kaneo' | 'youtrack'
 
-const PROVIDER_NAMES = new Set<string>(['kaneo'])
+const PROVIDER_NAMES = new Set<string>(['kaneo', 'youtrack'])
 
 export type ProviderFactory = (config: Record<string, string>) => TaskProvider
 
@@ -23,6 +24,13 @@ providers.set('kaneo', (config) => {
     sessionCookie === undefined ? { apiKey, baseUrl } : { apiKey: '', baseUrl, sessionCookie }
 
   return new KaneoProvider(kaneoConfig, workspaceId)
+})
+
+/** Register the built-in YouTrack provider. */
+providers.set('youtrack', (config) => {
+  const baseUrl = config['baseUrl'] ?? ''
+  const token = config['token'] ?? ''
+  return new YouTrackProvider({ baseUrl, token })
 })
 
 /** Check if a string is a valid provider name. */

@@ -81,8 +81,11 @@ const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createO
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
 const checkRequiredConfig = (userId: number): string[] => {
-  const requiredKeys = ['llm_apikey', 'llm_baseurl', 'main_model', 'kaneo_apikey'] as const
-  return requiredKeys.filter((k) => getConfig(userId, k) === null)
+  const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
+  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
+  const providerKeys =
+    providerName === 'youtrack' ? (['youtrack_url', 'youtrack_token'] as const) : (['kaneo_apikey'] as const)
+  return [...llmKeys, ...providerKeys].filter((k) => getConfig(userId, k) === null)
 }
 
 const persistFactsFromResults = (
@@ -150,6 +153,12 @@ const buildProvider = (userId: number): TaskProvider => {
       ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
       : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
     return createProvider('kaneo', config)
+  }
+
+  if (providerName === 'youtrack') {
+    const baseUrl = getConfig(userId, 'youtrack_url')!
+    const token = getConfig(userId, 'youtrack_token')!
+    return createProvider('youtrack', { baseUrl, token })
   }
 
   return createProvider(providerName, {})

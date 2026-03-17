@@ -30,7 +30,14 @@
       "rules": {
         "max-lines-per-function": "off",
         "max-lines": "off",
-        "no-await-in-loop": "off"
+        "no-await-in-loop": "off",
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["src/providers/*/client.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ]
