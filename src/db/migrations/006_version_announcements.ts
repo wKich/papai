@@ -8,7 +8,7 @@ export const migration006VersionAnnouncements: Migration = {
     db.run(`
       CREATE TABLE IF NOT EXISTS version_announcements (
         version TEXT PRIMARY KEY,
-        announced_at TEXT NOT NULL DEFAULT (datetime('now'))
+        announced_at TEXT NOT NULL
       )
     `)
   },
