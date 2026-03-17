@@ -23,7 +23,8 @@
 ## Phase 3: Persistence & Context
 
 - [x] [Database migration framework](docs/plans/2026-03-05-db-migrations.md) — lightweight versioned migration runner in `src/db/`, single shared `Database` instance, prerequisite for all schema changes
-- [x] [Conversation history persistence](docs/plans/2026-03-05-conversation-history-persistence.md) — SQLite-backed two-tier memory: smart-trimmed working window (50-100 messages, memory-model-selected) + rolling summary + structured Linear entity facts
+- [x] [Conversation history persistence](docs/plans/2026-03-05-conversation-history-persistence.md) — SQLite-backed two-tier memory: smart-trimmed working window (50-100 messages, memory-model-selected) + rolling summary + structured entity facts
+- [x] Fix conversation prompt — persist assistant responses to enable multi-turn conversations
 - [x] ~~User preference storage — default project, default priority~~ (Not planned)
 - [x] ~~Session continuity across bot restarts~~ (Covered by conversation history persistence)
 

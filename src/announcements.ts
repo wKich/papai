@@ -1,3 +1,5 @@
+import type { MessageEntity } from '@grammyjs/types'
+
 import packageJson from '../package.json' with { type: 'json' }
 import { bot } from './bot.js'
 import { readChangelogFile } from './changelog-reader.js'
@@ -39,29 +41,45 @@ function getUsersWithKaneoAccount(): number[] {
     .map((row) => row.user_id)
 }
 
-export async function announceNewVersion(): Promise<void> {
-  log.debug({ version: VERSION }, 'Checking if version announcement is needed')
+async function sendAnnouncementsToUsers(
+  userIds: number[],
+  formatted: { text: string; entities: MessageEntity[] },
+): Promise<number> {
+  const results = await Promise.allSettled(
+    userIds.map(async (userId) => {
+      try {
+        await bot.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
+        log.debug({ userId, version: VERSION }, 'Announcement sent to user')
+        return true
+      } catch (error) {
+        log.warn(
+          { userId, version: VERSION, error: error instanceof Error ? error.message : String(error) },
+          'Failed to send announcement to user',
+        )
+        return false
+      }
+    }),
+  )
+  return results.filter((r) => r.status === 'fulfilled' && r.value).length
+}
 
-  let changelogContent: string
-  try {
-    changelogContent = await readChangelogFile()
-  } catch (error) {
-    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not read CHANGELOG.md')
-    return
-  }
-
-  const changelogSection = extractChangelogSection(VERSION, changelogContent)
-  if (changelogSection === null) {
-    log.warn({ version: VERSION }, 'No changelog section found for version, skipping announcement')
-    return
-  }
-
-  const users = getUsersWithKaneoAccount()
+function shouldSkipAnnouncement(users: number[]): boolean {
   if (users.length === 0) {
     log.info({ version: VERSION }, 'No users with Kaneo account, skipping announcement')
     markVersionAnnounced(VERSION)
-    return
+    return true
   }
+  return false
+}
+
+export async function announceNewVersion(): Promise<void> {
+  log.debug({ version: VERSION }, 'Checking if version announcement is needed')
+
+  const changelogSection = await loadChangelogSection()
+  if (changelogSection === null) return
+
+  const users = getUsersWithKaneoAccount()
+  if (shouldSkipAnnouncement(users)) return
 
   const claimed = markVersionAnnounced(VERSION)
   if (!claimed) {
@@ -74,19 +92,24 @@ export async function announceNewVersion(): Promise<void> {
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
   const formatted = formatLlmOutput(message)
 
-  let successCount = 0
-  for (const userId of users) {
-    try {
-      await bot.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
-      successCount++
-      log.debug({ userId, version: VERSION }, 'Announcement sent to user')
-    } catch (error) {
-      log.warn(
-        { userId, version: VERSION, error: error instanceof Error ? error.message : String(error) },
-        'Failed to send announcement to user',
-      )
-    }
-  }
+  const successCount = await sendAnnouncementsToUsers(users, formatted)
 
   log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
+}
+
+async function loadChangelogSection(): Promise<string | null> {
+  let changelogContent: string
+  try {
+    changelogContent = await readChangelogFile()
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not read CHANGELOG.md')
+    return null
+  }
+
+  const section = extractChangelogSection(VERSION, changelogContent)
+  if (section === null) {
+    log.warn({ version: VERSION }, 'No changelog section found for version, skipping announcement')
+    return null
+  }
+  return section
 }

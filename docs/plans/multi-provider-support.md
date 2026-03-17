@@ -12,14 +12,14 @@ Enable papai to work with multiple task tracker backends (Jira, Linear, Todoist,
 
 The codebase is tightly coupled to Kaneo in **6 layers**:
 
-| Layer | Files | Coupling |
-|-------|-------|----------|
-| **HTTP Client** | `src/kaneo/client.ts` | `KaneoConfig`, `kaneoFetch()`, Kaneo-specific auth (Bearer + session cookie), `/api` path prefix |
-| **Resource Classes** | `src/kaneo/*-resource.ts` | Kaneo REST endpoints, request/response shapes, Zod schemas for Kaneo's API |
-| **Domain Functions** | `src/kaneo/create-task.ts`, etc. (28 files) | Each instantiates `KaneoClient`, calls resource methods, catches and classifies errors |
-| **Error System** | `src/errors.ts`, `src/kaneo/classify-error.ts` | `KaneoError` discriminated union, `classifyKaneoError()` maps HTTP status codes to domain errors |
-| **Tools** | `src/tools/*.ts` (28 files) | Each imports from `src/kaneo/index.js`, passes `KaneoConfig`, builds Kaneo-specific URLs |
-| **Bot / System Prompt** | `src/bot.ts` | `buildKaneoConfig()`, `SYSTEM_PROMPT` references Kaneo columns/workspace concepts, `makeTools({ kaneoConfig, workspaceId })` |
+| Layer                   | Files                                          | Coupling                                                                                                                     |
+| ----------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **HTTP Client**         | `src/kaneo/client.ts`                          | `KaneoConfig`, `kaneoFetch()`, Kaneo-specific auth (Bearer + session cookie), `/api` path prefix                             |
+| **Resource Classes**    | `src/kaneo/*-resource.ts`                      | Kaneo REST endpoints, request/response shapes, Zod schemas for Kaneo's API                                                   |
+| **Domain Functions**    | `src/kaneo/create-task.ts`, etc. (28 files)    | Each instantiates `KaneoClient`, calls resource methods, catches and classifies errors                                       |
+| **Error System**        | `src/errors.ts`, `src/kaneo/classify-error.ts` | `KaneoError` discriminated union, `classifyKaneoError()` maps HTTP status codes to domain errors                             |
+| **Tools**               | `src/tools/*.ts` (28 files)                    | Each imports from `src/kaneo/index.js`, passes `KaneoConfig`, builds Kaneo-specific URLs                                     |
+| **Bot / System Prompt** | `src/bot.ts`                                   | `buildKaneoConfig()`, `SYSTEM_PROMPT` references Kaneo columns/workspace concepts, `makeTools({ kaneoConfig, workspaceId })` |
 
 ### Kaneo-Specific Concepts
 
@@ -145,24 +145,26 @@ The existing `src/kaneo/` code moves largely as-is. `KaneoProvider` wraps it to 
 Tools stop importing from `src/kaneo/`. Instead, each tool receives a `TaskProvider` instance:
 
 **Before:**
+
 ```typescript
 import { createTask } from '../kaneo/index.js'
 export function makeCreateTaskTool(kaneoConfig: KaneoConfig, workspaceId: string) {
   return tool({
     execute: async (params) => {
       const task = await createTask({ config: kaneoConfig, ...params })
-    }
+    },
   })
 }
 ```
 
 **After:**
+
 ```typescript
 export function makeCreateTaskTool(provider: TaskProvider) {
   return tool({
     execute: async (params) => {
       const task = await provider.createTask(params)
-    }
+    },
   })
 }
 ```
@@ -234,12 +236,14 @@ Each provider defines which config keys it needs. The `/set` command validates a
 #### 7. Refactor: Bot Orchestration (`src/bot.ts`)
 
 **Before:**
+
 ```typescript
 const buildKaneoConfig = (userId: number): KaneoConfig => { ... }
 const tools = makeTools({ kaneoConfig, workspaceId })
 ```
 
 **After:**
+
 ```typescript
 const buildProvider = (userId: number): TaskProvider => {
   const providerName = getConfig(userId, 'provider') ?? 'kaneo'
@@ -257,7 +261,7 @@ The system prompt currently hardcodes Kaneo concepts. Make it dynamic:
 ```typescript
 const buildSystemPrompt = (provider: TaskProvider): string => {
   const base = `You are papai, a personal assistant that helps the user manage their ${provider.name} workspace from Telegram. ...`
-  const capabilities = provider.getPromptAddendum()  // Provider-specific instructions
+  const capabilities = provider.getPromptAddendum() // Provider-specific instructions
   return base + capabilities
 }
 ```
@@ -369,6 +373,7 @@ Alternative: each provider defines its own tool set. Problem: duplicates Zod sch
 ### What about provider-specific features?
 
 Some providers have unique features (Jira sprints, Linear cycles, GitHub milestones). Options:
+
 - **A)** Ignore them — only expose the common subset
 - **B)** Allow providers to register extra tools via `provider.getExtraTools(): ToolSet`
 - **Recommendation:** Start with A, add B when a concrete need arises. The common set (tasks, projects, comments, labels) covers 90% of use cases.
@@ -385,13 +390,13 @@ Each provider builds URLs differently. The `buildTaskUrl()` and `buildProjectUrl
 
 ## Scope & Effort Estimate
 
-| Phase | Scope | Risk |
-|-------|-------|------|
-| Phase 1: Interface | New files only, no changes to existing code | None |
-| Phase 2: Kaneo adapter | New files + thin wrapper, existing code untouched | Low |
-| Phase 3: Rewire tools | Modify all 28 tool files + `tools/index.ts` | Medium — need behavioral parity |
-| Phase 4: Rewire bot | Modify `bot.ts`, `config.ts`, `errors.ts` | Medium — core orchestration |
-| Phase 5: Cleanup | Move files, update imports | Low — mechanical |
-| Phase 6: Second provider | New provider implementation | Low — validates the design |
+| Phase                    | Scope                                             | Risk                            |
+| ------------------------ | ------------------------------------------------- | ------------------------------- |
+| Phase 1: Interface       | New files only, no changes to existing code       | None                            |
+| Phase 2: Kaneo adapter   | New files + thin wrapper, existing code untouched | Low                             |
+| Phase 3: Rewire tools    | Modify all 28 tool files + `tools/index.ts`       | Medium — need behavioral parity |
+| Phase 4: Rewire bot      | Modify `bot.ts`, `config.ts`, `errors.ts`         | Medium — core orchestration     |
+| Phase 5: Cleanup         | Move files, update imports                        | Low — mechanical                |
+| Phase 6: Second provider | New provider implementation                       | Low — validates the design      |
 
 Phases 1-2 can be done without any risk of regression. Phases 3-4 are the critical refactor requiring careful testing. Phase 5 is cosmetic. Phase 6 is validation.

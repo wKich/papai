@@ -48,7 +48,14 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
 - **`src/tools/`** — One file per tool. `index.ts` assembles all 28 into `makeTools`. Each tool imports its corresponding kaneo function.
 - **`src/kaneo/`** — One file per Kaneo REST API wrapper function. `index.ts` re-exports all. `client.ts` is the shared HTTP client. `classify-error.ts` contains the error classifier. `frontmatter.ts` handles relation storage in task descriptions.
-- **`src/commands/`** — Telegram command handlers extracted from bot.ts. Includes `/help`, `/set`, `/config`, `/clear`, and admin commands.
+- **`src/kaneo/schemas/`** — Individual Zod schemas for all API request/response validation (auto-generated from OpenAPI spec).
+- **`src/kaneo/task-update-helpers.ts`** — Helper functions for task update operations.
+- **`src/kaneo/task-status.ts`** — Task status/column management helpers.
+- **`src/commands/`** — Telegram command handlers extracted from bot.ts. Includes `/help`, `/set`, `/config`, `/clear`, `/context`, and admin commands. The `/context` command (admin-only) exports conversation history, summary, and known entities as a text file.
+- **`src/announcements.ts`** — Automatic version announcements to users with changelog excerpts.
+- **`src/changelog-reader.ts`** — CHANGELOG.md reader for version announcements.
+- **`src/cache.ts`** — In-memory user session cache with TTL (history, summary, facts, config, workspace, tools). Syncs to SQLite in background via `queueMicrotask`.
+- **`src/cache-helpers.ts`** — Helper functions for parsing conversation history from database JSON.
 - **`src/conversation.ts`** — Conversation history management with smart trimming and rolling summaries for multi-turn interactions.
 - **`src/history.ts`** — Persistent conversation history storage (SQLite-backed per-user).
 - **`src/memory.ts`** — Fact extraction and persistence from tool results for long-term context.
@@ -159,13 +166,13 @@ Tests are located in the `tests/` directory:
 
 ```
 tests/
-├── *.test.ts         # Unit tests (run with bun test)
+├── *.test.ts         # Unit tests (run with bun run test)
 ├── kaneo/            # Unit tests for src/kaneo/*
 ├── tools/            # Unit tests for src/tools/*
 └── e2e/              # E2E tests (run with bun run test:e2e)
 ```
 
-Run tests with `bun test` or `bun run test`.
+For unit tests, use `bun run test`.
 
 ## E2E Testing
 
