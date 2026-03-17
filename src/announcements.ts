@@ -1,5 +1,6 @@
 import packageJson from '../package.json' with { type: 'json' }
 import { bot } from './bot.js'
+import { readChangelogFile } from './changelog-reader.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 import { formatLlmOutput } from './utils/format.js'
@@ -8,7 +9,7 @@ const log = logger.child({ scope: 'announcements' })
 
 const VERSION: string = packageJson.version
 
-function extractChangelogSection(version: string, content: string): string | null {
+export function extractChangelogSection(version: string, content: string): string | null {
   const lines = content.split('\n')
   const headerPrefix = `## [${version}]`
   const startIdx = lines.findIndex((line) => line.startsWith(headerPrefix))
@@ -43,7 +44,7 @@ export async function announceNewVersion(): Promise<void> {
 
   let changelogContent: string
   try {
-    changelogContent = await Bun.file(new URL('../CHANGELOG.md', import.meta.url)).text()
+    changelogContent = await readChangelogFile()
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not read CHANGELOG.md')
     return
