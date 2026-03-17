@@ -181,7 +181,7 @@ const callLlm = async (
   ctx: Context,
   userId: number,
   history: readonly ModelMessage[],
-): Promise<{ response: { messages: ModelMessage[] } }> => {
+): Promise<{ response: { messages: ModelMessage[] }; inputMessageCount: number }> => {
   await maybeProvisionKaneo(ctx, userId)
   const missing = checkRequiredConfig(userId)
   if (missing.length > 0) {
@@ -208,7 +208,7 @@ const callLlm = async (
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
   await sendLlmResponse(ctx, userId, result)
-  return result
+  return { ...result, inputMessageCount: messagesWithMemory.length }
 }
 
 const handleMessageError = async (ctx: Context, userId: number, error: unknown): Promise<void> => {
@@ -255,7 +255,9 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     const result = await callLlm(ctx, userId, history)
 
     // Append assistant response to history
-    const assistantMessages = result.response.messages.slice(history.length)
+    // Slice from inputMessageCount (not history.length) because callLlm may have prepended
+    // a memory system message, which shifts all indices in result.response.messages.
+    const assistantMessages = result.response.messages.slice(result.inputMessageCount)
     if (assistantMessages.length > 0) {
       appendHistory(userId, assistantMessages)
       log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
