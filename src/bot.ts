@@ -261,7 +261,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
 registerHelpCommand(bot, checkAuthorization, adminUserId)
 registerSetCommand(bot, checkAuthorization)
 registerConfigCommand(bot, checkAuthorization)
-registerContextCommand(bot, checkAuthorization)
+registerContextCommand(bot, adminUserId)
 registerClearCommand(bot, checkAuthorization, adminUserId)
 registerAdminCommands(bot, adminUserId)
 

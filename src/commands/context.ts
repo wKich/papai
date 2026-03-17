@@ -1,3 +1,4 @@
+import { InputFile } from 'grammy'
 import type { Bot } from 'grammy'
 
 import { loadHistory } from '../history.js'
@@ -6,13 +7,13 @@ import { loadFacts, loadSummary } from '../memory.js'
 
 const log = logger.child({ scope: 'commands:context' })
 
-export function registerContextCommand(
-  bot: Bot,
-  checkAuthorization: (userId: number | undefined, username?: string) => userId is number,
-): void {
+export function registerContextCommand(bot: Bot, adminUserId: number): void {
   bot.command('context', async (ctx) => {
     const userId = ctx.from?.id
-    if (!checkAuthorization(userId, ctx.from?.username)) return
+    if (userId === undefined || userId !== adminUserId) {
+      await ctx.reply('Only the admin can use this command.')
+      return
+    }
     log.debug({ userId }, '/context command called')
 
     const history = loadHistory(userId)
@@ -39,15 +40,12 @@ export function registerContextCommand(
       lines.push('', 'Known entities: (none)')
     }
 
+    const hasSummary = summary !== null && summary.length > 0
     log.info(
-      {
-        userId,
-        historyLength: history.length,
-        factsCount: facts.length,
-        hasSummary: summary !== null && summary.length > 0,
-      },
+      { userId, historyLength: history.length, factsCount: facts.length, hasSummary },
       '/context command executed',
     )
-    await ctx.reply(lines.join('\n'))
+    const content = Buffer.from(lines.join('\n'), 'utf-8')
+    await ctx.replyWithDocument(new InputFile(content, 'context.txt'))
   })
 }
