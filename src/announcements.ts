@@ -1,7 +1,8 @@
+import packageJson from '../package.json' with { type: 'json' }
 import { bot } from './bot.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
-import packageJson from '../package.json' with { type: 'json' }
+import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'announcements' })
 
@@ -16,13 +17,6 @@ function extractChangelogSection(version: string, content: string): string | nul
   const endIdx = lines.findIndex((line, idx) => idx > startIdx && line.startsWith('## ['))
   const sectionLines = endIdx === -1 ? lines.slice(startIdx + 1) : lines.slice(startIdx + 1, endIdx)
   return sectionLines.join('\n').trim()
-}
-
-function isVersionAnnounced(version: string): boolean {
-  const row = getDb()
-    .query<{ version: string }, [string]>('SELECT version FROM version_announcements WHERE version = ?')
-    .get(version)
-  return row !== null
 }
 
 function markVersionAnnounced(version: string): boolean {
@@ -77,13 +71,12 @@ export async function announceNewVersion(): Promise<void> {
   log.info({ version: VERSION, userCount: users.length }, 'Sending version announcement to users')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
-  const MAX_LENGTH = 4096
-  const truncated = message.length > MAX_LENGTH ? `${message.slice(0, MAX_LENGTH - 3)}...` : message
+  const formatted = formatLlmOutput(message)
 
   let successCount = 0
   for (const userId of users) {
     try {
-      await bot.api.sendMessage(userId, truncated)
+      await bot.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
       successCount++
       log.debug({ userId, version: VERSION }, 'Announcement sent to user')
     } catch (error) {
