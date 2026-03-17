@@ -1,3 +1,4 @@
+import { announceNewVersion } from './announcements.js'
 import { bot } from './bot.js'
 import { setCommands } from './commands/index.js'
 import { closeDb, initDb } from './db/index.js'
@@ -36,6 +37,7 @@ void bot.start({
   onStart: () => {
     log.info('papai is running and listening for messages.')
     void setCommands(bot, adminId)
+    void announceNewVersion()
   },
 })
 
