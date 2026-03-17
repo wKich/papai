@@ -1,5 +1,6 @@
 import { type ModelMessage } from 'ai'
 
+import { syncConfigToDb, syncFactToDb, syncHistoryToDb, syncSummaryToDb, syncWorkspaceToDb } from './cache-db.js'
 import { parseHistoryFromDb } from './cache-helpers.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
@@ -82,39 +83,13 @@ export function getCachedHistory(userId: number): readonly ModelMessage[] {
 export function setCachedHistory(userId: number, messages: readonly ModelMessage[]): void {
   const cache = getOrCreateCache(userId)
   cache.history = [...messages]
-  queueMicrotask(() => {
-    try {
-      getDb().run('INSERT OR REPLACE INTO conversation_history (user_id, messages) VALUES (?, ?)', [
-        userId,
-        JSON.stringify(messages),
-      ])
-      log.debug({ userId, messageCount: messages.length }, 'History synced to DB')
-    } catch (error) {
-      log.error(
-        { userId, error: error instanceof Error ? error.message : String(error) },
-        'Failed to sync history to DB',
-      )
-    }
-  })
+  syncHistoryToDb(userId, cache.history)
 }
 
 export function appendToCachedHistory(userId: number, messages: readonly ModelMessage[]): void {
   const cache = getOrCreateCache(userId)
   cache.history.push(...messages)
-  queueMicrotask(() => {
-    try {
-      getDb().run('INSERT OR REPLACE INTO conversation_history (user_id, messages) VALUES (?, ?)', [
-        userId,
-        JSON.stringify(cache.history),
-      ])
-      log.debug({ userId, messageCount: cache.history.length }, 'History appended and synced to DB')
-    } catch (error) {
-      log.error(
-        { userId, error: error instanceof Error ? error.message : String(error) },
-        'Failed to sync history to DB',
-      )
-    }
-  })
+  syncHistoryToDb(userId, cache.history)
 }
 
 // --- Summary Cache ---
@@ -135,21 +110,7 @@ export function getCachedSummary(userId: number): string | null {
 export function setCachedSummary(userId: number, summary: string): void {
   const cache = getOrCreateCache(userId)
   cache.summary = summary
-  queueMicrotask(() => {
-    try {
-      getDb().run('INSERT OR REPLACE INTO memory_summary (user_id, summary, updated_at) VALUES (?, ?, ?)', [
-        userId,
-        summary,
-        new Date().toISOString(),
-      ])
-      log.debug({ userId, summaryLength: summary.length }, 'Summary synced to DB')
-    } catch (error) {
-      log.error(
-        { userId, error: error instanceof Error ? error.message : String(error) },
-        'Failed to sync summary to DB',
-      )
-    }
-  })
+  syncSummaryToDb(userId, summary)
 }
 
 // --- Facts Cache ---
@@ -183,31 +144,7 @@ export function upsertCachedFact(userId: number, fact: { identifier: string; tit
       cache.facts = cache.facts.slice(0, 50)
     }
   }
-  queueMicrotask(() => {
-    try {
-      const db = getDb()
-      db.run('BEGIN TRANSACTION')
-      try {
-        db.run(
-          'INSERT OR REPLACE INTO memory_facts (user_id, identifier, title, url, last_seen) VALUES (?, ?, ?, ?, ?)',
-          [userId, fact.identifier, fact.title, fact.url, now],
-        )
-        db.run(
-          `DELETE FROM memory_facts WHERE user_id = ? AND identifier NOT IN (
-            SELECT identifier FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC LIMIT ?
-          )`,
-          [userId, userId, 50],
-        )
-        db.run('COMMIT')
-        log.debug({ userId, identifier: fact.identifier }, 'Fact synced to DB')
-      } catch (error) {
-        db.run('ROLLBACK')
-        throw error
-      }
-    } catch (error) {
-      log.error({ userId, error: error instanceof Error ? error.message : String(error) }, 'Failed to sync fact to DB')
-    }
-  })
+  syncFactToDb(userId, fact, now)
 }
 
 // --- Config Cache ---
@@ -227,17 +164,7 @@ export function getCachedConfig(userId: number, key: string): string | null {
 export function setCachedConfig(userId: number, key: string, value: string): void {
   const cache = getOrCreateCache(userId)
   cache.config.set(key, value)
-  queueMicrotask(() => {
-    try {
-      getDb().run('INSERT OR REPLACE INTO user_config (user_id, key, value) VALUES (?, ?, ?)', [userId, key, value])
-      log.debug({ userId, key }, 'Config synced to DB')
-    } catch (error) {
-      log.error(
-        { userId, key, error: error instanceof Error ? error.message : String(error) },
-        'Failed to sync config to DB',
-      )
-    }
-  })
+  syncConfigToDb(userId, key, value)
 }
 
 export function getAllCachedConfig(userId: number): Map<string, string | null> {
@@ -265,17 +192,7 @@ export function getCachedWorkspace(userId: number): string | null {
 export function setCachedWorkspace(userId: number, workspaceId: string): void {
   const cache = getOrCreateCache(userId)
   cache.workspaceId = workspaceId
-  queueMicrotask(() => {
-    try {
-      getDb().run('UPDATE users SET kaneo_workspace_id = ? WHERE telegram_id = ?', [workspaceId, userId])
-      log.debug({ userId }, 'Workspace synced to DB')
-    } catch (error) {
-      log.error(
-        { userId, error: error instanceof Error ? error.message : String(error) },
-        'Failed to sync workspace to DB',
-      )
-    }
-  })
+  syncWorkspaceToDb(userId, workspaceId)
 }
 
 // --- Tools Cache ---
