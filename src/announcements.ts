@@ -3,6 +3,7 @@ import { bot } from './bot.js'
 import { readChangelogFile } from './changelog-reader.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
+import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'announcements' })
 
@@ -71,13 +72,12 @@ export async function announceNewVersion(): Promise<void> {
   log.info({ version: VERSION, userCount: users.length }, 'Sending version announcement to users')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
-  const MAX_LENGTH = 4096
-  const truncated = message.length > MAX_LENGTH ? `${message.slice(0, MAX_LENGTH - 3)}...` : message
+  const formatted = formatLlmOutput(message)
 
   let successCount = 0
   for (const userId of users) {
     try {
-      await bot.api.sendMessage(userId, truncated)
+      await bot.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
       successCount++
       log.debug({ userId, version: VERSION }, 'Announcement sent to user')
     } catch (error) {
