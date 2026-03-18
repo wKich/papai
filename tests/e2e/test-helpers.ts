@@ -1,4 +1,4 @@
-import type { KaneoConfig } from '../../src/kaneo/client.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { getE2EConfig } from './global-setup.js'
 
 /**

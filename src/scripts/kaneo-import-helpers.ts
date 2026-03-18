@@ -1,13 +1,13 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
+// Schema definitions are local to this file
+import { logger } from '../logger.js'
+import { type KaneoConfig, kaneoFetch } from '../providers/kaneo/client.js'
 import {
   buildDescriptionWithRelations,
   parseRelationsFromDescription,
   type TaskRelation,
-} from '../kaneo/frontmatter.js'
-// Schema definitions are local to this file
-import { logger } from '../logger.js'
+} from '../providers/kaneo/frontmatter.js'
 import type { LinearIssue, LinearLabel } from './linear-client.js'
 import { processAndCount } from './queue.js'
 

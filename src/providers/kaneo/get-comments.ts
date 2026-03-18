@@ -1,0 +1,31 @@
+import { z } from 'zod'
+
+import { logger } from '../../logger.js'
+import { classifyKaneoError } from './classify-error.js'
+import { type KaneoConfig } from './client.js'
+import { KaneoClient } from './kaneo-client.js'
+import { ActivityItemSchema } from './schemas/getActivities.js'
+
+const log = logger.child({ scope: 'kaneo:get-comments' })
+
+export type KaneoActivity = z.infer<typeof ActivityItemSchema>
+
+export async function getComments({
+  config,
+  taskId,
+}: {
+  config: KaneoConfig
+  taskId: string
+}): Promise<{ id: string; comment: string; createdAt: string }[]> {
+  log.debug({ taskId }, 'getComments called')
+
+  try {
+    const client = new KaneoClient(config)
+    const comments = await client.comments.list(taskId)
+    log.info({ taskId, commentCount: comments.length }, 'Comments fetched')
+    return comments
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'getComments failed')
+    throw classifyKaneoError(error)
+  }
+}

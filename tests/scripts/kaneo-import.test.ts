@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { buildDescriptionWithRelations, parseRelationsFromDescription } from '../../src/kaneo/frontmatter.js'
+import { buildDescriptionWithRelations, parseRelationsFromDescription } from '../../src/providers/kaneo/frontmatter.js'
 import { mapPriority } from '../../src/scripts/kaneo-import.js'
 
 describe('mapPriority', () => {

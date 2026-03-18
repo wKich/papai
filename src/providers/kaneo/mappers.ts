@@ -1,8 +1,8 @@
-import type { TaskDetails } from '../../kaneo/get-task.js'
-import type { KaneoTaskListItem } from '../../kaneo/list-tasks.js'
-import type { CreateTaskResponse } from '../../kaneo/schemas/createTask.js'
-import type { TaskResult } from '../../kaneo/search-tasks.js'
 import type { Column, Comment, Label, Project, Task, TaskListItem, TaskSearchResult } from '../types.js'
+import type { TaskDetails } from './get-task.js'
+import type { KaneoTaskListItem } from './list-tasks.js'
+import type { CreateTaskResponse } from './schemas/createTask.js'
+import type { TaskResult } from './search-tasks.js'
 
 /** Safely convert an unknown Kaneo date field to a string or null/undefined. */
 const toDateString = (value: unknown): string | null => {

@@ -1,10 +1,10 @@
 import { mock } from 'bun:test'
 
-import type { Column } from '../src/kaneo/schemas/column.js'
-import type { CreateProjectResponse } from '../src/kaneo/schemas/create-project.js'
-import type { CreateLabelResponse } from '../src/kaneo/schemas/createLabel.js'
-import type { CreateTaskResponse } from '../src/kaneo/schemas/createTask.js'
-import type { ActivityItem } from '../src/kaneo/schemas/getActivities.js'
+import type { Column } from '../src/providers/kaneo/schemas/column.js'
+import type { CreateProjectResponse } from '../src/providers/kaneo/schemas/create-project.js'
+import type { CreateLabelResponse } from '../src/providers/kaneo/schemas/createLabel.js'
+import type { CreateTaskResponse } from '../src/providers/kaneo/schemas/createTask.js'
+import type { ActivityItem } from '../src/providers/kaneo/schemas/getActivities.js'
 
 const originalFetch = globalThis.fetch
 

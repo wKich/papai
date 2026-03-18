@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
 // Schema definitions are local to this file
 import { logger } from '../logger.js'
+import { type KaneoConfig, kaneoFetch } from '../providers/kaneo/client.js'
 import {
   assignLabels,
   buildRelations,

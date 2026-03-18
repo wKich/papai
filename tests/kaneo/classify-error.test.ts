@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { providerError } from '../../src/errors.js'
-import { KaneoApiError } from '../../src/kaneo/errors.js'
-import { classifyKaneoError, KaneoClassifiedError } from '../../src/kaneo/index.js'
+import { KaneoApiError } from '../../src/providers/kaneo/errors.js'
+import { classifyKaneoError, KaneoClassifiedError } from '../../src/providers/kaneo/index.js'
 
 describe('classifyKaneoError', () => {
   test('returns authFailed for 401', () => {

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { createTask } from '../../src/kaneo/create-task.js'
-import { searchTasks } from '../../src/kaneo/search-tasks.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { createTask } from '../../src/providers/kaneo/create-task.js'
+import { searchTasks } from '../../src/providers/kaneo/search-tasks.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
 
 describe('E2E: Task Search and Filter', () => {

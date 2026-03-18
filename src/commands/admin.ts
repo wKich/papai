@@ -226,7 +226,7 @@ async function provisionUserKaneo(ctx: { reply: (text: string) => Promise<unknow
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
   if (kaneoUrl === undefined) return
   try {
-    const { provisionKaneoUser } = await import('../kaneo/provision.js')
+    const { provisionKaneoUser } = await import('../providers/kaneo/provision.js')
     const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
     const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, null)
     setConfig(userId, 'kaneo_apikey', prov.kaneoKey)

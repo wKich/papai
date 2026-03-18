@@ -1,23 +1,4 @@
 import type { AppError } from '../../errors.js'
-import { classifyKaneoError } from '../../kaneo/classify-error.js'
-import { type KaneoConfig } from '../../kaneo/client.js'
-import { addComment, addTaskLabel, addTaskRelation, archiveTask } from '../../kaneo/index.js'
-import { createColumn, createLabel, createProject, createTask } from '../../kaneo/index.js'
-import { deleteColumn, deleteProject, deleteTask } from '../../kaneo/index.js'
-import { getComments, getTask } from '../../kaneo/index.js'
-import { listColumns, listLabels, listProjects, listTasks } from '../../kaneo/index.js'
-import { removeComment, removeLabel, removeTaskLabel, removeTaskRelation } from '../../kaneo/index.js'
-import {
-  updateColumn,
-  updateComment,
-  updateLabel,
-  updateProject,
-  updateTask,
-  updateTaskRelation,
-} from '../../kaneo/index.js'
-import { reorderColumns } from '../../kaneo/reorder-columns.js'
-import { searchTasks } from '../../kaneo/search-tasks.js'
-import { buildProjectUrl, buildTaskUrl } from '../../kaneo/url-builder.js'
 import { logger } from '../../logger.js'
 import type {
   Capability,
@@ -33,6 +14,39 @@ import type {
   RelationType,
 } from '../types.js'
 import {
+  addComment,
+  addTaskLabel,
+  addTaskRelation,
+  archiveTask,
+  createColumn,
+  createLabel,
+  createProject,
+  createTask,
+  deleteColumn,
+  deleteProject,
+  deleteTask,
+  getComments,
+  getTask,
+  listColumns,
+  listLabels,
+  listProjects,
+  listTasks,
+  removeComment,
+  removeLabel,
+  removeTaskLabel,
+  removeTaskRelation,
+  reorderColumns,
+  searchTasks,
+  updateColumn,
+  updateComment,
+  updateLabel,
+  updateProject,
+  updateTask,
+  updateTaskRelation,
+} from './api.js'
+import { classifyKaneoError } from './classify-error.js'
+import { type KaneoConfig } from './client.js'
+import {
   mapColumn,
   mapComment,
   mapCreateTaskResponse,
@@ -42,6 +56,7 @@ import {
   mapTaskListItem,
   mapTaskSearchResult,
 } from './mappers.js'
+import { buildProjectUrl, buildTaskUrl } from './url-builder.js'
 
 const log = logger.child({ scope: 'provider:kaneo' })
 
@@ -303,3 +318,57 @@ export class KaneoProvider implements TaskProvider {
 
 /** Re-export KaneoConfig so the registry imports from the provider layer. */
 export type { KaneoConfig }
+
+// Re-export all API functions for backward compatibility
+export {
+  addComment,
+  addTaskLabel,
+  addTaskRelation,
+  archiveTask,
+  createColumn,
+  createLabel,
+  createProject,
+  createTask,
+  deleteColumn,
+  deleteProject,
+  deleteTask,
+  getComments,
+  getTask,
+  listColumns,
+  listLabels,
+  listProjects,
+  listTasks,
+  removeComment,
+  removeLabel,
+  removeTaskLabel,
+  removeTaskRelation,
+  reorderColumns,
+  searchTasks,
+  updateColumn,
+  updateComment,
+  updateLabel,
+  updateProject,
+  updateTask,
+  updateTaskRelation,
+} from './api.js'
+
+// Re-export other modules
+export { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
+export { KaneoApiError, KaneoValidationError } from './errors.js'
+export {
+  addRelation,
+  buildDescriptionWithRelations,
+  parseRelationsFromDescription,
+  removeRelation,
+  updateRelation,
+  type TaskRelation,
+} from './frontmatter.js'
+export { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
+export {
+  KaneoClient,
+  TaskResource,
+  ProjectResource,
+  LabelResource,
+  CommentResource,
+  ColumnResource,
+} from './kaneo-client.js'

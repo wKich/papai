@@ -13,9 +13,9 @@
 
 import { z } from 'zod'
 
-import { kaneoFetch } from '../kaneo/client.js'
-import { provisionKaneoUser } from '../kaneo/provision.js'
 import { logger } from '../logger.js'
+import { kaneoFetch } from '../providers/kaneo/client.js'
+import { provisionKaneoUser } from '../providers/kaneo/provision.js'
 import { KANEO_BASE_URL, KANEO_CLIENT_URL } from './test-migration-constants.js'
 import { composeDown, composeUp, waitForKaneo } from './test-migration-infra.js'
 

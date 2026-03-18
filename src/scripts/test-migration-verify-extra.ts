@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { type KaneoConfig, kaneoFetch } from '../kaneo/client.js'
 import { logger } from '../logger.js'
+import { type KaneoConfig, kaneoFetch } from '../providers/kaneo/client.js'
 import { mapPriority, type KaneoTask } from './kaneo-import.js'
 import type { LinearIssue } from './linear-client.js'
 import type { MigrationResult } from './test-migration-migrate.js'

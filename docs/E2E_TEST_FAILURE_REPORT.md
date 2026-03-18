@@ -1,6 +1,6 @@
 # E2E Test Failure Report
 
-**Date**: 2026-03-16
+**Date**: 2026-03-16 (consolidated with 2026-03-14 analysis)
 **Total E2E Tests**: 54
 **Passed**: 14
 **Failed**: 40
@@ -11,6 +11,12 @@
 The E2E tests are failing due to a systematic mismatch between the API documentation schemas (from llms.txt) and the actual Kaneo API responses. The documentation specifies certain fields as required, but the real API returns `undefined` or omits them entirely.
 
 This is a common issue when generating schemas from documentation - the documentation may be outdated, aspirational, or simply incorrect compared to the actual implementation.
+
+## Historical Context
+
+Earlier analysis (2026-03-14) showed 43 tests with 48.8% pass rate. After fixes, the suite expanded to 54 tests but still has 74% failure rate due to schema/API mismatches rather than implementation bugs.
+
+---
 
 ## Failure Categories
 
@@ -56,6 +62,33 @@ This is a common issue when generating schemas from documentation - the document
 ```
 
 **Root Cause**: The `createComment` endpoint (`POST /activity/comment`) returns an empty object `{}` instead of the activity data documented in the API. All 10 fields are `undefined`.
+
+**Race Condition Issue** (from 2026-03-14 analysis):
+
+The `addComment` function follows this flow:
+
+1. POST to `/activity` endpoint to create a comment
+2. Immediately GET from `/activity/${taskId}` to retrieve all comments
+3. Expects to find the newly created comment
+
+**Problem:** The Kaneo API returns an empty array (`count: 0`) when listing comments immediately after creation. This indicates either:
+
+- An eventual consistency issue in the Kaneo API (comment not immediately queryable)
+- A race condition in the API layer
+- Comment creation not actually persisting
+
+**Evidence from Logs**:
+
+```
+{"level":30,"scope":"kaneo:comment-resource","taskId":"gohtr2zg2osa7hx7giq96lwa","count":0,"msg":"Comments listed"}
+{"level":50,"scope":"kaneo:comment-resource","error":"Failed to retrieve created comment: no comments found","msg":"Failed to add comment"}
+```
+
+**Recommended Fix:**
+
+1. Add retry logic with exponential backoff after creating a comment
+2. Poll the GET endpoint up to 3 times with 100ms delays
+3. Consider removing the verification step if it's not critical
 
 ---
 
@@ -151,6 +184,22 @@ This is a common issue when generating schemas from documentation - the document
 - User Workflows > full task lifecycle workflow
 
 **Issue**: Same as Category 2 - the list tasks endpoint includes columns with `icon` and `color` as `undefined`.
+
+**Additional Issue** (from 2026-03-14 analysis - Task Query Consistency):
+
+Tasks are successfully created (API returns 201 with task data), but `listTasks()` returns an empty array when called immediately after.
+
+**Evidence from Logs**:
+
+```
+// Task created successfully
+{"scope":"kaneo:create-task","taskId":"task1","title":"Task 1","number":1,"msg":"Task created"}
+{"scope":"kaneo:create-task","taskId":"task2","title":"Task 2","number":2,"msg":"Task created"}
+
+// But listTasks returns empty
+{"scope":"kaneo:list-tasks","projectId":"...","columnCount":0,"msg":"Columns listed"}
+// Assertion: expect(tasks.length).toBeGreaterThanOrEqual(2) - Received: 0
+```
 
 ---
 
@@ -258,6 +307,44 @@ This is a common issue when generating schemas from documentation - the document
 
 ---
 
+## Docker/Infrastructure Issues
+
+### Docker Lifecycle/Timeout Issues
+
+**Impact:** 6+ tests failing
+**Severity:** MEDIUM
+
+**Error Messages:**
+
+```
+(fail) E2E: Project Archive > (unnamed) [5001.10ms]
+  ^ a beforeEach/afterEach hook timed out for this test.
+
+error: Docker compose up failed with code 1: Container papai-kaneo-web-1 exited (137)
+```
+
+**Root Cause:**
+
+1. **Container OOM (Exit Code 137):** The `kaneo-web-1` container is being killed (likely out of memory) during test execution
+2. **Hook Timeouts:** `beforeAll` and `beforeEach` hooks timeout at 5000ms waiting for Docker to start
+3. **Intermittent Failures:** Docker startup is not reliable between test files
+
+**Evidence from Logs:**
+
+```
+{"scope":"e2e:docker","code":130,"stderr":"...","msg":"Failed to start Kaneo server"}
+"error: Docker compose up failed with code 1: ... container papai-kaneo-web-1 exited (137)"
+```
+
+**Recommended Fix:**
+
+1. Increase hook timeout from 5000ms to 10000ms or higher
+2. Add retry logic for Docker startup (3 attempts)
+3. Investigate why `kaneo-web-1` is exiting with code 137 (OOM)
+4. Consider reusing Docker containers across test files instead of restarting
+
+---
+
 ## Recommendations
 
 ### Option 1: Make Schemas Lenient (Quick Fix)
@@ -295,7 +382,7 @@ Investigate each endpoint and update schemas to match actual responses:
 
 ### Option 3: Hybrid Approach (Recommended)
 
-1. Make schemas lenient for E2E tests to pass
+1. Make schemas lenient enough to handle real API responses
 2. Add separate "strict" schemas for development
 3. Use lenient schemas in production for robustness
 4. Document API discrepancies for Kaneo team
@@ -317,6 +404,24 @@ Investigate each endpoint and update schemas to match actual responses:
 
 ---
 
+## Summary of Fixes Applied (Historical)
+
+### ✅ Successfully Fixed
+
+1. **Comment field mapping** - Changed from `a.comment` to `a.message` in `src/kaneo/comment-resource.ts`
+2. **Error handling test pattern** - Removed `async/await` from `.rejects` assertions
+3. **Column name uniqueness** - Added `${Date.now()}` suffix to avoid 409 conflicts
+4. **Docker timeout** - Increased `maxAttempts` from 30 to 60
+
+### ❌ Still Broken
+
+1. **Comment retrieval race condition** - Comments not immediately queryable after creation
+2. **Task list consistency** - Tasks not immediately visible after creation
+3. **Docker container stability** - `kaneo-web-1` container OOM and startup failures
+4. **Schema mismatches** - API returns different structures than documented
+
+---
+
 ## Conclusion
 
 The E2E test failures reveal significant discrepancies between the Kaneo API documentation and the actual API implementation. This is a common issue with auto-generated documentation or when the documentation is not kept in sync with the code.
@@ -330,4 +435,6 @@ The recommended approach is to:
 
 ---
 
+_Report consolidated: 2026-03-16_  
+_Original analysis from 2026-03-14 incorporated_  
 _Report generated by automated analysis of E2E test output_

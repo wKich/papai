@@ -10,10 +10,16 @@ import {
   KaneoActivityWithTypeSchema,
   KaneoColumnSchema,
   type KaneoConfig,
-} from '../../src/kaneo/client.js'
-import { TaskResource, ProjectResource, LabelResource, CommentResource, ColumnResource } from '../../src/kaneo/index.js'
-import { CreateTaskResponseSchema } from '../../src/kaneo/schemas/createTask.js'
-import { ActivityItemSchema } from '../../src/kaneo/schemas/getActivities.js'
+} from '../../src/providers/kaneo/client.js'
+import {
+  TaskResource,
+  ProjectResource,
+  LabelResource,
+  CommentResource,
+  ColumnResource,
+} from '../../src/providers/kaneo/index.js'
+import { CreateTaskResponseSchema } from '../../src/providers/kaneo/schemas/createTask.js'
+import { ActivityItemSchema } from '../../src/providers/kaneo/schemas/getActivities.js'
 import {
   restoreFetch,
   setMockFetch,

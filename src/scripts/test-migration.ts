@@ -13,8 +13,8 @@
  *   --skip-up Skip docker compose up (assume services are already running)
  */
 
-import type { KaneoConfig } from '../kaneo/client.js'
 import { logger } from '../logger.js'
+import type { KaneoConfig } from '../providers/kaneo/client.js'
 import type { LinearConfig } from './linear-client.js'
 import { KANEO_BASE_URL } from './test-migration-constants.js'
 import { composeDown, composeUp, createWorkspace, signUp, waitForKaneo } from './test-migration-infra.js'

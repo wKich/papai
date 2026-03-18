@@ -2,8 +2,6 @@ import path from 'node:path'
 
 import { setConfig } from './config.js'
 import { DB_PATH, closeDb, getDb, initDb } from './db/index.js'
-import { type KaneoConfig } from './kaneo/client.js'
-import { provisionKaneoUser } from './kaneo/provision.js'
 import { logger } from './logger.js'
 import { clearUserHistoryInDb, deleteLinearConfig, getUserConfig, getUsers } from './migration-db.js'
 import type {
@@ -15,6 +13,8 @@ import type {
   ResolvedKaneoConfig,
   UserRow,
 } from './migration-types.js'
+import { type KaneoConfig } from './providers/kaneo/client.js'
+import { provisionKaneoUser } from './providers/kaneo/provision.js'
 import {
   createTaskFromIssue,
   ensureArchivedLabel,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { TaskResource } from '../../src/kaneo/kaneo-client.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { TaskResource } from '../../src/providers/kaneo/kaneo-client.js'
 import { restoreFetch, setMockFetch, createMockTask } from '../test-helpers.js'
 
 interface UpdateDescriptionBody {

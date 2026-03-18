@@ -1,5 +1,5 @@
-import type { KaneoConfig } from '../kaneo/client.js'
 import { logger } from '../logger.js'
+import type { KaneoConfig } from '../providers/kaneo/client.js'
 import {
   createTaskFromIssue,
   ensureArchivedLabel,

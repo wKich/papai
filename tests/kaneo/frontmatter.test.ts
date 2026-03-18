@@ -6,7 +6,7 @@ import {
   parseRelationsFromDescription,
   removeRelation,
   updateRelation,
-} from '../../src/kaneo/index.js'
+} from '../../src/providers/kaneo/index.js'
 
 describe('parseRelationsFromDescription', () => {
   test('returns empty for undefined', () => {

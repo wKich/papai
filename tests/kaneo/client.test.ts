@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { kaneoFetch, KaneoTaskResponseSchema, EmptyResponseSchema } from '../../src/kaneo/client.js'
-import { KaneoApiError, KaneoValidationError } from '../../src/kaneo/errors.js'
+import { kaneoFetch, KaneoTaskResponseSchema, EmptyResponseSchema } from '../../src/providers/kaneo/client.js'
+import { KaneoApiError, KaneoValidationError } from '../../src/providers/kaneo/errors.js'
 import { restoreFetch, setMockFetch, createMockTask } from '../test-helpers.js'
 
 describe('kaneoFetch', () => {
