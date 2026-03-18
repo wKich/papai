@@ -11,5 +11,3 @@ export const CreateProjectResponseSchema = z.object({
   createdAt: z.any(),
   isPublic: z.boolean().nullable(),
 })
-
-export type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>

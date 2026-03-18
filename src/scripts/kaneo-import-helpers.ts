@@ -186,7 +186,7 @@ export async function importComments(
   }, Promise.resolve())
 }
 
-export function buildRelations(issue: LinearIssue, linearIdToKaneoId: Map<string, string>): TaskRelation[] {
+function buildRelations(issue: LinearIssue, linearIdToKaneoId: Map<string, string>): TaskRelation[] {
   const relations: TaskRelation[] = []
   for (const rel of issue.relations.nodes) {
     if (!(rel.type in RELATION_TYPE_MAP)) {

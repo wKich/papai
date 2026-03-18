@@ -1,10 +1,24 @@
 import { mock } from 'bun:test'
 
-import type { Column } from '../src/providers/kaneo/schemas/column.js'
-import type { CreateProjectResponse } from '../src/providers/kaneo/schemas/create-project.js'
-import type { CreateLabelResponse } from '../src/providers/kaneo/schemas/createLabel.js'
-import type { CreateTaskResponse } from '../src/providers/kaneo/schemas/createTask.js'
-import type { ActivityItem } from '../src/providers/kaneo/schemas/getActivities.js'
+import type { z } from 'zod'
+
+import type { CreateProjectResponseSchema } from '../src/providers/kaneo/schemas/create-project.js'
+import type { CreateLabelResponseSchema } from '../src/providers/kaneo/schemas/createLabel.js'
+import type { TaskSchema } from '../src/providers/kaneo/schemas/createTask.js'
+import type { ActivityItemSchema } from '../src/providers/kaneo/schemas/getActivities.js'
+
+type CreateTaskResponse = z.infer<typeof TaskSchema>
+type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>
+type CreateLabelResponse = z.infer<typeof CreateLabelResponseSchema>
+type ActivityItem = z.infer<typeof ActivityItemSchema>
+
+type Column = {
+  id: string
+  name: string
+  icon: string | null
+  color: string | null
+  isFinal: boolean
+}
 
 const originalFetch = globalThis.fetch
 

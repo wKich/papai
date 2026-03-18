@@ -37,7 +37,7 @@ const log = logger.child({ scope: 'migration' })
 let lastBackupPath: string | undefined
 
 export const getLastBackupPath = (): string | undefined => lastBackupPath
-export type { MigrationStats, MigrationUserResult, MigrationOptions, ProgressCallback }
+export type { MigrationStats, MigrationUserResult }
 
 export function createBackup(): string {
   const timestamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')

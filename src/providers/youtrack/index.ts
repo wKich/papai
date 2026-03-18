@@ -183,5 +183,3 @@ export class YouTrackProvider implements TaskProvider {
     ].join('\n')
   }
 }
-
-export type { YouTrackConfig }

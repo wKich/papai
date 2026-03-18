@@ -30,5 +30,3 @@ export const ActivityItemSchema = z.object({
 
 // Response schema (array of activities)
 export const GetActivitiesResponseSchema = z.array(ActivityItemSchema)
-
-export type ActivityItem = z.infer<typeof ActivityItemSchema>
