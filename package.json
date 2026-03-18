@@ -26,7 +26,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.35",
+    "@ai-sdk/provider": "^3.0.8",
     "@gramio/format": "^0.5.0",
+    "@gramio/types": "^9.5.0",
+    "@grammyjs/types": "^3.25.0",
     "ai": "^6.0.116",
     "grammy": "^1.41.1",
     "marked": "^17.0.4",
