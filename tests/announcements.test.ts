@@ -1,5 +1,18 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
+// --- Mock Bot for testing ---
+const sentMessages: Array<{ userId: number; text: string }> = []
+let sendMessageImpl = (userId: number, text: string): Promise<void> => {
+  sentMessages.push({ userId, text })
+  return Promise.resolve()
+}
+
+const mockBot = {
+  api: {
+    sendMessage: (userId: number, text: string): Promise<void> => sendMessageImpl(userId, text),
+  },
+} as const
+
 // --- Mock for db (must come before importing announcements.ts) ---
 const announcedVersions = new Set<string>()
 const userConfigRows: Array<{ user_id: number }> = []
@@ -37,24 +50,6 @@ void mock.module('../src/db/index.js', () => ({
   getDb: (): MockDatabase => mockDb,
   DB_PATH: ':memory:',
   initDb: (): void => {},
-}))
-
-// --- Mock for bot: delegate to sendMessageImpl so tests can override behavior ---
-const sentMessages: Array<{ userId: number; text: string }> = []
-let sendMessageImpl: (userId: number, text: string) => Promise<void> = (
-  userId: number,
-  text: string,
-): Promise<void> => {
-  sentMessages.push({ userId, text })
-  return Promise.resolve()
-}
-
-void mock.module('../src/bot.js', () => ({
-  bot: {
-    api: {
-      sendMessage: (userId: number, text: string): Promise<void> => sendMessageImpl(userId, text),
-    },
-  },
 }))
 
 // --- Mock for changelog-reader (controlled per-test via changelogProvider) ---
@@ -158,7 +153,7 @@ describe('announceNewVersion', () => {
     userConfigRows.push({ user_id: 101 }, { user_id: 102 })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
 
     expect(sentMessages).toHaveLength(2)
     expect(sentMessages[0]?.userId).toBe(101)
@@ -170,8 +165,8 @@ describe('announceNewVersion', () => {
     userConfigRows.push({ user_id: 101 })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion()
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
+    await announceNewVersion(mockBot)
 
     expect(sentMessages).toHaveLength(1)
   })
@@ -179,7 +174,7 @@ describe('announceNewVersion', () => {
   test('marks version as announced even when no users have Kaneo accounts', async () => {
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(true)
@@ -189,7 +184,7 @@ describe('announceNewVersion', () => {
     userConfigRows.push({ user_id: 101 })
     changelogProvider = null
 
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(false)
@@ -200,7 +195,7 @@ describe('announceNewVersion', () => {
     changelogProvider = (): Promise<string> =>
       Promise.resolve('# Changelog\n\n## [0.0.1] - 2024-01-01\n\n- old stuff\n')
 
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(false)
@@ -223,7 +218,7 @@ describe('announceNewVersion', () => {
     userConfigRows.push({ user_id: 201 }, { user_id: 202 })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion()
+    await announceNewVersion(mockBot)
 
     expect(failedIds).toHaveLength(1)
     expect(sentMessages).toHaveLength(1)
