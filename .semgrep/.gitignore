@@ -1,3 +1,6 @@
+# Legacy binary directory (if created locally)
+bin/
+
 # Temporary rule clones
 ai-best-practices/
 
