@@ -2,15 +2,8 @@ import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type { Comment, Label, Project, Task, TaskListItem, TaskProvider, TaskSearchResult } from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
-import { type YouTrackConfig, youtrackFetch } from './client.js'
-import {
-  COMMENT_FIELDS,
-  CONFIG_REQUIREMENTS,
-  ISSUE_FIELDS,
-  ISSUE_LIST_FIELDS,
-  PROJECT_FIELDS,
-  YOUTRACK_CAPABILITIES,
-} from './constants.js'
+import { type YouTrackConfig } from './client.js'
+import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import {
   addYouTrackTaskLabel,
   createYouTrackLabel,
@@ -19,9 +12,28 @@ import {
   removeYouTrackTaskLabel,
   updateYouTrackLabel,
 } from './labels.js'
-import { buildCustomFields, mapComment, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from './mappers.js'
+import {
+  addYouTrackComment,
+  getYouTrackComments,
+  removeYouTrackComment,
+  updateYouTrackComment,
+} from './operations/comments.js'
+import {
+  archiveYouTrackProject,
+  createYouTrackProject,
+  getYouTrackProject,
+  listYouTrackProjects,
+  updateYouTrackProject,
+} from './operations/projects.js'
+import {
+  createYouTrackTask,
+  deleteYouTrackTask,
+  getYouTrackTask,
+  listYouTrackTasks,
+  searchYouTrackTasks,
+  updateYouTrackTask,
+} from './operations/tasks.js'
 import { addYouTrackRelation, removeYouTrackRelation } from './relations.js'
-import type { YtComment, YtIssue, YtProject } from './types.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
@@ -34,7 +46,7 @@ export class YouTrackProvider implements TaskProvider {
     log.debug('YouTrackProvider created')
   }
 
-  async createTask(params: {
+  createTask(params: {
     projectId: string
     title: string
     description?: string
@@ -43,33 +55,14 @@ export class YouTrackProvider implements TaskProvider {
     dueDate?: string
     assignee?: string
   }): Promise<Task> {
-    log.debug({ projectId: params.projectId, title: params.title }, 'createTask')
-    const body: Record<string, unknown> = {
-      project: { id: params.projectId },
-      summary: params.title,
-    }
-    if (params.description !== undefined) body['description'] = params.description
-
-    const customFields = buildCustomFields(params)
-    if (customFields.length > 0) body['customFields'] = customFields
-
-    const issue = await youtrackFetch<YtIssue>(this.config, 'POST', '/api/issues', {
-      body,
-      query: { fields: ISSUE_FIELDS },
-    })
-    log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
-    return mapIssueToTask(issue, this.config.baseUrl)
+    return createYouTrackTask(this.config, params)
   }
 
-  async getTask(taskId: string): Promise<Task> {
-    log.debug({ taskId }, 'getTask')
-    const issue = await youtrackFetch<YtIssue>(this.config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: ISSUE_FIELDS },
-    })
-    return mapIssueToTask(issue, this.config.baseUrl)
+  getTask(taskId: string): Promise<Task> {
+    return getYouTrackTask(this.config, taskId)
   }
 
-  async updateTask(
+  updateTask(
     taskId: string,
     params: {
       title?: string
@@ -81,171 +74,55 @@ export class YouTrackProvider implements TaskProvider {
       assignee?: string
     },
   ): Promise<Task> {
-    log.debug({ taskId, hasTitle: params.title !== undefined, hasStatus: params.status !== undefined }, 'updateTask')
-    const body: Record<string, unknown> = {}
-    if (params.title !== undefined) body['summary'] = params.title
-    if (params.description !== undefined) body['description'] = params.description
-    if (params.projectId !== undefined) body['project'] = { id: params.projectId }
-
-    const customFields = buildCustomFields(params)
-    if (customFields.length > 0) body['customFields'] = customFields
-
-    const issue = await youtrackFetch<YtIssue>(this.config, 'POST', `/api/issues/${taskId}`, {
-      body,
-      query: { fields: ISSUE_FIELDS },
-    })
-    log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
-    return mapIssueToTask(issue, this.config.baseUrl)
+    return updateYouTrackTask(this.config, taskId, params)
   }
 
-  async listTasks(projectId: string): Promise<TaskListItem[]> {
-    log.debug({ projectId }, 'listTasks')
-    const issues = await youtrackFetch<YtIssue[]>(this.config, 'GET', '/api/issues', {
-      query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
-    })
-    log.info({ projectId, count: issues.length }, 'Tasks listed')
-    return issues.map(mapIssueToListItem)
+  listTasks(projectId: string): Promise<TaskListItem[]> {
+    return listYouTrackTasks(this.config, projectId)
   }
 
-  async searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
-    log.debug({ query: params.query, projectId: params.projectId }, 'searchTasks')
-    let query = params.query
-    if (params.projectId !== undefined) {
-      query = `project: {${params.projectId}} ${query}`
-    }
-    const issues = await youtrackFetch<YtIssue[]>(this.config, 'GET', '/api/issues', {
-      query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
-    })
-    log.info({ query: params.query, count: issues.length }, 'Tasks searched')
-    return issues.map(mapIssueToSearchResult)
+  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
+    return searchYouTrackTasks(this.config, params)
   }
 
-  async deleteTask(taskId: string): Promise<{ id: string }> {
-    log.debug({ taskId }, 'deleteTask')
-    await youtrackFetch(this.config, 'DELETE', `/api/issues/${taskId}`)
-    log.info({ taskId }, 'Issue deleted')
-    return { id: taskId }
+  deleteTask(taskId: string): Promise<{ id: string }> {
+    return deleteYouTrackTask(this.config, taskId)
   }
 
-  async getProject(projectId: string): Promise<Project> {
-    log.debug({ projectId }, 'getProject')
-    const project = await youtrackFetch<YtProject>(this.config, 'GET', `/api/admin/projects/${projectId}`, {
-      query: { fields: PROJECT_FIELDS },
-    })
-    log.info({ projectId: project.id, name: project.name }, 'Project retrieved')
-    return {
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
-    }
+  getProject(projectId: string): Promise<Project> {
+    return getYouTrackProject(this.config, projectId)
   }
 
-  async listProjects(): Promise<Project[]> {
-    log.debug('listProjects')
-    const projects = await youtrackFetch<YtProject[]>(this.config, 'GET', '/api/admin/projects', {
-      query: { fields: PROJECT_FIELDS, $top: '100' },
-    })
-    log.info({ count: projects.length }, 'Projects listed')
-    return projects
-      .filter((p) => p.archived !== true)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        url: `${this.config.baseUrl}/projects/${p.shortName ?? p.id}`,
-      }))
+  listProjects(): Promise<Project[]> {
+    return listYouTrackProjects(this.config)
   }
 
-  async createProject(params: { name: string; description?: string }): Promise<Project> {
-    log.debug({ name: params.name }, 'createProject')
-    // Generate shortName from name (first 10 chars, uppercase, no spaces)
-    const shortName = params.name
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 10)
-    const body: Record<string, unknown> = {
-      name: params.name,
-      shortName,
-    }
-    if (params.description !== undefined) body['description'] = params.description
-    const project = await youtrackFetch<YtProject>(this.config, 'POST', '/api/admin/projects', {
-      body,
-      query: { fields: PROJECT_FIELDS },
-    })
-    log.info({ projectId: project.id, name: project.name }, 'Project created')
-    return {
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
-    }
+  createProject(params: { name: string; description?: string }): Promise<Project> {
+    return createYouTrackProject(this.config, params)
   }
 
-  async updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
-    log.debug({ projectId, hasName: params.name !== undefined }, 'updateProject')
-    const body: Record<string, unknown> = {}
-    if (params.name !== undefined) body['name'] = params.name
-    if (params.description !== undefined) body['description'] = params.description
-    const project = await youtrackFetch<YtProject>(this.config, 'POST', `/api/admin/projects/${projectId}`, {
-      body,
-      query: { fields: PROJECT_FIELDS },
-    })
-    log.info({ projectId: project.id }, 'Project updated')
-    return {
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
-    }
+  updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
+    return updateYouTrackProject(this.config, projectId, params)
   }
 
-  async archiveProject(projectId: string): Promise<{ id: string }> {
-    log.debug({ projectId }, 'archiveProject')
-    await youtrackFetch(this.config, 'POST', `/api/admin/projects/${projectId}`, {
-      body: { archived: true },
-      query: { fields: 'id' },
-    })
-    log.info({ projectId }, 'Project archived')
-    return { id: projectId }
+  archiveProject(projectId: string): Promise<{ id: string }> {
+    return archiveYouTrackProject(this.config, projectId)
   }
 
-  async addComment(taskId: string, body: string): Promise<Comment> {
-    log.debug({ taskId }, 'addComment')
-    const comment = await youtrackFetch<YtComment>(this.config, 'POST', `/api/issues/${taskId}/comments`, {
-      body: { text: body },
-      query: { fields: COMMENT_FIELDS },
-    })
-    log.info({ taskId, commentId: comment.id }, 'Comment added')
-    return mapComment(comment)
+  addComment(taskId: string, body: string): Promise<Comment> {
+    return addYouTrackComment(this.config, taskId, body)
   }
 
-  async getComments(taskId: string): Promise<Comment[]> {
-    log.debug({ taskId }, 'getComments')
-    const comments = await youtrackFetch<YtComment[]>(this.config, 'GET', `/api/issues/${taskId}/comments`, {
-      query: { fields: COMMENT_FIELDS, $top: '100' },
-    })
-    log.info({ taskId, count: comments.length }, 'Comments retrieved')
-    return comments.map(mapComment)
+  getComments(taskId: string): Promise<Comment[]> {
+    return getYouTrackComments(this.config, taskId)
   }
 
-  async updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {
-    log.debug({ taskId: params.taskId, commentId: params.commentId }, 'updateComment')
-    const comment = await youtrackFetch<YtComment>(
-      this.config,
-      'POST',
-      `/api/issues/${params.taskId}/comments/${params.commentId}`,
-      { body: { text: params.body }, query: { fields: COMMENT_FIELDS } },
-    )
-    log.info({ commentId: comment.id }, 'Comment updated')
-    return mapComment(comment)
+  updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {
+    return updateYouTrackComment(this.config, params)
   }
 
-  async removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
-    log.debug({ taskId: params.taskId, commentId: params.commentId }, 'removeComment')
-    await youtrackFetch(this.config, 'DELETE', `/api/issues/${params.taskId}/comments/${params.commentId}`)
-    log.info({ taskId: params.taskId, commentId: params.commentId }, 'Comment removed')
-    return { id: params.commentId }
+  removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
+    return removeYouTrackComment(this.config, params)
   }
 
   listLabels(): Promise<Label[]> {

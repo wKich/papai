@@ -1,35 +1,22 @@
 import type { AppError } from '../../errors.js'
-import { addComment } from '../../kaneo/add-comment.js'
-import { addTaskLabel } from '../../kaneo/add-task-label.js'
-import { addTaskRelation } from '../../kaneo/add-task-relation.js'
-import { archiveTask } from '../../kaneo/archive-task.js'
 import { classifyKaneoError } from '../../kaneo/classify-error.js'
 import { type KaneoConfig } from '../../kaneo/client.js'
-import { createColumn } from '../../kaneo/create-column.js'
-import { createLabel } from '../../kaneo/create-label.js'
-import { createProject } from '../../kaneo/create-project.js'
-import { createTask } from '../../kaneo/create-task.js'
-import { deleteColumn } from '../../kaneo/delete-column.js'
-import { deleteProject } from '../../kaneo/delete-project.js'
-import { deleteTask } from '../../kaneo/delete-task.js'
-import { getComments } from '../../kaneo/get-comments.js'
-import { getTask } from '../../kaneo/get-task.js'
-import { listColumns } from '../../kaneo/list-columns.js'
-import { listLabels } from '../../kaneo/list-labels.js'
-import { listProjects } from '../../kaneo/list-projects.js'
-import { listTasks } from '../../kaneo/list-tasks.js'
-import { removeComment } from '../../kaneo/remove-comment.js'
-import { removeLabel } from '../../kaneo/remove-label.js'
-import { removeTaskLabel } from '../../kaneo/remove-task-label.js'
-import { removeTaskRelation } from '../../kaneo/remove-task-relation.js'
+import { addComment, addTaskLabel, addTaskRelation, archiveTask } from '../../kaneo/index.js'
+import { createColumn, createLabel, createProject, createTask } from '../../kaneo/index.js'
+import { deleteColumn, deleteProject, deleteTask } from '../../kaneo/index.js'
+import { getComments, getTask } from '../../kaneo/index.js'
+import { listColumns, listLabels, listProjects, listTasks } from '../../kaneo/index.js'
+import { removeComment, removeLabel, removeTaskLabel, removeTaskRelation } from '../../kaneo/index.js'
+import {
+  updateColumn,
+  updateComment,
+  updateLabel,
+  updateProject,
+  updateTask,
+  updateTaskRelation,
+} from '../../kaneo/index.js'
 import { reorderColumns } from '../../kaneo/reorder-columns.js'
 import { searchTasks } from '../../kaneo/search-tasks.js'
-import { updateColumn } from '../../kaneo/update-column.js'
-import { updateComment } from '../../kaneo/update-comment.js'
-import { updateLabel } from '../../kaneo/update-label.js'
-import { updateProject } from '../../kaneo/update-project.js'
-import { updateTaskRelation } from '../../kaneo/update-task-relation.js'
-import { updateTask } from '../../kaneo/update-task.js'
 import { buildProjectUrl, buildTaskUrl } from '../../kaneo/url-builder.js'
 import { logger } from '../../logger.js'
 import type {
@@ -104,7 +91,6 @@ export class KaneoProvider implements TaskProvider {
   ) {
     log.debug({ workspaceId }, 'KaneoProvider created')
   }
-
   async createTask(params: {
     projectId: string
     title: string
