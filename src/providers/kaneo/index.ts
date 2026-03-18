@@ -59,13 +59,33 @@ import {
 const log = logger.child({ scope: 'provider:kaneo' })
 
 const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  // Tasks
   'tasks.archive',
   'tasks.delete',
   'tasks.relations',
-  'projects.crud',
-  'comments.crud',
-  'labels.crud',
-  'statuses.crud',
+  // Projects (full CRUD)
+  'projects.read',
+  'projects.list',
+  'projects.create',
+  'projects.update',
+  'projects.archive',
+  // Comments (full CRUD)
+  'comments.read',
+  'comments.create',
+  'comments.update',
+  'comments.delete',
+  // Labels (full CRUD + assignment)
+  'labels.list',
+  'labels.create',
+  'labels.update',
+  'labels.delete',
+  'labels.assign',
+  // Statuses (full CRUD)
+  'statuses.list',
+  'statuses.create',
+  'statuses.update',
+  'statuses.delete',
+  'statuses.reorder',
 ])
 
 const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

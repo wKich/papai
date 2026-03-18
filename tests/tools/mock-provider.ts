@@ -3,13 +3,33 @@ import { mock } from 'bun:test'
 import type { Capability, TaskProvider } from '../../src/providers/types.js'
 
 const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  // Tasks
   'tasks.archive',
   'tasks.delete',
   'tasks.relations',
-  'projects.crud',
-  'comments.crud',
-  'labels.crud',
-  'statuses.crud',
+  // Projects (full CRUD)
+  'projects.read',
+  'projects.list',
+  'projects.create',
+  'projects.update',
+  'projects.archive',
+  // Comments (full CRUD)
+  'comments.read',
+  'comments.create',
+  'comments.update',
+  'comments.delete',
+  // Labels (full CRUD + assignment)
+  'labels.list',
+  'labels.create',
+  'labels.update',
+  'labels.delete',
+  'labels.assign',
+  // Statuses (full CRUD)
+  'statuses.list',
+  'statuses.create',
+  'statuses.update',
+  'statuses.delete',
+  'statuses.reorder',
 ])
 
 /** Create a mock TaskProvider with all methods stubbed. Override specific methods as needed. */
@@ -25,10 +45,12 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     searchTasks: mock(() => Promise.resolve([])),
     archiveTask: mock(() => Promise.resolve({ id: 'task-1' })),
     deleteTask: mock(() => Promise.resolve({ id: 'task-1' })),
+    getProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test' })),
     listProjects: mock(() => Promise.resolve([])),
     createProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test' })),
     updateProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test' })),
     archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
+    getComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     addComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     getComments: mock(() => Promise.resolve([])),
     updateComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),

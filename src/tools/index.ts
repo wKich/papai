@@ -48,29 +48,52 @@ function maybeAddArchiveTool(tools: ToolSet, provider: TaskProvider): void {
 }
 
 function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('projects.crud')) {
+  // Check each project capability individually
+  if (provider.capabilities.has('projects.list')) {
     tools['list_projects'] = makeListProjectsTool(provider)
+  }
+  if (provider.capabilities.has('projects.create')) {
     tools['create_project'] = makeCreateProjectTool(provider)
+  }
+  if (provider.capabilities.has('projects.update')) {
     tools['update_project'] = makeUpdateProjectTool(provider)
+  }
+  if (provider.capabilities.has('projects.archive')) {
     tools['archive_project'] = makeArchiveProjectTool(provider)
   }
 }
 
 function maybeAddCommentTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('comments.crud')) {
-    tools['add_comment'] = makeAddCommentTool(provider)
+  // Check each comment capability individually
+  if (provider.capabilities.has('comments.read')) {
     tools['get_comments'] = makeGetCommentsTool(provider)
+  }
+  if (provider.capabilities.has('comments.create')) {
+    tools['add_comment'] = makeAddCommentTool(provider)
+  }
+  if (provider.capabilities.has('comments.update')) {
     tools['update_comment'] = makeUpdateCommentTool(provider)
+  }
+  if (provider.capabilities.has('comments.delete')) {
     tools['remove_comment'] = makeRemoveCommentTool(provider)
   }
 }
 
 function maybeAddLabelTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('labels.crud')) {
+  // Check each label capability individually
+  if (provider.capabilities.has('labels.list')) {
     tools['list_labels'] = makeListLabelsTool(provider)
+  }
+  if (provider.capabilities.has('labels.create')) {
     tools['create_label'] = makeCreateLabelTool(provider)
+  }
+  if (provider.capabilities.has('labels.update')) {
     tools['update_label'] = makeUpdateLabelTool(provider)
+  }
+  if (provider.capabilities.has('labels.delete')) {
     tools['remove_label'] = makeRemoveLabelTool(provider)
+  }
+  if (provider.capabilities.has('labels.assign')) {
     tools['add_task_label'] = makeAddTaskLabelTool(provider)
     tools['remove_task_label'] = makeRemoveTaskLabelTool(provider)
   }
@@ -85,11 +108,20 @@ function maybeAddRelationTools(tools: ToolSet, provider: TaskProvider): void {
 }
 
 function maybeAddStatusTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('statuses.crud')) {
+  // Check each status capability individually
+  if (provider.capabilities.has('statuses.list')) {
     tools['list_statuses'] = makeListStatusesTool(provider)
+  }
+  if (provider.capabilities.has('statuses.create')) {
     tools['create_status'] = makeCreateStatusTool(provider)
+  }
+  if (provider.capabilities.has('statuses.update')) {
     tools['update_status'] = makeUpdateStatusTool(provider)
+  }
+  if (provider.capabilities.has('statuses.delete')) {
     tools['delete_status'] = makeDeleteStatusTool(provider)
+  }
+  if (provider.capabilities.has('statuses.reorder')) {
     tools['reorder_statuses'] = makeReorderStatusesTool(provider)
   }
 }

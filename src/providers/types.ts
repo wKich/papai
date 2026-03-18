@@ -5,15 +5,42 @@ import type { AppError } from '../errors.js'
 /**
  * Capabilities that a task tracker provider may support.
  * Core task operations are always required; everything else is optional.
+ *
+ * Each domain has granular capabilities for specific operations:
+ * - projects: read, list, create, update, archive
+ * - comments: read, create, update, delete
+ * - labels: list, create, update, delete, assign
+ * - statuses: list, create, update, delete, reorder
+ * - tasks: archive, delete, relations
  */
 export type Capability =
+  // Tasks
   | 'tasks.archive'
   | 'tasks.delete'
   | 'tasks.relations'
-  | 'projects.crud'
-  | 'comments.crud'
-  | 'labels.crud'
-  | 'statuses.crud'
+  // Projects
+  | 'projects.read'
+  | 'projects.list'
+  | 'projects.create'
+  | 'projects.update'
+  | 'projects.archive'
+  // Comments
+  | 'comments.read'
+  | 'comments.create'
+  | 'comments.update'
+  | 'comments.delete'
+  // Labels
+  | 'labels.list'
+  | 'labels.create'
+  | 'labels.update'
+  | 'labels.delete'
+  | 'labels.assign'
+  // Statuses
+  | 'statuses.list'
+  | 'statuses.create'
+  | 'statuses.update'
+  | 'statuses.delete'
+  | 'statuses.reorder'
 
 // --- Common domain types ---
 
@@ -160,7 +187,9 @@ export interface TaskProvider {
 
   deleteTask?(taskId: string): Promise<{ id: string }>
 
-  // --- Optional: projects.crud ---
+  // --- Optional: projects.* ---
+
+  getProject?(projectId: string): Promise<Project>
 
   listProjects?(): Promise<Project[]>
 
@@ -170,7 +199,9 @@ export interface TaskProvider {
 
   archiveProject?(projectId: string): Promise<{ id: string }>
 
-  // --- Optional: comments.crud ---
+  // --- Optional: comments.* ---
+
+  getComment?(taskId: string, commentId: string): Promise<Comment>
 
   addComment?(taskId: string, body: string): Promise<Comment>
 
@@ -180,7 +211,7 @@ export interface TaskProvider {
 
   removeComment?(commentId: string): Promise<{ id: string }>
 
-  // --- Optional: labels.crud ---
+  // --- Optional: labels.* ---
 
   listLabels?(): Promise<Label[]>
 
@@ -210,7 +241,7 @@ export interface TaskProvider {
 
   removeRelation?(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }>
 
-  // --- Optional: statuses.crud ---
+  // --- Optional: statuses.* ---
 
   listStatuses?(projectId: string): Promise<Column[]>
 

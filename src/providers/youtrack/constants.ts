@@ -29,11 +29,24 @@ export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
 export const TAG_FIELDS = 'id,name,color(id,background)'
 
 export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  // Tasks
   'tasks.delete',
   'tasks.relations',
-  'projects.crud',
-  'comments.crud',
-  'labels.crud',
+  // Projects (YouTrack supports list and archive only)
+  'projects.list',
+  'projects.archive',
+  // Comments (YouTrack does not support delete)
+  'comments.read',
+  'comments.create',
+  'comments.update',
+  // Labels
+  'labels.list',
+  'labels.create',
+  'labels.update',
+  'labels.delete',
+  'labels.assign',
+  // Statuses (YouTrack uses custom fields, not explicit status management)
+  // No status capabilities
 ])
 
 export const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

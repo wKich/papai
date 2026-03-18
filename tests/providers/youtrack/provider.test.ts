@@ -59,13 +59,29 @@ describe('YouTrackProvider', () => {
     })
 
     test('has expected capabilities', () => {
+      // Tasks
       expect(provider.capabilities.has('tasks.delete')).toBe(true)
       expect(provider.capabilities.has('tasks.relations')).toBe(true)
-      expect(provider.capabilities.has('projects.crud')).toBe(true)
-      expect(provider.capabilities.has('comments.crud')).toBe(true)
-      expect(provider.capabilities.has('labels.crud')).toBe(true)
-      expect(provider.capabilities.has('statuses.crud')).toBe(false)
       expect(provider.capabilities.has('tasks.archive')).toBe(false)
+      // Projects (YouTrack supports list and archive only)
+      expect(provider.capabilities.has('projects.list')).toBe(true)
+      expect(provider.capabilities.has('projects.archive')).toBe(true)
+      expect(provider.capabilities.has('projects.create')).toBe(false)
+      expect(provider.capabilities.has('projects.update')).toBe(false)
+      // Comments (YouTrack supports read, create, update but not delete)
+      expect(provider.capabilities.has('comments.read')).toBe(true)
+      expect(provider.capabilities.has('comments.create')).toBe(true)
+      expect(provider.capabilities.has('comments.update')).toBe(true)
+      expect(provider.capabilities.has('comments.delete')).toBe(false)
+      // Labels (full support)
+      expect(provider.capabilities.has('labels.list')).toBe(true)
+      expect(provider.capabilities.has('labels.create')).toBe(true)
+      expect(provider.capabilities.has('labels.update')).toBe(true)
+      expect(provider.capabilities.has('labels.delete')).toBe(true)
+      expect(provider.capabilities.has('labels.assign')).toBe(true)
+      // Statuses (YouTrack uses custom fields, not explicit status management)
+      expect(provider.capabilities.has('statuses.list')).toBe(false)
+      expect(provider.capabilities.has('statuses.create')).toBe(false)
     })
 
     test('has config requirements', () => {
