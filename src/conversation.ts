@@ -46,9 +46,12 @@ export const runTrimInBackground = async (userId: number, history: readonly Mode
         baseUrl: llmBaseUrl,
         model: smallModel,
       })
+      // Preserve any messages added to history while the async trim was running
+      const currentHistory = getCachedHistory(userId)
+      const newMessages = currentHistory.slice(history.length)
       saveSummary(userId, summary)
-      setCachedHistory(userId, trimmedMessages)
-      log.info({ userId, retained: trimmedMessages.length }, 'Smart trim complete')
+      setCachedHistory(userId, [...trimmedMessages, ...newMessages])
+      log.info({ userId, retained: trimmedMessages.length, preserved: newMessages.length }, 'Smart trim complete')
     } catch (error) {
       log.warn(
         { userId, error: error instanceof Error ? error.message : String(error) },

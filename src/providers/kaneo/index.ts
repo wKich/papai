@@ -1,100 +1,56 @@
 import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type {
-  Capability,
   Column,
   Comment,
   Label,
   Project,
-  ProviderConfigRequirement,
+  RelationType,
   Task,
   TaskListItem,
   TaskProvider,
   TaskSearchResult,
-  RelationType,
 } from '../types.js'
-import {
-  addComment,
-  addTaskLabel,
-  addTaskRelation,
-  archiveTask,
-  createColumn,
-  createLabel,
-  createProject,
-  createTask,
-  deleteColumn,
-  deleteProject,
-  deleteTask,
-  getComments,
-  getTask,
-  listColumns,
-  listLabels,
-  listProjects,
-  listTasks,
-  removeComment,
-  removeLabel,
-  removeTaskLabel,
-  removeTaskRelation,
-  reorderColumns,
-  searchTasks,
-  updateColumn,
-  updateComment,
-  updateLabel,
-  updateProject,
-  updateTask,
-  updateTaskRelation,
-} from './api.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
+import { ALL_CAPABILITIES, CONFIG_REQUIREMENTS } from './constants.js'
+import { kaneoAddComment, kaneoGetComments, kaneoRemoveComment, kaneoUpdateComment } from './operations/comments.js'
 import {
-  mapColumn,
-  mapComment,
-  mapCreateTaskResponse,
-  mapLabel,
-  mapProject,
-  mapTaskDetails,
-  mapTaskListItem,
-  mapTaskSearchResult,
-} from './mappers.js'
+  kaneoAddTaskLabel,
+  kaneoCreateLabel,
+  kaneoListLabels,
+  kaneoRemoveLabel,
+  kaneoRemoveTaskLabel,
+  kaneoUpdateLabel,
+} from './operations/labels.js'
+import {
+  kaneoArchiveProject,
+  kaneoCreateProject,
+  kaneoListProjects,
+  kaneoUpdateProject,
+} from './operations/projects.js'
+import { kaneoAddRelation, kaneoRemoveRelation, kaneoUpdateRelation } from './operations/relations.js'
+import {
+  kaneoDeleteStatus,
+  kaneoCreateStatus,
+  kaneoListStatuses,
+  kaneoReorderStatuses,
+  kaneoUpdateStatus,
+} from './operations/statuses.js'
+import {
+  kaneoArchiveTask,
+  kaneoCreateTask,
+  kaneoDeleteTask,
+  kaneoGetTask,
+  kaneoListTasks,
+  kaneoSearchTasks,
+  kaneoUpdateTask,
+} from './operations/tasks.js'
 import { buildProjectUrl, buildTaskUrl } from './url-builder.js'
 
 const log = logger.child({ scope: 'provider:kaneo' })
 
-const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
-  // Tasks
-  'tasks.archive',
-  'tasks.delete',
-  'tasks.relations',
-  // Projects (full CRUD)
-  'projects.read',
-  'projects.list',
-  'projects.create',
-  'projects.update',
-  'projects.archive',
-  // Comments (full CRUD)
-  'comments.read',
-  'comments.create',
-  'comments.update',
-  'comments.delete',
-  // Labels (full CRUD + assignment)
-  'labels.list',
-  'labels.create',
-  'labels.update',
-  'labels.delete',
-  'labels.assign',
-  // Statuses (full CRUD)
-  'statuses.list',
-  'statuses.create',
-  'statuses.update',
-  'statuses.delete',
-  'statuses.reorder',
-])
-
-const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [
-  { key: 'kaneo_apikey', label: 'Kaneo API Key', required: true },
-]
-
-/** KaneoProvider wraps existing src/kaneo/ functions to implement TaskProvider. */
+/** KaneoProvider wraps kaneo operation functions to implement TaskProvider. */
 export class KaneoProvider implements TaskProvider {
   readonly name = 'kaneo'
   readonly capabilities = ALL_CAPABILITIES
@@ -106,7 +62,8 @@ export class KaneoProvider implements TaskProvider {
   ) {
     log.debug({ workspaceId }, 'KaneoProvider created')
   }
-  async createTask(params: {
+
+  createTask(params: {
     projectId: string
     title: string
     description?: string
@@ -115,24 +72,14 @@ export class KaneoProvider implements TaskProvider {
     dueDate?: string
     assignee?: string
   }): Promise<Task> {
-    const { projectId, title, description, priority, status, dueDate, assignee } = params
-    const result = await createTask({
-      config: this.config,
-      projectId,
-      title,
-      description,
-      priority,
-      status,
-      dueDate,
-      userId: assignee,
-    })
-    return mapCreateTaskResponse(result, this.buildTaskUrl(result.id, result.projectId))
+    return kaneoCreateTask(this.config, this.workspaceId, params)
   }
-  async getTask(taskId: string): Promise<Task> {
-    const result = await getTask({ config: this.config, taskId })
-    return mapTaskDetails(result, this.buildTaskUrl(result.id, result.projectId))
+
+  getTask(taskId: string): Promise<Task> {
+    return kaneoGetTask(this.config, this.workspaceId, taskId)
   }
-  async updateTask(
+
+  updateTask(
     taskId: string,
     params: {
       title?: string
@@ -144,170 +91,139 @@ export class KaneoProvider implements TaskProvider {
       assignee?: string
     },
   ): Promise<Task> {
-    const { title, description, status, priority, dueDate, projectId, assignee } = params
-    const result = await updateTask({
-      config: this.config,
-      taskId,
-      title,
-      description,
-      status,
-      priority,
-      dueDate,
-      projectId,
-      userId: assignee,
-    })
-    return mapCreateTaskResponse(result, this.buildTaskUrl(result.id, result.projectId))
+    return kaneoUpdateTask(this.config, this.workspaceId, taskId, params)
   }
-  async listTasks(projectId: string): Promise<TaskListItem[]> {
-    const results = await listTasks({ config: this.config, projectId })
-    return results.map((t) => mapTaskListItem(t))
+
+  listTasks(projectId: string): Promise<TaskListItem[]> {
+    return kaneoListTasks(this.config, projectId)
   }
-  async searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
-    const results = await searchTasks({
-      config: this.config,
-      query: params.query,
-      workspaceId: this.workspaceId,
-      projectId: params.projectId,
-      limit: params.limit,
-    })
-    return results.map((t) => mapTaskSearchResult(t))
+
+  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
+    return kaneoSearchTasks(this.config, this.workspaceId, params)
   }
-  async archiveTask(taskId: string): Promise<{ id: string }> {
-    const result = await archiveTask({ config: this.config, taskId, workspaceId: this.workspaceId })
-    return { id: result.id }
+
+  archiveTask(taskId: string): Promise<{ id: string }> {
+    return kaneoArchiveTask(this.config, this.workspaceId, taskId)
   }
-  async deleteTask(taskId: string): Promise<{ id: string }> {
-    const result = await deleteTask({ config: this.config, taskId })
-    return { id: result.id }
+
+  deleteTask(taskId: string): Promise<{ id: string }> {
+    return kaneoDeleteTask(this.config, taskId)
   }
-  async listProjects(): Promise<Project[]> {
-    const results = await listProjects({ config: this.config, workspaceId: this.workspaceId })
-    return results.map((p) => mapProject(p, this.buildProjectUrl(p.id)))
+
+  listProjects(): Promise<Project[]> {
+    return kaneoListProjects(this.config, this.workspaceId)
   }
-  async createProject(params: { name: string; description?: string }): Promise<Project> {
-    const result = await createProject({
-      config: this.config,
-      workspaceId: this.workspaceId,
-      name: params.name,
-      description: params.description,
-    })
-    return mapProject(result, this.buildProjectUrl(result.id))
+
+  createProject(params: { name: string; description?: string }): Promise<Project> {
+    return kaneoCreateProject(this.config, this.workspaceId, params)
   }
-  async updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
-    const result = await updateProject({
-      config: this.config,
-      workspaceId: this.workspaceId,
-      projectId,
-      name: params.name,
-      description: params.description,
-    })
-    return mapProject(result, this.buildProjectUrl(result.id))
+
+  updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
+    return kaneoUpdateProject(this.config, this.workspaceId, projectId, params)
   }
-  async archiveProject(projectId: string): Promise<{ id: string }> {
-    const result = await deleteProject({ config: this.config, projectId })
-    return { id: result.id }
+
+  archiveProject(projectId: string): Promise<{ id: string }> {
+    return kaneoArchiveProject(this.config, projectId)
   }
-  async addComment(taskId: string, body: string): Promise<Comment> {
-    const result = await addComment({ config: this.config, taskId, comment: body })
-    return mapComment(result)
+
+  addComment(taskId: string, body: string): Promise<Comment> {
+    return kaneoAddComment(this.config, taskId, body)
   }
-  async getComments(taskId: string): Promise<Comment[]> {
-    const results = await getComments({ config: this.config, taskId })
-    return results.map(mapComment)
+
+  getComments(taskId: string): Promise<Comment[]> {
+    return kaneoGetComments(this.config, taskId)
   }
-  async updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {
-    const result = await updateComment({
-      config: this.config,
-      taskId: params.taskId,
-      activityId: params.commentId,
-      comment: params.body,
-    })
-    return mapComment(result)
+
+  updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {
+    return kaneoUpdateComment(this.config, params)
   }
-  async removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
-    const result = await removeComment({ config: this.config, activityId: params.commentId })
-    return { id: result.id }
+
+  removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
+    return kaneoRemoveComment(this.config, params)
   }
-  async listLabels(): Promise<Label[]> {
-    const results = await listLabels({ config: this.config, workspaceId: this.workspaceId })
-    return results.map(mapLabel)
+
+  listLabels(): Promise<Label[]> {
+    return kaneoListLabels(this.config, this.workspaceId)
   }
-  async createLabel(params: { name: string; color?: string }): Promise<Label> {
-    const result = await createLabel({
-      config: this.config,
-      workspaceId: this.workspaceId,
-      name: params.name,
-      color: params.color,
-    })
-    return mapLabel(result)
+
+  createLabel(params: { name: string; color?: string }): Promise<Label> {
+    return kaneoCreateLabel(this.config, this.workspaceId, params)
   }
-  async updateLabel(labelId: string, params: { name?: string; color?: string }): Promise<Label> {
-    const result = await updateLabel({ config: this.config, labelId, name: params.name, color: params.color })
-    return mapLabel(result)
+
+  updateLabel(labelId: string, params: { name?: string; color?: string }): Promise<Label> {
+    return kaneoUpdateLabel(this.config, labelId, params)
   }
-  async removeLabel(labelId: string): Promise<{ id: string }> {
-    const result = await removeLabel({ config: this.config, labelId })
-    return { id: result.id }
+
+  removeLabel(labelId: string): Promise<{ id: string }> {
+    return kaneoRemoveLabel(this.config, labelId)
   }
+
   addTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
-    return addTaskLabel({ config: this.config, taskId, labelId, workspaceId: this.workspaceId })
+    return kaneoAddTaskLabel(this.config, this.workspaceId, taskId, labelId)
   }
-  async removeTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
-    const result = await removeTaskLabel({ config: this.config, taskId, labelId })
-    return { taskId: result.taskId, labelId: result.labelId }
+
+  removeTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
+    return kaneoRemoveTaskLabel(this.config, taskId, labelId)
   }
+
   addRelation(
     taskId: string,
     relatedTaskId: string,
     type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
-    return addTaskRelation({ config: this.config, taskId, relatedTaskId, type })
+    return kaneoAddRelation(this.config, taskId, relatedTaskId, type)
   }
+
   updateRelation(
     taskId: string,
     relatedTaskId: string,
     type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
-    return updateTaskRelation({ config: this.config, taskId, relatedTaskId, type })
+    return kaneoUpdateRelation(this.config, taskId, relatedTaskId, type)
   }
-  async removeRelation(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }> {
-    const result = await removeTaskRelation({ config: this.config, taskId, relatedTaskId })
-    return { taskId: result.taskId, relatedTaskId: result.relatedTaskId }
+
+  removeRelation(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }> {
+    return kaneoRemoveRelation(this.config, taskId, relatedTaskId)
   }
-  async listStatuses(projectId: string): Promise<Column[]> {
-    const results = await listColumns({ config: this.config, projectId })
-    return results.map(mapColumn)
+
+  listStatuses(projectId: string): Promise<Column[]> {
+    return kaneoListStatuses(this.config, projectId)
   }
-  async createStatus(
+
+  createStatus(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column> {
-    const result = await createColumn({ config: this.config, projectId, ...params })
-    return mapColumn(result)
+    return kaneoCreateStatus(this.config, projectId, params)
   }
-  async updateStatus(
+
+  updateStatus(
     statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column> {
-    const result = await updateColumn({ config: this.config, columnId: statusId, ...params })
-    return mapColumn(result)
+    return kaneoUpdateStatus(this.config, statusId, params)
   }
-  async deleteStatus(statusId: string): Promise<{ id: string }> {
-    const result = await deleteColumn({ config: this.config, columnId: statusId })
-    return { id: result.id }
+
+  deleteStatus(statusId: string): Promise<{ id: string }> {
+    return kaneoDeleteStatus(this.config, statusId)
   }
-  async reorderStatuses(projectId: string, statuses: { id: string; position: number }[]): Promise<void> {
-    await reorderColumns({ config: this.config, projectId, columns: statuses })
+
+  reorderStatuses(projectId: string, statuses: { id: string; position: number }[]): Promise<void> {
+    return kaneoReorderStatuses(this.config, projectId, statuses)
   }
+
   buildTaskUrl(taskId: string, projectId?: string): string {
     return buildTaskUrl(this.config.baseUrl, this.workspaceId, projectId ?? '', taskId)
   }
+
   buildProjectUrl(projectId: string): string {
     return buildProjectUrl(this.config.baseUrl, this.workspaceId, projectId)
   }
+
   classifyError(error: unknown): AppError {
     return classifyKaneoError(error).appError
   }
+
   getPromptAddendum(): string {
     return `IMPORTANT — Task status vs kanban columns:
 - Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.

@@ -1,13 +1,25 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript"],
+  "plugins": ["typescript", "vitest"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
     "pedantic": "warn",
     "perf": "warn"
   },
+  "options": {
+    "typeAware": true,
+    "typeCheck": true,
+    "denyWarnings": true
+  },
   "rules": {
+    "vitest/expect-expect": "error",
+    "vitest/valid-expect": "error",
+    "vitest/no-conditional-tests": "error",
+    "vitest/no-conditional-expect": "error",
+    "vitest/no-disabled-tests": "error",
+    "vitest/no-focused-tests": "error",
+    "vitest/require-local-test-context-for-concurrent-snapshots": "error",
     "typescript/explicit-function-return-type": "error",
     "typescript/explicit-module-boundary-types": "error",
     "typescript/no-dynamic-delete": "error",

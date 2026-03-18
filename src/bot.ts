@@ -251,7 +251,9 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     const result = await callLlm(ctx, userId, history)
 
     // Append assistant response to history
-    const assistantMessages = result.response.messages.slice(history.length)
+    // result.response.messages contains ONLY the new messages from the model (assistant + tool messages),
+    // not the input history — do NOT slice by history.length
+    const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(userId, assistantMessages)
       log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')

@@ -4,7 +4,7 @@ import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { TaskResource } from '../../src/providers/kaneo/index.js'
 import { restoreFetch, setMockFetch, createMockTask, createMockColumn } from '../test-helpers.js'
 
-void mock.module('../../src/kaneo/list-columns.js', () => ({
+void mock.module('../../src/providers/kaneo/list-columns.js', () => ({
   listColumns: mock(() =>
     Promise.resolve([
       createMockColumn({ id: 'col-1', name: 'To Do' }),
