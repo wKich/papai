@@ -10,7 +10,7 @@ export const ISSUE_FIELDS = [
   'updated',
   'resolved',
   'project(id,shortName,name)',
-  'customFields($type,id,projectCustomField($type,id,field($type,id,name)),value($type,name,login,isResolved))',
+  'customFields($type,name,value($type,name,login))',
   'tags(id,name,color(id,background))',
   'links(id,direction,linkType(name,sourceToTarget,targetToSource),issues(id,idReadable,summary))',
 ].join(',')
