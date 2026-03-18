@@ -12,4 +12,5 @@ COPY package.json tsconfig.json ./
 
 ENV NODE_ENV=production
 
+USER bun
 CMD ["bun", "run", "src/index.ts"]

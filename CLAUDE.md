@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a Telegram bot that manages Kaneo tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes Kaneo operations, then replies with the result. The provider, base URL, and model are all runtime-configurable — any OpenAI-compatible endpoint works (OpenAI, Anthropic, Mistral, Ollama, etc.).
+papai is a Telegram bot that manages tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes task tracker operations, then replies with the result. The task tracker provider (Kaneo, YouTrack, or any future provider), LLM provider, base URL, and model are all runtime-configurable.
 
 ## Commands
 
 - `bun run start` — run the bot (`bun run src/index.ts`)
 - `bun run lint` — lint with oxlint
 - `bun run format` — format with oxfmt
+- `bun run knip` — check for unused dependencies/exports
 - `bun install` — install dependencies
 
 No build step; Bun runs TypeScript directly.
@@ -35,7 +36,13 @@ Copy `.env.example` to `.env`. Only two are required at startup (validated in `s
 
 `TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
 
-The remaining credentials (`kaneo_apikey`, `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`) are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+
+**Common config keys:** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`, `provider`
+
+**Kaneo-specific (default provider):** `kaneo_apikey`
+
+**YouTrack-specific:** `youtrack_url`, `youtrack_token`
 
 Additional environment variables used by the bot:
 
@@ -46,24 +53,28 @@ Additional environment variables used by the bot:
 ```
 Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
                                               │
-                                              ├─ tools/ ─→ kaneo/ ─→ Kaneo REST API
-                                              │   28 tools, one file each
+                                              ├─ tools/ ─→ providers/ ─→ Task tracker REST API
+                                              │   capability-gated tools
                                               │
                                               └─→ response back to Telegram
 ```
 
 - **`src/index.ts`** — entry point; validates env vars, runs migrations, starts the bot.
-- **`src/bot.ts`** — Grammy bot setup, per-user conversation history, LLM orchestration with up to 25 tool-calling steps. Multi-user authorization via `users` table.
+- **`src/bot.ts`** — Grammy bot setup, per-user conversation history, LLM orchestration with up to 25 tool-calling steps. Multi-user authorization via `users` table. Builds the active `TaskProvider` from per-user config.
 - **`src/admin-commands.ts`** — Legacy admin command registration (handlers moved to `src/commands/`).
 - **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 - **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
-- **`src/tools/`** — One file per tool. `index.ts` assembles all 28 into `makeTools`. Each tool imports its corresponding kaneo function.
-- **`src/kaneo/`** — One file per Kaneo REST API wrapper function. `index.ts` re-exports all. `client.ts` is the shared HTTP client. `classify-error.ts` contains the error classifier. `frontmatter.ts` handles relation storage in task descriptions.
-- **`src/kaneo/schemas/`** — Individual Zod schemas for all API request/response validation (auto-generated from OpenAPI spec).
-- **`src/kaneo/task-update-helpers.ts`** — Helper functions for task update operations.
-- **`src/kaneo/task-status.ts`** — Task status/column management helpers.
+- **`src/tools/`** — One file per tool. `index.ts` assembles tools via `makeTools(provider)`, exposing only tools supported by the active provider's capabilities.
+- **`src/providers/types.ts`** — `TaskProvider` interface, `Capability` union type, and normalized domain types (`Task`, `Project`, `Comment`, `Label`, `Status`). All providers must implement this interface.
+- **`src/providers/registry.ts`** — Provider factory registry; `createProvider(name, config)` instantiates the named provider.
+- **`src/providers/errors.ts`** — Provider-layer error types and constructors.
+- **`src/providers/kaneo/`** — Kaneo REST API adapter implementing `TaskProvider`. `index.ts` exports `KaneoProvider`. `client.ts` is the shared HTTP client. `classify-error.ts` maps HTTP errors to `AppError`. `frontmatter.ts` stores task relations in description frontmatter.
+- **`src/providers/kaneo/schemas/`** — Zod schemas for Kaneo API request/response validation.
+- **`src/providers/kaneo/operations/`** — Grouped Kaneo operation implementations (tasks, comments, labels, projects, statuses, relations).
+- **`src/providers/youtrack/`** — YouTrack REST API adapter implementing `TaskProvider`. `index.ts` exports `YouTrackProvider`. Uses `youtrack_url` + `youtrack_token` from per-user config.
+- **`src/providers/youtrack/schemas/`** — Zod schemas for YouTrack API response validation.
 - **`src/commands/`** — Telegram command handlers extracted from bot.ts. Includes `/help`, `/set`, `/config`, `/clear`, `/context`, and admin commands. The `/context` command (admin-only) exports conversation history, summary, and known entities as a text file.
 - **`src/announcements.ts`** — Automatic version announcements to users with changelog excerpts.
 - **`src/changelog-reader.ts`** — CHANGELOG.md reader for version announcements.
@@ -76,36 +87,39 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 
 ### Available tools
 
-| Tool                   | Description                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------ |
-| `create_task`          | Create a new task (title, description, priority, project, due date, status)          |
-| `update_task`          | Update status, priority, assignee, due date, title, or description on a task         |
-| `search_tasks`         | Search tasks by keyword                                                              |
-| `list_tasks`           | List all tasks in a project                                                          |
-| `get_task`             | Fetch full details of a single task including relations (from frontmatter)           |
-| `archive_task`         | Archive a task by adding the "archived" label                                        |
-| `add_comment`          | Add a comment to a task                                                              |
-| `get_comments`         | Read all comments on a task                                                          |
-| `update_comment`       | Update an existing comment on a task                                                 |
-| `remove_comment`       | Remove a comment from a task                                                         |
-| `list_projects`        | List all projects in the workspace                                                   |
-| `create_project`       | Create a new project in the workspace                                                |
-| `update_project`       | Update an existing project (name, description)                                       |
-| `archive_project`      | Archive (delete) a project                                                           |
-| `list_labels`          | List all available labels in the workspace                                           |
-| `create_label`         | Create a new label with optional hex color                                           |
-| `update_label`         | Update an existing label (name, color)                                               |
-| `remove_label`         | Remove (delete) a label                                                              |
-| `add_task_label`       | Add a label to a task                                                                |
-| `remove_task_label`    | Remove a label from a task                                                           |
-| `add_task_relation`    | Create a blocks/duplicate/related relation between two tasks (stored in frontmatter) |
-| `update_task_relation` | Update the type of an existing relation between two tasks                            |
-| `remove_task_relation` | Remove a relation between two tasks                                                  |
-| `list_columns`         | List all status columns in a project                                                 |
-| `create_column`        | Create a new status column in a project                                              |
-| `update_column`        | Update an existing column (name, order)                                              |
-| `delete_column`        | Delete a status column from a project                                                |
-| `reorder_columns`      | Reorder columns in a project                                                         |
+Tools are capability-gated: only tools supported by the active provider are exposed to the LLM.
+
+| Tool                   | Capability required | Description                                                                  |
+| ---------------------- | ------------------- | ---------------------------------------------------------------------------- |
+| `create_task`          | _(always)_          | Create a new task (title, description, priority, project, due date, status)  |
+| `update_task`          | _(always)_          | Update status, priority, assignee, due date, title, or description on a task |
+| `search_tasks`         | _(always)_          | Search tasks by keyword                                                      |
+| `list_tasks`           | _(always)_          | List all tasks in a project                                                  |
+| `get_task`             | _(always)_          | Fetch full details of a single task including relations                      |
+| `archive_task`         | `tasks.archive`     | Archive a task                                                               |
+| `delete_task`          | `tasks.delete`      | Permanently delete a task                                                    |
+| `add_comment`          | `comments.create`   | Add a comment to a task                                                      |
+| `get_comments`         | `comments.read`     | Read all comments on a task                                                  |
+| `update_comment`       | `comments.update`   | Update an existing comment on a task                                         |
+| `remove_comment`       | `comments.delete`   | Remove a comment from a task                                                 |
+| `list_projects`        | `projects.list`     | List all projects in the workspace                                           |
+| `create_project`       | `projects.create`   | Create a new project in the workspace                                        |
+| `update_project`       | `projects.update`   | Update an existing project (name, description)                               |
+| `archive_project`      | `projects.archive`  | Archive (delete) a project                                                   |
+| `list_labels`          | `labels.list`       | List all available labels in the workspace                                   |
+| `create_label`         | `labels.create`     | Create a new label with optional hex color                                   |
+| `update_label`         | `labels.update`     | Update an existing label (name, color)                                       |
+| `remove_label`         | `labels.delete`     | Remove (delete) a label                                                      |
+| `add_task_label`       | `labels.assign`     | Add a label to a task                                                        |
+| `remove_task_label`    | `labels.assign`     | Remove a label from a task                                                   |
+| `add_task_relation`    | `tasks.relations`   | Create a blocks/duplicate/related relation between two tasks                 |
+| `update_task_relation` | `tasks.relations`   | Update the type of an existing relation between two tasks                    |
+| `remove_task_relation` | `tasks.relations`   | Remove a relation between two tasks                                          |
+| `list_statuses`        | `statuses.list`     | List all status columns in a project                                         |
+| `create_status`        | `statuses.create`   | Create a new status column in a project                                      |
+| `update_status`        | `statuses.update`   | Update an existing status column (name, order)                               |
+| `delete_status`        | `statuses.delete`   | Delete a status column from a project                                        |
+| `reorder_statuses`     | `statuses.reorder`  | Reorder status columns in a project                                          |
 
 ## Logging Requirements (HIGH PRIORITY)
 

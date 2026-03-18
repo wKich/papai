@@ -2,13 +2,38 @@
   "$schema": "https://unpkg.com/knip@latest/schema.json",
 
   // Standalone scripts not auto-detected from package.json
-  "entry": ["src/scripts/*.ts"],
+  "entry": ["src/scripts/*.ts!"],
 
-  // All source files
-  "project": ["src/**/*.ts"],
+  // All source files (production only)
+  "project": ["src/**/*.ts!"],
 
   // System binaries not managed as npm dependencies
-  "ignoreBinaries": ["git-cliff", "knip-bun", "python3", "semgrep", "which"],
+  "ignoreBinaries": ["git-cliff", "semgrep", "which"],
+
+  // Type-only dependencies (used for TypeScript types, not runtime code)
+  // TODO: These are used via 'import type' but knip strict mode doesn't detect them properly
+  "ignoreDependencies": ["@gramio/types", "@grammyjs/types"],
+
+  // TODO: YouTrack schemas are currently only used in tests.
+  // Once imported in production code (like kaneo schemas), remove this ignore.
+  "ignoreFiles": ["src/providers/youtrack/schemas/**/*.ts"],
+
+  // Suppress 'unused exports' for exports used only in tests (strict mode excludes tests)
+  "ignoreIssues": {
+    // Test helper exports
+    "src/announcements.ts": ["exports"],
+    "src/cache.ts": ["exports"],
+    "src/errors.ts": ["exports"],
+    "src/memory.ts": ["exports"],
+    "src/users.ts": ["exports"],
+    // Schema exports part of public API
+    "src/providers/kaneo/client.ts": ["exports", "types"],
+    "src/providers/kaneo/kaneo-client.ts": ["exports", "types"],
+    "src/providers/kaneo/schemas/*.ts": ["exports", "types"],
+    // Test-only exports
+    "src/scripts/test-migration.ts": ["exports"],
+    "src/config.ts": ["types"],
+  },
 
   // All issue types treated as hard errors
   "rules": {

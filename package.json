@@ -7,7 +7,7 @@
   "module": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
-    "knip": "knip-bun",
+    "knip": "knip-bun --strict",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write . --ignore-path=.oxfmtignore",

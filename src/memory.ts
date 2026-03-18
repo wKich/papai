@@ -86,7 +86,7 @@ export function extractFacts(
   const facts: Omit<MemoryFact, 'last_seen'>[] = []
 
   for (const result of toolResults) {
-    if (['create_task', 'update_task', 'get_task'].includes(result.toolName)) {
+    if (['create_task', 'update_task', 'delete_task'].includes(result.toolName)) {
       const parsed = TaskResultSchema.safeParse(result.result)
       if (parsed.success) {
         const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
@@ -98,21 +98,7 @@ export function extractFacts(
       }
     }
 
-    if (result.toolName === 'search_tasks') {
-      const items = z.array(TaskResultSchema).safeParse(result.result)
-      if (items.success) {
-        for (const item of items.data.slice(0, 3)) {
-          const label = item.number === undefined ? item.id : `#${item.number}`
-          facts.push({
-            identifier: label,
-            title: item.title ?? label,
-            url: '',
-          })
-        }
-      }
-    }
-
-    if (result.toolName === 'create_project') {
+    if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
       const parsed = ProjectResultSchema.safeParse(result.result)
       if (parsed.success) {
         facts.push({

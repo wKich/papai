@@ -240,24 +240,36 @@ describe('extractFacts', () => {
     expect(facts[0]!.title).toBe('#38')
   })
 
-  test('extracts fact from get_task result', () => {
-    const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
+  test('extracts fact from delete_task result', () => {
+    const results = [{ toolName: 'delete_task', result: { id: 'task-10', number: 10 } }]
     const facts = extractFacts([], results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('#10')
+    expect(facts[0]!.title).toBe('#10')
   })
 
-  test('extracts up to 3 facts from search_tasks result', () => {
+  test('extracts fact from update_project result', () => {
+    const results = [{ toolName: 'update_project', result: { id: 'proj-99', name: 'Updated Name' } }]
+    const facts = extractFacts([], results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-99')
+    expect(facts[0]!.title).toBe('Updated Name')
+  })
+
+  test('does not extract fact from get_task result', () => {
+    const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
+    const facts = extractFacts([], results)
+    expect(facts).toHaveLength(0)
+  })
+
+  test('does not extract facts from search_tasks result', () => {
     const items = [
       { id: 'task-1', title: 'A', number: 1 },
       { id: 'task-2', title: 'B', number: 2 },
-      { id: 'task-3', title: 'C', number: 3 },
-      { id: 'task-4', title: 'D', number: 4 },
     ]
     const results = [{ toolName: 'search_tasks', result: items }]
     const facts = extractFacts([], results)
-    expect(facts).toHaveLength(3)
-    expect(facts.map((f) => f.identifier)).toEqual(['#1', '#2', '#3'])
+    expect(facts).toHaveLength(0)
   })
 
   test('returns empty array for unknown tool', () => {

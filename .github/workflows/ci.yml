@@ -56,8 +56,6 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install
-      - name: Install Semgrep
-        run: python3 -m pip install semgrep --quiet
       - name: Run Semgrep security scan
         run: bun run security:ci
       - name: Upload SARIF to GitHub Security tab
