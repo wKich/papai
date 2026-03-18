@@ -1,0 +1,10 @@
+# Downloaded semgrep binary
+bin/
+
+# Temporary rule clones
+ai-best-practices/
+
+# Scan results
+results.json
+results.sarif
+semgrep-results.*
