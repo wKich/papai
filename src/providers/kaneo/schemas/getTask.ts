@@ -1,17 +1,7 @@
 import { z } from 'zod'
 
 // Enums
-export const TaskPriorityEnum = z.enum(['no-priority', 'low', 'medium', 'high', 'urgent'])
-
-// Path parameters
-export const GetTaskPathSchema = z.object({
-  id: z.string(),
-})
-
-// Request schema (no body)
-export const GetTaskRequestSchema = z.object({
-  path: GetTaskPathSchema,
-})
+const TaskPriorityEnum = z.enum(['no-priority', 'low', 'medium', 'high', 'urgent'])
 
 // Task schema (response)
 export const TaskSchema = z.object({
@@ -27,13 +17,3 @@ export const TaskSchema = z.object({
   dueDate: z.unknown().optional(),
   createdAt: z.unknown(),
 })
-
-// Response schema
-export const GetTaskResponseSchema = TaskSchema
-
-// TypeScript types
-export type TaskPriority = z.infer<typeof TaskPriorityEnum>
-export type GetTaskPath = z.infer<typeof GetTaskPathSchema>
-export type GetTaskRequest = z.infer<typeof GetTaskRequestSchema>
-export type Task = z.infer<typeof TaskSchema>
-export type GetTaskResponse = z.infer<typeof GetTaskResponseSchema>

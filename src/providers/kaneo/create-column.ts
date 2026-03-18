@@ -7,7 +7,7 @@ import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:create-column' })
 
-export type CreateColumnResponse = z.infer<typeof ColumnCompatSchema>
+type CreateColumnResponse = z.infer<typeof ColumnCompatSchema>
 
 export async function createColumn({
   config,

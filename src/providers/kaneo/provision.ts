@@ -12,7 +12,7 @@ const SignUpResponseSchema = z.object({
 const OrgResponseSchema = z.object({ id: z.string(), slug: z.string() })
 const ApiKeyResponseSchema = z.object({ key: z.string() })
 
-export type ProvisionResult = {
+type ProvisionResult = {
   email: string
   password: string
   /** Better Auth API key (preferred) or session cookie (fallback). */

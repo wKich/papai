@@ -6,8 +6,7 @@ import { type Project } from './schemas/update-project.js'
 
 const log = logger.child({ scope: 'kaneo:create-project' })
 
-export type CreateProjectResponse = Project
-export type KaneoProject = Project
+type KaneoProject = Project
 
 export async function createProject({
   config,

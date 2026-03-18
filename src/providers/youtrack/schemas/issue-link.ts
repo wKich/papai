@@ -18,55 +18,24 @@ export const IssueLinkSchema = BaseEntitySchema.extend({
   issues: z.array(z.lazy(() => IssueSchema)),
 })
 
-export const ListIssueLinksPathSchema = z.object({
-  issueId: z.string(),
-})
-
-export const ListIssueLinksQuerySchema = z.object({
-  fields: z.string().optional(),
-})
-
-export const ListIssueLinksRequestSchema = z.object({
-  path: ListIssueLinksPathSchema,
-  query: ListIssueLinksQuerySchema.optional(),
-})
-
-export const ListIssueLinksResponseSchema = z.array(IssueLinkSchema)
-
-export const CreateIssueLinkPathSchema = z.object({
-  issueId: z.string(),
-})
-
-export const CreateIssueLinkBodySchema = z.object({
-  type: z.string(),
-  issues: z.array(
-    z.object({
-      id: z.string().optional(),
-      idReadable: z.string().optional(),
-    }),
-  ),
-})
-
 export const CreateIssueLinkRequestSchema = z.object({
-  path: CreateIssueLinkPathSchema,
-  body: CreateIssueLinkBodySchema,
-})
-
-export const CreateIssueLinkResponseSchema = IssueLinkSchema
-
-export const RemoveIssueLinkPathSchema = z.object({
-  issueId: z.string(),
-  linkId: z.string(),
+  path: z.object({
+    issueId: z.string(),
+  }),
+  body: z.object({
+    type: z.string(),
+    issues: z.array(
+      z.object({
+        id: z.string().optional(),
+        idReadable: z.string().optional(),
+      }),
+    ),
+  }),
 })
 
 export const RemoveIssueLinkRequestSchema = z.object({
-  path: RemoveIssueLinkPathSchema,
+  path: z.object({
+    issueId: z.string(),
+    linkId: z.string(),
+  }),
 })
-
-export type IssueLinkType = z.infer<typeof IssueLinkTypeSchema>
-export type IssueLink = z.infer<typeof IssueLinkSchema>
-export type ListIssueLinksRequest = z.infer<typeof ListIssueLinksRequestSchema>
-export type ListIssueLinksResponse = z.infer<typeof ListIssueLinksResponseSchema>
-export type CreateIssueLinkRequest = z.infer<typeof CreateIssueLinkRequestSchema>
-export type CreateIssueLinkResponse = z.infer<typeof CreateIssueLinkResponseSchema>
-export type RemoveIssueLinkRequest = z.infer<typeof RemoveIssueLinkRequestSchema>

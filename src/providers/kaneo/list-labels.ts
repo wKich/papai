@@ -8,7 +8,7 @@ import { CreateLabelResponseSchema } from './schemas/createLabel.js'
 
 const log = logger.child({ scope: 'kaneo:list-labels' })
 
-export type KaneoLabel = z.infer<typeof CreateLabelResponseSchema>
+type KaneoLabel = z.infer<typeof CreateLabelResponseSchema>
 
 export async function listLabels({
   config,

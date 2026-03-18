@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 // Enums
-export const ActivityTypeEnum = z.enum([
+const ActivityTypeEnum = z.enum([
   'comment',
   'task',
   'status_changed',
@@ -13,12 +13,6 @@ export const ActivityTypeEnum = z.enum([
   'description_changed',
   'create',
 ])
-
-// Request schema
-export const CreateCommentRequestSchema = z.object({
-  taskId: z.string(),
-  comment: z.string(),
-})
 
 // Response schema
 export const CreateCommentResponseSchema = z.object({
@@ -33,6 +27,3 @@ export const CreateCommentResponseSchema = z.object({
   externalSource: z.string().nullable(),
   externalUrl: z.string().nullable(),
 })
-
-export type CreateCommentRequest = z.infer<typeof CreateCommentRequestSchema>
-export type CreateCommentResponse = z.infer<typeof CreateCommentResponseSchema>

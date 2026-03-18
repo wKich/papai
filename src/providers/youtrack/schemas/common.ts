@@ -21,8 +21,3 @@ export const BaseEntitySchema = z.object({
 })
 
 export const TimestampSchema = z.number().int().positive()
-
-export type IssueState = z.infer<typeof IssueStateEnum>
-export type IssuePriority = z.infer<typeof IssuePriorityEnum>
-export type LinkType = z.infer<typeof LinkTypeEnum>
-export type BaseEntity = z.infer<typeof BaseEntitySchema>

@@ -5,14 +5,12 @@ import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
-import { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
+import { TaskSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
 import { denormalizeStatus, validateStatus } from './task-status.js'
 import { performUpdate } from './task-update-helpers.js'
-
-export { addTaskRelation, removeTaskRelation, updateTaskRelation } from './task-relations.js'
 
 export class TaskResource {
   private log = logger.child({ scope: 'kaneo:task-resource' })

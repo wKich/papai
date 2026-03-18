@@ -18,7 +18,7 @@ import {
   CommentResource,
   ColumnResource,
 } from '../../src/providers/kaneo/kaneo-client.js'
-import { CreateTaskResponseSchema } from '../../src/providers/kaneo/schemas/createTask.js'
+import { TaskSchema as CreateTaskResponseSchema } from '../../src/providers/kaneo/schemas/createTask.js'
 import { ActivityItemSchema } from '../../src/providers/kaneo/schemas/getActivities.js'
 import {
   restoreFetch,

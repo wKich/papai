@@ -8,7 +8,7 @@ import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:list-columns' })
 
-export type KaneoColumn = z.infer<typeof ColumnCompatSchema>
+type KaneoColumn = z.infer<typeof ColumnCompatSchema>
 
 export async function listColumns({
   config,

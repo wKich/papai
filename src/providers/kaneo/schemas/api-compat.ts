@@ -26,7 +26,6 @@ import { UpdateCommentResponseSchema } from './updateComment.js'
  * the empty object. The caller must supply fallback values for any field it needs.
  */
 export const CreateCommentResponseCompatSchema = CreateCommentResponseSchema.partial()
-export type CreateCommentResponseCompat = ReturnType<typeof CreateCommentResponseCompatSchema.parse>
 
 /**
  * PUT /activity/comment returns {} instead of the updated activity record.
@@ -38,7 +37,6 @@ export type CreateCommentResponseCompat = ReturnType<typeof CreateCommentRespons
  * the empty object. The caller must supply fallback values for any field it needs.
  */
 export const UpdateCommentResponseCompatSchema = UpdateCommentResponseSchema.partial()
-export type UpdateCommentResponseCompat = ReturnType<typeof UpdateCommentResponseCompatSchema.parse>
 
 /**
  * All column endpoints return `icon` and `color` as absent (undefined) instead of null
@@ -56,13 +54,12 @@ export const ColumnCompatSchema = ColumnSchema.extend({
   icon: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
 })
-export type ColumnCompat = z.infer<typeof ColumnCompatSchema>
 
 /**
  * ListTasksResponseSchema embeds ColumnWithTasksSchema which extends the strict ColumnSchema.
  * Same upstream bug applies: icon/color are absent in column objects returned by GET /task/tasks/:projectId.
  */
-export const ColumnWithTasksCompatSchema = ColumnCompatSchema.extend({
+const ColumnWithTasksCompatSchema = ColumnCompatSchema.extend({
   tasks: z.array(ListTaskSchema),
 })
 
@@ -73,7 +70,6 @@ export const ListTasksResponseCompatSchema = z.object({
   archivedTasks: z.array(ListTaskSchema),
   plannedTasks: z.array(ListTaskSchema),
 })
-export type ListTasksResponseCompat = z.infer<typeof ListTasksResponseCompatSchema>
 
 /**
  * GET /search returns a flat { results, totalCount, searchQuery } structure, not the
@@ -84,7 +80,7 @@ export type ListTasksResponseCompat = z.infer<typeof ListTasksResponseCompatSche
  * Note: task number is exposed as `taskNumber`, not `number`.
  * Upstream source: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/search/controllers/global-search.ts
  */
-export const SearchResultItemSchema = z.object({
+const SearchResultItemSchema = z.object({
   id: z.string(),
   type: z.enum(['task', 'project', 'workspace', 'comment', 'activity']),
   title: z.string(),
@@ -109,6 +105,3 @@ export const GlobalSearchResponseCompatSchema = z.object({
   totalCount: z.number(),
   searchQuery: z.string(),
 })
-
-export type SearchResultItem = z.infer<typeof SearchResultItemSchema>
-export type GlobalSearchResponseCompat = z.infer<typeof GlobalSearchResponseCompatSchema>

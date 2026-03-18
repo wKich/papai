@@ -3,11 +3,8 @@ import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { type TaskRelation } from './frontmatter.js'
 import { KaneoClient } from './kaneo-client.js'
-import type { Task as GetTaskResponse } from './schemas/getTask.js'
 
 const log = logger.child({ scope: 'kaneo:get-task' })
-
-export type KaneoTaskResponse = GetTaskResponse
 
 export interface TaskDetails {
   id: string

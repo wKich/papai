@@ -15,6 +15,3 @@ export const UserSchema = BaseEntitySchema.extend({
 export const UserReferenceSchema = BaseEntitySchema.extend({
   login: z.string(),
 })
-
-export type User = z.infer<typeof UserSchema>
-export type UserReference = z.infer<typeof UserReferenceSchema>

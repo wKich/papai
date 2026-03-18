@@ -1,12 +1,11 @@
 import { z } from 'zod'
 
-import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
-import { CreateTaskResponseSchema } from './schemas/createTask.js'
+import { TaskSchema } from './schemas/createTask.js'
 import { denormalizeStatus } from './task-status.js'
 
 // Local schema for task with projectId (for update responses)
-const TaskWithProjectIdSchema = CreateTaskResponseSchema
+const TaskWithProjectIdSchema = TaskSchema
 
 const FullTaskSchema = TaskWithProjectIdSchema.extend({
   position: z.number(),
@@ -89,8 +88,4 @@ export async function performUpdate(
     task.status = await denormalizeStatus(config, task.projectId, task.status)
   }
   return task
-}
-
-export function classifyUpdateError(error: unknown): Error {
-  return classifyKaneoError(error)
 }

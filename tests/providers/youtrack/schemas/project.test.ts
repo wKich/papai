@@ -4,7 +4,6 @@ import { describe, expect, test } from 'bun:test'
 import {
   ProjectSchema,
   CreateProjectRequestSchema,
-  CreateProjectResponseSchema,
   ListProjectsRequestSchema,
 } from '../../../../src/providers/youtrack/schemas/project.js'
 
@@ -31,14 +30,14 @@ describe('Project schemas', () => {
     expect(result.shortName).toBe('NP')
   })
 
-  test('CreateProjectResponseSchema validates response', () => {
+  test('ProjectSchema validates response (same shape as create response)', () => {
     const valid = {
       id: '0-0',
       $type: 'Project',
       name: 'New Project',
       shortName: 'NP',
     }
-    expect(() => CreateProjectResponseSchema.parse(valid)).not.toThrow()
+    expect(() => ProjectSchema.parse(valid)).not.toThrow()
   })
 
   test('ListProjectsRequestSchema validates with query', () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 // Enums
-export const ActivityTypeEnum = z.enum([
+const ActivityTypeEnum = z.enum([
   'comment',
   'task',
   'status_changed',
@@ -13,11 +13,6 @@ export const ActivityTypeEnum = z.enum([
   'description_changed',
   'create',
 ])
-
-// Path parameters schema
-export const GetActivitiesPathParamsSchema = z.object({
-  taskId: z.string(),
-})
 
 // Activity item schema
 export const ActivityItemSchema = z.object({
@@ -36,6 +31,4 @@ export const ActivityItemSchema = z.object({
 // Response schema (array of activities)
 export const GetActivitiesResponseSchema = z.array(ActivityItemSchema)
 
-export type GetActivitiesPathParams = z.infer<typeof GetActivitiesPathParamsSchema>
 export type ActivityItem = z.infer<typeof ActivityItemSchema>
-export type GetActivitiesResponse = z.infer<typeof GetActivitiesResponseSchema>

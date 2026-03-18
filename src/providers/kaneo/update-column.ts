@@ -8,7 +8,7 @@ import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:update-column' })
 
-export type UpdateColumnResponse = z.infer<typeof ColumnCompatSchema>
+type UpdateColumnResponse = z.infer<typeof ColumnCompatSchema>
 
 export async function updateColumn({
   config,

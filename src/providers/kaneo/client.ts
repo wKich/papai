@@ -15,8 +15,6 @@ export type KaneoConfig = {
   sessionCookie?: string
 }
 
-export { KaneoApiError, KaneoValidationError } from './errors.js'
-
 function buildUrl(config: KaneoConfig, path: string, query?: Record<string, string>): URL {
   const url = new URL(`${config.baseUrl}/api${path}`)
   if (query !== undefined) {
@@ -92,7 +90,7 @@ export async function kaneoFetch<T>(
 }
 
 // Re-export schemas for backward compatibility
-export { CreateTaskResponseSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
+export { TaskSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
 export { CreateProjectResponseSchema as KaneoProjectSchema } from './schemas/create-project.js'
 export { GetProjectResponseSchema as KaneoProjectFullSchema } from './schemas/get-project.js'
 export { CreateLabelResponseSchema as KaneoLabelSchema } from './schemas/createLabel.js'

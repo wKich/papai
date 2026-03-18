@@ -7,7 +7,7 @@ import { type CreateLabelResponse } from './schemas/createLabel.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 
-export type KaneoLabel = CreateLabelResponse
+type KaneoLabel = CreateLabelResponse
 
 export async function updateLabel({
   config,

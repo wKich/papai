@@ -9,7 +9,7 @@ import {
   updateRelation,
   type TaskRelation,
 } from './frontmatter.js'
-import { GetTaskResponseSchema } from './schemas/getTask.js'
+import { TaskSchema as GetTaskResponseSchema } from './schemas/getTask.js'
 
 const log = logger.child({ scope: 'kaneo:task-relations' })
 
