@@ -4,9 +4,7 @@ import { join } from 'path'
 
 import { $ } from 'bun'
 
-const SEMGREP_VERSION = '1.138.0'
 const SEMGREP_DIR = join(process.cwd(), '.semgrep')
-const SEMGREP_BIN = join(SEMGREP_DIR, 'bin', 'semgrep')
 
 interface RunOptions {
   ci: boolean
@@ -21,51 +19,26 @@ function parseArgs(): RunOptions {
   }
 }
 
-async function downloadSemgrep(): Promise<void> {
-  console.log('📦 Downloading Semgrep...')
-
-  const platform = process.platform
-  const arch = process.arch
-
-  let binaryName: string
-  if (platform === 'darwin') {
-    binaryName = arch === 'arm64' ? 'semgrep-osx-arm64' : 'semgrep-osx-x86_64'
-  } else if (platform === 'linux') {
-    binaryName = arch === 'arm64' ? 'semgrep-manylinux2014_aarch64' : 'semgrep-manylinux2014_x86_64'
-  } else {
-    throw new Error(`Unsupported platform: ${platform}`)
-  }
-
-  const url = `https://github.com/semgrep/semgrep/releases/download/v${SEMGREP_VERSION}/${binaryName}`
-
-  const binDir = join(SEMGREP_DIR, 'bin')
-  await $`mkdir -p ${binDir}`
-  await $`curl -L -o ${SEMGREP_BIN} ${url}`
-  await $`chmod +x ${SEMGREP_BIN}`
-
-  console.log('✅ Semgrep downloaded successfully')
+async function installSemgrep(): Promise<void> {
+  console.log('📦 Installing Semgrep via pip...')
+  await $`python3 -m pip install semgrep --quiet`
+  console.log('✅ Semgrep installed successfully')
 }
 
 async function ensureSemgrep(): Promise<string> {
-  // Check if semgrep is in PATH
-  try {
-    const whichResult = await $`which semgrep`.nothrow().quiet()
-    if (whichResult.exitCode === 0) {
-      const result = await $`semgrep --version`.text()
-      console.log(`✅ Using system Semgrep: ${result.trim()}`)
-      return 'semgrep'
-    }
-  } catch {
-    // Not in PATH
+  // Check if semgrep is already in PATH
+  const whichResult = await $`which semgrep`.nothrow().quiet()
+  if (whichResult.exitCode === 0) {
+    const result = await $`semgrep --version`.text()
+    console.log(`✅ Using system Semgrep: ${result.trim()}`)
+    return 'semgrep'
   }
 
-  // Check local binary
-  if (!existsSync(SEMGREP_BIN)) {
-    await downloadSemgrep()
-  }
-  const result = await $`${SEMGREP_BIN} --version`.text()
-  console.log(`✅ Using local Semgrep: ${result.trim()}`)
-  return SEMGREP_BIN
+  // Not found — install via pip
+  await installSemgrep()
+  const result = await $`semgrep --version`.text()
+  console.log(`✅ Installed Semgrep: ${result.trim()}`)
+  return 'semgrep'
 }
 
 async function cloneAIRules(): Promise<string> {

@@ -43,13 +43,10 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install
-      - name: Clone AI best practices rules
-        run: |
-          git clone --depth 1 https://github.com/semgrep/ai-best-practices.git /tmp/ai-best-practices
+      - name: Install Semgrep
+        run: python3 -m pip install semgrep --quiet
       - name: Run Semgrep security scan
         run: bun run security:ci
-        env:
-          SEMGREP_RULES: '/tmp/ai-best-practices/rules/'
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always() && hashFiles('semgrep-results.sarif') != ''

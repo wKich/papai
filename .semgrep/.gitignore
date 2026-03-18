@@ -1,6 +1,3 @@
-# Downloaded semgrep binary
-bin/
-
 # Temporary rule clones
 ai-best-practices/
 
