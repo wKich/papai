@@ -15,6 +15,19 @@ papai is a Telegram bot that manages Kaneo tasks via LLM tool-calling. A user se
 
 No build step; Bun runs TypeScript directly.
 
+## Security
+
+- `bun run security` — run Semgrep security scan locally
+- `bun run security:ci` — run scan with JSON/SARIF output for CI
+
+Security scans check for:
+
+- OWASP Top 10 vulnerabilities
+- TypeScript/JavaScript best practices
+- AI/LLM-specific security issues (hardcoded API keys, prompt injection, etc.)
+
+The scan runs automatically in CI on every PR and push to master.
+
 ## Required Environment Variables
 
 Copy `.env.example` to `.env`. Only two are required at startup (validated in `src/index.ts`):

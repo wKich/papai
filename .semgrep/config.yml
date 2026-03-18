@@ -1,0 +1,21 @@
+rules:
+  # General security rules from Semgrep Registry
+  - config: p/owasp-top-ten
+  - config: p/typescript
+  - config: p/javascript
+
+# Scan settings
+scan:
+  strict: true
+  error: true
+  json: false
+
+# Exclude patterns
+exclude:
+  - tests/
+  - node_modules/
+  - .git/
+  - dist/
+  - '*.test.ts'
+  - '*.spec.ts'
+  - '.semgrep/bin/'

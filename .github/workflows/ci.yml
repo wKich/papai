@@ -20,6 +20,19 @@ jobs:
       - name: Check formatting
         run: bun run format:check
 
+  knip:
+    name: Knip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+      - name: Check for unused dependencies and exports
+        run: bun run knip
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -32,6 +45,26 @@ jobs:
         run: bun install
       - name: Lint
         run: bun run lint
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+      - name: Install Semgrep
+        run: python3 -m pip install semgrep --quiet
+      - name: Run Semgrep security scan
+        run: bun run security:ci
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('semgrep-results.sarif') != ''
+        with:
+          sarif_file: semgrep-results.sarif
 
   typecheck:
     name: Type Check
