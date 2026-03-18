@@ -64,7 +64,7 @@ describe('YouTrackProvider', () => {
       expect(provider.capabilities.has('projects.crud')).toBe(true)
       expect(provider.capabilities.has('comments.crud')).toBe(true)
       expect(provider.capabilities.has('labels.crud')).toBe(true)
-      expect(provider.capabilities.has('columns.crud')).toBe(false)
+      expect(provider.capabilities.has('statuses.crud')).toBe(false)
       expect(provider.capabilities.has('tasks.archive')).toBe(false)
     })
 

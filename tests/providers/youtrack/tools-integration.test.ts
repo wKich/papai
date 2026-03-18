@@ -7,7 +7,7 @@ import { createMockProvider } from '../../tools/mock-provider.js'
 describe('YouTrack provider tools integration', () => {
   test('makeTools generates correct tool set for YouTrack capabilities', () => {
     // YouTrack supports: tasks.delete, tasks.relations, projects.crud, comments.crud, labels.crud
-    // YouTrack does NOT support: tasks.archive, columns.crud
+    // YouTrack does NOT support: tasks.archive, statuses.crud
     const youtrackCapabilities = new Set([
       'tasks.delete',
       'tasks.relations',
@@ -48,12 +48,12 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('update_task_relation')
     expect(toolNames).toContain('remove_task_relation')
 
-    // Column tools should NOT be present (YouTrack doesn't support columns.crud)
-    expect(toolNames).not.toContain('list_columns')
-    expect(toolNames).not.toContain('create_column')
-    expect(toolNames).not.toContain('update_column')
-    expect(toolNames).not.toContain('delete_column')
-    expect(toolNames).not.toContain('reorder_columns')
+    // Status tools should NOT be present (YouTrack doesn't support statuses.crud)
+    expect(toolNames).not.toContain('list_statuses')
+    expect(toolNames).not.toContain('create_status')
+    expect(toolNames).not.toContain('update_status')
+    expect(toolNames).not.toContain('delete_status')
+    expect(toolNames).not.toContain('reorder_statuses')
 
     // Archive tool should NOT be present (YouTrack doesn't support tasks.archive)
     expect(toolNames).not.toContain('archive_task')

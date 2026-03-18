@@ -6,28 +6,28 @@ import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
-import { makeCreateColumnTool } from './create-column.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
+import { makeCreateStatusTool } from './create-status.js'
 import { makeCreateTaskTool } from './create-task.js'
-import { makeDeleteColumnTool } from './delete-column.js'
+import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
-import { makeListColumnsTool } from './list-columns.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListProjectsTool } from './list-projects.js'
+import { makeListStatusesTool } from './list-statuses.js'
 import { makeListTasksTool } from './list-tasks.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
-import { makeReorderColumnsTool } from './reorder-columns.js'
+import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeSearchTasksTool } from './search-tasks.js'
-import { makeUpdateColumnTool } from './update-column.js'
 import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
+import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
@@ -84,13 +84,13 @@ function maybeAddRelationTools(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
-function maybeAddColumnTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('columns.crud')) {
-    tools['list_columns'] = makeListColumnsTool(provider)
-    tools['create_column'] = makeCreateColumnTool(provider)
-    tools['update_column'] = makeUpdateColumnTool(provider)
-    tools['delete_column'] = makeDeleteColumnTool(provider)
-    tools['reorder_columns'] = makeReorderColumnsTool(provider)
+function maybeAddStatusTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('statuses.crud')) {
+    tools['list_statuses'] = makeListStatusesTool(provider)
+    tools['create_status'] = makeCreateStatusTool(provider)
+    tools['update_status'] = makeUpdateStatusTool(provider)
+    tools['delete_status'] = makeDeleteStatusTool(provider)
+    tools['reorder_statuses'] = makeReorderStatusesTool(provider)
   }
 }
 
@@ -107,7 +107,7 @@ export function makeTools(provider: TaskProvider): ToolSet {
   maybeAddCommentTools(tools, provider)
   maybeAddLabelTools(tools, provider)
   maybeAddRelationTools(tools, provider)
-  maybeAddColumnTools(tools, provider)
+  maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
   return tools
 }

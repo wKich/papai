@@ -65,7 +65,7 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'projects.crud',
   'comments.crud',
   'labels.crud',
-  'columns.crud',
+  'statuses.crud',
 ])
 
 const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [
@@ -253,30 +253,30 @@ export class KaneoProvider implements TaskProvider {
     const result = await removeTaskRelation({ config: this.config, taskId, relatedTaskId })
     return { taskId: result.taskId, relatedTaskId: result.relatedTaskId }
   }
-  async listColumns(projectId: string): Promise<Column[]> {
+  async listStatuses(projectId: string): Promise<Column[]> {
     const results = await listColumns({ config: this.config, projectId })
     return results.map(mapColumn)
   }
-  async createColumn(
+  async createStatus(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column> {
     const result = await createColumn({ config: this.config, projectId, ...params })
     return mapColumn(result)
   }
-  async updateColumn(
-    columnId: string,
+  async updateStatus(
+    statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column> {
-    const result = await updateColumn({ config: this.config, columnId, ...params })
+    const result = await updateColumn({ config: this.config, columnId: statusId, ...params })
     return mapColumn(result)
   }
-  async deleteColumn(columnId: string): Promise<{ id: string }> {
-    const result = await deleteColumn({ config: this.config, columnId })
+  async deleteStatus(statusId: string): Promise<{ id: string }> {
+    const result = await deleteColumn({ config: this.config, columnId: statusId })
     return { id: result.id }
   }
-  async reorderColumns(projectId: string, columns: { id: string; position: number }[]): Promise<void> {
-    await reorderColumns({ config: this.config, projectId, columns })
+  async reorderStatuses(projectId: string, statuses: { id: string; position: number }[]): Promise<void> {
+    await reorderColumns({ config: this.config, projectId, columns: statuses })
   }
   buildTaskUrl(taskId: string, projectId?: string): string {
     return buildTaskUrl(this.config.baseUrl, this.workspaceId, projectId ?? '', taskId)

@@ -9,7 +9,7 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'projects.crud',
   'comments.crud',
   'labels.crud',
-  'columns.crud',
+  'statuses.crud',
 ])
 
 /** Create a mock TaskProvider with all methods stubbed. Override specific methods as needed. */
@@ -42,11 +42,11 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     addRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' })),
     updateRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' })),
     removeRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2' })),
-    listColumns: mock(() => Promise.resolve([])),
-    createColumn: mock(() => Promise.resolve({ id: 'col-1', name: 'Test' })),
-    updateColumn: mock(() => Promise.resolve({ id: 'col-1', name: 'Test' })),
-    deleteColumn: mock(() => Promise.resolve({ id: 'col-1' })),
-    reorderColumns: mock(() => Promise.resolve()),
+    listStatuses: mock(() => Promise.resolve([])),
+    createStatus: mock(() => Promise.resolve({ id: 'status-1', name: 'Test' })),
+    updateStatus: mock(() => Promise.resolve({ id: 'status-1', name: 'Test' })),
+    deleteStatus: mock(() => Promise.resolve({ id: 'status-1' })),
+    reorderStatuses: mock(() => Promise.resolve()),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),
     classifyError: mock(() => ({

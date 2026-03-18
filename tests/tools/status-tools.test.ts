@@ -1,21 +1,21 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { makeCreateColumnTool } from '../../src/tools/create-column.js'
-import { makeDeleteColumnTool } from '../../src/tools/delete-column.js'
-import { makeListColumnsTool } from '../../src/tools/list-columns.js'
-import { makeReorderColumnsTool } from '../../src/tools/reorder-columns.js'
-import { makeUpdateColumnTool } from '../../src/tools/update-column.js'
+import { makeCreateStatusTool } from '../../src/tools/create-status.js'
+import { makeDeleteStatusTool } from '../../src/tools/delete-status.js'
+import { makeListStatusesTool } from '../../src/tools/list-statuses.js'
+import { makeReorderStatusesTool } from '../../src/tools/reorder-statuses.js'
+import { makeUpdateStatusTool } from '../../src/tools/update-status.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
-interface ColumnItem {
+interface StatusItem {
   id: string
   name: string
   color?: string | null
   isFinal?: boolean
 }
 
-function isColumnItem(item: unknown): item is ColumnItem {
+function isStatusItem(item: unknown): item is StatusItem {
   return (
     item !== null &&
     typeof item === 'object' &&
@@ -26,25 +26,25 @@ function isColumnItem(item: unknown): item is ColumnItem {
   )
 }
 
-function isColumnArray(val: unknown): val is ColumnItem[] {
-  return Array.isArray(val) && val.every(isColumnItem)
+function isStatusArray(val: unknown): val is StatusItem[] {
+  return Array.isArray(val) && val.every(isStatusItem)
 }
 
-describe('Column Tools', () => {
+describe('Status Tools', () => {
   beforeEach(() => {
     mock.restore()
   })
 
-  describe('makeListColumnsTool', () => {
+  describe('makeListStatusesTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeListColumnsTool(provider)
-      expect(tool.description).toContain('List all status columns')
+      const tool = makeListStatusesTool(provider)
+      expect(tool.description).toContain('List all statuses')
     })
 
-    test('lists all columns in project', async () => {
+    test('lists all statuses in project', async () => {
       const provider = createMockProvider({
-        listColumns: mock(() =>
+        listStatuses: mock(() =>
           Promise.resolve([
             { id: 'col-1', name: 'todo' },
             { id: 'col-2', name: 'in-progress' },
@@ -53,10 +53,10 @@ describe('Column Tools', () => {
         ),
       })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
-      if (!isColumnArray(result)) throw new Error('Invalid result')
+      if (!isStatusArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(3)
       expect(result[0]?.name).toBe('todo')
@@ -64,12 +64,12 @@ describe('Column Tools', () => {
       expect(result[2]?.name).toBe('done')
     })
 
-    test('returns empty array when no columns', async () => {
+    test('returns empty array when no statuses', async () => {
       const provider = createMockProvider({
-        listColumns: mock(() => Promise.resolve([])),
+        listStatuses: mock(() => Promise.resolve([])),
       })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'empty-proj' }, { toolCallId: '1', messages: [] })
       if (!Array.isArray(result)) throw new Error('Invalid result')
@@ -78,22 +78,22 @@ describe('Column Tools', () => {
     })
 
     test('includes projectId in list call', async () => {
-      const listColumns = mock((_projectId: string) => Promise.resolve([]))
-      const provider = createMockProvider({ listColumns })
+      const listStatuses = mock((_projectId: string) => Promise.resolve([]))
+      const provider = createMockProvider({ listStatuses })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ projectId: 'proj-123' }, { toolCallId: '1', messages: [] })
 
-      expect(listColumns).toHaveBeenCalledWith('proj-123')
+      expect(listStatuses).toHaveBeenCalledWith('proj-123')
     })
 
     test('propagates project not found error', async () => {
       const provider = createMockProvider({
-        listColumns: mock((): Promise<never> => Promise.reject(new Error('Project not found'))),
+        listStatuses: mock((): Promise<never> => Promise.reject(new Error('Project not found'))),
       })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       const promise: Promise<unknown> = getToolExecutor(tool)(
         { projectId: 'invalid' },
         { toolCallId: '1', messages: [] },
@@ -108,10 +108,10 @@ describe('Column Tools', () => {
 
     test('propagates API errors', async () => {
       const provider = createMockProvider({
-        listColumns: mock(() => Promise.reject(new Error('API Error'))),
+        listStatuses: mock(() => Promise.reject(new Error('API Error'))),
       })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       const promise: Promise<unknown> = getToolExecutor(tool)(
         { projectId: 'proj-1' },
         { toolCallId: '1', messages: [] },
@@ -126,13 +126,13 @@ describe('Column Tools', () => {
 
     test('validates projectId is required', () => {
       const provider = createMockProvider()
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       expect(schemaValidates(tool, {})).toBe(false)
     })
 
-    test('returns columns with correct structure', async () => {
+    test('returns statuses with correct structure', async () => {
       const provider = createMockProvider({
-        listColumns: mock(() =>
+        listStatuses: mock(() =>
           Promise.resolve([
             { id: 'col-1', name: 'Backlog' },
             { id: 'col-2', name: 'In Progress' },
@@ -142,29 +142,29 @@ describe('Column Tools', () => {
         ),
       })
 
-      const tool = makeListColumnsTool(provider)
+      const tool = makeListStatusesTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
-      if (!isColumnArray(result)) throw new Error('Invalid result')
+      if (!isStatusArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(4)
-      for (const column of result) {
-        expect(column).toHaveProperty('id')
-        expect(column).toHaveProperty('name')
+      for (const status of result) {
+        expect(status).toHaveProperty('id')
+        expect(status).toHaveProperty('name')
       }
     })
   })
 
-  describe('makeCreateColumnTool', () => {
+  describe('makeCreateStatusTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeCreateColumnTool(provider)
-      expect(tool.description).toContain('Create a new status column')
+      const tool = makeCreateStatusTool(provider)
+      expect(tool.description).toContain('Create a new status')
     })
 
-    test('creates column with required fields', async () => {
+    test('creates status with required fields', async () => {
       const provider = createMockProvider({
-        createColumn: mock(() =>
+        createStatus: mock(() =>
           Promise.resolve({
             id: 'col-new',
             name: 'In Progress',
@@ -172,20 +172,20 @@ describe('Column Tools', () => {
         ),
       })
 
-      const tool = makeCreateColumnTool(provider)
+      const tool = makeCreateStatusTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { projectId: 'proj-1', name: 'In Progress' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isColumnItem(result)) throw new Error('Invalid result')
+      if (!isStatusItem(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('col-new')
       expect(result.name).toBe('In Progress')
     })
 
-    test('creates column with all optional fields', async () => {
-      const createColumn = mock(
+    test('creates status with all optional fields', async () => {
+      const createStatus = mock(
         (_projectId: string, params: { name: string; icon?: string; color?: string; isFinal?: boolean }) =>
           Promise.resolve({
             id: 'col-new',
@@ -193,16 +193,16 @@ describe('Column Tools', () => {
             isFinal: params.isFinal,
           }),
       )
-      const provider = createMockProvider({ createColumn })
+      const provider = createMockProvider({ createStatus })
 
-      const tool = makeCreateColumnTool(provider)
+      const tool = makeCreateStatusTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         { projectId: 'proj-1', name: 'Done', icon: 'check', color: '#00ff00', isFinal: true },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(createColumn).toHaveBeenCalledWith('proj-1', {
+      expect(createStatus).toHaveBeenCalledWith('proj-1', {
         name: 'Done',
         icon: 'check',
         color: '#00ff00',
@@ -212,10 +212,10 @@ describe('Column Tools', () => {
 
     test('propagates API errors', async () => {
       const provider = createMockProvider({
-        createColumn: mock(() => Promise.reject(new Error('API Error'))),
+        createStatus: mock(() => Promise.reject(new Error('API Error'))),
       })
 
-      const tool = makeCreateColumnTool(provider)
+      const tool = makeCreateStatusTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'proj-1', name: 'Test' }, { toolCallId: '1', messages: [] })
       expect(promise).rejects.toThrow('API Error')
       try {
@@ -227,27 +227,27 @@ describe('Column Tools', () => {
 
     test('validates projectId is required', () => {
       const provider = createMockProvider()
-      const tool = makeCreateColumnTool(provider)
+      const tool = makeCreateStatusTool(provider)
       expect(schemaValidates(tool, { name: 'Test' })).toBe(false)
     })
 
     test('validates name is required', () => {
       const provider = createMockProvider()
-      const tool = makeCreateColumnTool(provider)
+      const tool = makeCreateStatusTool(provider)
       expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
   })
 
-  describe('makeUpdateColumnTool', () => {
+  describe('makeUpdateStatusTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeUpdateColumnTool(provider)
-      expect(tool.description).toContain('Update an existing status column')
+      const tool = makeUpdateStatusTool(provider)
+      expect(tool.description).toContain('Update an existing status')
     })
 
-    test('updates column name', async () => {
+    test('updates status name', async () => {
       const provider = createMockProvider({
-        updateColumn: mock(() =>
+        updateStatus: mock(() =>
           Promise.resolve({
             id: 'col-1',
             name: 'Updated Name',
@@ -255,37 +255,37 @@ describe('Column Tools', () => {
         ),
       })
 
-      const tool = makeUpdateColumnTool(provider)
+      const tool = makeUpdateStatusTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
-        { columnId: 'col-1', name: 'Updated Name' },
+        { statusId: 'col-1', name: 'Updated Name' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isColumnItem(result)) throw new Error('Invalid result')
+      if (!isStatusItem(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('col-1')
       expect(result.name).toBe('Updated Name')
     })
 
-    test('updates column with multiple fields', async () => {
-      const updateColumn = mock(
-        (_columnId: string, params: { name?: string; icon?: string; color?: string; isFinal?: boolean }) =>
+    test('updates status with multiple fields', async () => {
+      const updateStatus = mock(
+        (_statusId: string, params: { name?: string; icon?: string; color?: string; isFinal?: boolean }) =>
           Promise.resolve({
             id: 'col-1',
             name: params.name ?? 'Test',
             isFinal: params.isFinal,
           }),
       )
-      const provider = createMockProvider({ updateColumn })
+      const provider = createMockProvider({ updateStatus })
 
-      const tool = makeUpdateColumnTool(provider)
+      const tool = makeUpdateStatusTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
-        { columnId: 'col-1', name: 'Done', color: '#00ff00', isFinal: true },
+        { statusId: 'col-1', name: 'Done', color: '#00ff00', isFinal: true },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(updateColumn).toHaveBeenCalledWith('col-1', {
+      expect(updateStatus).toHaveBeenCalledWith('col-1', {
         name: 'Done',
         icon: undefined,
         color: '#00ff00',
@@ -293,14 +293,14 @@ describe('Column Tools', () => {
       })
     })
 
-    test('propagates column not found error', async () => {
+    test('propagates status not found error', async () => {
       const provider = createMockProvider({
-        updateColumn: mock(() => Promise.reject(new Error('Column not found'))),
+        updateStatus: mock(() => Promise.reject(new Error('Status not found'))),
       })
 
-      const tool = makeUpdateColumnTool(provider)
-      const promise = getToolExecutor(tool)({ columnId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Column not found')
+      const tool = makeUpdateStatusTool(provider)
+      const promise = getToolExecutor(tool)({ statusId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('Status not found')
       try {
         await promise
       } catch {
@@ -308,42 +308,42 @@ describe('Column Tools', () => {
       }
     })
 
-    test('validates columnId is required', () => {
+    test('validates statusId is required', () => {
       const provider = createMockProvider()
-      const tool = makeUpdateColumnTool(provider)
+      const tool = makeUpdateStatusTool(provider)
       expect(schemaValidates(tool, { name: 'Test' })).toBe(false)
     })
 
     test('validates at least one field is provided', () => {
       const provider = createMockProvider()
-      const tool = makeUpdateColumnTool(provider)
-      expect(schemaValidates(tool, { columnId: 'col-1' })).toBe(false)
+      const tool = makeUpdateStatusTool(provider)
+      expect(schemaValidates(tool, { statusId: 'col-1' })).toBe(false)
     })
   })
 
-  describe('makeDeleteColumnTool', () => {
+  describe('makeDeleteStatusTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeDeleteColumnTool(provider)
-      expect(tool.description).toContain('Delete a status column')
+      const tool = makeDeleteStatusTool(provider)
+      expect(tool.description).toContain('Delete a status')
     })
 
-    test('deletes column successfully with high confidence', async () => {
+    test('deletes status successfully with high confidence', async () => {
       const provider = createMockProvider({
-        deleteColumn: mock(() => Promise.resolve({ id: 'col-1' })),
+        deleteStatus: mock(() => Promise.resolve({ id: 'col-1' })),
       })
 
-      const execute = getToolExecutor(makeDeleteColumnTool(provider))
-      const result: unknown = await execute({ columnId: 'col-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeDeleteStatusTool(provider))
+      const result: unknown = await execute({ statusId: 'col-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
 
       expect(result).toMatchObject({ id: 'col-1' })
     })
 
     test('returns confirmation_required when confidence is below threshold', async () => {
       const provider = createMockProvider()
-      const execute = getToolExecutor(makeDeleteColumnTool(provider))
+      const execute = getToolExecutor(makeDeleteStatusTool(provider))
       const result: unknown = await execute(
-        { columnId: 'col-1', label: 'In Progress', confidence: 0.6 },
+        { statusId: 'col-1', label: 'In Progress', confidence: 0.6 },
         { toolCallId: '1', messages: [] },
       )
 
@@ -360,23 +360,23 @@ describe('Column Tools', () => {
 
     test('executes when confidence exactly meets threshold (0.85)', async () => {
       const provider = createMockProvider({
-        deleteColumn: mock(() => Promise.resolve({ id: 'col-1' })),
+        deleteStatus: mock(() => Promise.resolve({ id: 'col-1' })),
       })
 
-      const execute = getToolExecutor(makeDeleteColumnTool(provider))
-      const result: unknown = await execute({ columnId: 'col-1', confidence: 0.85 }, { toolCallId: '1', messages: [] })
+      const execute = getToolExecutor(makeDeleteStatusTool(provider))
+      const result: unknown = await execute({ statusId: 'col-1', confidence: 0.85 }, { toolCallId: '1', messages: [] })
 
       expect(result).toMatchObject({ id: 'col-1' })
     })
 
-    test('propagates column not found error', async () => {
+    test('propagates status not found error', async () => {
       const provider = createMockProvider({
-        deleteColumn: mock(() => Promise.reject(new Error('Column not found'))),
+        deleteStatus: mock(() => Promise.reject(new Error('Status not found'))),
       })
 
-      const tool = makeDeleteColumnTool(provider)
-      const promise = getToolExecutor(tool)({ columnId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Column not found')
+      const tool = makeDeleteStatusTool(provider)
+      const promise = getToolExecutor(tool)({ statusId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('Status not found')
       try {
         await promise
       } catch {
@@ -384,32 +384,32 @@ describe('Column Tools', () => {
       }
     })
 
-    test('validates columnId is required', () => {
+    test('validates statusId is required', () => {
       const provider = createMockProvider()
-      const tool = makeDeleteColumnTool(provider)
+      const tool = makeDeleteStatusTool(provider)
       expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
     })
   })
 
-  describe('makeReorderColumnsTool', () => {
+  describe('makeReorderStatusesTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeReorderColumnsTool(provider)
-      expect(tool.description).toContain('Reorder status columns')
+      const tool = makeReorderStatusesTool(provider)
+      expect(tool.description).toContain('Reorder statuses')
     })
 
-    test('reorders columns successfully', async () => {
-      const reorderColumns = mock((_projectId: string, _columns: { id: string; position: number }[]) =>
+    test('reorders statuses successfully', async () => {
+      const reorderStatuses = mock((_projectId: string, _statuses: { id: string; position: number }[]) =>
         Promise.resolve(),
       )
-      const provider = createMockProvider({ reorderColumns })
+      const provider = createMockProvider({ reorderStatuses })
 
-      const tool = makeReorderColumnsTool(provider)
+      const tool = makeReorderStatusesTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
           projectId: 'proj-1',
-          columns: [
+          statuses: [
             { id: 'col-2', position: 0 },
             { id: 'col-1', position: 1 },
             { id: 'col-3', position: 2 },
@@ -418,7 +418,7 @@ describe('Column Tools', () => {
         { toolCallId: '1', messages: [] },
       )
 
-      expect(reorderColumns).toHaveBeenCalledWith('proj-1', [
+      expect(reorderStatuses).toHaveBeenCalledWith('proj-1', [
         { id: 'col-2', position: 0 },
         { id: 'col-1', position: 1 },
         { id: 'col-3', position: 2 },
@@ -427,14 +427,14 @@ describe('Column Tools', () => {
 
     test('propagates API errors', async () => {
       const provider = createMockProvider({
-        reorderColumns: mock(() => Promise.reject(new Error('API Error'))),
+        reorderStatuses: mock(() => Promise.reject(new Error('API Error'))),
       })
 
-      const tool = makeReorderColumnsTool(provider)
+      const tool = makeReorderStatusesTool(provider)
       const promise = getToolExecutor(tool)(
         {
           projectId: 'proj-1',
-          columns: [{ id: 'col-1', position: 0 }],
+          statuses: [{ id: 'col-1', position: 0 }],
         },
         { toolCallId: '1', messages: [] },
       )
@@ -448,13 +448,13 @@ describe('Column Tools', () => {
 
     test('validates projectId is required', () => {
       const provider = createMockProvider()
-      const tool = makeReorderColumnsTool(provider)
-      expect(schemaValidates(tool, { columns: [{ id: 'col-1', position: 0 }] })).toBe(false)
+      const tool = makeReorderStatusesTool(provider)
+      expect(schemaValidates(tool, { statuses: [{ id: 'col-1', position: 0 }] })).toBe(false)
     })
 
-    test('validates columns is required', () => {
+    test('validates statuses is required', () => {
       const provider = createMockProvider()
-      const tool = makeReorderColumnsTool(provider)
+      const tool = makeReorderStatusesTool(provider)
       expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
   })

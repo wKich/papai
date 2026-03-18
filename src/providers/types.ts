@@ -13,7 +13,7 @@ export type Capability =
   | 'projects.crud'
   | 'comments.crud'
   | 'labels.crud'
-  | 'columns.crud'
+  | 'statuses.crud'
 
 // --- Common domain types ---
 
@@ -210,23 +210,23 @@ export interface TaskProvider {
 
   removeRelation?(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }>
 
-  // --- Optional: columns.crud ---
+  // --- Optional: statuses.crud ---
 
-  listColumns?(projectId: string): Promise<Column[]>
+  listStatuses?(projectId: string): Promise<Column[]>
 
-  createColumn?(
+  createStatus?(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column>
 
-  updateColumn?(
-    columnId: string,
+  updateStatus?(
+    statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
   ): Promise<Column>
 
-  deleteColumn?(columnId: string): Promise<{ id: string }>
+  deleteStatus?(statusId: string): Promise<{ id: string }>
 
-  reorderColumns?(projectId: string, columns: { id: string; position: number }[]): Promise<void>
+  reorderStatuses?(projectId: string, statuses: { id: string; position: number }[]): Promise<void>
 
   // --- URL builders ---
 
