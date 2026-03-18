@@ -25,7 +25,7 @@ type TaskUpdateParams = {
 /**
  * Single field update for a task
  */
-export function singleFieldUpdate(
+function singleFieldUpdate(
   config: KaneoConfig,
   taskId: string,
   field: string,

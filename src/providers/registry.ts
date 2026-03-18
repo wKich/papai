@@ -5,11 +5,7 @@ import { YouTrackProvider } from './youtrack/index.js'
 
 const log = logger.child({ scope: 'provider:registry' })
 
-export type ProviderName = 'kaneo' | 'youtrack'
-
-const PROVIDER_NAMES = new Set<string>(['kaneo', 'youtrack'])
-
-export type ProviderFactory = (config: Record<string, string>) => TaskProvider
+type ProviderFactory = (config: Record<string, string>) => TaskProvider
 
 const providers = new Map<string, ProviderFactory>()
 
@@ -33,11 +29,6 @@ providers.set('youtrack', (config) => {
   return new YouTrackProvider({ baseUrl, token })
 })
 
-/** Check if a string is a valid provider name. */
-export function isProviderName(name: string): name is ProviderName {
-  return PROVIDER_NAMES.has(name)
-}
-
 /**
  * Create a TaskProvider instance by name.
  *
@@ -54,9 +45,4 @@ export function createProvider(name: string, config: Record<string, string>): Ta
   }
   log.debug({ name }, 'Creating provider instance')
   return factory(config)
-}
-
-/** List all registered provider names. */
-export function listProviders(): string[] {
-  return [...PROVIDER_NAMES]
 }

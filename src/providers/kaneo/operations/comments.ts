@@ -1,7 +1,10 @@
 import type { Comment } from '../../types.js'
-import { addComment, getComments, removeComment, updateComment } from '../api.js'
+import { addComment } from '../add-comment.js'
 import type { KaneoConfig } from '../client.js'
+import { getComments } from '../get-comments.js'
 import { mapComment } from '../mappers.js'
+import { removeComment } from '../remove-comment.js'
+import { updateComment } from '../update-comment.js'
 
 export async function kaneoAddComment(config: KaneoConfig, taskId: string, body: string): Promise<Comment> {
   const result = await addComment({ config, taskId, comment: body })

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { TaskResource } from '../../src/providers/kaneo/index.js'
+import { TaskResource } from '../../src/providers/kaneo/kaneo-client.js'
 import { restoreFetch, setMockFetch, createMockTask, createMockColumn } from '../test-helpers.js'
 
 void mock.module('../../src/providers/kaneo/list-columns.js', () => ({

@@ -5,12 +5,7 @@
  * overwhelming external APIs.
  */
 
-export interface QueueItem<T, R> {
-  item: T
-  processor: (item: T) => Promise<R>
-}
-
-export interface QueueOptions {
+interface QueueOptions {
   /** Delay between operations in ms (for rate limiting) */
   delayMs?: number
 }

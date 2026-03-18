@@ -62,27 +62,3 @@ export const runTrimInBackground = async (userId: number, history: readonly Mode
     log.warn({ userId }, 'LLM config not available for background trim')
   }
 }
-
-export const getOrCreateHistory = (userId: number): readonly ModelMessage[] => {
-  log.debug({ userId }, 'getOrCreateHistory called')
-  const history = getCachedHistory(userId)
-  log.debug({ userId, messageCount: history.length }, 'Conversation history loaded from cache')
-  if (history.length === 0) {
-    log.info({ userId }, 'No existing conversation history')
-  }
-  return history
-}
-
-export const trimAndSummarise = (history: readonly ModelMessage[], userId: number): readonly ModelMessage[] => {
-  log.debug({ userId, historyLength: history.length }, 'trimAndSummarise called (now non-blocking)')
-
-  if (!shouldTriggerTrim(history)) {
-    return history
-  }
-
-  // Run trim in background without blocking
-  void runTrimInBackground(userId, history)
-
-  // Return current history immediately
-  return history
-}

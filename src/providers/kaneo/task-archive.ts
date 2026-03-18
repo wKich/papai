@@ -66,5 +66,3 @@ export async function addArchiveLabel(config: KaneoConfig, workspaceId: string, 
 
   log.info({ taskId, labelId: archiveLabel.id }, 'Archive label added to task')
 }
-
-export { ARCHIVE_LABEL_NAME, ARCHIVE_LABEL_COLOR }

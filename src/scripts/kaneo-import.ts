@@ -5,7 +5,6 @@ import { logger } from '../logger.js'
 import { type KaneoConfig, kaneoFetch } from '../providers/kaneo/client.js'
 import {
   assignLabels,
-  buildRelations,
   CreateColumnBodySchema,
   CreateLabelBodySchema,
   CreateProjectBodySchema,
@@ -22,8 +21,7 @@ import { processWithAccumulator } from './queue.js'
 
 const log = logger.child({ scope: 'kaneo-import' })
 
-export { assignLabels, ensureArchivedLabel, markArchived, importComments, buildRelations, patchRelations }
-export type { KaneoLabel }
+export { ensureArchivedLabel, patchRelations }
 
 // Label schema for API responses
 const KaneoLabelSchemaLocal = z.object({
@@ -60,8 +58,6 @@ const KaneoProjectSchema = z.object({
   name: z.string(),
   slug: z.string(),
 })
-
-export type KaneoProject = z.infer<typeof KaneoProjectSchema>
 
 const LINEAR_PRIORITY_MAP: Record<number, string> = {
   0: 'no-priority',
@@ -101,7 +97,7 @@ async function findOrCreateColumn(
   return column.slug
 }
 
-export interface EnsureColumnsResult {
+interface EnsureColumnsResult {
   stateToColumnId: Map<string, string>
   newCount: number
 }

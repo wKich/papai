@@ -9,14 +9,14 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'memory' })
 
-export type MemoryFact = {
+type MemoryFact = {
   readonly identifier: string
   readonly title: string
   readonly url: string
   readonly last_seen: string
 }
 
-export type ModelConfig = {
+type ModelConfig = {
   readonly apiKey: string
   readonly baseUrl: string
   readonly model: string
@@ -154,7 +154,7 @@ const TrimResultSchema = z.object({
   summary: z.string(),
 })
 
-export type TrimResult = {
+type TrimResult = {
   readonly trimmedMessages: readonly ModelMessage[]
   readonly summary: string
 }

@@ -1,7 +1,13 @@
 import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
-import { archiveTask, createTask, deleteTask, getTask, listTasks, searchTasks, updateTask } from '../api.js'
+import { archiveTask } from '../archive-task.js'
 import type { KaneoConfig } from '../client.js'
+import { createTask } from '../create-task.js'
+import { deleteTask } from '../delete-task.js'
+import { getTask } from '../get-task.js'
+import { listTasks } from '../list-tasks.js'
 import { mapCreateTaskResponse, mapTaskDetails, mapTaskListItem, mapTaskSearchResult } from '../mappers.js'
+import { searchTasks } from '../search-tasks.js'
+import { updateTask } from '../update-task.js'
 import { buildTaskUrl } from '../url-builder.js'
 
 export async function kaneoCreateTask(

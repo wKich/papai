@@ -1,7 +1,12 @@
 import type { Label } from '../../types.js'
-import { addTaskLabel, createLabel, listLabels, removeLabel, removeTaskLabel, updateLabel } from '../api.js'
+import { addTaskLabel } from '../add-task-label.js'
 import type { KaneoConfig } from '../client.js'
+import { createLabel } from '../create-label.js'
+import { listLabels } from '../list-labels.js'
 import { mapLabel } from '../mappers.js'
+import { removeLabel } from '../remove-label.js'
+import { removeTaskLabel } from '../remove-task-label.js'
+import { updateLabel } from '../update-label.js'
 
 export async function kaneoListLabels(config: KaneoConfig, workspaceId: string): Promise<Label[]> {
   const results = await listLabels({ config, workspaceId })

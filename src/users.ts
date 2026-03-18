@@ -4,7 +4,7 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'users' })
 
-export interface UserRecord {
+interface UserRecord {
   telegram_id: number
   username: string | null
   added_at: string

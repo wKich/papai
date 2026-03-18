@@ -95,7 +95,7 @@ const OrgSchema = z.object({
   slug: z.string(),
 })
 
-export interface AuthSession {
+interface AuthSession {
   sessionCookie: string
   userId: string
 }

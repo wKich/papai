@@ -1,6 +1,8 @@
 import type { RelationType } from '../../types.js'
-import { addTaskRelation, removeTaskRelation, updateTaskRelation } from '../api.js'
+import { addTaskRelation } from '../add-task-relation.js'
 import type { KaneoConfig } from '../client.js'
+import { removeTaskRelation } from '../remove-task-relation.js'
+import { updateTaskRelation } from '../update-task-relation.js'
 
 export function kaneoAddRelation(
   config: KaneoConfig,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { ProjectResource } from '../../src/providers/kaneo/index.js'
+import { ProjectResource } from '../../src/providers/kaneo/kaneo-client.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('ProjectResource', () => {

@@ -167,11 +167,6 @@ export function setCachedConfig(userId: number, key: string, value: string): voi
   syncConfigToDb(userId, key, value)
 }
 
-export function getAllCachedConfig(userId: number): Map<string, string | null> {
-  const cache = getOrCreateCache(userId)
-  return new Map(cache.config)
-}
-
 // --- Workspace Cache ---
 
 export function getCachedWorkspace(userId: number): string | null {

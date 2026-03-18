@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from '../../src/providers/kaneo/index.js'
+import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from '../../src/providers/kaneo/task-archive.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('Archive Label Management', () => {

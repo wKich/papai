@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { CommentResource } from '../../src/providers/kaneo/index.js'
+import { CommentResource } from '../../src/providers/kaneo/kaneo-client.js'
 import { restoreFetch, setMockFetch, createMockActivityForList } from '../test-helpers.js'
 
 describe('CommentResource', () => {

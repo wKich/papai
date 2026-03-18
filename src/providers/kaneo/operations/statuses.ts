@@ -1,7 +1,11 @@
 import type { Column } from '../../types.js'
-import { createColumn, deleteColumn, listColumns, reorderColumns, updateColumn } from '../api.js'
 import type { KaneoConfig } from '../client.js'
+import { createColumn } from '../create-column.js'
+import { deleteColumn } from '../delete-column.js'
+import { listColumns } from '../list-columns.js'
 import { mapColumn } from '../mappers.js'
+import { reorderColumns } from '../reorder-columns.js'
+import { updateColumn } from '../update-column.js'
 
 export async function kaneoListStatuses(config: KaneoConfig, projectId: string): Promise<Column[]> {
   const results = await listColumns({ config, projectId })

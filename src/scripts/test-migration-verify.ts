@@ -15,7 +15,7 @@ import {
 
 const log = logger.child({ scope: 'test-migration:verify' })
 
-export interface VerificationResult {
+interface VerificationResult {
   passed: boolean
   checks: Check[]
 }

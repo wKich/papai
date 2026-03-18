@@ -274,8 +274,3 @@ export interface TaskProvider {
   /** Returns provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string
 }
-
-/** Helper to check whether a provider supports a given capability. */
-export function hasCapability(provider: TaskProvider, capability: Capability): boolean {
-  return provider.capabilities.has(capability)
-}

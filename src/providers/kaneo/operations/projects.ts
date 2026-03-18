@@ -1,7 +1,10 @@
 import type { Project } from '../../types.js'
-import { createProject, deleteProject, listProjects, updateProject } from '../api.js'
 import type { KaneoConfig } from '../client.js'
+import { createProject } from '../create-project.js'
+import { deleteProject } from '../delete-project.js'
+import { listProjects } from '../list-projects.js'
 import { mapProject } from '../mappers.js'
+import { updateProject } from '../update-project.js'
 import { buildProjectUrl } from '../url-builder.js'
 
 export async function kaneoListProjects(config: KaneoConfig, workspaceId: string): Promise<Project[]> {

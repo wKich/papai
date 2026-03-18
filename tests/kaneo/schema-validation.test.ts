@@ -17,7 +17,7 @@ import {
   LabelResource,
   CommentResource,
   ColumnResource,
-} from '../../src/providers/kaneo/index.js'
+} from '../../src/providers/kaneo/kaneo-client.js'
 import { CreateTaskResponseSchema } from '../../src/providers/kaneo/schemas/createTask.js'
 import { ActivityItemSchema } from '../../src/providers/kaneo/schemas/getActivities.js'
 import {

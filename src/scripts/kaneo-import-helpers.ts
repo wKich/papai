@@ -21,12 +21,12 @@ export const CreateLabelBodySchema = z.object({
   taskId: z.string().optional(),
 })
 
-export const CreateCommentBodySchema = z.object({
+const CreateCommentBodySchema = z.object({
   taskId: z.string(),
   comment: z.string(),
 })
 
-export const UpdateTaskDescriptionBodySchema = z.object({
+const UpdateTaskDescriptionBodySchema = z.object({
   description: z.string(),
 })
 

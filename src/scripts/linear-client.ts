@@ -84,15 +84,13 @@ export const LinearProjectSchema = z.object({
 
 export type LinearProject = z.infer<typeof LinearProjectSchema>
 
-export const LinearCommentSchema = z.object({
+const LinearCommentSchema = z.object({
   id: z.string(),
   body: z.string(),
   createdAt: z.string(),
 })
 
-export type LinearComment = z.infer<typeof LinearCommentSchema>
-
-export const LinearRelationSchema = z.object({
+const LinearRelationSchema = z.object({
   id: z.string(),
   type: z.string(),
   relatedIssue: z.object({
@@ -100,8 +98,6 @@ export const LinearRelationSchema = z.object({
     identifier: z.string(),
   }),
 })
-
-export type LinearRelation = z.infer<typeof LinearRelationSchema>
 
 const LinearLabelNodeSchema = z.object({ nodes: z.array(LinearLabelSchema) })
 const LinearCommentNodeSchema = z.object({ nodes: z.array(LinearCommentSchema) })

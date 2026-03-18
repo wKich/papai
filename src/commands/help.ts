@@ -4,14 +4,14 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:help' })
 
-export const USER_COMMANDS = [
+const USER_COMMANDS = [
   { command: 'help', description: 'Show available commands' },
   { command: 'set', description: 'Set a config value — /set <key> <value>' },
   { command: 'config', description: 'View current configuration' },
   { command: 'clear', description: 'Clear conversation history and memory' },
 ] as const
 
-export const ADMIN_COMMANDS = [
+const ADMIN_COMMANDS = [
   { command: 'context', description: 'Show current memory context (summary and known entities)' },
   { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
   { command: 'users', description: 'List authorized users' },
