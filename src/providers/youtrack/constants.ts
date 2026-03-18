@@ -32,21 +32,24 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   // Tasks
   'tasks.delete',
   'tasks.relations',
-  // Projects (YouTrack supports list and archive only)
+  // Projects (full CRUD)
+  'projects.read',
   'projects.list',
+  'projects.create',
+  'projects.update',
   'projects.archive',
-  // Comments (YouTrack does not support delete)
+  // Comments (full CRUD)
   'comments.read',
   'comments.create',
   'comments.update',
-  // Labels
+  'comments.delete',
+  // Labels (full CRUD + assignment)
   'labels.list',
   'labels.create',
   'labels.update',
   'labels.delete',
   'labels.assign',
-  // Statuses (YouTrack uses custom fields, not explicit status management)
-  // No status capabilities
+  // Statuses (YouTrack uses State custom fields, not explicit status management)
 ])
 
 export const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

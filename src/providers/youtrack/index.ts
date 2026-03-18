@@ -1,7 +1,5 @@
 import type { AppError } from '../../errors.js'
-import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
-import { ProviderClassifiedError } from '../errors.js'
 import type { Comment, Label, Project, Task, TaskListItem, TaskProvider, TaskSearchResult } from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig, youtrackFetch } from './client.js'
@@ -129,6 +127,20 @@ export class YouTrackProvider implements TaskProvider {
     return { id: taskId }
   }
 
+  async getProject(projectId: string): Promise<Project> {
+    log.debug({ projectId }, 'getProject')
+    const project = await youtrackFetch<YtProject>(this.config, 'GET', `/api/admin/projects/${projectId}`, {
+      query: { fields: PROJECT_FIELDS },
+    })
+    log.info({ projectId: project.id, name: project.name }, 'Project retrieved')
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
+    }
+  }
+
   async listProjects(): Promise<Project[]> {
     log.debug('listProjects')
     const projects = await youtrackFetch<YtProject[]>(this.config, 'GET', '/api/admin/projects', {
@@ -143,6 +155,49 @@ export class YouTrackProvider implements TaskProvider {
         description: p.description,
         url: `${this.config.baseUrl}/projects/${p.shortName ?? p.id}`,
       }))
+  }
+
+  async createProject(params: { name: string; description?: string }): Promise<Project> {
+    log.debug({ name: params.name }, 'createProject')
+    // Generate shortName from name (first 10 chars, uppercase, no spaces)
+    const shortName = params.name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 10)
+    const body: Record<string, unknown> = {
+      name: params.name,
+      shortName,
+    }
+    if (params.description !== undefined) body['description'] = params.description
+    const project = await youtrackFetch<YtProject>(this.config, 'POST', '/api/admin/projects', {
+      body,
+      query: { fields: PROJECT_FIELDS },
+    })
+    log.info({ projectId: project.id, name: project.name }, 'Project created')
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
+    }
+  }
+
+  async updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
+    log.debug({ projectId, hasName: params.name !== undefined }, 'updateProject')
+    const body: Record<string, unknown> = {}
+    if (params.name !== undefined) body['name'] = params.name
+    if (params.description !== undefined) body['description'] = params.description
+    const project = await youtrackFetch<YtProject>(this.config, 'POST', `/api/admin/projects/${projectId}`, {
+      body,
+      query: { fields: PROJECT_FIELDS },
+    })
+    log.info({ projectId: project.id }, 'Project updated')
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      url: `${this.config.baseUrl}/projects/${project.shortName ?? project.id}`,
+    }
   }
 
   async archiveProject(projectId: string): Promise<{ id: string }> {
@@ -186,9 +241,11 @@ export class YouTrackProvider implements TaskProvider {
     return mapComment(comment)
   }
 
-  removeComment(_commentId: string): Promise<{ id: string }> {
-    const err = providerError.unsupportedOperation('removeComment without taskId')
-    throw new ProviderClassifiedError('removeComment without taskId is not supported by YouTrack', err)
+  async removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
+    log.debug({ taskId: params.taskId, commentId: params.commentId }, 'removeComment')
+    await youtrackFetch(this.config, 'DELETE', `/api/issues/${params.taskId}/comments/${params.commentId}`)
+    log.info({ taskId: params.taskId, commentId: params.commentId }, 'Comment removed')
+    return { id: params.commentId }
   }
 
   listLabels(): Promise<Label[]> {

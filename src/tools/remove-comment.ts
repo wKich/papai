@@ -9,16 +9,17 @@ const log = logger.child({ scope: 'tool:remove-comment' })
 
 export function makeRemoveCommentTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Remove a comment from a Kaneo task.',
+    description: 'Remove a comment from a task.',
     inputSchema: z.object({
-      activityId: z.string().describe('Kaneo activity/comment ID to remove'),
+      taskId: z.string().describe('Task ID containing the comment'),
+      commentId: z.string().describe('Comment ID to remove'),
     }),
-    execute: async ({ activityId }) => {
+    execute: async ({ taskId, commentId }) => {
       try {
-        return await provider.removeComment!(activityId)
+        return await provider.removeComment!({ taskId, commentId })
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), activityId, tool: 'remove_comment' },
+          { error: error instanceof Error ? error.message : String(error), taskId, commentId, tool: 'remove_comment' },
           'Tool execution failed',
         )
         throw error

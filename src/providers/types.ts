@@ -209,7 +209,7 @@ export interface TaskProvider {
 
   updateComment?(params: { taskId: string; commentId: string; body: string }): Promise<Comment>
 
-  removeComment?(commentId: string): Promise<{ id: string }>
+  removeComment?(params: { taskId: string; commentId: string }): Promise<{ id: string }>
 
   // --- Optional: labels.* ---
 

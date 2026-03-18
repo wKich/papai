@@ -223,8 +223,8 @@ export class KaneoProvider implements TaskProvider {
     })
     return mapComment(result)
   }
-  async removeComment(commentId: string): Promise<{ id: string }> {
-    const result = await removeComment({ config: this.config, activityId: commentId })
+  async removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
+    const result = await removeComment({ config: this.config, activityId: params.commentId })
     return { id: result.id }
   }
   async listLabels(): Promise<Label[]> {

@@ -6,23 +6,27 @@ import { createMockProvider } from '../../tools/mock-provider.js'
 
 describe('YouTrack provider tools integration', () => {
   test('makeTools generates correct tool set for YouTrack capabilities', () => {
-    // YouTrack supports granular capabilities:
+    // YouTrack supports full granular capabilities:
     // - tasks: delete, relations
-    // - projects: list, archive (NOT create, update)
-    // - comments: read, create, update (NOT delete)
-    // - labels: list, create, update, delete, assign
+    // - projects: read, list, create, update, archive (full CRUD)
+    // - comments: read, create, update, delete (full CRUD)
+    // - labels: list, create, update, delete, assign (full)
     // YouTrack does NOT support: tasks.archive, statuses.*
     const youtrackCapabilities = new Set<Capability>([
       // Tasks
       'tasks.delete',
       'tasks.relations',
-      // Projects (partial - list and archive only)
+      // Projects (full CRUD)
+      'projects.read',
       'projects.list',
+      'projects.create',
+      'projects.update',
       'projects.archive',
-      // Comments (partial - no delete)
+      // Comments (full CRUD)
       'comments.read',
       'comments.create',
       'comments.update',
+      'comments.delete',
       // Labels (full)
       'labels.list',
       'labels.create',
@@ -46,17 +50,17 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('list_tasks')
     expect(toolNames).toContain('search_tasks')
 
-    // YouTrack-supported project tools (list and archive only, NOT create/update)
+    // YouTrack-supported project tools (full CRUD)
     expect(toolNames).toContain('list_projects')
+    expect(toolNames).toContain('create_project')
+    expect(toolNames).toContain('update_project')
     expect(toolNames).toContain('archive_project')
-    expect(toolNames).not.toContain('create_project')
-    expect(toolNames).not.toContain('update_project')
 
-    // YouTrack-supported comment tools (read, create, update, NOT delete)
+    // YouTrack-supported comment tools (full CRUD)
     expect(toolNames).toContain('add_comment')
     expect(toolNames).toContain('get_comments')
     expect(toolNames).toContain('update_comment')
-    expect(toolNames).not.toContain('remove_comment')
+    expect(toolNames).toContain('remove_comment')
 
     // YouTrack-supported label tools (full support)
     expect(toolNames).toContain('list_labels')
