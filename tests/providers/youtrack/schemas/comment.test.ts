@@ -4,9 +4,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   CommentSchema,
   CreateCommentRequestSchema,
-  ListCommentsRequestSchema,
   UpdateCommentRequestSchema,
-  DeleteCommentRequestSchema,
 } from '../../../../src/providers/youtrack/schemas/comment.js'
 
 describe('Comment schemas', () => {

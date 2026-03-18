@@ -1,7 +1,8 @@
 // src/providers/youtrack/schemas/issue-link.ts
-import { z } from "zod"
-import { BaseEntitySchema, LinkTypeEnum } from "./common.js"
-import { IssueSchema } from "./issue.js"
+import { z } from 'zod'
+
+import { BaseEntitySchema, LinkTypeEnum } from './common.js'
+import { IssueSchema } from './issue.js'
 
 export const IssueLinkTypeSchema = BaseEntitySchema.extend({
   name: LinkTypeEnum,

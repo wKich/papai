@@ -1,6 +1,7 @@
 // src/providers/youtrack/schemas/agile.ts
-import { z } from "zod"
-import { BaseEntitySchema } from "./common.js"
+import { z } from 'zod'
+
+import { BaseEntitySchema } from './common.js'
 
 const ProjectReferenceSchema = BaseEntitySchema
 
