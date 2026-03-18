@@ -26,18 +26,24 @@ async function installSemgrep(): Promise<void> {
 }
 
 async function ensureSemgrep(): Promise<string> {
-  // Check if semgrep is already in PATH
+  // Check if semgrep is already in PATH and functional
   const whichResult = await $`which semgrep`.nothrow().quiet()
   if (whichResult.exitCode === 0) {
-    const result = await $`semgrep --version`.text()
-    console.log(`✅ Using system Semgrep: ${result.trim()}`)
-    return 'semgrep'
+    const versionResult = await $`semgrep --version`.nothrow().quiet()
+    if (versionResult.exitCode === 0) {
+      console.log(`✅ Using system Semgrep: ${versionResult.stdout.toString().trim()}`)
+      return 'semgrep'
+    }
+    console.log('⚠️  System semgrep found but not functional, reinstalling...')
   }
 
-  // Not found — install via pip
+  // Not found or broken — install via pip
   await installSemgrep()
-  const result = await $`semgrep --version`.text()
-  console.log(`✅ Installed Semgrep: ${result.trim()}`)
+  const result = await $`semgrep --version`.nothrow().quiet()
+  if (result.exitCode !== 0) {
+    throw new Error('Semgrep installation failed — could not verify version')
+  }
+  console.log(`✅ Installed Semgrep: ${result.stdout.toString().trim()}`)
   return 'semgrep'
 }
 

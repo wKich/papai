@@ -7,8 +7,8 @@
   // All source files
   "project": ["src/**/*.ts"],
 
-  // git-cliff is installed globally, not a devDependency
-  "ignoreBinaries": ["git-cliff"],
+  // System binaries not managed as npm dependencies
+  "ignoreBinaries": ["git-cliff", "knip-bun", "python3", "semgrep", "which"],
 
   // All issue types treated as hard errors
   "rules": {
