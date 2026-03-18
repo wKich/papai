@@ -20,16 +20,16 @@ const mockFetchResponse = (data: unknown, status = 200): void => {
         headers: { 'Content-Type': 'application/json' },
       }),
     ),
-  ) as typeof fetch
+  ) as unknown as typeof fetch
 }
 
 const mockFetchNoContent = (): void => {
-  globalThis.fetch = mock(() => Promise.resolve(new Response(null, { status: 204 }))) as typeof fetch
+  globalThis.fetch = mock(() => Promise.resolve(new Response(null, { status: 204 }))) as unknown as typeof fetch
 }
 
 /** Helper to extract the request body sent to the mocked fetch. */
 const getLastFetchBody = (): unknown => {
-  const mockFn = globalThis.fetch as ReturnType<typeof mock>
+  const mockFn = globalThis.fetch as unknown as ReturnType<typeof mock>
   const lastCall = mockFn.mock.calls[0] as [string, { body?: string }] | undefined
   if (lastCall?.[1]?.body === undefined) return undefined
   return JSON.parse(lastCall[1].body) as unknown
@@ -37,7 +37,7 @@ const getLastFetchBody = (): unknown => {
 
 /** Helper to extract the URL of the last fetch call. */
 const getLastFetchUrl = (): URL => {
-  const mockFn = globalThis.fetch as ReturnType<typeof mock>
+  const mockFn = globalThis.fetch as unknown as ReturnType<typeof mock>
   const lastCall = mockFn.mock.calls[0] as [string] | undefined
   return new URL(lastCall?.[0] ?? '')
 }

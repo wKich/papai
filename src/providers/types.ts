@@ -41,6 +41,7 @@ export type TaskListItem = {
   status?: string
   priority?: string
   dueDate?: string | null
+  url?: string
 }
 
 /** Minimal task representation for search results. */
@@ -51,6 +52,7 @@ export type TaskSearchResult = {
   status?: string
   priority?: string
   projectId?: string
+  url?: string
 }
 
 export type Project = {

@@ -9,12 +9,12 @@ const log = logger.child({ scope: 'tool:create-task' })
 
 export function makeCreateTaskTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Create a new task in Kaneo. Call list_projects first to get a valid projectId.',
+    description: 'Create a new task. Call list_projects first to get a valid projectId.',
     inputSchema: z.object({
       title: z.string().describe('Short, descriptive task title'),
       description: z.string().optional().describe('Detailed description of the task'),
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('Priority level'),
-      projectId: z.string().describe('Kaneo project ID — call list_projects first to obtain this'),
+      projectId: z.string().describe('Project ID — call list_projects first to obtain this'),
       dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
       status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
     }),

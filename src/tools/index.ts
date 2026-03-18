@@ -11,6 +11,7 @@ import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateTaskTool } from './create-task.js'
 import { makeDeleteColumnTool } from './delete-column.js'
+import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeListColumnsTool } from './list-columns.js'
@@ -30,38 +31,41 @@ import { makeUpdateProjectTool } from './update-project.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
-export function makeTools(provider: TaskProvider): ToolSet {
-  const tools: ToolSet = {
-    // Core task operations — always present
+function makeCoreTools(provider: TaskProvider): ToolSet {
+  return {
     create_task: makeCreateTaskTool(provider),
     update_task: makeUpdateTaskTool(provider),
     search_tasks: makeSearchTasksTool(provider),
     list_tasks: makeListTasksTool(provider),
     get_task: makeGetTaskTool(provider),
   }
+}
 
-  // tasks.archive
+function maybeAddArchiveTool(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('tasks.archive')) {
     tools['archive_task'] = makeArchiveTaskTool(provider)
   }
+}
 
-  // projects.crud
+function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('projects.crud')) {
     tools['list_projects'] = makeListProjectsTool(provider)
     tools['create_project'] = makeCreateProjectTool(provider)
     tools['update_project'] = makeUpdateProjectTool(provider)
     tools['archive_project'] = makeArchiveProjectTool(provider)
   }
+}
 
-  // comments.crud
+function maybeAddCommentTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('comments.crud')) {
     tools['add_comment'] = makeAddCommentTool(provider)
     tools['get_comments'] = makeGetCommentsTool(provider)
     tools['update_comment'] = makeUpdateCommentTool(provider)
     tools['remove_comment'] = makeRemoveCommentTool(provider)
   }
+}
 
-  // labels.crud
+function maybeAddLabelTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('labels.crud')) {
     tools['list_labels'] = makeListLabelsTool(provider)
     tools['create_label'] = makeCreateLabelTool(provider)
@@ -70,15 +74,17 @@ export function makeTools(provider: TaskProvider): ToolSet {
     tools['add_task_label'] = makeAddTaskLabelTool(provider)
     tools['remove_task_label'] = makeRemoveTaskLabelTool(provider)
   }
+}
 
-  // tasks.relations
+function maybeAddRelationTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('tasks.relations')) {
     tools['add_task_relation'] = makeAddTaskRelationTool(provider)
     tools['update_task_relation'] = makeUpdateTaskRelationTool(provider)
     tools['remove_task_relation'] = makeRemoveTaskRelationTool(provider)
   }
+}
 
-  // columns.crud
+function maybeAddColumnTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('columns.crud')) {
     tools['list_columns'] = makeListColumnsTool(provider)
     tools['create_column'] = makeCreateColumnTool(provider)
@@ -86,6 +92,22 @@ export function makeTools(provider: TaskProvider): ToolSet {
     tools['delete_column'] = makeDeleteColumnTool(provider)
     tools['reorder_columns'] = makeReorderColumnsTool(provider)
   }
+}
 
+function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('tasks.delete')) {
+    tools['delete_task'] = makeDeleteTaskTool(provider)
+  }
+}
+
+export function makeTools(provider: TaskProvider): ToolSet {
+  const tools = makeCoreTools(provider)
+  maybeAddArchiveTool(tools, provider)
+  maybeAddProjectTools(tools, provider)
+  maybeAddCommentTools(tools, provider)
+  maybeAddLabelTools(tools, provider)
+  maybeAddRelationTools(tools, provider)
+  maybeAddColumnTools(tools, provider)
+  maybeAddDeleteTool(tools, provider)
   return tools
 }

@@ -227,32 +227,12 @@ const callLlm = async (
   return result
 }
 
-const handleMessageError = async (ctx: Context, userId: number, error: unknown): Promise<void> => {
+const handleMessageError = async (ctx: Context, _userId: number, error: unknown): Promise<void> => {
   if (isAppError(error)) {
-    const userMessage = getUserMessage(error)
-    log.warn({ error: { type: error.type, code: error.code }, userId }, `Handled error: ${error.type}/${error.code}`)
-    await ctx.reply(userMessage)
+    await ctx.reply(getUserMessage(error))
   } else if (APICallError.isInstance(error)) {
-    log.error(
-      {
-        url: error.url,
-        statusCode: error.statusCode,
-        responseBody: error.responseBody,
-        error: error.message,
-        userId,
-      },
-      'LLM API call failed',
-    )
     await ctx.reply('An unexpected error occurred. Please try again later.')
   } else {
-    log.error(
-      {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        userId,
-      },
-      'Unexpected error generating response',
-    )
     await ctx.reply('An unexpected error occurred. Please try again later.')
   }
 }

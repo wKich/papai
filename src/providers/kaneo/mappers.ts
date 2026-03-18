@@ -49,23 +49,25 @@ export const mapTaskDetails = (result: TaskDetails, url: string): Task => ({
 })
 
 /** Map Kaneo task list items to common TaskListItem type. */
-export const mapTaskListItem = (t: KaneoTaskListItem): TaskListItem => ({
+export const mapTaskListItem = (t: KaneoTaskListItem, url?: string): TaskListItem => ({
   id: t.id,
   title: t.title,
   number: t.number,
   status: t.status,
   priority: t.priority,
   dueDate: t.dueDate,
+  url,
 })
 
 /** Map Kaneo search result to common TaskSearchResult type. */
-export const mapTaskSearchResult = (t: TaskResult): TaskSearchResult => ({
+export const mapTaskSearchResult = (t: TaskResult, url?: string): TaskSearchResult => ({
   id: t.id,
   title: t.title,
   number: t.number ?? undefined,
   status: t.status,
   priority: t.priority,
   projectId: t.projectId,
+  url,
 })
 
 /** Map Kaneo project to common Project type. */

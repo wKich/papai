@@ -2,30 +2,28 @@ import type { AppError } from '../../errors.js'
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { ProviderClassifiedError } from '../errors.js'
-import type {
-  Comment,
-  Label,
-  Project,
-  RelationType,
-  Task,
-  TaskListItem,
-  TaskProvider,
-  TaskSearchResult,
-} from '../types.js'
+import type { Comment, Label, Project, Task, TaskListItem, TaskProvider, TaskSearchResult } from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig, youtrackFetch } from './client.js'
-import { buildLinkCommand, buildRemoveLinkCommand } from './commands.js'
 import {
   COMMENT_FIELDS,
   CONFIG_REQUIREMENTS,
   ISSUE_FIELDS,
   ISSUE_LIST_FIELDS,
   PROJECT_FIELDS,
-  TAG_FIELDS,
   YOUTRACK_CAPABILITIES,
 } from './constants.js'
+import {
+  addYouTrackTaskLabel,
+  createYouTrackLabel,
+  listYouTrackLabels,
+  removeYouTrackLabel,
+  removeYouTrackTaskLabel,
+  updateYouTrackLabel,
+} from './labels.js'
 import { buildCustomFields, mapComment, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from './mappers.js'
-import type { YtComment, YtIssue, YtProject, YtTag } from './types.js'
+import { addYouTrackRelation, removeYouTrackRelation } from './relations.js'
+import type { YtComment, YtIssue, YtProject } from './types.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
@@ -190,109 +188,43 @@ export class YouTrackProvider implements TaskProvider {
 
   removeComment(_commentId: string): Promise<{ id: string }> {
     const err = providerError.unsupportedOperation('removeComment without taskId')
-    throw new ProviderClassifiedError(err.operation, err)
+    throw new ProviderClassifiedError('removeComment without taskId is not supported by YouTrack', err)
   }
 
-  async listLabels(): Promise<Label[]> {
-    log.debug('listLabels')
-    const tags = await youtrackFetch<YtTag[]>(this.config, 'GET', '/api/tags', {
-      query: { fields: TAG_FIELDS, $top: '100' },
-    })
-    log.info({ count: tags.length }, 'Tags listed')
-    return tags.map((t) => ({ id: t.id, name: t.name, color: t.color?.background }))
+  listLabels(): Promise<Label[]> {
+    return listYouTrackLabels(this.config)
   }
 
-  async createLabel(params: { name: string; color?: string }): Promise<Label> {
-    log.debug({ name: params.name }, 'createLabel')
-    const tag = await youtrackFetch<YtTag>(this.config, 'POST', '/api/tags', {
-      body: { name: params.name },
-      query: { fields: TAG_FIELDS },
-    })
-    log.info({ tagId: tag.id, name: tag.name }, 'Tag created')
-    return { id: tag.id, name: tag.name, color: tag.color?.background }
+  createLabel(params: { name: string; color?: string }): Promise<Label> {
+    return createYouTrackLabel(this.config, params)
   }
 
-  async updateLabel(labelId: string, params: { name?: string; color?: string }): Promise<Label> {
-    log.debug({ labelId }, 'updateLabel')
-    const body: Record<string, unknown> = {}
-    if (params.name !== undefined) body['name'] = params.name
-    const tag = await youtrackFetch<YtTag>(this.config, 'POST', `/api/tags/${labelId}`, {
-      body,
-      query: { fields: TAG_FIELDS },
-    })
-    log.info({ tagId: tag.id }, 'Tag updated')
-    return { id: tag.id, name: tag.name, color: tag.color?.background }
+  updateLabel(labelId: string, params: { name?: string; color?: string }): Promise<Label> {
+    return updateYouTrackLabel(this.config, labelId, params)
   }
 
-  async removeLabel(labelId: string): Promise<{ id: string }> {
-    log.debug({ labelId }, 'removeLabel')
-    await youtrackFetch(this.config, 'DELETE', `/api/tags/${labelId}`)
-    log.info({ labelId }, 'Tag deleted')
-    return { id: labelId }
+  removeLabel(labelId: string): Promise<{ id: string }> {
+    return removeYouTrackLabel(this.config, labelId)
   }
 
-  async addTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
-    log.debug({ taskId, labelId }, 'addTaskLabel')
-    const issue = await youtrackFetch<{ tags?: YtTag[] }>(this.config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: 'id,tags(id)' },
-    })
-    const currentTagIds = (issue.tags ?? []).map((t) => ({ id: t.id }))
-    currentTagIds.push({ id: labelId })
-    await youtrackFetch(this.config, 'POST', `/api/issues/${taskId}`, {
-      body: { tags: currentTagIds },
-      query: { fields: 'id' },
-    })
-    log.info({ taskId, labelId }, 'Tag added to issue')
-    return { taskId, labelId }
+  addTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
+    return addYouTrackTaskLabel(this.config, taskId, labelId)
   }
 
-  async removeTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
-    log.debug({ taskId, labelId }, 'removeTaskLabel')
-    const issue = await youtrackFetch<{ tags?: YtTag[] }>(this.config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: 'id,tags(id)' },
-    })
-    const filteredTags = (issue.tags ?? []).filter((t) => t.id !== labelId).map((t) => ({ id: t.id }))
-    await youtrackFetch(this.config, 'POST', `/api/issues/${taskId}`, {
-      body: { tags: filteredTags },
-      query: { fields: 'id' },
-    })
-    log.info({ taskId, labelId }, 'Tag removed from issue')
-    return { taskId, labelId }
+  removeTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
+    return removeYouTrackTaskLabel(this.config, taskId, labelId)
   }
 
-  async addRelation(
+  addRelation(
     taskId: string,
     relatedTaskId: string,
-    type: RelationType,
+    type: import('../types.js').RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
-    log.debug({ taskId, relatedTaskId, type }, 'addRelation')
-    const command = buildLinkCommand(type, relatedTaskId)
-    await youtrackFetch(this.config, 'POST', `/api/issues/${taskId}/execute`, {
-      body: { query: command },
-    })
-    log.info({ taskId, relatedTaskId, type }, 'Relation added')
-    return { taskId, relatedTaskId, type }
+    return addYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }
 
-  async removeRelation(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }> {
-    log.debug({ taskId, relatedTaskId }, 'removeRelation')
-    const issue = await youtrackFetch<YtIssue>(this.config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: 'id,links(id,direction,linkType(name),issues(id,idReadable))' },
-    })
-    const matchingLink = (issue.links ?? []).find((link) =>
-      (link.issues ?? []).some((i) => i.id === relatedTaskId || i.idReadable === relatedTaskId),
-    )
-    if (matchingLink === undefined) {
-      const err = providerError.relationNotFound(taskId, relatedTaskId)
-      throw new ProviderClassifiedError(`Relation not found: ${taskId} -> ${relatedTaskId}`, err)
-    }
-    const typeName = matchingLink.linkType?.name ?? 'relates to'
-    const removeCmd = buildRemoveLinkCommand(typeName, matchingLink.direction, relatedTaskId)
-    await youtrackFetch(this.config, 'POST', `/api/issues/${taskId}/execute`, {
-      body: { query: removeCmd },
-    })
-    log.info({ taskId, relatedTaskId }, 'Relation removed')
-    return { taskId, relatedTaskId }
+  removeRelation(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }> {
+    return removeYouTrackRelation(this.config, taskId, relatedTaskId)
   }
 
   buildTaskUrl(taskId: string): string {

@@ -140,7 +140,7 @@ export class KaneoProvider implements TaskProvider {
 
   async listTasks(projectId: string): Promise<TaskListItem[]> {
     const results = await listTasks({ config: this.config, projectId })
-    return results.map(mapTaskListItem)
+    return results.map((t) => mapTaskListItem(t))
   }
 
   async searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
@@ -151,7 +151,7 @@ export class KaneoProvider implements TaskProvider {
       projectId: params.projectId,
       limit: params.limit,
     })
-    return results.map(mapTaskSearchResult)
+    return results.map((t) => mapTaskSearchResult(t))
   }
 
   async archiveTask(taskId: string): Promise<{ id: string }> {
@@ -318,12 +318,10 @@ export class KaneoProvider implements TaskProvider {
   }
 
   getPromptAddendum(): string {
-    return [
-      'IMPORTANT — Task status vs kanban columns:',
-      '- Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.',
-      '- To move a task, update its status to the target column name. To change the board structure, use the column management tools.',
-      '- Always call list_columns before updating a task status to make sure the column exists.',
-    ].join('\n')
+    return `IMPORTANT — Task status vs kanban columns:
+- Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.
+- To move a task, update its status to the target column name. To change the board structure, use the column management tools.
+- Always call list_columns before updating a task status to make sure the column exists.`
   }
 }
 
