@@ -10,14 +10,12 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY schemas ./schemas
 COPY package.json tsconfig.json CHANGELOG.md ./
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Install su-exec for switching users in entrypoint
-RUN apk add --no-cache su-exec
 
 ENV NODE_ENV=production
 
-# Container runs as root to fix /data permissions, then entrypoint drops to bun user via su-exec
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Create data directory with proper permissions for the bun user
+RUN mkdir -p /data && chown -R bun:bun /data
+
+USER bun
+
 CMD ["bun", "run", "src/index.ts"]
