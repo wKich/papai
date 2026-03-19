@@ -31,10 +31,6 @@ if (!hooksRegistered) {
   await globalSetup()
 
   // Register cleanup on process exit
-  process.on('exit', () => {
-    // Note: can't use async here, but we have SIGTERM/SIGINT handlers
-  })
-
   process.on('SIGINT', () => {
     void globalTeardown().then(() => process.exit(0))
   })

@@ -14,10 +14,9 @@ export function startKaneoServer(): Promise<void> {
 
   log.info('Starting Kaneo server via Docker Compose')
 
-  // Start docker compose in detached mode
   const dockerUp = spawn(
     'docker',
-    ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'up', '-d', '--wait'],
+    ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml', 'up', '-d'],
     {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],

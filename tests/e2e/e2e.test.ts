@@ -6,7 +6,9 @@
  * Run with: bun test tests/e2e/e2e.test.ts
  */
 
-import { describe, setDefaultTimeout } from 'bun:test'
+import { describe, setDefaultTimeout, afterAll } from 'bun:test'
+
+import { cleanupE2E } from './global-setup.js'
 
 // Increase timeout for E2E tests
 setDefaultTimeout(60000)
@@ -30,4 +32,8 @@ describe('E2E Test Suite', () => {
   // This describe block ensures proper nesting
   // All imported test suites will be children of this describe block
   // Global setup/teardown is handled by bun-test-setup.ts via --preload
+
+  afterAll(async () => {
+    await cleanupE2E()
+  })
 })

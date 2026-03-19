@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "vitest"],
+  "ignorePatterns": ["docs/tdd-hooks/**"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -43,6 +44,12 @@
         "max-lines-per-function": "off",
         "max-lines": "off",
         "no-await-in-loop": "off"
+      }
+    },
+    {
+      "files": ["docs/tdd-hooks/**"],
+      "rules": {
+        "all": "off"
       }
     }
   ]
