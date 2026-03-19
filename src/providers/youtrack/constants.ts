@@ -21,7 +21,7 @@ export const ISSUE_LIST_FIELDS = [
   'idReadable',
   'summary',
   'project(id,shortName)',
-  'customFields($type,projectCustomField(field(name)),value($type,name))',
+  'customFields($type,name,value($type,name,login))',
 ].join(',')
 
 export const COMMENT_FIELDS = 'id,text,author(login,name),created,updated'
