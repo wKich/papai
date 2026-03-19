@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
+import { CreateLabelResponseSchema } from '../../../schemas/kaneo/create-label.js'
 import { logger } from '../../logger.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { LabelResource } from './label-resource.js'
-import { CreateLabelResponseSchema } from './schemas/createLabel.js'
 
 const ARCHIVE_LABEL_NAME = 'archived'
 const ARCHIVE_LABEL_COLOR = '#808080'

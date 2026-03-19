@@ -6,12 +6,6 @@ import { LabelResource } from './label-resource.js'
 import { ProjectResource } from './project-resource.js'
 import { TaskResource } from './task-resource.js'
 
-export { TaskResource } from './task-resource.js'
-export { ProjectResource } from './project-resource.js'
-export { LabelResource } from './label-resource.js'
-export { CommentResource } from './comment-resource.js'
-export { ColumnResource } from './column-resource.js'
-
 export class KaneoClient {
   private log = logger.child({ scope: 'kaneo:client' })
 

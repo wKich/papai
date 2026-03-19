@@ -113,24 +113,24 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
                                               └─→ response back to Telegram
 ```
 
-| Path                        | Role                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| `src/index.ts`              | Entry point; validates env vars, runs migrations, starts the bot                         |
-| `src/bot.ts`                | Grammy bot setup, per-user conversation history, LLM orchestration (up to 25 tool steps) |
-| `src/config.ts`             | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers       |
-| `src/users.ts`              | User authorization store; admin commands for adding/removing users                       |
-| `src/migrate.ts`            | One-time migration: seeds admin, copies legacy config to per-user table                  |
-| `src/errors.ts`             | Discriminated union error types, constructors, and user-facing message mapper            |
-| `src/tools/`                | One file per tool; `index.ts` assembles capability-gated tools via `makeTools(provider)` |
-| `src/providers/types.ts`    | `TaskProvider` interface, `Capability` types, normalized domain types                    |
-| `src/providers/registry.ts` | Provider factory; `createProvider(name, config)` instantiates the named provider         |
-| `src/providers/kaneo/`      | Kaneo REST API adapter (`KaneoProvider`); HTTP client, error classifier, schemas         |
-| `src/providers/youtrack/`   | YouTrack REST API adapter (`YouTrackProvider`); schemas, mappers, operations             |
-| `src/commands/`             | Telegram command handlers: `/help`, `/set`, `/config`, `/clear`, admin commands          |
-| `src/conversation.ts`       | Conversation history management with smart trimming and rolling summaries                |
-| `src/history.ts`            | Persistent conversation history storage (SQLite-backed per-user)                         |
-| `src/memory.ts`             | Fact extraction and persistence from tool results for long-term context                  |
-| `src/logger.ts`             | pino logger instance                                                                     |
+| Path            | Role                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `src/index.ts`  | Entry point; validates env vars, runs migrations, starts the bot                         |
+| `src/bot.ts`    | Grammy bot setup, per-user conversation history, LLM orchestration (up to 25 tool steps) |
+| `src/config.ts` | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers       |
+| `src/users.ts`  | User authorization store; admin commands for adding/removing users                       |
+
+| `src/errors.ts` | Discriminated union error types, constructors, and user-facing message mapper |
+| `src/tools/` | One file per tool; `index.ts` assembles capability-gated tools via `makeTools(provider)` |
+| `src/providers/types.ts` | `TaskProvider` interface, `Capability` types, normalized domain types |
+| `src/providers/registry.ts` | Provider factory; `createProvider(name, config)` instantiates the named provider |
+| `src/providers/kaneo/` | Kaneo REST API adapter (`KaneoProvider`); HTTP client, error classifier, schemas |
+| `src/providers/youtrack/` | YouTrack REST API adapter (`YouTrackProvider`); schemas, mappers, operations |
+| `src/commands/` | Telegram command handlers: `/help`, `/set`, `/config`, `/clear`, admin commands |
+| `src/conversation.ts` | Conversation history management with smart trimming and rolling summaries |
+| `src/history.ts` | Persistent conversation history storage (SQLite-backed per-user) |
+| `src/memory.ts` | Fact extraction and persistence from tool results for long-term context |
+| `src/logger.ts` | pino logger instance |
 
 ## Tech Stack
 
@@ -225,6 +225,7 @@ bun run lint      # lint with oxlint
 bun run format    # format with oxfmt
 bun run test      # run tests with bun
 bun run knip      # check for unused dependencies/exports
+bun run typecheck # TypeScript type checking
 bun run security  # run Semgrep security scan
 ```
 

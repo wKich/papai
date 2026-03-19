@@ -1,10 +1,10 @@
+import { YtIssueSchema } from '../../../../schemas/youtrack/yt-types.js'
 import { logger } from '../../../logger.js'
 import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
-import { YtIssueSchema } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
 

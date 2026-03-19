@@ -1,3 +1,4 @@
+import { TaskSchema as GetTaskResponseSchema } from '../../../schemas/kaneo/get-task.js'
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
@@ -9,7 +10,6 @@ import {
   updateRelation,
   type TaskRelation,
 } from './frontmatter.js'
-import { TaskSchema as GetTaskResponseSchema } from './schemas/getTask.js'
 
 const log = logger.child({ scope: 'kaneo:task-relations' })
 

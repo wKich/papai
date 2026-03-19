@@ -1,7 +1,7 @@
+import type { CreateTaskResponse } from '../../../schemas/kaneo/create-task.js'
 import type { Column, Comment, Label, Project, Task, TaskListItem, TaskSearchResult } from '../types.js'
 import type { TaskDetails } from './get-task.js'
 import type { KaneoTaskListItem } from './list-tasks.js'
-import type { CreateTaskResponse } from './schemas/createTask.js'
 import type { TaskResult } from './search-tasks.js'
 
 /** Safely convert an unknown Kaneo date field to a string or null/undefined. */

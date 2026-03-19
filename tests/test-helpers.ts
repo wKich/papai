@@ -1,11 +1,11 @@
 import { mock } from 'bun:test'
 
-import type { z } from 'zod'
+import { z } from 'zod'
 
-import type { CreateProjectResponseSchema } from '../src/providers/kaneo/schemas/create-project.js'
-import type { CreateLabelResponseSchema } from '../src/providers/kaneo/schemas/createLabel.js'
-import type { TaskSchema } from '../src/providers/kaneo/schemas/createTask.js'
-import type { ActivityItemSchema } from '../src/providers/kaneo/schemas/getActivities.js'
+import type { CreateLabelResponseSchema } from '../schemas/kaneo/create-label.js'
+import { CreateProjectResponseSchema } from '../schemas/kaneo/create-project.js'
+import { TaskSchema } from '../schemas/kaneo/create-task.js'
+import type { ActivityItemSchema } from '../schemas/kaneo/get-activities.js'
 
 type CreateTaskResponse = z.infer<typeof TaskSchema>
 type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>

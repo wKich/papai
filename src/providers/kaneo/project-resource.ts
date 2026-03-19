@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
+import { GetProjectResponseSchema } from '../../../schemas/kaneo/get-project.js'
+import { ProjectSchema } from '../../../schemas/kaneo/update-project.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
-import { GetProjectResponseSchema } from './schemas/get-project.js'
-import { ProjectSchema } from './schemas/update-project.js'
 
 function generateSlug(name: string): string {
   return name

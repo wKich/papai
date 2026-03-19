@@ -12,6 +12,7 @@ papai is a Telegram bot that manages tasks via LLM tool-calling. A user sends na
 - `bun run lint` — lint with oxlint
 - `bun run format` — format with oxfmt
 - `bun run knip` — check for unused dependencies/exports
+- `bun run typecheck` — TypeScript type checking
 - `bun install` — install dependencies
 
 No build step; Bun runs TypeScript directly.
@@ -64,7 +65,7 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/admin-commands.ts`** — Legacy admin command registration (handlers moved to `src/commands/`).
 - **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
-- **`src/migrate.ts`** — One-time runtime migration: seeds admin user, copies legacy `config` rows to per-user `user_config`.
+
 - **`src/errors.ts`** — Discriminated union error types (`AppError`), constructors, and `getUserMessage` mapper. `isAppError` uses Zod runtime validation.
 - **`src/tools/`** — One file per tool. `index.ts` assembles tools via `makeTools(provider)`, exposing only tools supported by the active provider's capabilities.
 - **`src/providers/types.ts`** — `TaskProvider` interface, `Capability` union type, and normalized domain types (`Task`, `Project`, `Comment`, `Label`, `Status`). All providers must implement this interface.

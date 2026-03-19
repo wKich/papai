@@ -75,7 +75,7 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Type check
-        run: bun tsc --noEmit
+        run: bun run typecheck
 
   test:
     name: Test

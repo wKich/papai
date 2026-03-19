@@ -1,9 +1,9 @@
+import { type CreateLabelResponse } from '../../../schemas/kaneo/create-label.js'
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
-import { type CreateLabelResponse } from './schemas/createLabel.js'
 
 const log = logger.child({ scope: 'kaneo:update-label' })
 

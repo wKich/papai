@@ -1,3 +1,4 @@
+import { YtIssueLinksSchema } from '../../../schemas/youtrack/yt-types.js'
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { ProviderClassifiedError } from '../errors.js'
@@ -5,7 +6,6 @@ import type { RelationType } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { buildLinkCommand, buildRemoveLinkCommand } from './commands.js'
-import { YtIssueLinksSchema } from './schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:relations' })
 

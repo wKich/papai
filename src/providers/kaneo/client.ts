@@ -1,12 +1,9 @@
-import { type ZodType, z } from 'zod'
+import { type ZodType } from 'zod'
 
 import { logger } from '../../logger.js'
 import { KaneoApiError, KaneoValidationError } from './errors.js'
 
 const log = logger.child({ scope: 'kaneo:client' })
-
-// Schema for operations that return empty/unknown responses (DELETE, etc.)
-export const EmptyResponseSchema = z.unknown()
 
 export type KaneoConfig = {
   apiKey: string
@@ -88,11 +85,3 @@ export async function kaneoFetch<T>(
 
   return validateResponse(rawData, schema, method, path, response.status)
 }
-
-// Re-export schemas for backward compatibility
-export { TaskSchema as KaneoTaskResponseSchema } from './schemas/createTask.js'
-export { CreateProjectResponseSchema as KaneoProjectSchema } from './schemas/create-project.js'
-export { GetProjectResponseSchema as KaneoProjectFullSchema } from './schemas/get-project.js'
-export { CreateLabelResponseSchema as KaneoLabelSchema } from './schemas/createLabel.js'
-export { ColumnCompatSchema as KaneoColumnSchema } from './schemas/api-compat.js'
-export { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from './schemas/getActivities.js'
