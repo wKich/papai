@@ -11,6 +11,9 @@ COPY src ./src
 COPY schemas ./schemas
 COPY package.json tsconfig.json CHANGELOG.md ./
 
+# Create data directory for SQLite database with proper permissions
+RUN mkdir -p /data && chown -R bun:bun /data
+
 ENV NODE_ENV=production
 
 USER bun
