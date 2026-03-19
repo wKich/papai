@@ -1,6 +1,4 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, Output } from 'ai'
-import { type ModelMessage } from 'ai'
+import { generateText, Output, type LanguageModel, type ModelMessage } from 'ai'
 import { z } from 'zod'
 
 import { getCachedFacts, getCachedSummary, setCachedSummary, clearCachedFacts, upsertCachedFact } from './cache.js'
@@ -9,12 +7,6 @@ import { logger } from './logger.js'
 import type { MemoryFact } from './types/memory.js'
 
 const log = logger.child({ scope: 'memory' })
-
-type ModelConfig = {
-  readonly apiKey: string
-  readonly baseUrl: string
-  readonly model: string
-}
 
 // --- Summary persistence (now uses cache) ---
 
@@ -150,15 +142,12 @@ function clampIndices(selected: number[], trimMin: number, trimMax: number, hist
   return selected
 }
 
-const buildMemoryModel = (config: ModelConfig): ReturnType<ReturnType<typeof createOpenAICompatible>> =>
-  createOpenAICompatible({ name: 'openai-compatible', apiKey: config.apiKey, baseURL: config.baseUrl })(config.model)
-
 export async function trimWithMemoryModel(
   history: readonly ModelMessage[],
   trimMin: number,
   trimMax: number,
   previousSummary: string | null,
-  config: ModelConfig,
+  model: LanguageModel,
 ): Promise<TrimResult> {
   log.debug(
     { messageCount: history.length, trimMin, trimMax, hasPrevious: previousSummary !== null },
@@ -174,7 +163,7 @@ export async function trimWithMemoryModel(
     .replace('{MESSAGES}', messagesText)
 
   const result = await generateText({
-    model: buildMemoryModel(config),
+    model,
     output: Output.object({ schema: TrimResultSchema }),
     prompt,
   })

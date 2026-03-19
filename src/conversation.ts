@@ -1,10 +1,14 @@
-import { type ModelMessage } from 'ai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { type LanguageModel, type ModelMessage } from 'ai'
 
 import { getCachedConfig, getCachedHistory, setCachedHistory } from './cache.js'
 import { logger } from './logger.js'
 import { buildMemoryContextMessage, loadFacts, loadSummary, saveSummary, trimWithMemoryModel } from './memory.js'
 
 const log = logger.child({ scope: 'conversation' })
+
+const buildModel = (apiKey: string, baseUrl: string, modelName: string): LanguageModel =>
+  createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL: baseUrl })(modelName)
 
 const WORKING_MEMORY_CAP = 100
 const TRIM_MIN = 50
@@ -41,11 +45,8 @@ export const runTrimInBackground = async (userId: number, history: readonly Mode
   if (llmApiKey !== null && llmBaseUrl !== null && smallModel !== null) {
     try {
       const existing = loadSummary(userId)
-      const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, {
-        apiKey: llmApiKey,
-        baseUrl: llmBaseUrl,
-        model: smallModel,
-      })
+      const model = buildModel(llmApiKey, llmBaseUrl, smallModel)
+      const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, model)
       // Preserve any messages added to history while the async trim was running
       const currentHistory = getCachedHistory(userId)
       const newMessages = currentHistory.slice(history.length)

@@ -1,5 +1,7 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
+import type { LanguageModel } from 'ai'
+
 import { flushMicrotasks } from './test-helpers.js'
 
 // --- bun:sqlite mock (must come before importing memory.ts) ---
@@ -377,6 +379,8 @@ describe('upsertFact eviction', () => {
 })
 
 describe('trimWithMemoryModel', () => {
+  const mockModel = {} as unknown as LanguageModel
+
   const makeMessages = (count: number): Array<{ role: 'user' | 'assistant'; content: string }> =>
     Array.from({ length: count }, (_, i) => ({
       role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
@@ -388,11 +392,7 @@ describe('trimWithMemoryModel', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ output: { keep_indices: [0, 2, 4], summary: 'Test summary' } })
 
-    const result = await trimWithMemoryModel(history, 2, 10, null, {
-      apiKey: 'key',
-      baseUrl: 'http://localhost',
-      model: 'test-model',
-    })
+    const result = await trimWithMemoryModel(history, 2, 10, null, mockModel)
 
     expect(result.trimmedMessages).toHaveLength(3)
     expect(result.trimmedMessages[0]).toEqual(history[0])
@@ -406,11 +406,7 @@ describe('trimWithMemoryModel', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ output: { keep_indices: [0, 1, 99], summary: 'Summary' } })
 
-    const result = await trimWithMemoryModel(history, 1, 10, null, {
-      apiKey: 'key',
-      baseUrl: 'http://localhost',
-      model: 'test-model',
-    })
+    const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
     // 99 is out of range — filtered out
     expect(result.trimmedMessages).toHaveLength(2)
@@ -421,11 +417,7 @@ describe('trimWithMemoryModel', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ output: { keep_indices: [1, 1, 2], summary: 'Summary' } })
 
-    const result = await trimWithMemoryModel(history, 1, 10, null, {
-      apiKey: 'key',
-      baseUrl: 'http://localhost',
-      model: 'test-model',
-    })
+    const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
     expect(result.trimmedMessages).toHaveLength(2)
     expect(result.trimmedMessages[0]).toEqual(history[1])
@@ -437,11 +429,7 @@ describe('trimWithMemoryModel', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Summary' } })
 
-    const result = await trimWithMemoryModel(history, 5, 10, null, {
-      apiKey: 'key',
-      baseUrl: 'http://localhost',
-      model: 'test-model',
-    })
+    const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
 
     expect(result.trimmedMessages.length).toBeGreaterThanOrEqual(5)
   })
@@ -451,11 +439,7 @@ describe('trimWithMemoryModel', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' } })
 
-    const result = await trimWithMemoryModel(history, 1, 3, null, {
-      apiKey: 'key',
-      baseUrl: 'http://localhost',
-      model: 'test-model',
-    })
+    const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
     expect(result.trimmedMessages).toHaveLength(3)
   })
