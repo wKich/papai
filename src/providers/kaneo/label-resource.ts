@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { CreateLabelResponseSchema } from '../../../schemas/kaneo/create-label.js'
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError, KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
+import { CreateLabelResponseSchema } from './schemas/create-label.js'
 
 // Extended schema for labels with task association
 const KaneoLabelWithTaskSchema = CreateLabelResponseSchema

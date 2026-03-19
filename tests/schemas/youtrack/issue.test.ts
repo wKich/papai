@@ -1,7 +1,11 @@
 // tests/providers/youtrack/schemas/issue.test.ts
 import { describe, expect, test } from 'bun:test'
 
-import { IssueSchema, CreateIssueRequestSchema, SearchIssuesRequestSchema } from '../../../schemas/youtrack/issue.js'
+import {
+  IssueSchema,
+  CreateIssueRequestSchema,
+  SearchIssuesRequestSchema,
+} from '../../../src/providers/youtrack/schemas/issue.js'
 
 describe('Issue schemas', () => {
   test('IssueSchema validates full issue', () => {

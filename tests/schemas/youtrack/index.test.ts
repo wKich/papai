@@ -1,7 +1,7 @@
 // tests/providers/youtrack/schemas/index.test.ts
 import { describe, expect, test } from 'bun:test'
 
-import * as schemas from '../../../schemas/youtrack/index.js'
+import * as schemas from '../../../src/providers/youtrack/schemas/index.js'
 
 describe('Schema index exports', () => {
   test('exports all common schemas', () => {

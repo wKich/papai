@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { TaskSchema } from '../../../schemas/kaneo/create-task.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
+import { TaskSchema } from './schemas/create-task.js'
 import { denormalizeStatus } from './task-status.js'
 
 // Local schema for task with projectId (for update responses)

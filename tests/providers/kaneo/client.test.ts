@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { TaskSchema as KaneoTaskResponseSchema } from '../../../schemas/kaneo/create-task.js'
 import { kaneoFetch } from '../../../src/providers/kaneo/client.js'
 import { KaneoApiError, KaneoValidationError } from '../../../src/providers/kaneo/errors.js'
+import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
 import { restoreFetch, setMockFetch, createMockTask } from '../../test-helpers.js'
 import { EmptyResponseSchema } from './test-resources.js'
 

@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { CreateLabelResponseSchema } from '../../../schemas/kaneo/create-label.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { CreateLabelResponseSchema } from './schemas/create-label.js'
 
 const log = logger.child({ scope: 'kaneo:create-label' })
 

@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
-import { TaskSchema as KaneoTaskResponseSchema } from '../../../schemas/kaneo/create-task.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
+import { TaskSchema as KaneoTaskResponseSchema } from './schemas/create-task.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'

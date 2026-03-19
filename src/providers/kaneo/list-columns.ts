@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { ColumnCompatSchema } from '../../../schemas/kaneo/api-compat.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 const log = logger.child({ scope: 'kaneo:list-columns' })
 

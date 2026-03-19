@@ -1,15 +1,12 @@
 import { z } from 'zod'
 
-// Both compat schemas accept {} from buggy endpoints lacking .returning().
-// See src/kaneo/schemas/api-compat.ts for upstream bug references.
-import {
-  CreateCommentResponseCompatSchema,
-  UpdateCommentResponseCompatSchema,
-} from '../../../schemas/kaneo/api-compat.js'
-import { ActivityItemSchema } from '../../../schemas/kaneo/get-activities.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
+// Both compat schemas accept {} from buggy endpoints lacking .returning().
+// See src/kaneo/schemas/api-compat.ts for upstream bug references.
+import { CreateCommentResponseCompatSchema, UpdateCommentResponseCompatSchema } from './schemas/api-compat.js'
+import { ActivityItemSchema } from './schemas/get-activities.js'
 
 export class CommentResource {
   private log = logger.child({ scope: 'kaneo:comment-resource' })

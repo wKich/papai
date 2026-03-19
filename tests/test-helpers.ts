@@ -2,10 +2,10 @@ import { mock } from 'bun:test'
 
 import { z } from 'zod'
 
-import type { CreateLabelResponseSchema } from '../schemas/kaneo/create-label.js'
-import { CreateProjectResponseSchema } from '../schemas/kaneo/create-project.js'
-import { TaskSchema } from '../schemas/kaneo/create-task.js'
-import type { ActivityItemSchema } from '../schemas/kaneo/get-activities.js'
+import type { CreateLabelResponseSchema } from '../src/providers/kaneo/schemas/create-label.js'
+import { CreateProjectResponseSchema } from '../src/providers/kaneo/schemas/create-project.js'
+import { TaskSchema } from '../src/providers/kaneo/schemas/create-task.js'
+import type { ActivityItemSchema } from '../src/providers/kaneo/schemas/get-activities.js'
 
 type CreateTaskResponse = z.infer<typeof TaskSchema>
 type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>

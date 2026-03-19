@@ -1,10 +1,10 @@
-import { YtCommentSchema } from '../../../../schemas/youtrack/yt-types.js'
 import { logger } from '../../../logger.js'
 import type { Comment } from '../../types.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { COMMENT_FIELDS } from '../constants.js'
 import { mapComment } from '../mappers.js'
+import { YtCommentSchema } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:comments' })
 

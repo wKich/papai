@@ -5,7 +5,7 @@ import {
   IssueLinkSchema,
   CreateIssueLinkRequestSchema,
   RemoveIssueLinkRequestSchema,
-} from '../../../schemas/youtrack/issue-link.js'
+} from '../../../src/providers/youtrack/schemas/issue-link.js'
 
 describe('Issue link schemas', () => {
   test('IssueLinkSchema validates link', () => {

@@ -1,8 +1,8 @@
-import type { CreateTaskResponse } from '../../../schemas/kaneo/create-task.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import type { CreateTaskResponse } from './schemas/create-task.js'
 
 const log = logger.child({ scope: 'kaneo:update-task' })
 

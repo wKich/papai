@@ -1,8 +1,8 @@
-import { type Project } from '../../../schemas/kaneo/update-project.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+import { type Project } from './schemas/update-project.js'
 
 const log = logger.child({ scope: 'kaneo:create-project' })
 

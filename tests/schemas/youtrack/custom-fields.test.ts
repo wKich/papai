@@ -6,7 +6,7 @@ import {
   SingleUserIssueCustomFieldSchema,
   TextIssueCustomFieldSchema,
   SimpleIssueCustomFieldSchema,
-} from '../../../schemas/youtrack/custom-fields.js'
+} from '../../../src/providers/youtrack/schemas/custom-fields.js'
 
 describe('Custom field schemas', () => {
   test('SingleEnumIssueCustomFieldSchema validates enum field', () => {

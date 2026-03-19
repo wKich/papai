@@ -1,5 +1,5 @@
-import type { YtComment, YtIssue } from '../../../schemas/youtrack/yt-types.js'
 import type { Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
+import type { YtComment, YtIssue } from './schemas/yt-types.js'
 
 const getCustomFieldValue = (issue: YtIssue, fieldName: string): string | undefined => {
   const cf = issue.customFields?.find((f) => f.name === fieldName)

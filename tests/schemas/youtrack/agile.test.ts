@@ -1,7 +1,11 @@
 // tests/providers/youtrack/schemas/agile.test.ts
 import { describe, expect, test } from 'bun:test'
 
-import { AgileBoardSchema, AgileColumnSchema, ListAgileBoardsRequestSchema } from '../../../schemas/youtrack/agile.js'
+import {
+  AgileBoardSchema,
+  AgileColumnSchema,
+  ListAgileBoardsRequestSchema,
+} from '../../../src/providers/youtrack/schemas/agile.js'
 
 describe('Agile board schemas', () => {
   test('AgileBoardSchema validates board', () => {

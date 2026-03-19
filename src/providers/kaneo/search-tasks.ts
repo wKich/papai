@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-// GlobalSearchResponseCompatSchema matches the real flat API response — see api-compat.ts.
-import { GlobalSearchResponseCompatSchema } from '../../../schemas/kaneo/api-compat.js'
-import { SearchTaskSchema } from '../../../schemas/kaneo/global-search.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
+// GlobalSearchResponseCompatSchema matches the real flat API response — see api-compat.ts.
+import { GlobalSearchResponseCompatSchema } from './schemas/api-compat.js'
+import { SearchTaskSchema } from './schemas/global-search.js'
 
 const log = logger.child({ scope: 'kaneo:search-tasks' })
 

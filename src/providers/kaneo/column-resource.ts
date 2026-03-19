@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-// ColumnCompatSchema accepts undefined icon/color — see src/kaneo/schemas/api-compat.ts for upstream bug reference.
-import { ColumnCompatSchema } from '../../../schemas/kaneo/api-compat.js'
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
+// ColumnCompatSchema accepts undefined icon/color — see src/kaneo/schemas/api-compat.ts for upstream bug reference.
+import { ColumnCompatSchema } from './schemas/api-compat.js'
 
 export class ColumnResource {
   private log = logger.child({ scope: 'kaneo:column-resource' })

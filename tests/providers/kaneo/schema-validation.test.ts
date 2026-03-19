@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { ColumnCompatSchema as KaneoColumnSchema } from '../../../schemas/kaneo/api-compat.js'
-import { CreateLabelResponseSchema as KaneoLabelSchema } from '../../../schemas/kaneo/create-label.js'
-import { CreateProjectResponseSchema as KaneoProjectSchema } from '../../../schemas/kaneo/create-project.js'
-import { TaskSchema as KaneoTaskResponseSchema } from '../../../schemas/kaneo/create-task.js'
-import { TaskSchema as CreateTaskResponseSchema } from '../../../schemas/kaneo/create-task.js'
-import { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from '../../../schemas/kaneo/get-activities.js'
-import { ActivityItemSchema } from '../../../schemas/kaneo/get-activities.js'
-import { GetProjectResponseSchema as KaneoProjectFullSchema } from '../../../schemas/kaneo/get-project.js'
+import { ColumnCompatSchema as KaneoColumnSchema } from '../../../src/providers/kaneo/schemas/api-compat.js'
+import { CreateLabelResponseSchema as KaneoLabelSchema } from '../../../src/providers/kaneo/schemas/create-label.js'
+import { CreateProjectResponseSchema as KaneoProjectSchema } from '../../../src/providers/kaneo/schemas/create-project.js'
+import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
+import { TaskSchema as CreateTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
+import { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from '../../../src/providers/kaneo/schemas/get-activities.js'
+import { ActivityItemSchema } from '../../../src/providers/kaneo/schemas/get-activities.js'
+import { GetProjectResponseSchema as KaneoProjectFullSchema } from '../../../src/providers/kaneo/schemas/get-project.js'
 import {
   restoreFetch,
   setMockFetch,

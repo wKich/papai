@@ -7,7 +7,7 @@ import {
   LinkTypeEnum,
   BaseEntitySchema,
   TimestampSchema,
-} from '../../../schemas/youtrack/common.js'
+} from '../../../src/providers/youtrack/schemas/common.js'
 
 describe('YouTrack common schemas', () => {
   test('IssueStateEnum validates valid states', () => {

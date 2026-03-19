@@ -1,9 +1,9 @@
-import { YtIssueTagsSchema, YtLabelSchema } from '../../../schemas/youtrack/yt-types.js'
 import { logger } from '../../logger.js'
 import type { Label } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { TAG_FIELDS } from './constants.js'
+import { YtIssueTagsSchema, YtLabelSchema } from './schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:labels' })
 
