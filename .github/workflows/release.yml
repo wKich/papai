@@ -57,24 +57,27 @@ jobs:
           echo "next=v$NEXT" >> "$GITHUB_OUTPUT"
           echo "Calculated next version: v$NEXT"
 
+      - name: Update package.json version
+        run: |
+          VERSION_NUM=$(echo "${{ steps.version.outputs.next }}" | sed 's/^v//')
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '$VERSION_NUM';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
       - name: Generate CHANGELOG.md
         run: git-cliff --unreleased --tag "${{ steps.version.outputs.next }}" --prepend CHANGELOG.md
 
-      - name: Commit CHANGELOG.md
+      - name: Commit and tag
         run: |
-          git add CHANGELOG.md
+          git add package.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore(release): update changelog for ${{ steps.version.outputs.next }}"
+            git commit -m "chore(release): bump to ${{ steps.version.outputs.next }}"
             git push
-          fi
-
-      - name: Create Git tag
-        run: |
-          if git rev-parse "refs/tags/${{ steps.version.outputs.next }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.version.outputs.next }} already exists"
-          else
             git tag ${{ steps.version.outputs.next }}
             git push origin ${{ steps.version.outputs.next }}
           fi
