@@ -10,11 +10,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY schemas ./schemas
 COPY package.json tsconfig.json CHANGELOG.md ./
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create data directory for SQLite database with proper permissions
-RUN mkdir -p /data && chown -R bun:bun /data
+# Install su-exec for switching users in entrypoint
+RUN apk add --no-cache su-exec
 
 ENV NODE_ENV=production
 
-USER bun
+# Container runs as root to fix /data permissions, then entrypoint drops to bun user via su-exec
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bun", "run", "src/index.ts"]
