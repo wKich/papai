@@ -3,6 +3,10 @@ name: Deploy
 on:
   push:
     tags: ['v*.*.*']
+  workflow_run:
+    workflows: ['Release']
+    types: [completed]
+    branches: [master]
 
 env:
   REGISTRY: ghcr.io
@@ -11,6 +15,7 @@ env:
 jobs:
   build-and-push:
     name: Build & Push
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

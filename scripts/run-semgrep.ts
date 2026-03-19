@@ -5,7 +5,7 @@ import { join } from 'path'
 import { $ } from 'bun'
 
 const SEMGREP_DIR = join(process.cwd(), '.semgrep')
-const SEMGREP_IMAGE = 'semgrep/semgrep:latest'
+const SEMGREP_IMAGE = 'semgrep/semgrep:1.156.0'
 
 interface RunOptions {
   ci: boolean
@@ -81,8 +81,7 @@ function buildScanArgs(aiRulesPath: string, options: RunOptions): string[] {
   ]
 
   if (options.ci) {
-    args.push('--json', '--output', 'semgrep-results.json')
-    args.push('--sarif', '--output', 'semgrep-results.sarif')
+    args.push('--sarif-output', 'semgrep-results.sarif')
   }
 
   if (options.fix) {
@@ -137,8 +136,8 @@ async function main(): Promise<void> {
       console.log('\n✅ Security scan passed - no issues found')
     } else if (exitCode === 1) {
       console.log('\n⚠️  Security scan found issues')
-      if (options.ci && existsSync('semgrep-results.json')) {
-        console.log('📄 Results saved to semgrep-results.json')
+      if (options.ci && existsSync('semgrep-results.sarif')) {
+        console.log('📄 Results saved to semgrep-results.sarif')
       }
     } else {
       console.log('\n❌ Security scan failed to run')
