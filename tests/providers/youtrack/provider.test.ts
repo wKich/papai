@@ -1,45 +1,88 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { z } from 'zod'
+
 import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
 
-// Mock global fetch
+// Store the original fetch
 const originalFetch = globalThis.fetch
+
+// Store reference to current fetch mock for call inspection
+let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>> | undefined
 
 const createConfig = (): YouTrackConfig => ({
   baseUrl: 'https://test.youtrack.cloud',
   token: 'test-token',
 })
 
+const installFetchMock = (handler: () => Promise<Response>): void => {
+  const mocked = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
+  fetchMock = mocked
+  globalThis.fetch = Object.assign(
+    (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      return mocked(url, init ?? {})
+    },
+    { preconnect: globalThis.fetch.preconnect },
+  )
+}
+
 const mockFetchResponse = (data: unknown, status = 200): void => {
-  globalThis.fetch = mock(() =>
+  installFetchMock(() =>
     Promise.resolve(
       new Response(JSON.stringify(data), {
         status,
         headers: { 'Content-Type': 'application/json' },
       }),
     ),
-  ) as unknown as typeof fetch
+  )
 }
 
 const mockFetchNoContent = (): void => {
-  globalThis.fetch = mock(() => Promise.resolve(new Response(null, { status: 204 }))) as unknown as typeof fetch
+  installFetchMock(() => Promise.resolve(new Response(null, { status: 204 })))
 }
+
+/** Schema for a mock fetch call tuple: [url, init] */
+const FetchCallSchema = z.tuple([z.string(), z.looseObject({ body: z.string().optional() })])
+
+/** Schema for request body with custom fields */
+const RequestBodySchema = z.object({
+  customFields: z.array(z.unknown()).optional(),
+})
 
 /** Helper to extract the request body sent to the mocked fetch. */
 const getLastFetchBody = (): unknown => {
-  const mockFn = globalThis.fetch as unknown as ReturnType<typeof mock>
-  const lastCall = mockFn.mock.calls[0] as [string, { body?: string }] | undefined
-  if (lastCall?.[1]?.body === undefined) return undefined
-  return JSON.parse(lastCall[1].body) as unknown
+  if (fetchMock === undefined) return undefined
+  const lastCall = fetchMock.mock.calls[0]
+  const parsed = FetchCallSchema.safeParse(lastCall)
+  if (!parsed.success) return undefined
+  const [, init] = parsed.data
+  if (init.body === undefined) return undefined
+  return JSON.parse(init.body) as unknown
 }
 
 /** Helper to extract the URL of the last fetch call. */
 const getLastFetchUrl = (): URL => {
-  const mockFn = globalThis.fetch as unknown as ReturnType<typeof mock>
-  const lastCall = mockFn.mock.calls[0] as [string] | undefined
-  return new URL(lastCall?.[0] ?? '')
+  if (fetchMock === undefined) return new URL('')
+  const lastCall = fetchMock.mock.calls[0]
+  const parsed = FetchCallSchema.safeParse(lastCall)
+  if (!parsed.success) return new URL('')
+  const [url] = parsed.data
+  return new URL(url)
+}
+
+/** Parse and validate request body has customFields. */
+const parseCustomFields = (obj: unknown): unknown[] => {
+  const parsed = RequestBodySchema.safeParse(obj)
+  if (!parsed.success) {
+    throw new Error('Expected body to have customFields')
+  }
+  if (parsed.data.customFields === undefined) {
+    throw new Error('Expected customFields to be present')
+  }
+  return parsed.data.customFields
 }
 
 describe('YouTrackProvider', () => {
@@ -47,10 +90,12 @@ describe('YouTrackProvider', () => {
 
   beforeEach(() => {
     provider = new YouTrackProvider(createConfig())
+    fetchMock = undefined
   })
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    fetchMock = undefined
   })
 
   describe('identity', () => {
@@ -142,8 +187,8 @@ describe('YouTrackProvider', () => {
         status: 'In Progress',
       })
 
-      const body = getLastFetchBody() as { customFields?: unknown[] }
-      expect(body.customFields).toEqual([
+      const customFields = parseCustomFields(getLastFetchBody())
+      expect(customFields).toEqual([
         { name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } },
         { name: 'State', $type: 'StateIssueCustomField', value: { name: 'In Progress' } },
       ])

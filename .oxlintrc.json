@@ -5,12 +5,12 @@
     "correctness": "error",
     "suspicious": "error",
     "pedantic": "warn",
-    "perf": "warn",
+    "perf": "warn"
   },
   "options": {
     "typeAware": true,
     "typeCheck": true,
-    "denyWarnings": true,
+    "denyWarnings": true
   },
   "rules": {
     "vitest/expect-expect": "error",
@@ -34,7 +34,7 @@
     "typescript/prefer-literal-enum-member": "error",
     "typescript/promise-function-async": "off",
     "typescript/use-unknown-in-catch-callback-variable": "error",
-    "no-param-reassign": "error",
+    "no-param-reassign": "error"
   },
   "overrides": [
     {
@@ -42,8 +42,8 @@
       "rules": {
         "max-lines-per-function": "off",
         "max-lines": "off",
-        "no-await-in-loop": "off",
-      },
-    },
-  ],
+        "no-await-in-loop": "off"
+      }
+    }
+  ]
 }

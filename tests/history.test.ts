@@ -125,12 +125,26 @@ describe('loadHistory', () => {
 
     const result = loadHistory(5)
     expect(result).toHaveLength(4)
-    const assistantMsg = result[1] as unknown as { content: unknown[] }
-    expect(Array.isArray(assistantMsg.content)).toBe(true)
-    expect((assistantMsg.content as Array<{ type: string }>)[0]?.type).toBe('tool-call')
-    const toolMsg = result[2] as unknown as { content: unknown[] }
-    expect(Array.isArray(toolMsg.content)).toBe(true)
-    expect((toolMsg.content as Array<{ type: string }>)[0]?.type).toBe('tool-result')
+
+    // Verify assistant message has tool-call content
+    const assistantMsg = result[1]
+    expect(assistantMsg).toBeDefined()
+    const assistantContent = assistantMsg?.content
+    expect(Array.isArray(assistantContent)).toBe(true)
+    expect(assistantContent).toHaveLength(1)
+    // Verify structure of first item in array content
+    const firstAssistantItem = Array.isArray(assistantContent) ? assistantContent[0] : undefined
+    expect(firstAssistantItem).toMatchObject({ type: 'tool-call', toolCallId: 'tc1', toolName: 'list_tasks' })
+
+    // Verify tool message has tool-result content
+    const toolMsg = result[2]
+    expect(toolMsg).toBeDefined()
+    const toolContent = toolMsg?.content
+    expect(Array.isArray(toolContent)).toBe(true)
+    expect(toolContent).toHaveLength(1)
+    // Verify structure of first item in array content
+    const firstToolItem = Array.isArray(toolContent) ? toolContent[0] : undefined
+    expect(firstToolItem).toMatchObject({ type: 'tool-result', toolCallId: 'tc1', toolName: 'list_tasks' })
   })
 
   test('rejects messages where content is neither string nor array', () => {

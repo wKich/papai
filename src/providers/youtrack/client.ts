@@ -19,12 +19,12 @@ export class YouTrackApiError extends Error {
 }
 
 /** Low-level fetch wrapper for the YouTrack REST API. */
-export async function youtrackFetch<T = unknown>(
+export async function youtrackFetch(
   config: YouTrackConfig,
   method: string,
   path: string,
   options?: { body?: unknown; query?: Record<string, string> },
-): Promise<T> {
+): Promise<unknown> {
   const url = new URL(path, config.baseUrl)
   if (options?.query !== undefined) {
     for (const [key, value] of Object.entries(options.query)) {
@@ -60,9 +60,11 @@ export async function youtrackFetch<T = unknown>(
     throw new YouTrackApiError(msg, response.status, errorBody)
   }
 
-  if (response.status === 204) return undefined as T
+  if (response.status === 204) {
+    return undefined
+  }
 
-  const data = (await response.json()) as T
+  const data = await response.json()
   log.debug({ method, path }, 'YouTrack API response received')
   return data
 }
