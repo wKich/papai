@@ -23,7 +23,7 @@ export const confidenceField = z
       'The action will be blocked and a confirmation requested if this is below 0.85.',
   )
 
-export type ConfirmationRequired = {
+type ConfirmationRequired = {
   readonly status: 'confirmation_required'
   readonly message: string
 }

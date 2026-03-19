@@ -1,15 +1,46 @@
 import { mock } from 'bun:test'
 
-import type { Column } from '../src/kaneo/schemas/column.js'
-import type { CreateProjectResponse } from '../src/kaneo/schemas/create-project.js'
-import type { CreateLabelResponse } from '../src/kaneo/schemas/createLabel.js'
-import type { CreateTaskResponse } from '../src/kaneo/schemas/createTask.js'
-import type { ActivityItem } from '../src/kaneo/schemas/getActivities.js'
+import { z } from 'zod'
+
+import type { CreateLabelResponseSchema } from '../schemas/kaneo/create-label.js'
+import { CreateProjectResponseSchema } from '../schemas/kaneo/create-project.js'
+import { TaskSchema } from '../schemas/kaneo/create-task.js'
+import type { ActivityItemSchema } from '../schemas/kaneo/get-activities.js'
+
+type CreateTaskResponse = z.infer<typeof TaskSchema>
+type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>
+type CreateLabelResponse = z.infer<typeof CreateLabelResponseSchema>
+type ActivityItem = z.infer<typeof ActivityItemSchema>
+
+type Column = {
+  id: string
+  name: string
+  icon: string | null
+  color: string | null
+  isFinal: boolean
+}
 
 const originalFetch = globalThis.fetch
 
 export function restoreFetch(): void {
   globalThis.fetch = originalFetch
+}
+
+interface SafeParseable {
+  safeParse: (data: unknown) => { success: boolean }
+}
+
+function isSafeParseable(val: unknown): val is SafeParseable {
+  return typeof val === 'object' && val !== null && 'safeParse' in val && typeof val.safeParse === 'function'
+}
+
+/** Test whether a tool's inputSchema accepts or rejects given data. */
+export function schemaValidates(tool: { inputSchema: unknown }, data: unknown): boolean {
+  const schema = tool.inputSchema
+  if (!isSafeParseable(schema)) {
+    throw new Error('Tool inputSchema does not have safeParse')
+  }
+  return schema.safeParse(data).success
 }
 
 export interface ToolExecutor {

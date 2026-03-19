@@ -84,17 +84,75 @@ describe('loadHistory', () => {
     expect(result).toEqual([])
   })
 
-  test('preserves extra fields', () => {
-    const messages = [{ role: 'assistant', content: 'hi', toolCalls: [{ id: '1' }] }]
+  test('strips unknown fields not in ModelMessage schema', () => {
+    // modelMessageSchema uses Zod which strips unrecognised properties — unknown
+    // keys like `toolCalls` (not part of AssistantModelMessage in SDK v6) are dropped.
+    const messages = [{ role: 'assistant', content: 'hi', unknownField: 'value' }]
     mockStore.set(4, JSON.stringify(messages))
 
     const result = loadHistory(4)
     expect(result).toHaveLength(1)
     const first = result[0]
     expect(first).toBeDefined()
-    if (first !== undefined) {
-      expect('toolCalls' in first).toBe(true)
-    }
+    expect(first?.content).toBe('hi')
+  })
+
+  test('returns messages when content is an array (tool call / tool result messages)', () => {
+    // The Vercel AI SDK uses array content for tool calls and tool results.
+    // Regression: the previous custom validator required content to be a string,
+    // causing the entire history to be dropped after cache eviction whenever
+    // tool-calling had occurred in the conversation.
+    const messages = [
+      { role: 'user', content: 'what tasks do I have?' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'list_tasks', args: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tc1',
+            toolName: 'list_tasks',
+            output: { type: 'json', value: [] },
+          },
+        ],
+      },
+      { role: 'assistant', content: 'You have no tasks.' },
+    ]
+    mockStore.set(5, JSON.stringify(messages))
+
+    const result = loadHistory(5)
+    expect(result).toHaveLength(4)
+
+    // Verify assistant message has tool-call content
+    const assistantMsg = result[1]
+    expect(assistantMsg).toBeDefined()
+    const assistantContent = assistantMsg?.content
+    expect(Array.isArray(assistantContent)).toBe(true)
+    expect(assistantContent).toHaveLength(1)
+    // Verify structure of first item in array content
+    const firstAssistantItem = Array.isArray(assistantContent) ? assistantContent[0] : undefined
+    expect(firstAssistantItem).toMatchObject({ type: 'tool-call', toolCallId: 'tc1', toolName: 'list_tasks' })
+
+    // Verify tool message has tool-result content
+    const toolMsg = result[2]
+    expect(toolMsg).toBeDefined()
+    const toolContent = toolMsg?.content
+    expect(Array.isArray(toolContent)).toBe(true)
+    expect(toolContent).toHaveLength(1)
+    // Verify structure of first item in array content
+    const firstToolItem = Array.isArray(toolContent) ? toolContent[0] : undefined
+    expect(firstToolItem).toMatchObject({ type: 'tool-result', toolCallId: 'tc1', toolName: 'list_tasks' })
+  })
+
+  test('rejects messages where content is neither string nor array', () => {
+    const messages = [{ role: 'user', content: 42 }]
+    mockStore.set(6, JSON.stringify(messages))
+
+    const result = loadHistory(6)
+    expect(result).toEqual([])
   })
 })
 

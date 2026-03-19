@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
-import { addTaskRelation } from '../../src/kaneo/add-task-relation.js'
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { createTask } from '../../src/kaneo/create-task.js'
-import { getTask } from '../../src/kaneo/get-task.js'
-import { removeTaskRelation } from '../../src/kaneo/remove-task-relation.js'
-import { updateTaskRelation } from '../../src/kaneo/update-task-relation.js'
+import { addTaskRelation } from '../../src/providers/kaneo/add-task-relation.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { createTask } from '../../src/providers/kaneo/create-task.js'
+import { getTask } from '../../src/providers/kaneo/get-task.js'
+import { removeTaskRelation } from '../../src/providers/kaneo/remove-task-relation.js'
+import { updateTaskRelation } from '../../src/providers/kaneo/update-task-relation.js'
 import { createTestClient, KaneoTestClient } from './kaneo-test-client.js'
 
 describe('E2E: Task Relations', () => {

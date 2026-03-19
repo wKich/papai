@@ -1,0 +1,18 @@
+/**
+ * Changelog parsing utilities.
+ */
+
+/**
+ * Extract the changelog section for a specific version.
+ * Returns null if the version is not found.
+ */
+export function extractChangelogSection(version: string, content: string): string | null {
+  const lines = content.split('\n')
+  const headerPrefix = `## [${version}]`
+  const startIdx = lines.findIndex((line) => line.startsWith(headerPrefix))
+  if (startIdx === -1) return null
+
+  const endIdx = lines.findIndex((line, idx) => idx > startIdx && line.startsWith('## ['))
+  const sectionLines = endIdx === -1 ? lines.slice(startIdx + 1) : lines.slice(startIdx + 1, endIdx)
+  return sectionLines.join('\n').trim()
+}

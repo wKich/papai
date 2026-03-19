@@ -4,7 +4,7 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'users' })
 
-export interface UserRecord {
+interface UserRecord {
   telegram_id: number
   username: string | null
   added_at: string
@@ -39,14 +39,6 @@ export function isAuthorized(telegramId: number): boolean {
   const row = getDb()
     .query<{ telegram_id: number }, [number]>('SELECT telegram_id FROM users WHERE telegram_id = ?')
     .get(telegramId)
-  return row !== null
-}
-
-export function isAuthorizedByUsername(username: string): boolean {
-  log.debug({ username }, 'isAuthorizedByUsername called')
-  const row = getDb()
-    .query<{ telegram_id: number }, [string]>('SELECT telegram_id FROM users WHERE username = ?')
-    .get(username)
   return row !== null
 }
 

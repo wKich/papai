@@ -2,14 +2,13 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { removeLabel } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:remove-label' })
 
-export function makeRemoveLabelTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeRemoveLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Remove (delete) a Kaneo label.',
     inputSchema: z.object({
@@ -25,7 +24,7 @@ export function makeRemoveLabelTool(kaneoConfig: KaneoConfig): ToolSet[string] {
         return gate
       }
       try {
-        return await removeLabel({ config: kaneoConfig, labelId })
+        return await provider.removeLabel!(labelId)
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), labelId, tool: 'remove_label' },

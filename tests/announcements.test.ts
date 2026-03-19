@@ -65,7 +65,8 @@ void mock.module('../src/changelog-reader.js', () => ({
 }))
 
 import packageJson from '../package.json' with { type: 'json' }
-import { announceNewVersion, extractChangelogSection } from '../src/announcements.js'
+import { announceNewVersion } from '../src/announcements.js'
+import { extractChangelogSection } from './helpers/extract-changelog-section.js'
 
 const VERSION: string = packageJson.version
 

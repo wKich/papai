@@ -19,13 +19,15 @@ import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
+import { createProvider } from './providers/registry.js'
+import type { TaskProvider } from './providers/types.js'
 import { makeTools } from './tools/index.js'
 import { isAuthorized, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspace } from './users.js'
 import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'bot' })
 
-const SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their Kaneo workspace directly from Telegram.
+const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks directly from Telegram.
 Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
@@ -35,11 +37,6 @@ WORKFLOW:
 2. Gather context if needed (e.g. call list_projects to resolve a project name, call list_columns before setting a task status).
 3. Call the appropriate tool(s) to fulfil the request.
 4. Reply with a concise confirmation.
-
-IMPORTANT — Task status vs kanban columns:
-- Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.
-- To move a task, update its status to the target column name. To change the board structure, use the column management tools.
-- Always call list_columns before updating a task status to make sure the column exists.
 
 AMBIGUITY — When the user's phrasing implies a single target (uses "the task", "it", "that one", or a specific title) but the search returns multiple equally-likely candidates, ask ONE short question to disambiguate before acting. When the phrasing implies multiple targets ("all", "every", "these", plural nouns), operate on all matches without asking. For referential phrases ("move it", "close that"), resolve from conversation context first; only ask if truly unresolvable.
 
@@ -62,6 +59,12 @@ OUTPUT RULES:
 - Keep replies short and friendly.
 - Don't use tables.`
 
+const buildSystemPrompt = (provider: TaskProvider): string => {
+  const addendum = provider.getPromptAddendum()
+  if (addendum === '') return BASE_SYSTEM_PROMPT
+  return `${BASE_SYSTEM_PROMPT}\n\n${addendum}`
+}
+
 const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
 const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
 
@@ -78,8 +81,11 @@ const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createO
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
 const checkRequiredConfig = (userId: number): string[] => {
-  const requiredKeys = ['llm_apikey', 'llm_baseurl', 'main_model', 'kaneo_apikey'] as const
-  return requiredKeys.filter((k) => getConfig(userId, k) === null)
+  const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
+  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
+  const providerKeys =
+    providerName === 'youtrack' ? (['youtrack_url', 'youtrack_token'] as const) : (['kaneo_apikey'] as const)
+  return [...llmKeys, ...providerKeys].filter((k) => getConfig(userId, k) === null)
 }
 
 const persistFactsFromResults = (
@@ -111,7 +117,7 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
   if (kaneoUrl === undefined) return
   try {
-    const { provisionKaneoUser } = await import('./kaneo/provision.js')
+    const { provisionKaneoUser } = await import('./providers/kaneo/provision.js')
     const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
     const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, ctx.from?.username ?? null)
     setConfig(userId, 'kaneo_apikey', prov.kaneoKey)
@@ -134,30 +140,41 @@ const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> 
   }
 }
 
-const buildKaneoConfig = (userId: number): { apiKey: string; baseUrl: string; sessionCookie?: string } => {
-  const kaneoKey = getConfig(userId, 'kaneo_apikey')!
-  const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
-  const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
-  return isSessionCookie
-    ? { apiKey: '', baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey }
-    : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl }
+const buildProvider = (userId: number): TaskProvider => {
+  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
+  log.debug({ userId, providerName }, 'Building provider')
+
+  if (providerName === 'kaneo') {
+    const kaneoKey = getConfig(userId, 'kaneo_apikey')!
+    const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
+    const workspaceId = getKaneoWorkspace(userId)!
+    const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
+    const config: Record<string, string> = isSessionCookie
+      ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
+      : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
+    return createProvider('kaneo', config)
+  }
+
+  if (providerName === 'youtrack') {
+    const baseUrl = getConfig(userId, 'youtrack_url')!
+    const token = getConfig(userId, 'youtrack_token')!
+    return createProvider('youtrack', { baseUrl, token })
+  }
+
+  return createProvider(providerName, {})
 }
 
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (
-  userId: number,
-  kaneoConfig: { apiKey: string; baseUrl: string; sessionCookie?: string },
-  workspaceId: string,
-): ToolSet => {
+const getOrCreateTools = (userId: number, provider: TaskProvider): ToolSet => {
   const cachedTools = getCachedTools(userId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
     log.debug({ userId }, 'Using cached tools')
     return cachedTools
   }
   log.debug({ userId }, 'Building tools (cache miss)')
-  const tools = makeTools({ kaneoConfig, workspaceId })
+  const tools = makeTools(provider)
   setCachedTools(userId, tools)
   return tools
 }
@@ -192,15 +209,14 @@ const callLlm = async (
   const llmApiKey = getConfig(userId, 'llm_apikey')!
   const llmBaseUrl = getConfig(userId, 'llm_baseurl')!
   const mainModel = getConfig(userId, 'main_model')!
-  const kaneoWorkspaceId = getKaneoWorkspace(userId)!
   const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const kaneoConfig = buildKaneoConfig(userId)
-  const tools = getOrCreateTools(userId, kaneoConfig, kaneoWorkspaceId)
+  const provider = buildProvider(userId)
+  const tools = getOrCreateTools(userId, provider)
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
   log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
     model,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(provider),
     messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),
@@ -211,32 +227,12 @@ const callLlm = async (
   return result
 }
 
-const handleMessageError = async (ctx: Context, userId: number, error: unknown): Promise<void> => {
+const handleMessageError = async (ctx: Context, _userId: number, error: unknown): Promise<void> => {
   if (isAppError(error)) {
-    const userMessage = getUserMessage(error)
-    log.warn({ error: { type: error.type, code: error.code }, userId }, `Handled error: ${error.type}/${error.code}`)
-    await ctx.reply(userMessage)
+    await ctx.reply(getUserMessage(error))
   } else if (APICallError.isInstance(error)) {
-    log.error(
-      {
-        url: error.url,
-        statusCode: error.statusCode,
-        responseBody: error.responseBody,
-        error: error.message,
-        userId,
-      },
-      'LLM API call failed',
-    )
     await ctx.reply('An unexpected error occurred. Please try again later.')
   } else {
-    log.error(
-      {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        userId,
-      },
-      'Unexpected error generating response',
-    )
     await ctx.reply('An unexpected error occurred. Please try again later.')
   }
 }

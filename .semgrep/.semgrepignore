@@ -1,0 +1,23 @@
+# Test files
+tests/
+**/*.test.ts
+**/*.spec.ts
+
+# Dependencies
+node_modules/
+.git/
+
+# Build artifacts
+dist/
+*.log
+
+# Semgrep binary
+.semgrep/bin/
+
+# Environment files
+.env
+.env.*
+
+# Documentation
+docs/
+*.md

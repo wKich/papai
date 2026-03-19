@@ -93,10 +93,8 @@ void mock.module('ai', () => ({
 }))
 // --- end mocks ---
 
-import { clearUserCache } from '../src/cache.js'
 import {
   buildMemoryContextMessage,
-  extractFacts,
   loadSummary,
   saveSummary,
   loadFacts,
@@ -105,6 +103,8 @@ import {
   clearFacts,
   trimWithMemoryModel,
 } from '../src/memory.js'
+import { extractFacts } from './helpers/extract-facts.js'
+import { clearUserCache } from './utils/test-cache.js'
 
 describe('loadSummary', () => {
   beforeEach(() => {
@@ -225,7 +225,7 @@ describe('extractFacts', () => {
         result: { id: 'task-42', title: 'New task', number: 42 },
       },
     ]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('#42')
     expect(facts[0]!.title).toBe('New task')
@@ -233,42 +233,54 @@ describe('extractFacts', () => {
 
   test('extracts fact from update_task result', () => {
     const results = [{ toolName: 'update_task', result: { id: 'task-38', number: 38 } }]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('#38')
     // no title → falls back to identifier
     expect(facts[0]!.title).toBe('#38')
   })
 
-  test('extracts fact from get_task result', () => {
-    const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
-    const facts = extractFacts([], results)
+  test('extracts fact from delete_task result', () => {
+    const results = [{ toolName: 'delete_task', result: { id: 'task-10', number: 10 } }]
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('#10')
+    expect(facts[0]!.title).toBe('#10')
   })
 
-  test('extracts up to 3 facts from search_tasks result', () => {
+  test('extracts fact from update_project result', () => {
+    const results = [{ toolName: 'update_project', result: { id: 'proj-99', name: 'Updated Name' } }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-99')
+    expect(facts[0]!.title).toBe('Updated Name')
+  })
+
+  test('does not extract fact from get_task result', () => {
+    const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(0)
+  })
+
+  test('does not extract facts from search_tasks result', () => {
     const items = [
       { id: 'task-1', title: 'A', number: 1 },
       { id: 'task-2', title: 'B', number: 2 },
-      { id: 'task-3', title: 'C', number: 3 },
-      { id: 'task-4', title: 'D', number: 4 },
     ]
     const results = [{ toolName: 'search_tasks', result: items }]
-    const facts = extractFacts([], results)
-    expect(facts).toHaveLength(3)
-    expect(facts.map((f) => f.identifier)).toEqual(['#1', '#2', '#3'])
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(0)
   })
 
   test('returns empty array for unknown tool', () => {
     const results = [{ toolName: 'unknown_tool', result: { id: 'X' } }]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toEqual([])
   })
 
   test('returns empty array for malformed result', () => {
     const results = [{ toolName: 'create_task', result: { no_id: true } }]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toEqual([])
   })
 
@@ -279,7 +291,7 @@ describe('extractFacts', () => {
         result: { id: 'proj-123', name: 'Backend Migration', url: 'https://kaneo.app/project/proj-123' },
       },
     ]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('proj:proj-123')
     expect(facts[0]!.title).toBe('Backend Migration')
@@ -288,7 +300,7 @@ describe('extractFacts', () => {
 
   test('extracts create_project fact without url', () => {
     const results = [{ toolName: 'create_project', result: { id: 'proj-456', name: 'Frontend Refactor' } }]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(1)
     expect(facts[0]!.identifier).toBe('proj:proj-456')
     expect(facts[0]!.title).toBe('Frontend Refactor')
@@ -297,7 +309,7 @@ describe('extractFacts', () => {
 
   test('ignores malformed create_project result', () => {
     const results = [{ toolName: 'create_project', result: { no_id: true, name: 'Test' } }]
-    const facts = extractFacts([], results)
+    const facts = extractFacts(results)
     expect(facts).toEqual([])
   })
 })

@@ -2,12 +2,12 @@ import { beforeAll, afterAll, beforeEach, describe, expect, setDefaultTimeout, t
 
 setDefaultTimeout(30000)
 
-import { addComment } from '../../src/kaneo/add-comment.js'
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { createProject } from '../../src/kaneo/create-project.js'
-import { createTask } from '../../src/kaneo/create-task.js'
-import { deleteTask } from '../../src/kaneo/delete-task.js'
-import { getComments } from '../../src/kaneo/get-comments.js'
+import { addComment } from '../../src/providers/kaneo/add-comment.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { createProject } from '../../src/providers/kaneo/create-project.js'
+import { createTask } from '../../src/providers/kaneo/create-task.js'
+import { deleteTask } from '../../src/providers/kaneo/delete-task.js'
+import { getComments } from '../../src/providers/kaneo/get-comments.js'
 import { getSharedKaneoConfig, getSharedWorkspaceId, generateUniqueSuffix } from './test-helpers.js'
 
 describe('E2E: Task Comments', () => {
@@ -89,7 +89,7 @@ describe('E2E: Task Comments', () => {
     // PUT /activity/comment returns {} (Kaneo API bug: missing .returning() in update-comment.ts
     // https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/update-comment.ts)
     // update() re-fetches GET /activity/:taskId to confirm and return the updated comment.
-    const { updateComment } = await import('../../src/kaneo/update-comment.js')
+    const { updateComment } = await import('../../src/providers/kaneo/update-comment.js')
     const updated = await updateComment({
       config: kaneoConfig,
       taskId: task.id,
@@ -115,7 +115,7 @@ describe('E2E: Task Comments', () => {
     expect(comment.id).not.toBe('pending')
 
     // Remove the comment
-    const { removeComment } = await import('../../src/kaneo/remove-comment.js')
+    const { removeComment } = await import('../../src/providers/kaneo/remove-comment.js')
     const removed = await removeComment({
       config: kaneoConfig,
       activityId: comment.id,

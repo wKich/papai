@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+
+  // Standalone scripts not auto-detected from package.json
+  "entry": ["src/scripts/*.ts!"],
+
+  // All source files (production only)
+  "project": ["src/**/*.ts!"],
+
+  // All issue types treated as hard errors
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "devDependencies": "error",
+    "optionalPeerDependencies": "error",
+    "unlisted": "error",
+    "binaries": "error",
+    "unresolved": "error",
+    "exports": "error",
+    "types": "error",
+    "nsExports": "error",
+    "nsTypes": "error",
+    "duplicates": "error",
+    "enumMembers": "error",
+    "classMembers": "error",
+  },
+
+  // Report unused exports even in entry files
+  "includeEntryExports": true,
+
+  // Config hints become hard errors
+  "treatConfigHintsAsErrors": true,
+}

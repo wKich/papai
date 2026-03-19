@@ -2,102 +2,130 @@
 
 ## Problem Summary
 
-When running all tests together (`bun test`), E2E tests fail due to mock leakage from unit tests. The mock in `tests/tools/project-tools.test.ts` persists and affects E2E test execution.
+When running all tests together (`bun test`), E2E tests fail due to mock leakage from unit tests. The mocks in `tests/kaneo/*.test.ts` persist and affect E2E test execution.
 
 ## Root Cause
 
-### Mock Registration (tests/tools/project-tools.test.ts:187-189)
+### Mock Registration (tests/kaneo/task-resource.test.ts:7)
 
 ```typescript
-test('propagates API errors', async () => {
-  await mock.module('../../src/kaneo/index.js', () => ({
-    createProject: mock(() => Promise.reject(new Error('API Error'))),
-  }))
-  // ... test continues
-})
+void mock.module('../../src/kaneo/list-columns.js', () => ({
+  listColumns: mock(() =>
+    Promise.resolve([
+      createMockColumn({ id: 'col-1', name: 'To Do' }),
+      createMockColumn({ id: 'col-2', name: 'In Progress' }),
+      createMockColumn({ id: 'col-3', name: 'Done', isFinal: true }),
+    ]),
+  ),
+}))
 ```
 
-### Mock Consumption (tests/e2e/kaneo-test-client.ts:34)
-
-```typescript
-async createTestProject(name?: string): Promise<{ id: string; name: string; slug: string }> {
-  const projectName = name ?? `Test Project ${generateUniqueSuffix()}`
-  const project = await createProject({  // <-- Gets mocked version
-    config: this.kaneoConfig,
-    workspaceId: this.config.workspaceId,
-    name: projectName,
-  })
-  // ...
-}
-```
-
-## Why Mocks Leak
+### Why Mocks Leak
 
 1. **Bun's `mock.module()` mocks are global to the test process**
    - Unlike Jest's `jest.mock()` which can be isolated per test file
    - Bun's mock.module() replaces the module in the module cache globally
 
-2. **E2E tests run after unit tests in the same process**
-   - Bun test runner loads all test files in the same process
-   - Execution order: unit tests first, then E2E tests
+2. **E2E tests need `--preload` flag for Docker setup**
+   - When running all tests with `bun test`, E2E tests are loaded but preload isn't applied
+   - This causes "E2E environment not initialized" errors
 
-3. **No mock restoration between test files**
-   - The mock is never reset after the unit test completes
-   - All subsequent imports of `../../src/kaneo/index.js` get the mocked version
+## CI Configuration (Already Correct)
 
-## Evidence
+The CI is correctly configured to separate unit and E2E tests:
 
-### Test Run Output (bun test)
+```yaml
+# Unit tests job
+- name: Test
+  run: bun run test # runs: bun test tests/kaneo tests/tools tests/providers...
 
-```
-error: API Error
-      at <anonymous> (/Users/ki/Projects/experiments/papai/tests/tools/project-tools.test.ts:188:54)
-      at createTestProject (/Users/ki/Projects/experiments/papai/tests/e2e/kaneo-test-client.ts:34:27)
-      at <anonymous> (/Users/ki/Projects/experiments/papai/tests/e2e/user-workflows.test.ts:53:38)
-(fail) E2E: User Workflows > full task lifecycle workflow [0.03ms]
+# E2E tests job
+- name: Run E2E tests
+  run: bun run test:e2e # runs: bun test --preload ./tests/e2e/bun-test-setup.ts...
 ```
 
-The stack trace clearly shows:
+## When the Issue Occurs
 
-1. Mock is set at `project-tools.test.ts:188`
-2. E2E test calls `createTestProject()` at `kaneo-test-client.ts:34`
-3. Which calls the mocked `createProject`
-4. Which throws 'API Error' from the mock
+**The issue only occurs locally** when running `bun test` without arguments. This loads ALL test files including E2E tests that require:
 
-### When Run Alone, E2E Tests Pass
-
-```bash
-bun test --preload ./tests/e2e/bun-test-setup.ts tests/e2e/e2e.test.ts
-# All E2E tests pass
-```
+1. The `--preload` flag for Docker setup
+2. No leaked mocks from unit tests
 
 ## Impact
 
-- **508 tests pass, 70 fail** when running `bun test`
-- All 70 failures are E2E tests that depend on `createTestProject()`
-- Unit tests pass because they run before the mock is applied
+- **594 tests pass, 45 fail** when running `bun test` without arguments
+- E2E tests fail with "E2E environment not initialized"
+- Unit tests fail due to mock pollution from other test files
 
-## Potential Solutions
+## Solutions
 
-1. **Restore mocks after each test file**
-   - Use `afterAll()` to restore original module
-   - Bun provides `mock.restore()` to reset all mocks
+### Solution 1: Run Tests Correctly (Recommended for Local Dev)
 
-2. **Separate test runs**
-   - Run unit tests and E2E tests separately
-   - Update CI to run: `bun test tests/tools && bun run test:e2e`
+Always run tests using the proper npm scripts:
 
-3. **Avoid mock.module() in shared modules**
-   - Use dependency injection instead
-   - Pass mock functions as parameters rather than module-level mocking
+```bash
+# Run unit tests only
+bun run test
 
-4. **Use spyOn instead of module mock**
-   - `spyOn()` is more targeted and can be restored per-test
+# Run E2E tests only
+bun run test:e2e
+```
 
-## Recommendation
+### Solution 2: Fix Unit Test Mocks (Long-term)
 
-The most reliable fix is Solution #2 (separate test runs) combined with Solution #1 (mock restoration). This ensures:
+Refactor unit tests to use dependency injection instead of `mock.module()`:
 
-- Unit tests can use mocks freely
-- E2E tests always get real implementations
-- No accidental coupling between test suites
+**Current approach (problematic):**
+
+```typescript
+// Module-level mock affects all subsequent imports
+void mock.module('../../src/kaneo/list-columns.js', () => ({...}))
+```
+
+**Better approach (dependency injection):**
+
+```typescript
+// Pass mocks as parameters - no global state
+const taskResource = new TaskResource(mockConfig, {
+  listColumns: mock(() => Promise.resolve([...])),
+})
+```
+
+### Solution 3: Configure Bun to Exclude E2E Tests
+
+Add a `bunfig.toml` to exclude E2E tests from default runs:
+
+```toml
+[test]
+exclude = ["tests/e2e/**"]
+```
+
+## Files with mock.module Issues
+
+- `tests/kaneo/task-resource.test.ts:7` - mocks `list-columns.js`
+- `tests/kaneo/column-resource.test.ts:4` - mocks `index.js`
+
+## Current Status
+
+**CI is correctly configured** - unit and E2E tests run in separate jobs:
+
+- `bun run test` → unit tests only
+- `bun run test:e2e` → E2E tests with Docker preload
+
+**Local issue only** occurs when running `bun test` without arguments.
+
+## Verification
+
+To verify CI is working:
+
+```bash
+# Run unit tests (should pass)
+bun run test
+
+# Run E2E tests (should pass with Docker)
+bun run test:e2e
+```
+
+---
+
+_Document updated: 2026-03-18_

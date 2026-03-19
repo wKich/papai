@@ -46,9 +46,9 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-import { clearUserCache } from '../src/cache.js'
-import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
-import type { ConfigKey } from '../src/config.js'
+import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
+import { clearUserCache } from './utils/test-cache.js'
 
 const USER_A = 111
 const USER_B = 222
@@ -162,7 +162,10 @@ describe('maskValue', () => {
 
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
+    expect(CONFIG_KEYS).toContain('provider')
     expect(CONFIG_KEYS).toContain('kaneo_apikey')
+    expect(CONFIG_KEYS).toContain('youtrack_url')
+    expect(CONFIG_KEYS).toContain('youtrack_token')
     expect(CONFIG_KEYS).toContain('llm_apikey')
     expect(CONFIG_KEYS).toContain('llm_baseurl')
     expect(CONFIG_KEYS).toContain('main_model')
@@ -170,6 +173,6 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(5)
+    expect(CONFIG_KEYS).toHaveLength(8)
   })
 })

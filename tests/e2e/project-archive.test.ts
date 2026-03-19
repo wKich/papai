@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { deleteProject } from '../../src/kaneo/delete-project.js'
-import { listProjects } from '../../src/kaneo/list-projects.js'
-import { updateProject } from '../../src/kaneo/update-project.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { deleteProject } from '../../src/providers/kaneo/delete-project.js'
+import { listProjects } from '../../src/providers/kaneo/list-projects.js'
+import { updateProject } from '../../src/providers/kaneo/update-project.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 
 describe('E2E: Project Archive', () => {

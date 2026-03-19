@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { makeAddTaskRelationTool } from '../../src/tools/add-task-relation.js'
 import { makeRemoveTaskRelationTool } from '../../src/tools/remove-task-relation.js'
 import { makeUpdateTaskRelationTool } from '../../src/tools/update-task-relation.js'
-import { getToolExecutor, restoreAllModules } from '../test-helpers.js'
-
-const mockConfig = { apiKey: 'test-key', baseUrl: 'https://api.test.com' }
+import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
 
 function isTaskRelation(val: unknown): val is { taskId: string; relatedTaskId: string; type: string } {
   return (
@@ -20,8 +19,15 @@ function isTaskRelation(val: unknown): val is { taskId: string; relatedTaskId: s
   )
 }
 
-function isSuccessResult(val: unknown): val is { success: boolean } {
-  return val !== null && typeof val === 'object' && 'success' in val && typeof val.success === 'boolean'
+function isRemoveResult(val: unknown): val is { taskId: string; relatedTaskId: string } {
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    'taskId' in val &&
+    typeof (val as Record<string, unknown>)['taskId'] === 'string' &&
+    'relatedTaskId' in val &&
+    typeof (val as Record<string, unknown>)['relatedTaskId'] === 'string'
+  )
 }
 
 describe('Task Relation Tools', () => {
@@ -29,28 +35,25 @@ describe('Task Relation Tools', () => {
     mock.restore()
   })
 
-  afterEach(() => {
-    restoreAllModules()
-  })
-
   describe('makeAddTaskRelationTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeAddTaskRelationTool(provider)
       expect(tool.description).toContain('Create a relation between two Kaneo tasks')
     })
 
     test('adds blocks relation', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskRelation: mock(() =>
+      const provider = createMockProvider({
+        addRelation: mock(() =>
           Promise.resolve({
             taskId: 'task-1',
             relatedTaskId: 'task-2',
             type: 'blocks',
           }),
         ),
-      }))
+      })
 
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const tool = makeAddTaskRelationTool(provider)
       const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'blocks' },
         { toolCallId: '1', messages: [] },
@@ -63,77 +66,68 @@ describe('Task Relation Tools', () => {
     })
 
     test('adds duplicate relation', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskRelation: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            taskId: String(params['taskId']),
-            relatedTaskId: String(params['relatedTaskId']),
-            type: String(params['type']),
-          })
+      const addRelation = mock((_taskId: string, _relatedTaskId: string, type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type,
         }),
-      }))
+      )
+      const provider = createMockProvider({ addRelation })
 
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const tool = makeAddTaskRelationTool(provider)
       await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'duplicate' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['type']).toBe('duplicate')
+      expect(addRelation).toHaveBeenCalledWith('task-1', 'task-2', 'duplicate')
     })
 
     test('adds related relation', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskRelation: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            taskId: String(params['taskId']),
-            relatedTaskId: String(params['relatedTaskId']),
-            type: String(params['type']),
-          })
+      const addRelation = mock((_taskId: string, _relatedTaskId: string, type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type,
         }),
-      }))
+      )
+      const provider = createMockProvider({ addRelation })
 
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const tool = makeAddTaskRelationTool(provider)
       await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['type']).toBe('related')
+      expect(addRelation).toHaveBeenCalledWith('task-1', 'task-2', 'related')
     })
 
     test('adds parent relation', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskRelation: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            taskId: String(params['taskId']),
-            relatedTaskId: String(params['relatedTaskId']),
-            type: String(params['type']),
-          })
+      const addRelation = mock((_taskId: string, _relatedTaskId: string, type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type,
         }),
-      }))
+      )
+      const provider = createMockProvider({ addRelation })
 
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const tool = makeAddTaskRelationTool(provider)
       await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'parent' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['type']).toBe('parent')
+      expect(addRelation).toHaveBeenCalledWith('task-1', 'task-2', 'parent')
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        addTaskRelation: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      const provider = createMockProvider({
+        addRelation: mock(() => Promise.reject(new Error('Task not found'))),
+      })
 
-      const tool = makeAddTaskRelationTool(mockConfig)
+      const tool = makeAddTaskRelationTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'invalid', relatedTaskId: 'task-2', type: 'blocks' },
         { toolCallId: '1', messages: [] },
@@ -146,78 +140,50 @@ describe('Task Relation Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeAddTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)(
-        { relatedTaskId: 'task-2', type: 'blocks' },
-        { toolCallId: '1', messages: [] },
-      )
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskRelationTool(provider)
+      expect(schemaValidates(tool, { relatedTaskId: 'task-2', type: 'blocks' })).toBe(false)
     })
 
-    test('validates relatedTaskId is required', async () => {
-      const tool = makeAddTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1', type: 'blocks' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates relatedTaskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', type: 'blocks' })).toBe(false)
     })
 
-    test('validates type is required', async () => {
-      const tool = makeAddTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)(
-        { taskId: 'task-1', relatedTaskId: 'task-2' },
-        { toolCallId: '1', messages: [] },
-      )
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates type is required', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', relatedTaskId: 'task-2' })).toBe(false)
     })
 
-    test('validates type is from allowed enum', async () => {
-      const tool = makeAddTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)(
-        { taskId: 'task-1', relatedTaskId: 'task-2', type: 'invalid' as unknown },
-        { toolCallId: '1', messages: [] },
-      )
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates type is from allowed enum', () => {
+      const provider = createMockProvider()
+      const tool = makeAddTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', relatedTaskId: 'task-2', type: 'invalid' })).toBe(false)
     })
   })
 
   describe('makeUpdateTaskRelationTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeUpdateTaskRelationTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskRelationTool(provider)
       expect(tool.description).toContain('Update the type of an existing relation')
     })
 
     test('updates relation type from blocks to related', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateTaskRelation: mock(() =>
+      const provider = createMockProvider({
+        updateRelation: mock(() =>
           Promise.resolve({
             taskId: 'task-1',
             relatedTaskId: 'task-2',
             type: 'related',
           }),
         ),
-      }))
+      })
 
-      const tool = makeUpdateTaskRelationTool(mockConfig)
+      const tool = makeUpdateTaskRelationTool(provider)
       const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' },
         { toolCallId: '1', messages: [] },
@@ -230,55 +196,49 @@ describe('Task Relation Tools', () => {
     })
 
     test('updates relation type to duplicate', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateTaskRelation: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            taskId: String(params['taskId']),
-            relatedTaskId: String(params['relatedTaskId']),
-            type: String(params['type']),
-          })
+      const updateRelation = mock((_taskId: string, _relatedTaskId: string, type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type,
         }),
-      }))
+      )
+      const provider = createMockProvider({ updateRelation })
 
-      const tool = makeUpdateTaskRelationTool(mockConfig)
+      const tool = makeUpdateTaskRelationTool(provider)
       await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'duplicate' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['type']).toBe('duplicate')
+      expect(updateRelation).toHaveBeenCalledWith('task-1', 'task-2', 'duplicate')
     })
 
     test('updates relation type to parent', async () => {
-      let capturedParams: Record<string, unknown> | undefined
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateTaskRelation: mock((params: Record<string, unknown>) => {
-          capturedParams = params
-          return Promise.resolve({
-            taskId: String(params['taskId']),
-            relatedTaskId: String(params['relatedTaskId']),
-            type: String(params['type']),
-          })
+      const updateRelation = mock((_taskId: string, _relatedTaskId: string, type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type,
         }),
-      }))
+      )
+      const provider = createMockProvider({ updateRelation })
 
-      const tool = makeUpdateTaskRelationTool(mockConfig)
+      const tool = makeUpdateTaskRelationTool(provider)
       await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2', type: 'parent' },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(capturedParams?.['type']).toBe('parent')
+      expect(updateRelation).toHaveBeenCalledWith('task-1', 'task-2', 'parent')
     })
 
     test('propagates relation not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        updateTaskRelation: mock(() => Promise.reject(new Error('Relation not found'))),
-      }))
+      const provider = createMockProvider({
+        updateRelation: mock(() => Promise.reject(new Error('Relation not found'))),
+      })
 
-      const tool = makeUpdateTaskRelationTool(mockConfig)
+      const tool = makeUpdateTaskRelationTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'task-1', relatedTaskId: 'invalid', type: 'blocks' },
         { toolCallId: '1', messages: [] },
@@ -291,73 +251,54 @@ describe('Task Relation Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeUpdateTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)(
-        { relatedTaskId: 'task-2', type: 'blocks' },
-        { toolCallId: '1', messages: [] },
-      )
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskRelationTool(provider)
+      expect(schemaValidates(tool, { relatedTaskId: 'task-2', type: 'blocks' })).toBe(false)
     })
 
-    test('validates relatedTaskId is required', async () => {
-      const tool = makeUpdateTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1', type: 'blocks' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates relatedTaskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', type: 'blocks' })).toBe(false)
     })
 
-    test('validates type is required', async () => {
-      const tool = makeUpdateTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)(
-        { taskId: 'task-1', relatedTaskId: 'task-2' },
-        { toolCallId: '1', messages: [] },
-      )
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates type is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', relatedTaskId: 'task-2' })).toBe(false)
     })
   })
 
   describe('makeRemoveTaskRelationTool', () => {
     test('returns tool with correct structure', () => {
-      const tool = makeRemoveTaskRelationTool(mockConfig)
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskRelationTool(provider)
       expect(tool.description).toContain('Remove a relation between two Kaneo tasks')
     })
 
     test('removes relation successfully', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        removeTaskRelation: mock(() => Promise.resolve({ success: true })),
-      }))
+      const provider = createMockProvider({
+        removeRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2' })),
+      })
 
-      const tool = makeRemoveTaskRelationTool(mockConfig)
+      const tool = makeRemoveTaskRelationTool(provider)
       const result: unknown = await tool.execute!(
         { taskId: 'task-1', relatedTaskId: 'task-2' },
         { toolCallId: '1', messages: [] },
       )
-      if (!isSuccessResult(result)) throw new Error('Invalid result')
+      if (!isRemoveResult(result)) throw new Error('Invalid result')
 
-      expect(result.success).toBe(true)
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-2')
     })
 
     test('propagates task not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        removeTaskRelation: mock(() => Promise.reject(new Error('Task not found'))),
-      }))
+      const provider = createMockProvider({
+        removeRelation: mock(() => Promise.reject(new Error('Task not found'))),
+      })
 
-      const tool = makeRemoveTaskRelationTool(mockConfig)
+      const tool = makeRemoveTaskRelationTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'invalid', relatedTaskId: 'task-2' },
         { toolCallId: '1', messages: [] },
@@ -371,11 +312,11 @@ describe('Task Relation Tools', () => {
     })
 
     test('propagates relation not found error', async () => {
-      await mock.module('../../src/kaneo/index.js', () => ({
-        removeTaskRelation: mock(() => Promise.reject(new Error('Relation not found'))),
-      }))
+      const provider = createMockProvider({
+        removeRelation: mock(() => Promise.reject(new Error('Relation not found'))),
+      })
 
-      const tool = makeRemoveTaskRelationTool(mockConfig)
+      const tool = makeRemoveTaskRelationTool(provider)
       const promise = getToolExecutor(tool)(
         { taskId: 'task-1', relatedTaskId: 'invalid' },
         { toolCallId: '1', messages: [] },
@@ -388,26 +329,16 @@ describe('Task Relation Tools', () => {
       }
     })
 
-    test('validates taskId is required', async () => {
-      const tool = makeRemoveTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)({ relatedTaskId: 'task-2' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskRelationTool(provider)
+      expect(schemaValidates(tool, { relatedTaskId: 'task-2' })).toBe(false)
     })
 
-    test('validates relatedTaskId is required', async () => {
-      const tool = makeRemoveTaskRelationTool(mockConfig)
-      const promise = getToolExecutor(tool)({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow()
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
+    test('validates relatedTaskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveTaskRelationTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     })
   })
 })

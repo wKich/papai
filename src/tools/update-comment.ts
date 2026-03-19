@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { updateComment } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:update-comment' })
 
-export function makeUpdateCommentTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeUpdateCommentTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Update an existing comment on a Kaneo task.',
     inputSchema: z.object({
@@ -18,7 +17,7 @@ export function makeUpdateCommentTool(kaneoConfig: KaneoConfig): ToolSet[string]
     }),
     execute: async ({ taskId, activityId, comment }) => {
       try {
-        return await updateComment({ config: kaneoConfig, taskId, activityId, comment })
+        return await provider.updateComment!({ taskId, commentId: activityId, body: comment })
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), activityId, tool: 'update_comment' },

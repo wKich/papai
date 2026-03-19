@@ -21,6 +21,12 @@ type UserCache = {
 
 const userCaches = new Map<number, UserCache>()
 
+/**
+ * Exported for testing purposes only.
+ * @internal
+ */
+export const _userCaches = userCaches
+
 const SESSION_TTL_MS = 30 * 60 * 1000
 
 setInterval(
@@ -167,11 +173,6 @@ export function setCachedConfig(userId: number, key: string, value: string): voi
   syncConfigToDb(userId, key, value)
 }
 
-export function getAllCachedConfig(userId: number): Map<string, string | null> {
-  const cache = getOrCreateCache(userId)
-  return new Map(cache.config)
-}
-
 // --- Workspace Cache ---
 
 export function getCachedWorkspace(userId: number): string | null {
@@ -219,9 +220,4 @@ export function clearCachedFacts(userId: number): void {
   cache.facts = []
   cache.config.delete('facts_loaded')
   log.debug({ userId }, 'Facts cache cleared')
-}
-
-export function clearUserCache(userId: number): void {
-  userCaches.delete(userId)
-  log.info({ userId }, 'User cache cleared')
 }

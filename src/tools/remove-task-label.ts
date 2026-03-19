@@ -2,13 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { KaneoConfig } from '../kaneo/client.js'
-import { removeTaskLabel } from '../kaneo/index.js'
 import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:remove-task-label' })
 
-export function makeRemoveTaskLabelTool(kaneoConfig: KaneoConfig): ToolSet[string] {
+export function makeRemoveTaskLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Remove a label from a Kaneo task.',
     inputSchema: z.object({
@@ -17,7 +16,7 @@ export function makeRemoveTaskLabelTool(kaneoConfig: KaneoConfig): ToolSet[strin
     }),
     execute: async ({ taskId, labelId }) => {
       try {
-        return await removeTaskLabel({ config: kaneoConfig, taskId, labelId })
+        return await provider.removeTaskLabel!(taskId, labelId)
       } catch (error) {
         log.error(
           {

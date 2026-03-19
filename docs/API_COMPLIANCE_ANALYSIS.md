@@ -4,11 +4,11 @@
 
 This document provides a comprehensive analysis of the papai codebase's compliance with the official Kaneo API specification (OpenAPI 3.0.3).
 
-**Analysis Date:** 2026-03-12  
-**API Version:** 1.0.0  
-**Total API Endpoints:** 86  
-**Implemented Endpoints:** 27 (31%)  
-**Tools Available:** 24
+**Analysis Date:** 2026-03-18
+**API Version:** 1.0.0
+**Total API Endpoints:** 86
+**Implemented Endpoints:** 27 (31%)
+**Tools Available:** 28
 
 ---
 
@@ -234,6 +234,7 @@ This document provides a comprehensive analysis of the papai codebase's complian
 | search_tasks         | `/search`                                                                                                                                            | GET            | `src/kaneo/search-tasks.ts`         |
 | list_tasks           | `/task/tasks/{projectId}`                                                                                                                            | GET            | `src/kaneo/list-tasks.ts`           |
 | get_task             | `/task/{id}`                                                                                                                                         | GET            | `src/kaneo/get-task.ts`             |
+| delete_task          | `/task/{id}`                                                                                                                                         | DELETE         | `src/kaneo/delete-task.ts`          |
 | archive_task         | `/label/workspace/{workspaceId}`, `/label`, `/label/task/{taskId}`                                                                                   | GET, POST, GET | `src/kaneo/task-archive.ts`         |
 | list_projects        | `/project`                                                                                                                                           | GET            | `src/kaneo/list-projects.ts`        |
 | create_project       | `/project`, `/project/{id}`                                                                                                                          | POST, PUT      | `src/kaneo/create-project.ts`       |
@@ -253,6 +254,11 @@ This document provides a comprehensive analysis of the papai codebase's complian
 | update_task_relation | `/task/{id}`, `/task/description/{id}`                                                                                                               | GET, PUT       | `src/kaneo/update-task-relation.ts` |
 | remove_task_relation | `/task/{id}`, `/task/description/{id}`                                                                                                               | GET, PUT       | `src/kaneo/remove-task-relation.ts` |
 | list_columns         | `/column/{projectId}`                                                                                                                                | GET            | `src/kaneo/list-columns.ts`         |
+| list_statuses        | `/column/{projectId}`                                                                                                                                | GET            | `src/kaneo/list-statuses.ts`        |
+| create_status        | `/column/{projectId}`                                                                                                                                | POST           | `src/kaneo/create-status.ts`        |
+| update_status        | `/column/{id}`                                                                                                                                       | PUT            | `src/kaneo/update-status.ts`        |
+| delete_status        | `/column/{id}`                                                                                                                                       | DELETE         | `src/kaneo/delete-status.ts`        |
+| reorder_statuses     | `/column/reorder/{projectId}`                                                                                                                        | PUT            | `src/kaneo/reorder-statuses.ts`     |
 
 ### 2.2 Resource Class Mapping
 
@@ -264,7 +270,7 @@ The implementation uses a resource-based client architecture:
 | Projects | ProjectResource | `src/kaneo/project-resource.ts` | create, list, update, archive                                                                   |
 | Labels   | LabelResource   | `src/kaneo/label-resource.ts`   | create, list, update, remove, addToTask, removeFromTask                                         |
 | Comments | CommentResource | `src/kaneo/comment-resource.ts` | add, list, update, remove                                                                       |
-| Columns  | ColumnResource  | `src/kaneo/column-resource.ts`  | list                                                                                            |
+| Columns  | ColumnResource  | `src/kaneo/column-resource.ts`  | list, create, update, delete, reorder                                                           |
 
 ---
 
@@ -274,30 +280,23 @@ The implementation uses a resource-based client architecture:
 
 The following API endpoints are **not exposed as tools** but could be useful:
 
-| API Endpoint                  | Method | Proposed Tool     | Use Case                        |
-| ----------------------------- | ------ | ----------------- | ------------------------------- |
-| `/task/import/{projectId}`    | POST   | `import_tasks`    | Bulk import tasks from JSON     |
-| `/task/export/{projectId}`    | GET    | `export_tasks`    | Export project tasks for backup |
-| `/column/{projectId}`         | POST   | `create_column`   | Add new status columns          |
-| `/column/{id}`                | PUT    | `update_column`   | Rename/modify columns           |
-| `/column/{id}`                | DELETE | `delete_column`   | Remove unused columns           |
-| `/column/reorder/{projectId}` | PUT    | `reorder_columns` | Reorganize workflow             |
+| API Endpoint               | Method | Proposed Tool  | Use Case                        |
+| -------------------------- | ------ | -------------- | ------------------------------- |
+| `/task/import/{projectId}` | POST   | `import_tasks` | Bulk import tasks from JSON     |
+| `/task/export/{projectId}` | GET    | `export_tasks` | Export project tasks for backup |
 
 ### 3.2 Missing Endpoints (Not Implemented)
 
 The following API endpoints are **not implemented** in papai:
 
-**High Priority (Task Management Features):**
+**Medium Priority (Data Portability):**
 
-- `DELETE /task/{id}` - Hard delete task (currently only archive via label)
-
-**Medium Priority (Project Management Features):**
-
-- All Time Entry endpoints (time tracking)
-- All Column management endpoints (create/update/delete/reorder)
+- `GET /task/export/{projectId}` - Export tasks for backup
+- `POST /task/import/{projectId}` - Import tasks from JSON
 
 **Low Priority (Integration Features):**
 
+- All Time Entry endpoints (time tracking)
 - All GitHub Integration endpoints
 - All Workflow Rules endpoints
 - External Links endpoints
@@ -416,6 +415,7 @@ The implementation fetches existing label and preserves values for unspecified f
 | list_tasks   | GET         | projectId           | Yes    | Returns flattened task list                     |
 | get_task     | GET         | taskId              | Yes    | Includes parsed relations                       |
 | search_tasks | GET         | query, workspaceId  | Yes    | Optional projectId filter                       |
+| delete_task  | DELETE      | taskId              | Yes    | Hard delete task                                |
 | archive_task | N/A         | taskId, workspaceId | N/A    | Uses label-based archiving                      |
 
 ### 4.2 Project Operations
@@ -447,7 +447,17 @@ The implementation fetches existing label and preserves values for unspecified f
 | update_comment | PUT         | activityId, comment | Yes    | Returns updated comment         |
 | remove_comment | DELETE      | activityId          | Yes    | Hard delete                     |
 
-### 4.5 Task Relations (Custom Implementation)
+### 4.5 Status/Column Operations
+
+| Operation        | HTTP Method | Required Params     | Passed | Notes                            |
+| ---------------- | ----------- | ------------------- | ------ | -------------------------------- |
+| list_statuses    | GET         | projectId           | Yes    | Returns column-based status list |
+| create_status    | POST        | projectId, name     | Yes    | Creates new status column        |
+| update_status    | PUT         | statusId            | Yes    | Update name, color, icon         |
+| delete_status    | DELETE      | statusId            | Yes    | Remove status column             |
+| reorder_statuses | PUT         | projectId, statuses | Yes    | Reorder columns                  |
+
+### 4.6 Task Relations (Custom Implementation)
 
 | Operation            | Implementation             | Passed | Notes                           |
 | -------------------- | -------------------------- | ------ | ------------------------------- |
@@ -561,9 +571,7 @@ All tool inputs are validated using Zod schemas in the tool definitions (see `sr
 
 ### 8.1 High Priority
 
-1. **Implement Hard Delete Task**: Add `delete_task` tool using `DELETE /task/{id}` endpoint
-2. **Add Export/Import Tools**: Implement `export_tasks` and `import_tasks` for data portability
-3. **Column Management**: Add tools for `create_column`, `update_column`, `delete_column`, `reorder_columns`
+1. **Add Export/Import Tools**: Implement `export_tasks` and `import_tasks` for data portability
 
 ### 8.2 Medium Priority
 
@@ -592,14 +600,14 @@ All tool inputs are validated using Zod schemas in the tool definitions (see `sr
 | ----------------------------- | -------------------------------- |
 | Total API Endpoints           | 86                               |
 | Implemented Endpoints         | 27 (31%)                         |
-| Available Tools               | 24                               |
-| Tools with Full Compliance    | 22                               |
+| Available Tools               | 28                               |
+| Tools with Full Compliance    | 26                               |
 | Tools with Partial Compliance | 2 (archive_task, add_task_label) |
-| Missing Tools (High Value)    | 5                                |
+| Missing Tools (High Value)    | 2                                |
 
-**Overall Compliance Rating:** Good (75%)
+**Overall Compliance Rating:** Good (80%)
 
-The implementation covers all core task and project management features with 24 well-implemented tools. The main gaps are in auxiliary features (time tracking, column management, integrations) that may not be essential for basic Telegram bot functionality.
+The implementation covers all core task and project management features with 28 well-implemented tools. The main gaps are in auxiliary features (time tracking, data import/export, integrations) that may not be essential for basic Telegram bot functionality.
 
 ---
 
@@ -613,7 +621,7 @@ src/kaneo/
 |-- project-resource.ts    # Project CRUD operations
 |-- label-resource.ts      # Label CRUD operations
 |-- comment-resource.ts    # Comment CRUD operations
-|-- column-resource.ts     # Column list operations
+|-- column-resource.ts     # Column/Status CRUD operations
 |-- frontmatter.ts         # Task relations via YAML frontmatter
 |-- task-archive.ts        # Archive label management
 |-- task-relations.ts      # Relation CRUD operations
@@ -622,6 +630,7 @@ src/kaneo/
 |-- create-task.ts         # Create task wrapper
 |-- update-task.ts         # Update task wrapper
 |-- get-task.ts            # Get task wrapper
+|-- delete-task.ts         # Delete task wrapper
 |-- archive-task.ts        # Archive task wrapper
 |-- add-task-label.ts      # Add label wrapper
 |-- remove-task-label.ts   # Remove label wrapper
@@ -641,15 +650,22 @@ src/kaneo/
 |-- update-project.ts      # Update project wrapper
 |-- archive-project.ts     # Archive project wrapper
 |-- list-columns.ts        # List columns wrapper
+|-- list-statuses.ts       # List statuses wrapper
+|-- create-status.ts       # Create status wrapper
+|-- update-status.ts       # Update status wrapper
+|-- delete-status.ts       # Delete status wrapper
+|-- reorder-statuses.ts    # Reorder statuses wrapper
 |-- classify-error.ts      # Error classification
 |-- errors.ts              # Error classes
 |-- task-list-schema.ts    # Task list response schema
 |-- request-schemas.ts     # Request validation schemas
+|-- schemas/               # Auto-generated Zod schemas (70+ files)
 
 src/tools/
-|-- index.ts               # Tool registry (24 tools)
+|-- index.ts               # Tool registry (28 tools)
 |-- create-task.ts
 |-- update-task.ts
+|-- delete-task.ts
 |-- search-tasks.ts
 |-- list-tasks.ts
 |-- get-task.ts
@@ -672,10 +688,16 @@ src/tools/
 |-- update-task-relation.ts
 |-- remove-task-relation.ts
 |-- list-columns.ts
+|-- list-statuses.ts
+|-- create-status.ts
+|-- update-status.ts
+|-- delete-status.ts
+|-- reorder-statuses.ts
+|-- confirmation-gate.ts    # Confirmation helper for destructive operations
 ```
 
 ---
 
-_Document generated: 2026-03-12_  
-_API Specification: OpenAPI 3.0.3_  
+_Document generated: 2026-03-18_
+_API Specification: OpenAPI 3.0.3_
 _Analysis Tool: Claude Code_

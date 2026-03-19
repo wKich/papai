@@ -38,10 +38,12 @@ jobs:
 
       - name: Calculate next version
         id: version
+        env:
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
         run: |
           CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           CURRENT=$(echo "$CURRENT_TAG" | sed 's/^v//')
-          case "${{ github.event.inputs.bump_type }}" in
+          case "$BUMP_TYPE" in
             major)
               NEXT=$(echo $CURRENT | awk -F. '{print $1+1".0.0"}')
               ;;

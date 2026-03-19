@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
-import { addTaskLabel } from '../../src/kaneo/add-task-label.js'
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { createLabel } from '../../src/kaneo/create-label.js'
-import { createTask } from '../../src/kaneo/create-task.js'
-import { listLabels } from '../../src/kaneo/list-labels.js'
-import { removeLabel } from '../../src/kaneo/remove-label.js'
-import { removeTaskLabel } from '../../src/kaneo/remove-task-label.js'
-import { updateLabel } from '../../src/kaneo/update-label.js'
+import { addTaskLabel } from '../../src/providers/kaneo/add-task-label.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { createLabel } from '../../src/providers/kaneo/create-label.js'
+import { createTask } from '../../src/providers/kaneo/create-task.js'
+import { listLabels } from '../../src/providers/kaneo/list-labels.js'
+import { removeLabel } from '../../src/providers/kaneo/remove-label.js'
+import { removeTaskLabel } from '../../src/providers/kaneo/remove-task-label.js'
+import { updateLabel } from '../../src/providers/kaneo/update-label.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 
 describe('E2E: Label Operations', () => {

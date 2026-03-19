@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
-import { addTaskRelation } from '../../src/kaneo/add-task-relation.js'
-import { archiveTask } from '../../src/kaneo/archive-task.js'
-import type { KaneoConfig } from '../../src/kaneo/client.js'
-import { createColumn } from '../../src/kaneo/create-column.js'
-import { createTask } from '../../src/kaneo/create-task.js'
-import { getTask } from '../../src/kaneo/get-task.js'
-import { listTasks } from '../../src/kaneo/list-tasks.js'
-import { updateTask } from '../../src/kaneo/update-task.js'
+import { addTaskRelation } from '../../src/providers/kaneo/add-task-relation.js'
+import { archiveTask } from '../../src/providers/kaneo/archive-task.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
+import { createColumn } from '../../src/providers/kaneo/create-column.js'
+import { createTask } from '../../src/providers/kaneo/create-task.js'
+import { getTask } from '../../src/providers/kaneo/get-task.js'
+import { listTasks } from '../../src/providers/kaneo/list-tasks.js'
+import { updateTask } from '../../src/providers/kaneo/update-task.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 
 /**
