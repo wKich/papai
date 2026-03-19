@@ -446,12 +446,35 @@ export async function provisionKaneoUser(
 }
 ```
 
-**Step 2: Run typecheck**
+**Step 2: Update `provisionAndConfigure` signature**
+
+> **Gap vs original plan:** `provisionAndConfigure` was not in the original plan but is also exported from this file and takes `userId: number`. It calls `setConfig`, `setKaneoWorkspace`, and `clearCachedTools` — all of which become `string` after Tasks 3–5.
+
+```typescript
+export async function provisionAndConfigure(userId: string, username: string | null): Promise<ProvisionOutcome> {
+  const kaneoUrl = process.env['KANEO_CLIENT_URL']
+  if (kaneoUrl === undefined) return { status: 'failed', error: 'KANEO_CLIENT_URL not set' }
+
+  try {
+    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
+    const result = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, username)
+    setConfig(userId, 'kaneo_apikey', result.kaneoKey)
+    setKaneoWorkspace(userId, result.workspaceId)
+    clearCachedTools(userId)
+    log.info({ userId }, 'Kaneo account provisioned and configured')
+    return { status: 'provisioned', email: result.email, password: result.password, kaneoUrl }
+  } catch (err: unknown) {
+    // ... same error handling unchanged
+  }
+}
+```
+
+**Step 3: Run typecheck**
 
 Run: `bun run typecheck`
-Expected: Callers (`bot.ts`, `admin.ts`) will error — fixed in later tasks.
+Expected: Callers (`llm-orchestrator.ts`, `admin.ts`) will error — fixed in later tasks.
 
-**Step 3: Commit**
+**Step 4: Commit**
 
 ```bash
 git add src/providers/kaneo/provision.ts
@@ -475,11 +498,11 @@ git commit -m "refactor: kaneo provisioning uses string platform user ID"
 
 Currently imported by:
 
-- `src/bot.ts` — will be removed in Task 10 (bot refactoring)
+- `src/llm-orchestrator.ts` — update to `./chat/telegram/format.js` (will be removed entirely in Task 10a)
 - `src/announcements.ts` — already removed in Task 6
 - `tests/utils/format.test.ts` — update import path to `../../src/chat/telegram/format.js`
 
-For now, update the import in `bot.ts` to `./chat/telegram/format.js` (it will be removed entirely in Task 10).
+> **Gap vs original plan:** The plan referenced `src/bot.ts` as the importer. Since the plan was written, LLM orchestration was extracted to `src/llm-orchestrator.ts`, which is now the actual importer.
 
 **Step 4: Run tests**
 
@@ -639,7 +662,110 @@ git commit -m "refactor: command handlers use ChatProvider abstraction"
 
 ---
 
-### Task 10: Refactor `src/bot.ts` — Platform-Agnostic Orchestration
+### Task 10a: Refactor `src/llm-orchestrator.ts` — Remove Grammy Context
+
+> **Gap vs original plan:** Since the plan was written, all LLM orchestration logic was extracted from `bot.ts` into `src/llm-orchestrator.ts`. This is now the primary refactoring target — `bot.ts` itself is a thin wiring file. This task was entirely missing from the original plan.
+
+**Files:**
+
+- Modify: `src/llm-orchestrator.ts`
+
+**Step 1: Remove Grammy import, replace `Context` with `ReplyFn`**
+
+- Remove: `import type { Context } from 'grammy'`
+- Remove: `import { formatLlmOutput } from './chat/telegram/format.js'` (already moved in Task 8; formatting is now `reply.formatted()`)
+- Add: `import type { ReplyFn } from './chat/types.js'`
+
+**Step 2: Update all function signatures — `number` → `string`, `Context` → `ReplyFn`**
+
+```typescript
+// userId: number → string throughout
+const checkRequiredConfig = (userId: string): string[] => { ... }
+const persistFactsFromResults = (userId: string, ...): void => { ... }
+const buildProvider = (userId: string): TaskProvider => { ... }
+const getOrCreateTools = (userId: string, provider: TaskProvider): ToolSet => { ... }
+
+// ctx: Context → reply: ReplyFn
+const sendLlmResponse = async (
+  reply: ReplyFn,
+  userId: string,
+  result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
+): Promise<void> => {
+  const textToFormat = result.text !== undefined && result.text !== '' ? result.text : 'Done.'
+  await reply.formatted(textToFormat)
+  log.info({ userId, responseLength: result.text?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 }, 'Response sent successfully')
+}
+
+const maybeProvisionKaneo = async (reply: ReplyFn, userId: string, username: string | null): Promise<void> => {
+  if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_apikey') !== null) return
+  const outcome = await provisionAndConfigure(userId, username)
+  if (outcome.status === 'provisioned') {
+    await reply.text(
+      `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
+    )
+  } else if (outcome.status === 'registration_disabled') {
+    await reply.text('Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.')
+  }
+}
+
+const callLlm = async (
+  reply: ReplyFn,
+  userId: string,
+  username: string | null,
+  history: readonly ModelMessage[],
+): Promise<{ response: { messages: ModelMessage[] } }> => {
+  await maybeProvisionKaneo(reply, userId, username)
+  const missing = checkRequiredConfig(userId)
+  if (missing.length > 0) {
+    log.warn({ userId, missing }, 'Missing required config keys')
+    await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
+    throw new Error('Missing configuration')
+  }
+  // ... rest unchanged
+  await sendLlmResponse(reply, userId, result)
+  return result
+}
+
+const handleMessageError = async (reply: ReplyFn, _userId: string, error: unknown): Promise<void> => {
+  if (isAppError(error)) {
+    await reply.text(getUserMessage(error))
+  } else {
+    await reply.text('An unexpected error occurred. Please try again later.')
+  }
+}
+
+export const processMessage = async (reply: ReplyFn, userId: string, username: string | null, userText: string): Promise<void> => {
+  // ... same logic, pass (reply, userId, username, history) to callLlm
+}
+```
+
+**Step 3: Remove `withTypingIndicator`** — it has moved into `TelegramChatProvider` (Task 11). The Telegram adapter's `onMessage` handler wraps the call in its own typing loop; `processMessage` no longer needs it.
+
+**Step 4: Update `BASE_SYSTEM_PROMPT`** — remove "directly from Telegram":
+
+```typescript
+const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks.
+Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+...`
+```
+
+**Step 5: Run typecheck**
+
+Run: `bun run typecheck`
+Expected: Errors in `src/bot.ts` (still wires `ctx` through) — fixed in Task 10.
+
+**Step 6: Commit**
+
+```bash
+git add src/llm-orchestrator.ts
+git commit -m "refactor: llm-orchestrator uses ReplyFn and string user IDs"
+```
+
+---
+
+### Task 10: Refactor `src/bot.ts` — Platform-Agnostic Wiring
+
+> **Updated vs original plan:** `bot.ts` is now a thin wiring module (all orchestration is in `llm-orchestrator.ts`). The refactoring here is minimal: remove Grammy, export `setupBot()`.
 
 **Files:**
 
@@ -650,40 +776,20 @@ git commit -m "refactor: command handlers use ChatProvider abstraction"
 Remove all Grammy imports. Export `setupBot(chat: ChatProvider, adminUserId: string): void` instead of `bot`.
 
 ```typescript
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { APICallError } from '@ai-sdk/provider'
-import { generateText, stepCountIs, type ToolSet } from 'ai'
-import { type ModelMessage } from 'ai'
-
-import { clearCachedTools, getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
-import type { ChatProvider, ReplyFn } from './chat/types.js'
+import type { ChatProvider } from './chat/types.js'
 import {
   registerAdminCommands,
   registerClearCommand,
   registerConfigCommand,
   registerContextCommand,
   registerHelpCommand,
+  registerSetCommand,
 } from './commands/index.js'
-import { getConfig, setConfig } from './config.js'
-import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
-import { getUserMessage, isAppError } from './errors.js'
-import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
-import { extractFactsFromSdkResults, upsertFact } from './memory.js'
-import { createProvider } from './providers/registry.js'
-import type { TaskProvider } from './providers/types.js'
-import { makeTools } from './tools/index.js'
-import { isAuthorized, resolveUserByUsername, getKaneoWorkspace, setKaneoWorkspace } from './users.js'
+import { processMessage } from './llm-orchestrator.js'
+import { isAuthorized, resolveUserByUsername } from './users.js'
 
 const log = logger.child({ scope: 'bot' })
-
-const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks.
-Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
-// ... rest of prompt unchanged, remove "from Telegram" ...
-`
-
-// checkAuthorization, buildOpenAI, checkRequiredConfig, persistFactsFromResults,
-// buildProvider, getOrCreateTools — same logic, userId: string
 
 const checkAuthorization = (userId: string, username?: string | null): boolean => {
   log.debug({ userId }, 'Checking authorization')
@@ -692,20 +798,6 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
   log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
   return false
 }
-
-// sendLlmResponse now takes ReplyFn
-const sendLlmResponse = async (
-  reply: ReplyFn,
-  userId: string,
-  result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
-): Promise<void> => {
-  const textToFormat = result.text !== undefined && result.text !== '' ? result.text : 'Done.'
-  await reply.formatted(textToFormat)
-  // ...
-}
-
-// callLlm, maybeProvisionKaneo, handleMessageError — same, taking ReplyFn instead of Context
-// processMessage — same, taking ReplyFn instead of Context
 
 export function setupBot(chat: ChatProvider, adminUserId: string): void {
   registerHelpCommand(chat, checkAuthorization, adminUserId)
@@ -718,7 +810,7 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
   chat.onMessage(async (msg, reply) => {
     if (!checkAuthorization(msg.user.id, msg.user.username)) return
     reply.typing()
-    await processMessage(reply, msg.user.id, msg.text)
+    await processMessage(reply, msg.user.id, msg.user.username, msg.text)
   })
 }
 ```
@@ -917,6 +1009,8 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'main' })
 
+// KANEO_CLIENT_URL is NOT moved here — it stays as a Kaneo-specific runtime var
+// consumed by provisionAndConfigure and buildProvider (not a top-level startup requirement)
 const REQUIRED_ENV_VARS = ['CHAT_PROVIDER', 'ADMIN_USER_ID']
 
 const missing = REQUIRED_ENV_VARS.filter((v) => (process.env[v]?.trim() ?? '') === '')
@@ -989,6 +1083,9 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 # --- Mattermost-specific (required when CHAT_PROVIDER=mattermost) ---
 # MATTERMOST_URL=https://mm.example.com
 # MATTERMOST_BOT_TOKEN=your_mattermost_bot_token_here
+
+# --- Kaneo-specific (required when using Kaneo task provider) ---
+KANEO_CLIENT_URL=http://localhost:3000
 ```
 
 **Step 3: Run typecheck and lint**
@@ -1009,12 +1106,14 @@ git commit -m "refactor: index.ts uses ChatProvider, new env vars"
 
 **Files:**
 
-- Modify: `tests/bot.test.ts`
+- Modify: `tests/bot.test.ts` — mock `ChatProvider` instead of Grammy `Bot`
 - Modify: any other test files that reference Grammy types or numeric user IDs
+
+> **Note on `llm-orchestrator.ts` tests:** `tests/bot.test.ts` currently tests the LLM orchestration logic that lives in `llm-orchestrator.ts`. After Tasks 10a and 10, it should mock `ChatProvider` (specifically `ReplyFn`) instead of Grammy `Context`. The mock `processMessage` call signature changes to `(reply, userId, username, text)`.
 
 **Step 1: Update `tests/bot.test.ts`**
 
-Replace Grammy-specific mocking with ChatProvider mocking. The test should verify that `setupBot` registers commands and message handlers correctly.
+Replace Grammy-specific mocking with ChatProvider mocking. The test should verify that `setupBot` registers commands and message handlers correctly, and that `processMessage` (now in `llm-orchestrator.ts`) is called with `(ReplyFn, string userId, string | null username, string text)`.
 
 **Step 2: Run full test suite**
 

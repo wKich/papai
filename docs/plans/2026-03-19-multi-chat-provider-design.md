@@ -71,7 +71,8 @@ src/
 │   │   └── format.ts         # moved from src/utils/format.ts
 │   └── mattermost/
 │       └── index.ts          # MattermostChatProvider implements ChatProvider
-├── bot.ts                    # platform-agnostic orchestration
+├── bot.ts                    # platform-agnostic wiring (setupBot)
+├── llm-orchestrator.ts       # LLM call logic, takes ReplyFn instead of Grammy Context
 ├── commands/                 # handlers use ReplyFn + IncomingMessage
 ├── index.ts                  # reads CHAT_PROVIDER env, creates provider, wires everything
 └── ...                       # tools/, providers/, config, cache, etc. — unchanged
@@ -81,6 +82,7 @@ src/
 
 - **`src/index.ts`** — `TELEGRAM_BOT_TOKEN` / `TELEGRAM_USER_ID` replaced by required `CHAT_PROVIDER` + `ADMIN_USER_ID`. Platform-specific env vars validated inside each adapter's constructor.
 - **`src/bot.ts`** — no longer imports Grammy. Receives `ChatProvider`. Exports `setupBot(chat, adminUserId)`.
+- **`src/llm-orchestrator.ts`** — no longer imports Grammy `Context`. All functions take `ReplyFn` + `userId: string`. `withTypingIndicator` removed (moved to Telegram adapter). `BASE_SYSTEM_PROMPT` loses "directly from Telegram".
 - **`src/commands/*.ts`** — take `ChatProvider` instead of `Bot`. Handlers receive `(msg, reply)` instead of Grammy `ctx`.
 - **`src/users.ts`** — `telegram_id` → `platform_user_id` (text). All functions accept string IDs.
 - **`src/announcements.ts`** — `BotApi` replaced by `ChatProvider.sendMessage()`.
@@ -196,24 +198,38 @@ All other modules (`config.ts`, `history.ts`, `cache.ts`, `memory.ts`) change `u
 | Markdown formatting  | Convert to `MessageEntity[]` via `@gramio/format` | Pass through as-is                      |
 | Command arguments    | Grammy's `ctx.match`                              | Parse text after command name           |
 
-## 6. bot.ts Refactoring
+## 6. bot.ts / llm-orchestrator.ts Refactoring
 
-**Current:** Creates Grammy Bot, defines all handlers, exports `bot`.
-**After:** Pure orchestration module. Exports `setupBot(chat: ChatProvider, adminUserId: string): void`.
+**Current:** `bot.ts` is a thin wiring file; all LLM orchestration logic (extracted after this plan was first written) lives in `src/llm-orchestrator.ts`.
+
+**After:** Both files are platform-agnostic.
+
+### `src/llm-orchestrator.ts`
+
+What changes:
+
+- `withTypingIndicator(ctx, fn)` removed — moved into `TelegramChatProvider` (adapter handles re-sending)
+- `formatLlmOutput()` import removed — formatting is now `reply.formatted()` in each adapter
+- All functions: `ctx: Context` → `reply: ReplyFn`, `userId: number` → `userId: string`
+- `processMessage` signature: `(reply: ReplyFn, userId: string, username: string | null, userText: string)`
+- `BASE_SYSTEM_PROMPT`: remove "directly from Telegram" phrase
+
+What stays:
+
+- `buildSystemPrompt()`, `buildOpenAI()`, `checkRequiredConfig()`, `buildProvider()`, `getOrCreateTools()`
+- `callLlm()`, `sendLlmResponse()`, `handleMessageError()`, `maybeProvisionKaneo()`, `persistFactsFromResults()`
+
+### `src/bot.ts`
 
 What moves out:
 
 - `new Bot(...)` → `TelegramChatProvider` constructor
-- `withTypingIndicator()` → Telegram adapter internals
-- `formatLlmOutput()` import → each adapter's `reply.formatted()`
 - `bot.on('message:text', ...)` → `chat.onMessage(...)`
 
 What stays:
 
-- `buildSystemPrompt()`, `buildOpenAI()`, `buildProvider()`, `getOrCreateTools()`
 - `checkAuthorization()` (string IDs)
-- `callLlm()`, `processMessage()`, `handleMessageError()`, `maybeProvisionKaneo()` — take `ReplyFn` instead of `ctx`
-- `persistFactsFromResults()` — unchanged
+- `setupBot(chat: ChatProvider, adminUserId: string): void` — registers all commands and `chat.onMessage`
 
 **Entry point:**
 
