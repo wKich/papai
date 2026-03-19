@@ -6,15 +6,9 @@ import { z } from 'zod'
 import { getCachedFacts, getCachedSummary, setCachedSummary, clearCachedFacts, upsertCachedFact } from './cache.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
+import type { MemoryFact } from './types/memory.js'
 
 const log = logger.child({ scope: 'memory' })
-
-type MemoryFact = {
-  readonly identifier: string
-  readonly title: string
-  readonly url: string
-  readonly last_seen: string
-}
 
 type ModelConfig = {
   readonly apiKey: string
@@ -64,9 +58,6 @@ export function clearFacts(userId: number): void {
 
 // --- Rule-based fact extraction ---
 
-type ToolCallEntry = { toolName: string; args: unknown }
-type ToolResultEntry = { toolName: string; result: unknown }
-
 const TaskResultSchema = z.looseObject({
   id: z.string(),
   title: z.string().optional(),
@@ -79,15 +70,17 @@ const ProjectResultSchema = z.looseObject({
   url: z.string().optional(),
 })
 
-export function extractFacts(
-  _toolCalls: readonly ToolCallEntry[],
-  toolResults: readonly ToolResultEntry[],
+// Wrapper to accept SDK result types directly without unsafe assignments
+// SDK v5 uses input/output properties typed as any
+export function extractFactsFromSdkResults(
+  _toolCalls: Array<{ toolName: string; input: unknown }>,
+  toolResults: Array<{ toolName: string; output: unknown }>,
 ): readonly Omit<MemoryFact, 'last_seen'>[] {
   const facts: Omit<MemoryFact, 'last_seen'>[] = []
 
   for (const result of toolResults) {
     if (['create_task', 'update_task', 'delete_task'].includes(result.toolName)) {
-      const parsed = TaskResultSchema.safeParse(result.result)
+      const parsed = TaskResultSchema.safeParse(result.output)
       if (parsed.success) {
         const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
         facts.push({
@@ -99,7 +92,7 @@ export function extractFacts(
     }
 
     if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
-      const parsed = ProjectResultSchema.safeParse(result.result)
+      const parsed = ProjectResultSchema.safeParse(result.output)
       if (parsed.success) {
         facts.push({
           identifier: `proj:${parsed.data.id}`,
@@ -111,26 +104,6 @@ export function extractFacts(
   }
 
   return facts
-}
-
-// Wrapper to accept SDK result types directly without unsafe assignments
-// SDK v5 uses input/output properties typed as any
-export function extractFactsFromSdkResults(
-  toolCalls: Array<{ toolName: string; input: unknown }>,
-  toolResults: Array<{ toolName: string; output: unknown }>,
-): readonly Omit<MemoryFact, 'last_seen'>[] {
-  // Map SDK types to internal types safely
-  const callEntries: ToolCallEntry[] = []
-  for (const tc of toolCalls) {
-    callEntries.push({ toolName: tc.toolName, args: tc.input })
-  }
-
-  const resultEntries: ToolResultEntry[] = []
-  for (const tr of toolResults) {
-    resultEntries.push({ toolName: tr.toolName, result: tr.output })
-  }
-
-  return extractFacts(callEntries, resultEntries)
 }
 
 // --- Smart trimming with memory model ---

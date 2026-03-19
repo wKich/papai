@@ -93,14 +93,7 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-import {
-  addUser,
-  removeUser,
-  isAuthorized,
-  isAuthorizedByUsername,
-  resolveUserByUsername,
-  listUsers,
-} from '../src/users.js'
+import { addUser, removeUser, isAuthorized, resolveUserByUsername, listUsers } from '../src/users.js'
 
 describe('addUser', () => {
   beforeEach(() => {
@@ -158,21 +151,6 @@ describe('isAuthorized', () => {
 
   test('returns false for unknown user', () => {
     expect(isAuthorized(222)).toBe(false)
-  })
-})
-
-describe('isAuthorizedByUsername', () => {
-  beforeEach(() => {
-    store.users.clear()
-  })
-
-  test('returns true for authorized user by username', () => {
-    addUser(111, 999, 'testuser')
-    expect(isAuthorizedByUsername('testuser')).toBe(true)
-  })
-
-  test('returns false for unknown username', () => {
-    expect(isAuthorizedByUsername('unknown')).toBe(false)
   })
 })
 

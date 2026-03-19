@@ -1,0 +1,56 @@
+/**
+ * Test helper for extracting facts from tool results.
+ * This was moved from src/memory.ts since it's only used in tests.
+ */
+
+import { z } from 'zod'
+
+import type { MemoryFact } from '../../src/types/memory.js'
+
+const TaskResultSchema = z.looseObject({
+  id: z.string(),
+  title: z.string().optional(),
+  number: z.number().optional(),
+})
+
+const ProjectResultSchema = z.looseObject({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().optional(),
+})
+
+type ToolResultEntry = { toolName: string; result: unknown }
+
+/**
+ * Extract facts from tool results for testing purposes.
+ */
+export function extractFacts(toolResults: readonly ToolResultEntry[]): readonly Omit<MemoryFact, 'last_seen'>[] {
+  const facts: Omit<MemoryFact, 'last_seen'>[] = []
+
+  for (const result of toolResults) {
+    if (['create_task', 'update_task', 'delete_task'].includes(result.toolName)) {
+      const parsed = TaskResultSchema.safeParse(result.result)
+      if (parsed.success) {
+        const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
+        facts.push({
+          identifier: label,
+          title: parsed.data.title ?? label,
+          url: '',
+        })
+      }
+    }
+
+    if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
+      const parsed = ProjectResultSchema.safeParse(result.result)
+      if (parsed.success) {
+        facts.push({
+          identifier: `proj:${parsed.data.id}`,
+          title: parsed.data.name,
+          url: parsed.data.url ?? '',
+        })
+      }
+    }
+  }
+
+  return facts
+}

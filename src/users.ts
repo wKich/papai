@@ -42,14 +42,6 @@ export function isAuthorized(telegramId: number): boolean {
   return row !== null
 }
 
-export function isAuthorizedByUsername(username: string): boolean {
-  log.debug({ username }, 'isAuthorizedByUsername called')
-  const row = getDb()
-    .query<{ telegram_id: number }, [string]>('SELECT telegram_id FROM users WHERE username = ?')
-    .get(username)
-  return row !== null
-}
-
 export function resolveUserByUsername(telegramId: number, username: string): boolean {
   log.debug({ telegramId, username }, 'resolveUserByUsername called')
   const row = getDb()

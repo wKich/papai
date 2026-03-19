@@ -9,7 +9,7 @@ import { migration004KaneoWorkspace } from './migrations/004_kaneo_workspace.js'
 import { migration005RenameConfigKeys } from './migrations/005_rename_config_keys.js'
 import { migration006VersionAnnouncements } from './migrations/006_version_announcements.js'
 
-export const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
 let dbInstance: Database | undefined
 

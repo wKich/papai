@@ -58,7 +58,7 @@ export function parseRelationsFromDescription(description: string | undefined | 
   return { relations, body }
 }
 
-export function buildDescriptionWithRelations(body: string, relations: TaskRelation[]): string {
+function buildDescriptionWithRelations(body: string, relations: TaskRelation[]): string {
   if (relations.length === 0) {
     return body
   }

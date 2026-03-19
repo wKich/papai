@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { providerError, llmError, validationError, systemError, isAppError, getUserMessage } from '../src/errors.js'
+import { providerError, systemError, isAppError, getUserMessage } from '../src/errors.js'
+import { llmError, validationError } from './utils/test-errors.js'
 
 describe('providerError basic constructors', () => {
   test('taskNotFound creates correct structure', () => {

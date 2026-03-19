@@ -23,23 +23,6 @@ export type SystemError =
 
 export type AppError = ProviderError | LlmError | ValidationError | SystemError
 
-export const llmError = {
-  apiError: (message: string): AppError => ({ type: 'llm', code: 'api-error', message }),
-  rateLimited: (): AppError => ({ type: 'llm', code: 'rate-limited' }),
-  timeout: (): AppError => ({ type: 'llm', code: 'timeout' }),
-  tokenLimit: (): AppError => ({ type: 'llm', code: 'token-limit' }),
-}
-
-export const validationError = {
-  invalidInput: (field: string, reason: string): AppError => ({
-    type: 'validation',
-    code: 'invalid-input',
-    field,
-    reason,
-  }),
-  missingRequired: (field: string): AppError => ({ type: 'validation', code: 'missing-required', field }),
-}
-
 export const systemError = {
   configMissing: (variable: string): AppError => ({ type: 'system', code: 'config-missing', variable }),
   networkError: (message: string): AppError => ({ type: 'system', code: 'network-error', message }),

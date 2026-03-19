@@ -1,7 +1,8 @@
 import type { Bot } from 'grammy'
 
-import { CONFIG_KEYS, isConfigKey, setConfig } from '../config.js'
+import { isConfigKey, setConfig } from '../config.js'
 import { logger } from '../logger.js'
+import { CONFIG_KEYS } from '../types/config.js'
 
 const log = logger.child({ scope: 'commands:set' })
 

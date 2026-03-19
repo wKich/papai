@@ -1,28 +1,8 @@
 import { getCachedConfig, setCachedConfig } from './cache.js'
 import { logger } from './logger.js'
+import { CONFIG_KEYS, type ConfigKey } from './types/config.js'
 
 const log = logger.child({ scope: 'config' })
-
-export type ConfigKey =
-  | 'provider'
-  | 'kaneo_apikey'
-  | 'youtrack_url'
-  | 'youtrack_token'
-  | 'llm_apikey'
-  | 'llm_baseurl'
-  | 'main_model'
-  | 'small_model'
-
-export const CONFIG_KEYS: readonly ConfigKey[] = [
-  'provider',
-  'kaneo_apikey',
-  'youtrack_url',
-  'youtrack_token',
-  'llm_apikey',
-  'llm_baseurl',
-  'main_model',
-  'small_model',
-]
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['kaneo_apikey', 'youtrack_token', 'llm_apikey'])
 

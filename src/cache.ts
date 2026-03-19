@@ -21,6 +21,12 @@ type UserCache = {
 
 const userCaches = new Map<number, UserCache>()
 
+/**
+ * Exported for testing purposes only.
+ * @internal
+ */
+export const _userCaches = userCaches
+
 const SESSION_TTL_MS = 30 * 60 * 1000
 
 setInterval(
@@ -214,9 +220,4 @@ export function clearCachedFacts(userId: number): void {
   cache.facts = []
   cache.config.delete('facts_loaded')
   log.debug({ userId }, 'Facts cache cleared')
-}
-
-export function clearUserCache(userId: number): void {
-  userCaches.delete(userId)
-  log.info({ userId }, 'User cache cleared')
 }

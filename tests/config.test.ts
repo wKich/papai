@@ -46,9 +46,9 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-import { clearUserCache } from '../src/cache.js'
-import { CONFIG_KEYS, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
-import type { ConfigKey } from '../src/config.js'
+import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
+import { clearUserCache } from './utils/test-cache.js'
 
 const USER_A = 111
 const USER_B = 222

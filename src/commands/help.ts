@@ -15,7 +15,6 @@ const ADMIN_COMMANDS = [
   { command: 'context', description: 'Show current memory context (summary and known entities)' },
   { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
   { command: 'users', description: 'List authorized users' },
-  { command: 'migrate', description: 'Run data migrations' },
 ] as const
 
 const USER_HELP = [
@@ -37,7 +36,6 @@ const ADMIN_HELP = [
   '/user add <id|@username> — Authorize a user',
   '/user remove <id|@username> — Revoke access',
   '/users — List authorized users',
-  '/migrate — Run data migrations',
   "/clear <user_id> — Clear a specific user's history",
   "/clear all — Clear all users' history",
 ].join('\n')

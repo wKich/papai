@@ -4,6 +4,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import { readChangelogFile } from './changelog-reader.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
+import { extractChangelogSection } from './utils/changelog.js'
 import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'announcements' })
@@ -16,17 +17,6 @@ type BotApi = {
 }
 
 const VERSION: string = packageJson.version
-
-export function extractChangelogSection(version: string, content: string): string | null {
-  const lines = content.split('\n')
-  const headerPrefix = `## [${version}]`
-  const startIdx = lines.findIndex((line) => line.startsWith(headerPrefix))
-  if (startIdx === -1) return null
-
-  const endIdx = lines.findIndex((line, idx) => idx > startIdx && line.startsWith('## ['))
-  const sectionLines = endIdx === -1 ? lines.slice(startIdx + 1) : lines.slice(startIdx + 1, endIdx)
-  return sectionLines.join('\n').trim()
-}
 
 function markVersionAnnounced(version: string): boolean {
   const result = getDb().run('INSERT OR IGNORE INTO version_announcements (version, announced_at) VALUES (?, ?)', [

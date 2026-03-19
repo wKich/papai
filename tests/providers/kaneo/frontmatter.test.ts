@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   addRelation,
-  buildDescriptionWithRelations,
   parseRelationsFromDescription,
   removeRelation,
   updateRelation,
 } from '../../../src/providers/kaneo/frontmatter.js'
+import { buildDescriptionWithRelations } from '../../helpers/build-description.js'
 
 describe('parseRelationsFromDescription', () => {
   test('returns empty for undefined', () => {
