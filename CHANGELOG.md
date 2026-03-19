@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-03-19
+
+### Added
+
+- Add YouTrack as second provider to validate abstraction (Phase 6)
+- Add delete-task tool and improve provider abstraction
+- Implement missing YouTrack methods and fix comment interface
+- **youtrack:** Add common schemas and enums
+- **youtrack:** Add user schemas
+- **youtrack:** Add comment schemas
+- **youtrack:** Add project schemas
+- **youtrack:** Add tag schemas
+- **youtrack:** Add custom field schemas
+- **youtrack:** Add agile board schemas
+- **youtrack:** Add issue schemas
+- **youtrack:** Add issue link schemas
+- **youtrack:** Add schema index file
+- **youtrack:** Complete schema definitions for YouTrack REST API
+- Integrate Semgrep security scanning
+- **youtrack:** Add production-ready Zod schemas for API response types
+- **youtrack:** Wire Zod parse() into all operations for runtime API response validation
+
+### Changed
+
+- Add provider interface and error types (Phase 1)
+- Add KaneoProvider adapter and provider registry (Phase 2)
+- Rewire tools and bot to use TaskProvider interface (Phase 3)
+- Rewire bot to use provider abstraction (Phase 4)
+- Clean up provider layer imports (Phase 5)
+- Rename columns.crud capability to statuses.crud
+- Split coarse-grained capabilities into granular ones
+- Extract operations to fix lint warnings
+- Move src/kaneo/ into src/providers/kaneo/
+- Move schemas to root schemas/ and restructure tests to mirror src/
+- Remove migration infrastructure and reorganize types
+
+### Documentation
+
+- Add semgrep security integration design
+- Add semgrep integration implementation plan
+- Add mutation testing design with StrykerJS command runner approach
+- Add mutation testing implementation plan
+
+### Fixed
+
+- Use pip install for semgrep instead of binary download
+- Resolve semgrep CI error and knip unlisted binaries
+- **youtrack:** Simplify ISSUE_FIELDS custom fields query to name-based shape
+- **youtrack:** Update mappers to use name-based custom field lookup and schema types
+- **youtrack:** Update ISSUE_LIST_FIELDS to name-based custom fields shape
+- **knip:** Use ignoreFiles for test-only YouTrack schemas (files rule requires ignoreFiles not ignoreIssues)
+- Add CHANGELOG.md to Docker image for version announcements
+
+### Miscellaneous
+
+- Create youtrack provider schemas directory
+- Add directly-imported transitive deps to package.json
+- Remove dead code flagged by knip
+- Final knip cleanup — zero issues remaining
+- Restore bin/ to .semgrep/.gitignore
+- **youtrack:** Delete types.ts and update knip config for schemas
+
+### Styling
+
+- Fix lint warning by compressing long function signatures
+
+### Ci
+
+- Add knip job for unused dependency/export detection
+
+### Revert
+
+- Restore queueMicrotask in cache-db.ts (accidentally included in youtrack schema migration)
 ## [3.2.3] - 2026-03-17
 
 ### Fixed
