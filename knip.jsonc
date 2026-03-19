@@ -14,8 +14,9 @@
   // TODO: These are used via 'import type' but knip strict mode doesn't detect them properly
   "ignoreDependencies": ["@gramio/types", "@grammyjs/types"],
 
-  // YouTrack schemas only used in tests (strict mode excludes tests from analysis).
-  // Listed individually (not as a glob) so any new production schema files are checked.
+  // YouTrack test-only schemas: not imported by any production code (tests are outside project scope).
+  // ignoreFiles is required here because knip flags them as unused *files*, not just unused exports.
+  // Listed individually (not as a glob) so any new production schema files are caught.
   "ignoreFiles": [
     "src/providers/youtrack/schemas/agile.ts",
     "src/providers/youtrack/schemas/comment.ts",
@@ -41,7 +42,7 @@
     "src/providers/kaneo/client.ts": ["exports", "types"],
     "src/providers/kaneo/kaneo-client.ts": ["exports", "types"],
     "src/providers/kaneo/schemas/*.ts": ["exports", "types"],
-    // YouTrack yt-types.ts: sub-schemas and inferred types used in tests or as internal building blocks
+    // yt-types.ts: sub-schemas and inferred types consumed only via tests or internally
     "src/providers/youtrack/schemas/yt-types.ts": ["exports", "types"],
     // Test-only exports
     "src/scripts/test-migration.ts": ["exports"],
