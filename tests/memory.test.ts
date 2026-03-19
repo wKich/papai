@@ -379,7 +379,7 @@ describe('upsertFact eviction', () => {
 })
 
 describe('trimWithMemoryModel', () => {
-  const mockModel = {} as unknown as LanguageModel
+  const mockModel: LanguageModel = 'test-model'
 
   const makeMessages = (count: number): Array<{ role: 'user' | 'assistant'; content: string }> =>
     Array.from({ length: count }, (_, i) => ({
