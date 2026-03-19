@@ -8,6 +8,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "knip": "knip-bun --strict",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write . --ignore-path=.oxfmtignore",

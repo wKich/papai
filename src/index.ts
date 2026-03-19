@@ -3,7 +3,6 @@ import { bot } from './bot.js'
 import { setCommands } from './commands/index.js'
 import { closeDb, initDb } from './db/index.js'
 import { logger } from './logger.js'
-import { migrateToMultiUser } from './migrate.js'
 
 const log = logger.child({ scope: 'main' })
 
@@ -25,13 +24,7 @@ try {
 }
 
 const adminId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
-try {
-  migrateToMultiUser(adminId)
-  log.info({ adminId }, 'Multi-user migration complete')
-} catch (error) {
-  log.error({ error: error instanceof Error ? error.message : String(error) }, 'Multi-user migration failed')
-  process.exit(1)
-}
+log.info({ adminId }, 'Starting papai...')
 
 void bot.start({
   onStart: () => {
