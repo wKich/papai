@@ -8,6 +8,7 @@ RUN bun install --frozen-lockfile --production
 FROM base AS final
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
+COPY schemas ./schemas
 COPY package.json tsconfig.json CHANGELOG.md ./
 
 ENV NODE_ENV=production
