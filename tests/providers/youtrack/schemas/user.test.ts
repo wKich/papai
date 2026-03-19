@@ -1,7 +1,7 @@
 // tests/providers/youtrack/schemas/user.test.ts
 import { describe, expect, test } from 'bun:test'
 
-import { UserSchema, UserReferenceSchema } from '../../../src/providers/youtrack/schemas/user.js'
+import { UserSchema, UserReferenceSchema } from '../../../../src/providers/youtrack/schemas/user.js'
 
 describe('User schemas', () => {
   test('UserSchema validates full user', () => {

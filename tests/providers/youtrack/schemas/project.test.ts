@@ -5,7 +5,7 @@ import {
   ProjectSchema,
   CreateProjectRequestSchema,
   ListProjectsRequestSchema,
-} from '../../../src/providers/youtrack/schemas/project.js'
+} from '../../../../src/providers/youtrack/schemas/project.js'
 
 describe('Project schemas', () => {
   test('ProjectSchema validates project', () => {

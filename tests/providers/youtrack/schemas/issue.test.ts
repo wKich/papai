@@ -5,7 +5,7 @@ import {
   IssueSchema,
   CreateIssueRequestSchema,
   SearchIssuesRequestSchema,
-} from '../../../src/providers/youtrack/schemas/issue.js'
+} from '../../../../src/providers/youtrack/schemas/issue.js'
 
 describe('Issue schemas', () => {
   test('IssueSchema validates full issue', () => {

@@ -7,7 +7,7 @@ import {
   ListTagsRequestSchema,
   AddTagToIssueRequestSchema,
   RemoveTagFromIssueRequestSchema,
-} from '../../../src/providers/youtrack/schemas/tag.js'
+} from '../../../../src/providers/youtrack/schemas/tag.js'
 
 describe('Tag schemas', () => {
   test('TagSchema validates tag', () => {

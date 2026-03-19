@@ -5,7 +5,7 @@ import {
   CommentSchema,
   CreateCommentRequestSchema,
   UpdateCommentRequestSchema,
-} from '../../../src/providers/youtrack/schemas/comment.js'
+} from '../../../../src/providers/youtrack/schemas/comment.js'
 
 describe('Comment schemas', () => {
   test('CommentSchema validates comment', () => {

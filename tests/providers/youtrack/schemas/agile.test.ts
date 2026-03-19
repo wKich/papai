@@ -5,7 +5,7 @@ import {
   AgileBoardSchema,
   AgileColumnSchema,
   ListAgileBoardsRequestSchema,
-} from '../../../src/providers/youtrack/schemas/agile.js'
+} from '../../../../src/providers/youtrack/schemas/agile.js'
 
 describe('Agile board schemas', () => {
   test('AgileBoardSchema validates board', () => {

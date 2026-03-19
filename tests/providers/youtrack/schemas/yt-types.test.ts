@@ -7,7 +7,7 @@ import {
   YtLabelSchema,
   YtIssueLinksSchema,
   YtIssueTagsSchema,
-} from '../../../src/providers/youtrack/schemas/yt-types.js'
+} from '../../../../src/providers/youtrack/schemas/yt-types.js'
 
 describe('YtIssueSchema', () => {
   test('parses minimal issue', () => {
