@@ -1,4 +1,6 @@
 import { logger } from '../logger.js'
+import { MattermostChatProvider } from './mattermost/index.js'
+import { TelegramChatProvider } from './telegram/index.js'
 import type { ChatProvider } from './types.js'
 
 const log = logger.child({ scope: 'chat:registry' })
@@ -6,6 +8,9 @@ const log = logger.child({ scope: 'chat:registry' })
 type ChatProviderFactory = () => ChatProvider
 
 const providers = new Map<string, ChatProviderFactory>()
+
+registerChatProvider('telegram', () => new TelegramChatProvider())
+registerChatProvider('mattermost', () => new MattermostChatProvider())
 
 export function registerChatProvider(name: string, factory: ChatProviderFactory): void {
   providers.set(name, factory)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { formatLlmOutput } from '../../src/utils/format.js'
+import { formatLlmOutput } from '../../src/chat/telegram/format.js'
 
 describe('formatLlmOutput', () => {
   describe('inline formatting', () => {

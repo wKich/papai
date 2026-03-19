@@ -1,20 +1,11 @@
-import type { MessageEntity } from '@grammyjs/types'
-
 import packageJson from '../package.json' with { type: 'json' }
 import { readChangelogFile } from './changelog-reader.js'
+import type { ChatProvider } from './chat/types.js'
 import { getDb } from './db/index.js'
 import { logger } from './logger.js'
 import { extractChangelogSection } from './utils/changelog.js'
-import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'announcements' })
-
-// Minimal bot interface for dependency injection
-type BotApi = {
-  api: {
-    sendMessage(userId: number, text: string, options?: { entities?: MessageEntity[] }): Promise<unknown>
-  }
-}
 
 const VERSION: string = packageJson.version
 
@@ -30,22 +21,18 @@ function markVersionAnnounced(version: string): boolean {
   return inserted
 }
 
-function getUsersWithKaneoAccount(): number[] {
+function getUsersWithKaneoAccount(): string[] {
   return getDb()
-    .query<{ user_id: number }, [string]>('SELECT DISTINCT user_id FROM user_config WHERE key = ?')
+    .query<{ user_id: string }, [string]>('SELECT DISTINCT user_id FROM user_config WHERE key = ?')
     .all('kaneo_apikey')
     .map((row) => row.user_id)
 }
 
-async function sendAnnouncementsToUsers(
-  userIds: number[],
-  formatted: { text: string; entities: MessageEntity[] },
-  botInstance: BotApi,
-): Promise<number> {
+async function sendAnnouncementsToUsers(userIds: string[], markdown: string, chat: ChatProvider): Promise<number> {
   const results = await Promise.allSettled(
     userIds.map(async (userId) => {
       try {
-        await botInstance.api.sendMessage(userId, formatted.text, { entities: formatted.entities })
+        await chat.sendMessage(userId, markdown)
         log.debug({ userId, version: VERSION }, 'Announcement sent to user')
         return true
       } catch (error) {
@@ -60,7 +47,7 @@ async function sendAnnouncementsToUsers(
   return results.filter((r) => r.status === 'fulfilled' && r.value).length
 }
 
-function shouldSkipAnnouncement(users: number[]): boolean {
+function shouldSkipAnnouncement(users: string[]): boolean {
   if (users.length === 0) {
     log.info({ version: VERSION }, 'No users with Kaneo account, skipping announcement')
     markVersionAnnounced(VERSION)
@@ -69,7 +56,7 @@ function shouldSkipAnnouncement(users: number[]): boolean {
   return false
 }
 
-export async function announceNewVersion(botInstance: BotApi): Promise<void> {
+export async function announceNewVersion(chat: ChatProvider): Promise<void> {
   log.debug({ version: VERSION }, 'Checking if version announcement is needed')
 
   const changelogSection = await loadChangelogSection()
@@ -87,9 +74,7 @@ export async function announceNewVersion(botInstance: BotApi): Promise<void> {
   log.info({ version: VERSION, userCount: users.length }, 'Sending version announcement to users')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
-  const formatted = formatLlmOutput(message)
-
-  const successCount = await sendAnnouncementsToUsers(users, formatted, botInstance)
+  const successCount = await sendAnnouncementsToUsers(users, message, chat)
 
   log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
 }

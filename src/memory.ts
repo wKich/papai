@@ -10,18 +10,18 @@ const log = logger.child({ scope: 'memory' })
 
 // --- Summary persistence (now uses cache) ---
 
-export function loadSummary(userId: number): string | null {
+export function loadSummary(userId: string): string | null {
   log.debug({ userId }, 'loadSummary called')
   return getCachedSummary(userId)
 }
 
-export function saveSummary(userId: number, summary: string): void {
+export function saveSummary(userId: string, summary: string): void {
   log.debug({ userId, summaryLength: summary.length }, 'saveSummary called')
   setCachedSummary(userId, summary)
   log.info({ userId, summaryLength: summary.length }, 'Summary saved to cache (DB sync in background)')
 }
 
-export function clearSummary(userId: number): void {
+export function clearSummary(userId: string): void {
   log.debug({ userId }, 'clearSummary called')
   setCachedSummary(userId, '')
   getDb().run('DELETE FROM memory_summary WHERE user_id = ?', [userId])
@@ -30,18 +30,18 @@ export function clearSummary(userId: number): void {
 
 // --- Fact persistence (now uses cache) ---
 
-export function loadFacts(userId: number): readonly MemoryFact[] {
+export function loadFacts(userId: string): readonly MemoryFact[] {
   log.debug({ userId }, 'loadFacts called')
   return getCachedFacts(userId)
 }
 
-export function upsertFact(userId: number, fact: Omit<MemoryFact, 'last_seen'>): void {
+export function upsertFact(userId: string, fact: Omit<MemoryFact, 'last_seen'>): void {
   log.debug({ userId, identifier: fact.identifier }, 'upsertFact called')
   upsertCachedFact(userId, fact)
   log.info({ userId, identifier: fact.identifier }, 'Fact upserted to cache (DB sync in background)')
 }
 
-export function clearFacts(userId: number): void {
+export function clearFacts(userId: string): void {
   log.debug({ userId }, 'clearFacts called')
   clearCachedFacts(userId)
   getDb().run('DELETE FROM memory_facts WHERE user_id = ?', [userId])

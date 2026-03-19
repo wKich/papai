@@ -5,7 +5,7 @@ import type { LanguageModel } from 'ai'
 import { flushMicrotasks } from './test-helpers.js'
 
 // --- bun:sqlite mock (must come before importing memory.ts) ---
-const mockSummaryStore = new Map<number, string>()
+const mockSummaryStore = new Map<string, string>()
 const mockFactsStore = new Map<string, Array<{ identifier: string; title: string; url: string; last_seen: string }>>()
 const runCalls: Array<{ sql: string; params?: unknown[] }> = []
 
@@ -13,10 +13,10 @@ class MockDatabase {
   run(sql: string, params?: unknown[]): void {
     runCalls.push({ sql, params })
     if (sql.includes('INSERT OR REPLACE INTO memory_summary') && params !== undefined) {
-      mockSummaryStore.set(Number(params[0]), String(params[1]))
+      mockSummaryStore.set(String(params[0]), String(params[1]))
     }
     if (sql.includes('DELETE FROM memory_summary') && params !== undefined) {
-      mockSummaryStore.delete(Number(params[0]))
+      mockSummaryStore.delete(String(params[0]))
     }
     if (sql.includes('INSERT OR REPLACE INTO memory_facts') && params !== undefined) {
       const userId = String(params[0])
@@ -48,12 +48,12 @@ class MockDatabase {
   }
 
   query(sql: string): {
-    get: (userId: number) => { summary: string } | null
-    all: (userId?: number) => unknown[]
+    get: (userId: string) => { summary: string } | null
+    all: (userId?: string) => unknown[]
   } {
     if (sql.includes('SELECT summary FROM memory_summary')) {
       return {
-        get: (userId: number): { summary: string } | null => {
+        get: (userId: string): { summary: string } | null => {
           const s = mockSummaryStore.get(userId)
           if (s === undefined) return null
           return { summary: s }
@@ -64,9 +64,9 @@ class MockDatabase {
     if (sql.includes('SELECT identifier, title')) {
       return {
         get: (): null => null,
-        all: (userId?: number): unknown[] => {
+        all: (userId?: string): unknown[] => {
           if (userId === undefined) return []
-          const facts = mockFactsStore.get(String(userId)) ?? []
+          const facts = mockFactsStore.get(userId) ?? []
           // Sort by last_seen DESC as real DB would
           return facts.sort((a, b) => b.last_seen.localeCompare(a.last_seen))
         },
@@ -115,12 +115,12 @@ describe('loadSummary', () => {
   })
 
   test('returns null when no row exists', () => {
-    expect(loadSummary(999)).toBeNull()
+    expect(loadSummary('999')).toBeNull()
   })
 
   test('returns summary string when row exists', () => {
-    mockSummaryStore.set(1, 'Previous conversation summary')
-    expect(loadSummary(1)).toBe('Previous conversation summary')
+    mockSummaryStore.set('1', 'Previous conversation summary')
+    expect(loadSummary('1')).toBe('Previous conversation summary')
   })
 })
 
@@ -131,13 +131,13 @@ describe('saveSummary', () => {
   })
 
   test('persists summary', async () => {
-    saveSummary(1, 'Test summary')
+    saveSummary('1', 'Test summary')
     await flushMicrotasks()
-    expect(mockSummaryStore.get(1)).toBe('Test summary')
+    expect(mockSummaryStore.get('1')).toBe('Test summary')
   })
 
   test('calls INSERT OR REPLACE', async () => {
-    saveSummary(1, 'Test')
+    saveSummary('1', 'Test')
     await flushMicrotasks()
     const call = runCalls.find((c) => c.sql.includes('INSERT OR REPLACE INTO memory_summary'))
     expect(call).toBeDefined()
@@ -151,9 +151,9 @@ describe('clearSummary', () => {
   })
 
   test('removes summary', () => {
-    mockSummaryStore.set(1, 'Summary')
-    clearSummary(1)
-    expect(mockSummaryStore.has(1)).toBe(false)
+    mockSummaryStore.set('1', 'Summary')
+    clearSummary('1')
+    expect(mockSummaryStore.has('1')).toBe(false)
   })
 })
 
@@ -164,10 +164,10 @@ describe('clearFacts', () => {
   })
 
   test('calls DELETE on memory_facts', () => {
-    clearFacts(1)
+    clearFacts('1')
     const call = runCalls.find((c) => c.sql.includes('DELETE FROM memory_facts') && !c.sql.includes('NOT IN'))
     expect(call).toBeDefined()
-    expect(call!.params).toEqual([1])
+    expect(call!.params).toEqual(['1'])
   })
 })
 
@@ -321,12 +321,12 @@ describe('upsertFact eviction', () => {
     mockFactsStore.clear()
     mockSummaryStore.clear()
     runCalls.length = 0
-    clearUserCache(999)
+    clearUserCache('999')
     await flushMicrotasks()
   })
 
   test('evicts oldest facts when exceeding FACTS_CAP', async () => {
-    const userId = 999
+    const userId = '999'
     // Insert 52 facts (over the 50 cap)
     for (let i = 0; i < 52; i++) {
       upsertFact(userId, {
@@ -352,7 +352,7 @@ describe('upsertFact eviction', () => {
   })
 
   test('updates last_seen on duplicate fact insert', async () => {
-    const userId = 999
+    const userId = '999'
     const fact = { identifier: '#100', title: 'Test Task', url: '' }
 
     upsertFact(userId, fact)

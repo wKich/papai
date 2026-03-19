@@ -1,5 +1,4 @@
-import type { Bot } from 'grammy'
-
+import type { ChatProvider } from '../chat/types.js'
 import { getAllConfig, maskValue } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS } from '../types/config.js'
@@ -7,16 +6,13 @@ import { CONFIG_KEYS } from '../types/config.js'
 const log = logger.child({ scope: 'commands:config' })
 
 export function registerConfigCommand(
-  bot: Bot,
-  checkAuthorization: (userId: number | undefined, username?: string) => userId is number,
+  chat: ChatProvider,
+  checkAuthorization: (userId: string, username?: string | null) => boolean,
 ): void {
-  bot.command('config', async (ctx) => {
-    const userId = ctx.from?.id
-    if (!checkAuthorization(userId, ctx.from?.username)) {
-      return
-    }
-    log.debug({ userId }, '/config command called')
-    const config = getAllConfig(userId)
+  chat.registerCommand('config', async (msg, reply) => {
+    if (!checkAuthorization(msg.user.id, msg.user.username)) return
+    log.debug({ userId: msg.user.id }, '/config command called')
+    const config = getAllConfig(msg.user.id)
     const lines = CONFIG_KEYS.map((key) => {
       const value = config[key]
       if (value === undefined) {
@@ -24,7 +20,7 @@ export function registerConfigCommand(
       }
       return `${key}: ${maskValue(key, value)}`
     })
-    log.info({ userId }, '/config command executed')
-    await ctx.reply(lines.join('\n'))
+    log.info({ userId: msg.user.id }, '/config command executed')
+    await reply.text(lines.join('\n'))
   })
 }

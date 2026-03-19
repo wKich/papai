@@ -1,7 +1,6 @@
 import type { ModelMessage } from 'ai'
-import { InputFile } from 'grammy'
-import type { Bot } from 'grammy'
 
+import type { ChatProvider } from '../chat/types.js'
 import { loadHistory } from '../history.js'
 import { logger } from '../logger.js'
 import { loadFacts, loadSummary } from '../memory.js'
@@ -22,13 +21,10 @@ function getTextFromPart(part: unknown): string | null {
 }
 
 function formatMessageContent(content: unknown): string {
-  // For Telegram output, we only show text content
-  // Complex parts (tool calls, etc.) are internal and not shown to users
   if (typeof content === 'string') {
     return content
   }
 
-  // Extract text from array content (e.g., TextPart)
   if (Array.isArray(content)) {
     const texts: string[] = []
     for (const part of content) {
@@ -111,27 +107,25 @@ function generateContextReport(
   return lines.join('\n')
 }
 
-export function registerContextCommand(bot: Bot, adminUserId: number): void {
-  bot.command('context', async (ctx) => {
-    const userId = ctx.from?.id
-    if (userId === undefined || userId !== adminUserId) {
-      await ctx.reply('Only the admin can use this command.')
+export function registerContextCommand(chat: ChatProvider, adminUserId: string): void {
+  chat.registerCommand('context', async (msg, reply) => {
+    if (msg.user.id !== adminUserId) {
+      await reply.text('Only the admin can use this command.')
       return
     }
-    log.debug({ userId }, '/context command called')
+    log.debug({ userId: msg.user.id }, '/context command called')
 
-    const history = loadHistory(userId)
-    const summary = loadSummary(userId)
-    const facts = loadFacts(userId)
+    const history = loadHistory(msg.user.id)
+    const summary = loadSummary(msg.user.id)
+    const facts = loadFacts(msg.user.id)
 
     const report = generateContextReport(history, summary, facts)
 
     const hasSummary = summary !== null && summary.length > 0
     log.info(
-      { userId, historyLength: history.length, factsCount: facts.length, hasSummary },
+      { userId: msg.user.id, historyLength: history.length, factsCount: facts.length, hasSummary },
       '/context command executed',
     )
-    const content = Buffer.from(report, 'utf-8')
-    await ctx.replyWithDocument(new InputFile(content, 'context.txt'))
+    await reply.file({ content: Buffer.from(report, 'utf-8'), filename: 'context.txt' })
   })
 }

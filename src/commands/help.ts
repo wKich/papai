@@ -1,21 +1,7 @@
-import type { Bot } from 'grammy'
-
+import type { ChatProvider } from '../chat/types.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:help' })
-
-const USER_COMMANDS = [
-  { command: 'help', description: 'Show available commands' },
-  { command: 'set', description: 'Set a config value — /set <key> <value>' },
-  { command: 'config', description: 'View current configuration' },
-  { command: 'clear', description: 'Clear conversation history and memory' },
-] as const
-
-const ADMIN_COMMANDS = [
-  { command: 'context', description: 'Show current memory context (summary and known entities)' },
-  { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
-  { command: 'users', description: 'List authorized users' },
-] as const
 
 const USER_HELP = [
   'papai — AI assistant for Kaneo task management',
@@ -41,25 +27,14 @@ const ADMIN_HELP = [
 ].join('\n')
 
 export function registerHelpCommand(
-  bot: Bot,
-  checkAuthorization: (userId: number | undefined, username?: string) => userId is number,
-  adminUserId: number,
+  chat: ChatProvider,
+  checkAuthorization: (userId: string, username?: string | null) => boolean,
+  adminUserId: string,
 ): void {
-  bot.command('help', async (ctx) => {
-    const userId = ctx.from?.id
-    if (!checkAuthorization(userId, ctx.from?.username)) return
-    log.info({ userId }, '/help command executed')
-    const text = userId === adminUserId ? USER_HELP + ADMIN_HELP : USER_HELP
-    await ctx.reply(text)
+  chat.registerCommand('help', async (msg, reply) => {
+    if (!checkAuthorization(msg.user.id, msg.user.username)) return
+    log.info({ userId: msg.user.id }, '/help command executed')
+    const text = msg.user.id === adminUserId ? USER_HELP + ADMIN_HELP : USER_HELP
+    await reply.text(text)
   })
-}
-
-export async function setCommands(bot: Bot, adminUserId: number): Promise<void> {
-  await bot.api.setMyCommands(USER_COMMANDS, {
-    scope: { type: 'all_private_chats' },
-  })
-  await bot.api.setMyCommands([...USER_COMMANDS, ...ADMIN_COMMANDS], {
-    scope: { type: 'chat', chat_id: adminUserId },
-  })
-  log.info({ adminUserId }, 'Bot commands registered with Telegram')
 }

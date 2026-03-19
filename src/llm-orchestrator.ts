@@ -2,9 +2,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { APICallError } from '@ai-sdk/provider'
 import { generateText, stepCountIs, type ToolSet } from 'ai'
 import { type ModelMessage } from 'ai'
-import type { Context } from 'grammy'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
+import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
@@ -16,11 +16,10 @@ import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import { makeTools } from './tools/index.js'
 import { getKaneoWorkspace } from './users.js'
-import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
 
-const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks directly from Telegram.
+const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks.
 Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
@@ -61,7 +60,7 @@ const buildSystemPrompt = (provider: TaskProvider): string => {
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
-const checkRequiredConfig = (userId: number): string[] => {
+const checkRequiredConfig = (userId: string): string[] => {
   const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
   const providerName = getConfig(userId, 'provider') ?? 'kaneo'
   const providerKeys =
@@ -70,7 +69,7 @@ const checkRequiredConfig = (userId: number): string[] => {
 }
 
 const persistFactsFromResults = (
-  userId: number,
+  userId: string,
   toolCalls: Array<{ toolName: string; input: unknown }>,
   toolResults: Array<{ toolName: string; output: unknown }>,
 ): void => {
@@ -80,34 +79,21 @@ const persistFactsFromResults = (
   log.info({ userId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
 }
 
-const withTypingIndicator = async <T>(ctx: Context, fn: () => Promise<T>): Promise<T> => {
-  const send = (): void => {
-    ctx.replyWithChatAction('typing').catch(() => undefined)
-  }
-  send()
-  const interval = setInterval(send, 4500)
-  try {
-    return await fn()
-  } finally {
-    clearInterval(interval)
-  }
-}
-
-const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> => {
+const maybeProvisionKaneo = async (reply: ReplyFn, userId: string, username: string | null): Promise<void> => {
   if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_apikey') !== null) return
-  const outcome = await provisionAndConfigure(userId, ctx.from?.username ?? null)
+  const outcome = await provisionAndConfigure(userId, username)
   if (outcome.status === 'provisioned') {
-    await ctx.reply(
+    await reply.text(
       `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
     )
   } else if (outcome.status === 'registration_disabled') {
-    await ctx.reply(
+    await reply.text(
       'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
     )
   }
 }
 
-const buildProvider = (userId: number): TaskProvider => {
+const buildProvider = (userId: string): TaskProvider => {
   const providerName = getConfig(userId, 'provider') ?? 'kaneo'
   log.debug({ userId, providerName }, 'Building provider')
 
@@ -134,7 +120,7 @@ const buildProvider = (userId: number): TaskProvider => {
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (userId: number, provider: TaskProvider): ToolSet => {
+const getOrCreateTools = (userId: string, provider: TaskProvider): ToolSet => {
   const cachedTools = getCachedTools(userId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
     log.debug({ userId }, 'Using cached tools')
@@ -147,14 +133,13 @@ const getOrCreateTools = (userId: number, provider: TaskProvider): ToolSet => {
 }
 
 const sendLlmResponse = async (
-  ctx: Context,
-  userId: number,
+  reply: ReplyFn,
+  userId: string,
   result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
 ): Promise<void> => {
   const assistantText = result.text
   const textToFormat = assistantText !== undefined && assistantText !== '' ? assistantText : 'Done.'
-  const formatted = formatLlmOutput(textToFormat)
-  await ctx.reply(formatted.text, { entities: formatted.entities })
+  await reply.formatted(textToFormat)
   log.info(
     { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',
@@ -162,15 +147,16 @@ const sendLlmResponse = async (
 }
 
 const callLlm = async (
-  ctx: Context,
-  userId: number,
+  reply: ReplyFn,
+  userId: string,
+  username: string | null,
   history: readonly ModelMessage[],
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
-  await maybeProvisionKaneo(ctx, userId)
+  await maybeProvisionKaneo(reply, userId, username)
   const missing = checkRequiredConfig(userId)
   if (missing.length > 0) {
     log.warn({ userId, missing }, 'Missing required config keys')
-    await ctx.reply(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
+    await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     throw new Error('Missing configuration')
   }
   const llmApiKey = getConfig(userId, 'llm_apikey')!
@@ -190,21 +176,26 @@ const callLlm = async (
   })
   log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(userId, result.toolCalls, result.toolResults)
-  await sendLlmResponse(ctx, userId, result)
+  await sendLlmResponse(reply, userId, result)
   return result
 }
 
-const handleMessageError = async (ctx: Context, _userId: number, error: unknown): Promise<void> => {
+const handleMessageError = async (reply: ReplyFn, _userId: string, error: unknown): Promise<void> => {
   if (isAppError(error)) {
-    await ctx.reply(getUserMessage(error))
+    await reply.text(getUserMessage(error))
   } else if (APICallError.isInstance(error)) {
-    await ctx.reply('An unexpected error occurred. Please try again later.')
+    await reply.text('An unexpected error occurred. Please try again later.')
   } else {
-    await ctx.reply('An unexpected error occurred. Please try again later.')
+    await reply.text('An unexpected error occurred. Please try again later.')
   }
 }
 
-const processMessage = async (ctx: Context, userId: number, userText: string): Promise<void> => {
+export const processMessage = async (
+  reply: ReplyFn,
+  userId: string,
+  username: string | null,
+  userText: string,
+): Promise<void> => {
   log.debug({ userId, userText }, 'processMessage called')
   log.info({ userId, messageLength: userText.length }, 'Message received from user')
 
@@ -215,7 +206,7 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
   appendHistory(userId, [newMessage])
 
   try {
-    const result = await withTypingIndicator(ctx, () => callLlm(ctx, userId, history))
+    const result = await callLlm(reply, userId, username, history)
 
     // result.response.messages contains ONLY the newly generated messages (assistant + tool
     // messages from all steps). The Vercel AI SDK does NOT include input messages there —
@@ -234,8 +225,6 @@ const processMessage = async (ctx: Context, userId: number, userText: string): P
     }
   } catch (error) {
     saveHistory(userId, baseHistory)
-    await handleMessageError(ctx, userId, error)
+    await handleMessageError(reply, userId, error)
   }
 }
-
-export { processMessage }

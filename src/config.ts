@@ -6,13 +6,13 @@ const log = logger.child({ scope: 'config' })
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['kaneo_apikey', 'youtrack_token', 'llm_apikey'])
 
-export function setConfig(userId: number, key: ConfigKey, value: string): void {
+export function setConfig(userId: string, key: ConfigKey, value: string): void {
   log.debug({ userId, key }, 'setConfig called')
   setCachedConfig(userId, key, value)
   log.info({ userId, key }, 'Config key set (DB sync in background)')
 }
 
-export function getConfig(userId: number, key: ConfigKey): string | null {
+export function getConfig(userId: string, key: ConfigKey): string | null {
   log.debug({ userId, key }, 'getConfig called')
   return getCachedConfig(userId, key)
 }
@@ -21,7 +21,7 @@ export function isConfigKey(key: string): key is ConfigKey {
   return (CONFIG_KEYS as readonly string[]).includes(key)
 }
 
-export function getAllConfig(userId: number): Partial<Record<ConfigKey, string>> {
+export function getAllConfig(userId: string): Partial<Record<ConfigKey, string>> {
   log.debug({ userId }, 'getAllConfig called')
   const result: Partial<Record<ConfigKey, string>> = {}
   for (const key of CONFIG_KEYS) {

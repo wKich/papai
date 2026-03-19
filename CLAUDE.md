@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a Telegram bot that manages tasks via LLM tool-calling. A user sends natural language messages through Telegram, the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes task tracker operations, then replies with the result. The task tracker provider (Kaneo, YouTrack, or any future provider), LLM provider, base URL, and model are all runtime-configurable.
+papai is a chat bot that manages tasks via LLM tool-calling. A user sends natural language messages through a configurable chat platform (Telegram or Mattermost), the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes task tracker operations, then replies with the result. The chat platform, task tracker provider (Kaneo, YouTrack, or any future provider), LLM provider, base URL, and model are all runtime-configurable.
 
 ## Commands
 
@@ -32,12 +32,16 @@ The scan runs automatically in CI on every PR and push to master.
 
 ## Required Environment Variables
 
-Copy `.env.example` to `.env`. Only two are required at startup (validated in `src/index.ts`):
-`TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`
+Copy `.env.example` to `.env`. Required at startup (validated in `src/index.ts`):
+`CHAT_PROVIDER`, `ADMIN_USER_ID`
 
-`TELEGRAM_USER_ID` is the admin user ID. This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
+`ADMIN_USER_ID` is the admin user ID (numeric for Telegram, string for Mattermost). This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
 
-The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` Telegram command. Use `/config` to view current values.
+**Telegram-specific:** `TELEGRAM_BOT_TOKEN`
+
+**Mattermost-specific:** `MATTERMOST_URL`, `MATTERMOST_BOT_TOKEN`
+
+The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` command. Use `/config` to view current values.
 
 **Common config keys:** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`, `provider`
 
@@ -52,17 +56,22 @@ Additional environment variables used by the bot:
 ## Architecture
 
 ```
-Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
-                                              │
-                                              ├─ tools/ ─→ providers/ ─→ Task tracker REST API
-                                              │   capability-gated tools
-                                              │
-                                              └─→ response back to Telegram
+User (Telegram/Mattermost) ─→ ChatProvider (chat/registry.ts) ─→ bot.ts (setupBot)
+                                                                        │
+                                                                        └─→ llm-orchestrator.ts ─→ Vercel AI SDK generateText
+                                                                                                         │
+                                                                                                         ├─ tools/ ─→ providers/ ─→ Task tracker REST API
+                                                                                                         │   capability-gated tools
+                                                                                                         │
+                                                                                                         └─→ reply via ReplyFn ─→ chat platform
 ```
 
-- **`src/index.ts`** — entry point; validates env vars, runs migrations, starts the bot.
-- **`src/bot.ts`** — Grammy bot setup, per-user conversation history, LLM orchestration with up to 25 tool-calling steps. Multi-user authorization via `users` table. Builds the active `TaskProvider` from per-user config.
-- **`src/admin-commands.ts`** — Legacy admin command registration (handlers moved to `src/commands/`).
+- **`src/index.ts`** — entry point; validates env vars, runs migrations, creates `ChatProvider`, calls `setupBot`, starts the provider.
+- **`src/bot.ts`** — platform-agnostic wiring; registers all command handlers and the message handler via `setupBot(chat, adminUserId)`.
+- **`src/chat/types.ts`** — `ChatProvider` interface, `ReplyFn`, `IncomingMessage`, `ChatUser`, `ChatFile` types.
+- **`src/chat/registry.ts`** — provider factory registry; `createChatProvider(name)` instantiates the named provider. Built-in: `telegram`, `mattermost`.
+- **`src/chat/telegram/`** — Grammy-based Telegram adapter (`TelegramChatProvider`). `format.ts` converts LLM markdown to Telegram `MessageEntity[]`.
+- **`src/chat/mattermost/`** — Mattermost REST+WebSocket adapter (`MattermostChatProvider`).
 - **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 
@@ -76,7 +85,7 @@ Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any 
 - **`src/providers/kaneo/operations/`** — Grouped Kaneo operation implementations (tasks, comments, labels, projects, statuses, relations).
 - **`src/providers/youtrack/`** — YouTrack REST API adapter implementing `TaskProvider`. `index.ts` exports `YouTrackProvider`. Uses `youtrack_url` + `youtrack_token` from per-user config.
 - **`src/providers/youtrack/schemas/`** — Zod schemas for YouTrack API response validation.
-- **`src/commands/`** — Telegram command handlers extracted from bot.ts. Includes `/help`, `/set`, `/config`, `/clear`, `/context`, and admin commands. The `/context` command (admin-only) exports conversation history, summary, and known entities as a text file.
+- **`src/commands/`** — Platform-agnostic command handlers. Includes `/help`, `/set`, `/config`, `/clear`, `/context`, and admin commands. Each handler receives `(msg: IncomingMessage, reply: ReplyFn)` — no platform imports. The `/context` command (admin-only) exports conversation history, summary, and known entities as a text file.
 - **`src/announcements.ts`** — Automatic version announcements to users with changelog excerpts.
 - **`src/changelog-reader.ts`** — CHANGELOG.md reader for version announcements.
 - **`src/cache.ts`** — In-memory user session cache with TTL (history, summary, facts, config, workspace, tools). Syncs to SQLite in background via `queueMicrotask`.

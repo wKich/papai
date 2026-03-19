@@ -17,7 +17,7 @@ const SMART_TRIM_INTERVAL = 10
 
 type MessagesWithMemory = { messages: ModelMessage[]; memoryMsg: { role: 'system'; content: string } | null }
 
-export const buildMessagesWithMemory = (userId: number, history: readonly ModelMessage[]): MessagesWithMemory => {
+export const buildMessagesWithMemory = (userId: string, history: readonly ModelMessage[]): MessagesWithMemory => {
   const summary = loadSummary(userId)
   const facts = loadFacts(userId)
   const memoryMsg = buildMemoryContextMessage(summary, facts)
@@ -31,7 +31,7 @@ export const shouldTriggerTrim = (history: readonly ModelMessage[]): boolean => 
   return periodicTrim || hardCapTrim
 }
 
-export const runTrimInBackground = async (userId: number, history: readonly ModelMessage[]): Promise<void> => {
+export const runTrimInBackground = async (userId: string, history: readonly ModelMessage[]): Promise<void> => {
   const userMessageCount = history.filter((m) => m.role === 'user').length
   const reason =
     history.length >= WORKING_MEMORY_CAP ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`

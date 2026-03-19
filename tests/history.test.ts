@@ -1,27 +1,27 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 // --- bun:sqlite mock (must come before importing history.ts) ---
-const mockStore = new Map<number, string>()
+const mockStore = new Map<string, string>()
 const runCalls: Array<{ sql: string; params?: unknown[] }> = []
 
 class MockDatabase {
   run(sql: string, params?: unknown[]): void {
     runCalls.push({ sql, params })
     if (sql.includes('INSERT OR REPLACE INTO conversation_history') && params !== undefined) {
-      const userId = Number(params[0])
+      const userId = String(params[0])
       const messages = String(params[1])
       mockStore.set(userId, messages)
     }
     if (sql.includes('DELETE FROM conversation_history') && params !== undefined) {
-      const userId = Number(params[0])
+      const userId = String(params[0])
       mockStore.delete(userId)
     }
   }
 
-  query(sql: string): { get: (userId: number) => { messages: string } | null; all: () => unknown[] } {
+  query(sql: string): { get: (userId: string) => { messages: string } | null; all: () => unknown[] } {
     if (sql.includes('SELECT messages FROM conversation_history')) {
       return {
-        get: (userId: number): { messages: string } | null => {
+        get: (userId: string): { messages: string } | null => {
           const messages = mockStore.get(userId)
           return messages === undefined ? null : { messages }
         },
@@ -53,7 +53,7 @@ describe('loadHistory', () => {
   })
 
   test('returns empty array when no row exists', () => {
-    const result = loadHistory(999)
+    const result = loadHistory('999')
     expect(result).toEqual([])
   })
 
@@ -62,25 +62,25 @@ describe('loadHistory', () => {
       { role: 'user', content: 'hello' },
       { role: 'assistant', content: 'hi there' },
     ]
-    mockStore.set(1, JSON.stringify(messages))
+    mockStore.set('1', JSON.stringify(messages))
 
-    const result = loadHistory(1)
+    const result = loadHistory('1')
     expect(result).toHaveLength(2)
     expect(result[0]).toEqual({ role: 'user', content: 'hello' })
     expect(result[1]).toEqual({ role: 'assistant', content: 'hi there' })
   })
 
   test('returns empty array for corrupt JSON', () => {
-    mockStore.set(2, 'not-valid-json')
+    mockStore.set('2', 'not-valid-json')
 
-    const result = loadHistory(2)
+    const result = loadHistory('2')
     expect(result).toEqual([])
   })
 
   test('returns empty array when messages lack role field', () => {
-    mockStore.set(3, JSON.stringify([{ content: 'no role' }]))
+    mockStore.set('3', JSON.stringify([{ content: 'no role' }]))
 
-    const result = loadHistory(3)
+    const result = loadHistory('3')
     expect(result).toEqual([])
   })
 
@@ -88,9 +88,9 @@ describe('loadHistory', () => {
     // modelMessageSchema uses Zod which strips unrecognised properties — unknown
     // keys like `toolCalls` (not part of AssistantModelMessage in SDK v6) are dropped.
     const messages = [{ role: 'assistant', content: 'hi', unknownField: 'value' }]
-    mockStore.set(4, JSON.stringify(messages))
+    mockStore.set('4', JSON.stringify(messages))
 
-    const result = loadHistory(4)
+    const result = loadHistory('4')
     expect(result).toHaveLength(1)
     const first = result[0]
     expect(first).toBeDefined()
@@ -121,9 +121,9 @@ describe('loadHistory', () => {
       },
       { role: 'assistant', content: 'You have no tasks.' },
     ]
-    mockStore.set(5, JSON.stringify(messages))
+    mockStore.set('5', JSON.stringify(messages))
 
-    const result = loadHistory(5)
+    const result = loadHistory('5')
     expect(result).toHaveLength(4)
 
     // Verify assistant message has tool-call content
@@ -149,9 +149,9 @@ describe('loadHistory', () => {
 
   test('rejects messages where content is neither string nor array', () => {
     const messages = [{ role: 'user', content: 42 }]
-    mockStore.set(6, JSON.stringify(messages))
+    mockStore.set('6', JSON.stringify(messages))
 
-    const result = loadHistory(6)
+    const result = loadHistory('6')
     expect(result).toEqual([])
   })
 })
@@ -164,19 +164,19 @@ describe('saveHistory', () => {
 
   test('persists messages as JSON', async () => {
     const messages: ModelMessage[] = [{ role: 'user', content: 'test' }]
-    saveHistory(10, messages)
+    saveHistory('10', messages)
 
     // Wait for background DB sync
     await flushMicrotasks()
 
-    const saved = mockStore.get(10)
+    const saved = mockStore.get('10')
     expect(saved).toBeDefined()
     expect(JSON.parse(saved!)).toEqual(messages)
   })
 
   test('calls INSERT OR REPLACE', async () => {
     const empty: ModelMessage[] = []
-    saveHistory(10, empty)
+    saveHistory('10', empty)
 
     // Wait for background DB sync
     await flushMicrotasks()
@@ -193,16 +193,16 @@ describe('clearHistory', () => {
   })
 
   test('removes entry from store', () => {
-    mockStore.set(20, JSON.stringify([]))
-    clearHistory(20)
-    expect(mockStore.has(20)).toBe(false)
+    mockStore.set('20', JSON.stringify([]))
+    clearHistory('20')
+    expect(mockStore.has('20')).toBe(false)
   })
 
   test('calls DELETE statement', () => {
-    clearHistory(20)
+    clearHistory('20')
 
     const deleteCall = runCalls.find((c) => c.sql.includes('DELETE FROM conversation_history'))
     expect(deleteCall).toBeDefined()
-    expect(deleteCall!.params).toEqual([20])
+    expect(deleteCall!.params).toEqual(['20'])
   })
 })

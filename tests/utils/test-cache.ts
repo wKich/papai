@@ -12,7 +12,7 @@ const log = logger.child({ scope: 'test-cache' })
  * Clear the user cache for a specific user.
  * This is only used in tests to ensure clean state between test runs.
  */
-export function clearUserCache(userId: number): void {
+export function clearUserCache(userId: string): void {
   _userCaches.delete(userId)
   log.info({ userId }, 'User cache cleared for testing')
 }

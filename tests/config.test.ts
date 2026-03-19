@@ -50,8 +50,8 @@ import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../s
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 
-const USER_A = 111
-const USER_B = 222
+const USER_A = '111'
+const USER_B = '222'
 
 describe('setConfig', () => {
   beforeEach(() => {

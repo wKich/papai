@@ -3,7 +3,7 @@ import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'cache-db' })
 
-export function syncHistoryToDb(userId: number, messages: unknown[]): void {
+export function syncHistoryToDb(userId: string, messages: unknown[]): void {
   queueMicrotask(() => {
     try {
       getDb().run('INSERT OR REPLACE INTO conversation_history (user_id, messages) VALUES (?, ?)', [
@@ -20,7 +20,7 @@ export function syncHistoryToDb(userId: number, messages: unknown[]): void {
   })
 }
 
-export function syncSummaryToDb(userId: number, summary: string): void {
+export function syncSummaryToDb(userId: string, summary: string): void {
   queueMicrotask(() => {
     try {
       getDb().run('INSERT OR REPLACE INTO memory_summary (user_id, summary, updated_at) VALUES (?, ?, ?)', [
@@ -39,7 +39,7 @@ export function syncSummaryToDb(userId: number, summary: string): void {
 }
 
 export function syncFactToDb(
-  userId: number,
+  userId: string,
   fact: { identifier: string; title: string; url: string },
   now: string,
 ): void {
@@ -70,7 +70,7 @@ export function syncFactToDb(
   })
 }
 
-export function syncConfigToDb(userId: number, key: string, value: string): void {
+export function syncConfigToDb(userId: string, key: string, value: string): void {
   queueMicrotask(() => {
     try {
       getDb().run('INSERT OR REPLACE INTO user_config (user_id, key, value) VALUES (?, ?, ?)', [userId, key, value])
@@ -84,10 +84,10 @@ export function syncConfigToDb(userId: number, key: string, value: string): void
   })
 }
 
-export function syncWorkspaceToDb(userId: number, workspaceId: string): void {
+export function syncWorkspaceToDb(userId: string, workspaceId: string): void {
   queueMicrotask(() => {
     try {
-      getDb().run('UPDATE users SET kaneo_workspace_id = ? WHERE telegram_id = ?', [workspaceId, userId])
+      getDb().run('UPDATE users SET kaneo_workspace_id = ? WHERE platform_user_id = ?', [workspaceId, userId])
       log.debug({ userId }, 'Workspace synced to DB')
     } catch (error) {
       log.error(

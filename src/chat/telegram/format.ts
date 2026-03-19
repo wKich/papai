@@ -3,7 +3,7 @@ import type { TelegramMessageEntity } from '@gramio/types'
 import type { MessageEntity } from '@grammyjs/types'
 import { lexer, type Token, type Tokens } from 'marked'
 
-import { logger } from '../logger.js'
+import { logger } from '../../logger.js'
 
 const log = logger.child({ scope: 'format' })
 

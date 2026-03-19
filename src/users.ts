@@ -5,68 +5,67 @@ import { logger } from './logger.js'
 const log = logger.child({ scope: 'users' })
 
 interface UserRecord {
-  telegram_id: number
+  platform_user_id: string
   username: string | null
   added_at: string
-  added_by: number
+  added_by: string
 }
 
-export function addUser(telegramId: number, addedBy: number, username?: string): void {
-  log.debug({ telegramId, addedBy, hasUsername: username !== undefined }, 'addUser called')
+export function addUser(userId: string, addedBy: string, username?: string): void {
+  log.debug({ userId, addedBy, hasUsername: username !== undefined }, 'addUser called')
   if (username === undefined) {
-    getDb().run('INSERT INTO users (telegram_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [telegramId, addedBy])
+    getDb().run('INSERT INTO users (platform_user_id, added_by) VALUES (?, ?) ON CONFLICT DO NOTHING', [
+      userId,
+      addedBy,
+    ])
   } else {
     getDb().run(
-      'INSERT INTO users (telegram_id, username, added_by) VALUES (?, ?, ?) ON CONFLICT(telegram_id) DO UPDATE SET username = excluded.username',
-      [telegramId, username, addedBy],
+      'INSERT INTO users (platform_user_id, username, added_by) VALUES (?, ?, ?) ON CONFLICT(platform_user_id) DO UPDATE SET username = excluded.username',
+      [userId, username, addedBy],
     )
   }
-  log.info({ telegramId, addedBy, hasUsername: username !== undefined }, 'User added')
+  log.info({ userId, addedBy, hasUsername: username !== undefined }, 'User added')
 }
 
-export function removeUser(identifier: number | string): void {
+export function removeUser(identifier: string): void {
   log.debug({ identifier }, 'removeUser called')
-  if (typeof identifier === 'string') {
-    getDb().run('DELETE FROM users WHERE username = ?', [identifier])
-  } else {
-    getDb().run('DELETE FROM users WHERE telegram_id = ?', [identifier])
-  }
+  getDb().run('DELETE FROM users WHERE username = ? OR platform_user_id = ?', [identifier, identifier])
   log.info({ identifier }, 'User removed')
 }
 
-export function isAuthorized(telegramId: number): boolean {
-  log.debug({ telegramId }, 'isAuthorized called')
+export function isAuthorized(userId: string): boolean {
+  log.debug({ userId }, 'isAuthorized called')
   const row = getDb()
-    .query<{ telegram_id: number }, [number]>('SELECT telegram_id FROM users WHERE telegram_id = ?')
-    .get(telegramId)
+    .query<{ platform_user_id: string }, [string]>('SELECT platform_user_id FROM users WHERE platform_user_id = ?')
+    .get(userId)
   return row !== null
 }
 
-export function resolveUserByUsername(telegramId: number, username: string): boolean {
-  log.debug({ telegramId, username }, 'resolveUserByUsername called')
+export function resolveUserByUsername(userId: string, username: string): boolean {
+  log.debug({ userId, username }, 'resolveUserByUsername called')
   const row = getDb()
-    .query<{ telegram_id: number }, [string]>('SELECT telegram_id FROM users WHERE username = ?')
+    .query<{ platform_user_id: string }, [string]>('SELECT platform_user_id FROM users WHERE username = ?')
     .get(username)
   if (row === null) return false
-  if (row.telegram_id === telegramId) return true
+  if (row.platform_user_id === userId) return true
 
-  getDb().run('UPDATE users SET telegram_id = ? WHERE username = ?', [telegramId, username])
-  log.info({ telegramId, username }, 'User telegram_id resolved from username')
+  getDb().run('UPDATE users SET platform_user_id = ? WHERE username = ?', [userId, username])
+  log.info({ userId, username }, 'User platform_user_id resolved from username')
   return true
 }
 
 export function listUsers(): UserRecord[] {
   log.debug('listUsers called')
-  return getDb().query<UserRecord, []>('SELECT telegram_id, username, added_at, added_by FROM users').all()
+  return getDb().query<UserRecord, []>('SELECT platform_user_id, username, added_at, added_by FROM users').all()
 }
 
-export function getKaneoWorkspace(telegramId: number): string | null {
-  log.debug({ telegramId }, 'getKaneoWorkspace called')
-  return getCachedWorkspace(telegramId)
+export function getKaneoWorkspace(userId: string): string | null {
+  log.debug({ userId }, 'getKaneoWorkspace called')
+  return getCachedWorkspace(userId)
 }
 
-export function setKaneoWorkspace(telegramId: number, workspaceId: string): void {
-  log.debug({ telegramId }, 'setKaneoWorkspace called')
-  setCachedWorkspace(telegramId, workspaceId)
-  log.info({ telegramId }, 'Kaneo workspace ID stored (DB sync in background)')
+export function setKaneoWorkspace(userId: string, workspaceId: string): void {
+  log.debug({ userId }, 'setKaneoWorkspace called')
+  setCachedWorkspace(userId, workspaceId)
+  log.info({ userId }, 'Kaneo workspace ID stored (DB sync in background)')
 }

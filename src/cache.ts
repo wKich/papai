@@ -19,7 +19,7 @@ type UserCache = {
   lastAccessed: number
 }
 
-const userCaches = new Map<number, UserCache>()
+const userCaches = new Map<string, UserCache>()
 
 /**
  * Exported for testing purposes only.
@@ -32,7 +32,7 @@ const SESSION_TTL_MS = 30 * 60 * 1000
 setInterval(
   () => {
     const now = Date.now()
-    const expired: number[] = []
+    const expired: string[] = []
     for (const [userId, cache] of userCaches) {
       if (now - cache.lastAccessed > SESSION_TTL_MS) {
         expired.push(userId)
@@ -49,7 +49,7 @@ setInterval(
   5 * 60 * 1000,
 )
 
-function getOrCreateCache(userId: number): UserCache {
+function getOrCreateCache(userId: string): UserCache {
   let cache = userCaches.get(userId)
   if (cache === undefined) {
     cache = {
@@ -69,12 +69,12 @@ function getOrCreateCache(userId: number): UserCache {
 
 // --- History Cache ---
 
-export function getCachedHistory(userId: number): readonly ModelMessage[] {
+export function getCachedHistory(userId: string): readonly ModelMessage[] {
   const cache = getOrCreateCache(userId)
   if (cache.history.length === 0) {
     log.debug({ userId }, 'Loading history from DB into cache')
     const row = getDb()
-      .query<{ messages: string }, [number]>('SELECT messages FROM conversation_history WHERE user_id = ?')
+      .query<{ messages: string }, [string]>('SELECT messages FROM conversation_history WHERE user_id = ?')
       .get(userId)
     if (row?.messages !== undefined) {
       const parsed = parseHistoryFromDb(row.messages)
@@ -86,13 +86,13 @@ export function getCachedHistory(userId: number): readonly ModelMessage[] {
   return cache.history
 }
 
-export function setCachedHistory(userId: number, messages: readonly ModelMessage[]): void {
+export function setCachedHistory(userId: string, messages: readonly ModelMessage[]): void {
   const cache = getOrCreateCache(userId)
   cache.history = [...messages]
   syncHistoryToDb(userId, cache.history)
 }
 
-export function appendToCachedHistory(userId: number, messages: readonly ModelMessage[]): void {
+export function appendToCachedHistory(userId: string, messages: readonly ModelMessage[]): void {
   const cache = getOrCreateCache(userId)
   cache.history.push(...messages)
   syncHistoryToDb(userId, cache.history)
@@ -100,12 +100,12 @@ export function appendToCachedHistory(userId: number, messages: readonly ModelMe
 
 // --- Summary Cache ---
 
-export function getCachedSummary(userId: number): string | null {
+export function getCachedSummary(userId: string): string | null {
   const cache = getOrCreateCache(userId)
   if (cache.summary === null && !cache.config.has('summary_loaded')) {
     log.debug({ userId }, 'Loading summary from DB into cache')
     const row = getDb()
-      .query<{ summary: string }, [number]>('SELECT summary FROM memory_summary WHERE user_id = ?')
+      .query<{ summary: string }, [string]>('SELECT summary FROM memory_summary WHERE user_id = ?')
       .get(userId)
     cache.summary = row?.summary ?? null
     cache.config.set('summary_loaded', 'true')
@@ -113,7 +113,7 @@ export function getCachedSummary(userId: number): string | null {
   return cache.summary
 }
 
-export function setCachedSummary(userId: number, summary: string): void {
+export function setCachedSummary(userId: string, summary: string): void {
   const cache = getOrCreateCache(userId)
   cache.summary = summary
   syncSummaryToDb(userId, summary)
@@ -122,13 +122,13 @@ export function setCachedSummary(userId: number, summary: string): void {
 // --- Facts Cache ---
 
 export function getCachedFacts(
-  userId: number,
+  userId: string,
 ): readonly { identifier: string; title: string; url: string; last_seen: string }[] {
   const cache = getOrCreateCache(userId)
   if (cache.facts.length === 0 && !cache.config.has('facts_loaded')) {
     log.debug({ userId }, 'Loading facts from DB into cache')
     const rows = getDb()
-      .query<{ identifier: string; title: string; url: string; last_seen: string }, [number]>(
+      .query<{ identifier: string; title: string; url: string; last_seen: string }, [string]>(
         'SELECT identifier, title, url, last_seen FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC',
       )
       .all(userId)
@@ -138,7 +138,7 @@ export function getCachedFacts(
   return cache.facts
 }
 
-export function upsertCachedFact(userId: number, fact: { identifier: string; title: string; url: string }): void {
+export function upsertCachedFact(userId: string, fact: { identifier: string; title: string; url: string }): void {
   const cache = getOrCreateCache(userId)
   const now = new Date().toISOString()
   const existingIndex = cache.facts.findIndex((f) => f.identifier === fact.identifier)
@@ -155,19 +155,19 @@ export function upsertCachedFact(userId: number, fact: { identifier: string; tit
 
 // --- Config Cache ---
 
-export function getCachedConfig(userId: number, key: string): string | null {
+export function getCachedConfig(userId: string, key: string): string | null {
   const cache = getOrCreateCache(userId)
   if (!cache.config.has(key)) {
     log.debug({ userId, key }, 'Loading config from DB into cache')
     const row = getDb()
-      .query<{ value: string }, [number, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
+      .query<{ value: string }, [string, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
       .get(userId, key)
     cache.config.set(key, row?.value ?? null)
   }
   return cache.config.get(key) ?? null
 }
 
-export function setCachedConfig(userId: number, key: string, value: string): void {
+export function setCachedConfig(userId: string, key: string, value: string): void {
   const cache = getOrCreateCache(userId)
   cache.config.set(key, value)
   syncConfigToDb(userId, key, value)
@@ -175,13 +175,13 @@ export function setCachedConfig(userId: number, key: string, value: string): voi
 
 // --- Workspace Cache ---
 
-export function getCachedWorkspace(userId: number): string | null {
+export function getCachedWorkspace(userId: string): string | null {
   const cache = getOrCreateCache(userId)
   if (cache.workspaceId === null && !cache.config.has('workspace_loaded')) {
     log.debug({ userId }, 'Loading workspace from DB into cache')
     const row = getDb()
-      .query<{ kaneo_workspace_id: string | null }, [number]>(
-        'SELECT kaneo_workspace_id FROM users WHERE telegram_id = ?',
+      .query<{ kaneo_workspace_id: string | null }, [string]>(
+        'SELECT kaneo_workspace_id FROM users WHERE platform_user_id = ?',
       )
       .get(userId)
     cache.workspaceId = row?.kaneo_workspace_id ?? null
@@ -190,7 +190,7 @@ export function getCachedWorkspace(userId: number): string | null {
   return cache.workspaceId
 }
 
-export function setCachedWorkspace(userId: number, workspaceId: string): void {
+export function setCachedWorkspace(userId: string, workspaceId: string): void {
   const cache = getOrCreateCache(userId)
   cache.workspaceId = workspaceId
   syncWorkspaceToDb(userId, workspaceId)
@@ -198,20 +198,20 @@ export function setCachedWorkspace(userId: number, workspaceId: string): void {
 
 // --- Tools Cache ---
 
-export function getCachedTools(userId: number): unknown {
+export function getCachedTools(userId: string): unknown {
   const tools = getOrCreateCache(userId).tools
   return tools === null ? undefined : tools
 }
 
-export function setCachedTools(userId: number, tools: unknown): void {
+export function setCachedTools(userId: string, tools: unknown): void {
   getOrCreateCache(userId).tools = tools
 }
 
-export function clearCachedTools(userId: number): void {
+export function clearCachedTools(userId: string): void {
   getOrCreateCache(userId).tools = null
 }
 
-export function clearCachedFacts(userId: number): void {
+export function clearCachedFacts(userId: string): void {
   const cache = userCaches.get(userId)
   if (cache === undefined) {
     log.debug({ userId }, 'No facts cache to clear (cache not initialized)')

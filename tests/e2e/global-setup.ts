@@ -69,7 +69,7 @@ async function performSetup(): Promise<E2EConfig> {
     const uniqueSuffix = Date.now()
     const uniqueUsername = `e2e-test-${uniqueSuffix}`
     const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000)
-    const result = await provisionKaneoUser(baseUrl, publicUrl, uniqueTelegramId, uniqueUsername)
+    const result = await provisionKaneoUser(baseUrl, publicUrl, String(uniqueTelegramId), uniqueUsername)
 
     e2eConfig = {
       baseUrl,

@@ -1,21 +1,26 @@
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-// --- Mock Bot for testing ---
-const sentMessages: Array<{ userId: number; text: string }> = []
-let sendMessageImpl = (userId: number, text: string): Promise<void> => {
+import type { ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+
+// --- Mock ChatProvider for testing ---
+const sentMessages: Array<{ userId: string; text: string }> = []
+let sendMessageImpl = (userId: string, text: string): Promise<void> => {
   sentMessages.push({ userId, text })
   return Promise.resolve()
 }
 
-const mockBot = {
-  api: {
-    sendMessage: (userId: number, text: string): Promise<void> => sendMessageImpl(userId, text),
-  },
-} as const
+const mockChat: ChatProvider = {
+  name: 'mock',
+  registerCommand: (_name: string, _handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
+  onMessage: (_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
+  sendMessage: (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
+  start: (): Promise<void> => Promise.resolve(),
+  stop: (): Promise<void> => Promise.resolve(),
+}
 
 // --- Mock for db (must come before importing announcements.ts) ---
 const announcedVersions = new Set<string>()
-const userConfigRows: Array<{ user_id: number }> = []
+const userConfigRows: Array<{ user_id: string }> = []
 
 class MockDatabase {
   run(sql: string, params?: (string | number | null)[]): { changes: number } {
@@ -144,30 +149,30 @@ describe('announceNewVersion', () => {
     sentMessages.length = 0
     userConfigRows.length = 0
     changelogProvider = null
-    sendMessageImpl = (userId: number, text: string): Promise<void> => {
+    sendMessageImpl = (userId: string, text: string): Promise<void> => {
       sentMessages.push({ userId, text })
       return Promise.resolve()
     }
   })
 
   test('sends announcement to all users with Kaneo accounts', async () => {
-    userConfigRows.push({ user_id: 101 }, { user_id: 102 })
+    userConfigRows.push({ user_id: '101' }, { user_id: '102' })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(2)
-    expect(sentMessages[0]?.userId).toBe(101)
-    expect(sentMessages[1]?.userId).toBe(102)
+    expect(sentMessages[0]?.userId).toBe('101')
+    expect(sentMessages[1]?.userId).toBe('102')
     expect(sentMessages[0]?.text).toContain(VERSION)
   })
 
   test('does not send announcement twice for the same version', async () => {
-    userConfigRows.push({ user_id: 101 })
+    userConfigRows.push({ user_id: '101' })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockBot)
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(1)
   })
@@ -175,54 +180,54 @@ describe('announceNewVersion', () => {
   test('marks version as announced even when no users have Kaneo accounts', async () => {
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(true)
   })
 
   test('returns early without sending when CHANGELOG.md cannot be read', async () => {
-    userConfigRows.push({ user_id: 101 })
+    userConfigRows.push({ user_id: '101' })
     changelogProvider = null
 
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(false)
   })
 
   test('returns early without sending when version is missing from changelog', async () => {
-    userConfigRows.push({ user_id: 101 })
+    userConfigRows.push({ user_id: '101' })
     changelogProvider = (): Promise<string> =>
       Promise.resolve('# Changelog\n\n## [0.0.1] - 2024-01-01\n\n- old stuff\n')
 
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
     expect(announcedVersions.has(VERSION)).toBe(false)
   })
 
   test('continues sending to remaining users when one send fails', async () => {
-    const failedIds: number[] = []
+    const failedIds: string[] = []
     let callCount = 0
 
-    sendMessageImpl = (userId: number, text: string): Promise<void> => {
+    sendMessageImpl = (userId: string, text: string): Promise<void> => {
       callCount++
       if (callCount === 1) {
         failedIds.push(userId)
-        return Promise.reject(new Error('Telegram API error'))
+        return Promise.reject(new Error('API error'))
       }
       sentMessages.push({ userId, text })
       return Promise.resolve()
     }
 
-    userConfigRows.push({ user_id: 201 }, { user_id: 202 })
+    userConfigRows.push({ user_id: '201' }, { user_id: '202' })
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockBot)
+    await announceNewVersion(mockChat)
 
     expect(failedIds).toHaveLength(1)
     expect(sentMessages).toHaveLength(1)
-    expect(sentMessages[0]?.userId).toBe(202)
+    expect(sentMessages[0]?.userId).toBe('202')
   })
 })

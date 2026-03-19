@@ -1,5 +1,4 @@
-import { Bot } from 'grammy'
-
+import type { ChatProvider } from './chat/types.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -14,32 +13,24 @@ import { isAuthorized, resolveUserByUsername } from './users.js'
 
 const log = logger.child({ scope: 'bot' })
 
-const bot = new Bot(process.env['TELEGRAM_BOT_TOKEN']!)
-const adminUserId = parseInt(process.env['TELEGRAM_USER_ID']!, 10)
-
-const checkAuthorization = (userId: number | undefined, username?: string): userId is number => {
+const checkAuthorization = (userId: string, username?: string | null): boolean => {
   log.debug({ userId }, 'Checking authorization')
-  if (userId === undefined) return false
   if (isAuthorized(userId)) return true
-  if (username !== undefined && resolveUserByUsername(userId, username)) return true
+  if (username !== undefined && username !== null && resolveUserByUsername(userId, username)) return true
   log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
   return false
 }
 
-registerHelpCommand(bot, checkAuthorization, adminUserId)
-registerSetCommand(bot, checkAuthorization)
-registerConfigCommand(bot, checkAuthorization)
-registerContextCommand(bot, adminUserId)
-registerClearCommand(bot, checkAuthorization, adminUserId)
-registerAdminCommands(bot, adminUserId)
-
-bot.on('message:text', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!checkAuthorization(userId, ctx.from?.username)) {
-    return
-  }
-  const userText = ctx.message.text
-  await processMessage(ctx, userId, userText)
-})
-
-export { bot }
+export function setupBot(chat: ChatProvider, adminUserId: string): void {
+  registerHelpCommand(chat, checkAuthorization, adminUserId)
+  registerSetCommand(chat, checkAuthorization)
+  registerConfigCommand(chat, checkAuthorization)
+  registerContextCommand(chat, adminUserId)
+  registerClearCommand(chat, checkAuthorization, adminUserId)
+  registerAdminCommands(chat, adminUserId)
+  chat.onMessage(async (msg, reply) => {
+    if (!checkAuthorization(msg.user.id, msg.user.username)) return
+    reply.typing()
+    await processMessage(reply, msg.user.id, msg.user.username, msg.text)
+  })
+}

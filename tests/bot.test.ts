@@ -1,20 +1,6 @@
-import { describe, expect, test, beforeAll } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 
-import { formatLlmOutput } from '../src/utils/format.js'
-
-// Set required env vars before importing bot
-beforeAll(() => {
-  process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
-  process.env['TELEGRAM_USER_ID'] = '12345'
-})
-
-describe('bot', () => {
-  test('module loads with env vars', async () => {
-    // Import bot after setting env vars
-    const { bot } = await import('../src/bot.js')
-    expect(bot).toBeDefined()
-  })
-})
+import { formatLlmOutput } from '../src/chat/telegram/format.js'
 
 describe('bot message formatting', () => {
   test('formatLlmOutput converts markdown to entities', () => {

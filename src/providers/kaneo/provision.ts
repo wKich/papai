@@ -112,15 +112,15 @@ export async function provisionKaneoUser(
   baseUrl: string,
   /** Public-facing web client URL — used as the trusted Origin for all auth requests. */
   publicUrl: string,
-  telegramId: number,
+  platformUserId: string,
   username: string | null,
 ): Promise<ProvisionResult> {
-  const email = username === null ? `${telegramId}@pap.ai` : `${username}@pap.ai`
+  const email = username === null ? `${platformUserId}@pap.ai` : `${username}@pap.ai`
   const password = generatePassword()
-  const name = username === null ? `User ${telegramId}` : `@${username}`
-  const slug = `papai-${telegramId}`
+  const name = username === null ? `User ${platformUserId}` : `@${username}`
+  const slug = `papai-${platformUserId}`
 
-  log.info({ telegramId, email }, 'Provisioning Kaneo user account')
+  log.info({ platformUserId, email }, 'Provisioning Kaneo user account')
   const trustedOrigin = publicUrl === '' ? baseUrl : publicUrl
   const sessionCookie = await doSignUp(baseUrl, email, password, name)
   const workspaceId = await doCreateWorkspace(baseUrl, trustedOrigin, sessionCookie, name, slug)
@@ -128,13 +128,13 @@ export async function provisionKaneoUser(
   let kaneoKey = sessionCookie
   try {
     kaneoKey = await doCreateApiKey(baseUrl, trustedOrigin, sessionCookie)
-    log.info({ telegramId }, 'Created API key for provisioned user')
+    log.info({ platformUserId }, 'Created API key for provisioned user')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    log.warn({ telegramId, error: msg }, 'API key endpoint unavailable — using session token as key')
+    log.warn({ platformUserId, error: msg }, 'API key endpoint unavailable — using session token as key')
   }
 
-  log.info({ telegramId, workspaceId }, 'Kaneo user provisioned')
+  log.info({ platformUserId, workspaceId }, 'Kaneo user provisioned')
   return { email, password, kaneoKey, workspaceId }
 }
 
@@ -143,7 +143,7 @@ export type ProvisionOutcome =
   | { status: 'registration_disabled' }
   | { status: 'failed'; error: string }
 
-export async function provisionAndConfigure(userId: number, username: string | null): Promise<ProvisionOutcome> {
+export async function provisionAndConfigure(userId: string, username: string | null): Promise<ProvisionOutcome> {
   const kaneoUrl = process.env['KANEO_CLIENT_URL']
   if (kaneoUrl === undefined) return { status: 'failed', error: 'KANEO_CLIENT_URL not set' }
 
