@@ -7,6 +7,13 @@ set -e
 bun run format
 bun run lint:fix
 
+# Run type check and unit tests
+echo "Running type check..."
+bun run typecheck
+
+echo "Running unit tests..."
+bun run test
+
 # Run security scan (non-blocking if semgrep is unavailable)
 echo "Running security scan..."
 SECURITY_EXIT=0
