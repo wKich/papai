@@ -52,7 +52,7 @@ export const YtIssueLinkSchema = z.object({
 export const YtTagSchema = z.object({
   id: z.string(),
   name: z.string(),
-  color: z.object({ background: z.string().optional() }).optional(),
+  color: z.object({ background: z.string().optional() }).nullable().optional(),
 })
 
 /** Full issue schema matching ISSUE_FIELDS query. */
@@ -113,7 +113,7 @@ export const YtProjectSchema = z.object({
 export const YtLabelSchema = z.object({
   id: z.string(),
   name: z.string(),
-  color: z.object({ background: z.string().optional() }).optional(),
+  color: z.object({ background: z.string().optional() }).nullable().optional(),
 })
 
 // Inferred types — replace the plain interfaces in types.ts

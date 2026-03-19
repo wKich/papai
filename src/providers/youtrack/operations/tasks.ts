@@ -4,7 +4,7 @@ import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
-import type { YtIssue } from '../schemas/yt-types.js'
+import { YtIssueSchema } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
 
@@ -30,19 +30,21 @@ export async function createYouTrackTask(
   const customFields = buildCustomFields(params)
   if (customFields.length > 0) body['customFields'] = customFields
 
-  const issue = await youtrackFetch<YtIssue>(config, 'POST', '/api/issues', {
+  const raw = await youtrackFetch(config, 'POST', '/api/issues', {
     body,
     query: { fields: ISSUE_FIELDS },
   })
+  const issue = YtIssueSchema.parse(raw)
   log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
   return mapIssueToTask(issue, config.baseUrl)
 }
 
 export async function getYouTrackTask(config: YouTrackConfig, taskId: string): Promise<Task> {
   log.debug({ taskId }, 'getTask')
-  const issue = await youtrackFetch<YtIssue>(config, 'GET', `/api/issues/${taskId}`, {
+  const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
     query: { fields: ISSUE_FIELDS },
   })
+  const issue = YtIssueSchema.parse(raw)
   return mapIssueToTask(issue, config.baseUrl)
 }
 
@@ -68,19 +70,21 @@ export async function updateYouTrackTask(
   const customFields = buildCustomFields(params)
   if (customFields.length > 0) body['customFields'] = customFields
 
-  const issue = await youtrackFetch<YtIssue>(config, 'POST', `/api/issues/${taskId}`, {
+  const raw = await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
     body,
     query: { fields: ISSUE_FIELDS },
   })
+  const issue = YtIssueSchema.parse(raw)
   log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
   return mapIssueToTask(issue, config.baseUrl)
 }
 
 export async function listYouTrackTasks(config: YouTrackConfig, projectId: string): Promise<TaskListItem[]> {
   log.debug({ projectId }, 'listTasks')
-  const issues = await youtrackFetch<YtIssue[]>(config, 'GET', '/api/issues', {
+  const raw = await youtrackFetch(config, 'GET', '/api/issues', {
     query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
   })
+  const issues = YtIssueSchema.array().parse(raw)
   log.info({ projectId, count: issues.length }, 'Tasks listed')
   return issues.map(mapIssueToListItem)
 }
@@ -94,9 +98,10 @@ export async function searchYouTrackTasks(
   if (params.projectId !== undefined) {
     query = `project: {${params.projectId}} ${query}`
   }
-  const issues = await youtrackFetch<YtIssue[]>(config, 'GET', '/api/issues', {
+  const raw = await youtrackFetch(config, 'GET', '/api/issues', {
     query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
   })
+  const issues = YtIssueSchema.array().parse(raw)
   log.info({ query: params.query, count: issues.length }, 'Tasks searched')
   return issues.map(mapIssueToSearchResult)
 }

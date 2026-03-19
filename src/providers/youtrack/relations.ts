@@ -5,7 +5,7 @@ import type { RelationType } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { buildLinkCommand, buildRemoveLinkCommand } from './commands.js'
-import type { YtIssue } from './types.js'
+import { YtIssueLinksSchema } from './schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:relations' })
 
@@ -30,9 +30,10 @@ export async function removeYouTrackRelation(
   relatedTaskId: string,
 ): Promise<{ taskId: string; relatedTaskId: string }> {
   log.debug({ taskId, relatedTaskId }, 'removeRelation')
-  const issue = await youtrackFetch<YtIssue>(config, 'GET', `/api/issues/${taskId}`, {
+  const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
     query: { fields: 'id,links(id,direction,linkType(name),issues(id,idReadable))' },
   })
+  const issue = YtIssueLinksSchema.parse(raw)
   const matchingLink = (issue.links ?? []).find((link) =>
     (link.issues ?? []).some((i) => i.id === relatedTaskId || i.idReadable === relatedTaskId),
   )
