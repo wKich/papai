@@ -4,7 +4,7 @@ import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { COMMENT_FIELDS } from '../constants.js'
 import { mapComment } from '../mappers.js'
-import type { YtComment } from '../types.js'
+import type { YtComment } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:comments' })
 

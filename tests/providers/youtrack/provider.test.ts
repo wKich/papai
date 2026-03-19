@@ -106,13 +106,7 @@ describe('YouTrackProvider', () => {
         summary: 'New task',
         description: 'A description',
         project: { id: '0-1', shortName: 'TEST' },
-        customFields: [
-          {
-            $type: 'SingleEnumIssueCustomField',
-            projectCustomField: { field: { name: 'Priority' } },
-            value: { name: 'Normal' },
-          },
-        ],
+        customFields: [{ $type: 'SingleEnumIssueCustomField', name: 'Priority', value: { name: 'Normal' } }],
         tags: [],
         links: [],
       })
@@ -164,13 +158,7 @@ describe('YouTrackProvider', () => {
         summary: 'Task with links',
         created: 1700000000000,
         project: { id: '0-1', shortName: 'TEST' },
-        customFields: [
-          {
-            $type: 'StateIssueCustomField',
-            projectCustomField: { field: { name: 'State' } },
-            value: { name: 'Open' },
-          },
-        ],
+        customFields: [{ $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } }],
         tags: [{ id: 'tag-1', name: 'bug', color: { background: '#ff0000' } }],
         links: [
           {

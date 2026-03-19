@@ -3,7 +3,7 @@ import type { Project } from '../../types.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { PROJECT_FIELDS } from '../constants.js'
-import type { YtProject } from '../types.js'
+import type { YtProject } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:projects' })
 

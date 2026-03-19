@@ -1,9 +1,10 @@
 import type { Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
-import type { YtComment, YtIssue } from './types.js'
+import type { YtComment, YtIssue } from './schemas/yt-types.js'
 
 const getCustomFieldValue = (issue: YtIssue, fieldName: string): string | undefined => {
-  const cf = issue.customFields?.find((f) => f.projectCustomField?.field?.name === fieldName)
+  const cf = issue.customFields?.find((f) => f.name === fieldName)
   if (cf?.value === null || cf?.value === undefined) return undefined
+  if (typeof cf.value !== 'object') return undefined
   return cf.value.name ?? cf.value.login
 }
 

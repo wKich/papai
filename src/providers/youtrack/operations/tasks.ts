@@ -4,7 +4,7 @@ import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
-import type { YtIssue } from '../types.js'
+import type { YtIssue } from '../schemas/yt-types.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
 
