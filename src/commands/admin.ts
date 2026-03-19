@@ -1,8 +1,8 @@
 import type { Bot, Context } from 'grammy'
 
-import { setConfig } from '../config.js'
 import { logger } from '../logger.js'
-import { addUser, listUsers, removeUser, setKaneoWorkspace } from '../users.js'
+import { provisionAndConfigure } from '../providers/kaneo/provision.js'
+import { addUser, listUsers, removeUser } from '../users.js'
 
 const log = logger.child({ scope: 'admin' })
 
@@ -71,20 +71,13 @@ async function handleUsersCommand(ctx: Context, userId: number, adminUserId: num
 }
 
 async function provisionUserKaneo(ctx: { reply: (text: string) => Promise<unknown> }, userId: number): Promise<void> {
-  const kaneoUrl = process.env['KANEO_CLIENT_URL']
-  if (kaneoUrl === undefined) return
-  try {
-    const { provisionKaneoUser } = await import('../providers/kaneo/provision.js')
-    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
-    const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, null)
-    setConfig(userId, 'kaneo_apikey', prov.kaneoKey)
-    setKaneoWorkspace(userId, prov.workspaceId)
-    log.info({ userId }, 'Kaneo account provisioned for new user')
-    await ctx.reply(`Kaneo account created.\n📧 Email: ${prov.email}\n🔑 Password: ${prov.password}\n🌐 ${kaneoUrl}`)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    log.warn({ userId, error: msg }, 'Kaneo provisioning failed for new user')
-    await ctx.reply(`Note: Kaneo auto-provisioning failed (${msg}). User can configure manually via /set.`)
+  const outcome = await provisionAndConfigure(userId, null)
+  if (outcome.status === 'provisioned') {
+    await ctx.reply(
+      `Kaneo account created.\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n🌐 ${outcome.kaneoUrl}`,
+    )
+  } else if (outcome.status === 'failed') {
+    await ctx.reply(`Note: Kaneo auto-provisioning failed (${outcome.error}). User can configure manually via /set.`)
   }
 }
 

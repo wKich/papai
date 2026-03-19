@@ -4,17 +4,18 @@ import { generateText, stepCountIs, type ToolSet } from 'ai'
 import { type ModelMessage } from 'ai'
 import type { Context } from 'grammy'
 
-import { clearCachedTools, getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
-import { getConfig, setConfig } from './config.js'
+import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
+import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
+import { provisionAndConfigure } from './providers/kaneo/provision.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import { makeTools } from './tools/index.js'
-import { getKaneoWorkspace, setKaneoWorkspace } from './users.js'
+import { getKaneoWorkspace } from './users.js'
 import { formatLlmOutput } from './utils/format.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
@@ -94,29 +95,15 @@ const withTypingIndicator = async <T>(ctx: Context, fn: () => Promise<T>): Promi
 
 const maybeProvisionKaneo = async (ctx: Context, userId: number): Promise<void> => {
   if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_apikey') !== null) return
-  const kaneoUrl = process.env['KANEO_CLIENT_URL']
-  if (kaneoUrl === undefined) return
-  try {
-    const { provisionKaneoUser } = await import('./providers/kaneo/provision.js')
-    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
-    const prov = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, ctx.from?.username ?? null)
-    setConfig(userId, 'kaneo_apikey', prov.kaneoKey)
-    setKaneoWorkspace(userId, prov.workspaceId)
-    // Clear tools cache since kaneo config changed
-    clearCachedTools(userId)
-    log.info({ userId }, 'Kaneo account provisioned on first use')
+  const outcome = await provisionAndConfigure(userId, ctx.from?.username ?? null)
+  if (outcome.status === 'provisioned') {
     await ctx.reply(
-      `✅ Your Kaneo account has been created!\n🌐 ${kaneoUrl}\n📧 Email: ${prov.email}\n🔑 Password: ${prov.password}\n\nThe bot is already configured and ready to use.`,
+      `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
     )
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    const isRegistrationDisabled = msg.includes('sign-up') || msg.includes('registration') || msg.includes('Sign-up')
-    log.warn({ userId, error: msg }, 'Kaneo auto-provisioning failed')
-    if (isRegistrationDisabled) {
-      await ctx.reply(
-        'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
-      )
-    }
+  } else if (outcome.status === 'registration_disabled') {
+    await ctx.reply(
+      'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
+    )
   }
 }
 

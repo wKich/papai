@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
+import { clearCachedTools } from '../../cache.js'
+import { setConfig } from '../../config.js'
 import { logger } from '../../logger.js'
+import { setKaneoWorkspace } from '../../users.js'
 
 const log = logger.child({ scope: 'kaneo:provision' })
 
@@ -133,4 +136,30 @@ export async function provisionKaneoUser(
 
   log.info({ telegramId, workspaceId }, 'Kaneo user provisioned')
   return { email, password, kaneoKey, workspaceId }
+}
+
+export type ProvisionOutcome =
+  | { status: 'provisioned'; email: string; password: string; kaneoUrl: string }
+  | { status: 'registration_disabled' }
+  | { status: 'failed'; error: string }
+
+export async function provisionAndConfigure(userId: number, username: string | null): Promise<ProvisionOutcome> {
+  const kaneoUrl = process.env['KANEO_CLIENT_URL']
+  if (kaneoUrl === undefined) return { status: 'failed', error: 'KANEO_CLIENT_URL not set' }
+
+  try {
+    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
+    const result = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, username)
+    setConfig(userId, 'kaneo_apikey', result.kaneoKey)
+    setKaneoWorkspace(userId, result.workspaceId)
+    clearCachedTools(userId)
+    log.info({ userId }, 'Kaneo account provisioned and configured')
+    return { status: 'provisioned', email: result.email, password: result.password, kaneoUrl }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const isRegistrationDisabled = msg.includes('sign-up') || msg.includes('registration') || msg.includes('Sign-up')
+    log.warn({ userId, error: msg }, 'Kaneo provisioning failed')
+    if (isRegistrationDisabled) return { status: 'registration_disabled' }
+    return { status: 'failed', error: msg }
+  }
 }
