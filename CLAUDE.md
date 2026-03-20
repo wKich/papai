@@ -242,6 +242,62 @@ tests/
 
 For unit tests, use `bun run test`.
 
+### Mocking External Modules
+
+When mocking modules like the Vercel AI SDK, use **module-level mocking** with a mutable function reference instead of `spyOn().mockImplementation()`. This pattern avoids TypeScript type assertion errors and lint violations.
+
+**Pattern (used in `tests/memory.test.ts` and `tests/conversation.test.ts`):**
+
+```typescript
+// Define local type and mutable implementation
+import { mock } from 'bun:test'
+import type { ModelMessage } from 'ai'
+
+type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
+let generateTextImpl = (): Promise<GenerateTextResult> =>
+  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Updated summary text' } })
+
+// Mock the module BEFORE importing code that uses it
+void mock.module('ai', () => ({
+  generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+  Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
+}))
+
+// Now import the code under test
+import { runTrimInBackground } from '../src/conversation.js'
+```
+
+**Benefits:**
+
+- No type assertions (`as SomeType`) needed
+- No `typescript-eslint(no-unsafe-type-assertion)` violations
+- Tests control behavior by reassigning `generateTextImpl`
+- Clean TypeScript types without generic complexity
+- Consistent with existing test patterns in the codebase
+
+**Example test with different behaviors:**
+
+```typescript
+test('success case', async () => {
+  // Uses default generateTextImpl
+  await runTrimInBackground('user1', history)
+})
+
+test('error case', async () => {
+  // Override for this test
+  generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API error'))
+  await runTrimInBackground('user1', history)
+})
+
+test('custom response', async () => {
+  generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ output: { keep_indices: [0], summary: 'Custom' } })
+  await runTrimInBackground('user1', history)
+})
+```
+
+See `tests/memory.test.ts` and `tests/conversation.test.ts` for full examples.
+
 ## E2E Testing
 
 E2E tests run against a real Kaneo instance in Docker using the existing `docker-compose.yml` setup. They verify the actual integration between papai's tools and the Kaneo API.

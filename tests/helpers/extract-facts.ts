@@ -21,6 +21,30 @@ const ProjectResultSchema = z.looseObject({
 
 type ToolResultEntry = { toolName: string; result: unknown }
 
+// Helper to extract projects from list_projects result
+function extractProjectsFromListResult(output: unknown): Omit<MemoryFact, 'last_seen'>[] {
+  if (!Array.isArray(output)) {
+    return []
+  }
+
+  const facts: Omit<MemoryFact, 'last_seen'>[] = []
+  // Cap at first 10 projects to avoid polluting the fact store
+  const projects = output.slice(0, 10)
+
+  for (const project of projects) {
+    const parsed = ProjectResultSchema.safeParse(project)
+    if (parsed.success) {
+      facts.push({
+        identifier: `proj:${parsed.data.id}`,
+        title: parsed.data.name,
+        url: parsed.data.url ?? '',
+      })
+    }
+  }
+
+  return facts
+}
+
 /**
  * Extract facts from tool results for testing purposes.
  */
@@ -28,7 +52,8 @@ export function extractFacts(toolResults: readonly ToolResultEntry[]): readonly 
   const facts: Omit<MemoryFact, 'last_seen'>[] = []
 
   for (const result of toolResults) {
-    if (['create_task', 'update_task', 'delete_task'].includes(result.toolName)) {
+    // Task-related facts from mutation and read operations
+    if (['create_task', 'update_task', 'delete_task', 'get_task'].includes(result.toolName)) {
       const parsed = TaskResultSchema.safeParse(result.result)
       if (parsed.success) {
         const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
@@ -40,6 +65,7 @@ export function extractFacts(toolResults: readonly ToolResultEntry[]): readonly 
       }
     }
 
+    // Project facts from mutation operations (single project)
     if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
       const parsed = ProjectResultSchema.safeParse(result.result)
       if (parsed.success) {
@@ -49,6 +75,12 @@ export function extractFacts(toolResults: readonly ToolResultEntry[]): readonly 
           url: parsed.data.url ?? '',
         })
       }
+    }
+
+    // Project facts from list_projects operation (array of projects)
+    if (result.toolName === 'list_projects') {
+      const projectFacts = extractProjectsFromListResult(result.result)
+      facts.push(...projectFacts)
     }
   }
 

@@ -188,7 +188,7 @@ describe('buildMemoryContextMessage', () => {
     expect(result).not.toBeNull()
     expect(result!.content).toContain('#42')
     expect(result!.content).toContain('Fix login')
-    expect(result!.content).toContain('Recently accessed Kaneo entities')
+    expect(result!.content).toContain('Recently accessed entities')
   })
 
   test('returns combined message with both summary and facts', () => {
@@ -245,10 +245,64 @@ describe('extractFacts', () => {
     expect(facts[0]!.title).toBe('Updated Name')
   })
 
-  test('does not extract fact from get_task result', () => {
+  test('extracts fact from get_task result', () => {
     const results = [{ toolName: 'get_task', result: { id: 'task-10', title: 'Details', number: 10 } }]
     const facts = extractFacts(results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('#10')
+    expect(facts[0]!.title).toBe('Details')
+  })
+
+  test('extracts facts from list_projects result', () => {
+    const projects = [
+      { id: 'proj-1', name: 'Project A', url: 'https://example.com/proj-1' },
+      { id: 'proj-2', name: 'Project B' },
+      { id: 'proj-3', name: 'Project C' },
+    ]
+    const results = [{ toolName: 'list_projects', result: projects }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(3)
+    expect(facts[0]!.identifier).toBe('proj:proj-1')
+    expect(facts[0]!.title).toBe('Project A')
+    expect(facts[0]!.url).toBe('https://example.com/proj-1')
+    expect(facts[1]!.identifier).toBe('proj:proj-2')
+    expect(facts[1]!.title).toBe('Project B')
+    expect(facts[2]!.identifier).toBe('proj:proj-3')
+    expect(facts[2]!.title).toBe('Project C')
+  })
+
+  test('caps list_projects at 10 entries', () => {
+    const projects = Array.from({ length: 12 }, (_, i) => ({ id: `proj-${i}`, name: `Project ${i}` }))
+    const results = [{ toolName: 'list_projects', result: projects }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(10)
+  })
+
+  test('returns empty array for empty list_projects result', () => {
+    const results = [{ toolName: 'list_projects', result: [] }]
+    const facts = extractFacts(results)
     expect(facts).toHaveLength(0)
+  })
+
+  test('returns empty array for non-array list_projects result', () => {
+    const results = [{ toolName: 'list_projects', result: { id: 'proj-1', name: 'Project' } }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(0)
+  })
+
+  test('skips malformed projects in list_projects result', () => {
+    const projects = [
+      { id: 'proj-1', name: 'Project A' },
+      // Missing name - should be skipped
+      { id: 'proj-2' },
+      // Missing id - should be skipped
+      { name: 'Project C' },
+    ]
+    const results = [{ toolName: 'list_projects', result: projects }]
+    const facts = extractFacts(results)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-1')
+    expect(facts[0]!.title).toBe('Project A')
   })
 
   test('does not extract facts from search_tasks result', () => {

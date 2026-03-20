@@ -70,6 +70,30 @@ const ProjectResultSchema = z.looseObject({
   url: z.string().optional(),
 })
 
+// Helper to extract projects from list_projects result
+function extractProjectsFromListResult(output: unknown): Omit<MemoryFact, 'last_seen'>[] {
+  if (!Array.isArray(output)) {
+    return []
+  }
+
+  const facts: Omit<MemoryFact, 'last_seen'>[] = []
+  // Cap at first 10 projects to avoid polluting the fact store
+  const projects = output.slice(0, 10)
+
+  for (const project of projects) {
+    const parsed = ProjectResultSchema.safeParse(project)
+    if (parsed.success) {
+      facts.push({
+        identifier: `proj:${parsed.data.id}`,
+        title: parsed.data.name,
+        url: parsed.data.url ?? '',
+      })
+    }
+  }
+
+  return facts
+}
+
 // Wrapper to accept SDK result types directly without unsafe assignments
 // SDK v5 uses input/output properties typed as any
 export function extractFactsFromSdkResults(
@@ -79,7 +103,8 @@ export function extractFactsFromSdkResults(
   const facts: Omit<MemoryFact, 'last_seen'>[] = []
 
   for (const result of toolResults) {
-    if (['create_task', 'update_task', 'delete_task'].includes(result.toolName)) {
+    // Task-related facts from mutation and read operations
+    if (['create_task', 'update_task', 'delete_task', 'get_task'].includes(result.toolName)) {
       const parsed = TaskResultSchema.safeParse(result.output)
       if (parsed.success) {
         const label = parsed.data.number === undefined ? parsed.data.id : `#${parsed.data.number}`
@@ -91,6 +116,7 @@ export function extractFactsFromSdkResults(
       }
     }
 
+    // Project facts from mutation operations (single project)
     if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
       const parsed = ProjectResultSchema.safeParse(result.output)
       if (parsed.success) {
@@ -100,6 +126,12 @@ export function extractFactsFromSdkResults(
           url: parsed.data.url ?? '',
         })
       }
+    }
+
+    // Project facts from list_projects operation (array of projects)
+    if (result.toolName === 'list_projects') {
+      const projectFacts = extractProjectsFromListResult(result.output)
+      facts.push(...projectFacts)
     }
   }
 
@@ -121,7 +153,7 @@ type TrimResult = {
 const TRIM_PROMPT = `You are a conversation memory manager. The following conversation history has grown too long ({TOTAL} messages).
 
 Your task:
-1. Select between 50 and 100 message indices (0-based) to retain verbatim. Choose fewer (~50) when many threads are resolved and the history is repetitive. Choose more (~100) when conversations are active and many topics are still open. Prefer messages about active unresolved Kaneo issues, recent decisions, ongoing threads, and stated preferences. Drop messages about completed tasks, resolved clarifications, and abandoned threads.
+1. Select between 50 and 100 message indices (0-based) to retain verbatim. Choose fewer (~50) when many threads are resolved and the history is repetitive. Choose more (~100) when conversations are active and many topics are still open. Prefer messages about active unresolved tasks and projects, recent decisions, ongoing threads, and stated preferences. Drop messages about completed tasks, resolved clarifications, and abandoned threads.
 2. Write an updated summary (max 200 words) for all messages NOT retained. Incorporate the previous summary. Preserve: task IDs and numbers, project names, decisions, priorities, preferences.
 
 Previous summary:
@@ -210,7 +242,7 @@ export function buildMemoryContextMessage(
 
   if (facts.length > 0) {
     const lines = facts.map((f) => `- ${f.identifier}: "${f.title}" — last seen ${f.last_seen.slice(0, 10)}`)
-    parts.push(`Recently accessed Kaneo entities:\n${lines.join('\n')}`)
+    parts.push(`Recently accessed entities:\n${lines.join('\n')}`)
   }
 
   if (parts.length === 0) {

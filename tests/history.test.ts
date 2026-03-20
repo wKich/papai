@@ -24,6 +24,7 @@ void mock.module('../src/db/index.js', () => ({
 
 import type { ModelMessage } from 'ai'
 
+import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { loadHistory, saveHistory, clearHistory } from '../src/history.js'
 import { flushMicrotasks } from './test-helpers.js'
 
@@ -240,5 +241,90 @@ describe('clearHistory', () => {
       .where(eq(schema.conversationHistory.userId, '20'))
       .get()
     expect(row).toBeUndefined()
+  })
+})
+
+describe('getCachedHistory cold-cache behavior', () => {
+  beforeEach(() => {
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    testSqlite.run(`
+      CREATE TABLE conversation_history (
+        user_id TEXT PRIMARY KEY,
+        messages TEXT NOT NULL
+      )
+    `)
+    // Clear all caches to ensure cold state
+    _userCaches.clear()
+  })
+
+  test('loads messages from DB when cache is cold and DB has data', () => {
+    const messages = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi there' },
+    ]
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: 'user1', messages: JSON.stringify(messages) })
+      .run()
+
+    const result = getCachedHistory('user1')
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ role: 'user', content: 'hello' })
+    expect(result[1]).toEqual({ role: 'assistant', content: 'hi there' })
+  })
+
+  test('returns empty array when cache is cold and DB has no data', () => {
+    const result = getCachedHistory('user2')
+    expect(result).toEqual([])
+  })
+
+  test('does not query DB again on second call after cold load', () => {
+    const messages = [{ role: 'user', content: 'test' }]
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: 'user3', messages: JSON.stringify(messages) })
+      .run()
+
+    // First call loads from DB
+    const result1 = getCachedHistory('user3')
+    expect(result1).toHaveLength(1)
+
+    // Update DB directly (bypass cache) - need to update since primary key exists
+    const newMessages = [{ role: 'user', content: 'modified' }]
+    testDb
+      .update(schema.conversationHistory)
+      .set({ messages: JSON.stringify(newMessages) })
+      .where(eq(schema.conversationHistory.userId, 'user3'))
+      .run()
+
+    // Second call should return cached result, not DB update
+    const result2 = getCachedHistory('user3')
+    expect(result2).toHaveLength(1)
+    expect(result2[0]!.content).toBe('test')
+  })
+
+  // Story 1 AC Test: "Continuing from previous session"
+  test('Story 1: continuing from previous session', async () => {
+    const userId = 'story1-user'
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'Create a task for the mobile app' },
+      { role: 'assistant', content: 'I have created task #42 for the mobile app.' },
+    ]
+
+    // Simulate first session: save history
+    saveHistory(userId, messages)
+    await flushMicrotasks()
+
+    // Simulate session end: clear cache (simulating bot restart)
+    _userCaches.clear()
+
+    // Simulate new session: load history
+    const loadedMessages = loadHistory(userId)
+
+    // Verify history is preserved across sessions
+    expect(loadedMessages).toHaveLength(2)
+    expect(loadedMessages[0]).toEqual(messages[0])
+    expect(loadedMessages[1]).toEqual(messages[1])
   })
 })

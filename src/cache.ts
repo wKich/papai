@@ -73,7 +73,7 @@ function getOrCreateCache(userId: string): UserCache {
 
 export function getCachedHistory(userId: string): readonly ModelMessage[] {
   const cache = getOrCreateCache(userId)
-  if (cache.history.length === 0) {
+  if (cache.history.length === 0 && !cache.config.has('history_loaded')) {
     log.debug({ userId }, 'Loading history from DB into cache')
     const row = getDrizzleDb()
       .select({ messages: conversationHistory.messages })
@@ -86,6 +86,7 @@ export function getCachedHistory(userId: string): readonly ModelMessage[] {
         cache.history = parsed
       }
     }
+    cache.config.set('history_loaded', 'true')
   }
   return cache.history
 }
@@ -234,4 +235,14 @@ export function clearCachedFacts(userId: string): void {
   cache.facts = []
   cache.config.delete('facts_loaded')
   log.debug({ userId }, 'Facts cache cleared')
+}
+
+export function clearCachedHistoryFlag(userId: string): void {
+  const cache = userCaches.get(userId)
+  if (cache === undefined) {
+    log.debug({ userId }, 'No history cache to clear flag (cache not initialized)')
+    return
+  }
+  cache.config.delete('history_loaded')
+  log.debug({ userId }, 'History loaded flag cleared')
 }

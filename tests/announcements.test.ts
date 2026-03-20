@@ -6,6 +6,25 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import packageJson from '../package.json' with { type: 'json' }
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 
+// Mock logger to avoid issues with runMigrations
+void mock.module('../src/logger.js', () => ({
+  logger: {
+    debug: (): void => {},
+    info: (): void => {},
+    warn: (): void => {},
+    error: (): void => {},
+    fatal: (): void => {},
+    trace: (): void => {},
+    level: 'info',
+    child: (): object => ({
+      debug: (): void => {},
+      info: (): void => {},
+      warn: (): void => {},
+      error: (): void => {},
+    }),
+  },
+}))
+
 // --- Test database setup with Drizzle ---
 let testDb: ReturnType<typeof drizzle>
 let testSqlite: Database
