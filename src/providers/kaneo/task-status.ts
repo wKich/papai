@@ -1,4 +1,6 @@
 import { logger } from '../../logger.js'
+import { providerError } from '../../providers/errors.js'
+import { KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { listColumns } from './list-columns.js'
 
@@ -37,9 +39,12 @@ export async function validateStatus(config: KaneoConfig, projectId: string, sta
     }
   }
 
-  // No match found - throw error with helpful message
-  const validList = columns.map((c) => `"${c.name}"`).join(', ')
-  throw new Error(`Invalid status "${status}". Must match one of: ${validList}`)
+  // No match found - throw classified error with helpful message
+  const available = columns.map((c) => c.name)
+  throw new KaneoClassifiedError(
+    `Invalid status "${status}". Must match one of: ${available.join(', ')}`,
+    providerError.statusNotFound(status, available),
+  )
 }
 
 /**

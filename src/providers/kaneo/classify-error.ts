@@ -11,7 +11,14 @@ export class KaneoClassifiedError extends Error {
   }
 }
 
-const classifyApiError = (error: KaneoApiError): KaneoClassifiedError => {
+export interface ClassificationContext {
+  taskId?: string
+  projectId?: string
+  commentId?: string
+  labelName?: string
+}
+
+const classifyApiError = (error: KaneoApiError, context?: ClassificationContext): KaneoClassifiedError => {
   const { statusCode, message } = error
   const messageLower = message.toLowerCase()
 
@@ -23,16 +30,16 @@ const classifyApiError = (error: KaneoApiError): KaneoClassifiedError => {
   }
   if (statusCode === 404) {
     if (messageLower.includes('task') || messageLower.includes('/task/')) {
-      return new KaneoClassifiedError(message, providerError.taskNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.taskNotFound(context?.taskId ?? 'unknown'))
     }
     if (messageLower.includes('project') || messageLower.includes('/project/')) {
-      return new KaneoClassifiedError(message, providerError.projectNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.projectNotFound(context?.projectId ?? 'unknown'))
     }
     if (messageLower.includes('label') || messageLower.includes('/label/')) {
-      return new KaneoClassifiedError(message, providerError.labelNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.labelNotFound(context?.labelName ?? 'unknown'))
     }
     if (messageLower.includes('comment') || messageLower.includes('/activity/')) {
-      return new KaneoClassifiedError(message, providerError.commentNotFound('unknown'))
+      return new KaneoClassifiedError(message, providerError.commentNotFound(context?.commentId ?? 'unknown'))
     }
     // Unknown resource type — avoid misreporting as task-not-found
     return new KaneoClassifiedError(message, providerError.unknown(error))
@@ -43,15 +50,15 @@ const classifyApiError = (error: KaneoApiError): KaneoClassifiedError => {
   return new KaneoClassifiedError(message, systemError.unexpected(error))
 }
 
-export const classifyKaneoError = (error: unknown): KaneoClassifiedError => {
+export const classifyKaneoError = (error: unknown, context?: ClassificationContext): KaneoClassifiedError => {
   if (error instanceof KaneoClassifiedError) {
     return error
   }
   if (error instanceof KaneoApiError) {
-    return classifyApiError(error)
+    return classifyApiError(error, context)
   }
   if (error instanceof KaneoValidationError) {
-    return new KaneoClassifiedError(error.message, providerError.validationFailed('response', error.message))
+    return new KaneoClassifiedError(error.message, providerError.invalidResponse())
   }
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
@@ -60,6 +67,16 @@ export const classifyKaneoError = (error: unknown): KaneoClassifiedError => {
     }
     if (message.includes('rate limit') || message.includes('429')) {
       return new KaneoClassifiedError(error.message, providerError.rateLimited())
+    }
+    // Network error detection before final fallback
+    if (
+      message.includes('fetch') ||
+      message.includes('network') ||
+      message.includes('econnrefused') ||
+      message.includes('enotfound') ||
+      message.includes('connect')
+    ) {
+      return new KaneoClassifiedError(error.message, systemError.networkError(error.message))
     }
   }
 

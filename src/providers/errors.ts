@@ -15,6 +15,8 @@ export type ProviderError =
   | { type: 'provider'; code: 'rate-limited' }
   | { type: 'provider'; code: 'validation-failed'; field: string; reason: string }
   | { type: 'provider'; code: 'unsupported-operation'; operation: string }
+  | { type: 'provider'; code: 'status-not-found'; statusName: string; available: string[] }
+  | { type: 'provider'; code: 'invalid-response' }
   | { type: 'provider'; code: 'unknown'; originalError: Error }
 
 /** Error constructors for ProviderError. */
@@ -47,6 +49,13 @@ export const providerError = {
     code: 'unsupported-operation',
     operation,
   }),
+  statusNotFound: (statusName: string, available: string[]): ProviderError => ({
+    type: 'provider',
+    code: 'status-not-found',
+    statusName,
+    available,
+  }),
+  invalidResponse: (): ProviderError => ({ type: 'provider', code: 'invalid-response' }),
   unknown: (originalError: Error): ProviderError => ({ type: 'provider', code: 'unknown', originalError }),
 }
 
@@ -73,6 +82,10 @@ export const getProviderMessage = (error: ProviderError): string => {
       return `Invalid ${error.field}: ${error.reason}`
     case 'unsupported-operation':
       return `Operation "${error.operation}" is not supported by this provider.`
+    case 'status-not-found':
+      return `Status "${error.statusName}" is not recognised. Available statuses: ${error.available.join(', ')}.`
+    case 'invalid-response':
+      return `The task tracker returned an unexpected response. Please try again.`
     case 'unknown':
       return `Task tracker API error occurred. Please try again later.`
   }

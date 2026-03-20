@@ -135,7 +135,7 @@ export class TaskResource {
       }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to get task')
-      throw classifyKaneoError(error)
+      throw classifyKaneoError(error, { taskId })
     }
   }
 
@@ -163,7 +163,7 @@ export class TaskResource {
       return task
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update task')
-      throw classifyKaneoError(error)
+      throw classifyKaneoError(error, { taskId })
     }
   }
 
@@ -176,7 +176,7 @@ export class TaskResource {
       return { id: taskId, success: true }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to delete task')
-      throw classifyKaneoError(error)
+      throw classifyKaneoError(error, { taskId })
     }
   }
 

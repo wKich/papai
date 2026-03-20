@@ -23,6 +23,6 @@ export async function archiveTask({
     return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'archiveTask failed')
-    throw classifyKaneoError(error)
+    throw classifyKaneoError(error, { taskId })
   }
 }

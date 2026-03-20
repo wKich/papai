@@ -117,7 +117,7 @@ export class ProjectResource {
       return project
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to update project')
-      throw classifyKaneoError(error)
+      throw classifyKaneoError(error, { projectId })
     }
   }
 
@@ -130,7 +130,7 @@ export class ProjectResource {
       return { id: projectId, success: true }
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to delete project')
-      throw classifyKaneoError(error)
+      throw classifyKaneoError(error, { projectId })
     }
   }
 }

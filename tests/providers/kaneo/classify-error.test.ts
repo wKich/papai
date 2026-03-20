@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { providerError } from '../../../src/errors.js'
 import { classifyKaneoError, KaneoClassifiedError } from '../../../src/providers/kaneo/classify-error.js'
-import { KaneoApiError } from '../../../src/providers/kaneo/errors.js'
+import { KaneoApiError, KaneoValidationError } from '../../../src/providers/kaneo/errors.js'
 
 describe('classifyKaneoError', () => {
   test('returns authFailed for 401', () => {
@@ -145,5 +145,82 @@ describe('classifyKaneoError', () => {
   test('handles undefined error', () => {
     const result = classifyKaneoError(undefined)
     expect(result.appError.code).toBe('unexpected')
+  })
+
+  describe('with context parameter', () => {
+    test('preserves taskId in 404 task-not-found error', () => {
+      const error = new KaneoApiError('Task not found', 404, { error: 'Not found' })
+      const result = classifyKaneoError(error, { taskId: 'TASK-123' })
+      expect(result.appError.code).toBe('task-not-found')
+      expect(result.appError).toHaveProperty('taskId', 'TASK-123')
+    })
+
+    test('preserves projectId in 404 project-not-found error', () => {
+      const error = new KaneoApiError('Project not found', 404, { error: 'Not found' })
+      const result = classifyKaneoError(error, { projectId: 'PROJ-456' })
+      expect(result.appError.code).toBe('project-not-found')
+      expect(result.appError).toHaveProperty('projectId', 'PROJ-456')
+    })
+
+    test('preserves commentId in 404 comment-not-found error', () => {
+      const error = new KaneoApiError('Comment not found', 404, { error: 'Not found' })
+      const result = classifyKaneoError(error, { commentId: 'COMM-789' })
+      expect(result.appError.code).toBe('comment-not-found')
+      expect(result.appError).toHaveProperty('commentId', 'COMM-789')
+    })
+
+    test('preserves labelName in 404 label-not-found error', () => {
+      const error = new KaneoApiError('Label not found', 404, { error: 'Not found' })
+      const result = classifyKaneoError(error, { labelName: 'urgent' })
+      expect(result.appError.code).toBe('label-not-found')
+      expect(result.appError).toHaveProperty('labelName', 'urgent')
+    })
+
+    test('uses unknown as fallback when no context provided', () => {
+      const error = new KaneoApiError('Task not found', 404, { error: 'Not found' })
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('task-not-found')
+      expect(result.appError).toHaveProperty('taskId', 'unknown')
+    })
+  })
+
+  describe('network error detection', () => {
+    test('detects TypeError with fetch failed message', () => {
+      const error = new TypeError('fetch failed')
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('network-error')
+    })
+
+    test('detects TypeError with ECONNREFUSED', () => {
+      const error = new TypeError('connect ECONNREFUSED 127.0.0.1:11337')
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('network-error')
+    })
+
+    test('detects TypeError with ENOTFOUND', () => {
+      const error = new TypeError('getaddrinfo ENOTFOUND api.example.com')
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('network-error')
+    })
+
+    test('detects Error with network in message', () => {
+      const error = new Error('Network request failed')
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('network-error')
+    })
+
+    test('detects Error with connect in message', () => {
+      const error = new Error('Failed to connect to server')
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('network-error')
+    })
+  })
+
+  describe('malformed response handling', () => {
+    test('returns invalid-response for KaneoValidationError', () => {
+      const error = new KaneoValidationError('Invalid response data', { issues: [{ path: ['id'] }] })
+      const result = classifyKaneoError(error)
+      expect(result.appError.code).toBe('invalid-response')
+    })
   })
 })

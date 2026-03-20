@@ -33,6 +33,6 @@ export async function updateTask({
     return task
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'updateTask failed')
-    throw classifyKaneoError(error)
+    throw classifyKaneoError(error, { taskId })
   }
 }

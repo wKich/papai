@@ -21,6 +21,6 @@ export async function deleteTask({
     return result
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'deleteTask failed')
-    throw classifyKaneoError(error)
+    throw classifyKaneoError(error, { taskId })
   }
 }

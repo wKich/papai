@@ -11,6 +11,8 @@ import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
+import { ProviderClassifiedError } from './providers/errors.js'
+import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { provisionAndConfigure } from './providers/kaneo/provision.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
@@ -180,9 +182,18 @@ const callLlm = async (
   return result
 }
 
-const handleMessageError = async (reply: ReplyFn, _userId: string, error: unknown): Promise<void> => {
+const handleMessageError = async (reply: ReplyFn, userId: string, error: unknown): Promise<void> => {
+  log.error(
+    { userId, error: isAppError(error) ? error : error instanceof Error ? error.message : String(error) },
+    'Message handling failed',
+  )
+
   if (isAppError(error)) {
     await reply.text(getUserMessage(error))
+  } else if (error instanceof KaneoClassifiedError) {
+    await reply.text(getUserMessage(error.appError))
+  } else if (error instanceof ProviderClassifiedError) {
+    await reply.text(getUserMessage(error.error))
   } else if (APICallError.isInstance(error)) {
     await reply.text('An unexpected error occurred. Please try again later.')
   } else {

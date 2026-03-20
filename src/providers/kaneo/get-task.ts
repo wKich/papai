@@ -30,6 +30,6 @@ export async function getTask({ config, taskId }: { config: KaneoConfig; taskId:
     return task
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'getTask failed')
-    throw classifyKaneoError(error)
+    throw classifyKaneoError(error, { taskId })
   }
 }
