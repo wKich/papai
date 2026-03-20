@@ -2,7 +2,11 @@
 export type ChatUser = {
   id: string
   username: string | null
+  isAdmin: boolean // platform admin in current context
 }
+
+/** Context type for messages - DM or group chat. */
+export type ContextType = 'dm' | 'group'
 
 /** A file to send to the user. */
 export type ChatFile = {
@@ -13,12 +17,27 @@ export type ChatFile = {
 /** Incoming message from a user. */
 export type IncomingMessage = {
   user: ChatUser
+  contextId: string // storage key: userId in DMs, groupId in groups
+  contextType: ContextType
+  isMentioned: boolean // bot was @mentioned
   text: string
   commandMatch?: string
 }
 
+/** Authorization result for message processing. */
+export type AuthorizationResult = {
+  allowed: boolean
+  isBotAdmin: boolean
+  isGroupAdmin: boolean
+  storageContextId: string
+}
+
 /** Command handler signature. */
-export type CommandHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
+export type CommandHandler = (
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+) => Promise<void>
 
 /** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {

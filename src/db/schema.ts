@@ -51,3 +51,22 @@ export const versionAnnouncements = sqliteTable('version_announcements', {
   version: text('version').primaryKey(),
   announcedAt: text('announced_at').notNull(),
 })
+
+export const groupMembers = sqliteTable(
+  'group_members',
+  {
+    groupId: text('group_id').notNull(),
+    userId: text('user_id').notNull(),
+    addedBy: text('added_by').notNull(),
+    addedAt: text('added_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.userId] }),
+    index('idx_group_members_group').on(table.groupId),
+    index('idx_group_members_user').on(table.userId),
+  ],
+)
+
+export type GroupMember = typeof groupMembers.$inferSelect
