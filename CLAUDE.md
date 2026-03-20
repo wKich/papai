@@ -62,25 +62,27 @@ The scan runs automatically in CI on every PR and push to master.
 ## Required Environment Variables
 
 Copy `.env.example` to `.env`. Required at startup (validated in `src/index.ts`):
-`CHAT_PROVIDER`, `ADMIN_USER_ID`
+`CHAT_PROVIDER`, `ADMIN_USER_ID`, `TASK_PROVIDER`
 
 `ADMIN_USER_ID` is the admin user ID (numeric for Telegram, string for Mattermost). This user is automatically authorized on first run and can manage other users via `/user add` and `/user remove` commands.
+
+`TASK_PROVIDER` determines which task tracker to use: `kaneo` or `youtrack`. This is set globally for the entire bot deployment.
 
 **Telegram-specific:** `TELEGRAM_BOT_TOKEN`
 
 **Mattermost-specific:** `MATTERMOST_URL`, `MATTERMOST_BOT_TOKEN`
 
-The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` command. Use `/config` to view current values.
+**Kaneo-specific (when TASK_PROVIDER=kaneo):** `KANEO_CLIENT_URL`
 
-**Common config keys:** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`, `provider`
+**YouTrack-specific (when TASK_PROVIDER=youtrack):** `YOUTRACK_URL`
 
-**Kaneo-specific (default provider):** `kaneo_apikey`
+The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` command. Use `/config` to view current values. The `/config` command only shows keys relevant to the configured task provider.
 
-**YouTrack-specific:** `youtrack_url`, `youtrack_token`
+**Common config keys (always shown):** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`
 
-Additional environment variables used by the bot:
+**Kaneo-specific (when TASK_PROVIDER=kaneo):** `kaneo_apikey`
 
-- `KANEO_CLIENT_URL` — Kaneo instance URL (required, set in `.env`)
+**YouTrack-specific (when TASK_PROVIDER=youtrack):** `youtrack_token`
 
 ## Architecture
 

@@ -62,11 +62,11 @@ const buildSystemPrompt = (provider: TaskProvider): string => {
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
+const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
+
 const checkRequiredConfig = (contextId: string): string[] => {
   const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
-  const providerName = getConfig(contextId, 'provider') ?? 'kaneo'
-  const providerKeys =
-    providerName === 'youtrack' ? (['youtrack_url', 'youtrack_token'] as const) : (['kaneo_apikey'] as const)
+  const providerKeys = TASK_PROVIDER === 'youtrack' ? (['youtrack_token'] as const) : (['kaneo_apikey'] as const)
   return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
 }
 
@@ -99,10 +99,9 @@ const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: 
 }
 
 const buildProvider = (contextId: string): TaskProvider => {
-  const providerName = getConfig(contextId, 'provider') ?? 'kaneo'
-  log.debug({ contextId, providerName }, 'Building provider')
+  log.debug({ contextId, providerName: TASK_PROVIDER }, 'Building provider')
 
-  if (providerName === 'kaneo') {
+  if (TASK_PROVIDER === 'kaneo') {
     const kaneoKey = getConfig(contextId, 'kaneo_apikey')!
     const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
     const workspaceId = getKaneoWorkspace(contextId)!
@@ -113,13 +112,13 @@ const buildProvider = (contextId: string): TaskProvider => {
     return createProvider('kaneo', config)
   }
 
-  if (providerName === 'youtrack') {
-    const baseUrl = getConfig(contextId, 'youtrack_url')!
+  if (TASK_PROVIDER === 'youtrack') {
+    const baseUrl = process.env['YOUTRACK_URL']!
     const token = getConfig(contextId, 'youtrack_token')!
     return createProvider('youtrack', { baseUrl, token })
   }
 
-  return createProvider(providerName, {})
+  return createProvider(TASK_PROVIDER, {})
 }
 
 const isToolSet = (value: unknown): value is ToolSet =>

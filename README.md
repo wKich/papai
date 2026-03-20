@@ -17,7 +17,7 @@ Chat bot that manages tasks via natural language, powered by any OpenAI-compatib
 - **Conversation memory** — maintains per-user chat history with smart trimming and rolling summaries for multi-turn interactions
 - **Long-term memory** — extracts and persists facts from tool results for better context
 - **Multi-platform** — runs on Telegram or Mattermost via a single `CHAT_PROVIDER` env var
-- **Multi-provider support** — switch between Kaneo, YouTrack, or future providers per user via `/set provider <name>`
+- **Multi-provider support** — supports Kaneo or YouTrack task trackers, configured globally via `TASK_PROVIDER` env var
 - **Multi-user support** — admin can authorize multiple users, each with isolated credentials and conversation history
 
 ## Prerequisites
@@ -40,12 +40,13 @@ bun run start
 
 ## Environment Variables
 
-Two variables are required at startup:
+Three variables are required at startup:
 
 | Variable        | Description                                                                                |
 | --------------- | ------------------------------------------------------------------------------------------ |
 | `CHAT_PROVIDER` | Chat platform to use: `telegram` or `mattermost`                                           |
 | `ADMIN_USER_ID` | Admin user ID (numeric for Telegram, string for Mattermost). Auto-authorized on first run. |
+| `TASK_PROVIDER` | Task tracker to use: `kaneo` or `youtrack`. Set once for the entire deployment.            |
 
 ### Getting API Keys
 
@@ -100,7 +101,7 @@ docker compose up -d
    - **YouTrack**: Read issues, Update issues, Read projects, Create issues
    - **Hub**: Read user profile
 6. Copy the token (starts with `perm:`)
-7. Set `youtrack_url` to your instance (e.g., `https://youtrack.company.com`)
+7. Set `YOUTRACK_URL` env var to your instance (e.g., `https://youtrack.company.com`)
 
 #### LLM API Key
 
@@ -114,30 +115,28 @@ For OpenAI-compatible providers:
 
 ### Runtime Configuration
 
-After the bot starts, configure per-user settings via chat commands:
+After the bot starts, configure per-user settings via chat commands. The `/config` command only shows keys relevant to your configured task provider:
 
-**Common settings** (all providers):
+**Common settings** (always available):
 
 | Key           | Description                       | Example                            |
 | ------------- | --------------------------------- | ---------------------------------- |
-| `provider`    | Task tracker backend              | `kaneo` or `youtrack`              |
 | `llm_apikey`  | LLM provider API key              | `sk-...` or `any-value-for-local`  |
 | `llm_baseurl` | OpenAI-compatible base URL        | `https://api.openai.com/v1`        |
 | `main_model`  | Primary model for task operations | `gpt-4o`, `claude-3-opus-20240229` |
 | `small_model` | Model for memory extraction (opt) | `gpt-4o-mini`                      |
 
-**Kaneo-specific:**
+**Kaneo-specific** (when `TASK_PROVIDER=kaneo`):
 
 | Key            | Description         | Example             |
 | -------------- | ------------------- | ------------------- |
 | `kaneo_apikey` | Kaneo API key/token | From Kaneo Settings |
 
-**YouTrack-specific:**
+**YouTrack-specific** (when `TASK_PROVIDER=youtrack`):
 
-| Key              | Description           | Example                        |
-| ---------------- | --------------------- | ------------------------------ |
-| `youtrack_url`   | YouTrack instance URL | `https://youtrack.example.com` |
-| `youtrack_token` | Permanent token       | `perm:XXX...`                  |
+| Key              | Description     | Example       |
+| ---------------- | --------------- | ------------- |
+| `youtrack_token` | Permanent token | `perm:XXX...` |
 
 Use `/config` to view current values, and `/set <key> <value>` to update them.
 
@@ -148,14 +147,15 @@ Use `/config` to view current values, and `/set <key> <value>` to update them.
 ```bash
 # .env - Required startup variables
 CHAT_PROVIDER=telegram
+TASK_PROVIDER=kaneo
 ADMIN_USER_ID=123456789
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz123456789
+KANEO_CLIENT_URL=https://kaneo.example.com
 ```
 
 Then via chat:
 
 ```
-/set provider kaneo
 /set kaneo_apikey your_kaneo_api_key
 /set llm_apikey sk-your-openai-key
 /set llm_baseurl https://api.openai.com/v1
@@ -167,16 +167,16 @@ Then via chat:
 ```bash
 # .env - Required startup variables
 CHAT_PROVIDER=mattermost
+TASK_PROVIDER=youtrack
 ADMIN_USER_ID=your-mattermost-username
 MATTERMOST_URL=https://mattermost.company.com
 MATTERMOST_BOT_TOKEN=q1w2e3r4t5y6u7i8o9p0
+YOUTRACK_URL=https://youtrack.company.com
 ```
 
 Then via chat:
 
 ```
-/set provider youtrack
-/set youtrack_url https://youtrack.company.com
 /set youtrack_token perm:your-youtrack-token
 /set llm_apikey sk-or-v1-your-openrouter-key
 /set llm_baseurl https://openrouter.ai/api/v1
@@ -188,14 +188,15 @@ Then via chat:
 ```bash
 # .env
 CHAT_PROVIDER=telegram
+TASK_PROVIDER=kaneo
 ADMIN_USER_ID=123456789
 TELEGRAM_BOT_TOKEN=your-telegram-token
+KANEO_CLIENT_URL=https://kaneo.example.com
 ```
 
 Then via chat:
 
 ```
-/set provider kaneo
 /set kaneo_apikey your_kaneo_key
 /set llm_apikey ollama
 /set llm_baseurl http://localhost:11434/v1
@@ -211,6 +212,7 @@ services:
     image: ghcr.io/wkich/papai:latest
     environment:
       CHAT_PROVIDER: telegram
+      TASK_PROVIDER: kaneo
       ADMIN_USER_ID: '123456789'
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       KANEO_CLIENT_URL: https://kaneo.example.com
@@ -257,7 +259,7 @@ The bot can be added to Telegram groups or Mattermost channels for team collabor
 
 1. Add bot to your group
 2. Group admin runs: `/group adduser @username` to authorize members
-3. Group admin configures: `/set provider kaneo`, `/set llm_apikey ...`
+3. Group admin configures: `/set kaneo_apikey ...`, `/set llm_apikey ...` (keys shown depend on `TASK_PROVIDER`)
 4. Members mention: `@bot create task: fix bug`
 
 ### Authorization
@@ -374,8 +376,10 @@ mkdir -p ~/papai && cd ~/papai
 # Copy docker-compose.yml from the repo, then create .env
 cat > .env <<EOF
 CHAT_PROVIDER=telegram
+TASK_PROVIDER=kaneo
 ADMIN_USER_ID=<your-user-id>
 TELEGRAM_BOT_TOKEN=<your-bot-token>
+KANEO_CLIENT_URL=<your-kaneo-url>
 EOF
 chmod 600 .env
 
@@ -393,14 +397,15 @@ git clone https://github.com/wKich/papai.git
 cd papai
 bun install
 cp .env.example .env
-# Edit .env with your CHAT_PROVIDER, ADMIN_USER_ID, and platform-specific token
+# Edit .env with your CHAT_PROVIDER, TASK_PROVIDER, ADMIN_USER_ID, and platform-specific token
 bun run start
 ```
 
 After starting, configure credentials via the bot:
 
 ```
-/set kaneo_apikey <your-kaneo-api-key>
+/set kaneo_apikey <your-kaneo-api-key>     # when TASK_PROVIDER=kaneo
+/set youtrack_token <your-youtrack-token> # when TASK_PROVIDER=youtrack
 /set llm_apikey sk-xxxxxxxxxxxx
 /set llm_baseurl https://api.openai.com/v1
 /set main_model gpt-4o

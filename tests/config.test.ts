@@ -89,11 +89,15 @@ describe('setConfig', () => {
   })
 
   test('handles all config keys', () => {
-    const allKeys: ConfigKey[] = ['kaneo_apikey', 'llm_apikey', 'llm_baseurl', 'main_model', 'small_model']
-    allKeys.forEach((key) => {
+    // Test LLM keys which are always available
+    const llmKeys: ConfigKey[] = ['llm_apikey', 'llm_baseurl', 'main_model', 'small_model']
+    llmKeys.forEach((key) => {
       setConfig(USER_A, key, `value-for-${key}`)
       expect(getConfig(USER_A, key)).toBe(`value-for-${key}`)
     })
+    // Test provider-specific key (kaneo when TASK_PROVIDER not set or kaneo)
+    setConfig(USER_A, 'kaneo_apikey', 'value-for-kaneo_apikey')
+    expect(getConfig(USER_A, 'kaneo_apikey')).toBe('value-for-kaneo_apikey')
   })
 })
 
@@ -118,6 +122,7 @@ describe('getConfig', () => {
 
 describe('isConfigKey', () => {
   test('returns true for valid keys', () => {
+    // These are always valid
     const validKeys: ConfigKey[] = ['kaneo_apikey', 'llm_apikey', 'llm_baseurl', 'main_model', 'small_model']
     validKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(true)
@@ -125,7 +130,8 @@ describe('isConfigKey', () => {
   })
 
   test('returns false for invalid keys', () => {
-    const invalidKeys = ['invalid', 'linear', 'openai', 'token', '', 'linear_key']
+    // These are never valid config keys
+    const invalidKeys = ['invalid', 'linear', 'openai', 'token', '', 'linear_key', 'provider', 'youtrack_url']
     invalidKeys.forEach((key) => {
       expect(isConfigKey(key)).toBe(false)
     })
@@ -176,17 +182,17 @@ describe('maskValue', () => {
 
 describe('CONFIG_KEYS', () => {
   test('contains all expected keys', () => {
-    expect(CONFIG_KEYS).toContain('provider')
-    expect(CONFIG_KEYS).toContain('kaneo_apikey')
-    expect(CONFIG_KEYS).toContain('youtrack_url')
-    expect(CONFIG_KEYS).toContain('youtrack_token')
+    // These are always available
     expect(CONFIG_KEYS).toContain('llm_apikey')
     expect(CONFIG_KEYS).toContain('llm_baseurl')
     expect(CONFIG_KEYS).toContain('main_model')
     expect(CONFIG_KEYS).toContain('small_model')
+    // Provider-specific keys (depends on TASK_PROVIDER env var)
+    expect(CONFIG_KEYS).toContain('kaneo_apikey')
   })
 
   test('has correct length', () => {
-    expect(CONFIG_KEYS).toHaveLength(8)
+    // LLM keys (4) + provider-specific key (1) = 5
+    expect(CONFIG_KEYS).toHaveLength(5)
   })
 })

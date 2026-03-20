@@ -106,6 +106,7 @@ jobs:
           cd ~/${GITHUB_REPOSITORY##*/}
           {
             printf 'CHAT_PROVIDER=telegram\n'
+            printf 'TASK_PROVIDER=kaneo\n'
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "${TELEGRAM_BOT_TOKEN}"
             printf 'ADMIN_USER_ID=%s\n' "${ADMIN_USER_ID}"
             printf 'KANEO_POSTGRES_PASSWORD=%s\n' "${KANEO_POSTGRES_PASSWORD}"
@@ -113,6 +114,26 @@ jobs:
             [ -n "${KANEO_CLIENT_URL}" ] && printf 'KANEO_CLIENT_URL=%s\n' "${KANEO_CLIENT_URL}"
           } > .env
           chmod 600 .env
+
+          # Backup database before deployment
+          echo "Creating database backup..."
+          backup_dir="~/${GITHUB_REPOSITORY##*/}/backups"
+          mkdir -p "$backup_dir"
+          backup_file="papai-$(date +%Y%m%d_%H%M%S).db"
+
+          # Check if papai is running and backup the database
+          if docker compose ps papai | grep -q "running"; then
+            docker compose cp papai:/data/papai.db "$backup_dir/$backup_file" 2>/dev/null || echo "Note: Could not backup database (may not exist yet)"
+            if [ -f "$backup_dir/$backup_file" ]; then
+              echo "Database backed up to: $backup_dir/$backup_file"
+              # Keep only last 5 backups
+              ls -t "$backup_dir"/papai-*.db 2>/dev/null | tail -n +6 | xargs -r rm
+              echo "Kept last 5 backups, removed older ones"
+            fi
+          else
+            echo "Note: papai container not running, skipping backup"
+          fi
+
           IMAGE="${IMAGE}" docker compose pull
           docker compose down --remove-orphans
           IMAGE="${IMAGE}" docker compose up -d

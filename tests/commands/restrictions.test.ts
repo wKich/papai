@@ -185,31 +185,31 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('set')
 
       const msg = createGroupMessage('user456', true)
-      msg.commandMatch = 'provider kaneo'
+      msg.commandMatch = 'main_model gpt-4'
       const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: true })
 
       await handler!(msg, createMockReply(), auth)
 
-      expect(lastReply).toBe('Set provider successfully.')
+      expect(lastReply).toBe('Set main_model successfully.')
     })
 
     test('allowed for bot admin in group', async () => {
       const handler = commandHandlers.get('set')
 
       const msg = createGroupMessage(adminUserId, false)
-      msg.commandMatch = 'provider kaneo'
+      msg.commandMatch = 'main_model gpt-4'
       const auth = createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: false })
 
       await handler!(msg, createMockReply(), auth)
 
-      expect(lastReply).toBe('Set provider successfully.')
+      expect(lastReply).toBe('Set main_model successfully.')
     })
 
     test('allowed for regular user in DM', async () => {
       const handler = commandHandlers.get('set')
 
       const msg = createDmMessage('user456')
-      msg.commandMatch = 'provider kaneo'
+      msg.commandMatch = 'main_model gpt-4'
       // Make user authorized
       addUser('user456', adminUserId)
       const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
@@ -217,7 +217,7 @@ describe('command context restrictions', () => {
 
       await handler!(msg, createMockReply(), auth)
 
-      expect(lastReply).toBe('Set provider successfully.')
+      expect(lastReply).toBe('Set main_model successfully.')
     })
   })
 
@@ -281,7 +281,7 @@ describe('command context restrictions', () => {
 
       await handler!(msg, createMockReply(), auth)
 
-      expect(lastReply).toContain('provider:')
+      expect(lastReply).toContain('kaneo_apikey:')
     })
 
     test('allowed for regular user in DM', async () => {
@@ -295,7 +295,7 @@ describe('command context restrictions', () => {
 
       await handler!(msg, createMockReply(), auth)
 
-      expect(lastReply).toContain('provider:')
+      expect(lastReply).toContain('kaneo_apikey:')
     })
   })
 
