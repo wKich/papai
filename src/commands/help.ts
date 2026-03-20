@@ -1,9 +1,9 @@
-import type { ChatProvider } from '../chat/types.js'
+import type { ChatProvider, CommandHandler } from '../chat/types.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:help' })
 
-const USER_HELP = [
+const DM_USER_HELP = [
   'papai — AI assistant for Kaneo task management',
   '',
   'Commands:',
@@ -15,7 +15,7 @@ const USER_HELP = [
   'Any other message is sent to the AI assistant.',
 ].join('\n')
 
-const ADMIN_HELP = [
+const DM_ADMIN_HELP = [
   '',
   'Admin commands:',
   '/context — Show current memory context (summary and known entities)',
@@ -26,15 +26,46 @@ const ADMIN_HELP = [
   "/clear all — Clear all users' history",
 ].join('\n')
 
-export function registerHelpCommand(
-  chat: ChatProvider,
-  checkAuthorization: (userId: string, username?: string | null) => boolean,
-  adminUserId: string,
-): void {
-  chat.registerCommand('help', async (msg, reply) => {
-    if (!checkAuthorization(msg.user.id, msg.user.username)) return
-    log.info({ userId: msg.user.id }, '/help command executed')
-    const text = msg.user.id === adminUserId ? USER_HELP + ADMIN_HELP : USER_HELP
-    await reply.text(text)
-  })
+function getDmHelpText(isAdmin: boolean): string {
+  return isAdmin ? DM_USER_HELP + DM_ADMIN_HELP : DM_USER_HELP
+}
+
+function getGroupHelpText(isGroupAdmin: boolean): string {
+  let text = [
+    'papai — AI assistant for Kaneo task management',
+    '',
+    'Group commands:',
+    '/help — Show this message',
+    '/group adduser <@username> — Add member to group',
+    '/group deluser <@username> — Remove member from group',
+    '/group users — List group members',
+    '',
+    'Mention me with @botname for natural language queries',
+  ].join('\n')
+
+  if (isGroupAdmin) {
+    text += [
+      '',
+      'Admin commands:',
+      '/set <key> <value> — Set group configuration',
+      '/config — View group configuration',
+      '/clear — Clear group conversation history',
+    ].join('\n')
+  }
+
+  return text
+}
+
+export function registerHelpCommand(chat: ChatProvider): void {
+  const handler: CommandHandler = async (msg, reply, auth) => {
+    log.info({ userId: msg.user.id, contextType: msg.contextType }, '/help command executed')
+
+    if (msg.contextType === 'dm') {
+      await reply.text(getDmHelpText(auth.isBotAdmin))
+    } else {
+      await reply.text(getGroupHelpText(auth.isGroupAdmin))
+    }
+  }
+
+  chat.registerCommand('help', handler)
 }

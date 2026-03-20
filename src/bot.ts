@@ -79,7 +79,7 @@ export const checkAuthorizationExtended = (
 }
 
 export function setupBot(chat: ChatProvider, adminUserId: string): void {
-  registerHelpCommand(chat, checkAuthorization, adminUserId)
+  registerHelpCommand(chat)
   registerSetCommand(chat, checkAuthorization)
   registerConfigCommand(chat, checkAuthorization)
   registerContextCommand(chat, adminUserId)
