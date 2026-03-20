@@ -32,4 +32,7 @@
   // Config hints become hard errors
   "treatConfigHintsAsErrors": true,
   "ignoreExportsUsedInFile": true,
+
+  // Ignore migration files (executed at runtime, not imported)
+  "ignore": ["src/db/migrations/**"],
 }

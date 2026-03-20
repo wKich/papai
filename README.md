@@ -249,6 +249,40 @@ Send natural language messages to the bot:
 - **"Archive task 42"** — archives a completed task
 - **"Delete task 42"** — permanently deletes a task (provider-dependent)
 
+## Group Chat Support
+
+The bot can be added to Telegram groups or Mattermost channels for team collaboration.
+
+### Quick Start
+
+1. Add bot to your group
+2. Group admin runs: `/group adduser @username` to authorize members
+3. Group admin configures: `/set provider kaneo`, `/set llm_apikey ...`
+4. Members mention: `@bot create task: fix bug`
+
+### Authorization
+
+- **Group Admin**: Full access (add/remove members, configure bot)
+- **Group Member**: Natural language queries via mention only
+- **Non-Member**: Gets auth error when mentioning bot
+
+### Commands
+
+| Command                              | In Group | Who Can Run               |
+| ------------------------------------ | -------- | ------------------------- |
+| `/group adduser/deluser`             | ✓        | Group Admin               |
+| `/group users`                       | ✓        | Any Member                |
+| `/set`, `/config`, `/clear`, `/help` | ✓        | Group Admin only          |
+| Natural language                     | ✓        | Any Member (with mention) |
+| `/user`, `/users`                    | ✗        | DM only                   |
+
+### Important Notes
+
+- In groups, natural language queries require mentioning the bot (e.g., "@bot create a task")
+- Commands like `/set` and `/clear` work without mentions but require admin privileges
+- Each group has isolated conversation history and configuration
+- Group members are managed independently from bot administrators
+
 ## Architecture
 
 ```

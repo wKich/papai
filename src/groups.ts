@@ -58,9 +58,3 @@ export function listGroupMembers(groupId: string): Array<{
     .orderBy(sql`${groupMembers.addedAt} DESC`)
     .all()
 }
-
-export async function isGroupAdmin(platform: string, groupId: string, userId: string): Promise<boolean> {
-  log.debug({ platform, groupId, userId }, 'isGroupAdmin called')
-  // Platform-specific implementations in Task 5 & 6
-  return false
-}
