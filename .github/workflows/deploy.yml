@@ -117,17 +117,17 @@ jobs:
 
           # Backup database before deployment
           echo "Creating database backup..."
-          backup_dir="./backups"
-          mkdir -p "$backup_dir"
-          backup_file="papai-$(date +%Y%m%d_%H%M%S).db"
+          backup_dir="backups"
+          mkdir -p "\$backup_dir"
+          backup_file="papai-\$(date +%Y%m%d_%H%M%S).db"
 
           # Check if papai is running and backup the database
           if docker compose ps papai | grep -q "running"; then
-            docker compose cp papai:/data/papai.db "$backup_dir/$backup_file" 2>/dev/null || echo "Note: Could not backup database (may not exist yet)"
-            if [ -f "$backup_dir/$backup_file" ]; then
-              echo "Database backed up to: $backup_dir/$backup_file"
+            docker compose cp papai:/data/papai.db "\$backup_dir/\$backup_file" 2>/dev/null || echo "Note: Could not backup database (may not exist yet)"
+            if [ -f "\$backup_dir/\$backup_file" ]; then
+              echo "Database backed up to: \$backup_dir/\$backup_file"
               # Keep only last 5 backups
-              ls -t "$backup_dir"/papai-*.db 2>/dev/null | tail -n +6 | xargs -r rm
+              ls -t "\$backup_dir"/papai-*.db 2>/dev/null | tail -n +6 | xargs -r rm
               echo "Kept last 5 backups, removed older ones"
             fi
           else
