@@ -4,12 +4,22 @@ import { z } from 'zod'
 
 import { ColumnCompatSchema as KaneoColumnSchema } from '../../../src/providers/kaneo/schemas/api-compat.js'
 import { CreateLabelResponseSchema as KaneoLabelSchema } from '../../../src/providers/kaneo/schemas/create-label.js'
-import { CreateProjectResponseSchema as KaneoProjectSchema } from '../../../src/providers/kaneo/schemas/create-project.js'
 import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
 import { TaskSchema as CreateTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
-import { GetActivitiesResponseSchema as KaneoActivityWithTypeSchema } from '../../../src/providers/kaneo/schemas/get-activities.js'
 import { ActivityItemSchema } from '../../../src/providers/kaneo/schemas/get-activities.js'
 import { GetProjectResponseSchema as KaneoProjectFullSchema } from '../../../src/providers/kaneo/schemas/get-project.js'
+
+const KaneoProjectSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  slug: z.string(),
+  icon: z.string().nullable(),
+  name: z.string(),
+  description: z.string().nullable(),
+  createdAt: z.any(),
+  isPublic: z.boolean().nullable(),
+})
+const KaneoActivityWithTypeSchema = ActivityItemSchema.array()
 import {
   restoreFetch,
   setMockFetch,

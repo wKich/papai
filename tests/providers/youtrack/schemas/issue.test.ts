@@ -1,11 +1,7 @@
 // tests/providers/youtrack/schemas/issue.test.ts
 import { describe, expect, test } from 'bun:test'
 
-import {
-  IssueSchema,
-  CreateIssueRequestSchema,
-  SearchIssuesRequestSchema,
-} from '../../../../src/providers/youtrack/schemas/issue.js'
+import { IssueSchema } from '../../../../src/providers/youtrack/schemas/issue.js'
 
 describe('Issue schemas', () => {
   test('IssueSchema validates full issue', () => {
@@ -24,31 +20,5 @@ describe('Issue schemas', () => {
     const result = IssueSchema.parse(valid)
     expect(result.idReadable).toBe('PROJ-123')
     expect(result.summary).toBe('Test Issue')
-  })
-
-  test('CreateIssueRequestSchema validates request', () => {
-    const valid = {
-      summary: 'New Issue',
-      description: 'Description',
-      project: { id: '0-0' },
-      customFields: [
-        {
-          name: 'Priority',
-          $type: 'SingleEnumIssueCustomField',
-          value: { name: 'Major' },
-        },
-      ],
-    }
-    const result = CreateIssueRequestSchema.parse(valid)
-    expect(result.summary).toBe('New Issue')
-  })
-
-  test('SearchIssuesRequestSchema validates query', () => {
-    const valid = {
-      query: 'for: me #Unresolved',
-      fields: 'id,idReadable,summary',
-    }
-    const result = SearchIssuesRequestSchema.parse(valid)
-    expect(result.query).toBe('for: me #Unresolved')
   })
 })

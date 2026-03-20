@@ -13,33 +13,3 @@ export const CommentSchema = BaseEntitySchema.extend({
   deleted: z.boolean().optional(),
   pinned: z.boolean().optional(),
 })
-
-export const ListCommentsRequestSchema = z.object({
-  path: z.object({
-    issueId: z.string(),
-  }),
-  query: z
-    .object({
-      fields: z.string().optional(),
-    })
-    .optional(),
-})
-
-export const CreateCommentRequestSchema = z.object({
-  path: z.object({
-    issueId: z.string(),
-  }),
-  body: z.object({
-    text: z.string(),
-  }),
-})
-
-export const UpdateCommentRequestSchema = z.object({
-  path: z.object({
-    issueId: z.string(),
-    commentId: z.string(),
-  }),
-  body: z.object({
-    text: z.string(),
-  }),
-})

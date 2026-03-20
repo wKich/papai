@@ -14,28 +14,35 @@ const TextFieldValueSchema = z.object({
   text: z.string(),
 })
 
-export const SingleEnumIssueCustomFieldSchema = z.object({
+const SingleEnumIssueCustomFieldSchema = z.object({
   $type: z.literal('SingleEnumIssueCustomField'),
   name: z.string(),
   value: EnumBundleElementSchema,
 })
 
-export const SingleUserIssueCustomFieldSchema = z.object({
+const SingleUserIssueCustomFieldSchema = z.object({
   $type: z.literal('SingleUserIssueCustomField'),
   name: z.string(),
   value: UserReferenceSchema.optional(),
 })
 
-export const TextIssueCustomFieldSchema = z.object({
+const TextIssueCustomFieldSchema = z.object({
   $type: z.literal('TextIssueCustomField'),
   name: z.string(),
   value: TextFieldValueSchema,
 })
 
-export const SimpleIssueCustomFieldSchema = z.object({
+const SimpleIssueCustomFieldSchema = z.object({
   $type: z.literal('SimpleIssueCustomField'),
   name: z.string(),
   value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+})
+
+/** Fallback for field types not explicitly modelled (e.g. StateIssueCustomField, PeriodIssueCustomField). */
+const UnknownIssueCustomFieldSchema = z.object({
+  $type: z.string(),
+  name: z.string(),
+  value: z.unknown(),
 })
 
 export const CustomFieldValueSchema = z.union([
@@ -53,4 +60,5 @@ export const CustomFieldValueSchema = z.union([
   }),
   TextIssueCustomFieldSchema,
   SimpleIssueCustomFieldSchema,
+  UnknownIssueCustomFieldSchema,
 ])

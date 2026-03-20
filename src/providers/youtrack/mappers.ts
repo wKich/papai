@@ -1,11 +1,25 @@
-import type { Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
-import type { YtComment, YtIssue } from './schemas/yt-types.js'
+import type { z } from 'zod'
 
-const getCustomFieldValue = (issue: YtIssue, fieldName: string): string | undefined => {
-  const cf = issue.customFields?.find((f) => f.name === fieldName)
-  if (cf?.value === null || cf?.value === undefined) return undefined
-  if (typeof cf.value !== 'object') return undefined
-  return cf.value.name ?? cf.value.login
+import type { Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
+import type { CommentSchema } from './schemas/comment.js'
+import type { CustomFieldValueSchema } from './schemas/custom-fields.js'
+import type { IssueListSchema, IssueSchema } from './schemas/issue.js'
+
+type AnyCustomField = z.infer<typeof CustomFieldValueSchema>
+
+const getCustomFieldValue = (customFields: AnyCustomField[] | undefined, fieldName: string): string | undefined => {
+  const cf = customFields?.find((f) => f.name === fieldName)
+  if (cf === undefined) return undefined
+  const val: unknown = cf.value
+  if (val === null || val === undefined) return undefined
+  if (typeof val === 'object') {
+    const name = (val as { name?: unknown })['name']
+    if (typeof name === 'string') return name
+    const login = (val as { login?: unknown })['login']
+    if (typeof login === 'string') return login
+    return undefined
+  }
+  return typeof val === 'string' ? val : undefined
 }
 
 const mapRelationType = (linkTypeName: string, direction: string): RelationType => {
@@ -25,11 +39,11 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
 const toIsoOrUndefined = (timestamp: number | undefined): string | undefined =>
   timestamp === undefined ? undefined : new Date(timestamp).toISOString()
 
-export const mapIssueToTask = (issue: YtIssue, baseUrl: string): Task => {
+export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: string): Task => {
   const relations = (issue.links ?? []).flatMap((link) => {
     const typeName = link.linkType?.name ?? 'Relate'
     return (link.issues ?? []).map((linked) => ({
-      type: mapRelationType(typeName, link.direction),
+      type: mapRelationType(typeName, link.direction ?? 'BOTH'),
       taskId: linked.idReadable ?? linked.id,
     }))
   })
@@ -38,9 +52,9 @@ export const mapIssueToTask = (issue: YtIssue, baseUrl: string): Task => {
     id: issue.idReadable ?? issue.id,
     title: issue.summary,
     description: issue.description,
-    status: getCustomFieldValue(issue, 'State'),
-    priority: getCustomFieldValue(issue, 'Priority'),
-    assignee: getCustomFieldValue(issue, 'Assignee'),
+    status: getCustomFieldValue(issue.customFields, 'State'),
+    priority: getCustomFieldValue(issue.customFields, 'Priority'),
+    assignee: getCustomFieldValue(issue.customFields, 'Assignee'),
     dueDate: null,
     createdAt: toIsoOrUndefined(issue.created),
     projectId: issue.project?.id,
@@ -50,25 +64,25 @@ export const mapIssueToTask = (issue: YtIssue, baseUrl: string): Task => {
   }
 }
 
-export const mapIssueToListItem = (issue: YtIssue): TaskListItem => ({
+export const mapIssueToListItem = (issue: z.infer<typeof IssueListSchema>): TaskListItem => ({
   id: issue.idReadable ?? issue.id,
   title: issue.summary,
-  status: getCustomFieldValue(issue, 'State'),
-  priority: getCustomFieldValue(issue, 'Priority'),
+  status: getCustomFieldValue(issue.customFields, 'State'),
+  priority: getCustomFieldValue(issue.customFields, 'Priority'),
 })
 
-export const mapIssueToSearchResult = (issue: YtIssue): TaskSearchResult => ({
+export const mapIssueToSearchResult = (issue: z.infer<typeof IssueListSchema>): TaskSearchResult => ({
   id: issue.idReadable ?? issue.id,
   title: issue.summary,
-  status: getCustomFieldValue(issue, 'State'),
-  priority: getCustomFieldValue(issue, 'Priority'),
+  status: getCustomFieldValue(issue.customFields, 'State'),
+  priority: getCustomFieldValue(issue.customFields, 'Priority'),
   projectId: issue.project?.id,
 })
 
-export const mapComment = (c: YtComment): Comment => ({
+export const mapComment = (c: z.infer<typeof CommentSchema>): Comment => ({
   id: c.id,
   body: c.text,
-  author: c.author?.name ?? c.author?.login,
+  author: c.author.name ?? c.author.login,
   createdAt: toIsoOrUndefined(c.created),
 })
 

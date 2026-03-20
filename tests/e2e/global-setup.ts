@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../../src/logger.js'
-import { provisionKaneoUser } from '../../src/providers/kaneo/provision.js'
+import { provisionAndConfigure } from '../../src/providers/kaneo/provision.js'
 import { startKaneoServer, stopKaneoServer } from './docker-lifecycle.js'
 
 const log = logger.child({ scope: 'e2e:global-setup' })
@@ -69,11 +69,18 @@ async function performSetup(): Promise<E2EConfig> {
     const uniqueSuffix = Date.now()
     const uniqueUsername = `e2e-test-${uniqueSuffix}`
     const uniqueTelegramId = 999999999 + (uniqueSuffix % 1000000)
-    const result = await provisionKaneoUser(baseUrl, publicUrl, String(uniqueTelegramId), uniqueUsername)
+    process.env['KANEO_INTERNAL_URL'] = baseUrl
+    process.env['KANEO_CLIENT_URL'] = publicUrl
+    const result = await provisionAndConfigure(String(uniqueTelegramId), uniqueUsername)
+    if (result.status !== 'provisioned') {
+      throw new Error(
+        `Kaneo provisioning failed: ${result.status === 'failed' ? result.error : 'registration disabled'}`,
+      )
+    }
 
     e2eConfig = {
       baseUrl,
-      apiKey: result.kaneoKey,
+      apiKey: result.apiKey,
       workspaceId: result.workspaceId,
     }
 

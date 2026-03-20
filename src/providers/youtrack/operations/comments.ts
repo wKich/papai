@@ -4,7 +4,7 @@ import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { COMMENT_FIELDS } from '../constants.js'
 import { mapComment } from '../mappers.js'
-import { YtCommentSchema } from '../schemas/yt-types.js'
+import { CommentSchema } from '../schemas/comment.js'
 
 const log = logger.child({ scope: 'provider:youtrack:comments' })
 
@@ -14,7 +14,7 @@ export async function addYouTrackComment(config: YouTrackConfig, taskId: string,
     body: { text: body },
     query: { fields: COMMENT_FIELDS },
   })
-  const comment = YtCommentSchema.parse(raw)
+  const comment = CommentSchema.parse(raw)
   log.info({ taskId, commentId: comment.id }, 'Comment added')
   return mapComment(comment)
 }
@@ -24,7 +24,7 @@ export async function getYouTrackComments(config: YouTrackConfig, taskId: string
   const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, {
     query: { fields: COMMENT_FIELDS, $top: '100' },
   })
-  const comments = YtCommentSchema.array().parse(raw)
+  const comments = CommentSchema.array().parse(raw)
   log.info({ taskId, count: comments.length }, 'Comments retrieved')
   return comments.map(mapComment)
 }
@@ -38,7 +38,7 @@ export async function updateYouTrackComment(
     body: { text: params.body },
     query: { fields: COMMENT_FIELDS },
   })
-  const comment = YtCommentSchema.parse(raw)
+  const comment = CommentSchema.parse(raw)
   log.info({ commentId: comment.id }, 'Comment updated')
   return mapComment(comment)
 }

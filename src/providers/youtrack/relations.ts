@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import { ProviderClassifiedError } from '../errors.js'
@@ -5,7 +7,12 @@ import type { RelationType } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { buildLinkCommand, buildRemoveLinkCommand } from './commands.js'
-import { YtIssueLinksSchema } from './schemas/yt-types.js'
+import { IssueLinkSchema } from './schemas/issue-link.js'
+
+const IssueLinksSchema = z.object({
+  id: z.string(),
+  links: z.array(IssueLinkSchema).optional(),
+})
 
 const log = logger.child({ scope: 'provider:youtrack:relations' })
 
@@ -33,7 +40,7 @@ export async function removeYouTrackRelation(
   const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
     query: { fields: 'id,links(id,direction,linkType(name),issues(id,idReadable))' },
   })
-  const issue = YtIssueLinksSchema.parse(raw)
+  const issue = IssueLinksSchema.parse(raw)
   const matchingLink = (issue.links ?? []).find((link) =>
     (link.issues ?? []).some((i) => i.id === relatedTaskId || i.idReadable === relatedTaskId),
   )
@@ -42,7 +49,7 @@ export async function removeYouTrackRelation(
     throw new ProviderClassifiedError(`Relation not found: ${taskId} -> ${relatedTaskId}`, err)
   }
   const typeName = matchingLink.linkType?.name ?? 'relates to'
-  const removeCmd = buildRemoveLinkCommand(typeName, matchingLink.direction, relatedTaskId)
+  const removeCmd = buildRemoveLinkCommand(typeName, matchingLink.direction ?? 'BOTH', relatedTaskId)
   await youtrackFetch(config, 'POST', `/api/issues/${taskId}/execute`, {
     body: { query: removeCmd },
   })

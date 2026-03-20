@@ -4,7 +4,7 @@ import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
-import { YtIssueSchema } from '../schemas/yt-types.js'
+import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
 
@@ -34,7 +34,7 @@ export async function createYouTrackTask(
     body,
     query: { fields: ISSUE_FIELDS },
   })
-  const issue = YtIssueSchema.parse(raw)
+  const issue = IssueSchema.parse(raw)
   log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
   return mapIssueToTask(issue, config.baseUrl)
 }
@@ -44,7 +44,7 @@ export async function getYouTrackTask(config: YouTrackConfig, taskId: string): P
   const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
     query: { fields: ISSUE_FIELDS },
   })
-  const issue = YtIssueSchema.parse(raw)
+  const issue = IssueSchema.parse(raw)
   return mapIssueToTask(issue, config.baseUrl)
 }
 
@@ -74,7 +74,7 @@ export async function updateYouTrackTask(
     body,
     query: { fields: ISSUE_FIELDS },
   })
-  const issue = YtIssueSchema.parse(raw)
+  const issue = IssueSchema.parse(raw)
   log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
   return mapIssueToTask(issue, config.baseUrl)
 }
@@ -84,7 +84,7 @@ export async function listYouTrackTasks(config: YouTrackConfig, projectId: strin
   const raw = await youtrackFetch(config, 'GET', '/api/issues', {
     query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
   })
-  const issues = YtIssueSchema.array().parse(raw)
+  const issues = IssueListSchema.array().parse(raw)
   log.info({ projectId, count: issues.length }, 'Tasks listed')
   return issues.map(mapIssueToListItem)
 }
@@ -101,7 +101,7 @@ export async function searchYouTrackTasks(
   const raw = await youtrackFetch(config, 'GET', '/api/issues', {
     query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
   })
-  const issues = YtIssueSchema.array().parse(raw)
+  const issues = IssueListSchema.array().parse(raw)
   log.info({ query: params.query, count: issues.length }, 'Tasks searched')
   return issues.map(mapIssueToSearchResult)
 }

@@ -83,7 +83,7 @@ jobs:
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           SSH_USER: ${{ vars.SSH_USER }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
+          ADMIN_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           IMAGE: ${{ env.REGISTRY }}/${{ needs.build-and-push.outputs.image_name }}@${{ needs.build-and-push.outputs.digest }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
@@ -105,8 +105,9 @@ jobs:
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
           cd ~/${GITHUB_REPOSITORY##*/}
           {
+            printf 'CHAT_PROVIDER=telegram\n'
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "${TELEGRAM_BOT_TOKEN}"
-            printf 'TELEGRAM_USER_ID=%s\n' "${TELEGRAM_USER_ID}"
+            printf 'ADMIN_USER_ID=%s\n' "${ADMIN_USER_ID}"
             printf 'KANEO_POSTGRES_PASSWORD=%s\n' "${KANEO_POSTGRES_PASSWORD}"
             printf 'KANEO_AUTH_SECRET=%s\n' "${KANEO_AUTH_SECRET}"
             [ -n "${KANEO_CLIENT_URL}" ] && printf 'KANEO_CLIENT_URL=%s\n' "${KANEO_CLIENT_URL}"

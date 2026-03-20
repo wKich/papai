@@ -3,7 +3,7 @@ import type { Project } from '../../types.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { PROJECT_FIELDS } from '../constants.js'
-import { YtProjectSchema } from '../schemas/yt-types.js'
+import { ProjectSchema } from '../schemas/project.js'
 
 const log = logger.child({ scope: 'provider:youtrack:projects' })
 
@@ -12,7 +12,7 @@ export async function getYouTrackProject(config: YouTrackConfig, projectId: stri
   const raw = await youtrackFetch(config, 'GET', `/api/admin/projects/${projectId}`, {
     query: { fields: PROJECT_FIELDS },
   })
-  const project = YtProjectSchema.parse(raw)
+  const project = ProjectSchema.parse(raw)
   log.info({ projectId: project.id, name: project.name }, 'Project retrieved')
   return {
     id: project.id,
@@ -27,7 +27,7 @@ export async function listYouTrackProjects(config: YouTrackConfig): Promise<Proj
   const raw = await youtrackFetch(config, 'GET', '/api/admin/projects', {
     query: { fields: PROJECT_FIELDS, $top: '100' },
   })
-  const projects = YtProjectSchema.array().parse(raw)
+  const projects = ProjectSchema.array().parse(raw)
   log.info({ count: projects.length }, 'Projects listed')
   return projects
     .filter((p) => p.archived !== true)
@@ -58,7 +58,7 @@ export async function createYouTrackProject(
     body,
     query: { fields: PROJECT_FIELDS },
   })
-  const project = YtProjectSchema.parse(raw)
+  const project = ProjectSchema.parse(raw)
   log.info({ projectId: project.id, name: project.name }, 'Project created')
   return {
     id: project.id,
@@ -81,7 +81,7 @@ export async function updateYouTrackProject(
     body,
     query: { fields: PROJECT_FIELDS },
   })
-  const project = YtProjectSchema.parse(raw)
+  const project = ProjectSchema.parse(raw)
   log.info({ projectId: project.id }, 'Project updated')
   return {
     id: project.id,

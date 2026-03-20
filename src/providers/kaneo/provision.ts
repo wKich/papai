@@ -107,7 +107,7 @@ async function doCreateApiKey(baseUrl: string, trustedOrigin: string, sessionCoo
  * signs up, creates a workspace, and generates an API key (falling back to
  * the session token if the API key endpoint is unavailable).
  */
-export async function provisionKaneoUser(
+async function provisionKaneoUser(
   /** Internal API base URL (e.g. http://kaneo-api:1337) */
   baseUrl: string,
   /** Public-facing web client URL — used as the trusted Origin for all auth requests. */
@@ -138,8 +138,8 @@ export async function provisionKaneoUser(
   return { email, password, kaneoKey, workspaceId }
 }
 
-export type ProvisionOutcome =
-  | { status: 'provisioned'; email: string; password: string; kaneoUrl: string }
+type ProvisionOutcome =
+  | { status: 'provisioned'; email: string; password: string; kaneoUrl: string; apiKey: string; workspaceId: string }
   | { status: 'registration_disabled' }
   | { status: 'failed'; error: string }
 
@@ -154,7 +154,14 @@ export async function provisionAndConfigure(userId: string, username: string | n
     setKaneoWorkspace(userId, result.workspaceId)
     clearCachedTools(userId)
     log.info({ userId }, 'Kaneo account provisioned and configured')
-    return { status: 'provisioned', email: result.email, password: result.password, kaneoUrl }
+    return {
+      status: 'provisioned',
+      email: result.email,
+      password: result.password,
+      kaneoUrl,
+      apiKey: result.kaneoKey,
+      workspaceId: result.workspaceId,
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     const isRegistrationDisabled = msg.includes('sign-up') || msg.includes('registration') || msg.includes('Sign-up')

@@ -1,6 +1,6 @@
 # papai
 
-Telegram bot that manages tasks via natural language, powered by any OpenAI-compatible LLM. Supports multiple task tracker backends (Kaneo, YouTrack) via a unified provider abstraction.
+Chat bot that manages tasks via natural language, powered by any OpenAI-compatible LLM. Supports Telegram and Mattermost as chat platforms, and multiple task tracker backends (Kaneo, YouTrack) via a unified provider abstraction.
 
 ## Features
 
@@ -16,13 +16,14 @@ Telegram bot that manages tasks via natural language, powered by any OpenAI-comp
 - **Auto-provisioning** — automatic Kaneo account creation on first use (Kaneo provider only)
 - **Conversation memory** — maintains per-user chat history with smart trimming and rolling summaries for multi-turn interactions
 - **Long-term memory** — extracts and persists facts from tool results for better context
+- **Multi-platform** — runs on Telegram or Mattermost via a single `CHAT_PROVIDER` env var
 - **Multi-provider support** — switch between Kaneo, YouTrack, or future providers per user via `/set provider <name>`
-- **Multi-user support** — admin can authorize multiple Telegram users, each with isolated credentials and conversation history
+- **Multi-user support** — admin can authorize multiple users, each with isolated credentials and conversation history
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime
-- Telegram bot token (from [@BotFather](https://t.me/BotFather))
+- A supported chat platform: [Telegram](https://telegram.org) (bot token from [@BotFather](https://t.me/BotFather)) or [Mattermost](https://mattermost.com) (bot account + token)
 - A supported task tracker instance: [Kaneo](https://github.com/usekaneo/kaneo) (self-hosted) or [YouTrack](https://www.jetbrains.com/youtrack/)
 - API key for any OpenAI-compatible LLM provider (OpenAI, Anthropic, Mistral, local Ollama, etc.)
 
@@ -39,25 +40,37 @@ bun run start
 
 ## Environment Variables
 
-Three variables are required at startup:
+Two variables are required at startup:
 
-| Variable             | Description                                                      | Where to get it                          |
-| -------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot API token                                           | [@BotFather](https://t.me/BotFather)     |
-| `TELEGRAM_USER_ID`   | Admin Telegram user ID (auto-authorized, can manage other users) | [@userinfobot](https://t.me/userinfobot) |
-| `KANEO_CLIENT_URL`   | Your Kaneo instance URL                                          | Your Kaneo deployment URL                |
+| Variable        | Description                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `CHAT_PROVIDER` | Chat platform to use: `telegram` or `mattermost`                                           |
+| `ADMIN_USER_ID` | Admin user ID (numeric for Telegram, string for Mattermost). Auto-authorized on first run. |
+
+**Telegram-specific** (required when `CHAT_PROVIDER=telegram`):
+
+| Variable             | Description            | Where to get it                      |
+| -------------------- | ---------------------- | ------------------------------------ |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot API token | [@BotFather](https://t.me/BotFather) |
+
+**Mattermost-specific** (required when `CHAT_PROVIDER=mattermost`):
+
+| Variable               | Description               | Where to get it                          |
+| ---------------------- | ------------------------- | ---------------------------------------- |
+| `MATTERMOST_URL`       | Mattermost instance URL   | Your Mattermost deployment URL           |
+| `MATTERMOST_BOT_TOKEN` | Mattermost bot user token | Mattermost → Integrations → Bot Accounts |
 
 The remaining credentials are configured at runtime via the `/set` command:
 
 **Common settings:**
 
-| Key           | Description                           | Example / Where to get it                                                 |
-| ------------- | ------------------------------------- | ------------------------------------------------------------------------- |
-| `provider`    | Task tracker backend to use           | `kaneo` (default) or `youtrack`                                           |
-| `llm_apikey`  | API key for your LLM provider         | Your provider's API key (use any value for keyless local endpoints)       |
-| `llm_baseurl` | OpenAI-compatible base URL            | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`             |
-| `main_model`  | Model name to use                     | e.g. `gpt-5.2`, `claude-opus-4-6`, `qwen3.5`, `kimi-k2.5`, `minimax-m2.5` |
-| `small_model` | Optional: model for memory extraction | Same as `main_model` if not specified                                     |
+| Key           | Description                           | Example / Where to get it                                           |
+| ------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| `provider`    | Task tracker backend to use           | `kaneo` (default) or `youtrack`                                     |
+| `llm_apikey`  | API key for your LLM provider         | Your provider's API key (use any value for keyless local endpoints) |
+| `llm_baseurl` | OpenAI-compatible base URL            | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`       |
+| `main_model`  | Model name to use                     | e.g. `gpt-4o`, `claude-opus-4-6`, `qwen3:8b`                        |
+| `small_model` | Optional: model for memory extraction | Same as `main_model` if not specified                               |
 
 **Kaneo provider (default):**
 
@@ -76,17 +89,17 @@ Use `/config` to view current values, and `/set <key> <value>` to update them. E
 
 ### Admin Commands
 
-The admin user (from `TELEGRAM_USER_ID`) can manage authorized users:
+The admin user (from `ADMIN_USER_ID`) can manage authorized users:
 
-| Command                        | Description                                     |
-| ------------------------------ | ----------------------------------------------- |
-| `/user add <id\|@username>`    | Authorize a new user by Telegram ID or username |
-| `/user remove <id\|@username>` | Revoke a user's access                          |
-| `/users`                       | List all authorized users                       |
+| Command                        | Description                            |
+| ------------------------------ | -------------------------------------- |
+| `/user add <id\|@username>`    | Authorize a new user by ID or username |
+| `/user remove <id\|@username>` | Revoke a user's access                 |
+| `/users`                       | List all authorized users              |
 
 ## Usage
 
-Send natural language messages to the bot in Telegram:
+Send natural language messages to the bot:
 
 - **"Create a bug report: login page crashes on Safari"** — creates a new task
 - **"What tasks are in progress?"** — searches tasks by keyword
@@ -105,36 +118,43 @@ Send natural language messages to the bot in Telegram:
 ## Architecture
 
 ```
-Telegram user ─→ Grammy bot (bot.ts) ─→ Vercel AI SDK generateText (any OpenAI-compatible LLM)
-                                              │
-                                              ├─ tools/ ─→ providers/ ─→ Task tracker REST API
-                                              │   capability-gated tools
-                                              │
-                                              └─→ response back to Telegram
+User (Telegram/Mattermost) ─→ ChatProvider (chat/registry.ts) ─→ bot.ts (setupBot)
+                                                                        │
+                                                                        └─→ llm-orchestrator.ts ─→ Vercel AI SDK generateText
+                                                                                                         │
+                                                                                                         ├─ tools/ ─→ providers/ ─→ Task tracker REST API
+                                                                                                         │   capability-gated tools
+                                                                                                         │
+                                                                                                         └─→ reply via ReplyFn ─→ chat platform
 ```
 
-| Path                        | Role                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| `src/index.ts`              | Entry point; validates env vars, runs migrations, starts the bot                         |
-| `src/bot.ts`                | Grammy bot setup, per-user conversation history, LLM orchestration (up to 25 tool steps) |
-| `src/config.ts`             | SQLite-backed per-user runtime config store; `/set` and `/config` command handlers       |
-| `src/users.ts`              | User authorization store; admin commands for adding/removing users                       |
-| `src/errors.ts`             | Discriminated union error types, constructors, and user-facing message mapper            |
-| `src/tools/`                | One file per tool; `index.ts` assembles capability-gated tools via `makeTools(provider)` |
-| `src/providers/types.ts`    | `TaskProvider` interface, `Capability` types, normalized domain types                    |
-| `src/providers/registry.ts` | Provider factory; `createProvider(name, config)` instantiates the named provider         |
-| `src/providers/kaneo/`      | Kaneo REST API adapter (`KaneoProvider`); HTTP client, error classifier, schemas         |
-| `src/providers/youtrack/`   | YouTrack REST API adapter (`YouTrackProvider`); schemas, mappers, operations             |
-| `src/commands/`             | Telegram command handlers: `/help`, `/set`, `/config`, `/clear`, admin commands          |
-| `src/conversation.ts`       | Conversation history management with smart trimming and rolling summaries                |
-| `src/history.ts`            | Persistent conversation history storage (SQLite-backed per-user)                         |
-| `src/memory.ts`             | Fact extraction and persistence from tool results for long-term context                  |
-| `src/logger.ts`             | pino logger instance                                                                     |
+| Path                        | Role                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`              | Entry point; validates env vars, runs migrations, creates `ChatProvider`, starts the bot                   |
+| `src/bot.ts`                | Platform-agnostic wiring; registers all command and message handlers via `setupBot(chat, adminUserId)`     |
+| `src/chat/types.ts`         | `ChatProvider` interface, `ReplyFn`, `IncomingMessage`, `ChatUser`, `ChatFile` types                       |
+| `src/chat/registry.ts`      | Provider factory; `createChatProvider(name)` instantiates the named chat provider                          |
+| `src/chat/telegram/`        | Grammy-based Telegram adapter (`TelegramChatProvider`); `format.ts` converts markdown to Telegram entities |
+| `src/chat/mattermost/`      | Mattermost REST+WebSocket adapter (`MattermostChatProvider`)                                               |
+| `src/llm-orchestrator.ts`   | LLM orchestration; calls Vercel AI SDK with capability-gated tools, sends reply via `ReplyFn`              |
+| `src/config.ts`             | SQLite-backed per-user runtime config store                                                                |
+| `src/users.ts`              | User authorization store; admin commands for adding/removing users                                         |
+| `src/errors.ts`             | Discriminated union error types, constructors, and user-facing message mapper                              |
+| `src/tools/`                | One file per tool; `index.ts` assembles capability-gated tools via `makeTools(provider)`                   |
+| `src/providers/types.ts`    | `TaskProvider` interface, `Capability` types, normalized domain types                                      |
+| `src/providers/registry.ts` | Provider factory; `createProvider(name, config)` instantiates the named task provider                      |
+| `src/providers/kaneo/`      | Kaneo REST API adapter (`KaneoProvider`); HTTP client, error classifier, schemas                           |
+| `src/providers/youtrack/`   | YouTrack REST API adapter (`YouTrackProvider`); schemas, mappers, operations                               |
+| `src/commands/`             | Platform-agnostic command handlers: `/help`, `/set`, `/config`, `/clear`, `/context`, admin                |
+| `src/conversation.ts`       | Conversation history management with smart trimming and rolling summaries                                  |
+| `src/history.ts`            | Persistent conversation history storage (SQLite-backed per-user)                                           |
+| `src/memory.ts`             | Fact extraction and persistence from tool results for long-term context                                    |
+| `src/logger.ts`             | pino logger instance                                                                                       |
 
 ## Tech Stack
 
 - **Runtime** — [Bun](https://bun.sh)
-- **Bot framework** — [Grammy](https://grammy.dev)
+- **Chat platforms** — [Grammy](https://grammy.dev) (Telegram), Mattermost REST API v4 + WebSocket
 - **LLM integration** — [Vercel AI SDK](https://sdk.vercel.ai) via `@ai-sdk/openai-compatible`
 - **Task trackers** — [Kaneo](https://github.com/usekaneo/kaneo) REST API, [YouTrack](https://www.jetbrains.com/youtrack/) REST API
 - **Validation** — [Zod v4](https://zod.dev)
@@ -155,7 +175,7 @@ Publishing a GitHub release triggers the deploy workflow, which builds a Docker 
 | `SSH_KEY`            | Private SSH key for the deploy target                     |
 | `SSH_HOST_KEY`       | Server's public host key (output of `ssh-keyscan <host>`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot API token                                    |
-| `TELEGRAM_USER_ID`   | Your Telegram user ID                                     |
+| `ADMIN_USER_ID`      | Admin user ID (numeric Telegram user ID)                  |
 
 **Required GitHub variables:**
 
@@ -185,8 +205,9 @@ mkdir -p ~/papai && cd ~/papai
 
 # Copy docker-compose.yml from the repo, then create .env
 cat > .env <<EOF
+CHAT_PROVIDER=telegram
+ADMIN_USER_ID=<your-user-id>
 TELEGRAM_BOT_TOKEN=<your-bot-token>
-TELEGRAM_USER_ID=<your-user-id>
 EOF
 chmod 600 .env
 
@@ -204,17 +225,17 @@ git clone https://github.com/wKich/papai.git
 cd papai
 bun install
 cp .env.example .env
-# Edit .env with your TELEGRAM_BOT_TOKEN and TELEGRAM_USER_ID
+# Edit .env with your CHAT_PROVIDER, ADMIN_USER_ID, and platform-specific token
 bun run start
 ```
 
-After starting, configure credentials via Telegram:
+After starting, configure credentials via the bot:
 
 ```
 /set kaneo_apikey <your-kaneo-api-key>
 /set llm_apikey sk-xxxxxxxxxxxx
 /set llm_baseurl https://api.openai.com/v1
-/set main_model o3
+/set main_model gpt-4o
 ```
 
 ## Development
@@ -236,16 +257,12 @@ Tests are organized in the `tests/` directory, mirroring the `src/` structure:
 
 ```
 tests/
-├── bot.test.ts
-├── config.test.ts
-├── errors.test.ts
-├── logger.test.ts
-├── history.test.ts
-├── memory.test.ts
-├── migrate.test.ts
-├── users.test.ts
-├── kaneo/            # Tests for src/kaneo/*
-└── tools/            # Tests for src/tools/*
+├── *.test.ts              # Unit tests (run with bun run test)
+├── providers/             # Tests for src/providers/*
+│   ├── kaneo/
+│   └── youtrack/
+├── tools/                 # Tests for src/tools/*
+└── e2e/                   # E2E tests (run with bun run test:e2e)
 ```
 
 Run tests with `bun test` or `bun run test`.

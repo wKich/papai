@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { BaseEntitySchema, TimestampSchema } from './common.js'
 import { CustomFieldValueSchema } from './custom-fields.js'
+import { IssueLinkSchema } from './issue-link.js'
 import { TagSchema } from './tag.js'
 import { UserSchema } from './user.js'
 
@@ -21,29 +22,20 @@ export const IssueSchema = BaseEntitySchema.extend({
   resolved: TimestampSchema.optional(),
   customFields: z.array(CustomFieldValueSchema),
   tags: z.array(z.lazy(() => TagSchema)).optional(),
+  links: z.array(IssueLinkSchema).optional(),
   commentsCount: z.number().optional(),
   votes: z.number().optional(),
 })
 
-export const CreateIssueRequestSchema = z.object({
+/** Lighter schema matching ISSUE_LIST_FIELDS (no created/updated/tags/links). */
+export const IssueListSchema = z.object({
+  id: z.string(),
+  $type: z.string().optional(),
+  idReadable: z.string().optional(),
   summary: z.string(),
-  description: z.string().optional(),
-  project: z.object({ id: z.string() }),
-  customFields: z
-    .array(
-      z.object({
-        name: z.string(),
-        $type: z.string(),
-        value: z.unknown(),
-      }),
-    )
-    .optional(),
-  tags: z.array(z.object({ id: z.string() })).optional(),
-})
-
-export const SearchIssuesRequestSchema = z.object({
-  query: z.string().optional(),
-  fields: z.string().optional(),
-  $skip: z.number().optional(),
-  $top: z.number().optional(),
+  project: BaseEntitySchema.extend({
+    name: z.string().optional(),
+    shortName: z.string().optional(),
+  }).optional(),
+  customFields: z.array(CustomFieldValueSchema).optional(),
 })

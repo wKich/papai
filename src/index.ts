@@ -3,6 +3,7 @@ import { setupBot } from './bot.js'
 import { createChatProvider } from './chat/registry.js'
 import { closeDb, initDb } from './db/index.js'
 import { logger } from './logger.js'
+import { addUser } from './users.js'
 
 const hasSetCommands = (chat: unknown): chat is { setCommands: (adminUserId: string) => Promise<void> } =>
   typeof chat === 'object' && chat !== null && 'setCommands' in chat
@@ -27,6 +28,8 @@ try {
 }
 
 const adminUserId = process.env['ADMIN_USER_ID']!
+addUser(adminUserId, adminUserId)
+
 const chatProvider = createChatProvider(process.env['CHAT_PROVIDER']!)
 
 log.info({ adminUserId, chatProvider: process.env['CHAT_PROVIDER'] }, 'Starting papai...')

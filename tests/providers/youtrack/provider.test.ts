@@ -151,6 +151,8 @@ describe('YouTrackProvider', () => {
         summary: 'New task',
         description: 'A description',
         project: { id: '0-1', shortName: 'TEST' },
+        created: 1700000000000,
+        updated: 1700000000000,
         customFields: [{ $type: 'SingleEnumIssueCustomField', name: 'Priority', value: { name: 'Normal' } }],
         tags: [],
         links: [],
@@ -175,6 +177,8 @@ describe('YouTrackProvider', () => {
         idReadable: 'TEST-2',
         summary: 'Task with fields',
         project: { id: '0-1' },
+        created: 1700000000000,
+        updated: 1700000000000,
         customFields: [],
         tags: [],
         links: [],
@@ -202,13 +206,14 @@ describe('YouTrackProvider', () => {
         idReadable: 'TEST-5',
         summary: 'Task with links',
         created: 1700000000000,
+        updated: 1700000000001,
         project: { id: '0-1', shortName: 'TEST' },
         customFields: [{ $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } }],
         tags: [{ id: 'tag-1', name: 'bug', color: { background: '#ff0000' } }],
         links: [
           {
             direction: 'OUTWARD',
-            linkType: { name: 'Depend', sourceToTarget: 'is required for' },
+            linkType: { id: 'lt-1', name: 'Depend', sourceToTarget: 'is required for' },
             issues: [{ id: '2-6', idReadable: 'TEST-6', summary: 'Blocked task' }],
           },
         ],
@@ -234,6 +239,8 @@ describe('YouTrackProvider', () => {
         idReadable: 'TEST-1',
         summary: 'Updated title',
         project: { id: '0-1' },
+        created: 1700000000000,
+        updated: 1700000000000,
         customFields: [],
         tags: [],
         links: [],
@@ -317,7 +324,7 @@ describe('YouTrackProvider', () => {
       mockFetchResponse({
         id: 'comment-1',
         text: 'Hello',
-        author: { login: 'john', name: 'John' },
+        author: { id: 'u-1', login: 'john', name: 'John' },
         created: 1700000000000,
       })
 
@@ -329,8 +336,8 @@ describe('YouTrackProvider', () => {
 
     test('getComments lists comments', async () => {
       mockFetchResponse([
-        { id: 'c-1', text: 'First', author: { login: 'alice' }, created: 1700000000000 },
-        { id: 'c-2', text: 'Second', author: { name: 'Bob' }, created: 1700000001000 },
+        { id: 'c-1', text: 'First', author: { id: 'u-alice', login: 'alice' }, created: 1700000000000 },
+        { id: 'c-2', text: 'Second', author: { id: 'u-bob', login: 'bob', name: 'Bob' }, created: 1700000001000 },
       ])
 
       const comments = await provider.getComments('TEST-1')
@@ -343,7 +350,7 @@ describe('YouTrackProvider', () => {
       mockFetchResponse({
         id: 'c-1',
         text: 'Updated text',
-        author: { login: 'alice' },
+        author: { id: 'u-alice', login: 'alice' },
         created: 1700000000000,
       })
 

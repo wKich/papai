@@ -24,7 +24,7 @@ export const ISSUE_LIST_FIELDS = [
   'customFields($type,name,value($type,name,login))',
 ].join(',')
 
-export const COMMENT_FIELDS = 'id,text,author(login,name),created,updated'
+export const COMMENT_FIELDS = 'id,text,author(id,$type,login,name),created,updated'
 export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
 export const TAG_FIELDS = 'id,name,color(id,background)'
 

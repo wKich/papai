@@ -27,7 +27,3 @@ export const ActivityItemSchema = z.object({
   externalSource: z.string().nullable(),
   externalUrl: z.string().nullable(),
 })
-
-export type ActivityItem = z.infer<typeof ActivityItemSchema>
-
-export const GetActivitiesResponseSchema = z.array(ActivityItemSchema)

@@ -191,7 +191,7 @@ Use for:
 
 Every file must import and use the logger. Required log points:
 
-- All function entries in `src/kaneo/`
+- All function entries in `src/providers/kaneo/`
 - All tool executions in `src/tools/`
 - Message lifecycle in `bot.ts` (receive, process, respond)
 - Authorization checks
@@ -204,7 +204,9 @@ Tests are located in the `tests/` directory:
 ```
 tests/
 ├── *.test.ts         # Unit tests (run with bun run test)
-├── kaneo/            # Unit tests for src/kaneo/*
+├── providers/        # Unit tests for src/providers/*
+│   ├── kaneo/
+│   └── youtrack/
 ├── tools/            # Unit tests for src/tools/*
 └── e2e/              # E2E tests (run with bun run test:e2e)
 ```
@@ -255,7 +257,7 @@ Example:
 
 ```typescript
 import { beforeEach, describe, expect, test } from 'bun:test'
-import type { KaneoConfig } from '../../src/kaneo/client.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 
 describe('My Feature', () => {
@@ -331,7 +333,7 @@ All Kaneo API operations are covered by E2E tests:
 - Runtime: **Bun** (not Node)
 - Validation: **Zod v4** for all schemas
 - LLM integration: **Vercel AI SDK** (`ai` package) with `@ai-sdk/openai`
-- Bot framework: **Grammy**
+- Chat platforms: **Grammy** (Telegram adapter), Mattermost REST+WebSocket
 - Linting/formatting: **oxlint / oxfmt** (not ESLint/Prettier)
 - Strict TypeScript (`tsconfig.json` has strict mode + all safety flags)
 - Logging: **pino** with structured JSON output

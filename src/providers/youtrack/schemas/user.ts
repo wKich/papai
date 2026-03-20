@@ -14,4 +14,5 @@ export const UserSchema = BaseEntitySchema.extend({
 
 export const UserReferenceSchema = BaseEntitySchema.extend({
   login: z.string(),
+  name: z.string().optional(),
 })
