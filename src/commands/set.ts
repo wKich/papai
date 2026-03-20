@@ -1,4 +1,4 @@
-import type { ChatProvider } from '../chat/types.js'
+import type { ChatProvider, CommandHandler } from '../chat/types.js'
 import { isConfigKey, setConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS } from '../types/config.js'
@@ -7,10 +7,17 @@ const log = logger.child({ scope: 'commands:set' })
 
 export function registerSetCommand(
   chat: ChatProvider,
-  checkAuthorization: (userId: string, username?: string | null) => boolean,
+  _checkAuthorization: (userId: string, username?: string | null) => boolean,
 ): void {
-  chat.registerCommand('set', async (msg, reply) => {
-    if (!checkAuthorization(msg.user.id, msg.user.username)) return
+  const handler: CommandHandler = async (msg, reply, auth) => {
+    if (!auth.allowed) return
+
+    // In groups, only bot admins and group admins can run this command
+    if (msg.contextType === 'group' && !auth.isBotAdmin && !auth.isGroupAdmin) {
+      await reply.text('Only group admins can run this command.')
+      return
+    }
+
     const match = (msg.commandMatch ?? '').trim()
     const spaceIndex = match.indexOf(' ')
     if (spaceIndex === -1) {
@@ -23,8 +30,10 @@ export function registerSetCommand(
       await reply.text(`Unknown key: ${key}\nValid keys: ${CONFIG_KEYS.join(', ')}`)
       return
     }
-    setConfig(msg.user.id, key, value)
-    log.info({ userId: msg.user.id, key }, '/set command executed')
+    setConfig(auth.storageContextId, key, value)
+    log.info({ userId: msg.user.id, storageContextId: auth.storageContextId, key }, '/set command executed')
     await reply.text(`Set ${key} successfully.`)
-  })
+  }
+
+  chat.registerCommand('set', handler)
 }

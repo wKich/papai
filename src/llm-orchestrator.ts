@@ -62,28 +62,28 @@ const buildSystemPrompt = (provider: TaskProvider): string => {
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
 
-const checkRequiredConfig = (userId: string): string[] => {
+const checkRequiredConfig = (contextId: string): string[] => {
   const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
-  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
+  const providerName = getConfig(contextId, 'provider') ?? 'kaneo'
   const providerKeys =
     providerName === 'youtrack' ? (['youtrack_url', 'youtrack_token'] as const) : (['kaneo_apikey'] as const)
-  return [...llmKeys, ...providerKeys].filter((k) => getConfig(userId, k) === null)
+  return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
 }
 
 const persistFactsFromResults = (
-  userId: string,
+  contextId: string,
   toolCalls: Array<{ toolName: string; input: unknown }>,
   toolResults: Array<{ toolName: string; output: unknown }>,
 ): void => {
   const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
   if (newFacts.length === 0) return
-  for (const fact of newFacts) upsertFact(userId, fact)
-  log.info({ userId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
+  for (const fact of newFacts) upsertFact(contextId, fact)
+  log.info({ contextId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
 }
 
-const maybeProvisionKaneo = async (reply: ReplyFn, userId: string, username: string | null): Promise<void> => {
-  if (getKaneoWorkspace(userId) !== null && getConfig(userId, 'kaneo_apikey') !== null) return
-  const outcome = await provisionAndConfigure(userId, username)
+const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: string | null): Promise<void> => {
+  if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) return
+  const outcome = await provisionAndConfigure(contextId, username)
   if (outcome.status === 'provisioned') {
     await reply.text(
       `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
@@ -95,14 +95,14 @@ const maybeProvisionKaneo = async (reply: ReplyFn, userId: string, username: str
   }
 }
 
-const buildProvider = (userId: string): TaskProvider => {
-  const providerName = getConfig(userId, 'provider') ?? 'kaneo'
-  log.debug({ userId, providerName }, 'Building provider')
+const buildProvider = (contextId: string): TaskProvider => {
+  const providerName = getConfig(contextId, 'provider') ?? 'kaneo'
+  log.debug({ contextId, providerName }, 'Building provider')
 
   if (providerName === 'kaneo') {
-    const kaneoKey = getConfig(userId, 'kaneo_apikey')!
+    const kaneoKey = getConfig(contextId, 'kaneo_apikey')!
     const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
-    const workspaceId = getKaneoWorkspace(userId)!
+    const workspaceId = getKaneoWorkspace(contextId)!
     const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
     const config: Record<string, string> = isSessionCookie
       ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
@@ -111,8 +111,8 @@ const buildProvider = (userId: string): TaskProvider => {
   }
 
   if (providerName === 'youtrack') {
-    const baseUrl = getConfig(userId, 'youtrack_url')!
-    const token = getConfig(userId, 'youtrack_token')!
+    const baseUrl = getConfig(contextId, 'youtrack_url')!
+    const token = getConfig(contextId, 'youtrack_token')!
     return createProvider('youtrack', { baseUrl, token })
   }
 
@@ -122,28 +122,28 @@ const buildProvider = (userId: string): TaskProvider => {
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (userId: string, provider: TaskProvider): ToolSet => {
-  const cachedTools = getCachedTools(userId)
+const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet => {
+  const cachedTools = getCachedTools(contextId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
-    log.debug({ userId }, 'Using cached tools')
+    log.debug({ contextId }, 'Using cached tools')
     return cachedTools
   }
-  log.debug({ userId }, 'Building tools (cache miss)')
+  log.debug({ contextId }, 'Building tools (cache miss)')
   const tools = makeTools(provider)
-  setCachedTools(userId, tools)
+  setCachedTools(contextId, tools)
   return tools
 }
 
 const sendLlmResponse = async (
   reply: ReplyFn,
-  userId: string,
+  contextId: string,
   result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
 ): Promise<void> => {
   const assistantText = result.text
   const textToFormat = assistantText !== undefined && assistantText !== '' ? assistantText : 'Done.'
   await reply.formatted(textToFormat)
   log.info(
-    { userId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
+    { contextId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',
   )
 }

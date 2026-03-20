@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
-import type { AuthorizationResult, ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
+import type {
+  AuthorizationResult,
+  ChatProvider,
+  CommandHandler,
+  IncomingMessage,
+  ReplyFn,
+} from '../../src/chat/types.js'
 import * as schema from '../../src/db/schema.js'
 
 // --- Test database setup with Drizzle ---
@@ -50,11 +56,7 @@ describe('group commands', () => {
     storageContextId: 'group1',
   })
 
-  const createGroupMessage = (
-    userId: string,
-    commandMatch?: string,
-    isAdmin = false,
-  ): IncomingMessage => ({
+  const createGroupMessage = (userId: string, commandMatch?: string, isAdmin = false): IncomingMessage => ({
     user: {
       id: userId,
       username: 'testuser',
@@ -130,7 +132,11 @@ describe('group commands', () => {
     test('rejects invalid user format', async () => {
       const handler = commandHandlers.get('group')
 
-      await handler!(createGroupMessage('admin1', 'adduser invalid@user', true), createMockReply(), createMockAuth(true))
+      await handler!(
+        createGroupMessage('admin1', 'adduser invalid@user', true),
+        createMockReply(),
+        createMockAuth(true),
+      )
 
       expect(lastReply).toBe('Please provide a valid user mention or ID.')
     })
@@ -176,7 +182,11 @@ describe('group commands', () => {
     test('rejects invalid user format', async () => {
       const handler = commandHandlers.get('group')
 
-      await handler!(createGroupMessage('admin1', 'deluser invalid@user', true), createMockReply(), createMockAuth(true))
+      await handler!(
+        createGroupMessage('admin1', 'deluser invalid@user', true),
+        createMockReply(),
+        createMockAuth(true),
+      )
 
       expect(lastReply).toBe('Please provide a valid user mention or ID.')
     })

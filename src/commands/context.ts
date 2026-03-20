@@ -108,22 +108,22 @@ function generateContextReport(
 }
 
 export function registerContextCommand(chat: ChatProvider, adminUserId: string): void {
-  chat.registerCommand('context', async (msg, reply) => {
+  chat.registerCommand('context', async (msg, reply, auth) => {
     if (msg.user.id !== adminUserId) {
       await reply.text('Only the admin can use this command.')
       return
     }
-    log.debug({ userId: msg.user.id }, '/context command called')
+    log.debug({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/context command called')
 
-    const history = loadHistory(msg.user.id)
-    const summary = loadSummary(msg.user.id)
-    const facts = loadFacts(msg.user.id)
+    const history = loadHistory(auth.storageContextId)
+    const summary = loadSummary(auth.storageContextId)
+    const facts = loadFacts(auth.storageContextId)
 
     const report = generateContextReport(history, summary, facts)
 
     const hasSummary = summary !== null && summary.length > 0
     log.info(
-      { userId: msg.user.id, historyLength: history.length, factsCount: facts.length, hasSummary },
+      { userId: msg.user.id, storageContextId: auth.storageContextId, historyLength: history.length, factsCount: facts.length, hasSummary },
       '/context command executed',
     )
     await reply.file({ content: Buffer.from(report, 'utf-8'), filename: 'context.txt' })

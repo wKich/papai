@@ -1,4 +1,4 @@
-import type { ChatProvider, IncomingMessage, ReplyFn } from '../chat/types.js'
+import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../chat/types.js'
 import { logger } from '../logger.js'
 import { provisionAndConfigure } from '../providers/kaneo/provision.js'
 import { addUser, listUsers, removeUser } from '../users.js'
@@ -20,21 +20,34 @@ const parseUserIdentifier = (
 export function registerAdminCommands(chat: ChatProvider, adminUserId: string): void {
   const checkAdmin = (userId: string): boolean => userId === adminUserId
 
-  chat.registerCommand('user', async (msg, reply) => {
+  const userHandler: CommandHandler = async (msg, reply) => {
+    // Reject in groups - these commands are only available in direct messages
+    if (msg.contextType === 'group') {
+      await reply.text('This command is only available in direct messages.')
+      return
+    }
     if (!checkAdmin(msg.user.id)) {
       await reply.text('Only the admin can manage users.')
       return
     }
     await handleUserCommand(msg, reply, msg.user.id, adminUserId)
-  })
+  }
 
-  chat.registerCommand('users', async (msg, reply) => {
+  const usersHandler: CommandHandler = async (msg, reply) => {
+    // Reject in groups - these commands are only available in direct messages
+    if (msg.contextType === 'group') {
+      await reply.text('This command is only available in direct messages.')
+      return
+    }
     if (!checkAdmin(msg.user.id)) {
       await reply.text('Only the admin can list users.')
       return
     }
     await handleUsersCommand(reply, msg.user.id, adminUserId)
-  })
+  }
+
+  chat.registerCommand('user', userHandler)
+  chat.registerCommand('users', usersHandler)
 }
 
 async function handleUserCommand(

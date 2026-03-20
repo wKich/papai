@@ -1,8 +1,15 @@
-import { Bot, InputFile, type Context } from 'grammy'
 import type { MessageEntity } from '@grammyjs/types/message.js'
+import { Bot, InputFile, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
-import type { AuthorizationResult, ChatProvider, CommandHandler, ContextType, IncomingMessage, ReplyFn } from '../types.js'
+import type {
+  AuthorizationResult,
+  ChatProvider,
+  CommandHandler,
+  ContextType,
+  IncomingMessage,
+  ReplyFn,
+} from '../types.js'
 import { formatLlmOutput } from './format.js'
 
 const log = logger.child({ scope: 'chat:telegram' })

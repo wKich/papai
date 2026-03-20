@@ -42,11 +42,7 @@ export function registerGroupCommand(chat: ChatProvider): void {
   })
 }
 
-async function handleAddUser(
-  msg: IncomingMessage,
-  reply: ReplyFn,
-  targetUser: string | undefined,
-): Promise<void> {
+async function handleAddUser(msg: IncomingMessage, reply: ReplyFn, targetUser: string | undefined): Promise<void> {
   if (!msg.user.isAdmin) {
     await reply.text('Only group admins can add users.')
     return
@@ -68,11 +64,7 @@ async function handleAddUser(
   log.info({ groupId: msg.contextId, userId }, 'Group member added')
 }
 
-async function handleDelUser(
-  msg: IncomingMessage,
-  reply: ReplyFn,
-  targetUser: string | undefined,
-): Promise<void> {
+async function handleDelUser(msg: IncomingMessage, reply: ReplyFn, targetUser: string | undefined): Promise<void> {
   if (!msg.user.isAdmin) {
     await reply.text('Only group admins can remove users.')
     return

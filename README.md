@@ -47,45 +47,179 @@ Two variables are required at startup:
 | `CHAT_PROVIDER` | Chat platform to use: `telegram` or `mattermost`                                           |
 | `ADMIN_USER_ID` | Admin user ID (numeric for Telegram, string for Mattermost). Auto-authorized on first run. |
 
-**Telegram-specific** (required when `CHAT_PROVIDER=telegram`):
+### Getting API Keys
 
-| Variable             | Description            | Where to get it                      |
-| -------------------- | ---------------------- | ------------------------------------ |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot API token | [@BotFather](https://t.me/BotFather) |
+#### Telegram Bot Token
 
-**Mattermost-specific** (required when `CHAT_PROVIDER=mattermost`):
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+2. Start a chat and send `/newbot`
+3. Follow prompts to name your bot (e.g., "papai") and choose a username (e.g., `papai_bot`)
+4. BotFather will provide a token like: `123456789:ABCdefGHIjklMNOpqrSTUvwxyz123456789`
+5. Copy this token to `TELEGRAM_BOT_TOKEN`
+6. **Getting your user ID**: Send a message to [@userinfobot](https://t.me/userinfobot) to get your numeric user ID for `ADMIN_USER_ID`
 
-| Variable               | Description               | Where to get it                          |
-| ---------------------- | ------------------------- | ---------------------------------------- |
-| `MATTERMOST_URL`       | Mattermost instance URL   | Your Mattermost deployment URL           |
-| `MATTERMOST_BOT_TOKEN` | Mattermost bot user token | Mattermost → Integrations → Bot Accounts |
+#### Mattermost Bot Token
 
-The remaining credentials are configured at runtime via the `/set` command:
+1. In Mattermost, go to **Main Menu → Integrations → Bot Accounts**
+2. Click **Add Bot Account**
+3. Fill in details:
+   - Username: `papai`
+   - Display Name: `papai Bot`
+   - Description: `Task management bot`
+4. Set **Role** to `System Admin` (or ensure the bot can post in channels)
+5. Save and copy the **Token** (starts with `q` or similar)
+6. Set `MATTERMOST_URL` to your instance (e.g., `https://mattermost.company.com`)
+7. **Getting your user ID**: In Mattermost, go to **Account Settings → Security → View Access History** or use the API; your user ID is the string shown in your profile URL or use `/user add @yourusername` after starting the bot
 
-**Common settings:**
+#### Kaneo API Key
 
-| Key           | Description                           | Example / Where to get it                                           |
-| ------------- | ------------------------------------- | ------------------------------------------------------------------- |
-| `provider`    | Task tracker backend to use           | `kaneo` (default) or `youtrack`                                     |
-| `llm_apikey`  | API key for your LLM provider         | Your provider's API key (use any value for keyless local endpoints) |
-| `llm_baseurl` | OpenAI-compatible base URL            | e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`       |
-| `main_model`  | Model name to use                     | e.g. `gpt-4o`, `claude-opus-4-6`, `qwen3:8b`                        |
-| `small_model` | Optional: model for memory extraction | Same as `main_model` if not specified                               |
+Kaneo is self-hosted. After setting up your instance:
 
-**Kaneo provider (default):**
+1. Log into Kaneo web UI
+2. Go to **Settings → API Keys**
+3. Click **Create API Key** and copy the key
+4. Alternatively, Kaneo auto-provisions on first use if you use email/password
 
-| Key            | Description                    | Where to get it                                |
-| -------------- | ------------------------------ | ---------------------------------------------- |
-| `kaneo_apikey` | Kaneo API key or session token | Kaneo Settings → API Keys, or auto-provisioned |
+**Self-hosting Kaneo** (optional):
 
-**YouTrack provider:**
+```bash
+git clone https://github.com/usekaneo/kaneo.git
+cd kaneo
+cp .env.example .env
+# Edit .env with your settings
+docker compose up -d
+```
 
-| Key              | Description              | Example                         |
-| ---------------- | ------------------------ | ------------------------------- |
-| `youtrack_url`   | YouTrack instance URL    | `https://youtrack.example.com`  |
-| `youtrack_token` | YouTrack permanent token | YouTrack → Profile → Hub Tokens |
+#### YouTrack Token
 
-Use `/config` to view current values, and `/set <key> <value>` to update them. Each user's credentials are isolated.
+1. Log into your YouTrack instance
+2. Click your avatar → **Profile** → **Account Settings**
+3. Go to **Authentication → Hub Tokens**
+4. Click **New token...**
+5. Name it "papai" and grant permissions:
+   - **YouTrack**: Read issues, Update issues, Read projects, Create issues
+   - **Hub**: Read user profile
+6. Copy the token (starts with `perm:`)
+7. Set `youtrack_url` to your instance (e.g., `https://youtrack.company.com`)
+
+#### LLM API Key
+
+For OpenAI-compatible providers:
+
+- **OpenAI**: Get from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- **Anthropic**: Get from [console.anthropic.com](https://console.anthropic.com)
+- **OpenRouter**: Get from [openrouter.ai/keys](https://openrouter.ai/keys)
+- **Local (Ollama)**: Use any non-empty value (e.g., `ollama`) since local endpoints often don't require auth
+- **OpenAI-compatible**: Check your provider's documentation
+
+### Runtime Configuration
+
+After the bot starts, configure per-user settings via chat commands:
+
+**Common settings** (all providers):
+
+| Key           | Description                       | Example                            |
+| ------------- | --------------------------------- | ---------------------------------- |
+| `provider`    | Task tracker backend              | `kaneo` or `youtrack`              |
+| `llm_apikey`  | LLM provider API key              | `sk-...` or `any-value-for-local`  |
+| `llm_baseurl` | OpenAI-compatible base URL        | `https://api.openai.com/v1`        |
+| `main_model`  | Primary model for task operations | `gpt-4o`, `claude-3-opus-20240229` |
+| `small_model` | Model for memory extraction (opt) | `gpt-4o-mini`                      |
+
+**Kaneo-specific:**
+
+| Key            | Description         | Example             |
+| -------------- | ------------------- | ------------------- |
+| `kaneo_apikey` | Kaneo API key/token | From Kaneo Settings |
+
+**YouTrack-specific:**
+
+| Key              | Description           | Example                        |
+| ---------------- | --------------------- | ------------------------------ |
+| `youtrack_url`   | YouTrack instance URL | `https://youtrack.example.com` |
+| `youtrack_token` | Permanent token       | `perm:XXX...`                  |
+
+Use `/config` to view current values, and `/set <key> <value>` to update them.
+
+### Configuration Examples
+
+#### Example 1: Telegram + OpenAI + Kaneo
+
+```bash
+# .env - Required startup variables
+CHAT_PROVIDER=telegram
+ADMIN_USER_ID=123456789
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz123456789
+```
+
+Then via chat:
+
+```
+/set provider kaneo
+/set kaneo_apikey your_kaneo_api_key
+/set llm_apikey sk-your-openai-key
+/set llm_baseurl https://api.openai.com/v1
+/set main_model gpt-4o
+```
+
+#### Example 2: Mattermost + OpenRouter + YouTrack
+
+```bash
+# .env - Required startup variables
+CHAT_PROVIDER=mattermost
+ADMIN_USER_ID=your-mattermost-username
+MATTERMOST_URL=https://mattermost.company.com
+MATTERMOST_BOT_TOKEN=q1w2e3r4t5y6u7i8o9p0
+```
+
+Then via chat:
+
+```
+/set provider youtrack
+/set youtrack_url https://youtrack.company.com
+/set youtrack_token perm:your-youtrack-token
+/set llm_apikey sk-or-v1-your-openrouter-key
+/set llm_baseurl https://openrouter.ai/api/v1
+/set main_model anthropic/claude-3-opus
+```
+
+#### Example 3: Telegram + Local Ollama + Kaneo
+
+```bash
+# .env
+CHAT_PROVIDER=telegram
+ADMIN_USER_ID=123456789
+TELEGRAM_BOT_TOKEN=your-telegram-token
+```
+
+Then via chat:
+
+```
+/set provider kaneo
+/set kaneo_apikey your_kaneo_key
+/set llm_apikey ollama
+/set llm_baseurl http://localhost:11434/v1
+/set main_model qwen3:8b
+```
+
+#### Example 4: Full Docker Compose with Kaneo
+
+```yaml
+# docker-compose.yml
+services:
+  papai:
+    image: ghcr.io/wkich/papai:latest
+    environment:
+      CHAT_PROVIDER: telegram
+      ADMIN_USER_ID: '123456789'
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      KANEO_CLIENT_URL: https://kaneo.example.com
+    volumes:
+      - papai-data:/data
+
+volumes:
+  papai-data:
+```
 
 ### Admin Commands
 
