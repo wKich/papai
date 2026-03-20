@@ -41,11 +41,12 @@ describe('group commands', () => {
   let lastReply: string | null
 
   const createMockReply = (): ReplyFn => ({
-    text: async (content: string): Promise<void> => {
+    text: (content: string): Promise<void> => {
       lastReply = content
+      return Promise.resolve()
     },
-    formatted: async (): Promise<void> => {},
-    file: async (): Promise<void> => {},
+    formatted: (): Promise<void> => Promise.resolve(),
+    file: (): Promise<void> => Promise.resolve(),
     typing: (): void => {},
   })
 

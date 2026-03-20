@@ -23,6 +23,46 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
   return false
 }
 
+const getBotAdminAuth = (
+  userId: string,
+  contextId: string,
+  contextType: ContextType,
+  isPlatformAdmin: boolean,
+): AuthorizationResult => ({
+  allowed: true,
+  isBotAdmin: true,
+  isGroupAdmin: isPlatformAdmin,
+  storageContextId: contextType === 'dm' ? userId : contextId,
+})
+
+const getGroupMemberAuth = (contextId: string, isPlatformAdmin: boolean): AuthorizationResult => ({
+  allowed: true,
+  isBotAdmin: false,
+  isGroupAdmin: isPlatformAdmin,
+  storageContextId: contextId,
+})
+
+const getUnauthorizedGroupAuth = (contextId: string): AuthorizationResult => ({
+  allowed: false,
+  isBotAdmin: false,
+  isGroupAdmin: false,
+  storageContextId: contextId,
+})
+
+const getDmUserAuth = (userId: string): AuthorizationResult => ({
+  allowed: true,
+  isBotAdmin: true,
+  isGroupAdmin: false,
+  storageContextId: userId,
+})
+
+const getUnauthorizedDmAuth = (userId: string): AuthorizationResult => ({
+  allowed: false,
+  isBotAdmin: false,
+  isGroupAdmin: false,
+  storageContextId: userId,
+})
+
 export const checkAuthorizationExtended = (
   userId: string,
   username: string | null,
@@ -32,50 +72,22 @@ export const checkAuthorizationExtended = (
 ): AuthorizationResult => {
   log.debug({ userId, contextId, contextType }, 'Checking authorization')
 
-  // Bot admin can do everything
   if (isAuthorized(userId)) {
-    return {
-      allowed: true,
-      isBotAdmin: true,
-      isGroupAdmin: isPlatformAdmin,
-      storageContextId: contextType === 'dm' ? userId : contextId,
-    }
+    return getBotAdminAuth(userId, contextId, contextType, isPlatformAdmin)
   }
 
-  // In groups, check group membership
   if (contextType === 'group') {
     if (isGroupMember(contextId, userId)) {
-      return {
-        allowed: true,
-        isBotAdmin: false,
-        isGroupAdmin: isPlatformAdmin,
-        storageContextId: contextId,
-      }
+      return getGroupMemberAuth(contextId, isPlatformAdmin)
     }
-    return {
-      allowed: false,
-      isBotAdmin: false,
-      isGroupAdmin: false,
-      storageContextId: contextId,
-    }
+    return getUnauthorizedGroupAuth(contextId)
   }
 
-  // In DMs, try to resolve by username
   if (username !== null && resolveUserByUsername(userId, username)) {
-    return {
-      allowed: true,
-      isBotAdmin: true,
-      isGroupAdmin: false,
-      storageContextId: userId,
-    }
+    return getDmUserAuth(userId)
   }
 
-  return {
-    allowed: false,
-    isBotAdmin: false,
-    isGroupAdmin: false,
-    storageContextId: userId,
-  }
+  return getUnauthorizedDmAuth(userId)
 }
 
 export function setupBot(chat: ChatProvider, adminUserId: string): void {
@@ -104,9 +116,11 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
       return
     }
 
-    // Natural language in groups requires mention
-    if (msg.contextType === 'group' && !msg.commandMatch && !msg.isMentioned) {
-      return // Silent ignore
+    const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
+    const isNaturalLanguage = !hasCommand
+    if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
+      // Silent ignore - natural language in groups requires mention
+      return
     }
 
     reply.typing()
