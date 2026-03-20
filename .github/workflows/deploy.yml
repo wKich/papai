@@ -117,7 +117,7 @@ jobs:
 
           # Backup database before deployment
           echo "Creating database backup..."
-          backup_dir="~/${GITHUB_REPOSITORY##*/}/backups"
+          backup_dir="./backups"
           mkdir -p "$backup_dir"
           backup_file="papai-$(date +%Y%m%d_%H%M%S).db"
 
