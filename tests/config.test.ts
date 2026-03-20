@@ -1,10 +1,22 @@
 import { Database } from 'bun:sqlite'
-import { describe, expect, test, beforeEach } from 'bun:test'
-
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
+import * as schema from '../src/db/schema.js'
+
+// --- Test database setup with Drizzle ---
+let testDb: ReturnType<typeof drizzle<typeof schema>>
+let testSqlite: Database
+
+// Mock getDrizzleDb to return our test database
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  closeDrizzleDb: (): void => {},
+  _resetDrizzleDb: (): void => {},
+  _setDrizzleDb: (): void => {},
+}))
+
 import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
-import { _resetDrizzleDb, _setDrizzleDb } from '../src/db/drizzle.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -13,7 +25,6 @@ import { migration004KaneoWorkspace } from '../src/db/migrations/004_kaneo_works
 import { migration005RenameConfigKeys } from '../src/db/migrations/005_rename_config_keys.js'
 import { migration006VersionAnnouncements } from '../src/db/migrations/006_version_announcements.js'
 import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
-import * as schema from '../src/db/schema.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 
@@ -32,11 +43,9 @@ const MIGRATIONS = [
 
 describe('setConfig', () => {
   beforeEach(() => {
-    _resetDrizzleDb()
-    const sqlite = new Database(':memory:')
-    runMigrations(sqlite, MIGRATIONS)
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    runMigrations(testSqlite, MIGRATIONS)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -70,11 +79,9 @@ describe('setConfig', () => {
 
 describe('getConfig', () => {
   beforeEach(() => {
-    _resetDrizzleDb()
-    const sqlite = new Database(':memory:')
-    runMigrations(sqlite, MIGRATIONS)
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    runMigrations(testSqlite, MIGRATIONS)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -107,11 +114,9 @@ describe('isConfigKey', () => {
 
 describe('getAllConfig', () => {
   beforeEach(() => {
-    _resetDrizzleDb()
-    const sqlite = new Database(':memory:')
-    runMigrations(sqlite, MIGRATIONS)
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    runMigrations(testSqlite, MIGRATIONS)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })

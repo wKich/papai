@@ -1,12 +1,23 @@
 import { Database } from 'bun:sqlite'
-import { describe, expect, test, beforeEach, mock } from 'bun:test'
-
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import packageJson from '../package.json' with { type: 'json' }
-import { announceNewVersion } from '../src/announcements.js'
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
-import { _resetDrizzleDb, _setDrizzleDb } from '../src/db/drizzle.js'
+
+// --- Test database setup with Drizzle ---
+let testDb: ReturnType<typeof drizzle>
+let testSqlite: Database
+
+// Mock getDrizzleDb to return our test database
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): ReturnType<typeof drizzle> => testDb,
+  closeDrizzleDb: (): void => {},
+  _resetDrizzleDb: (): void => {},
+  _setDrizzleDb: (): void => {},
+}))
+
+import { announceNewVersion } from '../src/announcements.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -128,11 +139,9 @@ describe('extractChangelogSection', () => {
 
 describe('announceNewVersion', () => {
   beforeEach(() => {
-    _resetDrizzleDb()
-    const sqlite = new Database(':memory:')
-    runMigrations(sqlite, MIGRATIONS)
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    runMigrations(testSqlite, MIGRATIONS)
 
     sentMessages.length = 0
     changelogProvider = null
@@ -144,11 +153,6 @@ describe('announceNewVersion', () => {
 
   test('sends announcement to all users with Kaneo accounts', async () => {
     // Insert test users with kaneo_apikey config
-    const sqlite = new Database(':memory:')
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
-    runMigrations(sqlite, MIGRATIONS)
-
     testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     testDb.insert(schema.userConfig).values({ userId: '102', key: 'kaneo_apikey', value: 'key2' }).run()
 
@@ -163,11 +167,6 @@ describe('announceNewVersion', () => {
   })
 
   test('does not send announcement twice for the same version', async () => {
-    const sqlite = new Database(':memory:')
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
-    runMigrations(sqlite, MIGRATIONS)
-
     testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
 
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
@@ -184,10 +183,7 @@ describe('announceNewVersion', () => {
     await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
-    // Version announcement is stored in the database (verified by the fact that
-    // calling announceNewVersion again doesn't re-announce)
-
-    // Reset and verify idempotency - second call should not send messages
+    // Verify idempotency - second call should not send messages
     sentMessages.length = 0
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
     await announceNewVersion(mockChat)
@@ -195,11 +191,6 @@ describe('announceNewVersion', () => {
   })
 
   test('returns early without sending when CHANGELOG.md cannot be read', async () => {
-    const sqlite = new Database(':memory:')
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
-    runMigrations(sqlite, MIGRATIONS)
-
     testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     changelogProvider = null
 
@@ -209,11 +200,6 @@ describe('announceNewVersion', () => {
   })
 
   test('returns early without sending when version is missing from changelog', async () => {
-    const sqlite = new Database(':memory:')
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
-    runMigrations(sqlite, MIGRATIONS)
-
     testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     changelogProvider = (): Promise<string> =>
       Promise.resolve('# Changelog\n\n## [0.0.1] - 2024-01-01\n\n- old stuff\n')
@@ -236,11 +222,6 @@ describe('announceNewVersion', () => {
       sentMessages.push({ userId, text })
       return Promise.resolve()
     }
-
-    const sqlite = new Database(':memory:')
-    const testDb = drizzle(sqlite, { schema })
-    _setDrizzleDb(testDb)
-    runMigrations(sqlite, MIGRATIONS)
 
     testDb.insert(schema.userConfig).values({ userId: '201', key: 'kaneo_apikey', value: 'key1' }).run()
     testDb.insert(schema.userConfig).values({ userId: '202', key: 'kaneo_apikey', value: 'key2' }).run()
