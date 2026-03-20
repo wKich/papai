@@ -4,6 +4,7 @@ import {
   registerClearCommand,
   registerConfigCommand,
   registerContextCommand,
+  registerGroupCommand,
   registerHelpCommand,
   registerSetCommand,
 } from './commands/index.js'
@@ -84,6 +85,7 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
   registerContextCommand(chat, adminUserId)
   registerClearCommand(chat, checkAuthorization, adminUserId)
   registerAdminCommands(chat, adminUserId)
+  registerGroupCommand(chat)
   chat.onMessage(async (msg, reply) => {
     const auth = checkAuthorizationExtended(
       msg.user.id,
