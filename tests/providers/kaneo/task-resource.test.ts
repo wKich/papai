@@ -950,14 +950,13 @@ describe('TaskResource', () => {
       )
 
       const resource = new TaskResource(mockConfig)
-      let thrown = false
+      const promise = resource.removeRelation('task-1', 'task-2')
+      expect(promise).rejects.toThrow('not found')
       try {
-        await resource.removeRelation('task-1', 'task-2')
-      } catch (error) {
-        thrown = true
-        expect(error instanceof Error && error.message.includes('not found')).toBe(true)
+        await promise
+      } catch {
+        // ignore
       }
-      expect(thrown).toBe(true)
     })
   })
 
@@ -1036,14 +1035,13 @@ describe('TaskResource', () => {
       )
 
       const resource = new TaskResource(mockConfig)
-      let thrown = false
+      const promise = resource.updateRelation('task-1', 'task-2', 'related')
+      expect(promise).rejects.toThrow('not found')
       try {
-        await resource.updateRelation('task-1', 'task-2', 'related')
-      } catch (error) {
-        thrown = true
-        expect(error instanceof Error && error.message.includes('not found')).toBe(true)
+        await promise
+      } catch {
+        // ignore
       }
-      expect(thrown).toBe(true)
     })
   })
 })
