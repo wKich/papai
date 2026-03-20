@@ -433,7 +433,7 @@ describe('YouTrackProvider', () => {
     })
 
     test('classifies non-YouTrackApiError as unexpected', () => {
-      const error = new Error('Network failure')
+      const error = new Error('Some internal processing error')
       const result = provider.classifyError(error)
       expect(result.code).toBe('unexpected')
     })

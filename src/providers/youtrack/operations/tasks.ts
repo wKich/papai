@@ -3,6 +3,7 @@ import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
+import { classifyYouTrackError } from '../classify-error.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
 import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
 
@@ -21,31 +22,41 @@ export async function createYouTrackTask(
   },
 ): Promise<Task> {
   log.debug({ projectId: params.projectId, title: params.title }, 'createTask')
-  const body: Record<string, unknown> = {
-    project: { id: params.projectId },
-    summary: params.title,
+  try {
+    const body: Record<string, unknown> = {
+      project: { id: params.projectId },
+      summary: params.title,
+    }
+    if (params.description !== undefined) body['description'] = params.description
+
+    const customFields = buildCustomFields(params)
+    if (customFields.length > 0) body['customFields'] = customFields
+
+    const raw = await youtrackFetch(config, 'POST', '/api/issues', {
+      body,
+      query: { fields: ISSUE_FIELDS },
+    })
+    const issue = IssueSchema.parse(raw)
+    log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
+    return mapIssueToTask(issue, config.baseUrl)
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to create task')
+    throw classifyYouTrackError(error)
   }
-  if (params.description !== undefined) body['description'] = params.description
-
-  const customFields = buildCustomFields(params)
-  if (customFields.length > 0) body['customFields'] = customFields
-
-  const raw = await youtrackFetch(config, 'POST', '/api/issues', {
-    body,
-    query: { fields: ISSUE_FIELDS },
-  })
-  const issue = IssueSchema.parse(raw)
-  log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
-  return mapIssueToTask(issue, config.baseUrl)
 }
 
 export async function getYouTrackTask(config: YouTrackConfig, taskId: string): Promise<Task> {
   log.debug({ taskId }, 'getTask')
-  const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
-    query: { fields: ISSUE_FIELDS },
-  })
-  const issue = IssueSchema.parse(raw)
-  return mapIssueToTask(issue, config.baseUrl)
+  try {
+    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
+      query: { fields: ISSUE_FIELDS },
+    })
+    const issue = IssueSchema.parse(raw)
+    return mapIssueToTask(issue, config.baseUrl)
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to get task')
+    throw classifyYouTrackError(error, { taskId })
+  }
 }
 
 export async function updateYouTrackTask(
@@ -62,31 +73,41 @@ export async function updateYouTrackTask(
   },
 ): Promise<Task> {
   log.debug({ taskId, hasTitle: params.title !== undefined, hasStatus: params.status !== undefined }, 'updateTask')
-  const body: Record<string, unknown> = {}
-  if (params.title !== undefined) body['summary'] = params.title
-  if (params.description !== undefined) body['description'] = params.description
-  if (params.projectId !== undefined) body['project'] = { id: params.projectId }
+  try {
+    const body: Record<string, unknown> = {}
+    if (params.title !== undefined) body['summary'] = params.title
+    if (params.description !== undefined) body['description'] = params.description
+    if (params.projectId !== undefined) body['project'] = { id: params.projectId }
 
-  const customFields = buildCustomFields(params)
-  if (customFields.length > 0) body['customFields'] = customFields
+    const customFields = buildCustomFields(params)
+    if (customFields.length > 0) body['customFields'] = customFields
 
-  const raw = await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
-    body,
-    query: { fields: ISSUE_FIELDS },
-  })
-  const issue = IssueSchema.parse(raw)
-  log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
-  return mapIssueToTask(issue, config.baseUrl)
+    const raw = await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
+      body,
+      query: { fields: ISSUE_FIELDS },
+    })
+    const issue = IssueSchema.parse(raw)
+    log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
+    return mapIssueToTask(issue, config.baseUrl)
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to update task')
+    throw classifyYouTrackError(error, { taskId })
+  }
 }
 
 export async function listYouTrackTasks(config: YouTrackConfig, projectId: string): Promise<TaskListItem[]> {
   log.debug({ projectId }, 'listTasks')
-  const raw = await youtrackFetch(config, 'GET', '/api/issues', {
-    query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
-  })
-  const issues = IssueListSchema.array().parse(raw)
-  log.info({ projectId, count: issues.length }, 'Tasks listed')
-  return issues.map((issue) => mapIssueToListItem(issue, config.baseUrl))
+  try {
+    const raw = await youtrackFetch(config, 'GET', '/api/issues', {
+      query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
+    })
+    const issues = IssueListSchema.array().parse(raw)
+    log.info({ projectId, count: issues.length }, 'Tasks listed')
+    return issues.map((issue) => mapIssueToListItem(issue, config.baseUrl))
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'Failed to list tasks')
+    throw classifyYouTrackError(error, { projectId })
+  }
 }
 
 export async function searchYouTrackTasks(
@@ -94,21 +115,31 @@ export async function searchYouTrackTasks(
   params: { query: string; projectId?: string; limit?: number },
 ): Promise<TaskSearchResult[]> {
   log.debug({ query: params.query, projectId: params.projectId }, 'searchTasks')
-  let query = params.query
-  if (params.projectId !== undefined) {
-    query = `project: {${params.projectId}} ${query}`
+  try {
+    let query = params.query
+    if (params.projectId !== undefined) {
+      query = `project: {${params.projectId}} ${query}`
+    }
+    const raw = await youtrackFetch(config, 'GET', '/api/issues', {
+      query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
+    })
+    const issues = IssueListSchema.array().parse(raw)
+    log.info({ query: params.query, count: issues.length }, 'Tasks searched')
+    return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to search tasks')
+    throw classifyYouTrackError(error)
   }
-  const raw = await youtrackFetch(config, 'GET', '/api/issues', {
-    query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
-  })
-  const issues = IssueListSchema.array().parse(raw)
-  log.info({ query: params.query, count: issues.length }, 'Tasks searched')
-  return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
 }
 
 export async function deleteYouTrackTask(config: YouTrackConfig, taskId: string): Promise<{ id: string }> {
   log.debug({ taskId }, 'deleteTask')
-  await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}`)
-  log.info({ taskId }, 'Issue deleted')
-  return { id: taskId }
+  try {
+    await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}`)
+    log.info({ taskId }, 'Issue deleted')
+    return { id: taskId }
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to delete task')
+    throw classifyYouTrackError(error, { taskId })
+  }
 }
