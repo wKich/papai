@@ -123,7 +123,13 @@ export function registerContextCommand(chat: ChatProvider, adminUserId: string):
 
     const hasSummary = summary !== null && summary.length > 0
     log.info(
-      { userId: msg.user.id, storageContextId: auth.storageContextId, historyLength: history.length, factsCount: facts.length, hasSummary },
+      {
+        userId: msg.user.id,
+        storageContextId: auth.storageContextId,
+        historyLength: history.length,
+        factsCount: facts.length,
+        hasSummary,
+      },
       '/context command executed',
     )
     await reply.file({ content: Buffer.from(report, 'utf-8'), filename: 'context.txt' })

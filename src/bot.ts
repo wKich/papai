@@ -23,7 +23,7 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
   return false
 }
 
-const checkAuthorizationExtended = (
+export const checkAuthorizationExtended = (
   userId: string,
   username: string | null,
   contextId: string,

@@ -78,7 +78,10 @@ const persistFactsFromResults = (
   const newFacts = extractFactsFromSdkResults(toolCalls, toolResults)
   if (newFacts.length === 0) return
   for (const fact of newFacts) upsertFact(contextId, fact)
-  log.info({ contextId, factsExtracted: newFacts.length, factsUpserted: newFacts.length }, 'Facts extracted and persisted')
+  log.info(
+    { contextId, factsExtracted: newFacts.length, factsUpserted: newFacts.length },
+    'Facts extracted and persisted',
+  )
 }
 
 const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: string | null): Promise<void> => {
@@ -150,25 +153,25 @@ const sendLlmResponse = async (
 
 const callLlm = async (
   reply: ReplyFn,
-  userId: string,
+  contextId: string,
   username: string | null,
   history: readonly ModelMessage[],
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
-  await maybeProvisionKaneo(reply, userId, username)
-  const missing = checkRequiredConfig(userId)
+  await maybeProvisionKaneo(reply, contextId, username)
+  const missing = checkRequiredConfig(contextId)
   if (missing.length > 0) {
-    log.warn({ userId, missing }, 'Missing required config keys')
+    log.warn({ contextId, missing }, 'Missing required config keys')
     await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
     throw new Error('Missing configuration')
   }
-  const llmApiKey = getConfig(userId, 'llm_apikey')!
-  const llmBaseUrl = getConfig(userId, 'llm_baseurl')!
-  const mainModel = getConfig(userId, 'main_model')!
+  const llmApiKey = getConfig(contextId, 'llm_apikey')!
+  const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
+  const mainModel = getConfig(contextId, 'main_model')!
   const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const provider = buildProvider(userId)
-  const tools = getOrCreateTools(userId, provider)
-  const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(userId, history)
-  log.debug({ userId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
+  const provider = buildProvider(contextId)
+  const tools = getOrCreateTools(contextId, provider)
+  const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
+  log.debug({ contextId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
   const result = await generateText({
     model,
     system: buildSystemPrompt(provider),
@@ -176,15 +179,15 @@ const callLlm = async (
     tools,
     stopWhen: stepCountIs(25),
   })
-  log.debug({ userId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
-  persistFactsFromResults(userId, result.toolCalls, result.toolResults)
-  await sendLlmResponse(reply, userId, result)
+  log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+  persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
+  await sendLlmResponse(reply, contextId, result)
   return result
 }
 
-const handleMessageError = async (reply: ReplyFn, userId: string, error: unknown): Promise<void> => {
+const handleMessageError = async (reply: ReplyFn, contextId: string, error: unknown): Promise<void> => {
   log.error(
-    { userId, error: isAppError(error) ? error : error instanceof Error ? error.message : String(error) },
+    { contextId, error: isAppError(error) ? error : error instanceof Error ? error.message : String(error) },
     'Message handling failed',
   )
 
@@ -203,21 +206,21 @@ const handleMessageError = async (reply: ReplyFn, userId: string, error: unknown
 
 export const processMessage = async (
   reply: ReplyFn,
-  userId: string,
+  contextId: string,
   username: string | null,
   userText: string,
 ): Promise<void> => {
-  log.debug({ userId, userText }, 'processMessage called')
-  log.info({ userId, messageLength: userText.length }, 'Message received from user')
+  log.debug({ contextId, userText }, 'processMessage called')
+  log.info({ contextId, messageLength: userText.length }, 'Message received from user')
 
-  const baseHistory = getCachedHistory(userId)
+  const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
 
-  appendHistory(userId, [newMessage])
+  appendHistory(contextId, [newMessage])
 
   try {
-    const result = await callLlm(reply, userId, username, history)
+    const result = await callLlm(reply, contextId, username, history)
 
     // result.response.messages contains ONLY the newly generated messages (assistant + tool
     // messages from all steps). The Vercel AI SDK does NOT include input messages there —
@@ -225,17 +228,17 @@ export const processMessage = async (
     // So we append all of them directly, no slicing needed.
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
-      appendHistory(userId, assistantMessages)
-      log.debug({ userId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
+      appendHistory(contextId, assistantMessages)
+      log.debug({ contextId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
     }
 
     // Trigger trim only after successful response
     const needsTrim = shouldTriggerTrim([...history, ...assistantMessages])
     if (needsTrim) {
-      void runTrimInBackground(userId, [...history, ...assistantMessages])
+      void runTrimInBackground(contextId, [...history, ...assistantMessages])
     }
   } catch (error) {
-    saveHistory(userId, baseHistory)
-    await handleMessageError(reply, userId, error)
+    saveHistory(contextId, baseHistory)
+    await handleMessageError(reply, contextId, error)
   }
 }

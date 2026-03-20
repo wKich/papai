@@ -26,7 +26,10 @@ export function registerClearCommand(
       clearHistory(auth.storageContextId)
       clearSummary(auth.storageContextId)
       clearFacts(auth.storageContextId)
-      log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/clear command executed — all memory tiers cleared')
+      log.info(
+        { userId: msg.user.id, storageContextId: auth.storageContextId },
+        '/clear command executed — all memory tiers cleared',
+      )
       await reply.text('Conversation history and memory cleared.')
       return
     }
