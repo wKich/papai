@@ -1,0 +1,53 @@
+import { sql } from 'drizzle-orm'
+import { sqliteTable, text, primaryKey, index } from 'drizzle-orm/sqlite-core'
+
+export const users = sqliteTable('users', {
+  platformUserId: text('platform_user_id').primaryKey(),
+  username: text('username').unique(),
+  addedAt: text('added_at')
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  addedBy: text('added_by').notNull(),
+  kaneoWorkspaceId: text('kaneo_workspace_id'),
+})
+
+export const userConfig = sqliteTable(
+  'user_config',
+  {
+    userId: text('user_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.key] }), index('idx_user_config_user_id').on(table.userId)],
+)
+
+export const conversationHistory = sqliteTable('conversation_history', {
+  userId: text('user_id').primaryKey(),
+  messages: text('messages').notNull(),
+})
+
+export const memorySummary = sqliteTable('memory_summary', {
+  userId: text('user_id').primaryKey(),
+  summary: text('summary').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const memoryFacts = sqliteTable(
+  'memory_facts',
+  {
+    userId: text('user_id').notNull(),
+    identifier: text('identifier').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull().default(''),
+    lastSeen: text('last_seen').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.identifier] }),
+    index('idx_memory_facts_user_lastseen').on(table.userId, table.lastSeen),
+  ],
+)
+
+export const versionAnnouncements = sqliteTable('version_announcements', {
+  version: text('version').primaryKey(),
+  announcedAt: text('announced_at').notNull(),
+})
