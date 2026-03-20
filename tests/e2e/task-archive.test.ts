@@ -1,3 +1,11 @@
+/**
+ * E2E Test: Task Archive
+ *
+ * IMPORTANT: These tests require Docker environment setup.
+ * Run with: bun run test:e2e
+ * Do NOT run with bare "bun test" command - use "bun run test" instead.
+ */
+
 import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)

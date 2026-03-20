@@ -112,7 +112,18 @@ export function getE2EConfig(): Promise<E2EConfig> {
  */
 export function getE2EConfigSync(): E2EConfig {
   if (e2eConfig === undefined) {
-    throw new Error('E2E environment not initialized. Call getE2EConfig() first.')
+    throw new Error(
+      '\n┌─────────────────────────────────────────────────────────────────┐\n' +
+      '│ E2E tests require Docker environment setup.                      │\n' +
+      '│                                                                  │\n' +
+      '│ Run E2E tests with:   bun run test:e2e                          │\n' +
+      '│                                                                  │\n' +
+      '│ Or skip E2E tests by specifying paths:                          │\n' +
+      '│   bun test tests/providers tests/tools tests/scripts ...        │\n' +
+      '│                                                                  │\n' +
+      '│ E2E tests cannot be run with bare "bun test" command.           │\n' +
+      '└─────────────────────────────────────────────────────────────────┘\n'
+    )
   }
   return e2eConfig
 }

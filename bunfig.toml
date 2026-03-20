@@ -1,0 +1,9 @@
+# Bun configuration file
+# https://bun.com/docs/runtime/bunfig
+
+[test]
+# Exclude E2E tests from default test discovery
+# E2E tests require Docker setup and should be run with: bun run test:e2e
+pathIgnorePatterns = [
+  "tests/e2e/**"
+]
