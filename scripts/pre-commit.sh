@@ -5,6 +5,3 @@ set -e
 .claude/hooks/check-no-lint-suppression.sh
 
 bun check
-bun fix
-
-git add -u
