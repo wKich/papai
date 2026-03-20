@@ -1,7 +1,10 @@
+import { eq } from 'drizzle-orm'
+
 import packageJson from '../package.json' with { type: 'json' }
 import { readChangelogFile } from './changelog-reader.js'
 import type { ChatProvider } from './chat/types.js'
-import { getDb } from './db/index.js'
+import { getDrizzleDb } from './db/drizzle.js'
+import { userConfig, versionAnnouncements } from './db/schema.js'
 import { logger } from './logger.js'
 import { extractChangelogSection } from './utils/changelog.js'
 
@@ -10,22 +13,23 @@ const log = logger.child({ scope: 'announcements' })
 const VERSION: string = packageJson.version
 
 function markVersionAnnounced(version: string): boolean {
-  const result = getDb().run('INSERT OR IGNORE INTO version_announcements (version, announced_at) VALUES (?, ?)', [
-    version,
-    new Date().toISOString(),
-  ])
-  const inserted = typeof result.changes === 'number' ? result.changes > 0 : false
-  if (inserted) {
+  try {
+    getDrizzleDb().insert(versionAnnouncements).values({ version, announcedAt: new Date().toISOString() }).run()
     log.info({ version }, 'Version marked as announced')
+    return true
+  } catch {
+    // Unique constraint violation - version already announced
+    return false
   }
-  return inserted
 }
 
 function getUsersWithKaneoAccount(): string[] {
-  return getDb()
-    .query<{ user_id: string }, [string]>('SELECT DISTINCT user_id FROM user_config WHERE key = ?')
-    .all('kaneo_apikey')
-    .map((row) => row.user_id)
+  return getDrizzleDb()
+    .select({ userId: userConfig.userId })
+    .from(userConfig)
+    .where(eq(userConfig.key, 'kaneo_apikey'))
+    .all()
+    .map((row: { userId: string }) => row.userId)
 }
 
 async function sendAnnouncementsToUsers(userIds: string[], markdown: string, chat: ChatProvider): Promise<number> {

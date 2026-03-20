@@ -1,61 +1,42 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { Database } from 'bun:sqlite'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
-// --- Mock for db (must come before importing config.ts) ---
-const store = { data: new Map<string, string>() }
-
-class MockDatabase {
-  run(sql: string, params?: (string | number)[]): void {
-    if (sql.includes('INSERT OR REPLACE INTO user_config') && params !== undefined) {
-      store.data.set(`${params[0]}:${params[1]}`, String(params[2]))
-    }
-  }
-
-  query(sql: string): {
-    get: (...args: (string | number)[]) => { value: string } | null
-    all: (...args: (string | number)[]) => Array<{ key: string; value: string }>
-  } {
-    if (sql.includes('SELECT value FROM user_config WHERE user_id') && sql.includes('AND key')) {
-      return {
-        get: (userId: string | number, key: string | number): { value: string } | null => {
-          const value = store.data.get(`${userId}:${key}`)
-          return value === undefined ? null : { value }
-        },
-        all: (): Array<{ key: string; value: string }> => [],
-      }
-    }
-    if (sql.includes('SELECT key, value FROM user_config WHERE user_id')) {
-      return {
-        get: (): null => null,
-        all: (userId: string | number): Array<{ key: string; value: string }> => {
-          const prefix = `${userId}:`
-          return Array.from(store.data.entries())
-            .filter(([k]) => k.startsWith(prefix))
-            .map(([k, v]) => ({ key: k.slice(prefix.length), value: v }))
-        },
-      }
-    }
-    return { get: (): null => null, all: (): Array<{ key: string; value: string }> => [] }
-  }
-}
-
-const mockDb = new MockDatabase()
-
-void mock.module('../src/db/index.js', () => ({
-  getDb: (): MockDatabase => mockDb,
-  DB_PATH: ':memory:',
-  initDb: (): void => {},
-}))
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import { _resetDrizzleDb, _setDrizzleDb } from '../src/db/drizzle.js'
+import { runMigrations } from '../src/db/migrate.js'
+import { migration001Initial } from '../src/db/migrations/001_initial.js'
+import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
+import { migration003MultiuserSupport } from '../src/db/migrations/003_multiuser_support.js'
+import { migration004KaneoWorkspace } from '../src/db/migrations/004_kaneo_workspace.js'
+import { migration005RenameConfigKeys } from '../src/db/migrations/005_rename_config_keys.js'
+import { migration006VersionAnnouncements } from '../src/db/migrations/006_version_announcements.js'
+import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
+import * as schema from '../src/db/schema.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 
 const USER_A = '111'
 const USER_B = '222'
 
+const MIGRATIONS = [
+  migration001Initial,
+  migration002ConversationHistory,
+  migration003MultiuserSupport,
+  migration004KaneoWorkspace,
+  migration005RenameConfigKeys,
+  migration006VersionAnnouncements,
+  migration007PlatformUserId,
+] as const
+
 describe('setConfig', () => {
   beforeEach(() => {
-    store.data.clear()
+    _resetDrizzleDb()
+    const sqlite = new Database(':memory:')
+    runMigrations(sqlite, MIGRATIONS)
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -89,7 +70,11 @@ describe('setConfig', () => {
 
 describe('getConfig', () => {
   beforeEach(() => {
-    store.data.clear()
+    _resetDrizzleDb()
+    const sqlite = new Database(':memory:')
+    runMigrations(sqlite, MIGRATIONS)
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -122,7 +107,11 @@ describe('isConfigKey', () => {
 
 describe('getAllConfig', () => {
   beforeEach(() => {
-    store.data.clear()
+    _resetDrizzleDb()
+    const sqlite = new Database(':memory:')
+    runMigrations(sqlite, MIGRATIONS)
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })

@@ -1,8 +1,10 @@
 import { type ModelMessage } from 'ai'
+import { sql } from 'drizzle-orm'
 
 import { syncConfigToDb, syncFactToDb, syncHistoryToDb, syncSummaryToDb, syncWorkspaceToDb } from './cache-db.js'
 import { parseHistoryFromDb } from './cache-helpers.js'
-import { getDb } from './db/index.js'
+import { getDrizzleDb } from './db/drizzle.js'
+import { conversationHistory, memoryFacts, memorySummary, userConfig, users } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'cache' })
@@ -73,9 +75,11 @@ export function getCachedHistory(userId: string): readonly ModelMessage[] {
   const cache = getOrCreateCache(userId)
   if (cache.history.length === 0) {
     log.debug({ userId }, 'Loading history from DB into cache')
-    const row = getDb()
-      .query<{ messages: string }, [string]>('SELECT messages FROM conversation_history WHERE user_id = ?')
-      .get(userId)
+    const row = getDrizzleDb()
+      .select({ messages: conversationHistory.messages })
+      .from(conversationHistory)
+      .where(sql`${conversationHistory.userId} = ${userId}`)
+      .get()
     if (row?.messages !== undefined) {
       const parsed = parseHistoryFromDb(row.messages)
       if (parsed !== null) {
@@ -104,9 +108,11 @@ export function getCachedSummary(userId: string): string | null {
   const cache = getOrCreateCache(userId)
   if (cache.summary === null && !cache.config.has('summary_loaded')) {
     log.debug({ userId }, 'Loading summary from DB into cache')
-    const row = getDb()
-      .query<{ summary: string }, [string]>('SELECT summary FROM memory_summary WHERE user_id = ?')
-      .get(userId)
+    const row = getDrizzleDb()
+      .select({ summary: memorySummary.summary })
+      .from(memorySummary)
+      .where(sql`${memorySummary.userId} = ${userId}`)
+      .get()
     cache.summary = row?.summary ?? null
     cache.config.set('summary_loaded', 'true')
   }
@@ -127,11 +133,17 @@ export function getCachedFacts(
   const cache = getOrCreateCache(userId)
   if (cache.facts.length === 0 && !cache.config.has('facts_loaded')) {
     log.debug({ userId }, 'Loading facts from DB into cache')
-    const rows = getDb()
-      .query<{ identifier: string; title: string; url: string; last_seen: string }, [string]>(
-        'SELECT identifier, title, url, last_seen FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC',
-      )
-      .all(userId)
+    const rows = getDrizzleDb()
+      .select({
+        identifier: memoryFacts.identifier,
+        title: memoryFacts.title,
+        url: memoryFacts.url,
+        last_seen: memoryFacts.lastSeen,
+      })
+      .from(memoryFacts)
+      .where(sql`${memoryFacts.userId} = ${userId}`)
+      .orderBy(sql`${memoryFacts.lastSeen} DESC`)
+      .all()
     cache.facts = rows
     cache.config.set('facts_loaded', 'true')
   }
@@ -159,9 +171,11 @@ export function getCachedConfig(userId: string, key: string): string | null {
   const cache = getOrCreateCache(userId)
   if (!cache.config.has(key)) {
     log.debug({ userId, key }, 'Loading config from DB into cache')
-    const row = getDb()
-      .query<{ value: string }, [string, string]>('SELECT value FROM user_config WHERE user_id = ? AND key = ?')
-      .get(userId, key)
+    const row = getDrizzleDb()
+      .select({ value: userConfig.value })
+      .from(userConfig)
+      .where(sql`${userConfig.userId} = ${userId} AND ${userConfig.key} = ${key}`)
+      .get()
     cache.config.set(key, row?.value ?? null)
   }
   return cache.config.get(key) ?? null
@@ -179,12 +193,12 @@ export function getCachedWorkspace(userId: string): string | null {
   const cache = getOrCreateCache(userId)
   if (cache.workspaceId === null && !cache.config.has('workspace_loaded')) {
     log.debug({ userId }, 'Loading workspace from DB into cache')
-    const row = getDb()
-      .query<{ kaneo_workspace_id: string | null }, [string]>(
-        'SELECT kaneo_workspace_id FROM users WHERE platform_user_id = ?',
-      )
-      .get(userId)
-    cache.workspaceId = row?.kaneo_workspace_id ?? null
+    const row = getDrizzleDb()
+      .select({ kaneoWorkspaceId: users.kaneoWorkspaceId })
+      .from(users)
+      .where(sql`${users.platformUserId} = ${userId}`)
+      .get()
+    cache.workspaceId = row?.kaneoWorkspaceId ?? null
     cache.config.set('workspace_loaded', 'true')
   }
   return cache.workspaceId

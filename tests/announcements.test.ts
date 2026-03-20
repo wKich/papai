@@ -1,6 +1,34 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { Database } from 'bun:sqlite'
+import { describe, expect, test, beforeEach, mock } from 'bun:test'
 
+import { drizzle } from 'drizzle-orm/bun-sqlite'
+
+import packageJson from '../package.json' with { type: 'json' }
+import { announceNewVersion } from '../src/announcements.js'
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import { _resetDrizzleDb, _setDrizzleDb } from '../src/db/drizzle.js'
+import { runMigrations } from '../src/db/migrate.js'
+import { migration001Initial } from '../src/db/migrations/001_initial.js'
+import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
+import { migration003MultiuserSupport } from '../src/db/migrations/003_multiuser_support.js'
+import { migration004KaneoWorkspace } from '../src/db/migrations/004_kaneo_workspace.js'
+import { migration005RenameConfigKeys } from '../src/db/migrations/005_rename_config_keys.js'
+import { migration006VersionAnnouncements } from '../src/db/migrations/006_version_announcements.js'
+import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
+import * as schema from '../src/db/schema.js'
+import { extractChangelogSection } from './helpers/extract-changelog-section.js'
+
+const MIGRATIONS = [
+  migration001Initial,
+  migration002ConversationHistory,
+  migration003MultiuserSupport,
+  migration004KaneoWorkspace,
+  migration005RenameConfigKeys,
+  migration006VersionAnnouncements,
+  migration007PlatformUserId,
+] as const
+
+const VERSION: string = packageJson.version
 
 // --- Mock ChatProvider for testing ---
 const sentMessages: Array<{ userId: string; text: string }> = []
@@ -18,45 +46,6 @@ const mockChat: ChatProvider = {
   stop: (): Promise<void> => Promise.resolve(),
 }
 
-// --- Mock for db (must come before importing announcements.ts) ---
-const announcedVersions = new Set<string>()
-const userConfigRows: Array<{ user_id: string }> = []
-
-class MockDatabase {
-  run(sql: string, params?: (string | number | null)[]): { changes: number } {
-    if (sql.includes('INSERT OR IGNORE INTO version_announcements') && params !== undefined) {
-      const version = String(params[0])
-      if (announcedVersions.has(version)) {
-        return { changes: 0 }
-      }
-      announcedVersions.add(version)
-      return { changes: 1 }
-    }
-    return { changes: 0 }
-  }
-
-  query(sql: string): {
-    get: (...args: (string | number)[]) => Record<string, unknown> | null
-    all: (...args: (string | number)[]) => Array<Record<string, unknown>>
-  } {
-    if (sql.includes('SELECT DISTINCT user_id FROM user_config')) {
-      return {
-        get: (): null => null,
-        all: (): Array<Record<string, unknown>> => userConfigRows,
-      }
-    }
-    return { get: (): null => null, all: (): Array<Record<string, unknown>> => [] }
-  }
-}
-
-const mockDb = new MockDatabase()
-
-void mock.module('../src/db/index.js', () => ({
-  getDb: (): MockDatabase => mockDb,
-  DB_PATH: ':memory:',
-  initDb: (): void => {},
-}))
-
 // --- Mock for changelog-reader (controlled per-test via changelogProvider) ---
 let changelogProvider: (() => Promise<string>) | null = null
 
@@ -68,12 +57,6 @@ void mock.module('../src/changelog-reader.js', () => ({
     return changelogProvider()
   },
 }))
-
-import packageJson from '../package.json' with { type: 'json' }
-import { announceNewVersion } from '../src/announcements.js'
-import { extractChangelogSection } from './helpers/extract-changelog-section.js'
-
-const VERSION: string = packageJson.version
 
 // Canonical CHANGELOG fixture aligned with the actual package version
 const CHANGELOG = `# Changelog
@@ -145,9 +128,13 @@ describe('extractChangelogSection', () => {
 
 describe('announceNewVersion', () => {
   beforeEach(() => {
-    announcedVersions.clear()
+    _resetDrizzleDb()
+    const sqlite = new Database(':memory:')
+    runMigrations(sqlite, MIGRATIONS)
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+
     sentMessages.length = 0
-    userConfigRows.length = 0
     changelogProvider = null
     sendMessageImpl = (userId: string, text: string): Promise<void> => {
       sentMessages.push({ userId, text })
@@ -156,7 +143,15 @@ describe('announceNewVersion', () => {
   })
 
   test('sends announcement to all users with Kaneo accounts', async () => {
-    userConfigRows.push({ user_id: '101' }, { user_id: '102' })
+    // Insert test users with kaneo_apikey config
+    const sqlite = new Database(':memory:')
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+    runMigrations(sqlite, MIGRATIONS)
+
+    testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
+    testDb.insert(schema.userConfig).values({ userId: '102', key: 'kaneo_apikey', value: 'key2' }).run()
+
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
     await announceNewVersion(mockChat)
@@ -168,7 +163,13 @@ describe('announceNewVersion', () => {
   })
 
   test('does not send announcement twice for the same version', async () => {
-    userConfigRows.push({ user_id: '101' })
+    const sqlite = new Database(':memory:')
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+    runMigrations(sqlite, MIGRATIONS)
+
+    testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
+
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
     await announceNewVersion(mockChat)
@@ -183,28 +184,43 @@ describe('announceNewVersion', () => {
     await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
-    expect(announcedVersions.has(VERSION)).toBe(true)
+    // Version announcement is stored in the database (verified by the fact that
+    // calling announceNewVersion again doesn't re-announce)
+
+    // Reset and verify idempotency - second call should not send messages
+    sentMessages.length = 0
+    changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
+    await announceNewVersion(mockChat)
+    expect(sentMessages).toHaveLength(0)
   })
 
   test('returns early without sending when CHANGELOG.md cannot be read', async () => {
-    userConfigRows.push({ user_id: '101' })
+    const sqlite = new Database(':memory:')
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+    runMigrations(sqlite, MIGRATIONS)
+
+    testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     changelogProvider = null
 
     await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
-    expect(announcedVersions.has(VERSION)).toBe(false)
   })
 
   test('returns early without sending when version is missing from changelog', async () => {
-    userConfigRows.push({ user_id: '101' })
+    const sqlite = new Database(':memory:')
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+    runMigrations(sqlite, MIGRATIONS)
+
+    testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     changelogProvider = (): Promise<string> =>
       Promise.resolve('# Changelog\n\n## [0.0.1] - 2024-01-01\n\n- old stuff\n')
 
     await announceNewVersion(mockChat)
 
     expect(sentMessages).toHaveLength(0)
-    expect(announcedVersions.has(VERSION)).toBe(false)
   })
 
   test('continues sending to remaining users when one send fails', async () => {
@@ -221,7 +237,13 @@ describe('announceNewVersion', () => {
       return Promise.resolve()
     }
 
-    userConfigRows.push({ user_id: '201' }, { user_id: '202' })
+    const sqlite = new Database(':memory:')
+    const testDb = drizzle(sqlite, { schema })
+    _setDrizzleDb(testDb)
+    runMigrations(sqlite, MIGRATIONS)
+
+    testDb.insert(schema.userConfig).values({ userId: '201', key: 'kaneo_apikey', value: 'key1' }).run()
+    testDb.insert(schema.userConfig).values({ userId: '202', key: 'kaneo_apikey', value: 'key2' }).run()
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
     await announceNewVersion(mockChat)

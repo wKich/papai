@@ -23,6 +23,7 @@
     "duplicates": "error",
     "enumMembers": "error",
     "classMembers": "error",
+    "catalog": "error",
   },
 
   // Report unused exports even in entry files
@@ -30,4 +31,5 @@
 
   // Config hints become hard errors
   "treatConfigHintsAsErrors": true,
+  "ignoreExportsUsedInFile": true,
 }

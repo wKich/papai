@@ -11,7 +11,7 @@ export class KaneoClassifiedError extends Error {
   }
 }
 
-export interface ClassificationContext {
+interface ClassificationContext {
   taskId?: string
   projectId?: string
   commentId?: string

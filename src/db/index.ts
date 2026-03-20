@@ -12,26 +12,26 @@ import { migration007PlatformUserId } from './migrations/007_platform_user_id.js
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
-let dbInstance: Database | undefined
+let migrationDbInstance: Database | undefined
 
-export const getDb = (): Database => {
-  if (dbInstance === undefined) {
-    dbInstance = new Database(DB_PATH)
+const getMigrationDb = (): Database => {
+  if (migrationDbInstance === undefined) {
+    migrationDbInstance = new Database(DB_PATH)
     // WAL mode is set here rather than in migrations because it must be
     // configured per-database-connection, not per-database-file. This ensures
     // WAL is active immediately on first connection, before any migrations run.
-    dbInstance.run('PRAGMA journal_mode=WAL')
-    dbInstance.run('PRAGMA foreign_keys=ON')
-    logger.info({ dbPath: DB_PATH }, 'Database connection created')
+    migrationDbInstance.run('PRAGMA journal_mode=WAL')
+    migrationDbInstance.run('PRAGMA foreign_keys=ON')
+    logger.info({ dbPath: DB_PATH }, 'Database connection created for migrations')
   }
-  return dbInstance
+  return migrationDbInstance
 }
 
-export const closeDb = (): void => {
-  if (dbInstance !== undefined) {
-    dbInstance.close()
-    dbInstance = undefined
-    logger.info({ dbPath: DB_PATH }, 'Database connection closed')
+const closeMigrationDb = (): void => {
+  if (migrationDbInstance !== undefined) {
+    migrationDbInstance.close()
+    migrationDbInstance = undefined
+    logger.info({ dbPath: DB_PATH }, 'Migration database connection closed')
   }
 }
 
@@ -46,5 +46,9 @@ const MIGRATIONS = [
 ] as const
 
 export const initDb = (): void => {
-  runMigrations(getDb(), MIGRATIONS)
+  runMigrations(getMigrationDb(), MIGRATIONS)
+}
+
+export const closeMigrationDbInstance = (): void => {
+  closeMigrationDb()
 }

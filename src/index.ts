@@ -1,7 +1,8 @@
 import { announceNewVersion } from './announcements.js'
 import { setupBot } from './bot.js'
 import { createChatProvider } from './chat/registry.js'
-import { closeDb, initDb } from './db/index.js'
+import { closeDrizzleDb } from './db/drizzle.js'
+import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { logger } from './logger.js'
 import { addUser } from './users.js'
 
@@ -47,13 +48,15 @@ void announceNewVersion(chatProvider)
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
   void chatProvider.stop()
-  closeDb()
+  closeDrizzleDb()
+  closeMigrationDbInstance()
   process.exit(0)
 })
 
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
   void chatProvider.stop()
-  closeDb()
+  closeDrizzleDb()
+  closeMigrationDbInstance()
   process.exit(0)
 })

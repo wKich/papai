@@ -21,8 +21,22 @@ export const getDrizzleDb = (): ReturnType<typeof drizzle<typeof schema>> => {
 
 export const closeDrizzleDb = (): void => {
   if (dbInstance !== undefined) {
-    // Note: bun:sqlite Database doesn't have a close method that's easily accessible
-    // The existing closeDb handles this
     dbInstance = undefined
   }
+}
+
+/**
+ * Reset the Drizzle DB instance. Useful for testing.
+ * @internal
+ */
+export const _resetDrizzleDb = (): void => {
+  dbInstance = undefined
+}
+
+/**
+ * Set a custom Drizzle DB instance. Useful for testing with in-memory DB.
+ * @internal
+ */
+export const _setDrizzleDb = (db: ReturnType<typeof drizzle<typeof schema>>): void => {
+  dbInstance = db
 }
