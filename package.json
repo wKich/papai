@@ -18,8 +18,10 @@
     "test": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/*.test.ts",
     "test:watch": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/*.test.ts --watch",
     "test:coverage": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/*.test.ts --coverage",
-    "test:e2e": "bun test --preload ./tests/e2e/bun-test-setup.ts tests/e2e/e2e.test.ts",
-    "test:e2e:watch": "bun test --preload ./tests/e2e/bun-test-setup.ts tests/e2e/e2e.test.ts --watch",
+    "test:e2e": "bun test --preload ./tests/e2e/bun-test-setup.ts --path-ignore-patterns '' tests/e2e/e2e.test.ts",
+    "test:e2e:watch": "bun test --preload ./tests/e2e/bun-test-setup.ts --path-ignore-patterns '' tests/e2e/e2e.test.ts --watch",
+    "check": "bun run --parallel lint typecheck format:check knip test security",
+    "fix": "bun run lint:fix && bun run format",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md"

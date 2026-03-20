@@ -240,13 +240,19 @@ After starting, configure credentials via the bot:
 
 ## Development
 
+All scripts can be run with `bun <script>` (no `run` keyword needed):
+
 ```bash
-bun run lint      # lint with oxlint
-bun run format    # format with oxfmt
-bun run test      # run tests with bun
-bun run knip      # check for unused dependencies/exports
-bun run typecheck # TypeScript type checking
-bun run security  # run Semgrep security scan
+bun lint          # lint with oxlint
+bun lint:fix      # lint with auto-fix
+bun format        # format with oxfmt
+bun format:check  # check formatting without writing
+bun knip          # check for unused dependencies/exports
+bun typecheck     # TypeScript type checking
+bun security      # run Semgrep security scan locally
+bun security:ci   # run security scan with JSON/SARIF output for CI
+bun check         # run all checks in parallel (lint, typecheck, format:check, knip, test, security)
+bun fix           # auto-fix lint and format issues
 ```
 
 No build step — Bun runs TypeScript directly.
@@ -257,15 +263,36 @@ Tests are organized in the `tests/` directory, mirroring the `src/` structure:
 
 ```
 tests/
-├── *.test.ts              # Unit tests (run with bun run test)
+├── *.test.ts              # Unit tests
 ├── providers/             # Tests for src/providers/*
 │   ├── kaneo/
 │   └── youtrack/
 ├── tools/                 # Tests for src/tools/*
-└── e2e/                   # E2E tests (run with bun run test:e2e)
+└── e2e/                   # E2E tests (require Docker)
 ```
 
-Run tests with `bun test` or `bun run test`.
+### Running Tests
+
+**Unit tests** (excludes E2E tests):
+
+```bash
+bun test           # or: bun run test
+```
+
+**E2E tests** (requires Docker):
+
+```bash
+bun test:e2e       # or: bun run test:e2e
+```
+
+The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude E2E tests from the default `bun test` command. E2E tests require Docker to spin up a Kaneo instance and therefore must be run separately via `bun test:e2e`.
+
+### Test Configuration
+
+Tests use `bunfig.toml` for configuration:
+
+- `pathIgnorePatterns` excludes `tests/e2e/**` from default test discovery
+- E2E tests override this with `--path-ignore-patterns ''` to run the E2E suite
 
 ## Releasing
 

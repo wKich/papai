@@ -8,14 +8,43 @@ papai is a chat bot that manages tasks via LLM tool-calling. A user sends natura
 
 ## Commands
 
-- `bun run start` — run the bot (`bun run src/index.ts`)
-- `bun run lint` — lint with oxlint
-- `bun run format` — format with oxfmt
-- `bun run knip` — check for unused dependencies/exports
-- `bun run typecheck` — TypeScript type checking
+All scripts can be run with `bun <script>` (no `run` keyword needed):
+
+- `bun start` — run the bot
+- `bun lint` — lint with oxlint
+- `bun lint:fix` — lint with auto-fix
+- `bun format` — format with oxfmt
+- `bun format:check` — check formatting without writing
+- `bun knip` — check for unused dependencies/exports
+- `bun typecheck` — TypeScript type checking
+- `bun security` — run Semgrep security scan locally
+- `bun security:ci` — run security scan with JSON/SARIF output for CI
+- `bun test` — run unit tests (excludes E2E)
+- `bun test:watch` — run unit tests in watch mode
+- `bun test:coverage` — run unit tests with coverage
+- `bun test:e2e` — run E2E tests (requires Docker)
+- `bun test:e2e:watch` — run E2E tests in watch mode
+- `bun check` — run all checks in parallel (lint, typecheck, format:check, knip, test, security)
+- `bun fix` — auto-fix lint and format issues
 - `bun install` — install dependencies
 
 No build step; Bun runs TypeScript directly.
+
+## Testing
+
+**Unit tests** (excludes E2E tests):
+
+```bash
+bun test           # or: bun run test
+```
+
+**E2E tests** (requires Docker):
+
+```bash
+bun test:e2e       # or: bun run test:e2e
+```
+
+The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude E2E tests from the default `bun test` command. E2E tests require Docker to spin up a Kaneo instance and must be run separately via `bun test:e2e`.
 
 ## Security
 
