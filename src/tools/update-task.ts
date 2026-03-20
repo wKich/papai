@@ -9,10 +9,9 @@ const log = logger.child({ scope: 'tool:update-task' })
 
 export function makeUpdateTaskTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description:
-      "Update an existing Kaneo task's status, priority, assignee, due date, title, description, or project.",
+    description: "Update an existing task's status, priority, assignee, due date, title, description, or project.",
     inputSchema: z.object({
-      taskId: z.string().describe('The Kaneo task ID'),
+      taskId: z.string().describe('The task ID'),
       title: z.string().optional().describe('New task title'),
       description: z.string().optional().describe('New task description'),
       status: z

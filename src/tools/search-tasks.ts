@@ -9,7 +9,7 @@ const log = logger.child({ scope: 'tool:search-tasks' })
 
 export function makeSearchTasksTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Search for tasks in Kaneo by keyword. Use this when the user asks about existing tasks.',
+    description: 'Search for tasks by keyword. Use this when the user asks about existing tasks.',
     inputSchema: z.object({
       query: z.string().describe('Search keyword or phrase'),
       projectId: z.string().optional().describe('Filter by project ID'),

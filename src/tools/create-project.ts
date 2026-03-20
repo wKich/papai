@@ -9,7 +9,7 @@ const log = logger.child({ scope: 'tool:create-project' })
 
 export function makeCreateProjectTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Create a new project in Kaneo.',
+    description: 'Create a new project in the task tracker.',
     inputSchema: z.object({
       name: z.string().describe('Project name'),
       description: z.string().optional().describe('Project description'),

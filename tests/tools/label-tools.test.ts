@@ -188,7 +188,7 @@ describe('Label Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeUpdateLabelTool(provider)
-      expect(tool.description).toContain('Update an existing Kaneo label')
+      expect(tool.description).toContain('Update an existing label')
     })
 
     test('updates label name', async () => {
@@ -280,7 +280,7 @@ describe('Label Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeRemoveLabelTool(provider)
-      expect(tool.description).toContain('Remove (delete) a Kaneo label')
+      expect(tool.description).toContain('Remove (delete) a label')
     })
 
     test('removes label successfully with high confidence', async () => {

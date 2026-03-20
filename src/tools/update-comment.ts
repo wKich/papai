@@ -9,10 +9,10 @@ const log = logger.child({ scope: 'tool:update-comment' })
 
 export function makeUpdateCommentTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Update an existing comment on a Kaneo task.',
+    description: 'Update an existing comment on a task.',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID the comment belongs to'),
-      activityId: z.string().describe('Kaneo activity/comment ID'),
+      taskId: z.string().describe('Task ID the comment belongs to'),
+      activityId: z.string().describe('Activity/comment ID'),
       comment: z.string().describe('New comment text'),
     }),
     execute: async ({ taskId, activityId, comment }) => {

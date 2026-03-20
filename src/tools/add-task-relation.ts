@@ -9,10 +9,10 @@ const log = logger.child({ scope: 'tool:add-task-relation' })
 
 export function makeAddTaskRelationTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Create a relation between two Kaneo tasks (stored as frontmatter in the task description).',
+    description: 'Create a directed relation between two tasks (e.g. one blocks another, or marks a duplicate).',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID'),
-      relatedTaskId: z.string().describe('Kaneo task ID of the related task'),
+      taskId: z.string().describe('Task ID'),
+      relatedTaskId: z.string().describe('Task ID of the related task'),
       type: z
         .enum(['blocks', 'duplicate', 'related', 'parent'])
         .describe(

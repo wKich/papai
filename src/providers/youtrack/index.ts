@@ -33,7 +33,7 @@ import {
   searchYouTrackTasks,
   updateYouTrackTask,
 } from './operations/tasks.js'
-import { addYouTrackRelation, removeYouTrackRelation } from './relations.js'
+import { addYouTrackRelation, removeYouTrackRelation, updateYouTrackRelation } from './relations.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
@@ -159,6 +159,14 @@ export class YouTrackProvider implements TaskProvider {
 
   removeRelation(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }> {
     return removeYouTrackRelation(this.config, taskId, relatedTaskId)
+  }
+
+  updateRelation(
+    taskId: string,
+    relatedTaskId: string,
+    type: import('../types.js').RelationType,
+  ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
+    return updateYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }
 
   buildTaskUrl(taskId: string): string {

@@ -9,10 +9,10 @@ const log = logger.child({ scope: 'tool:update-project' })
 
 export function makeUpdateProjectTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Update an existing Kaneo project.',
+    description: 'Update an existing project.',
     inputSchema: z
       .object({
-        projectId: z.string().describe('Kaneo project ID'),
+        projectId: z.string().describe('Project ID'),
         name: z.string().optional().describe('New project name'),
         description: z.string().optional().describe('New project description'),
       })

@@ -25,7 +25,7 @@ describe('Task Label Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeAddTaskLabelTool(provider)
-      expect(tool.description).toContain('Add a label to a Kaneo task')
+      expect(tool.description).toContain('Add a label to a task')
     })
 
     test('adds label to task', async () => {
@@ -112,7 +112,7 @@ describe('Task Label Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeRemoveTaskLabelTool(provider)
-      expect(tool.description).toContain('Remove a label from a Kaneo task')
+      expect(tool.description).toContain('Remove a label from a task')
     })
 
     test('removes label from task', async () => {

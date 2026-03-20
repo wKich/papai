@@ -10,9 +10,9 @@ const log = logger.child({ scope: 'tool:archive-task' })
 
 export function makeArchiveTaskTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Archive a Kaneo task by adding the "archived" label. Use this when the user wants to archive a task.',
+    description: 'Archive a task. Use this to mark completed or stale tasks as archived.',
     inputSchema: z.object({
-      taskId: z.string().describe('The Kaneo task ID to archive'),
+      taskId: z.string().describe('The task ID to archive'),
       label: z
         .string()
         .optional()

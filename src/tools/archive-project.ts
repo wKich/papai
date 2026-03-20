@@ -10,9 +10,9 @@ const log = logger.child({ scope: 'tool:archive-project' })
 
 export function makeArchiveProjectTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Archive (delete) a Kaneo project.',
+    description: 'Archive (delete) a project.',
     inputSchema: z.object({
-      projectId: z.string().describe('Kaneo project ID'),
+      projectId: z.string().describe('Project ID'),
       label: z
         .string()
         .optional()

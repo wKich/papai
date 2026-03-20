@@ -9,10 +9,10 @@ const log = logger.child({ scope: 'tool:update-task-relation' })
 
 export function makeUpdateTaskRelationTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Update the type of an existing relation between two Kaneo tasks.',
+    description: 'Update the type of an existing relation between two tasks.',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID'),
-      relatedTaskId: z.string().describe('Kaneo task ID of the related task'),
+      taskId: z.string().describe('Task ID'),
+      relatedTaskId: z.string().describe('Task ID of the related task'),
       type: z
         .enum(['blocks', 'duplicate', 'related', 'parent'])
         .describe(

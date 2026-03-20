@@ -146,7 +146,7 @@ describe('Task Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeUpdateTaskTool(provider)
-      expect(tool.description).toContain("Update an existing Kaneo task's")
+      expect(tool.description).toContain("Update an existing task's status")
     })
 
     test('updates task with single field', async () => {
@@ -238,7 +238,7 @@ describe('Task Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeGetTaskTool(provider)
-      expect(tool.description).toContain('Fetch full details')
+      expect(tool.description).toContain('Fetch complete details')
     })
 
     test('fetches task with details', async () => {
@@ -445,7 +445,7 @@ describe('Task Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeArchiveTaskTool(provider)
-      expect(tool.description).toContain('Archive a Kaneo task')
+      expect(tool.description).toContain('Archive a task')
     })
 
     test('archives task successfully with high confidence', async () => {

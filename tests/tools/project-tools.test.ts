@@ -186,7 +186,7 @@ describe('Project Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeUpdateProjectTool(provider)
-      expect(tool.description).toContain('Update an existing Kaneo project')
+      expect(tool.description).toContain('Update an existing project')
     })
 
     test('updates project name', async () => {
@@ -280,7 +280,7 @@ describe('Project Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeArchiveProjectTool(provider)
-      expect(tool.description).toContain('Archive (delete) a Kaneo project')
+      expect(tool.description).toContain('Archive (delete) a project')
     })
 
     test('archives project successfully with high confidence', async () => {

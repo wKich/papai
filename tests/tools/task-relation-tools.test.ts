@@ -39,7 +39,7 @@ describe('Task Relation Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeAddTaskRelationTool(provider)
-      expect(tool.description).toContain('Create a relation between two Kaneo tasks')
+      expect(tool.description).toContain('Create a directed relation between two tasks')
     })
 
     test('adds blocks relation', async () => {
@@ -274,7 +274,7 @@ describe('Task Relation Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeRemoveTaskRelationTool(provider)
-      expect(tool.description).toContain('Remove a relation between two Kaneo tasks')
+      expect(tool.description).toContain('Remove a relation between two tasks')
     })
 
     test('removes relation successfully', async () => {

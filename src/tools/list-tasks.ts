@@ -9,9 +9,9 @@ const log = logger.child({ scope: 'tool:list-tasks' })
 
 export function makeListTasksTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'List all tasks in a Kaneo project. Use this to see all tasks in a specific project.',
+    description: 'List all tasks in a project. Use this to see all tasks in a specific project.',
     inputSchema: z.object({
-      projectId: z.string().describe('Kaneo project ID to list tasks from'),
+      projectId: z.string().describe('Project ID to list tasks from'),
     }),
     execute: async ({ projectId }) => {
       try {

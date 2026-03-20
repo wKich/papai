@@ -9,9 +9,9 @@ const log = logger.child({ scope: 'tool:add-comment' })
 
 export function makeAddCommentTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Add a comment to a Kaneo task.',
+    description: 'Add a comment to a task.',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID'),
+      taskId: z.string().describe('Task ID'),
       comment: z.string().describe('Comment text'),
     }),
     execute: async ({ taskId, comment }) => {

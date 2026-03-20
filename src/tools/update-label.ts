@@ -9,10 +9,10 @@ const log = logger.child({ scope: 'tool:update-label' })
 
 export function makeUpdateLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Update an existing Kaneo label.',
+    description: 'Update an existing label.',
     inputSchema: z
       .object({
-        labelId: z.string().describe('Kaneo label ID'),
+        labelId: z.string().describe('Label ID'),
         name: z.string().optional().describe('New label name'),
         color: z.string().optional().describe('New label color (hex)'),
       })

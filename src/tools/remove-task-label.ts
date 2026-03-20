@@ -9,9 +9,9 @@ const log = logger.child({ scope: 'tool:remove-task-label' })
 
 export function makeRemoveTaskLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Remove a label from a Kaneo task.',
+    description: 'Remove a label from a task.',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID'),
+      taskId: z.string().describe('Task ID'),
       labelId: z.string().describe('Label ID to remove'),
     }),
     execute: async ({ taskId, labelId }) => {

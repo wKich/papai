@@ -9,8 +9,9 @@ const log = logger.child({ scope: 'tool:get-task' })
 
 export function makeGetTaskTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Fetch full details of a single Kaneo task including relations.',
-    inputSchema: z.object({ taskId: z.string().describe('Kaneo task ID') }),
+    description:
+      'Fetch complete details of a single task including description, status, priority, assignee, due date, and relations. For a full picture including comments, also call get_comments with the same task ID.',
+    inputSchema: z.object({ taskId: z.string().describe('Task ID') }),
     execute: async ({ taskId }) => {
       try {
         const task = await provider.getTask(taskId)

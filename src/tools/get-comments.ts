@@ -9,8 +9,8 @@ const log = logger.child({ scope: 'tool:get-comments' })
 
 export function makeGetCommentsTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Get all comments on a Kaneo task.',
-    inputSchema: z.object({ taskId: z.string().describe('Kaneo task ID') }),
+    description: 'Get all comments on a task.',
+    inputSchema: z.object({ taskId: z.string().describe('Task ID') }),
     execute: async ({ taskId }) => {
       try {
         return await provider.getComments!(taskId)

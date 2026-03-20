@@ -9,9 +9,9 @@ const log = logger.child({ scope: 'tool:add-task-label' })
 
 export function makeAddTaskLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Add a label to a Kaneo task. Use list_labels first to get available label IDs.',
+    description: 'Add a label to a task. Use list_labels first to get available label IDs.',
     inputSchema: z.object({
-      taskId: z.string().describe('Kaneo task ID'),
+      taskId: z.string().describe('Task ID'),
       labelId: z.string().describe('Label ID to add'),
     }),
     execute: async ({ taskId, labelId }) => {

@@ -10,9 +10,9 @@ const log = logger.child({ scope: 'tool:remove-label' })
 
 export function makeRemoveLabelTool(provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: 'Remove (delete) a Kaneo label.',
+    description: 'Remove (delete) a label.',
     inputSchema: z.object({
-      labelId: z.string().describe('Kaneo label ID to remove'),
+      labelId: z.string().describe('Label ID to remove'),
       label: z.string().optional().describe('Human-readable label name for the confirmation message (e.g. "urgent")'),
       confidence: confidenceField,
     }),

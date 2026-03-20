@@ -16,6 +16,24 @@ const IssueLinksSchema = z.object({
 
 const log = logger.child({ scope: 'provider:youtrack:relations' })
 
+export async function updateYouTrackRelation(
+  config: YouTrackConfig,
+  taskId: string,
+  relatedTaskId: string,
+  type: RelationType,
+): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
+  log.debug({ taskId, relatedTaskId, type }, 'updateRelation')
+
+  // First remove the existing relation
+  await removeYouTrackRelation(config, taskId, relatedTaskId)
+
+  // Then add the new relation with the updated type
+  const result = await addYouTrackRelation(config, taskId, relatedTaskId, type)
+
+  log.info({ taskId, relatedTaskId, type }, 'Relation updated')
+  return result
+}
+
 export async function addYouTrackRelation(
   config: YouTrackConfig,
   taskId: string,

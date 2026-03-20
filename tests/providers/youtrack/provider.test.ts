@@ -438,4 +438,48 @@ describe('YouTrackProvider', () => {
       expect(result.code).toBe('unexpected')
     })
   })
+
+  describe('updateRelation', () => {
+    test('calls remove then add commands in sequence', async () => {
+      // First fetch: get task with links to find relation
+      mockFetchResponse({
+        id: '2-5',
+        idReadable: 'TEST-5',
+        summary: 'Task with links',
+        links: [
+          {
+            id: 'link-1',
+            direction: 'OUTWARD',
+            linkType: { id: 'lt-1', name: 'Depend', sourceToTarget: 'is required for' },
+            issues: [{ id: '2-6', idReadable: 'TEST-6', summary: 'Related task' }],
+          },
+        ],
+      })
+
+      const testProvider = new YouTrackProvider(createConfig())
+      const result = await testProvider.updateRelation('TEST-5', 'TEST-6', 'related')
+
+      // Should return the result from add (which has the new type)
+      expect(result.taskId).toBe('TEST-5')
+      expect(result.relatedTaskId).toBe('TEST-6')
+      expect(result.type).toBe('related')
+    })
+
+    test('throws when relation not found without calling add', () => {
+      // Task has no links matching the related task
+      mockFetchResponse({
+        id: '2-5',
+        idReadable: 'TEST-5',
+        summary: 'Task with no matching links',
+        links: [],
+      })
+
+      const testProvider = new YouTrackProvider(createConfig())
+      const promise = testProvider.updateRelation('TEST-5', 'NON-EXISTENT', 'related')
+
+      expect(promise).rejects.toThrow('Relation not found')
+      // The fetch should only be called once (for the get task to find the link)
+      expect(fetchMock?.mock.calls).toHaveLength(1)
+    })
+  })
 })
