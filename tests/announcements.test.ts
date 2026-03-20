@@ -4,7 +4,7 @@ import { mock, describe, expect, test, beforeEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import packageJson from '../package.json' with { type: 'json' }
-import type { ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 
 // Mock logger to avoid issues with runMigrations
 void mock.module('../src/logger.js', () => ({
@@ -70,7 +70,10 @@ let sendMessageImpl = (userId: string, text: string): Promise<void> => {
 
 const mockChat: ChatProvider = {
   name: 'mock',
-  registerCommand: (_name: string, _handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
+  registerCommand: (
+    _name: string,
+    _handler: (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>,
+  ): void => {},
   onMessage: (_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
   sendMessage: (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
   start: (): Promise<void> => Promise.resolve(),

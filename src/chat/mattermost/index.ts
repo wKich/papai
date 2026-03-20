@@ -1,7 +1,14 @@
 import { z } from 'zod'
 
 import { logger } from '../../logger.js'
-import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../types.js'
+import type {
+  AuthorizationResult,
+  ChatProvider,
+  CommandHandler,
+  ContextType,
+  IncomingMessage,
+  ReplyFn,
+} from '../types.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
 
@@ -14,10 +21,13 @@ const MattermostPostSchema = z.object({
   user_id: z.string(),
   channel_id: z.string(),
   message: z.string(),
+  user_name: z.string().optional(),
 })
 
-const UserMeSchema = z.object({ id: z.string() })
+const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })
 const ChannelSchema = z.object({ id: z.string() })
+const ChannelInfoSchema = z.object({ type: z.string() })
+const ChannelMemberSchema = z.object({ roles: z.string() })
 const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string() })) })
 
 type MattermostWsEvent = z.infer<typeof MattermostWsEventSchema>
@@ -30,6 +40,7 @@ export class MattermostChatProvider implements ChatProvider {
   private messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null = null
   private ws: WebSocket | null = null
   private botUserId: string | null = null
+  private botUsername: string | null = null
   private wsSeq = 1
 
   constructor() {
@@ -60,8 +71,10 @@ export class MattermostChatProvider implements ChatProvider {
 
   async start(): Promise<void> {
     const data = await this.apiFetch('GET', '/api/v4/users/me', undefined)
-    this.botUserId = UserMeSchema.parse(data).id
-    log.info({ botUserId: this.botUserId }, 'Mattermost bot started')
+    const user = UserMeSchema.parse(data)
+    this.botUserId = user.id
+    this.botUsername = user.username ?? null
+    log.info({ botUserId: this.botUserId, botUsername: this.botUsername }, 'Mattermost bot started')
     this.connectWebSocket()
   }
 
@@ -119,24 +132,78 @@ export class MattermostChatProvider implements ChatProvider {
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
     const postJson = data['post']
     if (typeof postJson !== 'string') return
+
     const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
     if (!postResult.success) return
     const post = postResult.data
+
     if (post.user_id === this.botUserId) return
+
+    const channelInfo = await this.fetchChannelInfo(post.channel_id)
+    const isGroup = channelInfo.type !== 'D'
+    const contextType: ContextType = isGroup ? 'group' : 'dm'
+
+    const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
+    const isMentioned = this.isBotMentioned(post.message)
+
     const reply = this.buildReplyFn(post.channel_id)
     const command = this.matchCommand(post.message)
+
+    const msg: IncomingMessage = {
+      user: {
+        id: post.user_id,
+        username: post.user_name ?? null,
+        isAdmin,
+      },
+      contextId: post.channel_id,
+      contextType,
+      isMentioned,
+      text: post.message,
+      commandMatch: command?.match,
+    }
+
     if (command !== null) {
-      const msg: IncomingMessage = {
-        user: { id: post.user_id, username: null },
-        text: post.message,
-        commandMatch: command.match,
+      const auth: AuthorizationResult = {
+        allowed: true,
+        isBotAdmin: isAdmin,
+        isGroupAdmin: isAdmin,
+        storageContextId: post.channel_id,
       }
-      await command.handler(msg, reply)
+      await command.handler(msg, reply, auth)
       return
     }
+
     if (this.messageHandler !== null) {
-      const msg: IncomingMessage = { user: { id: post.user_id, username: null }, text: post.message }
       await this.messageHandler(msg, reply)
+    }
+  }
+
+  private isBotMentioned(message: string): boolean {
+    if (this.botUsername === null) return false
+    return message.includes(`@${this.botUsername}`)
+  }
+
+  private async fetchChannelInfo(channelId: string): Promise<{ type: string }> {
+    const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}`, undefined)
+    const parsed = ChannelInfoSchema.safeParse(data)
+    if (!parsed.success) {
+      log.warn({ channelId, error: parsed.error }, 'Failed to parse channel info')
+      return { type: '' }
+    }
+    return parsed.data
+  }
+
+  private async checkChannelAdmin(channelId: string, userId: string): Promise<boolean> {
+    try {
+      const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}/members/${userId}`, undefined)
+      const parsed = ChannelMemberSchema.safeParse(data)
+      if (!parsed.success) {
+        log.warn({ channelId, userId, error: parsed.error }, 'Failed to parse channel member')
+        return false
+      }
+      return parsed.data.roles.includes('channel_admin')
+    } catch {
+      return false
     }
   }
 

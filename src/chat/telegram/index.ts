@@ -1,7 +1,8 @@
 import { Bot, InputFile, type Context } from 'grammy'
+import type { MessageEntity } from '@grammyjs/types/message.js'
 
 import { logger } from '../../logger.js'
-import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../types.js'
+import type { AuthorizationResult, ChatProvider, CommandHandler, ContextType, IncomingMessage, ReplyFn } from '../types.js'
 import { formatLlmOutput } from './format.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
@@ -9,6 +10,7 @@ const log = logger.child({ scope: 'chat:telegram' })
 export class TelegramChatProvider implements ChatProvider {
   readonly name = 'telegram'
   private readonly bot: Bot
+  private botUsername: string | null = null
 
   constructor() {
     const token = process.env['TELEGRAM_BOT_TOKEN']
@@ -20,17 +22,25 @@ export class TelegramChatProvider implements ChatProvider {
 
   registerCommand(name: string, handler: CommandHandler): void {
     this.bot.command(name, async (ctx) => {
-      const msg = this.extractMessage(ctx)
+      const isAdmin = await this.checkAdminStatus(ctx)
+      const msg = this.extractMessage(ctx, isAdmin)
       if (msg === null) return
       msg.commandMatch = typeof ctx.match === 'string' ? ctx.match : ''
       const reply = this.buildReplyFn(ctx)
-      await handler(msg, reply)
+      const auth: AuthorizationResult = {
+        allowed: true,
+        isBotAdmin: isAdmin,
+        isGroupAdmin: isAdmin,
+        storageContextId: msg.contextId,
+      }
+      await handler(msg, reply, auth)
     })
   }
 
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void {
     this.bot.on('message:text', async (ctx) => {
-      const msg = this.extractMessage(ctx)
+      const isAdmin = await this.checkAdminStatus(ctx)
+      const msg = this.extractMessage(ctx, isAdmin)
       if (msg === null) return
       const reply = this.buildReplyFn(ctx)
       await this.withTypingIndicator(ctx, () => handler(msg, reply))
@@ -46,8 +56,10 @@ export class TelegramChatProvider implements ChatProvider {
 
   async start(): Promise<void> {
     await this.bot.start({
-      onStart: () => {
-        log.info('Telegram bot is running')
+      onStart: async () => {
+        const me = await this.bot.api.getMe()
+        this.botUsername = me.username ?? null
+        log.info({ botUsername: this.botUsername }, 'Telegram bot is running')
       },
     })
   }
@@ -76,15 +88,58 @@ export class TelegramChatProvider implements ChatProvider {
     log.info({ adminUserId }, 'Telegram command menu registered')
   }
 
-  private extractMessage(ctx: Context): IncomingMessage | null {
+  private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
     const id = ctx.from?.id
     if (id === undefined) return null
+
+    const chatType = ctx.chat?.type
+    const isGroup = chatType === 'group' || chatType === 'supergroup' || chatType === 'channel'
+    const contextId = String(ctx.chat?.id ?? id)
+    const contextType: ContextType = isGroup ? 'group' : 'dm'
+
+    const text = ctx.message?.text ?? ''
+    const isMentioned = this.isBotMentioned(text, ctx.message?.entities)
+
     return {
       user: {
         id: String(id),
         username: ctx.from?.username ?? null,
+        isAdmin,
       },
-      text: ctx.message?.text ?? '',
+      contextId,
+      contextType,
+      isMentioned,
+      text,
+    }
+  }
+
+  private isBotMentioned(text: string, entities?: MessageEntity[]): boolean {
+    if (this.botUsername === null) return false
+    if (text.includes(`@${this.botUsername}`)) return true
+
+    if (entities !== undefined) {
+      for (const entity of entities) {
+        if (entity.type === 'mention') {
+          const mentionText = text.slice(entity.offset, entity.offset + entity.length)
+          if (mentionText === `@${this.botUsername}`) return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  private async checkAdminStatus(ctx: Context): Promise<boolean> {
+    if (ctx.chat?.type === 'private') return true
+    if (ctx.chat?.id === undefined) return false
+
+    try {
+      const admins = await this.bot.api.getChatAdministrators(ctx.chat.id)
+      const userId = ctx.from?.id
+      if (userId === undefined) return false
+      return admins.some((admin) => admin.user.id === userId)
+    } catch {
+      return false
     }
   }
 
