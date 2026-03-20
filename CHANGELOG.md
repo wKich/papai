@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-03-20
+
+### Added
+
+- Add ChatProvider interface and registry
+- Migrate user ID columns from integer to text
+- Decouple from Telegram via ChatProvider abstraction
+- Multi-chat provider support, schema cleanup, and admin auto-seed
+- Add drizzle database client wrapper
+- **error-handling:** Improve error classification and user feedback
+- Implement Phase 02 enhanced tool capabilities
+- **phase-03:** Implement persistence and context improvements
+- Add group_members table schema
+- Update chat types for group support
+- Add groups module with CRUD operations
+- Update Mattermost provider for group support
+- Add group management commands
+- Add command context restrictions
+- Propagate storage context through all layers
+- Update help command for group context
+- Complete group chat support implementation
+
+### Changed
+
+- Extract LLM orchestration module from bot.ts
+- Accept LanguageModel instance in trimWithMemoryModel
+- Relocate schemas into provider directories
+- Extract shared Kaneo provisioning service
+- Move youtrack schema tests to mirror src/ structure
+- **tests:** Update tests to use Drizzle ORM
+- Complete Drizzle ORM migration
+
+### Documentation
+
+- Add multi-chat provider design (Telegram + Mattermost)
+- Add multi-chat provider implementation plan
+- Add group chat documentation
+
+### Fixed
+
+- Use string literal instead of unsafe type assertion for mock model
+- Resolve all lint warnings
+
+### Miscellaneous
+
+- Remove implemented and outdated plan documents
+- Setup tdd poc hooks and roadmap phases user stories
+- Add drizzle config and schema definitions
+- Update gitignore for SQLite WAL files
+- Ignore SQLite WAL files in gitignore
+- Add bun check and bun fix scripts for parallel task execution
+
+### Testing
+
+- Add guardrails for e2e test execution
+- Fix test isolation issues
+- Complete group chat test suite
+
+### Deps
+
+- Add drizzle-orm and drizzle-kit
 ## [4.0.4] - 2026-03-19
 
 ### Fixed
