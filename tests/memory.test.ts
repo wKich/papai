@@ -1,85 +1,25 @@
+import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import type { LanguageModel } from 'ai'
+import { eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 
+import * as schema from '../src/db/schema.js'
 import { flushMicrotasks } from './test-helpers.js'
 
-// --- bun:sqlite mock (must come before importing memory.ts) ---
-const mockSummaryStore = new Map<string, string>()
-const mockFactsStore = new Map<string, Array<{ identifier: string; title: string; url: string; last_seen: string }>>()
-const runCalls: Array<{ sql: string; params?: unknown[] }> = []
+// --- Test database setup with Drizzle ---
+let testDb: ReturnType<typeof drizzle<typeof schema>>
+let testSqlite: Database
 
-class MockDatabase {
-  run(sql: string, params?: unknown[]): void {
-    runCalls.push({ sql, params })
-    if (sql.includes('INSERT OR REPLACE INTO memory_summary') && params !== undefined) {
-      mockSummaryStore.set(String(params[0]), String(params[1]))
-    }
-    if (sql.includes('DELETE FROM memory_summary') && params !== undefined) {
-      mockSummaryStore.delete(String(params[0]))
-    }
-    if (sql.includes('INSERT OR REPLACE INTO memory_facts') && params !== undefined) {
-      const userId = String(params[0])
-      const fact = {
-        identifier: String(params[1]),
-        title: String(params[2]),
-        url: String(params[3]),
-        last_seen: String(params[4]),
-      }
-      const existing = mockFactsStore.get(userId) ?? []
-      const filtered = existing.filter((f) => f.identifier !== fact.identifier)
-      filtered.push(fact)
-      mockFactsStore.set(userId, filtered)
-    }
-    if (sql.includes('DELETE FROM memory_facts') && sql.includes('NOT IN') && params !== undefined) {
-      const userId = String(params[0])
-      const cap = Number(params[2])
-      const facts = mockFactsStore.get(userId) ?? []
-      if (facts.length > cap) {
-        // Sort by last_seen DESC and keep only top 'cap' facts
-        const sorted = facts.sort((a, b) => b.last_seen.localeCompare(a.last_seen))
-        const toKeep = sorted.slice(0, cap)
-        mockFactsStore.set(userId, toKeep)
-      }
-    }
-    if (sql.includes('DELETE FROM memory_facts') && !sql.includes('NOT IN') && params !== undefined) {
-      mockFactsStore.delete(String(params[0]))
-    }
-  }
+// Mock getDrizzleDb to return our test database
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+}))
 
-  query(sql: string): {
-    get: (userId: string) => { summary: string } | null
-    all: (userId?: string) => unknown[]
-  } {
-    if (sql.includes('SELECT summary FROM memory_summary')) {
-      return {
-        get: (userId: string): { summary: string } | null => {
-          const s = mockSummaryStore.get(userId)
-          if (s === undefined) return null
-          return { summary: s }
-        },
-        all: (): unknown[] => [],
-      }
-    }
-    if (sql.includes('SELECT identifier, title')) {
-      return {
-        get: (): null => null,
-        all: (userId?: string): unknown[] => {
-          if (userId === undefined) return []
-          const facts = mockFactsStore.get(userId) ?? []
-          // Sort by last_seen DESC as real DB would
-          return facts.sort((a, b) => b.last_seen.localeCompare(a.last_seen))
-        },
-      }
-    }
-    return { get: (): null => null, all: (): unknown[] => [] }
-  }
-}
-
-const mockDb = new MockDatabase()
-
+// Mock db/index.js to return test sqlite instance for cache.ts
 void mock.module('../src/db/index.js', () => ({
-  getDb: (): MockDatabase => mockDb,
+  getDb: (): Database => testSqlite,
   DB_PATH: ':memory:',
   initDb: (): void => {},
 }))
@@ -91,9 +31,8 @@ let generateTextImpl = (): Promise<GenerateTextResult> =>
 
 void mock.module('ai', () => ({
   generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-  Output: { object: ({ schema }: { schema: unknown }): { schema: unknown } => ({ schema }) },
+  Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
 }))
-// --- end mocks ---
 
 import {
   buildMemoryContextMessage,
@@ -110,8 +49,16 @@ import { clearUserCache } from './utils/test-cache.js'
 
 describe('loadSummary', () => {
   beforeEach(() => {
-    mockSummaryStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create memory_summary table
+    testSqlite.run(`
+      CREATE TABLE memory_summary (
+        user_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
   })
 
   test('returns null when no row exists', () => {
@@ -119,55 +66,95 @@ describe('loadSummary', () => {
   })
 
   test('returns summary string when row exists', () => {
-    mockSummaryStore.set('1', 'Previous conversation summary')
+    testDb
+      .insert(schema.memorySummary)
+      .values({ userId: '1', summary: 'Previous conversation summary', updatedAt: new Date().toISOString() })
+      .run()
     expect(loadSummary('1')).toBe('Previous conversation summary')
   })
 })
 
 describe('saveSummary', () => {
   beforeEach(() => {
-    mockSummaryStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create memory_summary table
+    testSqlite.run(`
+      CREATE TABLE memory_summary (
+        user_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
   })
 
   test('persists summary', async () => {
     saveSummary('1', 'Test summary')
     await flushMicrotasks()
-    expect(mockSummaryStore.get('1')).toBe('Test summary')
+    const row = testDb.select().from(schema.memorySummary).where(eq(schema.memorySummary.userId, '1')).get()
+    expect(row?.summary).toBe('Test summary')
   })
 
   test('calls INSERT OR REPLACE', async () => {
     saveSummary('1', 'Test')
     await flushMicrotasks()
-    const call = runCalls.find((c) => c.sql.includes('INSERT OR REPLACE INTO memory_summary'))
-    expect(call).toBeDefined()
+    const row = testDb.select().from(schema.memorySummary).where(eq(schema.memorySummary.userId, '1')).get()
+    expect(row).toBeDefined()
+    expect(row!.userId).toBe('1')
   })
 })
 
 describe('clearSummary', () => {
   beforeEach(() => {
-    mockSummaryStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create memory_summary table
+    testSqlite.run(`
+      CREATE TABLE memory_summary (
+        user_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
   })
 
   test('removes summary', () => {
-    mockSummaryStore.set('1', 'Summary')
+    testDb
+      .insert(schema.memorySummary)
+      .values({ userId: '1', summary: 'Summary', updatedAt: new Date().toISOString() })
+      .run()
     clearSummary('1')
-    expect(mockSummaryStore.has('1')).toBe(false)
+    const row = testDb.select().from(schema.memorySummary).where(eq(schema.memorySummary.userId, '1')).get()
+    expect(row).toBeUndefined()
   })
 })
 
 describe('clearFacts', () => {
   beforeEach(() => {
-    mockFactsStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create memory_facts table
+    testSqlite.run(`
+      CREATE TABLE memory_facts (
+        user_id TEXT NOT NULL,
+        identifier TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL DEFAULT '',
+        last_seen TEXT NOT NULL,
+        PRIMARY KEY (user_id, identifier)
+      )
+    `)
   })
 
-  test('calls DELETE on memory_facts', () => {
+  test('clears facts from database', () => {
+    // Insert a fact first
+    testDb
+      .insert(schema.memoryFacts)
+      .values({ userId: '1', identifier: '#42', title: 'Test', url: '', lastSeen: new Date().toISOString() })
+      .run()
     clearFacts('1')
-    const call = runCalls.find((c) => c.sql.includes('DELETE FROM memory_facts') && !c.sql.includes('NOT IN'))
-    expect(call).toBeDefined()
-    expect(call!.params).toEqual(['1'])
+    const rows = testDb.select().from(schema.memoryFacts).where(eq(schema.memoryFacts.userId, '1')).all()
+    expect(rows).toHaveLength(0)
   })
 })
 
@@ -318,9 +305,27 @@ describe('extractFacts', () => {
 
 describe('upsertFact eviction', () => {
   beforeEach(async () => {
-    mockFactsStore.clear()
-    mockSummaryStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create memory_facts table
+    testSqlite.run(`
+      CREATE TABLE memory_facts (
+        user_id TEXT NOT NULL,
+        identifier TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL DEFAULT '',
+        last_seen TEXT NOT NULL,
+        PRIMARY KEY (user_id, identifier)
+      )
+    `)
+    // Create memory_summary table (for cache lookups)
+    testSqlite.run(`
+      CREATE TABLE memory_summary (
+        user_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
     clearUserCache('999')
     await flushMicrotasks()
   })

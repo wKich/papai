@@ -1,144 +1,105 @@
+import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-// --- Mock for db (must come before importing users.ts) ---
-const store = {
-  users: new Map<string, { platform_user_id: string; username: string | null; added_at: string; added_by: string }>(),
-}
+import { eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 
-class MockDatabase {
-  run(sql: string, params?: (string | number)[]): void {
-    if (sql.includes('INSERT INTO users') && params !== undefined) {
-      if (sql.includes('ON CONFLICT(platform_user_id) DO UPDATE')) {
-        store.users.set(String(params[0]), {
-          platform_user_id: String(params[0]),
-          username: String(params[1]),
-          added_at: new Date().toISOString(),
-          added_by: String(params[2]),
-        })
-      } else if (!store.users.has(String(params[0]))) {
-        store.users.set(String(params[0]), {
-          platform_user_id: String(params[0]),
-          username: null,
-          added_at: new Date().toISOString(),
-          added_by: String(params[1]),
-        })
-      }
-    }
-    if (sql.includes('DELETE FROM users') && params !== undefined) {
-      const identifier = String(params[0])
-      for (const [id, user] of store.users) {
-        if (user.username === identifier || user.platform_user_id === identifier) {
-          store.users.delete(id)
-          break
-        }
-      }
-    }
-    if (sql.includes('UPDATE users SET platform_user_id') && params !== undefined) {
-      const newId = String(params[0])
-      const username = String(params[1])
-      for (const [id, user] of store.users) {
-        if (user.username === username) {
-          store.users.delete(id)
-          store.users.set(newId, { ...user, platform_user_id: newId })
-          break
-        }
-      }
-    }
-  }
+import * as schema from '../src/db/schema.js'
 
-  query(sql: string): {
-    get: (...args: (string | number)[]) => Record<string, unknown> | null
-    all: () => Array<Record<string, unknown>>
-  } {
-    if (sql.includes('SELECT platform_user_id FROM users WHERE platform_user_id')) {
-      return {
-        get: (id: string | number): Record<string, unknown> | null => {
-          const user = store.users.get(String(id))
-          return user === undefined ? null : { platform_user_id: user.platform_user_id }
-        },
-        all: (): Array<Record<string, unknown>> => [],
-      }
-    }
-    if (sql.includes('SELECT platform_user_id FROM users WHERE username')) {
-      return {
-        get: (username: string | number): Record<string, unknown> | null => {
-          for (const user of store.users.values()) {
-            if (user.username === username) {
-              return { platform_user_id: user.platform_user_id }
-            }
-          }
-          return null
-        },
-        all: (): Array<Record<string, unknown>> => [],
-      }
-    }
-    if (sql.includes('SELECT platform_user_id, username, added_at, added_by FROM users')) {
-      return {
-        get: (): null => null,
-        all: (): Array<Record<string, unknown>> => Array.from(store.users.values()),
-      }
-    }
-    return { get: (): null => null, all: (): Array<Record<string, unknown>> => [] }
-  }
-}
+// --- Test database setup with Drizzle ---
+let testDb: ReturnType<typeof drizzle<typeof schema>>
+let testSqlite: Database
 
-const mockDb = new MockDatabase()
-
-void mock.module('../src/db/index.js', () => ({
-  getDb: (): MockDatabase => mockDb,
-  DB_PATH: ':memory:',
-  initDb: (): void => {},
+// Mock getDrizzleDb to return our test database
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
 }))
 
 import { addUser, removeUser, isAuthorized, resolveUserByUsername, listUsers } from '../src/users.js'
 
 describe('addUser', () => {
   beforeEach(() => {
-    store.users.clear()
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create tables using Drizzle's schema
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
   })
 
   test('adds a user by ID', () => {
     addUser('111', '999')
-    expect(store.users.has('111')).toBe(true)
-    expect(store.users.get('111')?.added_by).toBe('999')
-    expect(store.users.get('111')?.username).toBeNull()
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
+    expect(user).toBeDefined()
+    expect(user?.addedBy).toBe('999')
+    expect(user?.username).toBeNull()
   })
 
   test('adds a user with username', () => {
     addUser('111', '999', 'testuser')
-    expect(store.users.has('111')).toBe(true)
-    expect(store.users.get('111')?.username).toBe('testuser')
-    expect(store.users.get('111')?.added_by).toBe('999')
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
+    expect(user).toBeDefined()
+    expect(user?.username).toBe('testuser')
+    expect(user?.addedBy).toBe('999')
   })
 
   test('does not overwrite existing user when adding by ID', () => {
     addUser('111', '999')
     addUser('111', '888')
-    expect(store.users.get('111')?.added_by).toBe('999')
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
+    expect(user?.addedBy).toBe('999')
   })
 })
 
 describe('removeUser', () => {
   beforeEach(() => {
-    store.users.clear()
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
   })
 
   test('removes a user by ID', () => {
     addUser('111', '999')
     removeUser('111')
-    expect(store.users.has('111')).toBe(false)
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
+    expect(user).toBeUndefined()
   })
 
   test('removes a user by username', () => {
     addUser('111', '999', 'testuser')
     removeUser('testuser')
-    expect(store.users.has('111')).toBe(false)
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
+    expect(user).toBeUndefined()
   })
 })
 
 describe('isAuthorized', () => {
   beforeEach(() => {
-    store.users.clear()
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
   })
 
   test('returns true for authorized user', () => {
@@ -153,14 +114,26 @@ describe('isAuthorized', () => {
 
 describe('resolveUserByUsername', () => {
   beforeEach(() => {
-    store.users.clear()
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
   })
 
   test('resolves placeholder ID to real platform user ID', () => {
     addUser('placeholder-abc', '999', 'alice')
     expect(resolveUserByUsername('555', 'alice')).toBe(true)
-    expect(store.users.has('555')).toBe(true)
-    expect(store.users.has('placeholder-abc')).toBe(false)
+    const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '555')).get()
+    expect(user).toBeDefined()
+    const oldUser = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, 'placeholder-abc')).get()
+    expect(oldUser).toBeUndefined()
   })
 
   test('returns true when ID already matches', () => {
@@ -175,7 +148,17 @@ describe('resolveUserByUsername', () => {
 
 describe('listUsers', () => {
   beforeEach(() => {
-    store.users.clear()
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
   })
 
   test('returns all users', () => {

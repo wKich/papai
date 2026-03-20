@@ -1,45 +1,26 @@
+import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-// --- bun:sqlite mock (must come before importing history.ts) ---
-const mockStore = new Map<string, string>()
-const runCalls: Array<{ sql: string; params?: unknown[] }> = []
+import { eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 
-class MockDatabase {
-  run(sql: string, params?: unknown[]): void {
-    runCalls.push({ sql, params })
-    if (sql.includes('INSERT OR REPLACE INTO conversation_history') && params !== undefined) {
-      const userId = String(params[0])
-      const messages = String(params[1])
-      mockStore.set(userId, messages)
-    }
-    if (sql.includes('DELETE FROM conversation_history') && params !== undefined) {
-      const userId = String(params[0])
-      mockStore.delete(userId)
-    }
-  }
+import * as schema from '../src/db/schema.js'
 
-  query(sql: string): { get: (userId: string) => { messages: string } | null; all: () => unknown[] } {
-    if (sql.includes('SELECT messages FROM conversation_history')) {
-      return {
-        get: (userId: string): { messages: string } | null => {
-          const messages = mockStore.get(userId)
-          return messages === undefined ? null : { messages }
-        },
-        all: (): unknown[] => [],
-      }
-    }
-    return { get: (): null => null, all: (): unknown[] => [] }
-  }
-}
+// --- Test database setup with Drizzle ---
+let testDb: ReturnType<typeof drizzle<typeof schema>>
+let testSqlite: Database
 
-const mockDb = new MockDatabase()
+// Mock getDrizzleDb to return our test database
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+}))
 
+// Mock db/index.js to return test sqlite instance for cache.ts
 void mock.module('../src/db/index.js', () => ({
-  getDb: (): MockDatabase => mockDb,
+  getDb: (): Database => testSqlite,
   DB_PATH: ':memory:',
   initDb: (): void => {},
 }))
-// --- end mock ---
 
 import type { ModelMessage } from 'ai'
 
@@ -48,8 +29,15 @@ import { flushMicrotasks } from './test-helpers.js'
 
 describe('loadHistory', () => {
   beforeEach(() => {
-    mockStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create conversation_history table
+    testSqlite.run(`
+      CREATE TABLE conversation_history (
+        user_id TEXT PRIMARY KEY,
+        messages TEXT NOT NULL
+      )
+    `)
   })
 
   test('returns empty array when no row exists', () => {
@@ -62,7 +50,10 @@ describe('loadHistory', () => {
       { role: 'user', content: 'hello' },
       { role: 'assistant', content: 'hi there' },
     ]
-    mockStore.set('1', JSON.stringify(messages))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '1', messages: JSON.stringify(messages) })
+      .run()
 
     const result = loadHistory('1')
     expect(result).toHaveLength(2)
@@ -71,14 +62,17 @@ describe('loadHistory', () => {
   })
 
   test('returns empty array for corrupt JSON', () => {
-    mockStore.set('2', 'not-valid-json')
+    testDb.insert(schema.conversationHistory).values({ userId: '2', messages: 'not-valid-json' }).run()
 
     const result = loadHistory('2')
     expect(result).toEqual([])
   })
 
   test('returns empty array when messages lack role field', () => {
-    mockStore.set('3', JSON.stringify([{ content: 'no role' }]))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '3', messages: JSON.stringify([{ content: 'no role' }]) })
+      .run()
 
     const result = loadHistory('3')
     expect(result).toEqual([])
@@ -88,7 +82,10 @@ describe('loadHistory', () => {
     // modelMessageSchema uses Zod which strips unrecognised properties — unknown
     // keys like `toolCalls` (not part of AssistantModelMessage in SDK v6) are dropped.
     const messages = [{ role: 'assistant', content: 'hi', unknownField: 'value' }]
-    mockStore.set('4', JSON.stringify(messages))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '4', messages: JSON.stringify(messages) })
+      .run()
 
     const result = loadHistory('4')
     expect(result).toHaveLength(1)
@@ -121,7 +118,10 @@ describe('loadHistory', () => {
       },
       { role: 'assistant', content: 'You have no tasks.' },
     ]
-    mockStore.set('5', JSON.stringify(messages))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '5', messages: JSON.stringify(messages) })
+      .run()
 
     const result = loadHistory('5')
     expect(result).toHaveLength(4)
@@ -149,7 +149,10 @@ describe('loadHistory', () => {
 
   test('rejects messages where content is neither string nor array', () => {
     const messages = [{ role: 'user', content: 42 }]
-    mockStore.set('6', JSON.stringify(messages))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '6', messages: JSON.stringify(messages) })
+      .run()
 
     const result = loadHistory('6')
     expect(result).toEqual([])
@@ -158,8 +161,15 @@ describe('loadHistory', () => {
 
 describe('saveHistory', () => {
   beforeEach(() => {
-    mockStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create conversation_history table
+    testSqlite.run(`
+      CREATE TABLE conversation_history (
+        user_id TEXT PRIMARY KEY,
+        messages TEXT NOT NULL
+      )
+    `)
   })
 
   test('persists messages as JSON', async () => {
@@ -169,9 +179,13 @@ describe('saveHistory', () => {
     // Wait for background DB sync
     await flushMicrotasks()
 
-    const saved = mockStore.get('10')
-    expect(saved).toBeDefined()
-    expect(JSON.parse(saved!)).toEqual(messages)
+    const row = testDb
+      .select()
+      .from(schema.conversationHistory)
+      .where(eq(schema.conversationHistory.userId, '10'))
+      .get()
+    expect(row).toBeDefined()
+    expect(JSON.parse(row!.messages)).toEqual(messages)
   })
 
   test('calls INSERT OR REPLACE', async () => {
@@ -181,28 +195,50 @@ describe('saveHistory', () => {
     // Wait for background DB sync
     await flushMicrotasks()
 
-    const insertCall = runCalls.find((c) => c.sql.includes('INSERT OR REPLACE INTO conversation_history'))
-    expect(insertCall).toBeDefined()
+    const row = testDb
+      .select()
+      .from(schema.conversationHistory)
+      .where(eq(schema.conversationHistory.userId, '10'))
+      .get()
+    expect(row).toBeDefined()
+    expect(row!.userId).toBe('10')
   })
 })
 
 describe('clearHistory', () => {
   beforeEach(() => {
-    mockStore.clear()
-    runCalls.length = 0
+    testSqlite = new Database(':memory:')
+    testDb = drizzle(testSqlite, { schema })
+    // Create conversation_history table
+    testSqlite.run(`
+      CREATE TABLE conversation_history (
+        user_id TEXT PRIMARY KEY,
+        messages TEXT NOT NULL
+      )
+    `)
   })
 
   test('removes entry from store', () => {
-    mockStore.set('20', JSON.stringify([]))
+    testDb
+      .insert(schema.conversationHistory)
+      .values({ userId: '20', messages: JSON.stringify([]) })
+      .run()
     clearHistory('20')
-    expect(mockStore.has('20')).toBe(false)
+    const row = testDb
+      .select()
+      .from(schema.conversationHistory)
+      .where(eq(schema.conversationHistory.userId, '20'))
+      .get()
+    expect(row).toBeUndefined()
   })
 
   test('calls DELETE statement', () => {
     clearHistory('20')
-
-    const deleteCall = runCalls.find((c) => c.sql.includes('DELETE FROM conversation_history'))
-    expect(deleteCall).toBeDefined()
-    expect(deleteCall!.params).toEqual(['20'])
+    const row = testDb
+      .select()
+      .from(schema.conversationHistory)
+      .where(eq(schema.conversationHistory.userId, '20'))
+      .get()
+    expect(row).toBeUndefined()
   })
 })

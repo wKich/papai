@@ -1,8 +1,10 @@
 import { generateText, Output, type LanguageModel, type ModelMessage } from 'ai'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getCachedFacts, getCachedSummary, setCachedSummary, clearCachedFacts, upsertCachedFact } from './cache.js'
-import { getDb } from './db/index.js'
+import { getDrizzleDb } from './db/drizzle.js'
+import { memorySummary, memoryFacts } from './db/schema.js'
 import { logger } from './logger.js'
 import type { MemoryFact } from './types/memory.js'
 
@@ -24,7 +26,10 @@ export function saveSummary(userId: string, summary: string): void {
 export function clearSummary(userId: string): void {
   log.debug({ userId }, 'clearSummary called')
   setCachedSummary(userId, '')
-  getDb().run('DELETE FROM memory_summary WHERE user_id = ?', [userId])
+
+  const db = getDrizzleDb()
+  db.delete(memorySummary).where(eq(memorySummary.userId, userId)).run()
+
   log.info({ userId }, 'Summary cleared')
 }
 
@@ -44,7 +49,10 @@ export function upsertFact(userId: string, fact: Omit<MemoryFact, 'last_seen'>):
 export function clearFacts(userId: string): void {
   log.debug({ userId }, 'clearFacts called')
   clearCachedFacts(userId)
-  getDb().run('DELETE FROM memory_facts WHERE user_id = ?', [userId])
+
+  const db = getDrizzleDb()
+  db.delete(memoryFacts).where(eq(memoryFacts.userId, userId)).run()
+
   log.info({ userId }, 'Facts cleared')
 }
 

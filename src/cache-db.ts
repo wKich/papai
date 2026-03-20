@@ -1,4 +1,7 @@
-import { getDb } from './db/index.js'
+import { eq, and, sql } from 'drizzle-orm'
+
+import { getDrizzleDb } from './db/drizzle.js'
+import { conversationHistory, memorySummary, memoryFacts, userConfig, users } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'cache-db' })
@@ -6,10 +9,14 @@ const log = logger.child({ scope: 'cache-db' })
 export function syncHistoryToDb(userId: string, messages: unknown[]): void {
   queueMicrotask(() => {
     try {
-      getDb().run('INSERT OR REPLACE INTO conversation_history (user_id, messages) VALUES (?, ?)', [
-        userId,
-        JSON.stringify(messages),
-      ])
+      const db = getDrizzleDb()
+      db.insert(conversationHistory)
+        .values({ userId, messages: JSON.stringify(messages) })
+        .onConflictDoUpdate({
+          target: conversationHistory.userId,
+          set: { messages: JSON.stringify(messages) },
+        })
+        .run()
       log.debug({ userId, messageCount: messages.length }, 'History synced to DB')
     } catch (error) {
       log.error(
@@ -23,11 +30,14 @@ export function syncHistoryToDb(userId: string, messages: unknown[]): void {
 export function syncSummaryToDb(userId: string, summary: string): void {
   queueMicrotask(() => {
     try {
-      getDb().run('INSERT OR REPLACE INTO memory_summary (user_id, summary, updated_at) VALUES (?, ?, ?)', [
-        userId,
-        summary,
-        new Date().toISOString(),
-      ])
+      const db = getDrizzleDb()
+      db.insert(memorySummary)
+        .values({ userId, summary, updatedAt: new Date().toISOString() })
+        .onConflictDoUpdate({
+          target: memorySummary.userId,
+          set: { summary, updatedAt: new Date().toISOString() },
+        })
+        .run()
       log.debug({ userId, summaryLength: summary.length }, 'Summary synced to DB')
     } catch (error) {
       log.error(
@@ -45,25 +55,40 @@ export function syncFactToDb(
 ): void {
   queueMicrotask(() => {
     try {
-      const db = getDb()
-      db.run('BEGIN TRANSACTION')
-      try {
-        db.run(
-          'INSERT OR REPLACE INTO memory_facts (user_id, identifier, title, url, last_seen) VALUES (?, ?, ?, ?, ?)',
-          [userId, fact.identifier, fact.title, fact.url, now],
-        )
-        db.run(
-          `DELETE FROM memory_facts WHERE user_id = ? AND identifier NOT IN (
-            SELECT identifier FROM memory_facts WHERE user_id = ? ORDER BY last_seen DESC LIMIT ?
-          )`,
-          [userId, userId, 50],
-        )
-        db.run('COMMIT')
-        log.debug({ userId, identifier: fact.identifier }, 'Fact synced to DB')
-      } catch (error) {
-        db.run('ROLLBACK')
-        throw error
-      }
+      const db = getDrizzleDb()
+
+      db.transaction((tx) => {
+        // Insert or update the fact
+        tx.insert(memoryFacts)
+          .values({
+            userId,
+            identifier: fact.identifier,
+            title: fact.title,
+            url: fact.url,
+            lastSeen: now,
+          })
+          .onConflictDoUpdate({
+            target: [memoryFacts.userId, memoryFacts.identifier],
+            set: { lastSeen: now },
+          })
+          .run()
+
+        // Keep only 50 most recent facts per user
+        tx.delete(memoryFacts)
+          .where(
+            and(
+              eq(memoryFacts.userId, userId),
+              sql`${memoryFacts.identifier} NOT IN (
+                SELECT identifier FROM memory_facts 
+                WHERE user_id = ${userId} 
+                ORDER BY last_seen DESC LIMIT 50
+              )`,
+            ),
+          )
+          .run()
+      })
+
+      log.debug({ userId, identifier: fact.identifier }, 'Fact synced to DB')
     } catch (error) {
       log.error({ userId, error: error instanceof Error ? error.message : String(error) }, 'Failed to sync fact to DB')
     }
@@ -73,7 +98,14 @@ export function syncFactToDb(
 export function syncConfigToDb(userId: string, key: string, value: string): void {
   queueMicrotask(() => {
     try {
-      getDb().run('INSERT OR REPLACE INTO user_config (user_id, key, value) VALUES (?, ?, ?)', [userId, key, value])
+      const db = getDrizzleDb()
+      db.insert(userConfig)
+        .values({ userId, key, value })
+        .onConflictDoUpdate({
+          target: [userConfig.userId, userConfig.key],
+          set: { value },
+        })
+        .run()
       log.debug({ userId, key }, 'Config synced to DB')
     } catch (error) {
       log.error(
@@ -87,7 +119,8 @@ export function syncConfigToDb(userId: string, key: string, value: string): void
 export function syncWorkspaceToDb(userId: string, workspaceId: string): void {
   queueMicrotask(() => {
     try {
-      getDb().run('UPDATE users SET kaneo_workspace_id = ? WHERE platform_user_id = ?', [workspaceId, userId])
+      const db = getDrizzleDb()
+      db.update(users).set({ kaneoWorkspaceId: workspaceId }).where(eq(users.platformUserId, userId)).run()
       log.debug({ userId }, 'Workspace synced to DB')
     } catch (error) {
       log.error(

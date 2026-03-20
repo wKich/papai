@@ -1,7 +1,9 @@
 import { type ModelMessage } from 'ai'
+import { eq } from 'drizzle-orm'
 
 import { getCachedHistory, setCachedHistory, appendToCachedHistory } from './cache.js'
-import { getDb } from './db/index.js'
+import { getDrizzleDb } from './db/drizzle.js'
+import { conversationHistory } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'history' })
@@ -25,6 +27,9 @@ export function appendHistory(userId: string, messages: readonly ModelMessage[])
 export function clearHistory(userId: string): void {
   log.debug({ userId }, 'clearHistory called')
   setCachedHistory(userId, [])
-  getDb().run('DELETE FROM conversation_history WHERE user_id = ?', [userId])
+
+  const db = getDrizzleDb()
+  db.delete(conversationHistory).where(eq(conversationHistory.userId, userId)).run()
+
   log.info({ userId }, 'History cleared')
 }
