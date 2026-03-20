@@ -52,7 +52,7 @@ Create `stryker.config.json` at project root with:
 {
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/*.test.ts"
+    "command": "bun test tests/providers tests/tools tests/db tests/utils tests/commands tests/*.test.ts"
   },
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
@@ -90,6 +90,12 @@ Create `stryker.config.json` at project root with:
   "cleanTempDir": true
 }
 ```
+
+**Key Alignment Changes from Original Plan:**
+
+- **Test command**: Added `tests/commands/` directory which contains command handler tests (restrictions.test.ts, group.test.ts, help.test.ts)
+- **Removed**: `tests/scripts` and `tests/schemas` (directories don't exist in project)
+- **Provider coverage**: `src/providers/**/*.ts` naturally covers both `kaneo/` and `youtrack/` subdirectories
 
 **Step 2: Commit**
 
@@ -165,13 +171,12 @@ Knip runs in strict mode and will flag `@stryker-mutator/typescript-checker` as 
 
 **Step 1: Add Stryker plugin to knip config**
 
-Add an `"ignoreDependencies"` array to `knip.jsonc` to whitelist the Stryker checker plugin:
+Add an `"ignoreDependencies"` array to `knip.jsonc` to whitelist the Stryker checker plugin. This goes at the top level of the JSON object (after the `rules` section):
 
 ```jsonc
-"ignoreDependencies": ["@stryker-mutator/typescript-checker"]
+  // Ignore Stryker plugin (loaded at runtime, not imported)
+  "ignoreDependencies": ["@stryker-mutator/typescript-checker"],
 ```
-
-This goes at the top level of the JSON object, after `"entry"`.
 
 **Step 2: Verify knip passes**
 
@@ -205,9 +210,10 @@ mutation-testing:
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
       with:
-        bun-version: latest
+        bun-version: 1.3.11
     - name: Install dependencies
       run: bun install --frozen-lockfile
+
     - name: Restore Stryker incremental cache
       uses: actions/cache@v4
       with:
@@ -216,8 +222,10 @@ mutation-testing:
         restore-keys: |
           stryker-incremental-${{ github.base_ref }}-
           stryker-incremental-master-
+
     - name: Run mutation testing
       run: bun run test:mutate
+
     - name: Upload mutation report
       uses: actions/upload-artifact@v4
       if: always()
@@ -226,6 +234,8 @@ mutation-testing:
         path: reports/mutation.html
         retention-days: 14
 ```
+
+**Alignment Note:** Bun version set to `1.3.11` to match existing CI jobs (security, check, e2e).
 
 **Step 2: Validate YAML syntax**
 
@@ -295,11 +305,21 @@ Suggested message:
 feat: add StrykerJS mutation testing with command runner
 
 - Install @stryker-mutator/core and typescript-checker
-- Configure command runner with bun test
+- Configure command runner with bun test (aligned to actual test dirs)
 - Target providers/, tools/, and core business logic files
 - Add incremental caching for fast re-runs
-- Add CI job with artifact upload and cache
+- Add CI job with artifact upload and cache (Bun 1.3.11)
 - Add test:mutate, test:mutate:changed, test:mutate:full scripts
 ```
 
 This task is optional — skip if you prefer granular commits.
+
+---
+
+## Summary of Changes from Original Plan
+
+| Aspect            | Original                                                                                       | Updated                                                                           | Reason                                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Test command      | `tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/*.test.ts` | `tests/providers tests/tools tests/db tests/utils tests/commands tests/*.test.ts` | Aligned to actual directory structure (added commands/, removed non-existent scripts/ and schemas/) |
+| Bun version in CI | `latest`                                                                                       | `1.3.11`                                                                          | Aligned to existing CI jobs                                                                         |
+| Provider coverage | Not specified                                                                                  | `src/providers/**/*.ts` covers both kaneo/ and youtrack/                          | Clarified that glob pattern covers both provider implementations                                    |
