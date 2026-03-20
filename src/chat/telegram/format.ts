@@ -20,10 +20,29 @@ const isValidDateTimeFormat = (value: string): value is MessageEntity.DateTimeMe
 const mapPreEntity = (entity: TelegramMessageEntity, base: { offset: number; length: number }): MessageEntity | null =>
   entity.language === undefined ? null : { ...base, type: 'pre', language: entity.language }
 
+const isValidHttpUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 const mapTextLinkEntity = (
   entity: TelegramMessageEntity,
   base: { offset: number; length: number },
-): MessageEntity | null => (entity.url === undefined ? null : { ...base, type: 'text_link', url: entity.url })
+): MessageEntity | null => {
+  if (entity.url === undefined) {
+    return null
+  }
+  // Telegram requires valid HTTP/HTTPS URLs for text_link entities
+  if (!isValidHttpUrl(entity.url)) {
+    log.debug({ url: entity.url }, 'Skipping invalid URL in text_link entity')
+    return null
+  }
+  return { ...base, type: 'text_link', url: entity.url }
+}
 
 const mapTextMentionEntity = (
   entity: TelegramMessageEntity,

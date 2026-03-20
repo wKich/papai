@@ -45,8 +45,8 @@ describe('Project Tools', () => {
       const provider = createMockProvider({
         listProjects: mock(() =>
           Promise.resolve([
-            { id: 'proj-1', name: 'Project 1' },
-            { id: 'proj-2', name: 'Project 2' },
+            { id: 'proj-1', name: 'Project 1', url: 'https://test.com/project/1' },
+            { id: 'proj-2', name: 'Project 2', url: 'https://test.com/project/2' },
           ]),
         ),
       })
@@ -114,6 +114,7 @@ describe('Project Tools', () => {
           Promise.resolve({
             id: 'proj-1',
             name: 'New Project',
+            url: 'https://test.com/project/1',
           }),
         ),
       })
@@ -133,6 +134,7 @@ describe('Project Tools', () => {
           id: 'proj-1',
           name: params.name,
           description: params.description,
+          url: 'https://test.com/project/1',
         }),
       )
       const provider = createMockProvider({ createProject })
@@ -149,6 +151,7 @@ describe('Project Tools', () => {
         Promise.resolve({
           id: 'proj-1',
           name: params.name,
+          url: 'https://test.com/project/1',
         }),
       )
       const provider = createMockProvider({ createProject })
@@ -195,6 +198,7 @@ describe('Project Tools', () => {
           Promise.resolve({
             id: 'proj-1',
             name: 'Updated Name',
+            url: 'https://test.com/project/1',
           }),
         ),
       })
@@ -217,6 +221,7 @@ describe('Project Tools', () => {
           id: 'proj-1',
           name: 'Test',
           description: params.description,
+          url: 'https://test.com/project/1',
         }),
       )
       const provider = createMockProvider({ updateProject })
@@ -234,6 +239,7 @@ describe('Project Tools', () => {
           id: 'proj-1',
           name: params.name ?? 'Test',
           description: params.description,
+          url: 'https://test.com/project/1',
         }),
       )
       const provider = createMockProvider({ updateProject })

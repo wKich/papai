@@ -64,19 +64,21 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
   }
 }
 
-export const mapIssueToListItem = (issue: z.infer<typeof IssueListSchema>): TaskListItem => ({
+export const mapIssueToListItem = (issue: z.infer<typeof IssueListSchema>, baseUrl: string): TaskListItem => ({
   id: issue.idReadable ?? issue.id,
   title: issue.summary,
   status: getCustomFieldValue(issue.customFields, 'State'),
   priority: getCustomFieldValue(issue.customFields, 'Priority'),
+  url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
 })
 
-export const mapIssueToSearchResult = (issue: z.infer<typeof IssueListSchema>): TaskSearchResult => ({
+export const mapIssueToSearchResult = (issue: z.infer<typeof IssueListSchema>, baseUrl: string): TaskSearchResult => ({
   id: issue.idReadable ?? issue.id,
   title: issue.summary,
   status: getCustomFieldValue(issue.customFields, 'State'),
   priority: getCustomFieldValue(issue.customFields, 'Priority'),
   projectId: issue.project?.id,
+  url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
 })
 
 export const mapComment = (c: z.infer<typeof CommentSchema>): Comment => ({

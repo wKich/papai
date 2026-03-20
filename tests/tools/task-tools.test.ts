@@ -92,6 +92,7 @@ describe('Task Tools', () => {
             id: 'task-1',
             title: params.title,
             status: params.status ?? 'todo',
+            url: 'https://test.com/task/1',
           }),
       )
       const provider = createMockProvider({ createTask })
@@ -188,6 +189,7 @@ describe('Task Tools', () => {
             id: 'task-1',
             title: params.title ?? 'Test',
             status: params.status ?? 'todo',
+            url: 'https://test.com/task/1',
           }),
       )
       const provider = createMockProvider({ updateTask })
@@ -251,6 +253,7 @@ describe('Task Tools', () => {
             priority: 'high',
             description: 'Task details',
             relations: [{ type: 'blocks' as const, taskId: 'task-2' }],
+            url: 'https://test.com/task/1',
           }),
         ),
       })
@@ -274,6 +277,7 @@ describe('Task Tools', () => {
             title: 'Test Task',
             status: 'todo',
             relations: [],
+            url: 'https://test.com/task/1',
           }),
         ),
       })
@@ -319,8 +323,22 @@ describe('Task Tools', () => {
       const provider = createMockProvider({
         listTasks: mock(() =>
           Promise.resolve([
-            { id: 'task-1', title: 'Task 1', number: 1, status: 'todo', priority: 'medium' },
-            { id: 'task-2', title: 'Task 2', number: 2, status: 'done', priority: 'high' },
+            {
+              id: 'task-1',
+              title: 'Task 1',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              url: 'https://test.com/task/1',
+            },
+            {
+              id: 'task-2',
+              title: 'Task 2',
+              number: 2,
+              status: 'done',
+              priority: 'high',
+              url: 'https://test.com/task/2',
+            },
           ]),
         ),
         buildTaskUrl: mock(() => 'https://test.com/task/1'),
@@ -382,8 +400,22 @@ describe('Task Tools', () => {
       const provider = createMockProvider({
         searchTasks: mock(() =>
           Promise.resolve([
-            { id: 'task-1', title: 'Fix bug', number: 1, status: 'todo', priority: 'high' },
-            { id: 'task-2', title: 'Bug report', number: 2, status: 'done', priority: 'medium' },
+            {
+              id: 'task-1',
+              title: 'Fix bug',
+              number: 1,
+              status: 'todo',
+              priority: 'high',
+              url: 'https://test.com/task/1',
+            },
+            {
+              id: 'task-2',
+              title: 'Bug report',
+              number: 2,
+              status: 'done',
+              priority: 'medium',
+              url: 'https://test.com/task/2',
+            },
           ]),
         ),
       })

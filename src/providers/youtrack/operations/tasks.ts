@@ -86,7 +86,7 @@ export async function listYouTrackTasks(config: YouTrackConfig, projectId: strin
   })
   const issues = IssueListSchema.array().parse(raw)
   log.info({ projectId, count: issues.length }, 'Tasks listed')
-  return issues.map(mapIssueToListItem)
+  return issues.map((issue) => mapIssueToListItem(issue, config.baseUrl))
 }
 
 export async function searchYouTrackTasks(
@@ -103,7 +103,7 @@ export async function searchYouTrackTasks(
   })
   const issues = IssueListSchema.array().parse(raw)
   log.info({ query: params.query, count: issues.length }, 'Tasks searched')
-  return issues.map(mapIssueToSearchResult)
+  return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
 }
 
 export async function deleteYouTrackTask(config: YouTrackConfig, taskId: string): Promise<{ id: string }> {

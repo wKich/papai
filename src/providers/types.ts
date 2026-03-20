@@ -55,7 +55,7 @@ export type Task = {
   dueDate?: string | null
   createdAt?: string
   projectId?: string
-  url?: string
+  url: string
   labels?: TaskLabel[]
   relations?: TaskRelation[]
 }
@@ -68,7 +68,7 @@ export type TaskListItem = {
   status?: string
   priority?: string
   dueDate?: string | null
-  url?: string
+  url: string
 }
 
 /** Minimal task representation for search results. */
@@ -79,14 +79,14 @@ export type TaskSearchResult = {
   status?: string
   priority?: string
   projectId?: string
-  url?: string
+  url: string
 }
 
 export type Project = {
   id: string
   name: string
   description?: string | null
-  url?: string
+  url: string
 }
 
 export type Comment = {

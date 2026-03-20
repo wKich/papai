@@ -71,9 +71,13 @@ export async function kaneoUpdateTask(
   return mapCreateTaskResponse(result, buildTaskUrl(config.baseUrl, workspaceId, result.projectId, result.id))
 }
 
-export async function kaneoListTasks(config: KaneoConfig, projectId: string): Promise<TaskListItem[]> {
+export async function kaneoListTasks(
+  config: KaneoConfig,
+  workspaceId: string,
+  projectId: string,
+): Promise<TaskListItem[]> {
   const results = await listTasks({ config, projectId })
-  return results.map((t) => mapTaskListItem(t))
+  return results.map((t) => mapTaskListItem(t, buildTaskUrl(config.baseUrl, workspaceId, projectId, t.id)))
 }
 
 export async function kaneoSearchTasks(
@@ -88,7 +92,7 @@ export async function kaneoSearchTasks(
     projectId: params.projectId,
     limit: params.limit,
   })
-  return results.map((t) => mapTaskSearchResult(t))
+  return results.map((t) => mapTaskSearchResult(t, buildTaskUrl(config.baseUrl, workspaceId, t.projectId ?? '', t.id)))
 }
 
 export async function kaneoArchiveTask(
