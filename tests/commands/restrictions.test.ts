@@ -24,11 +24,11 @@ void mock.module('../../src/db/drizzle.js', () => ({
 // Mock logger to avoid output during tests
 void mock.module('../../src/logger.js', () => ({
   logger: {
-    child: () => ({
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
+    child: (): object => ({
+      debug: (): void => {},
+      info: (): void => {},
+      warn: (): void => {},
+      error: (): void => {},
     }),
   },
 }))
@@ -46,12 +46,12 @@ describe('command context restrictions', () => {
   const adminUserId = 'admin123'
 
   const createMockReply = (): ReplyFn => ({
-    text: async (content: string) => {
+    text: async (content: string): Promise<void> => {
       lastReply = content
     },
-    formatted: async () => {},
-    file: async () => {},
-    typing: () => {},
+    formatted: async (): Promise<void> => {},
+    file: async (): Promise<void> => {},
+    typing: (): void => {},
   })
 
   const createMockAuth = (opts: {
@@ -149,13 +149,13 @@ describe('command context restrictions', () => {
     commandHandlers = new Map()
     mockChat = {
       name: 'mock',
-      registerCommand: (name: string, handler: CommandHandler) => {
+      registerCommand: (name: string, handler: CommandHandler): void => {
         commandHandlers.set(name, handler)
       },
-      onMessage: () => {},
-      sendMessage: async () => {},
-      start: async () => {},
-      stop: async () => {},
+      onMessage: (): void => {},
+      sendMessage: async (): Promise<void> => {},
+      start: async (): Promise<void> => {},
+      stop: async (): Promise<void> => {},
     }
 
     // Register commands

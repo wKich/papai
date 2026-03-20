@@ -9,6 +9,25 @@ import * as schema from '../src/db/schema.js'
 let testDb: ReturnType<typeof drizzle<typeof schema>>
 let testSqlite: Database
 
+// Mock logger to avoid issues with runMigrations
+void mock.module('../src/logger.js', () => ({
+  logger: {
+    debug: (): void => {},
+    info: (): void => {},
+    warn: (): void => {},
+    error: (): void => {},
+    fatal: (): void => {},
+    trace: (): void => {},
+    level: 'info',
+    child: (): object => ({
+      debug: (): void => {},
+      info: (): void => {},
+      warn: (): void => {},
+      error: (): void => {},
+    }),
+  },
+}))
+
 // Mock getDrizzleDb to return our test database
 void mock.module('../src/db/drizzle.js', () => ({
   getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,

@@ -229,7 +229,10 @@ export const processMessage = async (
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)
-      log.debug({ contextId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
+      log.debug(
+        { contextId, assistantMessagesCount: assistantMessages.length },
+        'Assistant response appended to history',
+      )
     }
 
     // Trigger trim only after successful response
