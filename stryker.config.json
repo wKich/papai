@@ -35,6 +35,6 @@
   "jsonReporter": {
     "fileName": "reports/mutation.json"
   },
-  "ignorePatterns": ["tests", "node_modules", ".stryker-tmp"],
+  "ignorePatterns": ["node_modules", ".stryker-tmp"],
   "cleanTempDir": true
 }
