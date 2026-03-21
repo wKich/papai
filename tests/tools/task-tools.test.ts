@@ -632,14 +632,14 @@ describe('Task Tools', () => {
       expect(result).toMatchObject({ status: 'confirmation_required' })
     })
 
-    test('propagates provider errors', () => {
+    test('propagates provider errors', async () => {
       const provider = createMockProvider({
         deleteTask: mock(() => Promise.reject(new Error('Task not found'))),
       })
 
       const tool = makeDeleteTaskTool(provider)
       const result = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      expect(result).rejects.toThrow('Task not found')
+      await expect(result).rejects.toThrow('Task not found')
     })
 
     test('validates taskId is required', () => {
