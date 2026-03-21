@@ -40,8 +40,11 @@ export async function createYouTrackTask(
     log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
     return mapIssueToTask(issue, config.baseUrl)
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to create task')
-    throw classifyYouTrackError(error)
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), projectId: params.projectId },
+      'Failed to create task',
+    )
+    throw classifyYouTrackError(error, { projectId: params.projectId })
   }
 }
 
@@ -127,8 +130,16 @@ export async function searchYouTrackTasks(
     log.info({ query: params.query, count: issues.length }, 'Tasks searched')
     return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to search tasks')
-    throw classifyYouTrackError(error)
+    log.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        query: params.query,
+        projectId: params.projectId,
+      },
+      'Failed to search tasks',
+    )
+    const context = params.projectId !== undefined ? { projectId: params.projectId } : undefined
+    throw classifyYouTrackError(error, context)
   }
 }
 

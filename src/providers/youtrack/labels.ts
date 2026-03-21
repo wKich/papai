@@ -107,7 +107,7 @@ export async function addYouTrackTaskLabel(
       { error: error instanceof Error ? error.message : String(error), taskId, labelId },
       'Failed to add label to task',
     )
-    throw classifyYouTrackError(error, { taskId })
+    throw classifyYouTrackError(error, { taskId, labelId })
   }
 }
 
@@ -134,6 +134,6 @@ export async function removeYouTrackTaskLabel(
       { error: error instanceof Error ? error.message : String(error), taskId, labelId },
       'Failed to remove label from task',
     )
-    throw classifyYouTrackError(error, { taskId })
+    throw classifyYouTrackError(error, { taskId, labelId })
   }
 }
