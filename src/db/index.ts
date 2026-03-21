@@ -11,6 +11,7 @@ import { migration006VersionAnnouncements } from './migrations/006_version_annou
 import { migration007PlatformUserId } from './migrations/007_platform_user_id.js'
 import { migration008GroupMembers } from './migrations/008_group_members.js'
 import { migration009RecurringTasks } from './migrations/009_recurring_tasks.js'
+import { migration010RecurringTaskOccurrences } from './migrations/010_recurring_task_occurrences.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -47,6 +48,7 @@ const MIGRATIONS = [
   migration007PlatformUserId,
   migration008GroupMembers,
   migration009RecurringTasks,
+  migration010RecurringTaskOccurrences,
 ] as const
 
 export const initDb = (): void => {

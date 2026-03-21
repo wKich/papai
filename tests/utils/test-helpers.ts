@@ -19,6 +19,8 @@ import { migration005RenameConfigKeys } from '../../src/db/migrations/005_rename
 import { migration006VersionAnnouncements } from '../../src/db/migrations/006_version_announcements.js'
 import { migration007PlatformUserId } from '../../src/db/migrations/007_platform_user_id.js'
 import { migration008GroupMembers } from '../../src/db/migrations/008_group_members.js'
+import { migration009RecurringTasks } from '../../src/db/migrations/009_recurring_tasks.js'
+import { migration010RecurringTaskOccurrences } from '../../src/db/migrations/010_recurring_task_occurrences.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -33,6 +35,8 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration006VersionAnnouncements,
   migration007PlatformUserId,
   migration008GroupMembers,
+  migration009RecurringTasks,
+  migration010RecurringTaskOccurrences,
 ]
 
 // ============================================================================
