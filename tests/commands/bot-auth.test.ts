@@ -33,7 +33,7 @@ let lastProcessedStorageId: string | null = null
 
 // Mock processMessage to avoid LLM/config dependencies
 void mock.module('../../src/llm-orchestrator.js', () => ({
-  processMessage: (reply: unknown, storageContextId: string): Promise<void> => {
+  processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
     processMessageCallCount++
     lastProcessedStorageId = storageContextId
     return Promise.resolve()
