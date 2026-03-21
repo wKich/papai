@@ -38,6 +38,10 @@ const parseField = (field: string, min: number, max: number): CronField => {
     if (stepMatch !== null) {
       const [, range, stepStr] = stepMatch
       const step = Number.parseInt(stepStr!, 10)
+      if (step <= 0) {
+        log.warn({ field, part }, 'Invalid cron step value: step must be a positive integer')
+        continue
+      }
       const [start, end] = range === '*' ? [min, max] : parseRange(range!, min, max)
       for (let i = start; i <= end; i += step) {
         values.push(i)

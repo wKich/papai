@@ -59,6 +59,13 @@ describe('parseCron', () => {
     expect(result).not.toBeNull()
     expect(result!.minute).toEqual({ type: 'values', values: [0, 15, 30, 45] })
   })
+
+  test('ignores step parts with zero step (*/0)', () => {
+    const result = parseCron('*/0 * * * *')
+    expect(result).not.toBeNull()
+    // Zero step is invalid; the minute field produces no values
+    expect(result!.minute).toEqual({ type: 'values', values: [] })
+  })
 })
 
 describe('cronMatches', () => {
