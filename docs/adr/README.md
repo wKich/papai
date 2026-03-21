@@ -22,14 +22,20 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0014](0014-multi-chat-provider-abstraction.md)               | Multi-Chat Provider Abstraction                                | 2026-03-19 | Implemented                           |
 | [0015](0015-enhanced-tool-capabilities.md)                    | Enhanced Tool Capabilities (Phase 02)                          | 2026-03-20 | Implemented                           |
 | [0016](0016-conversation-persistence-and-context.md)          | Conversation Persistence and Context Management (Phase 03)     | 2026-03-20 | Implemented                           |
+| [0017](0017-mutation-testing-strykerjs.md)                    | Mutation Testing with StrykerJS                                | 2026-03-19 | Implemented (with divergence)         |
+| [0018](0018-group-chat-support.md)                            | Group Chat Support                                             | 2026-03-20 | Implemented (with divergence)         |
+| [0019](0019-recurring-task-automation.md)                     | Recurring Task Automation                                      | 2026-03-20 | Implemented (with divergence)         |
+| [0020](0020-error-classification-improvements.md)             | Error Classification Improvements (Phase 01)                   | 2026-03-20 | Implemented                           |
 
 ## Skipped / Not Written
 
-| Plan                              | Reason                                                                        |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| `2026-03-16-fix-failing-tests.md` | Bug fix and test hygiene — no architectural decision, no options considered   |
-| ADR-0006                          | Merged into ADR-0005 (design + implementation of the same remediation effort) |
-| ADR-0012                          | Reserved slot; corresponding plan not architectural                           |
+| Plan                                          | Reason                                                                                                                                   |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `2026-03-16-fix-failing-tests.md`             | Bug fix and test hygiene — no architectural decision, no options considered                                                              |
+| `2026-03-20-phase-04-developer-experience.md` | CI push trigger widening and tool unit test gap-fills — implementation detail with no architectural decision content                     |
+| `2026-03-20-phase-05-advanced-features.md`    | Purely adds command-handler integration tests for already-implemented authorization and config features — no new architectural decisions |
+| ADR-0006                                      | Merged into ADR-0005 (design + implementation of the same remediation effort)                                                            |
+| ADR-0012                                      | Reserved slot; corresponding plan not architectural                                                                                      |
 
 ## ADR Status Legend
 
