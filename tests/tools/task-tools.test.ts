@@ -623,10 +623,7 @@ describe('Task Tools', () => {
       const provider = createMockProvider()
       const tool = makeDeleteTaskTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute(
-        { taskId: 'task-1', confidence: 0 },
-        { toolCallId: '1', messages: [] },
-      )
+      const result: unknown = await tool.execute({ taskId: 'task-1', confidence: 0 }, { toolCallId: '1', messages: [] })
 
       expect(result).toMatchObject({ status: 'confirmation_required' })
     })

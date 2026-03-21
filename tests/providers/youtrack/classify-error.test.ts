@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { getUserMessage, providerError, systemError } from '../../../src/errors.js'
-import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import { classifyYouTrackError, YouTrackClassifiedError } from '../../../src/providers/youtrack/classify-error.js'
+import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 
 describe('classifyYouTrackError', () => {
   describe('HTTP status code classification', () => {

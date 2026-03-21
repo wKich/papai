@@ -1,8 +1,8 @@
 import { logger } from '../../../logger.js'
 import type { Project } from '../../types.js'
+import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
-import { classifyYouTrackError } from '../classify-error.js'
 import { PROJECT_FIELDS } from '../constants.js'
 import { ProjectSchema } from '../schemas/project.js'
 

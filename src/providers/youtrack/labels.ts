@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 import { logger } from '../../logger.js'
 import type { Label } from '../types.js'
+import { classifyYouTrackError } from './classify-error.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
-import { classifyYouTrackError } from './classify-error.js'
 import { TAG_FIELDS } from './constants.js'
 import { TagSchema } from './schemas/tag.js'
 

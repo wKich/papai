@@ -1,9 +1,9 @@
 import { logger } from '../../../logger.js'
 import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
+import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
-import { classifyYouTrackError } from '../classify-error.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
 import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
 
