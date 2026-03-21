@@ -22,7 +22,6 @@
     "nsTypes": "error",
     "duplicates": "error",
     "enumMembers": "error",
-    "classMembers": "error",
     "catalog": "error",
   },
 

@@ -1,7 +1,7 @@
 {
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test"
+    "command": "bun run test"
   },
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",

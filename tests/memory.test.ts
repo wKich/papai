@@ -39,6 +39,7 @@ import { Database } from 'bun:sqlite'
 
 import {
   buildMemoryContextMessage,
+  extractFactsFromSdkResults,
   loadSummary,
   saveSummary,
   loadFacts,
@@ -455,5 +456,233 @@ describe('trimWithMemoryModel', () => {
     const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
     expect(result.trimmedMessages).toHaveLength(3)
+  })
+
+  test('does not trim when indices equal trimMax', async () => {
+    const history = makeMessages(5)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1, 2], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
+
+    expect(result.trimmedMessages).toHaveLength(3)
+    expect(result.trimmedMessages[0]).toEqual(history[0])
+  })
+
+  test('does not pad when indices equal trimMin', async () => {
+    const history = makeMessages(10)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
+
+    expect(result.trimmedMessages).toHaveLength(5)
+  })
+
+  test('padded indices are sorted in ascending order', async () => {
+    const history = makeMessages(10)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
+
+    expect(result.trimmedMessages.length).toBeGreaterThanOrEqual(4)
+    // Verify sorted: each message should appear later in history than the previous
+    for (let i = 1; i < result.trimmedMessages.length; i++) {
+      const prevIdx = history.findIndex((m) => m === result.trimmedMessages[i - 1])
+      const currIdx = history.findIndex((m) => m === result.trimmedMessages[i])
+      expect(currIdx).toBeGreaterThan(prevIdx)
+    }
+  })
+
+  test('slices most recent indices when capping at trimMax', async () => {
+    const history = makeMessages(10)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4, 5], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
+
+    expect(result.trimmedMessages).toHaveLength(3)
+    // The clamping takes the LAST trimMax items from sorted list
+    expect(result.trimmedMessages[0]).toEqual(history[3])
+    expect(result.trimmedMessages[1]).toEqual(history[4])
+    expect(result.trimmedMessages[2]).toEqual(history[5])
+  })
+
+  test('padding fills from highest indices first', async () => {
+    const history = makeMessages(6)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
+
+    expect(result.trimmedMessages.length).toBeGreaterThanOrEqual(4)
+    // Padding takes from candidates.reverse() = highest indices first
+    // So we expect index 0 (kept) plus indices 5, 4, 3 (padded from highest)
+    expect(result.trimmedMessages[0]).toEqual(history[0])
+    // Last three should be the highest indices
+    const lastThree = result.trimmedMessages.slice(-3)
+    expect(lastThree[0]).toEqual(history[3])
+    expect(lastThree[1]).toEqual(history[4])
+    expect(lastThree[2]).toEqual(history[5])
+  })
+
+  test('negative indices are filtered out', async () => {
+    const history = makeMessages(5)
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [-1, 0, 2], summary: 'Summary' } })
+
+    const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
+
+    expect(result.trimmedMessages).toHaveLength(2)
+    expect(result.trimmedMessages[0]).toEqual(history[0])
+    expect(result.trimmedMessages[1]).toEqual(history[2])
+  })
+})
+
+// ============================================================================
+// Tests: extractFactsFromSdkResults (actual source function)
+// ============================================================================
+
+describe('extractFactsFromSdkResults', () => {
+  test('extracts fact from create_task result', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'create_task', output: { id: 'task-1', title: 'New task', number: 42 } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('#42')
+    expect(facts[0]!.title).toBe('New task')
+    expect(facts[0]!.url).toBe('')
+  })
+
+  test('extracts fact from get_task result', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'get_task', output: { id: 'task-10', title: 'Details', number: 10 } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('#10')
+  })
+
+  test('extracts fact from delete_task result', () => {
+    const facts = extractFactsFromSdkResults([], [{ toolName: 'delete_task', output: { id: 'task-5', number: 5 } }])
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('#5')
+  })
+
+  test('extracts fact from update_task result', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'update_task', output: { id: 'task-3', number: 3, title: 'Updated' } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('#3')
+    expect(facts[0]!.title).toBe('Updated')
+  })
+
+  test('uses id as identifier when number is missing', () => {
+    const facts = extractFactsFromSdkResults([], [{ toolName: 'create_task', output: { id: 'task-99' } }])
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('task-99')
+    expect(facts[0]!.title).toBe('task-99')
+  })
+
+  test('extracts fact from create_project result', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'create_project', output: { id: 'proj-1', name: 'Backend' } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-1')
+    expect(facts[0]!.title).toBe('Backend')
+    expect(facts[0]!.url).toBe('')
+  })
+
+  test('extracts fact from update_project with url', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'update_project', output: { id: 'proj-2', name: 'Frontend', url: 'https://example.com' } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.url).toBe('https://example.com')
+  })
+
+  test('extracts fact from archive_project result', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'archive_project', output: { id: 'proj-3', name: 'Legacy' } }],
+    )
+    expect(facts).toHaveLength(1)
+    expect(facts[0]!.identifier).toBe('proj:proj-3')
+  })
+
+  test('extracts facts from list_projects result capped at 10', () => {
+    const projects = Array.from({ length: 12 }, (_, i) => ({ id: `proj-${i}`, name: `Project ${i}` }))
+    const facts = extractFactsFromSdkResults([], [{ toolName: 'list_projects', output: projects }])
+    expect(facts).toHaveLength(10)
+    expect(facts[0]!.identifier).toBe('proj:proj-0')
+    expect(facts[9]!.identifier).toBe('proj:proj-9')
+  })
+
+  test('returns empty for non-array list_projects output', () => {
+    const facts = extractFactsFromSdkResults([], [{ toolName: 'list_projects', output: { id: 'x', name: 'Y' } }])
+    expect(facts).toHaveLength(0)
+  })
+
+  test('ignores unknown tool names', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [{ toolName: 'search_tasks', output: { id: 'task-1', title: 'A', number: 1 } }],
+    )
+    expect(facts).toHaveLength(0)
+  })
+
+  test('handles multiple tool results', () => {
+    const facts = extractFactsFromSdkResults(
+      [],
+      [
+        { toolName: 'create_task', output: { id: 'task-1', title: 'Task', number: 1 } },
+        { toolName: 'create_project', output: { id: 'proj-1', name: 'Proj' } },
+      ],
+    )
+    expect(facts).toHaveLength(2)
+    expect(facts[0]!.identifier).toBe('#1')
+    expect(facts[1]!.identifier).toBe('proj:proj-1')
+  })
+
+  test('skips malformed results', () => {
+    const facts = extractFactsFromSdkResults([], [{ toolName: 'create_task', output: { no_id: true } }])
+    expect(facts).toHaveLength(0)
+  })
+})
+
+// ============================================================================
+// Tests: buildMemoryContextMessage format details
+// ============================================================================
+
+describe('buildMemoryContextMessage format details', () => {
+  test('separates summary and facts sections with double newline', () => {
+    const facts = [{ identifier: '#1', title: 'T', url: '', last_seen: '2026-01-01T00:00:00Z' }]
+    const result = buildMemoryContextMessage('My summary', facts)
+    expect(result!.content).toContain('Summary: My summary\n\nRecently accessed entities')
+  })
+
+  test('separates fact lines with single newline', () => {
+    const facts = [
+      { identifier: '#1', title: 'First', url: '', last_seen: '2026-01-01T00:00:00Z' },
+      { identifier: '#2', title: 'Second', url: '', last_seen: '2026-02-01T00:00:00Z' },
+    ]
+    const result = buildMemoryContextMessage(null, facts)
+    const content = result!.content
+    // Lines should be separated by \n NOT \n\n within the facts section
+    expect(content).toContain('- #1: "First" — last seen 2026-01-01\n- #2: "Second" — last seen 2026-02-01')
+  })
+
+  test('slices last_seen to exactly 10 characters', () => {
+    const facts = [{ identifier: '#1', title: 'T', url: '', last_seen: '2026-03-15T14:30:00.000Z' }]
+    const result = buildMemoryContextMessage(null, facts)
+    expect(result!.content).toContain('last seen 2026-03-15')
+    expect(result!.content).not.toContain('T14:30')
   })
 })
