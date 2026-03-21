@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeAddCommentTool } from '../../src/tools/add-comment.js'
 import { makeGetCommentsTool } from '../../src/tools/get-comments.js'
 import { makeRemoveCommentTool } from '../../src/tools/remove-comment.js'

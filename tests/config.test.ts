@@ -1,71 +1,30 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-import * as schema from '../src/db/schema.js'
-
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
-
-// Mock logger to avoid issues with runMigrations
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    fatal: (): void => {},
-    trace: (): void => {},
-    level: 'info',
-    child: (): object => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
   closeDrizzleDb: (): void => {},
   _resetDrizzleDb: (): void => {},
   _setDrizzleDb: (): void => {},
 }))
 
 import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
-import { runMigrations } from '../src/db/migrate.js'
-import { migration001Initial } from '../src/db/migrations/001_initial.js'
-import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
-import { migration003MultiuserSupport } from '../src/db/migrations/003_multiuser_support.js'
-import { migration004KaneoWorkspace } from '../src/db/migrations/004_kaneo_workspace.js'
-import { migration005RenameConfigKeys } from '../src/db/migrations/005_rename_config_keys.js'
-import { migration006VersionAnnouncements } from '../src/db/migrations/006_version_announcements.js'
-import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 
 const USER_A = '111'
 const USER_B = '222'
 
-const MIGRATIONS = [
-  migration001Initial,
-  migration002ConversationHistory,
-  migration003MultiuserSupport,
-  migration004KaneoWorkspace,
-  migration005RenameConfigKeys,
-  migration006VersionAnnouncements,
-  migration007PlatformUserId,
-] as const
-
 describe('setConfig', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    runMigrations(testSqlite, MIGRATIONS)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -102,10 +61,8 @@ describe('setConfig', () => {
 })
 
 describe('getConfig', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    runMigrations(testSqlite, MIGRATIONS)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -139,10 +96,8 @@ describe('isConfigKey', () => {
 })
 
 describe('getAllConfig', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    runMigrations(testSqlite, MIGRATIONS)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })

@@ -1,94 +1,36 @@
-import { Database } from 'bun:sqlite'
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { drizzle } from 'drizzle-orm/bun-sqlite'
-
-import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
+import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import { registerAdminCommands } from '../../src/commands/admin.js'
 import * as schema from '../../src/db/schema.js'
+import { addUser, isAuthorized, listUsers } from '../../src/users.js'
+import {
+  createDmMessage,
+  createMockReply,
+  getTestDb,
+  mockDrizzle,
+  mockLogger,
+  setupTestDb,
+} from '../utils/test-helpers.js'
 
-// --- Test database setup ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Mock logger at top of file
+mockLogger()
 
 // Mock getDrizzleDb BEFORE importing source modules
-void mock.module('../../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-}))
-
-// Mock logger to avoid output during tests
-void mock.module('../../src/logger.js', () => ({
-  logger: {
-    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+mockDrizzle()
 
 // Mock provisionAndConfigure to bypass Kaneo HTTP calls
 void mock.module('../../src/providers/kaneo/provision.js', () => ({
   provisionAndConfigure: (): Promise<{ status: string }> => Promise.resolve({ status: 'skipped' }),
 }))
 
-import { registerAdminCommands } from '../../src/commands/admin.js'
-import { runMigrations } from '../../src/db/migrate.js'
-import { migration001Initial } from '../../src/db/migrations/001_initial.js'
-import { migration002ConversationHistory } from '../../src/db/migrations/002_conversation_history.js'
-import { migration003MultiuserSupport } from '../../src/db/migrations/003_multiuser_support.js'
-import { migration004KaneoWorkspace } from '../../src/db/migrations/004_kaneo_workspace.js'
-import { migration005RenameConfigKeys } from '../../src/db/migrations/005_rename_config_keys.js'
-import { migration006VersionAnnouncements } from '../../src/db/migrations/006_version_announcements.js'
-import { migration007PlatformUserId } from '../../src/db/migrations/007_platform_user_id.js'
-import { migration008GroupMembers } from '../../src/db/migrations/008_group_members.js'
-import { addUser, isAuthorized, listUsers } from '../../src/users.js'
-
-const MIGRATIONS = [
-  migration001Initial,
-  migration002ConversationHistory,
-  migration003MultiuserSupport,
-  migration004KaneoWorkspace,
-  migration005RenameConfigKeys,
-  migration006VersionAnnouncements,
-  migration007PlatformUserId,
-  migration008GroupMembers,
-] as const
-
 const ADMIN_ID = 'admin-001'
-
-function createMockReply(): { reply: ReplyFn; getReplies: () => string[] } {
-  const replies: string[] = []
-  const reply: ReplyFn = {
-    text: (content: string): Promise<void> => {
-      replies.push(content)
-      return Promise.resolve()
-    },
-    formatted: (): Promise<void> => Promise.resolve(),
-    file: (): Promise<void> => Promise.resolve(),
-    typing: (): void => {},
-  }
-  return { reply, getReplies: () => replies }
-}
-
-function createDmMessage(userId: string, commandMatch: string): IncomingMessage {
-  return {
-    user: { id: userId, username: null, isAdmin: false },
-    contextId: userId,
-    contextType: 'dm',
-    isMentioned: false,
-    text: '',
-    commandMatch,
-  }
-}
 
 describe('Admin Commands', () => {
   let commandHandlers: Map<string, CommandHandler>
 
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    runMigrations(testSqlite, MIGRATIONS)
+  beforeEach(async () => {
+    await setupTestDb()
 
     // Add admin user to DB
     addUser(ADMIN_ID, ADMIN_ID)
@@ -247,7 +189,7 @@ describe('Admin Commands', () => {
 
     test('shows empty message when no users except admin', async () => {
       // Delete all users to simulate empty state
-      testDb.delete(schema.users).run()
+      getTestDb().delete(schema.users).run()
       const handler = commandHandlers.get('users')
       expect(handler).toBeDefined()
       const { reply, getReplies } = createMockReply()

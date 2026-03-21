@@ -21,46 +21,60 @@ interface ClassificationContext {
 
 const classifyApiError = (error: YouTrackApiError, context?: ClassificationContext): YouTrackClassifiedError => {
   const { statusCode, message } = error
+
   if (statusCode === 401 || statusCode === 403) {
     return new YouTrackClassifiedError(message, providerError.authFailed())
   }
+
   if (statusCode === 429) {
     return new YouTrackClassifiedError(message, providerError.rateLimited())
   }
+
   if (statusCode === 404) {
-    return classify404(message, error, context)
+    return classifyNotFoundError(message, context)
   }
+
   if (statusCode === 400) {
     return new YouTrackClassifiedError(message, providerError.validationFailed('unknown', message))
   }
+
   return new YouTrackClassifiedError(message, systemError.unexpected(error))
 }
 
-const classify404 = (message: string, error: Error, context?: ClassificationContext): YouTrackClassifiedError => {
+const classifyNotFoundError = (message: string, context?: ClassificationContext): YouTrackClassifiedError => {
   const msg = message.toLowerCase()
+
   if (msg.includes('issue') || msg.includes('/issues/')) {
     return new YouTrackClassifiedError(message, providerError.taskNotFound(context?.taskId ?? 'unknown'))
   }
+
   if (msg.includes('project') || msg.includes('/projects/')) {
     return new YouTrackClassifiedError(message, providerError.projectNotFound(context?.projectId ?? 'unknown'))
   }
+
   if (msg.includes('comment') || msg.includes('/comments/')) {
     return new YouTrackClassifiedError(message, providerError.commentNotFound(context?.commentId ?? 'unknown'))
   }
+
   if (msg.includes('tag') || msg.includes('/tags/')) {
     return new YouTrackClassifiedError(message, providerError.labelNotFound(context?.labelId ?? 'unknown'))
   }
-  return new YouTrackClassifiedError(message, providerError.unknown(error))
+
+  return new YouTrackClassifiedError(message, providerError.unknown(new Error(message)))
 }
 
 const classifyGenericError = (error: Error): YouTrackClassifiedError => {
   const msg = error.message.toLowerCase()
+
   if (msg.includes('authentication') || msg.includes('unauthorized')) {
     return new YouTrackClassifiedError(error.message, providerError.authFailed())
   }
+
   if (msg.includes('rate limit') || msg.includes('429')) {
     return new YouTrackClassifiedError(error.message, providerError.rateLimited())
   }
+
+  // Network error detection before final fallback
   if (
     msg.includes('fetch') ||
     msg.includes('network') ||
@@ -70,13 +84,23 @@ const classifyGenericError = (error: Error): YouTrackClassifiedError => {
   ) {
     return new YouTrackClassifiedError(error.message, systemError.networkError(error.message))
   }
+
   return new YouTrackClassifiedError(error.message, systemError.unexpected(error))
 }
 
 /** Classify a YouTrack error into a YouTrackClassifiedError carrying a standardised AppError. */
 export const classifyYouTrackError = (error: unknown, context?: ClassificationContext): YouTrackClassifiedError => {
-  if (error instanceof YouTrackClassifiedError) return error
-  if (error instanceof YouTrackApiError) return classifyApiError(error, context)
-  if (error instanceof Error) return classifyGenericError(error)
+  if (error instanceof YouTrackClassifiedError) {
+    return error
+  }
+
+  if (error instanceof YouTrackApiError) {
+    return classifyApiError(error, context)
+  }
+
+  if (error instanceof Error) {
+    return classifyGenericError(error)
+  }
+
   return new YouTrackClassifiedError(String(error), systemError.unexpected(new Error(String(error))))
 }

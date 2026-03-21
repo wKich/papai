@@ -1,7 +1,7 @@
 # Mutation Testing with StrykerJS
 
-**Date:** 2026-03-19
-**Status:** Approved
+**Date:** 2026-03-19  
+**Status:** Approved  
 **Approach:** Command Runner (Approach B)
 
 ## Goal
@@ -15,7 +15,7 @@ Add mutation testing as a quality gate in CI and a local developer tool, targeti
 - **Community Bun Runner Plugin** (`stryker-mutator-bun-runner` v0.4.0) — low adoption, single maintainer, pre-1.0 risk
 - **Vitest Adapter Layer** — would require rewriting `bun:test` mock patterns across ~50 test files
 
-The command runner shells out to `bun test`, works with any test runner, and requires zero test changes. The trade-off is `coverageAnalysis: "off"` (all tests run per mutant), which is acceptable given the narrow mutation scope and fast test suite (614 tests in 241ms).
+The command runner shells out to `bun test`, works with any test runner, and requires zero test changes. The trade-off is `coverageAnalysis: "off"` (all tests run per mutant), which is acceptable given the narrow mutation scope and fast test suite (~600+ tests in <1s).
 
 ## Dependencies
 
@@ -34,7 +34,7 @@ File: `stryker.config.json` at project root.
 {
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test tests/providers tests/tools tests/db tests/utils tests/schemas tests/*.test.ts"
+    "command": "bun test tests/providers tests/tools tests/db tests/utils tests/commands tests/*.test.ts"
   },
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
@@ -80,6 +80,7 @@ Key decisions:
 - `incremental: true` — only re-mutates changed files
 - TypeScript checker filters compile-error mutants before test execution
 - `thresholds.break: null` initially — no enforcement until baseline is established
+- **Test directories aligned with actual project structure** — includes `tests/commands/` which contains command handler tests
 
 ## NPM Scripts
 
@@ -103,13 +104,18 @@ New job in `.github/workflows/ci.yml`:
 
 ```yaml
 mutation-testing:
+  name: Mutation Testing
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
-    - run: bun install --frozen-lockfile
+      with:
+        bun-version: 1.3.11
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
 
-    - uses: actions/cache@v4
+    - name: Restore Stryker incremental cache
+      uses: actions/cache@v4
       with:
         path: reports/stryker-incremental.json
         key: stryker-incremental-${{ github.base_ref }}-${{ github.sha }}
@@ -117,9 +123,11 @@ mutation-testing:
           stryker-incremental-${{ github.base_ref }}-
           stryker-incremental-master-
 
-    - run: bun run test:mutate
+    - name: Run mutation testing
+      run: bun run test:mutate
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload mutation report
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: mutation-report
@@ -127,6 +135,7 @@ mutation-testing:
         retention-days: 14
 ```
 
+- Bun version aligned with existing CI jobs (`1.3.11`)
 - Cache restores `stryker-incremental.json` from previous CI runs
 - HTML report uploaded as artifact (14-day retention)
 - No threshold enforcement initially
@@ -134,6 +143,7 @@ mutation-testing:
 ## .gitignore Additions
 
 ```
+# mutation testing
 .stryker-tmp/
 reports/
 ```
@@ -173,9 +183,15 @@ Add exclusions only if string/object literal mutations produce too much noise.
 
 ## Mutation Scope
 
-- `src/providers/**/*.ts` (~67 files, excluding index/constants/types)
+- `src/providers/**/*.ts` (~67 files across kaneo/ and youtrack/, excluding index/constants/types)
 - `src/tools/**/*.ts` (~30 files, excluding index)
 - `src/errors.ts`, `src/config.ts`, `src/memory.ts`, `src/users.ts`
+
+## Alignment Notes
+
+- **Bun version**: Aligned to `1.3.11` to match existing CI jobs
+- **Test directories**: Command updated to reflect actual project structure (added `tests/commands/`)
+- **Provider coverage**: Includes both `kaneo/` and `youtrack/` subdirectories via `src/providers/**/*.ts`
 
 ## Sources
 

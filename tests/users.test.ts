@@ -1,36 +1,24 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 import { addUser, removeUser, isAuthorized, resolveUserByUsername, listUsers } from '../src/users.js'
 
 describe('addUser', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create tables using Drizzle's schema
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('adds a user by ID', () => {
@@ -58,18 +46,8 @@ describe('addUser', () => {
 })
 
 describe('removeUser', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('removes a user by ID', () => {
@@ -88,18 +66,8 @@ describe('removeUser', () => {
 })
 
 describe('isAuthorized', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('returns true for authorized user', () => {
@@ -113,18 +81,8 @@ describe('isAuthorized', () => {
 })
 
 describe('resolveUserByUsername', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('resolves placeholder ID to real platform user ID', () => {
@@ -147,18 +105,8 @@ describe('resolveUserByUsername', () => {
 })
 
 describe('listUsers', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('returns all users', () => {

@@ -1,35 +1,21 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-import * as schema from '../src/db/schema.js'
-
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 import { addGroupMember, isGroupMember, listGroupMembers, removeGroupMember } from '../src/groups.js'
 
 describe('groups', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create group_members table using Drizzle's schema
-    testSqlite.run(`
-      CREATE TABLE group_members (
-        group_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        added_by TEXT NOT NULL,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (group_id, user_id)
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   test('addGroupMember adds member to group', () => {

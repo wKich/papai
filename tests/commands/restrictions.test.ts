@@ -1,37 +1,19 @@
-import { Database } from 'bun:sqlite'
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import {
+  createAuth,
+  createDmMessage,
+  createGroupMessage,
+  createMockReply,
+  mockDrizzle,
+  mockLogger,
+  setupTestDb,
+} from '../utils/test-helpers.js'
 
-import type {
-  AuthorizationResult,
-  ChatProvider,
-  CommandHandler,
-  IncomingMessage,
-  ReplyFn,
-} from '../../src/chat/types.js'
-import * as schema from '../../src/db/schema.js'
-
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
-
-// Mock getDrizzleDb to return our test database
-void mock.module('../../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-}))
-
-// Mock logger to avoid output during tests
-void mock.module('../../src/logger.js', () => ({
-  logger: {
-    child: (): object => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+// Setup mocks before importing modules
+mockLogger()
+mockDrizzle()
 
 import { registerAdminCommands } from '../../src/commands/admin.js'
 import { registerClearCommand } from '../../src/commands/clear.js'
@@ -45,103 +27,13 @@ describe('command context restrictions', () => {
   let lastReply: string | null
   const adminUserId = 'admin123'
 
-  const createMockReply = (): ReplyFn => ({
-    text: (content: string): Promise<void> => {
-      lastReply = content
-      return Promise.resolve()
-    },
-    formatted: (): Promise<void> => Promise.resolve(),
-    file: (): Promise<void> => Promise.resolve(),
-    typing: (): void => {},
-  })
-
-  const createMockAuth = (opts: {
-    allowed?: boolean
-    isBotAdmin?: boolean
-    isGroupAdmin?: boolean
-  }): AuthorizationResult => ({
-    allowed: opts.allowed ?? true,
-    isBotAdmin: opts.isBotAdmin ?? false,
-    isGroupAdmin: opts.isGroupAdmin ?? false,
-    storageContextId: 'group1',
-  })
-
-  const createGroupMessage = (userId: string, isPlatformAdmin = false): IncomingMessage => ({
-    user: {
-      id: userId,
-      username: 'testuser',
-      isAdmin: isPlatformAdmin,
-    },
-    contextId: 'group1',
-    contextType: 'group',
-    isMentioned: false,
-    text: '',
-    commandMatch: '',
-  })
-
-  const createDmMessage = (userId: string): IncomingMessage => ({
-    user: {
-      id: userId,
-      username: 'testuser',
-      isAdmin: false,
-    },
-    contextId: userId,
-    contextType: 'dm',
-    isMentioned: false,
-    text: '',
-    commandMatch: '',
-  })
-
   const checkAuthorization = (userId: string): boolean => {
     return userId === adminUserId
   }
 
-  beforeEach(() => {
-    // Setup test database
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-
-    // Create required tables matching Drizzle schema
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE user_config (
-        user_id TEXT NOT NULL,
-        key TEXT NOT NULL,
-        value TEXT NOT NULL,
-        PRIMARY KEY (user_id, key)
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE memory_facts (
-        user_id TEXT NOT NULL,
-        identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        last_seen TEXT NOT NULL,
-        PRIMARY KEY (user_id, identifier)
-      )
-    `)
+  beforeEach(async () => {
+    // Setup test database with migrations
+    await setupTestDb()
 
     // Add admin user
     addUser(adminUserId, adminUserId)
@@ -173,35 +65,42 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('set')
       expect(handler).toBeDefined()
 
-      const msg = createGroupMessage('user456', false)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const msg = createGroupMessage('user456', '', false, 'group1')
+      msg.commandMatch = 'main_model gpt-4'
+      const auth = createAuth('user456')
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Only group admins can run this command.')
     })
 
     test('allowed for group admin in group', async () => {
       const handler = commandHandlers.get('set')
 
-      const msg = createGroupMessage('user456', true)
+      const msg = createGroupMessage('user456', '', true, 'group1')
       msg.commandMatch = 'main_model gpt-4'
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: true })
+      const auth = createAuth('user456', { isGroupAdmin: true })
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Set main_model successfully.')
     })
 
     test('allowed for bot admin in group', async () => {
       const handler = commandHandlers.get('set')
 
-      const msg = createGroupMessage(adminUserId, false)
+      const msg = createGroupMessage(adminUserId, '', false, 'group1')
       msg.commandMatch = 'main_model gpt-4'
-      const auth = createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: false })
+      const auth = createAuth(adminUserId, { isBotAdmin: true })
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Set main_model successfully.')
     })
 
@@ -212,11 +111,13 @@ describe('command context restrictions', () => {
       msg.commandMatch = 'main_model gpt-4'
       // Make user authorized
       addUser('user456', adminUserId)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const auth = createAuth('user456')
       auth.storageContextId = 'user456'
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Set main_model successfully.')
     })
   })
@@ -226,22 +127,26 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('clear')
       expect(handler).toBeDefined()
 
-      const msg = createGroupMessage('user456', false)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const msg = createGroupMessage('user456', '', false, 'group1')
+      const auth = createAuth('user456')
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Only group admins can run this command.')
     })
 
     test('allowed for group admin in group', async () => {
       const handler = commandHandlers.get('clear')
 
-      const msg = createGroupMessage('user456', true)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: true })
+      const msg = createGroupMessage('user456', '', true, 'group1')
+      const auth = createAuth('user456', { isGroupAdmin: true })
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Conversation history and memory cleared.')
     })
 
@@ -251,11 +156,13 @@ describe('command context restrictions', () => {
       const msg = createDmMessage('user456')
       // Make user authorized
       addUser('user456', adminUserId)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const auth = createAuth('user456')
       auth.storageContextId = 'user456'
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Conversation history and memory cleared.')
     })
   })
@@ -265,22 +172,26 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('config')
       expect(handler).toBeDefined()
 
-      const msg = createGroupMessage('user456', false)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const msg = createGroupMessage('user456', '', false, 'group1')
+      const auth = createAuth('user456')
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('Only group admins can run this command.')
     })
 
     test('allowed for group admin in group', async () => {
       const handler = commandHandlers.get('config')
 
-      const msg = createGroupMessage('user456', true)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: true })
+      const msg = createGroupMessage('user456', '', true, 'group1')
+      const auth = createAuth('user456', { isGroupAdmin: true })
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toContain('kaneo_apikey:')
     })
 
@@ -290,11 +201,13 @@ describe('command context restrictions', () => {
       const msg = createDmMessage('user456')
       // Make user authorized
       addUser('user456', adminUserId)
-      const auth = createMockAuth({ allowed: true, isBotAdmin: false, isGroupAdmin: false })
+      const auth = createAuth('user456')
       auth.storageContextId = 'user456'
 
-      await handler!(msg, createMockReply(), auth)
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, auth)
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toContain('kaneo_apikey:')
     })
   })
@@ -304,11 +217,13 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('user')
       expect(handler).toBeDefined()
 
-      const msg = createGroupMessage(adminUserId, true)
+      const msg = createGroupMessage(adminUserId, '', true, 'group1')
       msg.commandMatch = 'add user789'
 
-      await handler!(msg, createMockReply(), createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: true }))
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, createAuth(adminUserId, { isBotAdmin: true, isGroupAdmin: true }))
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('This command is only available in direct messages.')
     })
 
@@ -318,8 +233,10 @@ describe('command context restrictions', () => {
       const msg = createDmMessage(adminUserId)
       msg.commandMatch = 'add user789'
 
-      await handler!(msg, createMockReply(), createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: false }))
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, createAuth(adminUserId, { isBotAdmin: true }))
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('User @user789 authorized.')
     })
   })
@@ -329,10 +246,12 @@ describe('command context restrictions', () => {
       const handler = commandHandlers.get('users')
       expect(handler).toBeDefined()
 
-      const msg = createGroupMessage(adminUserId, true)
+      const msg = createGroupMessage(adminUserId, '', true, 'group1')
 
-      await handler!(msg, createMockReply(), createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: true }))
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, createAuth(adminUserId, { isBotAdmin: true, isGroupAdmin: true }))
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('This command is only available in direct messages.')
     })
 
@@ -341,8 +260,10 @@ describe('command context restrictions', () => {
 
       const msg = createDmMessage(adminUserId)
 
-      await handler!(msg, createMockReply(), createMockAuth({ allowed: true, isBotAdmin: true, isGroupAdmin: false }))
+      const { reply, textCalls } = createMockReply()
+      await handler!(msg, reply, createAuth(adminUserId, { isBotAdmin: true }))
 
+      lastReply = textCalls[0] ?? null
       expect(lastReply).toContain(adminUserId)
       expect(lastReply).toContain('(admin)')
     })

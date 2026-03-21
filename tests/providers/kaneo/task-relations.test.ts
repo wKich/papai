@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { mockLogger } from '../../utils/test-helpers.js'
+
+// Mock logger before importing modules that use it
+mockLogger()
+
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { restoreFetch, setMockFetch, createMockTask } from '../../test-helpers.js'
+import { createMockTask, restoreFetch, setMockFetch } from '../../test-helpers.js'
 import { TaskResource } from './test-resources.js'
 
 interface UpdateDescriptionBody {

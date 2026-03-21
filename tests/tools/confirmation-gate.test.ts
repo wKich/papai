@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { checkConfidence, confidenceField } from '../../src/tools/confirmation-gate.js'
 
 describe('Confirmation Gate', () => {

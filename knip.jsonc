@@ -26,6 +26,9 @@
     "catalog": "error",
   },
 
+  // Ignore Stryker plugin (loaded at runtime, not imported)
+  "ignoreDependencies": ["@stryker-mutator/typescript-checker"],
+
   // Report unused exports even in entry files
   "includeEntryExports": true,
 

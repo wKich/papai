@@ -5,21 +5,23 @@
  * using controlled test doubles to verify the composition of the persistence layer.
  */
 
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
+import { flushMicrotasks } from './test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
+let testSqlite: Database
+
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 // Mock db/index.js to return test sqlite instance for cache.ts
@@ -29,40 +31,17 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
+import { Database } from 'bun:sqlite'
+
 import { _userCaches } from '../src/cache.js'
 import { loadHistory, saveHistory } from '../src/history.js'
 import { loadSummary, saveSummary, loadFacts, upsertFact, buildMemoryContextMessage } from '../src/memory.js'
-import { flushMicrotasks } from './test-helpers.js'
 
 describe('Story 2: Surviving restart', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-
-    // Create tables
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE memory_facts (
-        user_id TEXT NOT NULL,
-        identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        last_seen TEXT NOT NULL,
-        PRIMARY KEY (user_id, identifier)
-      )
-    `)
 
     // Clear all caches
     _userCaches.clear()
@@ -119,27 +98,10 @@ describe('Story 2: Surviving restart', () => {
 })
 
 describe('Story 4: Key facts remembered after read', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-
-    testSqlite.run(`
-      CREATE TABLE memory_facts (
-        user_id TEXT NOT NULL,
-        identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        last_seen TEXT NOT NULL,
-        PRIMARY KEY (user_id, identifier)
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
 
     _userCaches.clear()
   })

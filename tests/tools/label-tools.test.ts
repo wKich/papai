@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeCreateLabelTool } from '../../src/tools/create-label.js'
 import { makeListLabelsTool } from '../../src/tools/list-labels.js'
 import { makeRemoveLabelTool } from '../../src/tools/remove-label.js'

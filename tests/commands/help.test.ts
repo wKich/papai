@@ -1,24 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type {
-  AuthorizationResult,
-  ChatProvider,
-  CommandHandler,
-  IncomingMessage,
-  ReplyFn,
-} from '../../src/chat/types.js'
+import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import { createDmMessage, createGroupMessage, mockLogger } from '../utils/test-helpers.js'
 
-// Mock logger to avoid output during tests
-void mock.module('../../src/logger.js', () => ({
-  logger: {
-    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+// Setup logger mock before importing modules
+mockLogger()
 
 import { registerHelpCommand } from '../../src/commands/help.js'
 
@@ -26,7 +12,18 @@ describe('help command', () => {
   let capturedText: string | null = null
   let lastHandler: CommandHandler | null = null
 
-  const mockReply: ReplyFn = {
+  const mockChat: ChatProvider = {
+    name: 'mock',
+    registerCommand: (_name: string, handler: CommandHandler): void => {
+      lastHandler = handler
+    },
+    onMessage: (): void => {},
+    sendMessage: (): Promise<void> => Promise.resolve(),
+    start: (): Promise<void> => Promise.resolve(),
+    stop: (): Promise<void> => Promise.resolve(),
+  }
+
+  const mockReply = {
     text: (content: string): Promise<void> => {
       capturedText = content
       return Promise.resolve()
@@ -36,35 +33,17 @@ describe('help command', () => {
     typing: (): void => {},
   }
 
-  const createMockChat = (): ChatProvider => ({
-    name: 'mock',
-    registerCommand: (_name: string, handler: CommandHandler): void => {
-      lastHandler = handler
-    },
-    onMessage: (): void => {},
-    sendMessage: (): Promise<void> => Promise.resolve(),
-    start: (): Promise<void> => Promise.resolve(),
-    stop: (): Promise<void> => Promise.resolve(),
-  })
-
   beforeEach(() => {
     capturedText = null
     lastHandler = null
   })
 
   test('DM help shows user management commands for admin', async () => {
-    const chat = createMockChat()
-    registerHelpCommand(chat)
+    registerHelpCommand(mockChat)
 
-    const dmMsg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'user1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: '/help',
-    }
+    const dmMsg = createDmMessage('user1', '/help')
 
-    const auth: AuthorizationResult = {
+    const auth = {
       allowed: true,
       isBotAdmin: true,
       isGroupAdmin: false,
@@ -83,18 +62,11 @@ describe('help command', () => {
   })
 
   test('DM help shows basic commands for non-admin', async () => {
-    const chat = createMockChat()
-    registerHelpCommand(chat)
+    registerHelpCommand(mockChat)
 
-    const dmMsg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'user1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: '/help',
-    }
+    const dmMsg = createDmMessage('user1', '/help')
 
-    const auth: AuthorizationResult = {
+    const auth = {
       allowed: true,
       isBotAdmin: false,
       isGroupAdmin: false,
@@ -112,18 +84,11 @@ describe('help command', () => {
   })
 
   test('Group help shows group commands', async () => {
-    const chat = createMockChat()
-    registerHelpCommand(chat)
+    registerHelpCommand(mockChat)
 
-    const groupMsg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'group1',
-      contextType: 'group',
-      isMentioned: false,
-      text: '/help',
-    }
+    const groupMsg = createGroupMessage('user1', '/help', false, 'group1')
 
-    const auth: AuthorizationResult = {
+    const auth = {
       allowed: true,
       isBotAdmin: false,
       isGroupAdmin: false,
@@ -142,18 +107,11 @@ describe('help command', () => {
   })
 
   test('Group admin help includes config commands', async () => {
-    const chat = createMockChat()
-    registerHelpCommand(chat)
+    registerHelpCommand(mockChat)
 
-    const groupMsg: IncomingMessage = {
-      user: { id: 'admin1', username: 'adminuser', isAdmin: true },
-      contextId: 'group1',
-      contextType: 'group',
-      isMentioned: false,
-      text: '/help',
-    }
+    const groupMsg = createGroupMessage('admin1', '/help', true, 'group1')
 
-    const auth: AuthorizationResult = {
+    const auth = {
       allowed: true,
       isBotAdmin: false,
       isGroupAdmin: true,

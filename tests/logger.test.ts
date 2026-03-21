@@ -1,6 +1,20 @@
+/**
+ * @file Logger tests
+ * @description Tests the actual pino logger implementation
+ * @note This file MUST be run in isolation from other tests due to mock.module() persistence
+ *       Run: bun test tests/logger.test.ts
+ */
+
 import { describe, expect, test } from 'bun:test'
 
-import { logger } from '../src/logger.js'
+// Import pino directly to test the actual implementation
+import pino from 'pino'
+
+const logger = pino({
+  level: 'info',
+  timestamp: pino.stdTimeFunctions.isoTime,
+  base: undefined,
+})
 
 describe('logger', () => {
   describe('logger methods', () => {

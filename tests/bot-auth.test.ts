@@ -1,30 +1,18 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-}))
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
-// Mock logger to avoid console output
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    child: (): object => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 import { addGroupMember } from '../src/groups.js'
@@ -35,28 +23,8 @@ import { addUser } from '../src/users.js'
 // For now, we'll test the logic through the module's behavior
 
 describe('Authorization Logic', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create tables using Drizzle's schema
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
-    testSqlite.run(`
-      CREATE TABLE group_members (
-        group_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        added_by TEXT NOT NULL,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (group_id, user_id)
-      )
-    `)
+  beforeEach(async () => {
+    testDb = await setupTestDb()
   })
 
   describe('Bot Admin Authorization', () => {

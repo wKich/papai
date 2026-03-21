@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { mockLogger } from '../../utils/test-helpers.js'
+
+// Mock logger before importing modules that use it
+mockLogger()
+
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { restoreFetch, setMockFetch, createMockTask, createMockColumn } from '../../test-helpers.js'
+import { createMockColumn, createMockTask, restoreFetch, setMockFetch } from '../../test-helpers.js'
 import { TaskResource } from './test-resources.js'
 
 void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
@@ -711,6 +716,327 @@ describe('TaskResource', () => {
         workspaceId: 'ws-1',
       })
       expect(result).toEqual([])
+    })
+  })
+
+  describe('archive', () => {
+    test('archives task by adding archive label', async () => {
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(JSON.stringify([{ id: 'label-1', name: 'archived', color: '#808080', workspaceId: 'ws-1' }]), {
+            status: 200,
+          }),
+        ),
+      )
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.archive('task-1', 'ws-1')
+
+      expect(result.id).toBe('task-1')
+      expect(result.archivedAt).toBeDefined()
+    })
+
+    test('creates archive label if not exists', async () => {
+      setMockFetch((url: string) => {
+        // List workspace labels (empty)
+        if (url.includes('/label/workspace/ws-1')) {
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }
+        // Create label (POST to /label endpoint)
+        if (url.endsWith('/label') && !url.includes('/workspace/') && !url.includes('/task/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: 'label-new', name: 'archived', color: '#808080', workspaceId: 'ws-1' }), {
+              status: 200,
+            }),
+          )
+        }
+        // Get label by ID
+        if (url.match(/\/label\/[^/]+$/)) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: 'label-new', name: 'archived', color: '#808080', workspaceId: 'ws-1' }), {
+              status: 200,
+            }),
+          )
+        }
+        // Get task labels (isTaskArchived check)
+        if (url.includes('/label/task/')) {
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }
+        // Add label to task (POST to /label/workspace/{labelId}/task/{taskId})
+        if (url.includes('/label/workspace/') && url.includes('/task/')) {
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.archive('task-1', 'ws-1')
+
+      expect(result.id).toBe('task-1')
+    })
+
+    test('skips adding label if already archived', async () => {
+      let callCount = 0
+      setMockFetch(() => {
+        callCount++
+        // First call: list labels returns archive label
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify([{ id: 'label-1', name: 'archived', color: '#808080', workspaceId: 'ws-1' }]), {
+              status: 200,
+            }),
+          )
+        }
+        // Second call: check if task has label (returns label)
+        if (callCount === 2) {
+          return Promise.resolve(
+            new Response(JSON.stringify([{ id: 'label-1', name: 'archived', color: '#808080', workspaceId: 'ws-1' }]), {
+              status: 200,
+            }),
+          )
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.archive('task-1', 'ws-1')
+
+      expect(result.id).toBe('task-1')
+      expect(callCount).toBe(2)
+    })
+  })
+
+  describe('addRelation', () => {
+    test('adds relation between tasks', async () => {
+      let callCount = 0
+      setMockFetch(() => {
+        callCount++
+        // First call: get related task
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'task-2',
+                title: 'Related Task',
+                description: '',
+                number: 2,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                position: 0,
+                userId: null,
+                createdAt: new Date().toISOString(),
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        // Second call: get source task
+        if (callCount === 2) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'task-1',
+                title: 'Task 1',
+                description: '',
+                number: 1,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                position: 0,
+                userId: null,
+                createdAt: new Date().toISOString(),
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        // Third call: update description with relation
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'task-1',
+              title: 'Task 1',
+              description: '---\nblocks: task-2\n---',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              projectId: 'proj-1',
+              position: 0,
+              userId: null,
+              createdAt: new Date().toISOString(),
+            }),
+            { status: 200 },
+          ),
+        )
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.addRelation('task-1', 'task-2', 'blocks')
+
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-2')
+      expect(result.type).toBe('blocks')
+    })
+  })
+
+  describe('removeRelation', () => {
+    test('removes relation between tasks', async () => {
+      let callCount = 0
+      setMockFetch(() => {
+        callCount++
+        // First call: get task with relation
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'task-1',
+                title: 'Task 1',
+                description: '---\nblocks: task-2\n---',
+                number: 1,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                position: 0,
+                userId: null,
+                createdAt: new Date().toISOString(),
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        // Second call: update description without relation
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'task-1',
+              title: 'Task 1',
+              description: '',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              projectId: 'proj-1',
+              position: 0,
+              userId: null,
+              createdAt: new Date().toISOString(),
+            }),
+            { status: 200 },
+          ),
+        )
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.removeRelation('task-1', 'task-2')
+
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-2')
+      expect(result.success).toBe(true)
+    })
+
+    test('throws error when relation not found', async () => {
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'task-1',
+              title: 'Task 1',
+              description: '',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              projectId: 'proj-1',
+              position: 0,
+              userId: null,
+              createdAt: new Date().toISOString(),
+            }),
+            { status: 200 },
+          ),
+        ),
+      )
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.removeRelation('task-1', 'task-2')
+      await expect(promise).rejects.toThrow('not found')
+    })
+  })
+
+  describe('updateRelation', () => {
+    test('updates relation type', async () => {
+      let callCount = 0
+      setMockFetch(() => {
+        callCount++
+        // First call: get task with existing relation
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'task-1',
+                title: 'Task 1',
+                description: '---\nblocks: task-2\n---',
+                number: 1,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                position: 0,
+                userId: null,
+                createdAt: new Date().toISOString(),
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        // Second call: update description with new relation type
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'task-1',
+              title: 'Task 1',
+              description: '---\nduplicate: task-2\n---',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              projectId: 'proj-1',
+              position: 0,
+              userId: null,
+              createdAt: new Date().toISOString(),
+            }),
+            { status: 200 },
+          ),
+        )
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.updateRelation('task-1', 'task-2', 'duplicate')
+
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-2')
+      expect(result.type).toBe('duplicate')
+    })
+
+    test('throws error when relation not found', async () => {
+      setMockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'task-1',
+              title: 'Task 1',
+              description: '',
+              number: 1,
+              status: 'todo',
+              priority: 'medium',
+              projectId: 'proj-1',
+              position: 0,
+              userId: null,
+              createdAt: new Date().toISOString(),
+            }),
+            { status: 200 },
+          ),
+        ),
+      )
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.updateRelation('task-1', 'task-2', 'related')
+      await expect(promise).rejects.toThrow('not found')
     })
   })
 })

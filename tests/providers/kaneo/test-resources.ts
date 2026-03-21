@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
 import { providerError } from '../../../src/errors.js'
-import { logger } from '../../../src/logger.js'
 import { classifyKaneoError } from '../../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
 import { kaneoFetch } from '../../../src/providers/kaneo/client.js'
@@ -13,9 +12,8 @@ import { TaskResource } from '../../../src/providers/kaneo/task-resource.js'
 
 export const EmptyResponseSchema = z.unknown()
 
-export { CommentResource, ColumnResource, LabelResource, ProjectResource, TaskResource }
+export { ColumnResource, CommentResource, LabelResource, ProjectResource, TaskResource }
 
 export { classifyKaneoError, providerError }
 export { kaneoFetch }
-export { logger }
 export type { KaneoConfig }
