@@ -58,8 +58,12 @@ addUser(adminUserId, adminUserId)
 const chatProvider = createChatProvider(process.env['CHAT_PROVIDER']!)
 
 log.info(
-  { adminUserConfigured: Boolean(adminUserId), chatProvider: process.env['CHAT_PROVIDER'], taskProvider: TASK_PROVIDER },
-  'Starting papai...'
+  {
+    adminUserConfigured: Boolean(adminUserId),
+    chatProvider: process.env['CHAT_PROVIDER'],
+    taskProvider: TASK_PROVIDER,
+  },
+  'Starting papai...',
 )
 
 setupBot(chatProvider, adminUserId)
