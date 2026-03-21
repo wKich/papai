@@ -101,6 +101,23 @@ export const recurringTasks = sqliteTable(
   ],
 )
 
+export const recurringTaskOccurrences = sqliteTable(
+  'recurring_task_occurrences',
+  {
+    id: text('id').primaryKey(),
+    templateId: text('template_id').notNull(),
+    taskId: text('task_id').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_recurring_occurrences_template').on(table.templateId),
+    index('idx_recurring_occurrences_task').on(table.taskId),
+  ],
+)
+
 export type RecurringTask = typeof recurringTasks.$inferSelect
+export type RecurringTaskOccurrence = typeof recurringTaskOccurrences.$inferSelect
 
 export type GroupMember = typeof groupMembers.$inferSelect

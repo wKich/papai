@@ -11,6 +11,7 @@ import { logger } from './logger.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import type { Task } from './providers/types.js'
+import { recordOccurrence } from './recurring-occurrences.js'
 import { type RecurringTaskRecord, getDueRecurringTasks, getRecurringTask, markExecuted } from './recurring.js'
 import { getKaneoWorkspace } from './users.js'
 
@@ -115,6 +116,7 @@ const executeRecurringTask = async (task: RecurringTaskRecord): Promise<void> =>
     )
 
     await applyLabels(provider, created.id, task.labels)
+    recordOccurrence(task.id, created.id)
     markExecuted(task.id)
     await notifyUser(task.userId, created)
   } catch (error) {
@@ -150,6 +152,7 @@ export const createMissedTasks = async (recurringTaskId: string, missedDates: re
         dueDate,
       })
       await applyLabels(provider, newTask.id, task.labels)
+      recordOccurrence(recurringTaskId, newTask.id)
       log.debug({ recurringTaskId, createdTaskId: newTask.id, dueDate }, 'Missed task created')
       return true
     } catch (error) {

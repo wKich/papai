@@ -7,6 +7,12 @@ import { logger } from './logger.js'
 import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from './types/recurring.js'
 
 export type { TriggerType, RecurringTaskInput, RecurringTaskRecord } from './types/recurring.js'
+export {
+  COMPLETION_STATUSES,
+  findTemplateByTaskId,
+  isCompletionStatus,
+  recordOccurrence,
+} from './recurring-occurrences.js'
 
 const log = logger.child({ scope: 'recurring' })
 const generateId = (): string => crypto.randomUUID()
@@ -260,10 +266,8 @@ export const deleteRecurringTask = (id: string): boolean => {
   return true
 }
 
-/** Get all enabled recurring tasks with nextRun <= now (for the scheduler). */
 export const getDueRecurringTasks = (): RecurringTaskRecord[] => {
   log.debug('getDueRecurringTasks called')
-
   const now = new Date().toISOString()
   const db = getDrizzleDb()
   const rows = db
@@ -276,10 +280,8 @@ export const getDueRecurringTasks = (): RecurringTaskRecord[] => {
   return rows.map(toRecord)
 }
 
-/** Mark a recurring task as executed and compute nextRun. */
 export const markExecuted = (id: string): void => {
   log.debug({ id }, 'markExecuted called')
-
   const db = getDrizzleDb()
   const existing = db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get()
   if (existing === undefined) return

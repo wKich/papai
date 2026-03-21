@@ -42,11 +42,14 @@ void mock.module('../src/db/drizzle.js', () => ({
 import {
   createRecurringTask,
   deleteRecurringTask,
+  findTemplateByTaskId,
   getDueRecurringTasks,
   getRecurringTask,
+  isCompletionStatus,
   listRecurringTasks,
   markExecuted,
   pauseRecurringTask,
+  recordOccurrence,
   resumeRecurringTask,
   skipNextOccurrence,
   updateRecurringTask,
@@ -86,6 +89,18 @@ beforeEach(() => {
   `)
   testSqlite.run('CREATE INDEX idx_recurring_tasks_user ON recurring_tasks(user_id)')
   testSqlite.run('CREATE INDEX idx_recurring_tasks_enabled_next ON recurring_tasks(enabled, next_run)')
+
+  // Create recurring_task_occurrences table
+  testSqlite.run(`
+    CREATE TABLE recurring_task_occurrences (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')) NOT NULL
+    )
+  `)
+  testSqlite.run('CREATE INDEX idx_recurring_occurrences_template ON recurring_task_occurrences(template_id)')
+  testSqlite.run('CREATE INDEX idx_recurring_occurrences_task ON recurring_task_occurrences(task_id)')
 })
 
 describe('createRecurringTask', () => {
@@ -435,5 +450,81 @@ describe('markExecuted', () => {
     expect(updated).not.toBeNull()
     expect(updated!.lastRun).not.toBeNull()
     expect(updated!.nextRun).not.toBeNull()
+  })
+})
+
+describe('recordOccurrence', () => {
+  test('records an occurrence linking template to task', () => {
+    const task = createRecurringTask({
+      userId: USER_ID,
+      projectId: PROJECT_ID,
+      title: 'Test',
+      triggerType: 'cron',
+      cronExpression: '0 9 * * 1',
+    })
+
+    recordOccurrence(task.id, 'external-task-123')
+
+    const row = testSqlite
+      .query<{ template_id: string; task_id: string }, [string]>(
+        'SELECT template_id, task_id FROM recurring_task_occurrences WHERE task_id = ?',
+      )
+      .get('external-task-123')
+
+    expect(row).not.toBeUndefined()
+    expect(row!.template_id).toBe(task.id)
+    expect(row!.task_id).toBe('external-task-123')
+  })
+})
+
+describe('findTemplateByTaskId', () => {
+  test('returns template when task_id matches an occurrence', () => {
+    const task = createRecurringTask({
+      userId: USER_ID,
+      projectId: PROJECT_ID,
+      title: 'Weekly Sync',
+      triggerType: 'cron',
+      cronExpression: '0 9 * * 1',
+    })
+
+    recordOccurrence(task.id, 'ext-task-1')
+
+    const found = findTemplateByTaskId('ext-task-1')
+    expect(found).not.toBeNull()
+    expect(found!.id).toBe(task.id)
+    expect(found!.title).toBe('Weekly Sync')
+  })
+
+  test('returns null when task_id has no occurrence', () => {
+    const found = findTemplateByTaskId('nonexistent-task')
+    expect(found).toBeNull()
+  })
+})
+
+describe('isCompletionStatus', () => {
+  test('matches done status', () => {
+    expect(isCompletionStatus('done')).toBe(true)
+    expect(isCompletionStatus('Done')).toBe(true)
+    expect(isCompletionStatus('DONE')).toBe(true)
+  })
+
+  test('matches completed status', () => {
+    expect(isCompletionStatus('completed')).toBe(true)
+    expect(isCompletionStatus('Completed')).toBe(true)
+  })
+
+  test('matches closed status', () => {
+    expect(isCompletionStatus('closed')).toBe(true)
+  })
+
+  test('matches resolved status', () => {
+    expect(isCompletionStatus('resolved')).toBe(true)
+  })
+
+  test('does not match non-completion statuses', () => {
+    expect(isCompletionStatus('in-progress')).toBe(false)
+    expect(isCompletionStatus('todo')).toBe(false)
+    expect(isCompletionStatus('to-do')).toBe(false)
+    expect(isCompletionStatus('in-review')).toBe(false)
   })
 })

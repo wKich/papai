@@ -4,10 +4,11 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
+import type { CompletionHookFn } from './completion-hook.js'
 
 const log = logger.child({ scope: 'tool:update-task' })
 
-export function makeUpdateTaskTool(provider: TaskProvider): ToolSet[string] {
+export function makeUpdateTaskTool(provider: TaskProvider, completionHook?: CompletionHookFn): ToolSet[string] {
   return tool({
     description: "Update an existing task's status, priority, assignee, due date, title, description, or project.",
     inputSchema: z.object({
@@ -38,6 +39,11 @@ export function makeUpdateTaskTool(provider: TaskProvider): ToolSet[string] {
           assignee: userId,
         })
         log.info({ taskId }, 'Task updated via tool')
+
+        if (completionHook !== undefined && task.status !== undefined) {
+          await completionHook(taskId, task.status, provider)
+        }
+
         return task
       } catch (error) {
         log.error(

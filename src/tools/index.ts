@@ -6,6 +6,7 @@ import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
+import { completionHook } from './completion-hook.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
@@ -41,7 +42,7 @@ import { makeUpdateTaskTool } from './update-task.js'
 function makeCoreTools(provider: TaskProvider): ToolSet {
   return {
     create_task: makeCreateTaskTool(provider),
-    update_task: makeUpdateTaskTool(provider),
+    update_task: makeUpdateTaskTool(provider, completionHook),
     search_tasks: makeSearchTasksTool(provider),
     list_tasks: makeListTasksTool(provider),
     get_task: makeGetTaskTool(provider),
