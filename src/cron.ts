@@ -114,20 +114,55 @@ const fieldMatches = (field: CronField, value: number): boolean => {
   return field.values.includes(value)
 }
 
-/** Check if a given date matches the cron expression. */
-export const cronMatches = (cron: ParsedCron, date: Date): boolean =>
-  fieldMatches(cron.minute, date.getUTCMinutes()) &&
-  fieldMatches(cron.hour, date.getUTCHours()) &&
-  fieldMatches(cron.dayOfMonth, date.getUTCDate()) &&
-  fieldMatches(cron.month, date.getUTCMonth() + 1) &&
-  fieldMatches(cron.dayOfWeek, date.getUTCDay())
+/**
+ * Get the local time components for a Date in a given IANA timezone.
+ * Falls back to UTC if the timezone is invalid.
+ */
+const getLocalParts = (
+  date: Date,
+  tz: string,
+): { minute: number; hour: number; day: number; month: number; weekday: number } => {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+      hour12: false,
+    })
+    const parts = fmt.formatToParts(date)
+    const get = (t: Intl.DateTimeFormatPartTypes): number =>
+      Number.parseInt(parts.find((p) => p.type === t)?.value ?? '0', 10)
+
+    const weekdayStr = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun'
+    const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+
+    return {
+      minute: get('minute'),
+      hour: get('hour') === 24 ? 0 : get('hour'),
+      day: get('day'),
+      month: get('month'),
+      weekday: weekdayMap[weekdayStr] ?? 0,
+    }
+  } catch {
+    return {
+      minute: date.getUTCMinutes(),
+      hour: date.getUTCHours(),
+      day: date.getUTCDate(),
+      month: date.getUTCMonth() + 1,
+      weekday: date.getUTCDay(),
+    }
+  }
+}
 
 /**
- * Compute the next occurrence after `after` that matches the cron expression.
- * Searches minute-by-minute for up to 366 days.
+ * Compute the next occurrence after `after` that matches the cron expression
+ * in the given timezone. Searches minute-by-minute for up to 366 days.
  */
-export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null => {
-  // Start from the next whole minute
+export const nextCronOccurrence = (cron: ParsedCron, after: Date, timezone = 'UTC'): Date | null => {
   const candidate = new Date(after.getTime())
   candidate.setUTCSeconds(0, 0)
   candidate.setUTCMinutes(candidate.getUTCMinutes() + 1)
@@ -136,12 +171,20 @@ export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null =
   const limit = 366 * 24 * 60
 
   for (let i = 0; i < limit; i++) {
-    if (cronMatches(cron, candidate)) {
+    const p = getLocalParts(candidate, timezone)
+
+    if (
+      fieldMatches(cron.minute, p.minute) &&
+      fieldMatches(cron.hour, p.hour) &&
+      fieldMatches(cron.dayOfMonth, p.day) &&
+      fieldMatches(cron.month, p.month) &&
+      fieldMatches(cron.dayOfWeek, p.weekday)
+    ) {
       return candidate
     }
 
     // Optimize: if hour doesn't match, skip to next hour
-    if (!fieldMatches(cron.hour, candidate.getUTCHours())) {
+    if (!fieldMatches(cron.hour, p.hour)) {
       candidate.setUTCHours(candidate.getUTCHours() + 1)
       candidate.setUTCMinutes(0)
       i += 59
@@ -150,9 +193,9 @@ export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null =
 
     // If day doesn't match, skip to next day
     if (
-      !fieldMatches(cron.dayOfMonth, candidate.getUTCDate()) ||
-      !fieldMatches(cron.month, candidate.getUTCMonth() + 1) ||
-      !fieldMatches(cron.dayOfWeek, candidate.getUTCDay())
+      !fieldMatches(cron.dayOfMonth, p.day) ||
+      !fieldMatches(cron.month, p.month) ||
+      !fieldMatches(cron.dayOfWeek, p.weekday)
     ) {
       candidate.setUTCDate(candidate.getUTCDate() + 1)
       candidate.setUTCHours(0)
@@ -164,7 +207,7 @@ export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null =
     candidate.setUTCMinutes(candidate.getUTCMinutes() + 1)
   }
 
-  log.warn({ after: after.toISOString() }, 'Could not find next cron occurrence within 366 days')
+  log.warn({ after: after.toISOString(), timezone }, 'Could not find next cron occurrence within 366 days')
   return null
 }
 
@@ -172,11 +215,17 @@ export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null =
  * Collect all occurrences of a cron expression between `after` (exclusive) and `before` (inclusive).
  * Returns at most `maxResults` dates. Used for retroactive missed-occurrence creation.
  */
-export const allOccurrencesBetween = (cron: ParsedCron, after: Date, before: Date, maxResults = 100): Date[] => {
+export const allOccurrencesBetween = (
+  cron: ParsedCron,
+  after: Date,
+  before: Date,
+  maxResults = 100,
+  timezone = 'UTC',
+): Date[] => {
   const results: Date[] = []
   let cursor = after
   while (results.length < maxResults) {
-    const next = nextCronOccurrence(cron, cursor)
+    const next = nextCronOccurrence(cron, cursor, timezone)
     if (next === null || next.getTime() > before.getTime()) break
     results.push(next)
     cursor = next
@@ -187,7 +236,7 @@ export const allOccurrencesBetween = (cron: ParsedCron, after: Date, before: Dat
 /**
  * Describes a cron expression in human-readable form.
  */
-export const describeCron = (expression: string): string => {
+export const describeCron = (expression: string, timezone = 'UTC'): string => {
   const cron = parseCron(expression)
   if (cron === null) return expression
 
@@ -214,7 +263,7 @@ export const describeCron = (expression: string): string => {
   if (cron.minute.type === 'values' && cron.hour.type === 'values') {
     const h = cron.hour.values[0] ?? 0
     const m = cron.minute.values[0] ?? 0
-    parts.push(`at ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} UTC`)
+    parts.push(`at ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${timezone}`)
   }
 
   // Day of week

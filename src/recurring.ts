@@ -1,7 +1,3 @@
-/**
- * Recurring task definitions — CRUD operations backed by SQLite.
- */
-
 import { eq, and, sql } from 'drizzle-orm'
 
 import { allOccurrencesBetween, nextCronOccurrence, parseCron } from './cron.js'
@@ -48,10 +44,10 @@ const toRecord = (row: typeof recurringTasks.$inferSelect): RecurringTaskRecord 
   updatedAt: row.updatedAt,
 })
 
-const computeNextRun = (cronExpression: string): string | null => {
+const computeNextRun = (cronExpression: string, timezone = 'UTC'): string | null => {
   const parsed = parseCron(cronExpression)
   if (parsed === null) return null
-  const next = nextCronOccurrence(parsed, new Date())
+  const next = nextCronOccurrence(parsed, new Date(), timezone)
   return next === null ? null : next.toISOString()
 }
 
@@ -61,7 +57,9 @@ export const createRecurringTask = (input: RecurringTaskInput): RecurringTaskRec
   const id = generateId()
   const now = new Date().toISOString()
   const nextRun =
-    input.triggerType === 'cron' && input.cronExpression !== undefined ? computeNextRun(input.cronExpression) : null
+    input.triggerType === 'cron' && input.cronExpression !== undefined
+      ? computeNextRun(input.cronExpression, input.timezone ?? 'UTC')
+      : null
 
   const db = getDrizzleDb()
   db.insert(recurringTasks)
@@ -146,7 +144,7 @@ export const updateRecurringTask = (
 
   if (updates.cronExpression !== undefined) {
     set.cronExpression = updates.cronExpression
-    set.nextRun = computeNextRun(updates.cronExpression)
+    set.nextRun = computeNextRun(updates.cronExpression, existing.timezone)
   }
 
   db.update(recurringTasks).set(set).where(eq(recurringTasks.id, id)).run()
@@ -173,12 +171,12 @@ export type ResumeResult = {
   missedDates: string[]
 }
 
-const computeMissedDates = (cronExpr: string, fromDate: string | null): string[] => {
+const computeMissedDates = (cronExpr: string, fromDate: string | null, timezone = 'UTC'): string[] => {
   const parsed = parseCron(cronExpr)
   if (parsed === null) return []
   const after = fromDate === null ? new Date(0) : new Date(fromDate)
   const before = new Date()
-  const missed = allOccurrencesBetween(parsed, after, before)
+  const missed = allOccurrencesBetween(parsed, after, before, 100, timezone)
   return missed.map((d) => d.toISOString())
 }
 
@@ -193,11 +191,12 @@ export const resumeRecurringTask = (id: string, createMissed: boolean): ResumeRe
   }
 
   const cronExpr = existing.cronExpression
+  const tz = existing.timezone
   let missedDates: string[] = []
-  const nextRun = cronExpr === null ? existing.nextRun : computeNextRun(cronExpr)
+  const nextRun = cronExpr === null ? existing.nextRun : computeNextRun(cronExpr, tz)
 
   if (createMissed && cronExpr !== null) {
-    missedDates = computeMissedDates(cronExpr, existing.nextRun)
+    missedDates = computeMissedDates(cronExpr, existing.nextRun, tz)
     log.info({ id, missedCount: missedDates.length }, 'Computed missed occurrences')
   }
 
@@ -231,7 +230,7 @@ export const skipNextOccurrence = (id: string): RecurringTaskRecord | null => {
   if (parsed === null) return toRecord(existing)
 
   const baseDate = existing.nextRun === null ? new Date() : new Date(existing.nextRun)
-  const newNext = nextCronOccurrence(parsed, baseDate)
+  const newNext = nextCronOccurrence(parsed, baseDate, existing.timezone)
   const newNextRun = newNext === null ? null : newNext.toISOString()
 
   db.update(recurringTasks)
@@ -289,7 +288,7 @@ export const markExecuted = (id: string): void => {
   let nextRun: string | null = null
 
   if (existing.triggerType === 'cron' && existing.cronExpression !== null) {
-    nextRun = computeNextRun(existing.cronExpression)
+    nextRun = computeNextRun(existing.cronExpression, existing.timezone)
   }
 
   db.update(recurringTasks).set({ lastRun: now, nextRun, updatedAt: now }).where(eq(recurringTasks.id, id)).run()

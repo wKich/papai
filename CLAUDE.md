@@ -78,7 +78,7 @@ Copy `.env.example` to `.env`. Required at startup (validated in `src/index.ts`)
 
 The remaining credentials are stored per-user in a local SQLite database and configured at runtime via the `/set <key> <value>` command. Use `/config` to view current values. The `/config` command only shows keys relevant to the configured task provider.
 
-**Common config keys (always shown):** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`
+**Common config keys (always shown):** `llm_apikey`, `llm_baseurl`, `main_model`, `small_model`, `timezone`
 
 **Kaneo-specific (when TASK_PROVIDER=kaneo):** `kaneo_apikey`
 

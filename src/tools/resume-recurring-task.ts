@@ -31,7 +31,7 @@ async function executeResume(input: Input): Promise<unknown> {
 
   const schedule =
     record.triggerType === 'cron' && record.cronExpression !== null
-      ? describeCron(record.cronExpression)
+      ? describeCron(record.cronExpression, record.timezone)
       : 'after completion'
 
   log.info(

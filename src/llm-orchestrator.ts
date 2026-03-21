@@ -50,9 +50,9 @@ RELATION TYPES — map user language to the correct type when calling add_task_r
 - "related to" / "linked to" / anything else → related
 
 RECURRING TASKS — The user can set up tasks that repeat automatically:
-- "cron" trigger: task is created on a fixed schedule (cron expression). All times are in UTC. Use create_recurring_task with triggerType "cron" and a cronExpression.
+- "cron" trigger: task is created on a fixed schedule (cron expression). Cron times are interpreted in the user's configured timezone (set via /set timezone <tz>; defaults to UTC). Use create_recurring_task with triggerType "cron" and a cronExpression.
 - "on_complete" trigger: creates the next task only after the current one is marked done. Use triggerType "on_complete" (no cronExpression needed).
-- Common cron patterns (all UTC): "0 9 * * 1" = every Monday 9am, "0 9 * * 1-5" = weekdays 9am, "0 0 1 * *" = 1st of every month.
+- Common cron patterns: "0 9 * * 1" = every Monday 9am, "0 9 * * 1-5" = weekdays 9am, "0 0 1 * *" = 1st of every month.
 - Use list_recurring_tasks to show all recurring definitions. Use pause/resume/skip/delete tools to manage them.
 - When resuming, set createMissed=true to retroactively create tasks for missed cycles during the pause.
 - When the user says "stop" or "cancel" a recurring task, use delete_recurring_task.

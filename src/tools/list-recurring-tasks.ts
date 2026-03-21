@@ -25,7 +25,9 @@ export function makeListRecurringTasksTool(userId: string): ToolSet[string] {
           projectId: t.projectId,
           triggerType: t.triggerType,
           schedule:
-            t.triggerType === 'cron' && t.cronExpression !== null ? describeCron(t.cronExpression) : 'after completion',
+            t.triggerType === 'cron' && t.cronExpression !== null
+              ? describeCron(t.cronExpression, t.timezone)
+              : 'after completion',
           cronExpression: t.cronExpression,
           enabled: t.enabled,
           nextRun: t.nextRun,

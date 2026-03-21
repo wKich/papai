@@ -23,7 +23,7 @@ void mock.module('../src/logger.js', () => ({
   },
 }))
 
-import { cronMatches, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
+import { describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
 
 describe('parseCron', () => {
   test('parses a valid 5-field cron expression', () => {
@@ -71,30 +71,33 @@ describe('parseCron', () => {
   })
 })
 
-describe('cronMatches', () => {
-  test('matches every Monday at 9am UTC', () => {
+describe('cron matching via nextCronOccurrence', () => {
+  test('finds exact match at correct day and time', () => {
     const cron = parseCron('0 9 * * 1')!
-    // 2026-03-23 is a Monday
-    const monday9am = new Date('2026-03-23T09:00:00Z')
-    expect(cronMatches(cron, monday9am)).toBe(true)
+    // One minute before Monday 9am — next occurrence should be exactly Monday 9am
+    const justBefore = new Date('2026-03-23T08:59:00Z')
+    const next = nextCronOccurrence(cron, justBefore)
+    expect(next).not.toBeNull()
+    expect(next!.toISOString()).toBe('2026-03-23T09:00:00.000Z')
   })
 
-  test('does not match wrong day', () => {
+  test('skips wrong day', () => {
     const cron = parseCron('0 9 * * 1')!
-    // 2026-03-24 is a Tuesday
-    const tuesday9am = new Date('2026-03-24T09:00:00Z')
-    expect(cronMatches(cron, tuesday9am)).toBe(false)
+    // Tuesday — should skip to next Monday
+    const tuesday = new Date('2026-03-24T08:59:00Z')
+    const next = nextCronOccurrence(cron, tuesday)
+    expect(next).not.toBeNull()
+    // Next Monday is March 30
+    expect(next!.getUTCDay()).toBe(1)
   })
 
-  test('does not match wrong time', () => {
-    const cron = parseCron('0 9 * * 1')!
-    const monday10am = new Date('2026-03-23T10:00:00Z')
-    expect(cronMatches(cron, monday10am)).toBe(false)
-  })
-
-  test('matches wildcard for all fields', () => {
+  test('every-minute cron matches immediately', () => {
     const cron = parseCron('* * * * *')!
-    expect(cronMatches(cron, new Date())).toBe(true)
+    const now = new Date('2026-03-23T10:00:00Z')
+    const next = nextCronOccurrence(cron, now)
+    expect(next).not.toBeNull()
+    // Should be the very next minute
+    expect(next!.toISOString()).toBe('2026-03-23T10:01:00.000Z')
   })
 })
 
@@ -133,6 +136,34 @@ describe('nextCronOccurrence', () => {
   })
 })
 
+describe('timezone-aware cron matching', () => {
+  test('nextCronOccurrence returns UTC time matching timezone-local 9am', () => {
+    const cron = parseCron('0 9 * * *')!
+    // Sunday 2026-03-22 at 15:00 UTC = 11:00 EDT — past 9am local
+    const after = new Date('2026-03-22T15:00:00Z')
+    const next = nextCronOccurrence(cron, after, 'America/New_York')
+    expect(next).not.toBeNull()
+    // 9am EDT next day = 13:00 UTC
+    expect(next!.getUTCHours()).toBe(13)
+  })
+
+  test('defaults to UTC when no timezone specified', () => {
+    const cron = parseCron('0 9 * * 1')!
+    const justBefore = new Date('2026-03-23T08:59:00Z')
+    const next = nextCronOccurrence(cron, justBefore)
+    expect(next).not.toBeNull()
+    expect(next!.getUTCHours()).toBe(9)
+  })
+
+  test('falls back to UTC for invalid timezone', () => {
+    const cron = parseCron('0 9 * * *')!
+    const justBefore = new Date('2026-03-23T08:59:00Z')
+    const next = nextCronOccurrence(cron, justBefore, 'Invalid/Timezone')
+    expect(next).not.toBeNull()
+    expect(next!.getUTCHours()).toBe(9)
+  })
+})
+
 describe('describeCron', () => {
   test('describes weekly Monday schedule', () => {
     const desc = describeCron('0 9 * * 1')
@@ -143,6 +174,12 @@ describe('describeCron', () => {
   test('describes daily schedule', () => {
     const desc = describeCron('30 14 * * *')
     expect(desc).toContain('14:30 UTC')
+  })
+
+  test('shows user timezone when provided', () => {
+    const desc = describeCron('0 9 * * 1', 'America/New_York')
+    expect(desc).toContain('09:00 America/New_York')
+    expect(desc).toContain('Monday')
   })
 
   test('returns expression for invalid input', () => {

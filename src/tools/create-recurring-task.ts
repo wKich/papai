@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { getConfig } from '../config.js'
 import { describeCron, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { createRecurringTask } from '../recurring.js'
@@ -42,11 +43,17 @@ function executeCreate(userId: string, input: Input): unknown {
     }
   }
 
-  const record = createRecurringTask({ userId, ...input, triggerType: input.triggerType satisfies TriggerType })
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const record = createRecurringTask({
+    userId,
+    ...input,
+    triggerType: input.triggerType satisfies TriggerType,
+    timezone,
+  })
 
   const schedule =
     record.triggerType === 'cron' && record.cronExpression !== null
-      ? describeCron(record.cronExpression)
+      ? describeCron(record.cronExpression, record.timezone)
       : 'after completion of current instance'
 
   log.info({ id: record.id, title: input.title, schedule }, 'Recurring task created via tool')
