@@ -21,6 +21,7 @@ const TICK_INTERVAL_MS = 60 * 1000
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let chatProviderRef: ChatProvider | null = null
+let activeTickPromise: Promise<void> | null = null
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
@@ -124,20 +125,29 @@ const executeRecurringTask = async (task: RecurringTaskRecord): Promise<void> =>
   }
 }
 
-const tick = async (): Promise<void> => {
-  try {
-    const dueTasks = getDueRecurringTasks()
-    if (dueTasks.length === 0) return
-
-    log.info({ count: dueTasks.length }, 'Processing due recurring tasks')
-
-    await dueTasks.reduce<Promise<void>>(
-      (chain, task) => chain.then(() => executeRecurringTask(task)),
-      Promise.resolve(),
-    )
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
+export const tick = (): Promise<void> => {
+  if (activeTickPromise !== null) {
+    log.debug('Tick skipped: previous tick still running')
+    return Promise.resolve()
   }
+  activeTickPromise = (async (): Promise<void> => {
+    try {
+      const dueTasks = getDueRecurringTasks()
+      if (dueTasks.length === 0) return
+
+      log.info({ count: dueTasks.length }, 'Processing due recurring tasks')
+
+      await dueTasks.reduce<Promise<void>>(
+        (chain, task) => chain.then(() => executeRecurringTask(task)),
+        Promise.resolve(),
+      )
+    } catch (error) {
+      log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
+    } finally {
+      activeTickPromise = null
+    }
+  })()
+  return activeTickPromise
 }
 
 export const startScheduler = (chatProvider: ChatProvider): void => {

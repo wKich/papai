@@ -60,18 +60,14 @@ describe('parseCron', () => {
     expect(result!.minute).toEqual({ type: 'values', values: [0, 15, 30, 45] })
   })
 
-  test('ignores step parts with zero step (*/0)', () => {
-    const result = parseCron('*/0 * * * *')
-    expect(result).not.toBeNull()
-    // Zero step is invalid; the minute field produces no values
-    expect(result!.minute).toEqual({ type: 'values', values: [] })
+  test('returns null for zero step (*/0)', () => {
+    // Zero step produces no values → parseCron returns null (invalid expression)
+    expect(parseCron('*/0 * * * *')).toBeNull()
   })
 
-  test('ignores step parts with negative step (*/-1)', () => {
-    const result = parseCron('*/-1 * * * *')
-    expect(result).not.toBeNull()
-    // */-1 does not match the step regex (\d+ requires digits), so no values are produced
-    expect(result!.minute).toEqual({ type: 'values', values: [] })
+  test('returns null for negative step (*/-1)', () => {
+    // */-1 does not match the step regex so produces no values → parseCron returns null
+    expect(parseCron('*/-1 * * * *')).toBeNull()
   })
 })
 

@@ -210,7 +210,7 @@ export const skipNextOccurrence = (id: string): RecurringTaskRecord | null => {
 
   if (existing.cronExpression === null) {
     log.warn({ id }, 'Cannot skip on-complete triggered task')
-    return toRecord(existing)
+    return null
   }
 
   // Advance nextRun past the current nextRun

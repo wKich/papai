@@ -265,6 +265,20 @@ describe('skipNextOccurrence', () => {
     expect(skipped!.nextRun).not.toBe(originalNextRun)
     expect(new Date(skipped!.nextRun!).getTime()).toBeGreaterThan(new Date(originalNextRun).getTime())
   })
+
+  test('returns null for on_complete task (cannot skip non-cron task)', () => {
+    // Create on_complete task (has no cronExpression, nextRun is null)
+    const task = createRecurringTask({
+      userId: USER_ID,
+      projectId: PROJECT_ID,
+      title: 'On-complete task',
+      triggerType: 'on_complete',
+    })
+
+    const result = skipNextOccurrence(task.id)
+    // Should return null — skip is not meaningful for on_complete tasks
+    expect(result).toBeNull()
+  })
 })
 
 describe('deleteRecurringTask', () => {
@@ -339,6 +353,48 @@ describe('getDueRecurringTasks', () => {
 
     const due = getDueRecurringTasks()
     expect(due.some((t) => t.id === task.id)).toBe(false)
+  })
+
+  test('finds enabled tasks when table uses INTEGER columns (migration schema)', () => {
+    // Re-create table with INTEGER columns exactly as migration 009 creates them
+    testSqlite.run('DROP TABLE IF EXISTS recurring_tasks')
+    testSqlite.run('DROP INDEX IF EXISTS idx_recurring_tasks_user')
+    testSqlite.run('DROP INDEX IF EXISTS idx_recurring_tasks_enabled_next')
+    testSqlite.run(`
+      CREATE TABLE recurring_tasks (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT,
+        status TEXT,
+        assignee TEXT,
+        labels TEXT,
+        trigger_type TEXT NOT NULL DEFAULT 'cron',
+        cron_expression TEXT,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        catch_up INTEGER NOT NULL DEFAULT 0,
+        last_run TEXT,
+        next_run TEXT,
+        created_at TEXT DEFAULT (datetime('now')) NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now')) NOT NULL
+      )
+    `)
+    testSqlite.run('CREATE INDEX idx_recurring_tasks_user ON recurring_tasks(user_id)')
+    testSqlite.run('CREATE INDEX idx_recurring_tasks_enabled_next ON recurring_tasks(enabled, next_run)')
+
+    // Insert an enabled task with a past nextRun using raw SQL (INTEGER 1 for enabled)
+    const pastTime = new Date(Date.now() - 60000).toISOString()
+    testSqlite.run(
+      `INSERT INTO recurring_tasks (id, user_id, project_id, title, trigger_type, enabled, catch_up, next_run, created_at, updated_at)
+       VALUES ('migration-test-id', 'u1', 'p1', 'Migration Task', 'cron', 1, 0, ?, datetime('now'), datetime('now'))`,
+      [pastTime],
+    )
+
+    const due = getDueRecurringTasks()
+    expect(due.some((t) => t.id === 'migration-test-id')).toBe(true)
   })
 })
 
