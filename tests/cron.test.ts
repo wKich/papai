@@ -4,15 +4,21 @@ import { mock } from 'bun:test'
 // Mock logger
 void mock.module('../src/logger.js', () => ({
   logger: {
+    trace: (): void => {},
     debug: (): void => {},
     info: (): void => {},
     warn: (): void => {},
     error: (): void => {},
+    fatal: (): void => {},
+    level: 'info',
     child: (): object => ({
+      trace: (): void => {},
       debug: (): void => {},
       info: (): void => {},
       warn: (): void => {},
       error: (): void => {},
+      fatal: (): void => {},
+      level: 'info',
     }),
   },
 }))
