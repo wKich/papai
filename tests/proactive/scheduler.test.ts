@@ -63,9 +63,11 @@ describe('ProactiveAlertScheduler', () => {
   test('start registers 2 global poller jobs (runs without error)', () => {
     const chat = createMockChat()
     const builder = createMockProviderBuilder()
+    const intervalSpy = mock.spy(globalThis, 'setInterval')
+
     start(chat, builder)
-    // If it doesn't throw, the pollers are registered
-    expect(true).toBe(true)
+
+    expect(intervalSpy).toHaveBeenCalledTimes(2)
   })
 
   test('start registers one briefing job per user with briefing_time configured', () => {
