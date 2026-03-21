@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-03-21
+
+### Added
+
+- Implement Phase 01 YouTrack error classification (context, network detection, tests)
+- Implement Phase 04 (CI trigger, delete task tests, confirmation gate tests)
+- Implement Phase 05 (admin, bot-auth, set, config command handler tests)
+- Implement recurring work automation (Phase 8)
+- Add mutation testing thresholds and progress reporter
+- Add timezone config key for recurring task scheduling
+- Timezone-aware system prompt and due date handling
+
+### Changed
+
+- **tests:** DRY test suite with shared helpers and add duplicate detection
+
+### Documentation
+
+- Move completed plans to done
+- Archive completed phase 02 and 03 plans
+
+### Fixed
+
+- Apply bun format and add CI concurrency group by commit SHA
+- Apply PR review feedback - propagate labelId and projectId context in YouTrack error classification
+- Rename unused reply param to _reply in bot-auth.test.ts (TS6133)
+- Complete logger mock in recurring and cron tests to fix failing logger tests
+- Simplify test command to use bun test auto-discovery
+- Remove tests from ignorePatterns so tests are copied to sandbox
+- **scripts:** Fix shell escaping in detect-duplicates.ts
+- Await rejects assertion in propagates provider errors test
+- **cron:** Validate step > 0 to prevent infinite loop on */0
+- **recurring:** Address PR review feedback
+- Address Phase 8 verification gaps
+
+### Miscellaneous
+
+- Add stryker mutation testing dependencies
+- Add stryker mutation testing configuration
+- Add mutation testing scripts and fix test paths
+- Gitignore stryker temp dir and reports
+- Whitelist stryker checker plugin in knip config
+- Disable no-confusing-void-expression and await-thenable for tests; clean up task-resource tests
+- **package:** Integrate duplicate detection into check script
+- **package:** Rename test:duplicates to duplicates
+
+### Testing
+
+- Add tests for archive and relation methods in task-resource
+- Fix exception assertion patterns in task-resource tests
+- **cron:** Add test for negative step value (*/-1)
+
+### Ci
+
+- Add mutation testing job with incremental cache
+- Restrict push trigger to master branch only
 ## [4.1.5] - 2026-03-20
 
 ### Ci
