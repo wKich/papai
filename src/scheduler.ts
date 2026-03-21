@@ -21,6 +21,7 @@ const TICK_INTERVAL_MS = 60 * 1000
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let chatProviderRef: ChatProvider | null = null
+let isTickRunning = false
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
@@ -125,6 +126,12 @@ const executeRecurringTask = async (task: RecurringTaskRecord): Promise<void> =>
 }
 
 const tick = async (): Promise<void> => {
+  if (isTickRunning) {
+    log.debug('Skipping scheduler tick: previous tick still in progress')
+    return
+  }
+
+  isTickRunning = true
   try {
     const dueTasks = getDueRecurringTasks()
     if (dueTasks.length === 0) return
@@ -137,6 +144,8 @@ const tick = async (): Promise<void> => {
     )
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
+  } finally {
+    isTickRunning = false
   }
 }
 
@@ -159,6 +168,7 @@ export const stopScheduler = (): void => {
     clearInterval(intervalId)
     intervalId = null
     chatProviderRef = null
+    isTickRunning = false
     log.info('Scheduler stopped')
   }
 }
