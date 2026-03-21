@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'

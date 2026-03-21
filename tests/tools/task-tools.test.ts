@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
 import { makeDeleteTaskTool } from '../../src/tools/delete-task.js'

@@ -1,20 +1,21 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import type { LanguageModel } from 'ai'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
 import { flushMicrotasks } from './test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
+let testSqlite: Database
+
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 // Mock db/index.js to return test sqlite instance for cache.ts
@@ -34,6 +35,8 @@ void mock.module('ai', () => ({
   Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
 }))
 
+import { Database } from 'bun:sqlite'
+
 import {
   buildMemoryContextMessage,
   loadSummary,
@@ -48,17 +51,10 @@ import { extractFacts } from './helpers/extract-facts.js'
 import { clearUserCache } from './utils/test-cache.js'
 
 describe('loadSummary', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create memory_summary table
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
   })
 
   test('returns null when no row exists', () => {
@@ -75,17 +71,10 @@ describe('loadSummary', () => {
 })
 
 describe('saveSummary', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create memory_summary table
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
   })
 
   test('persists summary', async () => {
@@ -105,17 +94,10 @@ describe('saveSummary', () => {
 })
 
 describe('clearSummary', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create memory_summary table
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
   })
 
   test('removes summary', () => {
@@ -130,20 +112,10 @@ describe('clearSummary', () => {
 })
 
 describe('clearFacts', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create memory_facts table
-    testSqlite.run(`
-      CREATE TABLE memory_facts (
-        user_id TEXT NOT NULL,
-        identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        last_seen TEXT NOT NULL,
-        PRIMARY KEY (user_id, identifier)
-      )
-    `)
   })
 
   test('clears facts from database', () => {
@@ -359,27 +331,9 @@ describe('extractFacts', () => {
 
 describe('upsertFact eviction', () => {
   beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create memory_facts table
-    testSqlite.run(`
-      CREATE TABLE memory_facts (
-        user_id TEXT NOT NULL,
-        identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        last_seen TEXT NOT NULL,
-        PRIMARY KEY (user_id, identifier)
-      )
-    `)
-    // Create memory_summary table (for cache lookups)
-    testSqlite.run(`
-      CREATE TABLE memory_summary (
-        user_id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `)
     clearUserCache('999')
     await flushMicrotasks()
   })

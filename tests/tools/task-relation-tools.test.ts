@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeAddTaskRelationTool } from '../../src/tools/add-task-relation.js'
 import { makeRemoveTaskRelationTool } from '../../src/tools/remove-task-relation.js'
 import { makeUpdateTaskRelationTool } from '../../src/tools/update-task-relation.js'

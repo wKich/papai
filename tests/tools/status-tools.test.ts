@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeCreateStatusTool } from '../../src/tools/create-status.js'
 import { makeDeleteStatusTool } from '../../src/tools/delete-status.js'
 import { makeListStatusesTool } from '../../src/tools/list-statuses.js'

@@ -1,18 +1,20 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
+import { flushMicrotasks } from './test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
+// Setup logger mock at top of file
+mockLogger()
 
 // Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
+let testSqlite: Database
+
 void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
+  getDrizzleDb: (): typeof testDb => testDb,
 }))
 
 // Mock db/index.js to return test sqlite instance for cache.ts
@@ -22,23 +24,18 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
+import { Database } from 'bun:sqlite'
+
 import type { ModelMessage } from 'ai'
 
 import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { loadHistory, saveHistory, clearHistory } from '../src/history.js'
-import { flushMicrotasks } from './test-helpers.js'
 
 describe('loadHistory', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create conversation_history table
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
   })
 
   test('returns empty array when no row exists', () => {
@@ -161,16 +158,10 @@ describe('loadHistory', () => {
 })
 
 describe('saveHistory', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create conversation_history table
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
   })
 
   test('persists messages as JSON', async () => {
@@ -207,16 +198,10 @@ describe('saveHistory', () => {
 })
 
 describe('clearHistory', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    // Create conversation_history table
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
   })
 
   test('removes entry from store', () => {
@@ -245,15 +230,10 @@ describe('clearHistory', () => {
 })
 
 describe('getCachedHistory cold-cache behavior', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-    testSqlite.run(`
-      CREATE TABLE conversation_history (
-        user_id TEXT PRIMARY KEY,
-        messages TEXT NOT NULL
-      )
-    `)
     // Clear all caches to ensure cold state
     _userCaches.clear()
   })

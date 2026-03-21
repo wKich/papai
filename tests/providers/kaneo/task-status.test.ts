@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 
+import { mockLogger } from '../../utils/test-helpers.js'
+
+// Mock logger before importing modules that use it
+mockLogger()
+
 import { getUserMessage } from '../../../src/errors.js'
 import { KaneoClassifiedError } from '../../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'

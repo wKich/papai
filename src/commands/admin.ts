@@ -13,7 +13,7 @@ const parseUserIdentifier = (
   // Numeric string ID
   if (/^\d+$/.test(trimmed)) return { type: 'id', value: trimmed }
   // Alphanumeric username without @
-  if (/^[a-zA-Z0-9_]+$/.test(trimmed)) return { type: 'username', value: trimmed }
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return { type: 'username', value: trimmed }
   return null
 }
 
@@ -137,7 +137,8 @@ async function handleUserRemove(
     return
   }
 
-  if (parsed.type === 'id' && parsed.value === adminUserId) {
+  // Block removal of admin user (check both ID and username matches)
+  if (parsed.value === adminUserId) {
     await reply.text('Cannot remove the admin user.')
     return
   }

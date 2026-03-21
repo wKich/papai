@@ -7,7 +7,7 @@ void mock.module('../../src/logger.js', () => ({
     info: (): void => {},
     warn: (): void => {},
     error: (): void => {},
-    child: (): object => ({
+    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
       debug: (): void => {},
       info: (): void => {},
       warn: (): void => {},

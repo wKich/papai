@@ -1,5 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
+
 import { makeAddTaskLabelTool } from '../../src/tools/add-task-label.js'
 import { makeRemoveTaskLabelTool } from '../../src/tools/remove-task-label.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'

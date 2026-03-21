@@ -2,12 +2,26 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { mockLogger } from '../../utils/test-helpers.js'
+
+// Mock logger before importing modules that use it
+mockLogger()
+
 import { ColumnCompatSchema as KaneoColumnSchema } from '../../../src/providers/kaneo/schemas/api-compat.js'
 import { CreateLabelResponseSchema as KaneoLabelSchema } from '../../../src/providers/kaneo/schemas/create-label.js'
 import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
 import { TaskSchema as CreateTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
 import { ActivityItemSchema } from '../../../src/providers/kaneo/schemas/get-activities.js'
 import { GetProjectResponseSchema as KaneoProjectFullSchema } from '../../../src/providers/kaneo/schemas/get-project.js'
+import {
+  createMockActivity,
+  createMockColumn,
+  createMockLabel,
+  createMockProject,
+  createMockTask,
+  restoreFetch,
+  setMockFetch,
+} from '../../test-helpers.js'
 
 const KaneoProjectSchema = z.object({
   id: z.string(),
@@ -21,20 +35,11 @@ const KaneoProjectSchema = z.object({
 })
 const KaneoActivityWithTypeSchema = ActivityItemSchema.array()
 import {
-  restoreFetch,
-  setMockFetch,
-  createMockTask,
-  createMockProject,
-  createMockLabel,
-  createMockActivity,
-  createMockColumn,
-} from '../../test-helpers.js'
-import {
-  TaskResource,
-  ProjectResource,
-  LabelResource,
-  CommentResource,
   ColumnResource,
+  CommentResource,
+  LabelResource,
+  ProjectResource,
+  TaskResource,
   type KaneoConfig,
 } from './test-resources.js'
 

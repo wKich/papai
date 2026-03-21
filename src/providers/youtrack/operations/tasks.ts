@@ -138,7 +138,7 @@ export async function searchYouTrackTasks(
       },
       'Failed to search tasks',
     )
-    const context = params.projectId !== undefined ? { projectId: params.projectId } : undefined
+    const context = params.projectId === undefined ? undefined : { projectId: params.projectId }
     throw classifyYouTrackError(error, context)
   }
 }
