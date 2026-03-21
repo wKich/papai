@@ -178,7 +178,7 @@ export class YouTrackProvider implements TaskProvider {
   }
 
   classifyError(error: unknown): AppError {
-    return classifyYouTrackError(error)
+    return classifyYouTrackError(error).appError
   }
 
   getPromptAddendum(): string {

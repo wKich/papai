@@ -16,6 +16,7 @@ import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { provisionAndConfigure } from './providers/kaneo/provision.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
+import { YouTrackClassifiedError } from './providers/youtrack/classify-error.js'
 import { makeTools } from './tools/index.js'
 import { getKaneoWorkspace } from './users.js'
 
@@ -193,6 +194,8 @@ const handleMessageError = async (reply: ReplyFn, contextId: string, error: unkn
   if (isAppError(error)) {
     await reply.text(getUserMessage(error))
   } else if (error instanceof KaneoClassifiedError) {
+    await reply.text(getUserMessage(error.appError))
+  } else if (error instanceof YouTrackClassifiedError) {
     await reply.text(getUserMessage(error.appError))
   } else if (error instanceof ProviderClassifiedError) {
     await reply.text(getUserMessage(error.error))
