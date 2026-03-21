@@ -4,7 +4,7 @@
 
 import { eq, and, sql } from 'drizzle-orm'
 
-import { nextCronOccurrence, parseCron } from './cron.js'
+import { allOccurrencesBetween, nextCronOccurrence, parseCron } from './cron.js'
 import { getDrizzleDb } from './db/drizzle.js'
 import { recurringTasks } from './db/schema.js'
 import { logger } from './logger.js'
@@ -13,7 +13,6 @@ import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from './typ
 export type { TriggerType, RecurringTaskInput, RecurringTaskRecord } from './types/recurring.js'
 
 const log = logger.child({ scope: 'recurring' })
-
 const generateId = (): string => crypto.randomUUID()
 
 const parseLabels = (raw: string | null): string[] => {
@@ -53,11 +52,8 @@ const computeNextRun = (cronExpression: string): string | null => {
   const parsed = parseCron(cronExpression)
   if (parsed === null) return null
   const next = nextCronOccurrence(parsed, new Date())
-  if (next === null) return null
-  return next.toISOString()
+  return next === null ? null : next.toISOString()
 }
-
-// --- CRUD ---
 
 export const createRecurringTask = (input: RecurringTaskInput): RecurringTaskRecord => {
   log.debug({ userId: input.userId, title: input.title, triggerType: input.triggerType }, 'createRecurringTask called')
@@ -172,7 +168,21 @@ export const pauseRecurringTask = (id: string): RecurringTaskRecord | null => {
   return getRecurringTask(id)
 }
 
-export const resumeRecurringTask = (id: string, createMissed: boolean): RecurringTaskRecord | null => {
+export type ResumeResult = {
+  record: RecurringTaskRecord
+  missedDates: string[]
+}
+
+const computeMissedDates = (cronExpr: string, fromDate: string | null): string[] => {
+  const parsed = parseCron(cronExpr)
+  if (parsed === null) return []
+  const after = fromDate === null ? new Date(0) : new Date(fromDate)
+  const before = new Date()
+  const missed = allOccurrencesBetween(parsed, after, before)
+  return missed.map((d) => d.toISOString())
+}
+
+export const resumeRecurringTask = (id: string, createMissed: boolean): ResumeResult | null => {
   log.debug({ id, createMissed }, 'resumeRecurringTask called')
 
   const db = getDrizzleDb()
@@ -182,11 +192,13 @@ export const resumeRecurringTask = (id: string, createMissed: boolean): Recurrin
     return null
   }
 
-  // If not catching up, reset nextRun to the next future occurrence
   const cronExpr = existing.cronExpression
-  let nextRun = existing.nextRun
-  if (!createMissed && cronExpr !== null) {
-    nextRun = computeNextRun(cronExpr)
+  let missedDates: string[] = []
+  const nextRun = cronExpr === null ? existing.nextRun : computeNextRun(cronExpr)
+
+  if (createMissed && cronExpr !== null) {
+    missedDates = computeMissedDates(cronExpr, existing.nextRun)
+    log.info({ id, missedCount: missedDates.length }, 'Computed missed occurrences')
   }
 
   db.update(recurringTasks)
@@ -195,7 +207,8 @@ export const resumeRecurringTask = (id: string, createMissed: boolean): Recurrin
     .run()
 
   log.info({ id, createMissed }, 'Recurring task resumed')
-  return getRecurringTask(id)
+  const record = getRecurringTask(id)!
+  return { record, missedDates }
 }
 
 export const skipNextOccurrence = (id: string): RecurringTaskRecord | null => {

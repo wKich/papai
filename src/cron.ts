@@ -169,6 +169,22 @@ export const nextCronOccurrence = (cron: ParsedCron, after: Date): Date | null =
 }
 
 /**
+ * Collect all occurrences of a cron expression between `after` (exclusive) and `before` (inclusive).
+ * Returns at most `maxResults` dates. Used for retroactive missed-occurrence creation.
+ */
+export const allOccurrencesBetween = (cron: ParsedCron, after: Date, before: Date, maxResults = 100): Date[] => {
+  const results: Date[] = []
+  let cursor = after
+  while (results.length < maxResults) {
+    const next = nextCronOccurrence(cron, cursor)
+    if (next === null || next.getTime() > before.getTime()) break
+    results.push(next)
+    cursor = next
+  }
+  return results
+}
+
+/**
  * Describes a cron expression in human-readable form.
  */
 export const describeCron = (expression: string): string => {

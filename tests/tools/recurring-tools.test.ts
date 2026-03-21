@@ -38,7 +38,7 @@ void mock.module('../../src/recurring.js', () => ({
 import { makeCreateRecurringTaskTool } from '../../src/tools/create-recurring-task.js'
 
 describe('makeCreateRecurringTaskTool', () => {
-  test('returns error when triggerType is on_complete (unsupported)', async () => {
+  test('allows on_complete triggerType and creates the definition', async () => {
     createRecurringTaskCallCount = 0
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -46,8 +46,9 @@ describe('makeCreateRecurringTaskTool', () => {
       { title: 'On complete task', projectId: 'p1', triggerType: 'on_complete' },
       { toolCallId: '1', messages: [] },
     )
-    expect(result).toHaveProperty('error')
-    expect(createRecurringTaskCallCount).toBe(0)
+    expect(result).toHaveProperty('id')
+    expect(result).toHaveProperty('triggerType', 'cron')
+    expect(createRecurringTaskCallCount).toBe(1)
   })
 
   test('returns error for invalid cron expression', async () => {

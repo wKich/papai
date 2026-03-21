@@ -236,12 +236,33 @@ describe('resumeRecurringTask', () => {
     })
     pauseRecurringTask(task.id)
 
-    const resumed = resumeRecurringTask(task.id, false)
-    expect(resumed).not.toBeNull()
-    expect(resumed!.enabled).toBe(true)
-    expect(resumed!.nextRun).not.toBeNull()
+    const result = resumeRecurringTask(task.id, false)
+    expect(result).not.toBeNull()
+    expect(result!.record.enabled).toBe(true)
+    expect(result!.record.nextRun).not.toBeNull()
     // nextRun should be in the future
-    expect(new Date(resumed!.nextRun!).getTime()).toBeGreaterThan(Date.now())
+    expect(new Date(result!.record.nextRun!).getTime()).toBeGreaterThan(Date.now())
+    expect(result!.missedDates).toEqual([])
+  })
+
+  test('returns missed dates when createMissed is true', () => {
+    const task = createRecurringTask({
+      userId: USER_ID,
+      projectId: PROJECT_ID,
+      title: 'Missed Test',
+      triggerType: 'cron',
+      cronExpression: '* * * * *',
+    })
+    pauseRecurringTask(task.id)
+    // Set nextRun to 5 minutes ago so there are missed occurrences
+    testSqlite.run('UPDATE recurring_tasks SET next_run = ? WHERE id = ?', [
+      new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      task.id,
+    ])
+
+    const result = resumeRecurringTask(task.id, true)
+    expect(result).not.toBeNull()
+    expect(result!.missedDates.length).toBeGreaterThanOrEqual(1)
   })
 
   test('returns null for non-existent task', () => {

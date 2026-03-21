@@ -32,16 +32,11 @@ type Input = z.infer<typeof inputSchema>
 function executeCreate(userId: string, input: Input): unknown {
   log.debug({ userId, title: input.title, triggerType: input.triggerType }, 'Creating recurring task')
 
-  if (input.triggerType === 'on_complete') {
-    return { error: "triggerType 'on_complete' is not yet supported. Use 'cron' with a cron expression." }
-  }
-
   if (input.triggerType === 'cron' && (input.cronExpression === undefined || input.cronExpression === '')) {
     return { error: "cronExpression is required when triggerType is 'cron'" }
   }
 
-  // input.triggerType is 'cron' and input.cronExpression is non-empty (guards above)
-  if (parseCron(input.cronExpression!) === null) {
+  if (input.triggerType === 'cron' && parseCron(input.cronExpression!) === null) {
     return {
       error: `Invalid cronExpression '${input.cronExpression!}': unable to parse as a valid 5-field cron expression (min hr dom mon dow)`,
     }

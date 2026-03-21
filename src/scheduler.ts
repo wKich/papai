@@ -11,7 +11,7 @@ import { logger } from './logger.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import type { Task } from './providers/types.js'
-import { type RecurringTaskRecord, getDueRecurringTasks, markExecuted } from './recurring.js'
+import { type RecurringTaskRecord, getDueRecurringTasks, getRecurringTask, markExecuted } from './recurring.js'
 import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'scheduler' })
@@ -123,6 +123,51 @@ const executeRecurringTask = async (task: RecurringTaskRecord): Promise<void> =>
       'Failed to create recurring task instance',
     )
   }
+}
+
+/** Create tasks for missed occurrences (called from resume tool). */
+export const createMissedTasks = async (recurringTaskId: string, missedDates: readonly string[]): Promise<number> => {
+  if (missedDates.length === 0) return 0
+
+  const task = getRecurringTask(recurringTaskId)
+  if (task === null) return 0
+
+  const provider = buildProviderForUser(task.userId)
+  if (provider === null) {
+    log.error({ recurringTaskId, userId: task.userId }, 'Cannot build provider for missed tasks')
+    return 0
+  }
+
+  const createOne = async (dueDate: string): Promise<boolean> => {
+    try {
+      const newTask = await provider.createTask({
+        projectId: task.projectId,
+        title: task.title,
+        description: task.description ?? undefined,
+        priority: task.priority ?? undefined,
+        status: task.status ?? undefined,
+        assignee: task.assignee ?? undefined,
+        dueDate,
+      })
+      await applyLabels(provider, newTask.id, task.labels)
+      log.debug({ recurringTaskId, createdTaskId: newTask.id, dueDate }, 'Missed task created')
+      return true
+    } catch (error) {
+      log.warn(
+        { recurringTaskId, dueDate, error: error instanceof Error ? error.message : String(error) },
+        'Failed to create missed task',
+      )
+      return false
+    }
+  }
+
+  const results = await missedDates.reduce<Promise<number>>(
+    (chain, dueDate) => chain.then(async (count) => ((await createOne(dueDate)) ? count + 1 : count)),
+    Promise.resolve(0),
+  )
+
+  log.info({ recurringTaskId, missedCount: missedDates.length, created: results }, 'Missed tasks creation complete')
+  return results
 }
 
 export const tick = (): Promise<void> => {
