@@ -69,4 +69,38 @@ export const groupMembers = sqliteTable(
   ],
 )
 
+export const recurringTasks = sqliteTable(
+  'recurring_tasks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    projectId: text('project_id').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    priority: text('priority'),
+    status: text('status'),
+    assignee: text('assignee'),
+    labels: text('labels'),
+    triggerType: text('trigger_type').notNull().default('cron'),
+    cronExpression: text('cron_expression'),
+    timezone: text('timezone').notNull().default('UTC'),
+    enabled: text('enabled').notNull().default('1'),
+    catchUp: text('catch_up').notNull().default('0'),
+    lastRun: text('last_run'),
+    nextRun: text('next_run'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_recurring_tasks_user').on(table.userId),
+    index('idx_recurring_tasks_enabled_next').on(table.enabled, table.nextRun),
+  ],
+)
+
+export type RecurringTask = typeof recurringTasks.$inferSelect
+
 export type GroupMember = typeof groupMembers.$inferSelect

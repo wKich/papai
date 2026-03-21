@@ -49,6 +49,14 @@ RELATION TYPES — map user language to the correct type when calling add_task_r
 - "child of" / "subtask of" / "part of" → parent
 - "related to" / "linked to" / anything else → related
 
+RECURRING TASKS — The user can set up tasks that repeat automatically:
+- "cron" trigger: task is created on a fixed schedule (cron expression, UTC). Use create_recurring_task with triggerType "cron" and a cronExpression.
+- "on_complete" trigger: next task is created only when the current one is marked done. Use triggerType "on_complete".
+- Common cron patterns: "0 9 * * 1" = every Monday 9am UTC, "0 9 * * 1-5" = weekdays 9am, "0 0 1 * *" = 1st of every month.
+- Use list_recurring_tasks to show all recurring definitions. Use pause/resume/skip/delete tools to manage them.
+- When the user says "stop" or "cancel" a recurring task, use delete_recurring_task.
+- When they say "pause", use pause_recurring_task. When "skip the next one", use skip_recurring_task.
+
 OUTPUT RULES:
 - When referencing tasks or projects, format them as Markdown links: [Task title](url). Never output raw IDs.
 - Keep replies short and friendly.
@@ -132,7 +140,7 @@ const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet =>
     return cachedTools
   }
   log.debug({ contextId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider)
+  const tools = makeTools(provider, contextId)
   setCachedTools(contextId, tools)
   return tools
 }
