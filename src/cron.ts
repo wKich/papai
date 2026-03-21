@@ -78,12 +78,30 @@ export const parseCron = (expression: string): ParsedCron | null => {
 
   const [minuteStr, hourStr, domStr, monthStr, dowStr] = fields
 
+  const minute = parseField(minuteStr!, 0, 59)
+  const hour = parseField(hourStr!, 0, 23)
+  const dayOfMonth = parseField(domStr!, 1, 31)
+  const month = parseField(monthStr!, 1, 12)
+  const dayOfWeek = parseField(dowStr!, 0, 6)
+
+  const invalidField =
+    (minute.type === 'values' && minute.values.length === 0) ||
+    (hour.type === 'values' && hour.values.length === 0) ||
+    (dayOfMonth.type === 'values' && dayOfMonth.values.length === 0) ||
+    (month.type === 'values' && month.values.length === 0) ||
+    (dayOfWeek.type === 'values' && dayOfWeek.values.length === 0)
+
+  if (invalidField) {
+    log.warn({ expression }, 'Invalid cron expression: field produced no valid values')
+    return null
+  }
+
   return {
-    minute: parseField(minuteStr!, 0, 59),
-    hour: parseField(hourStr!, 0, 23),
-    dayOfMonth: parseField(domStr!, 1, 31),
-    month: parseField(monthStr!, 1, 12),
-    dayOfWeek: parseField(dowStr!, 0, 6),
+    minute,
+    hour,
+    dayOfMonth,
+    month,
+    dayOfWeek,
   }
 }
 
