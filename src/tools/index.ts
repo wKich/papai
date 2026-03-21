@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai'
 
+import { makeProactiveTools } from '../proactive/tools.js'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
@@ -161,5 +162,9 @@ export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
   addRecurringTools(tools, userId)
+  if (userId !== undefined) {
+    const proactiveTools = makeProactiveTools(userId, provider)
+    Object.assign(tools, proactiveTools)
+  }
   return tools
 }
