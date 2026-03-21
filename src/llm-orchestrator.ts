@@ -22,12 +22,29 @@ import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
 
-const BASE_SYSTEM_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks.
-Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+const getLocalDateString = (timezone: string): string => {
+  try {
+    return new Date().toLocaleDateString('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  } catch {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  }
+}
 
-When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
-
-WORKFLOW:
+const STATIC_RULES = `WORKFLOW:
 1. Understand the user's intent from natural language.
 2. Gather context if needed (e.g. call list_projects to resolve a project name, call list_columns before setting a task status).
 3. Call the appropriate tool(s) to fulfil the request.
@@ -54,10 +71,39 @@ OUTPUT RULES:
 - Keep replies short and friendly.
 - Don't use tables.`
 
-const buildSystemPrompt = (provider: TaskProvider): string => {
+const buildBasePrompt = (timezone: string): string => {
+  const localDate = getLocalDateString(timezone)
+
+  return `You are papai, a personal assistant that helps the user manage their tasks.
+Current date and time: ${localDate} (${timezone}).
+User timezone: ${timezone}.
+
+When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
+
+DUE DATES — When the user mentions a due date or time:
+- Always interpret dates and times in the user's timezone (${timezone}).
+- Convert to ISO 8601 format for tool calls (e.g. '2026-03-15' for date-only, '2026-03-15T17:00:00' for date+time).
+- "tomorrow at 5pm" means 5pm in ${timezone}, not UTC.
+- "end of day" means 23:59 in ${timezone}.
+- "next Monday" means the next Monday in ${timezone}.
+
+RECURRING TASKS — The user can set up tasks that repeat automatically:
+- "cron" trigger: task is created on a fixed schedule (cron expression). Cron times are interpreted in the user's timezone (${timezone}). Use create_recurring_task with triggerType "cron" and a cronExpression.
+- "on_complete" trigger: creates the next task only after the current one is marked done. Use triggerType "on_complete" (no cronExpression needed).
+- Common cron patterns: "0 9 * * 1" = every Monday 9am, "0 9 * * 1-5" = weekdays 9am, "0 0 1 * *" = 1st of every month.
+- Use list_recurring_tasks to show all recurring definitions. Use pause/resume/skip/delete tools to manage them.
+- When resuming, set createMissed=true to retroactively create tasks for missed cycles during the pause.
+- When the user says "stop" or "cancel" a recurring task, use delete_recurring_task.
+- When they say "pause", use pause_recurring_task. When "skip the next one", use skip_recurring_task.
+
+${STATIC_RULES}`
+}
+
+const buildSystemPrompt = (provider: TaskProvider, timezone: string): string => {
+  const base = buildBasePrompt(timezone)
   const addendum = provider.getPromptAddendum()
-  if (addendum === '') return BASE_SYSTEM_PROMPT
-  return `${BASE_SYSTEM_PROMPT}\n\n${addendum}`
+  if (addendum === '') return base
+  return `${base}\n\n${addendum}`
 }
 
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
@@ -132,7 +178,7 @@ const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet =>
     return cachedTools
   }
   log.debug({ contextId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider)
+  const tools = makeTools(provider, contextId)
   setCachedTools(contextId, tools)
   return tools
 }
@@ -170,11 +216,15 @@ const callLlm = async (
   const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = buildProvider(contextId)
   const tools = getOrCreateTools(contextId, provider)
+  const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
-  log.debug({ contextId, historyLength: history.length, hasMemory: memoryMsg !== null }, 'Calling generateText')
+  log.debug(
+    { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
+    'Calling generateText',
+  )
   const result = await generateText({
     model,
-    system: buildSystemPrompt(provider),
+    system: buildSystemPrompt(provider, timezone),
     messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),

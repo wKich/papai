@@ -147,7 +147,7 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    // LLM keys (4) + provider-specific key (1) = 5
-    expect(CONFIG_KEYS).toHaveLength(5)
+    // LLM keys (4) + provider-specific key (1) + preference keys (1) = 6
+    expect(CONFIG_KEYS).toHaveLength(6)
   })
 })

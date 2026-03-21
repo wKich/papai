@@ -8,25 +8,32 @@ import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
+import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
 import { makeCreateStatusTool } from './create-status.js'
 import { makeCreateTaskTool } from './create-task.js'
+import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
 import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListProjectsTool } from './list-projects.js'
+import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListTasksTool } from './list-tasks.js'
+import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
 import { makeReorderStatusesTool } from './reorder-statuses.js'
+import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
 import { makeSearchTasksTool } from './search-tasks.js'
+import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
+import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
 import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
@@ -132,7 +139,18 @@ function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
-export function makeTools(provider: TaskProvider): ToolSet {
+function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
+  if (userId === undefined) return
+  tools['create_recurring_task'] = makeCreateRecurringTaskTool(userId)
+  tools['list_recurring_tasks'] = makeListRecurringTasksTool(userId)
+  tools['update_recurring_task'] = makeUpdateRecurringTaskTool()
+  tools['pause_recurring_task'] = makePauseRecurringTaskTool()
+  tools['resume_recurring_task'] = makeResumeRecurringTaskTool()
+  tools['skip_recurring_task'] = makeSkipRecurringTaskTool()
+  tools['delete_recurring_task'] = makeDeleteRecurringTaskTool()
+}
+
+export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
   const tools = makeCoreTools(provider)
   maybeAddArchiveTool(tools, provider)
   maybeAddProjectTools(tools, provider)
@@ -141,5 +159,6 @@ export function makeTools(provider: TaskProvider): ToolSet {
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
+  addRecurringTools(tools, userId)
   return tools
 }

@@ -15,7 +15,10 @@ export function makeCreateTaskTool(provider: TaskProvider): ToolSet[string] {
       description: z.string().optional().describe('Detailed description of the task'),
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('Priority level'),
       projectId: z.string().describe('Project ID — call list_projects first to obtain this'),
-      dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
+      dueDate: z
+        .string()
+        .optional()
+        .describe("Due date in ISO 8601 format in the user's timezone (e.g. '2026-03-15' or '2026-03-15T17:00:00')"),
       status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
     }),
     execute: async ({ title, description, priority, projectId, dueDate, status }) => {

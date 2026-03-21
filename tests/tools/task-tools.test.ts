@@ -638,8 +638,8 @@ describe('Task Tools', () => {
       })
 
       const tool = makeDeleteTaskTool(provider)
-      const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      await expect(promise).rejects.toThrow('Task not found')
+      const result = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      await expect(result).rejects.toThrow('Task not found')
     })
 
     test('validates taskId is required', () => {

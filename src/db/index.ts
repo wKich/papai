@@ -10,6 +10,7 @@ import { migration005RenameConfigKeys } from './migrations/005_rename_config_key
 import { migration006VersionAnnouncements } from './migrations/006_version_announcements.js'
 import { migration007PlatformUserId } from './migrations/007_platform_user_id.js'
 import { migration008GroupMembers } from './migrations/008_group_members.js'
+import { migration009RecurringTasks } from './migrations/009_recurring_tasks.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -45,6 +46,7 @@ const MIGRATIONS = [
   migration006VersionAnnouncements,
   migration007PlatformUserId,
   migration008GroupMembers,
+  migration009RecurringTasks,
 ] as const
 
 export const initDb = (): void => {

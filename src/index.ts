@@ -4,6 +4,7 @@ import { createChatProvider } from './chat/registry.js'
 import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { logger } from './logger.js'
+import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
 
 const hasSetCommands = (chat: unknown): chat is { setCommands: (adminUserId: string) => Promise<void> } =>
@@ -68,8 +69,11 @@ if (hasSetCommands(chatProvider)) {
 
 void announceNewVersion(chatProvider)
 
+startScheduler(chatProvider)
+
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
+  stopScheduler()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
@@ -78,6 +82,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
+  stopScheduler()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
