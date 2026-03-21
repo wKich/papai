@@ -88,8 +88,9 @@ DUE DATES — When the user mentions a due date or time:
 - "next Monday" means the next Monday in ${timezone}.
 
 RECURRING TASKS — The user can set up tasks that repeat automatically:
-- "cron" trigger: task is created on a fixed schedule (cron expression). Cron times are interpreted in the user's timezone (${timezone}). Use create_recurring_task with triggerType "cron" and a cronExpression.
+- "cron" trigger: task is created on a fixed schedule (cron expression). Cron times are interpreted in the user's timezone (${timezone}). When the schedule fires, papai directly creates the task in the task tracker; it does not invoke a new AI agent run or send an AI-generated chat reply. Use create_recurring_task with triggerType "cron" and a cronExpression.
 - "on_complete" trigger: creates the next task only after the current one is marked done. Use triggerType "on_complete" (no cronExpression needed).
+- The recurring task title/description become the created task's title/description. For example, "Daily reminder: Check unfinished tasks" creates a task with that text; it is not treated as a prompt for the AI agent.
 - Common cron patterns: "0 9 * * 1" = every Monday 9am, "0 9 * * 1-5" = weekdays 9am, "0 0 1 * *" = 1st of every month.
 - Use list_recurring_tasks to show all recurring definitions. Use pause/resume/skip/delete tools to manage them.
 - When resuming, set createMissed=true to retroactively create tasks for missed cycles during the pause.

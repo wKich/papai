@@ -66,13 +66,17 @@ function executeCreate(userId: string, input: Input): unknown {
     schedule,
     nextRun: record.nextRun,
     enabled: record.enabled,
+    executionMode:
+      record.triggerType === 'cron'
+        ? 'At each scheduled time, papai creates the task directly in your task tracker. It does not invoke the AI agent or send an AI-generated chat reply.'
+        : 'When the current task is completed, papai creates the next task directly in your task tracker.',
   }
 }
 
 export function makeCreateRecurringTaskTool(userId: string): ToolSet[string] {
   return tool({
     description:
-      'Set up a recurring task that is automatically created on a schedule (cron) or after completion. Call list_projects first.',
+      'Set up a recurring task that is automatically created directly in the task tracker on a schedule (cron) or after completion. This does not trigger a new AI chat response. Call list_projects first.',
     inputSchema,
     execute: (input) => {
       try {

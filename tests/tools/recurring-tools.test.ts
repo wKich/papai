@@ -6,6 +6,10 @@ mockLogger()
 
 import type { RecurringTaskInput, RecurringTaskRecord } from '../../src/types/recurring.js'
 
+void mock.module('../../src/config.js', () => ({
+  getConfig: (): string | null => null,
+}))
+
 // Mock recurring store — should NOT be called for invalid input
 let createRecurringTaskCallCount = 0
 void mock.module('../../src/recurring.js', () => ({
@@ -21,7 +25,7 @@ void mock.module('../../src/recurring.js', () => ({
       status: null,
       assignee: null,
       labels: [],
-      triggerType: 'cron',
+      triggerType: input.triggerType,
       // cronExpression from input (may be undefined for on_complete)
       cronExpression: input.cronExpression ?? null,
       timezone: 'UTC',
@@ -38,6 +42,12 @@ void mock.module('../../src/recurring.js', () => ({
 import { makeCreateRecurringTaskTool } from '../../src/tools/create-recurring-task.js'
 
 describe('makeCreateRecurringTaskTool', () => {
+  test('describes recurring tasks as direct task creation rather than AI chat replies', () => {
+    const tool = makeCreateRecurringTaskTool('user-1')
+    expect(tool.description).toContain('directly in the task tracker')
+    expect(tool.description).toContain('does not trigger a new AI chat response')
+  })
+
   test('allows on_complete triggerType and creates the definition', async () => {
     createRecurringTaskCallCount = 0
     const tool = makeCreateRecurringTaskTool('user-1')
@@ -47,7 +57,31 @@ describe('makeCreateRecurringTaskTool', () => {
       { toolCallId: '1', messages: [] },
     )
     expect(result).toHaveProperty('id')
-    expect(result).toHaveProperty('triggerType', 'cron')
+    expect(result).toHaveProperty('triggerType', 'on_complete')
+    expect(result).toHaveProperty(
+      'executionMode',
+      'When the current task is completed, papai creates the next task directly in your task tracker.',
+    )
+    expect(createRecurringTaskCallCount).toBe(1)
+  })
+
+  test('returns an execution explanation for cron-based recurring tasks', async () => {
+    createRecurringTaskCallCount = 0
+    const tool = makeCreateRecurringTaskTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      {
+        title: 'Daily reminder: Check unfinished tasks',
+        projectId: 'p1',
+        triggerType: 'cron',
+        cronExpression: '0 9 * * *',
+      },
+      { toolCallId: '1', messages: [] },
+    )
+    expect(result).toHaveProperty(
+      'executionMode',
+      'At each scheduled time, papai creates the task directly in your task tracker. It does not invoke the AI agent or send an AI-generated chat reply.',
+    )
     expect(createRecurringTaskCallCount).toBe(1)
   })
 
