@@ -23,7 +23,7 @@
     "test:mutate:full": "stryker run --force",
     "test:e2e": "bun test --preload ./tests/e2e/bun-test-setup.ts --path-ignore-patterns '' tests/e2e/e2e.test.ts",
     "test:e2e:watch": "bun test --preload ./tests/e2e/bun-test-setup.ts --path-ignore-patterns '' tests/e2e/e2e.test.ts --watch",
-    "check": "bun run --parallel lint typecheck format:check knip test",
+    "check": "bun run --parallel lint typecheck format:check knip test test:duplicates",
     "fix": "bun run lint:fix && bun run format",
     "test:duplicates": "bun run scripts/detect-duplicates.ts",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
