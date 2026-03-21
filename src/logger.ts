@@ -1,6 +1,6 @@
 import pino from 'pino'
 
-const getLogLevel = (): string => {
+export const getLogLevel = (): string => {
   const envLevel = process.env['LOG_LEVEL']?.toLowerCase()
   const validLevels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']
   if (envLevel !== undefined && envLevel !== '' && validLevels.includes(envLevel)) {

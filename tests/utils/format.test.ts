@@ -42,6 +42,14 @@ describe('formatLlmOutput', () => {
       expect(result.text).toBe('**unclosed')
       expect(result.entities).toEqual([])
     })
+
+    test('nested bold italic', () => {
+      const result = formatLlmOutput('***bold italic***')
+      expect(result.text).toBe('bold italic')
+      const types = result.entities.map((e) => e.type)
+      expect(types).toContain('bold')
+      expect(types).toContain('italic')
+    })
   })
 
   describe('block formatting', () => {
@@ -61,6 +69,28 @@ describe('formatLlmOutput', () => {
       const result = formatLlmOutput('```typescript\nconsole.log("hi")\n```')
       expect(result.text).toBe('console.log("hi")')
       expect(result.entities).toEqual([{ offset: 0, length: 17, type: 'pre', language: 'typescript' }])
+    })
+
+    test('fenced code block without language', () => {
+      const result = formatLlmOutput('```\nconsole.log("hi")\n```')
+      expect(result.text).toBe('console.log("hi")')
+      expect(result.entities).toHaveLength(1)
+      const entity = result.entities[0]!
+      expect(entity.type).toBe('pre')
+      expect(entity.offset).toBe(0)
+      expect(entity.length).toBe(17)
+    })
+
+    test('h3 header becomes bold', () => {
+      const result = formatLlmOutput('### Section')
+      expect(result.text).toBe('Section')
+      expect(result.entities).toEqual([{ offset: 0, length: 7, type: 'bold' }])
+    })
+
+    test('h4 header becomes bold', () => {
+      const result = formatLlmOutput('#### Subsection')
+      expect(result.text).toBe('Subsection')
+      expect(result.entities).toEqual([{ offset: 0, length: 10, type: 'bold' }])
     })
 
     test('blockquote', () => {
@@ -177,6 +207,13 @@ describe('formatLlmOutput', () => {
       const result = formatLlmOutput('')
       expect(result.text).toBe('')
       expect(result.entities).toEqual([])
+    })
+
+    test('CRLF line endings treated same as LF', () => {
+      const result = formatLlmOutput('**bold**\r\ntext')
+      expect(result.text).not.toContain('\r')
+      const types = result.entities.map((e) => e.type)
+      expect(types).toContain('bold')
     })
   })
 })

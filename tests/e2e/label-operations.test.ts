@@ -96,14 +96,16 @@ describe('E2E: Label Operations', () => {
     const task = await createTask({ config: kaneoConfig, projectId, title: 'Task with label' })
     testClient.trackTask(task.id)
 
-    await addTaskLabel({
+    const addResult = await addTaskLabel({
       config: kaneoConfig,
       taskId: task.id,
       labelId: label.id,
       workspaceId: testClient.getWorkspaceId(),
     })
-    await removeTaskLabel({ config: kaneoConfig, taskId: task.id, labelId: label.id })
+    expect(addResult).toEqual({ taskId: task.id, labelId: label.id })
 
-    expect(true).toBe(true)
+    const removeResult = await removeTaskLabel({ config: kaneoConfig, taskId: task.id, labelId: label.id })
+    expect(removeResult.taskId).toBe(task.id)
+    expect(removeResult.labelId).toBe(label.id)
   })
 })
