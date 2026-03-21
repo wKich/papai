@@ -2,6 +2,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
+import { makeDeleteTaskTool } from '../../src/tools/delete-task.js'
 import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
@@ -584,6 +585,72 @@ describe('Task Tools', () => {
       const provider = createMockProvider()
       const tool = makeArchiveTaskTool(provider)
       expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
+    })
+  })
+
+  describe('makeDeleteTaskTool', () => {
+    test('returns tool with correct structure', () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteTaskTool(provider)
+      expect(tool.description).toContain('Delete')
+    })
+
+    test('deletes task when confidence is high', async () => {
+      const deleteTask = mock(() => Promise.resolve({ id: 'task-1' }))
+      const provider = createMockProvider({ deleteTask })
+
+      const tool = makeDeleteTaskTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ taskId: 'task-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+
+      expect(deleteTask).toHaveBeenCalledTimes(1)
+      expect(deleteTask).toHaveBeenCalledWith('task-1')
+    })
+
+    test('returns confirmation_required when confidence is low', async () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteTaskTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', confidence: 0.5 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+    })
+
+    test('returns confirmation_required without sufficient confidence (confidence: 0)', async () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteTaskTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', confidence: 0 },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+    })
+
+    test('propagates provider errors', async () => {
+      const provider = createMockProvider({
+        deleteTask: mock(() => Promise.reject(new Error('Task not found'))),
+      })
+
+      const tool = makeDeleteTaskTool(provider)
+      const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
+      expect(promise).rejects.toThrow('Task not found')
+      try {
+        await promise
+      } catch {
+        // ignore
+      }
+    })
+
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteTaskTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
+      expect(schemaValidates(tool, { taskId: 'x', confidence: 0.9 })).toBe(true)
     })
   })
 })
