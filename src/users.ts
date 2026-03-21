@@ -15,7 +15,7 @@ interface UserRecord {
 }
 
 export function addUser(userId: string, addedBy: string, username?: string): void {
-  log.debug({ userId, addedBy, hasUsername: username !== undefined }, 'addUser called')
+  log.debug({ hasUsername: username !== undefined }, 'addUser called')
   const db = getDrizzleDb()
 
   db.insert(users)
@@ -30,22 +30,22 @@ export function addUser(userId: string, addedBy: string, username?: string): voi
     })
     .run()
 
-  log.info({ userId, addedBy, hasUsername: username !== undefined }, 'User added')
+  log.info({ hasUsername: username !== undefined }, 'User added')
 }
 
 export function removeUser(identifier: string): void {
-  log.debug({ identifier }, 'removeUser called')
+  log.debug('removeUser called')
   const db = getDrizzleDb()
 
   db.delete(users)
     .where(or(eq(users.username, identifier), eq(users.platformUserId, identifier)))
     .run()
 
-  log.info({ identifier }, 'User removed')
+  log.info('User removed')
 }
 
 export function isAuthorized(userId: string): boolean {
-  log.debug({ userId }, 'isAuthorized called')
+  log.debug('isAuthorized called')
   const db = getDrizzleDb()
 
   const row = db
@@ -58,7 +58,7 @@ export function isAuthorized(userId: string): boolean {
 }
 
 export function resolveUserByUsername(userId: string, username: string): boolean {
-  log.debug({ userId, username }, 'resolveUserByUsername called')
+  log.debug('resolveUserByUsername called')
   const db = getDrizzleDb()
 
   const row = db.select({ platformUserId: users.platformUserId }).from(users).where(eq(users.username, username)).get()
@@ -68,7 +68,7 @@ export function resolveUserByUsername(userId: string, username: string): boolean
 
   db.update(users).set({ platformUserId: userId }).where(eq(users.username, username)).run()
 
-  log.info({ userId, username }, 'User platform_user_id resolved from username')
+  log.info('User platform_user_id resolved from username')
   return true
 }
 
@@ -88,12 +88,12 @@ export function listUsers(): UserRecord[] {
 }
 
 export function getKaneoWorkspace(userId: string): string | null {
-  log.debug({ userId }, 'getKaneoWorkspace called')
+  log.debug('getKaneoWorkspace called')
   return getCachedWorkspace(userId)
 }
 
 export function setKaneoWorkspace(userId: string, workspaceId: string): void {
-  log.debug({ userId }, 'setKaneoWorkspace called')
+  log.debug('setKaneoWorkspace called')
   setCachedWorkspace(userId, workspaceId)
-  log.info({ userId }, 'Kaneo workspace ID stored (DB sync in background)')
+  log.info('Kaneo workspace ID stored (DB sync in background)')
 }
