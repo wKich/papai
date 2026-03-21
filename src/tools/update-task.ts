@@ -19,7 +19,10 @@ export function makeUpdateTaskTool(provider: TaskProvider): ToolSet[string] {
         .optional()
         .describe("New status column slug (e.g. 'to-do', 'in-progress', 'in-review', 'done')"),
       priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('New priority level'),
-      dueDate: z.string().optional().describe("Due date in ISO 8601 format (e.g. '2026-03-15')"),
+      dueDate: z
+        .string()
+        .optional()
+        .describe("Due date in ISO 8601 format in the user's timezone (e.g. '2026-03-15' or '2026-03-15T17:00:00')"),
       userId: z.string().optional().describe('User ID to assign the task to'),
       projectId: z.string().optional().describe('Project ID to move the task to'),
     }),
