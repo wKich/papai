@@ -7,7 +7,11 @@ mockLogger()
 import type { RecurringTaskInput, RecurringTaskRecord } from '../../src/types/recurring.js'
 
 void mock.module('../../src/config.js', () => ({
-  getConfig: (): string | null => null,
+  getConfig: (userId: string, key: string): string | null => {
+    expect(userId).toBe('user-1')
+    expect(key).toBe('timezone')
+    return null
+  },
 }))
 
 // Mock recurring store — should NOT be called for invalid input
