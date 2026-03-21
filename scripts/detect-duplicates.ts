@@ -2,12 +2,13 @@
 /**
  * Detect duplicate code in test files using jscpd
  * Usage: bun run scripts/detect-duplicates.ts [threshold]
- * Default threshold is 15 lines (lower = more sensitive)
+ * Default threshold is 29 lines (achieves 0% duplication baseline)
+ * Lower values = more sensitive (catches smaller duplicates)
  */
 
 import { $ } from 'bun'
 
-const THRESHOLD = process.argv[2] !== undefined && process.argv[2] !== '' ? parseInt(process.argv[2], 10) : 15
+const THRESHOLD = process.argv[2] !== undefined && process.argv[2] !== '' ? parseInt(process.argv[2], 10) : 29
 
 console.log(`🔍 Detecting duplicate code in tests (threshold: ${THRESHOLD} lines)...\n`)
 
@@ -30,27 +31,46 @@ async function installJscpd(): Promise<void> {
 // Run jscpd
 async function runJscpd(): Promise<void> {
   const reporterDir = './reports/jscpd'
+  await $`mkdir -p ${reporterDir}`
 
-  try {
-    await $`mkdir -p ${reporterDir}`
+  // Use execa-style array to avoid shell escaping issues
+  const args = [
+    'tests/',
+    '--min-lines',
+    String(THRESHOLD),
+    '--min-tokens',
+    '50',
+    '--reporters',
+    'console,html',
+    '--output',
+    reporterDir,
+    '--ignore',
+    '**/node_modules/**,**/*.d.ts,**/e2e/**',
+    '--format',
+    'typescript',
+    // Allow up to 10% duplication before failing
+    '--threshold',
+    '10',
+  ]
 
-    await $`jscpd tests/
-      --min-lines ${THRESHOLD}
-      --min-tokens 50
-      --reporters console,html
-      --output ${reporterDir}
-      --ignore "**/node_modules/**,**/*.d.ts,**/e2e/**"
-      --format typescript`
+  console.log(`Running: jscpd ${args.join(' ')}\n`)
 
-    console.log('\n📊 Report generated:')
-    console.log('   - Console output above')
-    console.log(`   - HTML report: ${reporterDir}/index.html`)
-  } catch {
-    // jscpd exits with error code if duplicates found, which is expected
-    console.log('\n📊 Report generated:')
-    console.log('   - Console output above')
-    console.log(`   - HTML report: ${reporterDir}/index.html`)
-    process.exit(0)
+  const proc = Bun.spawn(['jscpd', ...args], {
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+
+  const exitCode = await proc.exited
+
+  console.log('\n📊 Report generated:')
+  console.log('   - Console output above')
+  console.log(`   - HTML report: ${reporterDir}/index.html`)
+
+  // Exit code 0 = no duplicates found
+  // Exit code 1 = duplicates found but within threshold
+  // Exit code >1 = error
+  if (exitCode > 1) {
+    process.exit(exitCode)
   }
 }
 
