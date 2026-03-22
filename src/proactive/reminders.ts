@@ -4,28 +4,22 @@ import { nextCronOccurrence, parseCron } from '../cron.js'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { reminders } from '../db/schema.js'
 import { logger } from '../logger.js'
+import { ProviderClassifiedError, providerError } from '../providers/errors.js'
 import type { CreateReminderParams, ReminderStatus } from './types.js'
-
-/**
- * Thrown when a reminder cannot be found for the given id + userId.
- * Implements the AppError shape so isAppError() returns true.
- * @internal
- */
-class ReminderNotFoundError extends Error {
-  readonly type = 'provider' as const
-  readonly code = 'not-found' as const
-  readonly resourceType = 'reminder' as const
-  readonly resourceId: string
-
-  constructor(reminderId: string) {
-    super(`reminder "${reminderId}" was not found.`)
-    this.resourceId = reminderId
-  }
-}
 
 const log = logger.child({ scope: 'proactive:reminders' })
 
 const generateId = (): string => crypto.randomUUID()
+
+/** Normalize an ISO 8601 string to canonical UTC (Date.toISOString()). */
+const normalizeTimestamp = (iso: string): string => new Date(iso).toISOString()
+
+function throwReminderNotFound(reminderId: string): never {
+  throw new ProviderClassifiedError(
+    `reminder "${reminderId}" was not found.`,
+    providerError.notFound('reminder', reminderId),
+  )
+}
 
 export function createReminder(params: CreateReminderParams): typeof reminders.$inferSelect {
   log.debug(
@@ -38,7 +32,7 @@ export function createReminder(params: CreateReminderParams): typeof reminders.$
     id,
     userId: params.userId,
     text: params.text,
-    fireAt: params.fireAt,
+    fireAt: normalizeTimestamp(params.fireAt),
     recurrence: params.recurrence ?? null,
     taskId: params.taskId ?? null,
     status: 'pending' satisfies ReminderStatus,
@@ -76,7 +70,7 @@ export function cancelReminder(reminderId: string, userId: string): void {
     .get()
 
   if (row === undefined) {
-    throw new ReminderNotFoundError(reminderId)
+    throwReminderNotFound(reminderId)
   }
 
   db.update(reminders)
@@ -98,15 +92,16 @@ export function snoozeReminder(reminderId: string, userId: string, newFireAt: st
     .get()
 
   if (row === undefined) {
-    throw new ReminderNotFoundError(reminderId)
+    throwReminderNotFound(reminderId)
   }
 
+  const normalized = normalizeTimestamp(newFireAt)
   db.update(reminders)
-    .set({ status: 'snoozed' satisfies ReminderStatus, fireAt: newFireAt })
+    .set({ status: 'snoozed' satisfies ReminderStatus, fireAt: normalized })
     .where(eq(reminders.id, reminderId))
     .run()
 
-  log.info({ reminderId, userId, newFireAt }, 'Reminder snoozed')
+  log.info({ reminderId, userId, newFireAt: normalized }, 'Reminder snoozed')
 }
 
 export function rescheduleReminder(reminderId: string, userId: string, newFireAt: string): void {
@@ -120,15 +115,16 @@ export function rescheduleReminder(reminderId: string, userId: string, newFireAt
     .get()
 
   if (row === undefined) {
-    throw new ReminderNotFoundError(reminderId)
+    throwReminderNotFound(reminderId)
   }
 
+  const normalized = normalizeTimestamp(newFireAt)
   db.update(reminders)
-    .set({ status: 'pending' satisfies ReminderStatus, fireAt: newFireAt })
+    .set({ status: 'pending' satisfies ReminderStatus, fireAt: normalized })
     .where(eq(reminders.id, reminderId))
     .run()
 
-  log.info({ reminderId, userId, newFireAt }, 'Reminder rescheduled')
+  log.info({ reminderId, userId, newFireAt: normalized }, 'Reminder rescheduled')
 }
 
 export function fetchDue(): Array<typeof reminders.$inferSelect> {

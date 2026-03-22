@@ -36,7 +36,7 @@ const createMockChat = (): ChatProvider => ({
 const createMockProviderBuilder = (): ((userId: string) => TaskProvider | null) => () => null
 
 describe('ProactiveAlertScheduler', () => {
-  let intervalSpy = spyOn<typeof globalThis, 'setInterval'>(globalThis, 'setInterval')
+  let intervalSpy: ReturnType<typeof spyOn<typeof globalThis, 'setInterval'>>
 
   beforeEach(async () => {
     await setupTestDb()
@@ -128,7 +128,7 @@ describe('ProactiveAlertScheduler', () => {
       job.nextRun = new Date(0)
 
       // Must resolve without throwing (error is caught internally)
-      await _fireBriefingIfDue('user-briefing-err', '0 8 * * 1-5', 'UTC')
+      await _fireBriefingIfDue('user-briefing-err', '0 8 * * *', 'UTC')
     })
   })
 

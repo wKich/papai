@@ -113,8 +113,8 @@ export function updateAlertState(userId: string, taskId: string, currentStatus: 
     updates.suppressUntil = new Date(Date.now() + SUPPRESSION_MS[alertType]).toISOString()
 
     if (alertType === 'overdue') {
-      const current = existing.overdueDaysNotified ?? 0
-      updates.overdueDaysNotified = current + 1
+      const previous = statusChanged ? 0 : (existing.overdueDaysNotified ?? 0)
+      updates.overdueDaysNotified = previous + 1
     }
   }
 
@@ -246,7 +246,8 @@ export async function runAlertCycle(
 ): Promise<AlertCheckResult> {
   const result: AlertCheckResult = { sent: 0, suppressed: 0 }
   const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
-  const stalenessDays = Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
+  const rawStaleness = Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
+  const stalenessDays = Number.isFinite(rawStaleness) && rawStaleness >= 1 ? rawStaleness : 7
   try {
     const allTasks = await fetchAllTasks(provider, { userId })
     const syncAlerts = allTasks.flatMap((task) =>

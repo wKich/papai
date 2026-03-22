@@ -5,7 +5,6 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-import { isAppError } from '../../src/errors.js'
 import {
   createReminder,
   listReminders,
@@ -16,6 +15,7 @@ import {
   markDelivered,
   advanceRecurrence,
 } from '../../src/proactive/reminders.js'
+import { ProviderClassifiedError } from '../../src/providers/errors.js'
 
 const userId = 'test-user-1'
 const otherUser = 'test-user-2'
@@ -97,7 +97,10 @@ describe('ReminderService', () => {
       thrown = e
     }
     expect(thrown).toBeDefined()
-    expect(isAppError(thrown) && thrown.type === 'provider' && thrown.code === 'not-found').toBe(true)
+    expect(thrown).toBeInstanceOf(ProviderClassifiedError)
+    if (thrown instanceof ProviderClassifiedError) {
+      expect(thrown.error.code).toBe('not-found')
+    }
   })
 
   test('snoozeReminder sets status to snoozed and updates fire_at', () => {
