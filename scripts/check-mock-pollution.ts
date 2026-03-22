@@ -37,7 +37,11 @@ import ts from 'typescript'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const ROOT = resolve(import.meta.dirname, '..')
+const rootArgIdx = process.argv.indexOf('--root')
+const ROOT =
+  rootArgIdx !== -1 && process.argv[rootArgIdx + 1] !== undefined
+    ? resolve(process.argv[rootArgIdx + 1]!)
+    : resolve(import.meta.dirname, '..')
 const STRICT = process.argv.includes('--strict')
 
 // Modules that are always safe to mock: they are the intentional mock targets
@@ -292,6 +296,4 @@ if (warnings.length > 0) {
   }
 }
 
-if (errors.length > 0) {
-  process.exit(1)
-}
+if (errors.length > 0) process.exit(1)
