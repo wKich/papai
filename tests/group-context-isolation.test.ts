@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
@@ -87,4 +87,8 @@ describe('group context isolation', () => {
     expect(groupAuth.isBotAdmin).toBe(true)
     expect(groupAuth.storageContextId).toBe('group1')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

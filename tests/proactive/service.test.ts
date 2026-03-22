@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { eq, and } from 'drizzle-orm'
 
@@ -227,4 +227,8 @@ describe('ProactiveAlertService', () => {
       expect(after!.lastStatusChangedAt).toBe('2020-01-01T00:00:00.000Z')
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

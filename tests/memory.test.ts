@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import type { LanguageModel } from 'ai'
 import { eq } from 'drizzle-orm'
@@ -685,4 +685,8 @@ describe('buildMemoryContextMessage format details', () => {
     expect(result!.content).toContain('last seen 2026-03-15')
     expect(result!.content).not.toContain('T14:30')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

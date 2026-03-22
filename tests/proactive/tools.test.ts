@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { createMockProvider } from '../tools/mock-provider.js'
 import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
@@ -156,4 +156,8 @@ describe('Proactive Tools', () => {
       expect(result).toHaveProperty('briefing')
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

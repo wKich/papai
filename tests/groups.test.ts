@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
@@ -65,4 +65,8 @@ describe('groups', () => {
     // Should not throw
     removeGroupMember('group1', 'nonexistent')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

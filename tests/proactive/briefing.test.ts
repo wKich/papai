@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 
@@ -239,4 +239,8 @@ describe('BriefingService', () => {
       }
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -354,4 +354,8 @@ describe('getCachedHistory cold-cache behavior', () => {
     expect(loadedMessages[0]).toEqual(messages[0])
     expect(loadedMessages[1]).toEqual(messages[1])
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 
 import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 
@@ -116,4 +116,8 @@ describe('ProactiveAlertScheduler', () => {
     // Second call should not throw
     start(chat, builder)
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

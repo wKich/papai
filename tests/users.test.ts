@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -163,4 +163,8 @@ describe('getKaneoWorkspace / setKaneoWorkspace', () => {
     expect(getKaneoWorkspace('ws-user-4')).toBe('ws-A')
     expect(getKaneoWorkspace('ws-user-5')).toBe('ws-B')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
