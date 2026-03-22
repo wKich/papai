@@ -36,11 +36,6 @@ void mock.module('../src/providers/registry.js', () => ({
   createProvider: (): typeof mockProvider => mockProvider,
 }))
 
-// Tools — return empty toolset to avoid complex tool setup
-void mock.module('../src/tools/index.js', () => ({
-  makeTools: (): Record<string, never> => ({}),
-}))
-
 // Kaneo provisioning — skip real provisioning
 void mock.module('../src/providers/kaneo/provision.js', () => ({
   provisionAndConfigure: (): Promise<{ status: string }> => Promise.resolve({ status: 'already_configured' }),
@@ -66,7 +61,11 @@ const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
     usage: {},
   })
 
+// Preserve the real `tool` export so makeTools() works with unmocked tool creation.
+// Only generateText and stepCountIs are replaced for test control.
+const realAi = await import('ai')
 void mock.module('ai', () => ({
+  ...realAi,
   generateText: (): Promise<GenerateTextResult> => generateTextImpl(),
   stepCountIs: (): (() => boolean) => () => false,
 }))
