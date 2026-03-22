@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 
 import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 
@@ -63,7 +63,7 @@ describe('ProactiveAlertScheduler', () => {
   test('start registers 2 global poller jobs (runs without error)', () => {
     const chat = createMockChat()
     const builder = createMockProviderBuilder()
-    const intervalSpy = mock.spy(globalThis, 'setInterval')
+    const intervalSpy = spyOn(globalThis, 'setInterval')
 
     start(chat, builder)
 
