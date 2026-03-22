@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -103,14 +103,11 @@ void mock.module('../../src/scheduler.js', () => ({
   },
 }))
 
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, _key: string): string | null => 'UTC',
-}))
-
 // ============================================================================
 // Imports (after mocks)
 // ============================================================================
 
+import { setCachedConfig, _userCaches } from '../../src/cache.js'
 import { makeCreateRecurringTaskTool } from '../../src/tools/create-recurring-task.js'
 import { makeDeleteRecurringTaskTool } from '../../src/tools/delete-recurring-task.js'
 import { makeListRecurringTasksTool } from '../../src/tools/list-recurring-tasks.js'
@@ -166,9 +163,16 @@ function resetMockState(): void {
   listRecurringTasksCalls.length = 0
   createMissedTasksResult = 0
   createMissedTasksCalls.length = 0
+  // Pre-populate timezone in the in-memory cache so create-recurring-task tool
+  // can read it without needing a real DB. DB sync fails silently (no table).
+  setCachedConfig('user-1', 'timezone', 'UTC')
 }
 
 beforeEach(resetMockState)
+
+afterAll(() => {
+  _userCaches.delete('user-1')
+})
 
 // ============================================================================
 // Tests: makeCreateRecurringTaskTool

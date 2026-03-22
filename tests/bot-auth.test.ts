@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
@@ -10,22 +10,6 @@ let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
 void mock.module('../src/db/drizzle.js', () => ({
   getDrizzleDb: (): typeof testDb => testDb,
-}))
-
-// Mock commands/index.js to avoid Grammy imports
-void mock.module('../src/commands/index.js', () => ({
-  registerHelpCommand: (): void => {},
-  registerSetCommand: (): void => {},
-  registerConfigCommand: (): void => {},
-  registerContextCommand: (): void => {},
-  registerClearCommand: (): void => {},
-  registerAdminCommands: (): void => {},
-  registerGroupCommand: (): void => {},
-}))
-
-// Mock llm-orchestrator to avoid its transitive imports
-void mock.module('../src/llm-orchestrator.js', () => ({
-  processMessage: (): Promise<void> => Promise.resolve(),
 }))
 
 import { checkAuthorizationExtended } from '../src/bot.js'
@@ -149,4 +133,8 @@ describe('Authorization Logic', () => {
       })
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
