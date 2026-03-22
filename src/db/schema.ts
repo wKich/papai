@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { sqliteTable, text, primaryKey, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   platformUserId: text('platform_user_id').primaryKey(),
@@ -117,7 +117,58 @@ export const recurringTaskOccurrences = sqliteTable(
   ],
 )
 
+export const reminders = sqliteTable(
+  'reminders',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    text: text('text').notNull(),
+    taskId: text('task_id'),
+    fireAt: text('fire_at').notNull(),
+    recurrence: text('recurrence'),
+    status: text('status').notNull().default('pending'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_reminders_user').on(table.userId),
+    index('idx_reminders_status_fire').on(table.status, table.fireAt),
+  ],
+)
+
+export const userBriefingState = sqliteTable('user_briefing_state', {
+  userId: text('user_id').primaryKey(),
+  lastBriefingDate: text('last_briefing_date'),
+  lastBriefingAt: text('last_briefing_at'),
+})
+
+export const alertState = sqliteTable(
+  'alert_state',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    taskId: text('task_id').notNull(),
+    lastSeenStatus: text('last_seen_status'),
+    lastStatusChangedAt: text('last_status_changed_at'),
+    lastAlertType: text('last_alert_type'),
+    lastAlertSentAt: text('last_alert_sent_at'),
+    suppressUntil: text('suppress_until'),
+    overdueDaysNotified: integer('overdue_days_notified').default(0),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_alert_state_user').on(table.userId),
+    index('idx_alert_state_user_task').on(table.userId, table.taskId),
+  ],
+)
+
 export type RecurringTask = typeof recurringTasks.$inferSelect
 export type RecurringTaskOccurrence = typeof recurringTaskOccurrences.$inferSelect
+export type Reminder = typeof reminders.$inferSelect
+export type UserBriefingState = typeof userBriefingState.$inferSelect
+export type AlertStateRow = typeof alertState.$inferSelect
 
 export type GroupMember = typeof groupMembers.$inferSelect

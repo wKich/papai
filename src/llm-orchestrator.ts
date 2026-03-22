@@ -11,6 +11,7 @@ import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
+import * as briefingService from './proactive/briefing.js'
 import { ProviderClassifiedError } from './providers/errors.js'
 import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { provisionAndConfigure } from './providers/kaneo/provision.js'
@@ -95,6 +96,14 @@ RECURRING TASKS — The user can set up tasks that repeat automatically:
 - When resuming, set createMissed=true to retroactively create tasks for missed cycles during the pause.
 - When the user says "stop" or "cancel" a recurring task, use delete_recurring_task.
 - When they say "pause", use pause_recurring_task. When "skip the next one", use skip_recurring_task.
+
+REMINDERS — The user can set reminders that fire at specific times:
+- Use set_reminder to create a reminder. Always resolve natural language time expressions to ISO 8601 timestamps for fireAt.
+- For repeating reminders, resolve the recurrence to a 5-field cron expression.
+- Use list_reminders to show active reminders. Use cancel_reminder to cancel one.
+- Use snooze_reminder to delay a reminder (resolve duration to an ISO timestamp for newFireAt).
+- Use reschedule_reminder to move a reminder to a new time.
+- Use get_briefing to show today's task briefing on demand.
 
 ${STATIC_RULES}`
 }
@@ -240,20 +249,16 @@ const handleMessageError = async (reply: ReplyFn, contextId: string, error: unkn
     { contextId, error: isAppError(error) ? error : error instanceof Error ? error.message : String(error) },
     'Message handling failed',
   )
-
-  if (isAppError(error)) {
-    await reply.text(getUserMessage(error))
-  } else if (error instanceof KaneoClassifiedError) {
+  if (isAppError(error)) await reply.text(getUserMessage(error))
+  else if (error instanceof KaneoClassifiedError || error instanceof YouTrackClassifiedError)
     await reply.text(getUserMessage(error.appError))
-  } else if (error instanceof YouTrackClassifiedError) {
-    await reply.text(getUserMessage(error.appError))
-  } else if (error instanceof ProviderClassifiedError) {
-    await reply.text(getUserMessage(error.error))
-  } else if (APICallError.isInstance(error)) {
-    await reply.text('An unexpected error occurred. Please try again later.')
-  } else {
-    await reply.text('An unexpected error occurred. Please try again later.')
-  }
+  else if (error instanceof ProviderClassifiedError) await reply.text(getUserMessage(error.error))
+  else
+    await reply.text(
+      APICallError.isInstance(error)
+        ? 'API call failed. Please try again.'
+        : 'An unexpected error occurred. Please try again later.',
+    )
 }
 
 export const processMessage = async (
@@ -272,12 +277,11 @@ export const processMessage = async (
   appendHistory(contextId, [newMessage])
 
   try {
+    if (checkRequiredConfig(contextId).length === 0) {
+      const catchUp = await briefingService.getMissedBriefing(contextId, buildProvider(contextId)).catch(() => null)
+      if (catchUp !== null) await reply.formatted(catchUp)
+    }
     const result = await callLlm(reply, contextId, username, history)
-
-    // result.response.messages contains ONLY the newly generated messages (assistant + tool
-    // messages from all steps). The Vercel AI SDK does NOT include input messages there —
-    // it starts an empty array and pushes generated messages as steps complete.
-    // So we append all of them directly, no slicing needed.
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)
@@ -286,10 +290,7 @@ export const processMessage = async (
         'Assistant response appended to history',
       )
     }
-
-    // Trigger trim only after successful response
-    const needsTrim = shouldTriggerTrim([...history, ...assistantMessages])
-    if (needsTrim) {
+    if (shouldTriggerTrim([...history, ...assistantMessages])) {
       void runTrimInBackground(contextId, [...history, ...assistantMessages])
     }
   } catch (error) {

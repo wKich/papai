@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
@@ -147,7 +147,11 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    // LLM keys (4) + provider-specific key (1) + preference keys (1) = 6
-    expect(CONFIG_KEYS).toHaveLength(6)
+    // LLM keys (4) + provider-specific key (1) + preference keys (1) + proactive keys (5) = 11
+    expect(CONFIG_KEYS).toHaveLength(11)
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

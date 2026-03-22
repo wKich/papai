@@ -11,6 +11,7 @@ export type ProviderError =
   | { type: 'provider'; code: 'comment-not-found'; commentId: string }
   | { type: 'provider'; code: 'label-not-found'; labelName: string }
   | { type: 'provider'; code: 'relation-not-found'; taskId: string; relatedTaskId: string }
+  | { type: 'provider'; code: 'not-found'; resourceType: string; resourceId: string }
   | { type: 'provider'; code: 'auth-failed' }
   | { type: 'provider'; code: 'rate-limited' }
   | { type: 'provider'; code: 'validation-failed'; field: string; reason: string }
@@ -35,6 +36,12 @@ export const providerError = {
     code: 'relation-not-found',
     taskId,
     relatedTaskId,
+  }),
+  notFound: (resourceType: string, resourceId: string): ProviderError => ({
+    type: 'provider',
+    code: 'not-found',
+    resourceType,
+    resourceId,
   }),
   authFailed: (): ProviderError => ({ type: 'provider', code: 'auth-failed' }),
   rateLimited: (): ProviderError => ({ type: 'provider', code: 'rate-limited' }),
@@ -74,6 +81,8 @@ export const getProviderMessage = (error: ProviderError): string => {
       return `Label "${error.labelName}" was not found. Use list_labels to see available labels.`
     case 'relation-not-found':
       return `Relation between tasks "${error.taskId}" and "${error.relatedTaskId}" was not found.`
+    case 'not-found':
+      return `${error.resourceType} "${error.resourceId}" was not found.`
     case 'auth-failed':
       return `Failed to connect to the task tracker. Please check your API key.`
     case 'rate-limited':

@@ -5,7 +5,7 @@
  * using controlled test doubles to verify the composition of the persistence layer.
  */
 
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -165,4 +165,8 @@ describe('Story 4: Key facts remembered after read', () => {
     expect(contextMessage!.content).toContain('Mobile App Project')
     expect(contextMessage!.content).toContain('proj:proj-123')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
