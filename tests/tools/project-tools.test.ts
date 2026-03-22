@@ -96,7 +96,7 @@ describe('Project Tools', () => {
 
       const tool = makeListProjectsTool(provider)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -174,7 +174,7 @@ describe('Project Tools', () => {
 
       const tool = makeCreateProjectTool(provider)
       const promise = getToolExecutor(tool)({ name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -265,7 +265,7 @@ describe('Project Tools', () => {
 
       const tool = makeUpdateProjectTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Project not found')
+      await expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
       } catch {
@@ -347,7 +347,7 @@ describe('Project Tools', () => {
         { projectId: 'invalid', confidence: 0.9 },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Project not found')
+      await expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
       } catch {

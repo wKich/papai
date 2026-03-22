@@ -188,8 +188,7 @@ describe('Schema Validation', () => {
 
         const resource = new TaskResource(mockConfig)
         const promise = resource.create({ projectId: 'proj-1', title: 'Test' })
-        expect(promise).rejects.toThrow()
-        await promise.catch(() => {})
+        await expect(promise).rejects.toThrow()
       })
     })
 
@@ -709,8 +708,7 @@ describe('Schema Validation', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.create({ projectId: 'proj-1', title: 'Test' })
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('TaskResource.create rejects wrong number type', async () => {
@@ -731,8 +729,7 @@ describe('Schema Validation', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise2 = resource.create({ projectId: 'proj-1', title: 'Test' })
-      expect(promise2).rejects.toThrow()
-      await promise2.catch(() => {})
+      await expect(promise2).rejects.toThrow()
     })
 
     test('LabelResource.create rejects missing color', async () => {
@@ -751,8 +748,7 @@ describe('Schema Validation', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.create({ workspaceId: 'ws-1', name: 'Bug' })
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('ProjectResource.create rejects missing slug', async () => {
@@ -771,8 +767,7 @@ describe('Schema Validation', () => {
 
       const resource = new ProjectResource(mockConfig)
       const promise = resource.create({ name: 'Test', workspaceId: 'ws-1' })
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('CommentResource.update rejects missing createdAt', async () => {
@@ -791,8 +786,7 @@ describe('Schema Validation', () => {
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.update('task-1', 'act-1', 'Updated')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('ColumnResource.list rejects missing isFinal', async () => {
@@ -815,8 +809,7 @@ describe('Schema Validation', () => {
 
       const resource = new ColumnResource(mockConfig)
       const promise = resource.list('proj-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 

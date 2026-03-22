@@ -151,6 +151,6 @@ describe('E2E: Task Relations', () => {
       relatedTaskId: 'non-existent-id',
       type: 'related',
     })
-    expect(promise).rejects.toThrow()
+    await expect(promise).rejects.toThrow()
   })
 })

@@ -131,8 +131,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.addRelation('task-1', 'missing-task', 'blocks')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('throws when source task does not exist', async () => {
@@ -145,8 +144,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.addRelation('missing-source', 'task-2', 'blocks')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('appends relation to existing frontmatter', async () => {
@@ -219,8 +217,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.removeRelation('task-1', 'task-2')
-      expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
-      await promise.catch(() => {})
+      await expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
     })
 
     test('throws when task does not exist', async () => {
@@ -228,8 +225,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.removeRelation('missing', 'task-2')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('throws when task has no relations (empty description)', async () => {
@@ -242,8 +238,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.removeRelation('task-1', 'task-2')
-      expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
-      await promise.catch(() => {})
+      await expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
     })
   })
 
@@ -287,8 +282,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.updateRelation('task-1', 'task-2', 'blocks')
-      expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
-      await promise.catch(() => {})
+      await expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
     })
 
     test('throws when task does not exist', async () => {
@@ -296,8 +290,7 @@ describe('Task Relations', () => {
 
       const resource = new TaskResource(mockConfig)
       const promise = resource.updateRelation('missing', 'task-2', 'related')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('updates only the matching relation when multiple relations exist', async () => {

@@ -102,7 +102,7 @@ describe('Comment Tools', () => {
 
       const tool = makeAddCommentTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', comment: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -170,7 +170,7 @@ describe('Comment Tools', () => {
 
       const tool = makeGetCommentsTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -237,7 +237,7 @@ describe('Comment Tools', () => {
         { taskId: 'task-1', activityId: 'invalid', comment: 'Test' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Comment not found')
+      await expect(promise).rejects.toThrow('Comment not found')
       try {
         await promise
       } catch {
@@ -306,7 +306,7 @@ describe('Comment Tools', () => {
         { taskId: 'task-1', commentId: 'invalid' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Comment not found')
+      await expect(promise).rejects.toThrow('Comment not found')
       try {
         await promise
       } catch {

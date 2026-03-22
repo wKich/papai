@@ -127,10 +127,9 @@ describe('CommentResource', () => {
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.add('invalid', 'Test')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'comment-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -257,10 +256,9 @@ describe('CommentResource', () => {
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.list('invalid')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'comment-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -308,10 +306,9 @@ describe('CommentResource', () => {
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.update('task-1', 'invalid', 'Updated')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'comment-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -331,10 +328,9 @@ describe('CommentResource', () => {
 
       const resource = new CommentResource(mockConfig)
       const promise = resource.remove('invalid')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'comment-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 })

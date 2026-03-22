@@ -4,15 +4,90 @@ import { describe, expect, test } from 'bun:test'
 import { CommentSchema } from '../../../../src/providers/youtrack/schemas/comment.js'
 
 describe('Comment schemas', () => {
-  test('CommentSchema validates comment', () => {
-    const valid = {
-      id: '0-0',
-      $type: 'IssueComment',
-      text: 'This is a comment',
-      author: { id: '1-1', $type: 'User', login: 'john.doe' },
-      created: 1700000000000,
-    }
-    const result = CommentSchema.parse(valid)
+  const validComment = {
+    id: '0-0',
+    $type: 'IssueComment',
+    text: 'This is a comment',
+    author: { id: '1-1', $type: 'User', login: 'john.doe' },
+    created: 1700000000000,
+  }
+
+  test('validates comment with all fields', () => {
+    const result = CommentSchema.parse(validComment)
     expect(result.text).toBe('This is a comment')
+  })
+
+  test('missing text rejects', () => {
+    const { text: _, ...invalid } = validComment
+    expect(() => CommentSchema.parse(invalid)).toThrow()
+  })
+
+  test('missing author rejects', () => {
+    const { author: _, ...invalid } = validComment
+    expect(() => CommentSchema.parse(invalid)).toThrow()
+  })
+
+  test('missing created rejects', () => {
+    const { created: _, ...invalid } = validComment
+    expect(() => CommentSchema.parse(invalid)).toThrow()
+  })
+
+  test('author as string rejects', () => {
+    expect(() => CommentSchema.parse({ ...validComment, author: 'john' })).toThrow()
+  })
+
+  test('author missing login rejects', () => {
+    expect(() => CommentSchema.parse({ ...validComment, author: { id: '1' } })).toThrow()
+  })
+
+  test('text as number rejects', () => {
+    expect(() => CommentSchema.parse({ ...validComment, text: 42 })).toThrow()
+  })
+
+  test('created as string rejects', () => {
+    expect(() => CommentSchema.parse({ ...validComment, created: 'yesterday' })).toThrow()
+  })
+
+  test('updated omitted accepts', () => {
+    const result = CommentSchema.parse(validComment)
+    expect(result.updated).toBeUndefined()
+  })
+
+  test('deleted as string rejects', () => {
+    expect(() => CommentSchema.parse({ ...validComment, deleted: 'true' })).toThrow()
+  })
+
+  test('pinned omitted accepts', () => {
+    const result = CommentSchema.parse(validComment)
+    expect(result.pinned).toBeUndefined()
+  })
+
+  test('minimal valid object', () => {
+    const minimal = {
+      id: '1',
+      text: 'hi',
+      author: { id: '1', login: 'x' },
+      created: 1,
+    }
+    expect(() => CommentSchema.parse(minimal)).not.toThrow()
+  })
+
+  test('full valid with all optionals', () => {
+    const full = {
+      ...validComment,
+      textPreview: 'preview',
+      updated: 1700000000001,
+      deleted: false,
+      pinned: true,
+    }
+    const result = CommentSchema.parse(full)
+    expect(result.textPreview).toBe('preview')
+    expect(result.deleted).toBe(false)
+    expect(result.pinned).toBe(true)
+  })
+
+  test('empty text accepts (no .min(1))', () => {
+    const result = CommentSchema.parse({ ...validComment, text: '' })
+    expect(result.text).toBe('')
   })
 })

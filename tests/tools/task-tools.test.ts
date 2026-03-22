@@ -133,7 +133,7 @@ describe('Task Tools', () => {
 
       const tool = makeCreateTaskTool(provider)
       const promise = getToolExecutor(tool)({ title: 'Test', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -226,7 +226,7 @@ describe('Task Tools', () => {
 
       const tool = makeUpdateTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', status: 'done' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -385,7 +385,7 @@ describe('Task Tools', () => {
 
       const tool = makeGetTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -462,7 +462,7 @@ describe('Task Tools', () => {
 
       const tool = makeListTasksTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'invalid' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Project not found')
+      await expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
       } catch {
@@ -660,7 +660,7 @@ describe('Task Tools', () => {
 
       const tool = makeArchiveTaskTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
