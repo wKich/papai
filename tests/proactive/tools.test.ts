@@ -6,20 +6,9 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, key: string): string | null => {
-    if (key === 'briefing_mode') return 'full'
-    if (key === 'timezone') return 'UTC'
-    return null
-  },
-  isConfigKey: (): boolean => true,
-  getAllConfig: (): Record<string, string> => ({}),
-  setConfig: (): void => {},
-  maskValue: (_k: string, v: string): string => v,
-}))
-
 import type { ToolSet } from 'ai'
 
+import { setConfig } from '../../src/config.js'
 import { makeProactiveTools } from '../../src/proactive/tools.js'
 
 const userId = 'test-user'
@@ -42,6 +31,8 @@ describe('Proactive Tools', () => {
 
   beforeEach(async () => {
     await setupTestDb()
+    setConfig(userId, 'briefing_mode', 'full')
+    setConfig(userId, 'timezone', 'UTC')
     tools = makeProactiveTools(userId, createMockProvider())
   })
 

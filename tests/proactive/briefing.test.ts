@@ -5,17 +5,7 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-// Mock getConfig with configurable values
-const configStore = new Map<string, string>()
-
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, key: string): string | null => configStore.get(key) ?? null,
-  isConfigKey: (): boolean => true,
-  getAllConfig: (): Record<string, string> => ({}),
-  setConfig: (): void => {},
-  maskValue: (_k: string, v: string): string => v,
-}))
-
+import { setConfig } from '../../src/config.js'
 import {
   buildSections,
   formatFull,
@@ -51,8 +41,7 @@ const makeMockProvider = (tasks: TaskListItem[]): ReturnType<typeof createMockPr
 describe('BriefingService', () => {
   beforeEach(async () => {
     await setupTestDb()
-    configStore.clear()
-    configStore.set('timezone', 'UTC')
+    setConfig('user1', 'timezone', 'UTC')
   })
 
   describe('buildSections', () => {
@@ -273,7 +262,7 @@ describe('BriefingService', () => {
     })
 
     test('returns null when last_briefing_date is today', async () => {
-      configStore.set('briefing_time', '08:00')
+      setConfig('user1', 'briefing_time', '08:00')
 
       const provider = makeMockProvider([])
       // generateAndRecord sets last_briefing_date to today
@@ -285,7 +274,7 @@ describe('BriefingService', () => {
 
     test('returns catch-up string when briefing time has passed', async () => {
       // Set briefing time to 00:01 (always in the past since tests run after midnight)
-      configStore.set('briefing_time', '00:01')
+      setConfig('user1', 'briefing_time', '00:01')
 
       const provider = makeMockProvider([makeTask({ id: 't1', dueDate: today(), status: 'todo' })])
 
@@ -296,7 +285,7 @@ describe('BriefingService', () => {
     })
 
     test('catch-up string includes (Catch-up) header', async () => {
-      configStore.set('briefing_time', '00:01')
+      setConfig('user1', 'briefing_time', '00:01')
 
       const provider = makeMockProvider([])
       const result = await getMissedBriefing('user1', provider)

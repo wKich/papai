@@ -58,6 +58,10 @@ export async function setupTestDb(): Promise<ReturnType<typeof drizzle<typeof sc
   const { drizzle } = await import('drizzle-orm/bun-sqlite')
   const { runMigrations } = await import('../../src/db/migrate.js')
 
+  // Clear the in-memory user cache to prevent config/session bleed between tests
+  const { _userCaches } = await import('../../src/cache.js')
+  _userCaches.clear()
+
   testSqlite = new Database(':memory:')
   testDb = drizzle(testSqlite, { schema })
 

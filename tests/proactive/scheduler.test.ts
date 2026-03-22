@@ -5,28 +5,8 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-// Mock users module
-void mock.module('../../src/users.js', () => ({
-  listUsers: (): Array<{ platform_user_id: string; username: string | null }> => [
-    { platform_user_id: 'user1', username: 'alice' },
-    { platform_user_id: 'user2', username: 'bob' },
-  ],
-  addUser: (): void => {},
-  isAuthorized: (): boolean => true,
-  getKaneoWorkspace: (): string | null => null,
-}))
-
-// Mock config
-const configByUser: Record<string, Record<string, string>> = {}
-void mock.module('../../src/config.js', () => ({
-  getConfig: (userId: string, key: string): string | null => configByUser[userId]?.[key] ?? null,
-  isConfigKey: (): boolean => true,
-  getAllConfig: (): Record<string, string> => ({}),
-  setConfig: (): void => {},
-  maskValue: (_k: string, v: string): string => v,
-}))
-
 import type { ChatProvider } from '../../src/chat/types.js'
+import { setConfig } from '../../src/config.js'
 import { createReminder, listReminders } from '../../src/proactive/reminders.js'
 import {
   start,
@@ -41,6 +21,7 @@ import {
 } from '../../src/proactive/scheduler.js'
 import * as alertService from '../../src/proactive/service.js'
 import type { TaskProvider } from '../../src/providers/types.js'
+import { addUser } from '../../src/users.js'
 import { createMockProvider } from '../tools/mock-provider.js'
 
 const createMockChat = (): ChatProvider => ({
@@ -59,10 +40,6 @@ describe('ProactiveAlertScheduler', () => {
 
   beforeEach(async () => {
     await setupTestDb()
-    // Reset config by removing all keys
-    for (const key of Object.keys(configByUser)) {
-      Reflect.deleteProperty(configByUser, key)
-    }
     intervalSpy = spyOn<typeof globalThis, 'setInterval'>(globalThis, 'setInterval')
   })
 
@@ -81,8 +58,10 @@ describe('ProactiveAlertScheduler', () => {
   })
 
   test('start registers one briefing job per user with briefing_time configured', () => {
-    configByUser['user1'] = { briefing_time: '08:00', timezone: 'UTC' }
-    // user2 has no briefing_time
+    addUser('user1', 'admin', 'alice')
+    setConfig('user1', 'briefing_time', '08:00')
+    setConfig('user1', 'timezone', 'UTC')
+    // user2 not added — no briefing_time
 
     const chat = createMockChat()
     const builder = createMockProviderBuilder()
@@ -109,8 +88,13 @@ describe('ProactiveAlertScheduler', () => {
     const chat = createMockChat()
     const builder = createMockProviderBuilder()
 
-    configByUser['user1'] = { briefing_time: '08:00', timezone: 'UTC' }
-    configByUser['user2'] = { briefing_time: '09:00', timezone: 'America/New_York' }
+    addUser('user1', 'admin', 'alice')
+    setConfig('user1', 'briefing_time', '08:00')
+    setConfig('user1', 'timezone', 'UTC')
+
+    addUser('user2', 'admin', 'bob')
+    setConfig('user2', 'briefing_time', '09:00')
+    setConfig('user2', 'timezone', 'America/New_York')
 
     start(chat, builder)
     expect(getBriefingJobCount()).toBe(2)

@@ -7,21 +7,7 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-// Mock getConfig for timezone
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, key: string): string | null => {
-    if (key === 'timezone') return 'UTC'
-    if (key === 'briefing_timezone') return null
-    if (key === 'staleness_days') return '7'
-    if (key === 'deadline_nudges') return 'enabled'
-    return null
-  },
-  isConfigKey: (): boolean => true,
-  getAllConfig: (): Record<string, string> => ({}),
-  setConfig: (): void => {},
-  maskValue: (_k: string, v: string): string => v,
-}))
-
+import { setConfig } from '../../src/config.js'
 import { getDrizzleDb } from '../../src/db/drizzle.js'
 import { alertState } from '../../src/db/schema.js'
 import {
@@ -357,6 +343,7 @@ describe('runAlertCycleForAllUsers', () => {
     const db = getDrizzleDb()
     const { users } = await import('../../src/db/schema.js')
     db.insert(users).values({ platformUserId: 'test-eligible', addedBy: 'admin' }).run()
+    setConfig('test-eligible', 'deadline_nudges', 'enabled')
 
     const provider = createMockProvider({
       listProjects: () => Promise.resolve([]),
