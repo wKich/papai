@@ -178,7 +178,7 @@ export const tick = (): Promise<void> => {
     log.debug('Tick skipped: previous tick still running')
     return Promise.resolve()
   }
-  activeTickPromise = (async (): Promise<void> => {
+  const work = (async (): Promise<void> => {
     try {
       const dueTasks = getDueRecurringTasks()
       if (dueTasks.length === 0) return
@@ -191,10 +191,11 @@ export const tick = (): Promise<void> => {
       )
     } catch (error) {
       log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
-    } finally {
-      activeTickPromise = null
     }
   })()
+  activeTickPromise = work.finally(() => {
+    activeTickPromise = null
+  })
   return activeTickPromise
 }
 

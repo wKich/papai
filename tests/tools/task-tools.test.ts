@@ -239,6 +239,89 @@ describe('Task Tools', () => {
       const tool = makeUpdateTaskTool(provider)
       expect(schemaValidates(tool, { status: 'done' })).toBe(false)
     })
+
+    test('completionHook is called with correct args on status change', async () => {
+      const provider = createMockProvider({
+        updateTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'Test',
+            status: 'done',
+            url: 'https://test.com/task/1',
+          }),
+        ),
+      })
+      const hookSpy = mock(() => Promise.resolve())
+
+      const tool = makeUpdateTaskTool(provider, hookSpy)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ taskId: 'task-1', status: 'done' }, { toolCallId: '1', messages: [] })
+
+      expect(hookSpy).toHaveBeenCalledTimes(1)
+      expect(hookSpy).toHaveBeenCalledWith('task-1', 'done', provider)
+    })
+
+    test('completionHook error propagates to caller', async () => {
+      const provider = createMockProvider({
+        updateTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'Test',
+            status: 'done',
+            url: 'https://test.com/task/1',
+          }),
+        ),
+      })
+      const hookSpy = mock(() => Promise.reject(new Error('hook error')))
+
+      const tool = makeUpdateTaskTool(provider, hookSpy)
+      const promise = getToolExecutor(tool)({ taskId: 'task-1', status: 'done' }, { toolCallId: '1', messages: [] })
+      await expect(promise).rejects.toThrow('hook error')
+    })
+
+    test('completionHook fires even when only title is changed (status always on response)', async () => {
+      const provider = createMockProvider({
+        updateTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'New Title',
+            status: 'todo',
+            url: 'https://test.com/task/1',
+          }),
+        ),
+      })
+      const hookSpy = mock(() => Promise.resolve())
+
+      const tool = makeUpdateTaskTool(provider, hookSpy)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      // Only changing title, not status — but task.status is always defined on the response
+      await tool.execute({ taskId: 'task-1', title: 'New Title' }, { toolCallId: '1', messages: [] })
+
+      expect(hookSpy).toHaveBeenCalledTimes(1)
+      expect(hookSpy).toHaveBeenCalledWith('task-1', 'todo', provider)
+    })
+
+    test('no error when completionHook is not provided', async () => {
+      const provider = createMockProvider({
+        updateTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'Test',
+            status: 'done',
+            url: 'https://test.com/task/1',
+          }),
+        ),
+      })
+
+      const tool = makeUpdateTaskTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', status: 'done' },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isTask(result)) throw new Error('Invalid result')
+      expect(result.status).toBe('done')
+    })
   })
 
   describe('makeGetTaskTool', () => {
