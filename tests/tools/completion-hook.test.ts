@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -176,4 +176,8 @@ describe('completionHook', () => {
     const tool = makeUpdateTaskTool(provider)
     expect(tool.description).toContain('Update')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

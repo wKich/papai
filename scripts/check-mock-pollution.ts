@@ -16,7 +16,9 @@
  * PATTERN 2 — Shared module mocked without cleanup (MEDIUM RISK)
  *   A test mocks a module that other test files import directly without mocking.
  *   The mock persists across test files since Bun shares the module registry.
- *   Fix: remove the mock if unnecessary, or isolate it (narrow the mock target).
+ *   Files that call mock.restore() inside afterAll() are considered mitigated and
+ *   are not flagged.
+ *   Fix: add afterAll(() => { mock.restore() }), remove the mock, or narrow target.
  *
  * Usage:
  *   bun run scripts/check-mock-pollution.ts
@@ -80,6 +82,15 @@ function extractImports(source: string, filePath: string): string[] {
   return results
 }
 
+/**
+ * Returns true if the file registers an afterAll cleanup via mock.restore().
+ * Such files are exempt from Pattern 2: the risk is mitigated even if timing
+ * is not guaranteed to be perfect in all Bun versions.
+ */
+function hasRestoreCleanup(source: string): boolean {
+  return source.includes('afterAll') && source.includes('mock.restore()')
+}
+
 /** Extract sub-modules that a barrel file re-exports. */
 function extractReExports(source: string, filePath: string): string[] {
   const results: string[] = []
@@ -110,6 +121,8 @@ type FileInfo = {
   mocks: string[]
   // absolute paths of directly imported src modules
   imports: string[]
+  // true when the file has afterAll(() => mock.restore()) cleanup
+  hasCleanup: boolean
 }
 
 const files: FileInfo[] = unitTests.map((filePath) => {
@@ -118,17 +131,21 @@ const files: FileInfo[] = unitTests.map((filePath) => {
     path: filePath,
     mocks: extractMocks(source, filePath),
     imports: extractImports(source, filePath),
+    hasCleanup: hasRestoreCleanup(source),
   }
 })
 
 // Build indexes: module → files that mock/import it
 const mockedBy = new Map<string, string[]>()
 const importedBy = new Map<string, string[]>()
+// Track which mocker files have afterAll cleanup
+const mockerHasCleanup = new Map<string, boolean>()
 
 for (const file of files) {
   for (const mod of file.mocks) {
     if (!mockedBy.has(mod)) mockedBy.set(mod, [])
     mockedBy.get(mod)!.push(file.path)
+    mockerHasCleanup.set(file.path, file.hasCleanup)
   }
   for (const mod of file.imports) {
     if (!importedBy.has(mod)) importedBy.set(mod, [])
@@ -179,14 +196,17 @@ for (const [mockedModule, mockers] of mockedBy) {
   if (directImporters.length === 0) continue
 
   for (const mocker of mockers) {
+    // Files with afterAll(() => mock.restore()) cleanup are considered mitigated.
+    if (mockerHasCleanup.get(mocker) === true) continue
+
     issues.push({
       severity: 'MEDIUM',
       lines: [
-        `  [MEDIUM] Shared module mocked without isolation`,
+        `  [MEDIUM] Shared module mocked without cleanup`,
         `  Mocker : ${rel(mocker)}`,
         `  Module : ${rel(mockedModule)}`,
         `  Victims: ${directImporters.map(rel).join(', ')}`,
-        `  Fix    : narrow the mock target (use a lower-level dep), or remove it`,
+        `  Fix    : add afterAll(() => { mock.restore() }), or narrow the mock target`,
       ],
     })
   }

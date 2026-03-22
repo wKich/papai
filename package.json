@@ -26,7 +26,7 @@
     "check": "bun run --parallel lint typecheck format:check knip test duplicates mock-pollution",
     "fix": "bun run lint:fix && bun run format",
     "duplicates": "bun run scripts/detect-duplicates.ts",
-    "mock-pollution": "bun run scripts/check-mock-pollution.ts",
+    "mock-pollution": "bun run scripts/check-mock-pollution.ts --strict",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md"

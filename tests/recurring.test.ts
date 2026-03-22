@@ -1,35 +1,16 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import * as schema from '../src/db/schema.js'
+import { mockLogger } from './utils/test-helpers.js'
+
+mockLogger()
 
 // --- Test database setup ---
 let testDb: ReturnType<typeof drizzle<typeof schema>>
 let testSqlite: Database
-
-// Mock logger
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    trace: (): void => {},
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    fatal: (): void => {},
-    level: 'info',
-    child: (): object => ({
-      trace: (): void => {},
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-      fatal: (): void => {},
-      level: 'info',
-    }),
-  },
-}))
 
 // Mock getDrizzleDb
 void mock.module('../src/db/drizzle.js', () => ({
@@ -527,4 +508,8 @@ describe('isCompletionStatus', () => {
     expect(isCompletionStatus('to-do')).toBe(false)
     expect(isCompletionStatus('in-review')).toBe(false)
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

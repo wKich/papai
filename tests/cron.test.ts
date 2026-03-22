@@ -1,27 +1,8 @@
-import { describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { afterAll, describe, expect, mock, test } from 'bun:test'
 
-// Mock logger
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    trace: (): void => {},
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    fatal: (): void => {},
-    level: 'info',
-    child: (): object => ({
-      trace: (): void => {},
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-      fatal: (): void => {},
-      level: 'info',
-    }),
-  },
-}))
+import { mockLogger } from './utils/test-helpers.js'
+
+mockLogger()
 
 import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
 
@@ -249,4 +230,8 @@ describe('allOccurrencesBetween', () => {
     const results = allOccurrencesBetween(cron, point, point)
     expect(results).toEqual([])
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

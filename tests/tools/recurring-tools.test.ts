@@ -172,6 +172,7 @@ beforeEach(resetMockState)
 
 afterAll(() => {
   _userCaches.delete('user-1')
+  mock.restore()
 })
 
 // ============================================================================

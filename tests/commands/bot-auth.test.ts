@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
 import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -128,4 +128,8 @@ describe('Bot Authorization Gate', () => {
       expect(textCalls).toHaveLength(0)
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

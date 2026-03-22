@@ -1,29 +1,13 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import packageJson from '../package.json' with { type: 'json' }
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import { mockLogger } from './utils/test-helpers.js'
 
-// Mock logger to avoid issues with runMigrations
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    fatal: (): void => {},
-    trace: (): void => {},
-    level: 'info',
-    child: (): object => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+mockLogger()
 
 // --- Test database setup with Drizzle ---
 let testDb: ReturnType<typeof drizzle>
@@ -256,4 +240,8 @@ describe('announceNewVersion', () => {
     expect(sentMessages).toHaveLength(1)
     expect(sentMessages[0]?.userId).toBe('202')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

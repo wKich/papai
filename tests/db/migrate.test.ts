@@ -1,20 +1,9 @@
 import { Database } from 'bun:sqlite'
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { afterAll, describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
 
-void mock.module('../../src/logger.js', () => ({
-  logger: {
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+import { mockLogger } from '../utils/test-helpers.js'
+
+mockLogger()
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
 
@@ -249,4 +238,8 @@ describe('runMigrations - order validation', () => {
       runMigrations(db, migrations)
     }).toThrow('Migration 002_foo has duplicate base name: foo')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
