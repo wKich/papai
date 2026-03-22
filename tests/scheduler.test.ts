@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach, afterEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterEach, afterAll } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
@@ -7,6 +7,12 @@ import * as schema from '../src/db/schema.js'
 import { mockLogger } from './utils/test-helpers.js'
 
 mockLogger()
+
+// This file mocks providers/registry.js and db/drizzle.js.
+// mock.restore() in afterAll prevents these from leaking into other test files.
+afterAll(() => {
+  mock.restore()
+})
 
 // ---- Mutable mock state ----
 

@@ -1,8 +1,15 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import { mockLogger, createMockReply } from './utils/test-helpers.js'
 
 mockLogger()
+
+// This file mocks many shared modules (config, cache, history, conversation, memory,
+// providers/registry, tools/index, users, kaneo/provision, ai, @ai-sdk/openai-compatible).
+// mock.restore() in afterAll prevents these from leaking into other test files.
+afterAll(() => {
+  mock.restore()
+})
 
 // ---- Module mocks (before imports) ----
 
