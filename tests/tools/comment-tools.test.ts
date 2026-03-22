@@ -41,15 +41,14 @@ describe('Comment Tools', () => {
     })
 
     test('adds comment to task', async () => {
-      const provider = createMockProvider({
-        addComment: mock(() =>
-          Promise.resolve({
-            id: 'comment-1',
-            body: 'New comment',
-            createdAt: '2026-01-01T00:00:00Z',
-          }),
-        ),
-      })
+      const addCommentMock = mock(() =>
+        Promise.resolve({
+          id: 'comment-1',
+          body: 'New comment',
+          createdAt: '2026-01-01T00:00:00Z',
+        }),
+      )
+      const provider = createMockProvider({ addComment: addCommentMock })
 
       const tool = makeAddCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -61,6 +60,7 @@ describe('Comment Tools', () => {
 
       expect(result.id).toBe('comment-1')
       expect(result.body).toBe('New comment')
+      expect(addCommentMock).toHaveBeenCalledWith('task-1', 'New comment')
     })
 
     test('handles empty comment', async () => {
@@ -193,19 +193,18 @@ describe('Comment Tools', () => {
     })
 
     test('updates existing comment', async () => {
-      const provider = createMockProvider({
-        updateComment: mock(() =>
-          Promise.resolve({
-            id: 'comment-1',
-            body: 'Updated comment',
-          }),
-        ),
-      })
+      const updateCommentMock = mock(() =>
+        Promise.resolve({
+          id: 'comment-1',
+          body: 'Updated comment',
+        }),
+      )
+      const provider = createMockProvider({ updateComment: updateCommentMock })
 
       const tool = makeUpdateCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
-        { activityId: 'comment-1', comment: 'Updated comment' },
+        { taskId: 'task-1', activityId: 'comment-1', comment: 'Updated comment' },
         { toolCallId: '1', messages: [] },
       )
       if (
@@ -221,6 +220,11 @@ describe('Comment Tools', () => {
 
       expect(result.id).toBe('comment-1')
       expect(result.body).toBe('Updated comment')
+      expect(updateCommentMock).toHaveBeenCalledWith({
+        taskId: 'task-1',
+        commentId: 'comment-1',
+        body: 'Updated comment',
+      })
     })
 
     test('propagates comment not found error', async () => {
@@ -230,7 +234,7 @@ describe('Comment Tools', () => {
 
       const tool = makeUpdateCommentTool(provider)
       const promise = getToolExecutor(tool)(
-        { activityId: 'invalid', comment: 'Test' },
+        { taskId: 'task-1', activityId: 'invalid', comment: 'Test' },
         { toolCallId: '1', messages: [] },
       )
       expect(promise).rejects.toThrow('Comment not found')
@@ -241,16 +245,28 @@ describe('Comment Tools', () => {
       }
     })
 
+    test('validates taskId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateCommentTool(provider)
+      expect(schemaValidates(tool, { activityId: 'comment-1', comment: 'Test' })).toBe(false)
+    })
+
     test('validates activityId is required', () => {
       const provider = createMockProvider()
       const tool = makeUpdateCommentTool(provider)
-      expect(schemaValidates(tool, { comment: 'Test' })).toBe(false)
+      expect(schemaValidates(tool, { taskId: 'task-1', comment: 'Test' })).toBe(false)
     })
 
     test('validates comment is required', () => {
       const provider = createMockProvider()
       const tool = makeUpdateCommentTool(provider)
-      expect(schemaValidates(tool, { activityId: 'comment-1' })).toBe(false)
+      expect(schemaValidates(tool, { taskId: 'task-1', activityId: 'comment-1' })).toBe(false)
+    })
+
+    test('accepts valid full input', () => {
+      const provider = createMockProvider()
+      const tool = makeUpdateCommentTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', activityId: 'comment-1', comment: 'Test' })).toBe(true)
     })
   })
 
@@ -262,16 +278,22 @@ describe('Comment Tools', () => {
     })
 
     test('removes comment successfully', async () => {
-      const provider = createMockProvider({
-        removeComment: mock(() => Promise.resolve({ id: 'comment-1' })),
-      })
+      const removeCommentMock = mock(() => Promise.resolve({ id: 'comment-1' }))
+      const provider = createMockProvider({ removeComment: removeCommentMock })
 
       const tool = makeRemoveCommentTool(provider)
       if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute({ activityId: 'comment-1' }, { toolCallId: '1', messages: [] })
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', commentId: 'comment-1' },
+        { toolCallId: '1', messages: [] },
+      )
       if (!isSuccessResult(result)) throw new Error('Invalid result')
 
       expect(result.id).toBe('comment-1')
+      expect(removeCommentMock).toHaveBeenCalledWith({
+        taskId: 'task-1',
+        commentId: 'comment-1',
+      })
     })
 
     test('propagates comment not found error', async () => {
@@ -280,7 +302,10 @@ describe('Comment Tools', () => {
       })
 
       const tool = makeRemoveCommentTool(provider)
-      const promise = getToolExecutor(tool)({ activityId: 'invalid' }, { toolCallId: '1', messages: [] })
+      const promise = getToolExecutor(tool)(
+        { taskId: 'task-1', commentId: 'invalid' },
+        { toolCallId: '1', messages: [] },
+      )
       expect(promise).rejects.toThrow('Comment not found')
       try {
         await promise
@@ -289,10 +314,22 @@ describe('Comment Tools', () => {
       }
     })
 
-    test('validates activityId is required', () => {
+    test('validates taskId is required', () => {
       const provider = createMockProvider()
       const tool = makeRemoveCommentTool(provider)
-      expect(schemaValidates(tool, {})).toBe(false)
+      expect(schemaValidates(tool, { commentId: 'comment-1' })).toBe(false)
+    })
+
+    test('validates commentId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveCommentTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
+    })
+
+    test('accepts valid full input', () => {
+      const provider = createMockProvider()
+      const tool = makeRemoveCommentTool(provider)
+      expect(schemaValidates(tool, { taskId: 'task-1', commentId: 'comment-1' })).toBe(true)
     })
   })
 })

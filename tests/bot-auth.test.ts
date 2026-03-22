@@ -1,8 +1,5 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
-import { eq } from 'drizzle-orm'
-
-import * as schema from '../src/db/schema.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 // Setup logger mock at top of file
@@ -15,12 +12,9 @@ void mock.module('../src/db/drizzle.js', () => ({
   getDrizzleDb: (): typeof testDb => testDb,
 }))
 
+import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser } from '../src/users.js'
-
-// Import bot module after mocks are set up
-// We need to import the checkAuthorizationExtended function indirectly by testing setupBot
-// For now, we'll test the logic through the module's behavior
 
 describe('Authorization Logic', () => {
   beforeEach(async () => {
@@ -28,106 +22,119 @@ describe('Authorization Logic', () => {
   })
 
   describe('Bot Admin Authorization', () => {
-    test('Bot admin in DM: allowed, isBotAdmin=true, storageContextId=userId', () => {
-      // Add bot admin
-      addUser('admin-user-123', 'system', 'admin')
+    test('Bot admin in DM → allowed with isBotAdmin, storageContextId=userId', () => {
+      addUser('admin-1', 'system', 'admin')
 
-      // Check that admin is in users table
-      const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, 'admin-user-123')).get()
-      expect(user).toBeDefined()
+      const result = checkAuthorizationExtended('admin-1', 'admin', 'admin-1', 'dm', false)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: 'admin-1',
+      })
     })
 
-    test('Bot admin in group: allowed, isBotAdmin=true, storageContextId=groupId', () => {
-      // Add bot admin
-      addUser('admin-user-123', 'system', 'admin')
+    test('Bot admin in group → allowed with isBotAdmin, storageContextId=groupId', () => {
+      addUser('admin-1', 'system', 'admin')
 
-      // Check admin exists
-      const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, 'admin-user-123')).get()
-      expect(user).toBeDefined()
+      const result = checkAuthorizationExtended('admin-1', 'admin', 'group-1', 'group', false)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: 'group-1',
+      })
+    })
+
+    test('Bot admin who is also platform admin → isGroupAdmin=true', () => {
+      addUser('admin-1', 'system', 'admin')
+
+      const result = checkAuthorizationExtended('admin-1', 'admin', 'group-1', 'group', true)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: true,
+        storageContextId: 'group-1',
+      })
     })
   })
 
   describe('Group Member Authorization', () => {
-    test('Group member in group: allowed, isBotAdmin=false, storageContextId=groupId', () => {
-      // Add group member
-      addGroupMember('group-123', 'member-user-456', 'admin-user-123')
+    test('Group member → allowed, not bot admin, storageContextId=groupId', () => {
+      addGroupMember('group-1', 'member-1', 'system')
 
-      // Check member is in group_members table
-      const member = testDb
-        .select()
-        .from(schema.groupMembers)
-        .where(eq(schema.groupMembers.userId, 'member-user-456'))
-        .get()
-      expect(member).toBeDefined()
+      const result = checkAuthorizationExtended('member-1', null, 'group-1', 'group', false)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: false,
+        isGroupAdmin: false,
+        storageContextId: 'group-1',
+      })
     })
 
-    test('Non-member in group: not allowed, all flags=false', () => {
-      // No setup - user is not in the group
+    test('Group member who is platform admin → isGroupAdmin=true', () => {
+      addGroupMember('group-1', 'member-1', 'system')
 
-      // Check that non-member is NOT in group_members table
-      const member = testDb
-        .select()
-        .from(schema.groupMembers)
-        .where(eq(schema.groupMembers.userId, 'non-member-789'))
-        .get()
-      expect(member).toBeUndefined()
+      const result = checkAuthorizationExtended('member-1', null, 'group-1', 'group', true)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: false,
+        isGroupAdmin: true,
+        storageContextId: 'group-1',
+      })
+    })
+
+    test('Non-member in group → not allowed', () => {
+      const result = checkAuthorizationExtended('stranger-1', null, 'group-1', 'group', false)
+      expect(result).toEqual({
+        allowed: false,
+        isBotAdmin: false,
+        isGroupAdmin: false,
+        storageContextId: 'group-1',
+      })
     })
   })
 
   describe('DM User Resolution by Username', () => {
-    test('DM user resolved by username: allowed, isBotAdmin=true, storageContextId=userId', () => {
-      // Add user by username (like /user add @alice)
+    test('DM user resolved by username → allowed, storageContextId=userId', () => {
       addUser('placeholder-id', 'system', 'alice')
 
-      // Check user exists with username
-      const user = testDb.select().from(schema.users).where(eq(schema.users.username, 'alice')).get()
-      expect(user).toBeDefined()
-      expect(user?.platformUserId).toBe('placeholder-id')
+      const result = checkAuthorizationExtended('real-alice-id', 'alice', 'real-alice-id', 'dm', false)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: 'real-alice-id',
+      })
+    })
 
-      // When alice DMs the bot, resolveUserByUsername would update her platform_user_id
-      // This is tested in users.test.ts, we just verify the setup here
+    test('DM user with unmatched username → not allowed', () => {
+      const result = checkAuthorizationExtended('unknown-id', 'bob', 'unknown-id', 'dm', false)
+      expect(result).toEqual({
+        allowed: false,
+        isBotAdmin: false,
+        isGroupAdmin: false,
+        storageContextId: 'unknown-id',
+      })
     })
   })
 
-  describe('Unauthorized User', () => {
-    test('Unauthorized user: not allowed, all flags=false', () => {
-      // No setup - user is not authorized
+  describe('Priority: Bot Admin Wins Over Group Check', () => {
+    test('User who is BOTH bot admin AND group member → returns bot admin result (isBotAdmin=true)', () => {
+      addUser('admin-1', 'system', 'admin')
+      addGroupMember('group-1', 'admin-1', 'system')
 
-      // Check user is NOT in users table
-      const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, 'unknown-user')).get()
-      expect(user).toBeUndefined()
+      const result = checkAuthorizationExtended('admin-1', 'admin', 'group-1', 'group', false)
+      expect(result).toEqual({
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: 'group-1',
+      })
     })
   })
+})
 
-  describe('Authorization Integration', () => {
-    test('Group admin flag is preserved correctly', () => {
-      // A group admin (platform-level) who is also a group member
-      addGroupMember('group-123', 'group-admin-789', 'system')
-
-      // Verify member exists
-      const member = testDb
-        .select()
-        .from(schema.groupMembers)
-        .where(eq(schema.groupMembers.userId, 'group-admin-789'))
-        .get()
-      expect(member).toBeDefined()
-    })
-
-    test('Storage context differs between DM and group', () => {
-      // In DM: storageContextId should be userId
-      // In group: storageContextId should be groupId (even for bot admins)
-
-      // This is behavioral logic tested through the actual function
-      // Here we just verify the data structures are set up correctly
-
-      addUser('bot-admin', 'system', 'admin')
-      addGroupMember('group-123', 'bot-admin', 'system')
-
-      const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, 'bot-admin')).get()
-      const member = testDb.select().from(schema.groupMembers).where(eq(schema.groupMembers.userId, 'bot-admin')).get()
-
-      expect(user).toBeDefined()
-      expect(member).toBeDefined()
-    })
-  })
+afterAll(() => {
+  mock.restore()
 })

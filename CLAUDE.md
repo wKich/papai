@@ -300,6 +300,92 @@ test('custom response', async () => {
 
 See `tests/memory.test.ts` and `tests/conversation.test.ts` for full examples.
 
+### Mock Pollution Prevention (HIGH PRIORITY)
+
+`mock.module()` in Bun replaces the module **globally for the entire process** — not just for the current test file. When `bun test` runs multiple files in a single process, a mock registered in file A permanently replaces the real module for every subsequent file B, C, D… that imports the same module. This causes tests that pass individually (`bun test tests/foo.test.ts`) to fail when run as part of the full suite (`bun test`).
+
+**This is the #1 source of false test failures in this codebase. Every new test file must follow these rules.**
+
+#### Rule 1: Never mock a module that another test file also imports directly
+
+Before adding `void mock.module('../src/foo.js', ...)` to your test file, check whether other test files import `../src/foo.js` **without** mocking it. If they do, your mock will silently break those tests when the full suite runs.
+
+```bash
+# Check who imports a module you want to mock
+grep -r "from.*src/config.js" tests/ --include="*.test.ts" -l
+```
+
+If the module is already imported directly by other test files, you must either:
+
+- Use dependency injection instead of mocking the module
+- Mock at a lower level (mock the module's dependencies instead)
+- Accept that you need `mock.restore()` cleanup (see Rule 3)
+
+#### Rule 2: Mock the narrowest possible dependency
+
+Don't mock high-level modules (`config.js`, `cache.js`, `history.js`) when you can mock what they depend on (`db/drizzle.js`). High-level module mocks break more consumers.
+
+**Bad** — mocks `config.js`, breaking every other file that imports it:
+
+```typescript
+void mock.module('../src/config.js', () => ({
+  getConfig: () => 'test-value',
+}))
+```
+
+**Good** — mocks only the database layer, letting `config.js` work normally:
+
+```typescript
+void mock.module('../src/db/drizzle.js', () => ({
+  getDrizzleDb: () => testDb,
+}))
+```
+
+#### Rule 3: Always clean up mocks that shadow shared modules
+
+If you must mock a module that other test files also use, register cleanup in `afterAll`:
+
+```typescript
+import { mock, afterAll } from 'bun:test'
+
+void mock.module('../src/config.js', () => ({ getConfig: () => 'test' }))
+
+afterAll(() => {
+  mock.restore()
+})
+```
+
+**Note:** `mock.restore()` restores **all** mocked modules, not just one. Call it in `afterAll` (runs once after all tests in the file), not in `afterEach` (which would break inter-test mock state within the file).
+
+#### Rule 4: Prefer test helpers over ad-hoc mocks
+
+Use the shared helpers that already exist:
+
+| Helper                 | Location                       | Purpose                                                              |
+| ---------------------- | ------------------------------ | -------------------------------------------------------------------- |
+| `mockLogger()`         | `tests/utils/test-helpers.ts`  | Stubs logger — safe because every test file that needs it calls this |
+| `mockDrizzle()`        | `tests/utils/test-helpers.ts`  | Stubs `getDrizzleDb` — the standard way to mock the database         |
+| `setupTestDb()`        | `tests/utils/test-helpers.ts`  | Creates in-memory SQLite with all migrations                         |
+| `createMockProvider()` | `tests/tools/mock-provider.ts` | Creates a mock `TaskProvider` without touching the module registry   |
+
+Before writing a new `void mock.module(...)`, check whether a helper already covers your case.
+
+#### Rule 5: Test files that mock many modules should be self-contained
+
+If a test requires mocking 4+ modules (e.g., `llm-orchestrator-process.test.ts` mocks `config.js`, `cache.js`, `history.js`, `conversation.js`, `memory.js`, `ai`, etc.), that test is high-risk for pollution. Mitigate by:
+
+1. Adding `afterAll(() => { mock.restore() })` at the end of the file
+2. Documenting which modules are mocked in a comment at the top of the file
+3. Verifying the full suite still passes: `bun test` (not just `bun test tests/your-file.test.ts`)
+
+#### Quick checklist for new test files
+
+- [ ] Mocks are registered **before** imports of code under test
+- [ ] Only modules that the test directly needs are mocked — no unnecessary overrides
+- [ ] `mock.restore()` is called in `afterAll` if the file mocks modules used by other test files
+- [ ] `bun test` (full suite) passes, not just the individual file
+- [ ] Mutable implementation pattern is used (reassignable `let impl = ...`) instead of inline mock return values that can't be changed per-test
+
 ## E2E Testing
 
 E2E tests run against a real Kaneo instance in Docker using the existing `docker-compose.yml` setup. They verify the actual integration between papai's tools and the Kaneo API.

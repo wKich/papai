@@ -29,7 +29,7 @@ import { Database } from 'bun:sqlite'
 import type { ModelMessage } from 'ai'
 
 import { getCachedHistory, _userCaches } from '../src/cache.js'
-import { loadHistory, saveHistory, clearHistory } from '../src/history.js'
+import { appendHistory, loadHistory, saveHistory, clearHistory } from '../src/history.js'
 
 describe('loadHistory', () => {
   beforeEach(async () => {
@@ -226,6 +226,53 @@ describe('clearHistory', () => {
       .where(eq(schema.conversationHistory.userId, '20'))
       .get()
     expect(row).toBeUndefined()
+  })
+})
+
+describe('appendHistory', () => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    const { Database } = await import('bun:sqlite')
+    testSqlite = new Database(':memory:')
+    _userCaches.clear()
+  })
+
+  test('appends messages to empty history', () => {
+    const messages: ModelMessage[] = [{ role: 'user', content: 'hello' }]
+    appendHistory('append-1', messages)
+    const result = getCachedHistory('append-1')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({ role: 'user', content: 'hello' })
+  })
+
+  test('appends to existing history', () => {
+    saveHistory('append-2', [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'second' },
+    ])
+    appendHistory('append-2', [{ role: 'user', content: 'third' }])
+    const result = getCachedHistory('append-2')
+    expect(result).toHaveLength(3)
+    expect(result[0]!.content).toBe('first')
+    expect(result[1]!.content).toBe('second')
+    expect(result[2]!.content).toBe('third')
+  })
+
+  test('preserves message types (user, assistant, tool)', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'question' },
+      { role: 'assistant', content: 'answer' },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'tc1', toolName: 'test', output: { type: 'text', value: 'ok' } }],
+      },
+    ]
+    appendHistory('append-3', messages)
+    const result = getCachedHistory('append-3')
+    expect(result).toHaveLength(3)
+    expect(result[0]!.role).toBe('user')
+    expect(result[1]!.role).toBe('assistant')
+    expect(result[2]!.role).toBe('tool')
   })
 })
 

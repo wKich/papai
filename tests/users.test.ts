@@ -14,7 +14,16 @@ void mock.module('../src/db/drizzle.js', () => ({
   getDrizzleDb: (): typeof testDb => testDb,
 }))
 
-import { addUser, removeUser, isAuthorized, resolveUserByUsername, listUsers } from '../src/users.js'
+import { _userCaches } from '../src/cache.js'
+import {
+  addUser,
+  removeUser,
+  isAuthorized,
+  resolveUserByUsername,
+  listUsers,
+  getKaneoWorkspace,
+  setKaneoWorkspace,
+} from '../src/users.js'
 
 describe('addUser', () => {
   beforeEach(async () => {
@@ -124,5 +133,34 @@ describe('listUsers', () => {
     addUser('111', '999', 'testuser')
     const users = listUsers()
     expect(users[0]?.username).toBe('testuser')
+  })
+})
+
+describe('getKaneoWorkspace / setKaneoWorkspace', () => {
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    _userCaches.clear()
+  })
+
+  test('returns null when no workspace is set', () => {
+    expect(getKaneoWorkspace('ws-user-1')).toBeNull()
+  })
+
+  test('set then get returns workspace ID', () => {
+    setKaneoWorkspace('ws-user-2', 'ws-abc')
+    expect(getKaneoWorkspace('ws-user-2')).toBe('ws-abc')
+  })
+
+  test('overwrites previous workspace', () => {
+    setKaneoWorkspace('ws-user-3', 'ws-1')
+    setKaneoWorkspace('ws-user-3', 'ws-2')
+    expect(getKaneoWorkspace('ws-user-3')).toBe('ws-2')
+  })
+
+  test('user isolation — different users have independent workspaces', () => {
+    setKaneoWorkspace('ws-user-4', 'ws-A')
+    setKaneoWorkspace('ws-user-5', 'ws-B')
+    expect(getKaneoWorkspace('ws-user-4')).toBe('ws-A')
+    expect(getKaneoWorkspace('ws-user-5')).toBe('ws-B')
   })
 })

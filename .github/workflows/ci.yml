@@ -75,6 +75,7 @@ jobs:
   mutation-testing:
     name: Mutation Testing
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

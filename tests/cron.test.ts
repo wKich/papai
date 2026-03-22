@@ -1,29 +1,10 @@
-import { describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { afterAll, describe, expect, mock, test } from 'bun:test'
 
-// Mock logger
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    trace: (): void => {},
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    fatal: (): void => {},
-    level: 'info',
-    child: (): object => ({
-      trace: (): void => {},
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-      fatal: (): void => {},
-      level: 'info',
-    }),
-  },
-}))
+import { mockLogger } from './utils/test-helpers.js'
 
-import { describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
+mockLogger()
+
+import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
 
 describe('parseCron', () => {
   test('parses a valid 5-field cron expression', () => {
@@ -185,4 +166,72 @@ describe('describeCron', () => {
   test('returns expression for invalid input', () => {
     expect(describeCron('invalid')).toBe('invalid')
   })
+})
+
+describe('allOccurrencesBetween', () => {
+  test('returns all occurrences between two dates', () => {
+    // Mondays 9am
+    const cron = parseCron('0 9 * * 1')!
+    const after = new Date('2026-03-01T00:00:00Z')
+    const before = new Date('2026-03-31T23:59:00Z')
+    const results = allOccurrencesBetween(cron, after, before)
+    // Mar 2, 9, 16, 23, 30
+    expect(results).toHaveLength(5)
+    for (const d of results) {
+      expect(d.getUTCDay()).toBe(1)
+      expect(d.getUTCHours()).toBe(9)
+      expect(d.getUTCMinutes()).toBe(0)
+    }
+  })
+
+  test('returns empty array when no occurrences in range', () => {
+    // Mondays 9am — after Monday 9am, before end of same day
+    const cron = parseCron('0 9 * * 1')!
+    const after = new Date('2026-03-23T09:00:00Z')
+    const before = new Date('2026-03-23T23:59:00Z')
+    const results = allOccurrencesBetween(cron, after, before)
+    expect(results).toEqual([])
+  })
+
+  test('after is exclusive', () => {
+    // Daily 9am — after is exactly at an occurrence (Mar 15 09:00)
+    const cron = parseCron('0 9 * * *')!
+    const after = new Date('2026-03-15T09:00:00Z')
+    const before = new Date('2026-03-17T09:00:00Z')
+    const results = allOccurrencesBetween(cron, after, before)
+    expect(results).toHaveLength(2)
+    expect(results[0]!.getUTCDate()).toBe(16)
+    expect(results[1]!.getUTCDate()).toBe(17)
+  })
+
+  test('before is inclusive', () => {
+    // Daily 9am
+    const cron = parseCron('0 9 * * *')!
+    const after = new Date('2026-03-14T09:00:00Z')
+    const before = new Date('2026-03-15T09:00:00Z')
+    const results = allOccurrencesBetween(cron, after, before)
+    expect(results).toHaveLength(1)
+    expect(results[0]!.getTime()).toBe(before.getTime())
+  })
+
+  test('respects maxResults cap', () => {
+    // Every minute
+    const cron = parseCron('* * * * *')!
+    const after = new Date('2026-03-15T00:00:00Z')
+    const before = new Date('2026-03-16T00:00:00Z')
+    const results = allOccurrencesBetween(cron, after, before, 5)
+    expect(results).toHaveLength(5)
+  })
+
+  test('start equals end returns empty', () => {
+    // Daily 9am
+    const cron = parseCron('0 9 * * *')!
+    const point = new Date('2026-03-15T09:00:00Z')
+    const results = allOccurrencesBetween(cron, point, point)
+    expect(results).toEqual([])
+  })
+})
+
+afterAll(() => {
+  mock.restore()
 })

@@ -1,7 +1,7 @@
 {
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test"
+    "command": "bun run test"
   },
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
@@ -26,7 +26,7 @@
   "thresholds": {
     "high": 80,
     "low": 60,
-    "break": 25
+    "break": 30
   },
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
