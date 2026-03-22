@@ -135,9 +135,16 @@ export function suggestActions(sections: BriefingSection[]): BriefingTask[] {
   const dueTodayTasks = sections.find((s) => s.title === 'Due Today')?.tasks ?? []
 
   const priorityOrder = ['urgent', 'high', 'medium', 'low']
+
+  const getPriorityIndex = (priority: string | undefined): number => {
+    if (priority === undefined) return priorityOrder.indexOf('low')
+    const idx = priorityOrder.indexOf(priority.toLowerCase())
+    return idx === -1 ? priorityOrder.length : idx
+  }
+
   const sortByPriority = (a: BriefingTask, b: BriefingTask): number => {
-    const aIdx = priorityOrder.indexOf(a.priority?.toLowerCase() ?? 'low')
-    const bIdx = priorityOrder.indexOf(b.priority?.toLowerCase() ?? 'low')
+    const aIdx = getPriorityIndex(a.priority)
+    const bIdx = getPriorityIndex(b.priority)
     return aIdx - bIdx
   }
 
@@ -255,6 +262,8 @@ export async function getMissedBriefing(userId: string, provider: TaskProvider):
 
   const [briefHour, briefMinute] = briefingTime.split(':').map(Number)
   if (briefHour === undefined || briefMinute === undefined) return null
+  if (!Number.isFinite(briefHour) || !Number.isFinite(briefMinute)) return null
+  if (briefHour < 0 || briefHour > 23 || briefMinute < 0 || briefMinute > 59) return null
 
   const briefingMinutes = briefHour * 60 + briefMinute
   const currentMinutes = currentHour * 60 + currentMinute

@@ -3,8 +3,8 @@ import { z } from 'zod'
 
 import { getConfig } from '../config.js'
 import { parseCron } from '../cron.js'
-import { isAppError } from '../errors.js'
 import { logger } from '../logger.js'
+import { ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
 import * as briefingService from './briefing.js'
 import * as reminderService from './reminders.js'
@@ -12,7 +12,7 @@ import * as reminderService from './reminders.js'
 const log = logger.child({ scope: 'proactive:tools' })
 
 function handleReminderError(error: unknown, reminderId: string): { error: string } {
-  if (isAppError(error) && error.type === 'provider' && error.code === 'not-found') {
+  if (error instanceof ProviderClassifiedError && error.error.code === 'not-found') {
     return { error: `Reminder "${reminderId}" not found or does not belong to you.` }
   }
   throw error
@@ -51,7 +51,8 @@ function makeSetReminderTool(userId: string): ToolSet[string] {
         }
       }
 
-      const reminder = reminderService.createReminder({ userId, text, fireAt, recurrence, taskId })
+      const normalizedFireAt = new Date(fireDate).toISOString()
+      const reminder = reminderService.createReminder({ userId, text, fireAt: normalizedFireAt, recurrence, taskId })
 
       return {
         status: 'created',
@@ -110,6 +111,17 @@ function makeCancelReminderTool(userId: string): ToolSet[string] {
   })
 }
 
+function validateNewFireAt(newFireAt: string): { error: string } | null {
+  const parsed = Date.parse(newFireAt)
+  if (Number.isNaN(parsed)) {
+    return { error: `Invalid newFireAt timestamp: "${newFireAt}". Please provide a valid ISO 8601 timestamp.` }
+  }
+  if (parsed <= Date.now()) {
+    return { error: `The new fire time "${newFireAt}" is in the past. Please provide a future time.` }
+  }
+  return null
+}
+
 function makeSnoozeReminderTool(userId: string): ToolSet[string] {
   return tool({
     description:
@@ -120,9 +132,12 @@ function makeSnoozeReminderTool(userId: string): ToolSet[string] {
     }),
     execute: ({ reminderId, newFireAt }) => {
       log.debug({ userId, reminderId, newFireAt }, 'snooze_reminder called')
+      const validationError = validateNewFireAt(newFireAt)
+      if (validationError !== null) return validationError
       try {
-        reminderService.snoozeReminder(reminderId, userId, newFireAt)
-        return { status: 'snoozed', reminderId, newFireAt }
+        const normalized = new Date(newFireAt).toISOString()
+        reminderService.snoozeReminder(reminderId, userId, normalized)
+        return { status: 'snoozed', reminderId, newFireAt: normalized }
       } catch (error) {
         return handleReminderError(error, reminderId)
       }
@@ -140,9 +155,12 @@ function makeRescheduleReminderTool(userId: string): ToolSet[string] {
     }),
     execute: ({ reminderId, newFireAt }) => {
       log.debug({ userId, reminderId, newFireAt }, 'reschedule_reminder called')
+      const validationError = validateNewFireAt(newFireAt)
+      if (validationError !== null) return validationError
       try {
-        reminderService.rescheduleReminder(reminderId, userId, newFireAt)
-        return { status: 'rescheduled', reminderId, newFireAt }
+        const normalized = new Date(newFireAt).toISOString()
+        reminderService.rescheduleReminder(reminderId, userId, normalized)
+        return { status: 'rescheduled', reminderId, newFireAt: normalized }
       } catch (error) {
         return handleReminderError(error, reminderId)
       }

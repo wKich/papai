@@ -3,7 +3,7 @@
  *
  * Manages three types of scheduled jobs:
  * 1. Per-user briefing jobs (run at user-configured time in their timezone)
- * 2. Global alert poller (daily at 06:00 UTC)
+ * 2. Global alert poller (runs hourly)
  * 3. Global reminder poller (every minute)
  */
 
@@ -39,11 +39,11 @@ let buildProviderFn: ((userId: string) => TaskProvider | null) | null = null
 let isStarted = false
 
 /**
- * Convert "HH:MM" to a cron expression for weekdays.
+ * Convert "HH:MM" to a cron expression for daily execution.
  */
 function cronFromTime(time: string): string {
   const [hour, minute] = time.split(':')
-  return `${minute} ${hour} * * 1-5`
+  return `${minute} ${hour} * * *`
 }
 
 export function registerBriefingJob(userId: string, time: string, timezone: string): void {

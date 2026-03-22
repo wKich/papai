@@ -273,19 +273,39 @@ describe('BriefingService', () => {
     })
 
     test('returns catch-up string when briefing time has passed', async () => {
-      // Set briefing time to 00:01 (always in the past since tests run after midnight)
-      setConfig('user1', 'briefing_time', '00:01')
+      // Derive a briefing time that is deterministically in the past (current time minus 5 minutes)
+      const now = new Date()
+      const pastMinutes = now.getUTCHours() * 60 + now.getUTCMinutes() - 5
+      // If we're within the first 5 minutes of the day, skip (edge case)
+      if (pastMinutes < 0) return
+
+      const pastHour = Math.floor(pastMinutes / 60)
+      const pastMinute = pastMinutes % 60
+      const pastTime = `${String(pastHour).padStart(2, '0')}:${String(pastMinute).padStart(2, '0')}`
+
+      setConfig('user1', 'briefing_time', pastTime)
+      setConfig('user1', 'briefing_timezone', 'UTC')
 
       const provider = makeMockProvider([makeTask({ id: 't1', dueDate: today(), status: 'todo' })])
 
       const result = await getMissedBriefing('user1', provider)
       expect(result).not.toBeNull()
       expect(result).toContain('Catch-up')
-      expect(result).toContain('missed 00:01 briefing')
+      expect(result).toContain(`missed ${pastTime} briefing`)
     })
 
     test('catch-up string includes (Catch-up) header', async () => {
-      setConfig('user1', 'briefing_time', '00:01')
+      // Derive a briefing time that is deterministically in the past
+      const now = new Date()
+      const pastMinutes = now.getUTCHours() * 60 + now.getUTCMinutes() - 5
+      if (pastMinutes < 0) return
+
+      const pastHour = Math.floor(pastMinutes / 60)
+      const pastMinute = pastMinutes % 60
+      const pastTime = `${String(pastHour).padStart(2, '0')}:${String(pastMinute).padStart(2, '0')}`
+
+      setConfig('user1', 'briefing_time', pastTime)
+      setConfig('user1', 'briefing_timezone', 'UTC')
 
       const provider = makeMockProvider([])
       const result = await getMissedBriefing('user1', provider)
