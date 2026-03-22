@@ -25,13 +25,16 @@ void mock.module('../../src/config.js', () => ({
 import { getDrizzleDb } from '../../src/db/drizzle.js'
 import { alertState } from '../../src/db/schema.js'
 import {
+  checkBlocked,
   checkDeadlineNudge,
   checkDueToday,
   checkOverdue,
   checkStaleness,
+  runAlertCycleForAllUsers,
   updateAlertState,
 } from '../../src/proactive/service.js'
-import type { TaskListItem } from '../../src/providers/types.js'
+import type { Task, TaskListItem } from '../../src/providers/types.js'
+import { createMockProvider } from '../tools/mock-provider.js'
 
 const makeTask = (overrides: Partial<TaskListItem> = {}): TaskListItem => ({
   id: 'task-1',
@@ -226,6 +229,150 @@ describe('ProactiveAlertService', () => {
 
       expect(after!.lastStatusChangedAt).toBe('2020-01-01T00:00:00.000Z')
     })
+  })
+})
+
+describe('checkBlocked', () => {
+  const makeFullTask = (overrides: Partial<Task> = {}): Task => ({
+    id: 'task-1',
+    title: 'Test Task',
+    status: 'in-progress',
+    url: 'https://example.com/task-1',
+    ...overrides,
+  })
+
+  beforeEach(async () => {
+    await setupTestDb()
+  })
+
+  test('returns null when task has no due date', async () => {
+    const provider = createMockProvider()
+    const task = makeTask({ dueDate: undefined })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns null when task due date is beyond tomorrow', async () => {
+    const provider = createMockProvider()
+    const farFuture = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const task = makeTask({ dueDate: farFuture })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns null when task is terminal', async () => {
+    const provider = createMockProvider()
+    const task = makeTask({ dueDate: today(), status: 'done' })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns null when provider lacks tasks.relations capability', async () => {
+    const provider = createMockProvider({
+      capabilities: new Set(['projects.list' as const]),
+    })
+    const task = makeTask({ dueDate: today() })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns null when task has no blocked_by relations', async () => {
+    const provider = createMockProvider({
+      getTask: () => Promise.resolve(makeFullTask({ relations: [] })),
+    })
+    const task = makeTask({ dueDate: today() })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns alert when blocker is non-terminal and task due today', async () => {
+    let callCount = 0
+    const provider = createMockProvider({
+      getTask: (taskId: string): Promise<Task> => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.resolve(makeFullTask({ id: taskId, relations: [{ type: 'blocked_by', taskId: 'blocker-1' }] }))
+        }
+        return Promise.resolve(makeFullTask({ id: 'blocker-1', title: 'Blocking Task', status: 'in-progress' }))
+      },
+    })
+    const task = makeTask({ dueDate: today() })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).not.toBeNull()
+    expect(result).toContain('🚧')
+    expect(result).toContain('Blocking Task')
+  })
+
+  test('returns null when blocker is terminal', async () => {
+    let callCount = 0
+    const provider = createMockProvider({
+      getTask: (taskId: string): Promise<Task> => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.resolve(makeFullTask({ id: taskId, relations: [{ type: 'blocked_by', taskId: 'blocker-1' }] }))
+        }
+        return Promise.resolve(makeFullTask({ id: 'blocker-1', title: 'Done Blocker', status: 'done' }))
+      },
+    })
+    const task = makeTask({ dueDate: today() })
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+
+  test('returns null when already suppressed', async () => {
+    const provider = createMockProvider({
+      getTask: (taskId: string): Promise<Task> => {
+        if (taskId === 'task-blocked') {
+          return Promise.resolve(makeFullTask({ id: taskId, relations: [{ type: 'blocked_by', taskId: 'blocker-1' }] }))
+        }
+        return Promise.resolve(makeFullTask({ id: 'blocker-1', title: 'Blocker', status: 'in-progress' }))
+      },
+    })
+    const task = makeTask({ id: 'task-blocked', dueDate: today() })
+    // First call sets suppression
+    await checkBlocked('user1', task, 'UTC', provider)
+    // Second call should be suppressed
+    const result = await checkBlocked('user1', task, 'UTC', provider)
+    expect(result).toBeNull()
+  })
+})
+
+describe('runAlertCycleForAllUsers', () => {
+  beforeEach(async () => {
+    await setupTestDb()
+  })
+
+  test('skips users when provider builder returns null', async () => {
+    const sent: string[] = []
+    const sendFn = (_userId: string, msg: string): Promise<void> => {
+      sent.push(msg)
+      return Promise.resolve()
+    }
+    await runAlertCycleForAllUsers(() => null, sendFn)
+    expect(sent).toHaveLength(0)
+  })
+
+  test('runs alert cycle for users whose provider can be built', async () => {
+    // Insert a user directly into the DB so listUsers() returns them
+    const db = getDrizzleDb()
+    const { users } = await import('../../src/db/schema.js')
+    db.insert(users).values({ platformUserId: 'test-eligible', addedBy: 'admin' }).run()
+
+    const provider = createMockProvider({
+      listProjects: () => Promise.resolve([]),
+      searchTasks: () => Promise.resolve([]),
+    })
+
+    const sent: string[] = []
+    await runAlertCycleForAllUsers(
+      (userId) => (userId === 'test-eligible' ? provider : null),
+      (_userId, msg) => {
+        sent.push(msg)
+        return Promise.resolve()
+      },
+    )
+    // No tasks → no alerts, but cycle ran without error
+    expect(sent).toHaveLength(0)
   })
 })
 

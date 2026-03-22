@@ -6,6 +6,7 @@ import { alertState } from '../db/schema.js'
 import { logger } from '../logger.js'
 import type { TaskProvider, TaskListItem } from '../providers/types.js'
 import { listUsers } from '../users.js'
+import { fetchAllTasks, isTerminalStatus } from './shared.js'
 import type { AlertCheckResult, AlertType } from './types.js'
 
 const log = logger.child({ scope: 'proactive:alerts' })
@@ -17,14 +18,6 @@ const SUPPRESSION_MS: Record<AlertType, number> = {
   overdue: 20 * 60 * 60 * 1000,
   staleness: 72 * 60 * 60 * 1000,
   blocked: 20 * 60 * 60 * 1000,
-}
-
-const TERMINAL_STATUS_SLUGS = ['done', 'completed', "won't fix", 'cancelled', 'archived']
-
-const isTerminalStatus = (status: string | undefined): boolean => {
-  if (status === undefined) return false
-  const lower = status.toLowerCase()
-  return TERMINAL_STATUS_SLUGS.some((slug) => lower.includes(slug))
 }
 
 const generateId = (): string => crypto.randomUUID()
@@ -84,7 +77,7 @@ function insertNewAlertState(
       lastAlertType: alertType ?? null,
       lastAlertSentAt: alertType === undefined ? null : now,
       suppressUntil,
-      overdueDaysNotified: alertType === 'overdue' ? '1' : '0',
+      overdueDaysNotified: alertType === 'overdue' ? 1 : 0,
     })
     .run()
 }
@@ -107,21 +100,21 @@ export function updateAlertState(userId: string, taskId: string, currentStatus: 
   }
 
   const statusChanged = existing.lastSeenStatus !== currentStatus
-  const updates: Record<string, string | null> = { lastSeenStatus: currentStatus }
+  const updates: Partial<typeof alertState.$inferInsert> = { lastSeenStatus: currentStatus }
 
   if (statusChanged) {
-    updates['lastStatusChangedAt'] = now
-    updates['overdueDaysNotified'] = '0'
+    updates.lastStatusChangedAt = now
+    updates.overdueDaysNotified = 0
   }
 
   if (alertType !== undefined) {
-    updates['lastAlertType'] = alertType
-    updates['lastAlertSentAt'] = now
-    updates['suppressUntil'] = new Date(Date.now() + SUPPRESSION_MS[alertType]).toISOString()
+    updates.lastAlertType = alertType
+    updates.lastAlertSentAt = now
+    updates.suppressUntil = new Date(Date.now() + SUPPRESSION_MS[alertType]).toISOString()
 
     if (alertType === 'overdue') {
-      const current = Number.parseInt(existing.overdueDaysNotified ?? '0', 10)
-      updates['overdueDaysNotified'] = String(current + 1)
+      const current = existing.overdueDaysNotified ?? 0
+      updates.overdueDaysNotified = current + 1
     }
   }
 
@@ -171,7 +164,7 @@ export function checkOverdue(userId: string, task: TaskListItem, timezone: strin
     .where(and(eq(alertState.userId, userId), eq(alertState.taskId, task.id)))
     .get()
 
-  const priorNotifications = Number.parseInt(existing?.overdueDaysNotified ?? '0', 10)
+  const priorNotifications = existing?.overdueDaysNotified ?? 0
   updateAlertState(userId, task.id, task.status ?? 'unknown', 'overdue')
 
   const link = taskLink(task)
@@ -216,35 +209,34 @@ export function checkStaleness(userId: string, task: TaskListItem, thresholdDays
   return `🕸️ ${taskLink(task)} has been in "${task.status ?? 'unknown'}" for ${daysSinceChange} days with no activity.`
 }
 
-async function fetchAllUserTasks(userId: string, provider: TaskProvider): Promise<TaskListItem[]> {
-  if (provider.capabilities.has('projects.list') && provider.listProjects !== undefined) {
-    const projects = await provider.listProjects()
-    const results = await Promise.allSettled(projects.slice(0, 20).map((p) => provider.listTasks(p.id)))
-    return results.flatMap((r) => {
-      if (r.status === 'fulfilled') return r.value
-      log.warn(
-        { userId, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
-        'Failed to list tasks',
-      )
-      return []
-    })
-  }
+export async function checkBlocked(
+  userId: string,
+  task: TaskListItem,
+  timezone: string,
+  provider: TaskProvider,
+): Promise<string | null> {
+  log.debug({ userId, taskId: task.id }, 'checkBlocked called')
 
-  try {
-    const tasks = await provider.searchTasks({ query: '' })
-    return tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      number: t.number,
-      status: t.status,
-      priority: t.priority,
-      dueDate: undefined,
-      url: t.url,
-    }))
-  } catch (err) {
-    log.warn({ userId, error: err instanceof Error ? err.message : String(err) }, 'Failed to search tasks')
+  if (task.dueDate === undefined || task.dueDate === null) return null
+  if (isTerminalStatus(task.status)) return null
+  if (task.dueDate.slice(0, 10) > getTomorrowInTz(timezone)) return null
+  if (isSuppressed(userId, task.id, 'blocked')) return null
+  if (!provider.capabilities.has('tasks.relations') || provider.getTask === undefined) return null
+
+  const fullTask = await provider.getTask(task.id)
+  const blockedByRelations = fullTask.relations?.filter((r) => r.type === 'blocked_by') ?? []
+  if (blockedByRelations.length === 0) return null
+
+  const blockerDetails = await Promise.allSettled(blockedByRelations.map((r) => provider.getTask(r.taskId)))
+  const activeBlockers = blockerDetails.flatMap((r) => {
+    if (r.status === 'fulfilled' && !isTerminalStatus(r.value.status)) return [r.value]
     return []
-  }
+  })
+  if (activeBlockers.length === 0) return null
+
+  const blocker = activeBlockers[0]!
+  updateAlertState(userId, task.id, task.status ?? 'unknown', 'blocked')
+  return `🚧 ${taskLink(task)} is due in ≤1 day but blocked by [${blocker.title}](${blocker.url ?? '#'}), which is still "${blocker.status ?? 'unknown'}".`
 }
 
 export async function runAlertCycle(
@@ -256,8 +248,8 @@ export async function runAlertCycle(
   const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
   const stalenessDays = Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
   try {
-    const allTasks = await fetchAllUserTasks(userId, provider)
-    const allAlerts = allTasks.flatMap((task) =>
+    const allTasks = await fetchAllTasks(provider, { userId })
+    const syncAlerts = allTasks.flatMap((task) =>
       [
         checkDeadlineNudge(userId, task, timezone),
         checkDueToday(userId, task, timezone),
@@ -265,6 +257,11 @@ export async function runAlertCycle(
         checkStaleness(userId, task, stalenessDays),
       ].filter((a): a is string => a !== null),
     )
+
+    const blockedResults = await Promise.all(allTasks.map((task) => checkBlocked(userId, task, timezone, provider)))
+    const blockedAlerts = blockedResults.filter((msg): msg is string => msg !== null)
+    const allAlerts = [...syncAlerts, ...blockedAlerts]
+
     await allAlerts.reduce(
       (chain, alert) =>
         chain.then(async () => {

@@ -22,6 +22,7 @@ import {
   formatShort,
   suggestActions,
   generate,
+  generateAndRecord,
   getMissedBriefing,
 } from '../../src/proactive/briefing.js'
 import type { TaskListItem } from '../../src/providers/types.js'
@@ -85,6 +86,72 @@ describe('BriefingService', () => {
 
       const sections = buildSections(tasks, 'UTC')
       expect(sections).toHaveLength(0)
+    })
+
+    test('includes Recently Updated section for tasks with recent status changes', () => {
+      const tasks: TaskListItem[] = [makeTask({ id: 'recently', title: 'Recent Task', status: 'in-review' })]
+
+      // 1 hour ago
+      const recentTime = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const alertStateRows = [
+        {
+          id: 'row-1',
+          userId: 'user1',
+          taskId: 'recently',
+          lastSeenStatus: 'todo',
+          lastStatusChangedAt: recentTime,
+          lastAlertType: null,
+          lastAlertSentAt: null,
+          suppressUntil: null,
+          overdueDaysNotified: 0,
+          createdAt: recentTime,
+        },
+      ]
+
+      const sections = buildSections(tasks, 'UTC', alertStateRows)
+      const recentSection = sections.find((s) => s.title === 'Recently Updated')
+      expect(recentSection).toBeDefined()
+      expect(recentSection?.tasks).toHaveLength(1)
+      expect(recentSection?.tasks[0]!.title).toBe('Recent Task')
+    })
+
+    test('excludes tasks from Recently Updated if already in Due Today or Overdue', () => {
+      const tasks: TaskListItem[] = [
+        makeTask({ id: 'due-today-task', title: 'Due Today Task', dueDate: today(), status: 'todo' }),
+        makeTask({ id: 'overdue-task', title: 'Overdue Task', dueDate: yesterday(), status: 'todo' }),
+      ]
+
+      const recentTime = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const alertStateRows = [
+        {
+          id: 'row-1',
+          userId: 'u',
+          taskId: 'due-today-task',
+          lastSeenStatus: 'todo',
+          lastStatusChangedAt: recentTime,
+          lastAlertType: null,
+          lastAlertSentAt: null,
+          suppressUntil: null,
+          overdueDaysNotified: 0,
+          createdAt: recentTime,
+        },
+        {
+          id: 'row-2',
+          userId: 'u',
+          taskId: 'overdue-task',
+          lastSeenStatus: 'todo',
+          lastStatusChangedAt: recentTime,
+          lastAlertType: null,
+          lastAlertSentAt: null,
+          suppressUntil: null,
+          overdueDaysNotified: 0,
+          createdAt: recentTime,
+        },
+      ]
+
+      const sections = buildSections(tasks, 'UTC', alertStateRows)
+      const recentSection = sections.find((s) => s.title === 'Recently Updated')
+      expect(recentSection).toBeUndefined()
     })
   })
 
@@ -185,7 +252,7 @@ describe('BriefingService', () => {
 
     test('updates user_briefing_state.last_briefing_date', async () => {
       const provider = makeMockProvider([])
-      await generate('user1', provider, 'full')
+      await generateAndRecord('user1', provider, 'full')
 
       const { getDrizzleDb } = await import('../../src/db/drizzle.js')
       const { userBriefingState } = await import('../../src/db/schema.js')
@@ -209,8 +276,8 @@ describe('BriefingService', () => {
       configStore.set('briefing_time', '08:00')
 
       const provider = makeMockProvider([])
-      // Generate a briefing first (sets last_briefing_date to today)
-      await generate('user1', provider, 'full')
+      // generateAndRecord sets last_briefing_date to today
+      await generateAndRecord('user1', provider, 'full')
 
       const result = await getMissedBriefing('user1', provider)
       expect(result).toBeNull()

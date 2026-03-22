@@ -5,6 +5,7 @@ import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
+import { isAppError } from '../../src/errors.js'
 import {
   createReminder,
   listReminders,
@@ -14,7 +15,6 @@ import {
   fetchDue,
   markDelivered,
   advanceRecurrence,
-  ReminderNotFoundError,
 } from '../../src/proactive/reminders.js'
 
 const userId = 'test-user-1'
@@ -90,7 +90,14 @@ describe('ReminderService', () => {
   test('cancelReminder throws not-found for wrong userId', () => {
     const r = createReminder({ userId, text: 'Mine', fireAt: new Date(Date.now() + 3600000).toISOString() })
 
-    expect(() => cancelReminder(r.id, otherUser)).toThrow(ReminderNotFoundError)
+    let thrown: unknown
+    try {
+      cancelReminder(r.id, otherUser)
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown).toBeDefined()
+    expect(isAppError(thrown) && thrown.type === 'provider' && thrown.code === 'not-found').toBe(true)
   })
 
   test('snoozeReminder sets status to snoozed and updates fire_at', () => {

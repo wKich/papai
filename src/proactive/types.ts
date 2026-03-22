@@ -28,3 +28,5 @@ export type AlertCheckResult = {
   sent: number
   suppressed: number
 }
+
+export type ReminderStatus = 'pending' | 'delivered' | 'snoozed' | 'cancelled'

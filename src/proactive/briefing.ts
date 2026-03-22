@@ -2,20 +2,14 @@ import { eq } from 'drizzle-orm'
 
 import { getConfig } from '../config.js'
 import { getDrizzleDb } from '../db/drizzle.js'
-import { userBriefingState } from '../db/schema.js'
+import { userBriefingState, alertState } from '../db/schema.js'
+import type { AlertStateRow } from '../db/schema.js'
 import { logger } from '../logger.js'
 import type { TaskProvider, TaskListItem } from '../providers/types.js'
+import { fetchAllTasks, isTerminalStatus } from './shared.js'
 import type { BriefingMode, BriefingSection, BriefingTask } from './types.js'
 
 const log = logger.child({ scope: 'proactive:briefing' })
-
-const TERMINAL_STATUS_SLUGS = ['done', 'completed', "won't fix", 'cancelled', 'archived']
-
-const isTerminalStatus = (status: string | undefined): boolean => {
-  if (status === undefined) return false
-  const lower = status.toLowerCase()
-  return TERMINAL_STATUS_SLUGS.some((slug) => lower.includes(slug))
-}
 
 const getTodayInTz = (timezone: string): string => {
   try {
@@ -58,25 +52,30 @@ const toTask = (t: TaskListItem): BriefingTask => ({
   priority: t.priority,
 })
 
-export function buildSections(tasks: TaskListItem[], timezone: string): BriefingSection[] {
-  log.debug({ taskCount: tasks.length }, 'buildSections called')
+type TaskCategories = {
+  dueToday: BriefingTask[]
+  overdue: BriefingTask[]
+  inProgress: BriefingTask[]
+  dueTodayIds: Set<string>
+  overdueIds: Set<string>
+}
 
-  const today = getTodayInTz(timezone)
-  const nonTerminal = tasks.filter((t) => !isTerminalStatus(t.status))
-
+function categorizeTasks(nonTerminal: TaskListItem[], today: string): TaskCategories {
   const dueToday: BriefingTask[] = []
   const overdue: BriefingTask[] = []
   const inProgress: BriefingTask[] = []
+  const dueTodayIds = new Set<string>()
+  const overdueIds = new Set<string>()
 
   for (const task of nonTerminal) {
     const due = task.dueDate?.slice(0, 10)
-
     if (due === today) {
       dueToday.push(toTask(task))
+      dueTodayIds.add(task.id)
     } else if (due !== undefined && due < today) {
       overdue.push(toTask(task))
+      overdueIds.add(task.id)
     }
-
     const statusLower = task.status?.toLowerCase() ?? ''
     if (
       statusLower.includes('in-progress') ||
@@ -86,11 +85,46 @@ export function buildSections(tasks: TaskListItem[], timezone: string): Briefing
       inProgress.push(toTask(task))
     }
   }
+  return { dueToday, overdue, inProgress, dueTodayIds, overdueIds }
+}
+
+function buildRecentlyUpdated(
+  nonTerminal: TaskListItem[],
+  alertStateRows: AlertStateRow[],
+  dueTodayIds: Set<string>,
+  overdueIds: Set<string>,
+  cutoff24h: number,
+): BriefingTask[] {
+  const byTaskId = new Map(alertStateRows.map((r) => [r.taskId, r]))
+  return nonTerminal.flatMap((task) => {
+    if (dueTodayIds.has(task.id) || overdueIds.has(task.id)) return []
+    const row = byTaskId.get(task.id)
+    if (row?.lastStatusChangedAt === undefined || row.lastStatusChangedAt === null) return []
+    return new Date(row.lastStatusChangedAt).getTime() >= cutoff24h ? [toTask(task)] : []
+  })
+}
+
+export function buildSections(
+  tasks: TaskListItem[],
+  timezone: string,
+  alertStateRows?: AlertStateRow[],
+): BriefingSection[] {
+  log.debug({ taskCount: tasks.length }, 'buildSections called')
+
+  const today = getTodayInTz(timezone)
+  const nonTerminal = tasks.filter((t) => !isTerminalStatus(t.status))
+  const { dueToday, overdue, inProgress, dueTodayIds, overdueIds } = categorizeTasks(nonTerminal, today)
+
+  const recentlyUpdated =
+    alertStateRows === undefined
+      ? []
+      : buildRecentlyUpdated(nonTerminal, alertStateRows, dueTodayIds, overdueIds, Date.now() - 24 * 60 * 60 * 1000)
 
   const sections: BriefingSection[] = []
   if (dueToday.length > 0) sections.push({ title: 'Due Today', tasks: dueToday })
   if (overdue.length > 0) sections.push({ title: 'Overdue', tasks: overdue })
   if (inProgress.length > 0) sections.push({ title: 'In Progress', tasks: inProgress })
+  if (recentlyUpdated.length > 0) sections.push({ title: 'Recently Updated', tasks: recentlyUpdated })
 
   return sections
 }
@@ -107,7 +141,7 @@ export function suggestActions(sections: BriefingSection[]): BriefingTask[] {
     return aIdx - bIdx
   }
 
-  const sorted = [...overdueTasks.sort(sortByPriority), ...dueTodayTasks.sort(sortByPriority)]
+  const sorted = [...overdueTasks.toSorted(sortByPriority), ...dueTodayTasks.toSorted(sortByPriority)]
   return sorted.slice(0, 3)
 }
 
@@ -150,59 +184,28 @@ export function formatShort(sections: BriefingSection[]): string {
   return counts.join(' · ')
 }
 
-async function fetchAllTasks(provider: TaskProvider): Promise<TaskListItem[]> {
-  const allTasks: TaskListItem[] = []
-
-  if (provider.capabilities.has('projects.list') && provider.listProjects !== undefined) {
-    const projects = await provider.listProjects()
-    const results = await Promise.allSettled(projects.slice(0, 20).map((p) => provider.listTasks(p.id)))
-    for (const [i, result] of results.entries()) {
-      if (result.status === 'fulfilled') {
-        allTasks.push(...result.value)
-      } else {
-        const project = projects[i]!
-        log.warn(
-          {
-            projectId: project.id,
-            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-          },
-          'Failed to list tasks for project in briefing',
-        )
-      }
-    }
-  } else {
-    try {
-      const results = await provider.searchTasks({ query: '' })
-      allTasks.push(
-        ...results.map((t) => ({
-          id: t.id,
-          title: t.title,
-          number: t.number,
-          status: t.status,
-          priority: t.priority,
-          dueDate: undefined,
-          url: t.url,
-        })),
-      )
-    } catch (err) {
-      log.warn({ error: err instanceof Error ? err.message : String(err) }, 'Failed to search tasks for briefing')
-    }
-  }
-
-  return allTasks
-}
-
+/** Generate briefing content. Does NOT update user_briefing_state (use generateAndRecord for that). */
 export async function generate(userId: string, provider: TaskProvider, mode: BriefingMode): Promise<string> {
   log.debug({ userId, mode }, 'generate briefing called')
 
   const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
   const tasks = await fetchAllTasks(provider)
-  const sections = buildSections(tasks, timezone)
+
+  // Fetch alert state rows for the Recently Updated section
+  const db = getDrizzleDb()
+  const alertStateRows = db.select().from(alertState).where(eq(alertState.userId, userId)).all()
+
+  const sections = buildSections(tasks, timezone, alertStateRows)
   const date = getFormattedDateInTz(timezone)
 
   const briefing = mode === 'short' ? formatShort(sections) : formatFull(date, sections)
 
-  // Update briefing state
+  log.info({ userId, mode, sectionCount: sections.length }, 'Briefing generated')
+  return briefing
+}
+
+/** Record that a briefing was delivered today for the given user. */
+export function recordBriefingDelivery(userId: string, timezone: string): void {
   const db = getDrizzleDb()
   const today = getTodayInTz(timezone)
   const now = new Date().toISOString()
@@ -214,8 +217,13 @@ export async function generate(userId: string, provider: TaskProvider, mode: Bri
       set: { lastBriefingDate: today, lastBriefingAt: now },
     })
     .run()
+}
 
-  log.info({ userId, mode, sectionCount: sections.length }, 'Briefing generated')
+/** Generate briefing content AND record the delivery in user_briefing_state. Use for scheduled/catch-up briefings. */
+export async function generateAndRecord(userId: string, provider: TaskProvider, mode: BriefingMode): Promise<string> {
+  const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
+  const briefing = await generate(userId, provider, mode)
+  recordBriefingDelivery(userId, timezone)
   return briefing
 }
 
@@ -253,9 +261,9 @@ export async function getMissedBriefing(userId: string, provider: TaskProvider):
 
   if (currentMinutes < briefingMinutes) return null
 
-  // Briefing time has passed and wasn't delivered — generate catch-up
+  // Briefing time has passed and wasn't delivered — generate catch-up (records delivery)
   const mode = getConfig(userId, 'briefing_mode') === 'short' ? 'short' : 'full'
-  const briefing = await generate(userId, provider, mode)
+  const briefing = await generateAndRecord(userId, provider, mode)
 
   return `**(Catch-up — missed ${briefingTime} briefing)**\n\n${briefing}`
 }

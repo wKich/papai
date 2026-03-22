@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { sqliteTable, text, primaryKey, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   platformUserId: text('platform_user_id').primaryKey(),
@@ -154,7 +154,7 @@ export const alertState = sqliteTable(
     lastAlertType: text('last_alert_type'),
     lastAlertSentAt: text('last_alert_sent_at'),
     suppressUntil: text('suppress_until'),
-    overdueDaysNotified: text('overdue_days_notified').default('0'),
+    overdueDaysNotified: integer('overdue_days_notified').default(0),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(datetime('now'))`),

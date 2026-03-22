@@ -4,7 +4,24 @@ import { nextCronOccurrence, parseCron } from '../cron.js'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { reminders } from '../db/schema.js'
 import { logger } from '../logger.js'
-import type { CreateReminderParams } from './types.js'
+import type { CreateReminderParams, ReminderStatus } from './types.js'
+
+/**
+ * Thrown when a reminder cannot be found for the given id + userId.
+ * Implements the AppError shape so isAppError() returns true.
+ * @internal
+ */
+class ReminderNotFoundError extends Error {
+  readonly type = 'provider' as const
+  readonly code = 'not-found' as const
+  readonly resourceType = 'reminder' as const
+  readonly resourceId: string
+
+  constructor(reminderId: string) {
+    super(`reminder "${reminderId}" was not found.`)
+    this.resourceId = reminderId
+  }
+}
 
 const log = logger.child({ scope: 'proactive:reminders' })
 
@@ -24,7 +41,7 @@ export function createReminder(params: CreateReminderParams): typeof reminders.$
     fireAt: params.fireAt,
     recurrence: params.recurrence ?? null,
     taskId: params.taskId ?? null,
-    status: 'pending',
+    status: 'pending' satisfies ReminderStatus,
   }
   db.insert(reminders).values(row).run()
   log.info({ reminderId: id, userId: params.userId }, 'Reminder created')
@@ -37,7 +54,9 @@ export function listReminders(userId: string, includeDelivered = false): Array<t
   log.debug({ userId, includeDelivered }, 'listReminders called')
   const db = getDrizzleDb()
 
-  const validStatuses = includeDelivered ? ['pending', 'snoozed', 'delivered'] : ['pending', 'snoozed']
+  const validStatuses: ReminderStatus[] = includeDelivered
+    ? ['pending', 'snoozed', 'delivered']
+    : ['pending', 'snoozed']
 
   return db
     .select()
@@ -60,7 +79,10 @@ export function cancelReminder(reminderId: string, userId: string): void {
     throw new ReminderNotFoundError(reminderId)
   }
 
-  db.update(reminders).set({ status: 'cancelled' }).where(eq(reminders.id, reminderId)).run()
+  db.update(reminders)
+    .set({ status: 'cancelled' satisfies ReminderStatus })
+    .where(eq(reminders.id, reminderId))
+    .run()
 
   log.info({ reminderId, userId }, 'Reminder cancelled')
 }
@@ -79,7 +101,10 @@ export function snoozeReminder(reminderId: string, userId: string, newFireAt: st
     throw new ReminderNotFoundError(reminderId)
   }
 
-  db.update(reminders).set({ status: 'snoozed', fireAt: newFireAt }).where(eq(reminders.id, reminderId)).run()
+  db.update(reminders)
+    .set({ status: 'snoozed' satisfies ReminderStatus, fireAt: newFireAt })
+    .where(eq(reminders.id, reminderId))
+    .run()
 
   log.info({ reminderId, userId, newFireAt }, 'Reminder snoozed')
 }
@@ -98,7 +123,10 @@ export function rescheduleReminder(reminderId: string, userId: string, newFireAt
     throw new ReminderNotFoundError(reminderId)
   }
 
-  db.update(reminders).set({ status: 'pending', fireAt: newFireAt }).where(eq(reminders.id, reminderId)).run()
+  db.update(reminders)
+    .set({ status: 'pending' satisfies ReminderStatus, fireAt: newFireAt })
+    .where(eq(reminders.id, reminderId))
+    .run()
 
   log.info({ reminderId, userId, newFireAt }, 'Reminder rescheduled')
 }
@@ -119,7 +147,10 @@ export function markDelivered(reminderId: string): void {
   log.debug({ reminderId }, 'markDelivered called')
   const db = getDrizzleDb()
 
-  db.update(reminders).set({ status: 'delivered' }).where(eq(reminders.id, reminderId)).run()
+  db.update(reminders)
+    .set({ status: 'delivered' satisfies ReminderStatus })
+    .where(eq(reminders.id, reminderId))
+    .run()
 
   log.info({ reminderId }, 'Reminder marked as delivered')
 }
@@ -144,16 +175,9 @@ export function advanceRecurrence(reminderId: string): void {
   }
 
   db.update(reminders)
-    .set({ fireAt: nextFire.toISOString(), status: 'pending' })
+    .set({ fireAt: nextFire.toISOString(), status: 'pending' satisfies ReminderStatus })
     .where(eq(reminders.id, reminderId))
     .run()
 
   log.info({ reminderId, nextFireAt: nextFire.toISOString() }, 'Recurring reminder advanced')
-}
-
-export class ReminderNotFoundError extends Error {
-  constructor(public readonly reminderId: string) {
-    super(`Reminder "${reminderId}" not found`)
-    this.name = 'ReminderNotFoundError'
-  }
 }

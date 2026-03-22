@@ -1,4 +1,5 @@
 export * from './types.js'
+export { TERMINAL_STATUS_SLUGS, isTerminalStatus, fetchAllTasks } from './shared.js'
 export * as briefingService from './briefing.js'
 export * as reminderService from './reminders.js'
 export * as alertService from './service.js'

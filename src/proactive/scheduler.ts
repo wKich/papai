@@ -92,7 +92,7 @@ async function fireBriefingIfDue(userId: string, cronExpr: string, timezone: str
     }
 
     const mode = getConfig(userId, 'briefing_mode') === 'short' ? 'short' : 'full'
-    const content = await briefingService.generate(userId, provider, mode)
+    const content = await briefingService.generateAndRecord(userId, provider, mode)
     await chatRef.sendMessage(userId, content)
 
     log.info({ userId }, 'Scheduled briefing delivered')
@@ -196,8 +196,9 @@ export function start(chat: ChatProvider, providerBuilder: (userId: string) => T
     }
   }
 
-  // Run initial reminder poll immediately
+  // Run initial polls immediately
   void pollReminders()
+  void pollAlerts()
 
   log.info({ briefingJobs: briefingCount, globalPollers: 2 }, 'Proactive alert scheduler started')
 }
@@ -225,7 +226,29 @@ export function stopAll(): void {
 }
 
 /**
- * Get the number of active briefing jobs. Exported for testing.
+ * Get the number of active briefing jobs.
  * @internal
  */
-export const _briefingJobs = briefingJobs
+export function getBriefingJobCount(): number {
+  return briefingJobs.size
+}
+
+/** @internal — test-only */
+export function _pollReminders(): Promise<void> {
+  return pollReminders()
+}
+
+/** @internal — test-only */
+export function _pollAlerts(): Promise<void> {
+  return pollAlerts()
+}
+
+/** @internal — test-only */
+export function _fireBriefingIfDue(userId: string, cronExpr: string, timezone: string): Promise<void> {
+  return fireBriefingIfDue(userId, cronExpr, timezone)
+}
+
+/** @internal — test-only: returns the live briefingJobs map so tests can manipulate nextRun */
+export function _getBriefingJobs(): Map<string, BriefingJob> {
+  return briefingJobs
+}

@@ -3,16 +3,16 @@ import { z } from 'zod'
 
 import { getConfig } from '../config.js'
 import { parseCron } from '../cron.js'
+import { isAppError } from '../errors.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 import * as briefingService from './briefing.js'
 import * as reminderService from './reminders.js'
-import { ReminderNotFoundError } from './reminders.js'
 
 const log = logger.child({ scope: 'proactive:tools' })
 
 function handleReminderError(error: unknown, reminderId: string): { error: string } {
-  if (error instanceof ReminderNotFoundError) {
+  if (isAppError(error) && error.type === 'provider' && error.code === 'not-found') {
     return { error: `Reminder "${reminderId}" not found or does not belong to you.` }
   }
   throw error

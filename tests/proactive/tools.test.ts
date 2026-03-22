@@ -155,6 +155,18 @@ describe('Proactive Tools', () => {
       const result: unknown = await exec(tools, 'get_briefing', { mode: 'short' })
       expect(result).toHaveProperty('briefing')
     })
+
+    test('does not update user_briefing_state', async () => {
+      const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+      const { userBriefingState } = await import('../../src/db/schema.js')
+      const { eq } = await import('drizzle-orm')
+
+      await exec(tools, 'get_briefing', {})
+
+      const db = getDrizzleDb()
+      const state = db.select().from(userBriefingState).where(eq(userBriefingState.userId, userId)).get()
+      expect(state).toBeUndefined()
+    })
   })
 })
 
