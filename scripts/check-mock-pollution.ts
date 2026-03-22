@@ -2,6 +2,11 @@
 /**
  * Static analyzer for Bun test mock pollution.
  *
+ * Uses the TypeScript compiler API for precise AST-based analysis instead of
+ * regex/string heuristics, so it correctly handles all edge cases: nested
+ * expressions, aliased identifiers that happen to contain keywords, comments
+ * inside mock calls, template literals, etc.
+ *
  * Detects two patterns that cause cross-file test failures in Bun's shared
  * module registry (all test files run in one process):
  *
@@ -28,6 +33,8 @@
 import { existsSync, readFileSync } from 'fs'
 import { dirname, relative, resolve } from 'path'
 
+import ts from 'typescript'
+
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const ROOT = resolve(import.meta.dirname, '..')
@@ -41,7 +48,22 @@ const SAFE_TO_MOCK: readonly string[] = [
   // same way as project-local modules.
 ]
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── AST helpers ──────────────────────────────────────────────────────────────
+
+/** Parse a source file into a TypeScript AST (no type-checking, parse only). */
+function parseSource(filePath: string): ts.SourceFile {
+  const source = readFileSync(filePath, 'utf-8')
+  // setParentNodes=true is required for ts.forEachChild to traverse correctly
+  return ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true)
+}
+
+/** Visit every node in the subtree rooted at `node`. */
+function walk(node: ts.Node, visitor: (node: ts.Node) => void): void {
+  visitor(node)
+  ts.forEachChild(node, (child) => {
+    walk(child, visitor)
+  })
+}
 
 /** Resolve a relative import specifier from a source file to an absolute path. */
 function resolveSpecifier(fromFile: string, specifier: string): string | null {
@@ -56,52 +78,87 @@ function resolveSpecifier(fromFile: string, specifier: string): string | null {
   return null
 }
 
-/** Extract all mock.module() specifiers from a test file's source. */
-function extractMocks(source: string, filePath: string): string[] {
+/**
+ * Extract all mock.module(specifier, ...) call sites from the AST.
+ * Matches the pattern: mock.module('<literal>', factory)
+ * Correctly handles `void mock.module(...)` wrappers via full tree walk.
+ */
+function extractMocks(sf: ts.SourceFile, filePath: string): string[] {
   const results: string[] = []
-  const re = /mock\.module\(\s*['"`]([^'"`]+)['"`]/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(source)) !== null) {
-    const resolved = resolveSpecifier(filePath, m[1]!)
+  walk(sf, (node) => {
+    if (!ts.isCallExpression(node)) return
+    const { expression: callee, arguments: args } = node
+    if (!ts.isPropertyAccessExpression(callee)) return
+    if (!ts.isIdentifier(callee.expression) || callee.expression.text !== 'mock') return
+    if (!ts.isIdentifier(callee.name) || callee.name.text !== 'module') return
+    const firstArg = args[0]
+    if (firstArg === undefined || !ts.isStringLiteral(firstArg)) return
+    const resolved = resolveSpecifier(filePath, firstArg.text)
     if (resolved !== null) results.push(resolved)
-  }
+  })
   return results
 }
 
-/** Extract all static import specifiers that resolve to src/ modules. */
-function extractImports(source: string, filePath: string): string[] {
+/**
+ * Extract all static value import specifiers that resolve to src/ modules.
+ * Excludes type-only imports (`import type { X }`) — they are erased at
+ * runtime and never trigger module registry entries.
+ */
+function extractImports(sf: ts.SourceFile, filePath: string): string[] {
   const results: string[] = []
-  // Matches: import ... from '...'  (static imports only, not dynamic)
-  const re =
-    /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+|\w+(?:\s*,\s*\{[^}]*\})?)\s+from\s+['"`]([^'"`]+)['"`]/gm
-  let m: RegExpExecArray | null
-  while ((m = re.exec(source)) !== null) {
-    const resolved = resolveSpecifier(filePath, m[1]!)
+  walk(sf, (node) => {
+    if (!ts.isImportDeclaration(node)) return
+    // Skip type-only imports (`import type { X }`): phaseModifier === TypeKeyword
+    if (node.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword) return
+    const { moduleSpecifier } = node
+    if (!ts.isStringLiteral(moduleSpecifier)) return
+    const resolved = resolveSpecifier(filePath, moduleSpecifier.text)
     if (resolved !== null && !resolved.includes('/tests/')) results.push(resolved)
-  }
+  })
+  return results
+}
+
+/**
+ * Extract sub-module specifiers that a barrel file re-exports.
+ * Matches: export { X } from './Y'  and  export * from './Y'
+ * Excludes type-only re-exports (`export type { X } from './Y'`).
+ */
+function extractReExports(sf: ts.SourceFile, filePath: string): string[] {
+  const results: string[] = []
+  walk(sf, (node) => {
+    if (!ts.isExportDeclaration(node)) return
+    if (node.isTypeOnly) return
+    const { moduleSpecifier } = node
+    if (moduleSpecifier === undefined || !ts.isStringLiteral(moduleSpecifier)) return
+    const resolved = resolveSpecifier(filePath, moduleSpecifier.text)
+    if (resolved !== null) results.push(resolved)
+  })
   return results
 }
 
 /**
  * Returns true if the file registers an afterAll cleanup via mock.restore().
- * Such files are exempt from Pattern 2: the risk is mitigated even if timing
- * is not guaranteed to be perfect in all Bun versions.
+ * Looks for a CallExpression `afterAll(...)` that contains a descendant
+ * CallExpression `mock.restore()` anywhere in its argument subtree.
+ * Such files are exempt from Pattern 2: the risk is mitigated by cleanup.
  */
-function hasRestoreCleanup(source: string): boolean {
-  return source.includes('afterAll') && source.includes('mock.restore()')
-}
-
-/** Extract sub-modules that a barrel file re-exports. */
-function extractReExports(source: string, filePath: string): string[] {
-  const results: string[] = []
-  // export { X } from './Y'  or  export * from './Y'
-  const re = /^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"`]([^'"`]+)['"`]/gm
-  let m: RegExpExecArray | null
-  while ((m = re.exec(source)) !== null) {
-    const resolved = resolveSpecifier(filePath, m[1]!)
-    if (resolved !== null) results.push(resolved)
-  }
-  return results
+function hasRestoreCleanup(sf: ts.SourceFile): boolean {
+  let found = false
+  walk(sf, (node) => {
+    if (found) return
+    if (!ts.isCallExpression(node)) return
+    if (!ts.isIdentifier(node.expression) || node.expression.text !== 'afterAll') return
+    walk(node, (inner) => {
+      if (found) return
+      if (!ts.isCallExpression(inner)) return
+      const callee = inner.expression
+      if (!ts.isPropertyAccessExpression(callee)) return
+      if (!ts.isIdentifier(callee.expression) || callee.expression.text !== 'mock') return
+      if (!ts.isIdentifier(callee.name) || callee.name.text !== 'restore') return
+      found = true
+    })
+  })
+  return found
 }
 
 function rel(p: string): string {
@@ -117,21 +174,18 @@ const unitTests = testFiles.filter((f) => !f.includes('/e2e/'))
 
 type FileInfo = {
   path: string
-  // absolute paths of mocked modules
   mocks: string[]
-  // absolute paths of directly imported src modules
   imports: string[]
-  // true when the file has afterAll(() => mock.restore()) cleanup
   hasCleanup: boolean
 }
 
 const files: FileInfo[] = unitTests.map((filePath) => {
-  const source = readFileSync(filePath, 'utf-8')
+  const sf = parseSource(filePath)
   return {
     path: filePath,
-    mocks: extractMocks(source, filePath),
-    imports: extractImports(source, filePath),
-    hasCleanup: hasRestoreCleanup(source),
+    mocks: extractMocks(sf, filePath),
+    imports: extractImports(sf, filePath),
+    hasCleanup: hasRestoreCleanup(sf),
   }
 })
 
@@ -160,8 +214,8 @@ const issues: Issue[] = []
 
 for (const [mockedModule, mockers] of mockedBy) {
   if (!existsSync(mockedModule)) continue
-  const source = readFileSync(mockedModule, 'utf-8')
-  const reExports = extractReExports(source, mockedModule)
+  const sf = parseSource(mockedModule)
+  const reExports = extractReExports(sf, mockedModule)
   if (reExports.length === 0) continue
 
   for (const subModule of reExports) {
@@ -187,7 +241,7 @@ for (const [mockedModule, mockers] of mockedBy) {
   }
 }
 
-// ─── Pattern 2: Shared module mocked without isolation ───────────────────────
+// ─── Pattern 2: Shared module mocked without cleanup ─────────────────────────
 
 for (const [mockedModule, mockers] of mockedBy) {
   if (SAFE_TO_MOCK.some((s) => mockedModule.endsWith(s))) continue
