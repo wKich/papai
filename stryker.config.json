@@ -13,7 +13,11 @@
     "src/errors.ts",
     "src/config.ts",
     "src/memory.ts",
-    "src/users.ts"
+    "src/users.ts",
+    "src/cron.ts",
+    "src/recurring.ts",
+    "src/history.ts",
+    "src/conversation.ts"
   ],
   "coverageAnalysis": "perTest",
   "incremental": true,

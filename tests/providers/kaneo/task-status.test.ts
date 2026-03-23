@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -8,24 +8,33 @@ mockLogger()
 import { getUserMessage } from '../../../src/errors.js'
 import { KaneoClassifiedError } from '../../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
 import { restoreFetch } from '../../test-helpers.js'
 
+type ColumnEntry = { id: string; name: string; order: number }
+
+const defaultColumns: ColumnEntry[] = [
+  { id: 'col-1', name: 'To Do', order: 0 },
+  { id: 'col-2', name: 'In Progress', order: 1 },
+  { id: 'col-3', name: 'Done', order: 2 },
+]
+
+let listColumnsImpl: (opts: { config: KaneoConfig; projectId: string }) => Promise<ColumnEntry[]>
+
 void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-  listColumns: mock(() =>
-    Promise.resolve([
-      { id: 'col-1', name: 'To Do', order: 0 },
-      { id: 'col-2', name: 'In Progress', order: 1 },
-      { id: 'col-3', name: 'Done', order: 2 },
-    ]),
-  ),
+  listColumns: (opts: { config: KaneoConfig; projectId: string }): Promise<ColumnEntry[]> => listColumnsImpl(opts),
 }))
+
+import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
 
 describe('validateStatus', () => {
   const mockConfig: KaneoConfig = {
     apiKey: 'test-key',
     baseUrl: 'https://test.kaneo.app',
   }
+
+  beforeEach(() => {
+    listColumnsImpl = (): Promise<ColumnEntry[]> => Promise.resolve(defaultColumns)
+  })
 
   afterEach(() => {
     restoreFetch()
@@ -93,6 +102,18 @@ describe('validateStatus', () => {
         expect(message).toContain('In Progress')
         expect(message).toContain('Done')
       }
+    })
+  })
+
+  describe('with custom project columns', () => {
+    test('validates against custom project columns', async () => {
+      listColumnsImpl = (): Promise<ColumnEntry[]> =>
+        Promise.resolve([
+          { id: 'col-x', name: 'Backlog', order: 0 },
+          { id: 'col-y', name: 'Shipped', order: 1 },
+        ])
+      const result = await validateStatus(mockConfig, 'proj-1', 'Backlog')
+      expect(result).toBe('backlog')
     })
   })
 
