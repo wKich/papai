@@ -18,10 +18,10 @@ const defaultColumns: ColumnEntry[] = [
   { id: 'col-3', name: 'Done', order: 2 },
 ]
 
-let listColumnsImpl: (config: KaneoConfig, projectId: string) => Promise<ColumnEntry[]>
+let listColumnsImpl: (opts: { config: KaneoConfig; projectId: string }) => Promise<ColumnEntry[]>
 
 void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-  listColumns: (...args: [KaneoConfig, string]): Promise<ColumnEntry[]> => listColumnsImpl(...args),
+  listColumns: (opts: { config: KaneoConfig; projectId: string }): Promise<ColumnEntry[]> => listColumnsImpl(opts),
 }))
 
 import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
