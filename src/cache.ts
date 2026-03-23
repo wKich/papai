@@ -1,10 +1,18 @@
 import { type ModelMessage } from 'ai'
 import { sql } from 'drizzle-orm'
 
-import { syncConfigToDb, syncFactToDb, syncHistoryToDb, syncSummaryToDb, syncWorkspaceToDb } from './cache-db.js'
+import {
+  deleteInstructionFromDb,
+  syncConfigToDb,
+  syncFactToDb,
+  syncHistoryToDb,
+  syncInstructionToDb,
+  syncSummaryToDb,
+  syncWorkspaceToDb,
+} from './cache-db.js'
 import { parseHistoryFromDb } from './cache-helpers.js'
 import { getDrizzleDb } from './db/drizzle.js'
-import { conversationHistory, memoryFacts, memorySummary, userConfig, users } from './db/schema.js'
+import { conversationHistory, memoryFacts, memorySummary, userConfig, userInstructions, users } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'cache' })
@@ -15,6 +23,7 @@ type UserCache = {
   history: ModelMessage[]
   summary: string | null
   facts: Array<{ identifier: string; title: string; url: string; last_seen: string }>
+  instructions: Array<{ id: string; text: string; createdAt: string }> | null
   config: Map<string, string | null>
   workspaceId: string | null
   tools: unknown
@@ -58,6 +67,7 @@ function getOrCreateCache(userId: string): UserCache {
       history: [],
       summary: null,
       facts: [],
+      instructions: null,
       config: new Map(),
       workspaceId: null,
       tools: null,
@@ -245,4 +255,36 @@ export function clearCachedHistoryFlag(userId: string): void {
   }
   cache.config.delete('history_loaded')
   log.debug({ userId }, 'History loaded flag cleared')
+}
+
+// --- Instructions Cache ---
+
+export function getCachedInstructions(contextId: string): readonly { id: string; text: string; createdAt: string }[] {
+  const cache = getOrCreateCache(contextId)
+  if (cache.instructions === null) {
+    log.debug({ contextId }, 'Loading instructions from DB into cache')
+    const rows = getDrizzleDb()
+      .select({ id: userInstructions.id, text: userInstructions.text, createdAt: userInstructions.createdAt })
+      .from(userInstructions)
+      .where(sql`${userInstructions.contextId} = ${contextId}`)
+      .orderBy(sql`${userInstructions.createdAt} ASC`)
+      .all()
+    cache.instructions = rows
+  }
+  return cache.instructions
+}
+
+export function addCachedInstruction(contextId: string, instruction: { id: string; text: string }): void {
+  const cache = getOrCreateCache(contextId)
+  cache.instructions ??= []
+  cache.instructions.push({ ...instruction, createdAt: new Date().toISOString() })
+  syncInstructionToDb(contextId, instruction)
+}
+
+export function deleteCachedInstruction(contextId: string, id: string): void {
+  const cache = getOrCreateCache(contextId)
+  if (cache.instructions !== null) {
+    cache.instructions = cache.instructions.filter((i) => i.id !== id)
+  }
+  deleteInstructionFromDb(contextId, id)
 }

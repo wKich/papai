@@ -171,4 +171,19 @@ export type Reminder = typeof reminders.$inferSelect
 export type UserBriefingState = typeof userBriefingState.$inferSelect
 export type AlertStateRow = typeof alertState.$inferSelect
 
+export const userInstructions = sqliteTable(
+  'user_instructions',
+  {
+    id: text('id').primaryKey(),
+    contextId: text('context_id').notNull(),
+    text: text('text').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [index('idx_user_instructions_context').on(table.contextId)],
+)
+
+export type UserInstruction = typeof userInstructions.$inferSelect
+
 export type GroupMember = typeof groupMembers.$inferSelect

@@ -1,7 +1,7 @@
-import { eq, and, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { getDrizzleDb } from './db/drizzle.js'
-import { conversationHistory, memorySummary, memoryFacts, userConfig, users } from './db/schema.js'
+import { conversationHistory, memorySummary, memoryFacts, userConfig, userInstructions, users } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'cache-db' })
@@ -126,6 +126,41 @@ export function syncWorkspaceToDb(userId: string, workspaceId: string): void {
       log.error(
         { userId, error: error instanceof Error ? error.message : String(error) },
         'Failed to sync workspace to DB',
+      )
+    }
+  })
+}
+
+export function syncInstructionToDb(contextId: string, instruction: { id: string; text: string }): void {
+  queueMicrotask(() => {
+    try {
+      const db = getDrizzleDb()
+      db.insert(userInstructions)
+        .values({ id: instruction.id, contextId, text: instruction.text, createdAt: new Date().toISOString() })
+        .onConflictDoNothing()
+        .run()
+      log.debug({ contextId, id: instruction.id }, 'Instruction synced to DB')
+    } catch (error) {
+      log.error(
+        { contextId, error: error instanceof Error ? error.message : String(error) },
+        'Failed to sync instruction to DB',
+      )
+    }
+  })
+}
+
+export function deleteInstructionFromDb(contextId: string, id: string): void {
+  queueMicrotask(() => {
+    try {
+      const db = getDrizzleDb()
+      db.delete(userInstructions)
+        .where(and(eq(userInstructions.id, id), eq(userInstructions.contextId, contextId)))
+        .run()
+      log.debug({ contextId, id }, 'Instruction deleted from DB')
+    } catch (error) {
+      log.error(
+        { contextId, error: error instanceof Error ? error.message : String(error) },
+        'Failed to delete instruction from DB',
       )
     }
   })
