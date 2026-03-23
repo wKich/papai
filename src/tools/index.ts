@@ -18,6 +18,7 @@ import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
+import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
@@ -141,6 +142,13 @@ function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
+function addInstructionTools(tools: ToolSet, contextId: string | undefined): void {
+  if (contextId === undefined) return
+  tools['save_instruction'] = makeSaveInstructionTool(contextId)
+  tools['list_instructions'] = makeListInstructionsTool(contextId)
+  tools['delete_instruction'] = makeDeleteInstructionTool(contextId)
+}
+
 function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
   if (userId === undefined) return
   tools['create_recurring_task'] = makeCreateRecurringTaskTool(userId)
@@ -162,6 +170,7 @@ export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
   addRecurringTools(tools, userId)
+  addInstructionTools(tools, userId)
   if (userId !== undefined) {
     const proactiveTools = makeProactiveTools(userId, provider)
     Object.assign(tools, proactiveTools)

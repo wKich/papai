@@ -1,7 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { APICallError } from '@ai-sdk/provider'
-import { generateText, stepCountIs, type ToolSet } from 'ai'
-import { type ModelMessage } from 'ai'
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
@@ -9,6 +8,7 @@ import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
+import { buildInstructionsBlock } from './instructions.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import * as briefingService from './proactive/briefing.js'
@@ -69,8 +69,8 @@ RELATION TYPES — map user language to the correct type when calling add_task_r
 
 OUTPUT RULES:
 - When referencing tasks or projects, format them as Markdown links: [Task title](url). Never output raw IDs.
-- Keep replies short and friendly.
-- Don't use tables.`
+- Keep replies short and friendly. Don't use tables.
+- When the user expresses a persistent preference ("always", "never", "from now on"), call save_instruction. To list them, call list_instructions. To remove one, call list_instructions first, then delete_instruction.`
 
 const buildBasePrompt = (timezone: string): string => {
   const localDate = getLocalDateString(timezone)
@@ -107,12 +107,10 @@ REMINDERS — The user can set reminders that fire at specific times:
 
 ${STATIC_RULES}`
 }
-
-const buildSystemPrompt = (provider: TaskProvider, timezone: string): string => {
+const buildSystemPrompt = (provider: TaskProvider, timezone: string, contextId: string): string => {
   const base = buildBasePrompt(timezone)
   const addendum = provider.getPromptAddendum()
-  if (addendum === '') return base
-  return `${base}\n\n${addendum}`
+  return `${buildInstructionsBlock(contextId)}${addendum === '' ? base : `${base}\n\n${addendum}`}`
 }
 
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
@@ -233,7 +231,7 @@ const callLlm = async (
   )
   const result = await generateText({
     model,
-    system: buildSystemPrompt(provider, timezone),
+    system: buildSystemPrompt(provider, timezone, contextId),
     messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),
