@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 setDefaultTimeout(10000)
 
+import { KaneoClassifiedError } from '../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { createTask } from '../../src/providers/kaneo/create-task.js'
 import { deleteTask } from '../../src/providers/kaneo/delete-task.js'
@@ -25,7 +26,7 @@ describe('E2E: Error Handling', () => {
 
   test('throws error for non-existent task', async () => {
     const promise = getTask({ config: kaneoConfig, taskId: 'non-existent-id' })
-    await expect(promise).rejects.toThrow(/not found|404|does not exist/i)
+    await expect(promise).rejects.toThrow(KaneoClassifiedError)
   })
 
   test('throws error when updating non-existent task', async () => {
@@ -34,7 +35,7 @@ describe('E2E: Error Handling', () => {
       taskId: 'non-existent-id',
       title: 'New title',
     })
-    await expect(promise).rejects.toThrow(/not found|404|does not exist/i)
+    await expect(promise).rejects.toThrow(KaneoClassifiedError)
   })
 
   test('throws error when creating task in non-existent project', async () => {
