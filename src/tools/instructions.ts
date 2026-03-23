@@ -12,7 +12,11 @@ export function makeSaveInstructionTool(contextId: string): ToolSet[string] {
     description:
       'Save a persistent behavioral preference. Call this when the user expresses how the bot should always behave.',
     inputSchema: z.object({
-      text: z.string().describe('The instruction as a short, clear statement, e.g. "Always reply in Spanish"'),
+      text: z
+        .string()
+        .min(1)
+        .max(500)
+        .describe('The instruction as a short, clear statement, e.g. "Always reply in Spanish"'),
     }),
     execute: ({ text }) => {
       log.debug({ contextId }, 'save_instruction tool called')
@@ -31,7 +35,8 @@ export function makeListInstructionsTool(contextId: string): ToolSet[string] {
     inputSchema: z.object({}),
     execute: () => {
       log.debug({ contextId }, 'list_instructions tool called')
-      const instructions = listInstructions(contextId)
+      const rawInstructions = listInstructions(contextId)
+      const instructions = rawInstructions.map(({ id, text }) => ({ id, text }))
       log.info({ contextId, count: instructions.length }, 'Instructions listed via tool')
       return { instructions }
     },
