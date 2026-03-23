@@ -1,0 +1,91 @@
+import { z } from 'zod'
+
+// --- Condition fields and operators ---
+
+export const CONDITION_FIELDS = [
+  'task.status',
+  'task.priority',
+  'task.assignee',
+  'task.dueDate',
+  'task.updatedAt',
+  'task.project',
+  'task.labels',
+] as const
+
+export type ConditionField = (typeof CONDITION_FIELDS)[number]
+
+export const FIELD_OPERATORS: Record<ConditionField, readonly string[]> = {
+  'task.status': ['eq', 'neq', 'changed_to'],
+  'task.priority': ['eq', 'neq', 'changed_to'],
+  'task.assignee': ['eq', 'neq', 'changed_to'],
+  'task.dueDate': ['eq', 'lt', 'gt', 'overdue'],
+  'task.updatedAt': ['lt', 'gt', 'stale_days'],
+  'task.project': ['eq', 'neq'],
+  'task.labels': ['contains', 'not_contains'],
+}
+
+// --- Alert condition schema (recursive) ---
+
+const conditionFieldSchema = z.enum(CONDITION_FIELDS)
+
+const leafConditionSchema = z
+  .object({
+    field: conditionFieldSchema,
+    op: z.string(),
+    value: z.union([z.string(), z.number()]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const validOps = FIELD_OPERATORS[data.field]
+    if (!validOps.includes(data.op)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Invalid operator '${data.op}' for field '${data.field}'. Valid operators: ${validOps.join(', ')}`,
+        path: ['op'],
+      })
+    }
+  })
+
+export type LeafCondition = z.infer<typeof leafConditionSchema>
+
+type AndCondition = { and: AlertCondition[] }
+type OrCondition = { or: AlertCondition[] }
+
+export type AlertCondition = LeafCondition | AndCondition | OrCondition
+
+export const alertConditionSchema: z.ZodType<AlertCondition> = z.union([
+  leafConditionSchema,
+  z.object({
+    and: z.lazy(() => z.array(alertConditionSchema).min(1)),
+  }),
+  z.object({
+    or: z.lazy(() => z.array(alertConditionSchema).min(1)),
+  }),
+])
+
+// --- Domain types ---
+
+export type ScheduledPrompt = {
+  type: 'scheduled'
+  id: string
+  userId: string
+  prompt: string
+  fireAt: string
+  cronExpression: string | null
+  status: 'active' | 'completed' | 'cancelled'
+  createdAt: string
+  lastExecutedAt: string | null
+}
+
+export type AlertPrompt = {
+  type: 'alert'
+  id: string
+  userId: string
+  prompt: string
+  condition: AlertCondition
+  status: 'active' | 'cancelled'
+  createdAt: string
+  lastTriggeredAt: string | null
+  cooldownMinutes: number
+}
+
+export type DeferredPrompt = ScheduledPrompt | AlertPrompt

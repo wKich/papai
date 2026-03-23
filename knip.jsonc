@@ -36,5 +36,6 @@
   "ignoreExportsUsedInFile": true,
 
   // Ignore migration files (executed at runtime, not imported)
-  "ignore": ["src/db/migrations/**"],
+  // Ignore deferred-prompts (feature under incremental construction)
+  "ignore": ["src/db/migrations/**", "src/deferred-prompts/**"],
 }
