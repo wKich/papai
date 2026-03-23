@@ -942,90 +942,76 @@ For each tool, verify:
 
 ---
 
----
+## 11. Mock Patterns & Test Isolation
 
-## 11. Mock Patterns
+### 11.1 When to Use Each Mock Pattern
 
-### 11.1 When to Use Each Pattern
+| Pattern                           | When to Use                                                                 | Example                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `setMockFetch` / `restoreFetch`   | HTTP-level tests for providers (Kaneo, YouTrack)                            | `setMockFetch((url, init) => ...)` in `beforeEach`, `restoreFetch()` in `afterEach` |
+| `mock.module()` with mutable impl | Replacing entire modules (`ai`, `drizzle`, provider dependencies)           | `let impl = defaultImpl; void mock.module('ai', () => ({ fn: () => impl() }))`      |
+| `spyOn()`                         | Partial module mocking where you need the original implementation available | `spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)`                      |
 
-| Pattern                           | Use When                                                  | Example                                                |
-| --------------------------------- | --------------------------------------------------------- | ------------------------------------------------------ |
-| `setMockFetch` / `restoreFetch`   | HTTP-level provider tests (Kaneo, YouTrack)               | `tests/test-helpers.ts`                                |
-| `mock.module()` with mutable impl | Replacing modules before import (AI SDK, drizzle, logger) | `tests/conversation.test.ts`                           |
-| `spyOn()`                         | Partial mocking where you need original module behavior   | `tests/conversation.test.ts` `buildMessagesWithMemory` |
+### 11.2 Preferred: Mutable Implementation Pattern for `mock.module()`
 
-### 11.2 `setMockFetch` / `restoreFetch` (HTTP mocking)
-
-Centralised in `tests/test-helpers.ts`. Use for all provider tests that need to intercept `fetch()`.
+Use a `let` variable for the implementation so tests can override behaviour per-test. Reset in `beforeEach`:
 
 ```typescript
-import { setMockFetch, restoreFetch } from '../../test-helpers.js'
+const defaultImpl = () => Promise.resolve({ data: 'default' })
+let myImpl = defaultImpl
 
-afterEach(() => {
-  restoreFetch()
-})
-
-test('fetches data', async () => {
-  setMockFetch(async (url, init) => {
-    return new Response(JSON.stringify({ id: '1' }), { status: 200 })
-  })
-  // ...test logic...
-})
-```
-
-### 11.3 `mock.module()` with Mutable Implementation
-
-Use when replacing entire modules (AI SDK, database, logger). Define a mutable `let impl` variable so tests can override behavior per-test, with a named default restored in `beforeEach`.
-
-```typescript
-const defaultImpl = (): Promise<Result> =>
-  Promise.resolve({
-    /* default */
-  })
-let impl = defaultImpl
-
-void mock.module('some-module', () => ({
-  someFunction: (...args: unknown[]) => impl(...args),
+void mock.module('../src/my-module.js', () => ({
+  myFunction: (...args) => myImpl(...args),
 }))
 
 describe('tests', () => {
   beforeEach(() => {
-    impl = defaultImpl // reset to prevent cross-test leaks
+    myImpl = defaultImpl // reset before each test
   })
 
-  test('custom behavior', () => {
-    impl = () => Promise.reject(new Error('fail'))
-    // ...test logic...
+  test('custom behaviour', () => {
+    myImpl = () => Promise.reject(new Error('fail'))
+    // test error handling...
   })
 })
 ```
 
-### 11.4 `spyOn()` (Partial Module Mocking)
+### 11.3 Mandatory Restoration Patterns
 
-Use when you need to override specific exports while keeping the rest of the module intact. Always create spies in `beforeEach` and restore in `afterEach` — never inline in test bodies.
+- **`setMockFetch`**: Always call `restoreFetch()` in `afterEach`
+- **`spyOn`**: Always call `spy.mockRestore()` in `afterEach` — never inline in test body (fragile if test throws)
+- **`mock.module`**: Call `mock.restore()` in `afterAll` if the module is also imported by other test files
+- **Mutable impl vars**: Reset to default in `beforeEach`
 
-```typescript
-let mySpy: ReturnType<typeof spyOn>
+### 11.4 Shared Test Helpers
 
-beforeEach(() => {
-  mySpy = spyOn(module, 'fn').mockReturnValue('mocked')
-})
+Use these helpers from `tests/utils/test-helpers.ts` instead of writing ad-hoc mocks:
 
-afterEach(() => {
-  mySpy.mockRestore()
-})
-```
+| Helper              | Purpose                                                              |
+| ------------------- | -------------------------------------------------------------------- |
+| `mockLogger()`      | Stubs logger — safe because every test file that needs it calls this |
+| `mockDrizzle()`     | Stubs `getDrizzleDb` — the standard way to mock the database         |
+| `setupTestDb()`     | Creates in-memory SQLite with all migrations                         |
+| `createMockReply()` | Creates a mock `ReplyFn` that captures text calls                    |
 
-### 11.5 Mandatory Cleanup Rules
+For provider tests, use helpers from `tests/test-helpers.ts`:
 
-1. **`afterEach(() => restoreFetch())`** — always restore fetch after HTTP mock tests
-2. **`afterEach(() => spy.mockRestore())`** — always restore spies in `afterEach`, not inline
-3. **`afterAll(() => { mock.restore() })`** — when `mock.module()` mocks modules shared by other test files
-4. **`beforeEach(() => impl = defaultImpl)`** — reset mutable impls to prevent cross-test state leaks
+| Helper                          | Purpose                                                |
+| ------------------------------- | ------------------------------------------------------ |
+| `setMockFetch(handler)`         | Replace `globalThis.fetch` with a mock handler         |
+| `restoreFetch()`                | Restore original `globalThis.fetch`                    |
+| `createMockTask(overrides)`     | Create a mock task matching `CreateTaskResponseSchema` |
+| `createMockActivity(overrides)` | Create a mock activity matching `ActivityItemSchema`   |
+| `createMockProject(overrides)`  | Create a mock project                                  |
+| `createMockLabel(overrides)`    | Create a mock label                                    |
+| `createMockColumn(overrides)`   | Create a mock column                                   |
+
+### 11.5 YouTrack Fetch Mock Note
+
+YouTrack tests use a local `installFetchMock` function that is functionally equivalent to `setMockFetch`/`restoreFetch`. Both save/restore `originalFetch`, so isolation is fine. Unifying them is a nice-to-have but low priority since both work correctly.
 
 ---
 
 _Document generated: 2026-03-12_
-_Mock patterns section added: 2026-03-23_
 _Based on: API_COMPLIANCE_ANALYSIS.md_
 _Next review: On next API change or monthly_

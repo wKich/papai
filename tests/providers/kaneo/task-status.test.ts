@@ -8,7 +8,6 @@ mockLogger()
 import { getUserMessage } from '../../../src/errors.js'
 import { KaneoClassifiedError } from '../../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
 import { restoreFetch } from '../../test-helpers.js'
 
 type ColumnEntry = { id: string; name: string; order: number }
@@ -19,12 +18,13 @@ const defaultColumns: ColumnEntry[] = [
   { id: 'col-3', name: 'Done', order: 2 },
 ]
 
-let listColumnsImpl: (config: KaneoConfig, projectId: string) => Promise<ColumnEntry[]> = () =>
-  Promise.resolve(defaultColumns)
+let listColumnsImpl: (opts: { config: KaneoConfig; projectId: string }) => Promise<ColumnEntry[]>
 
 void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-  listColumns: (...args: [KaneoConfig, string]): Promise<ColumnEntry[]> => listColumnsImpl(...args),
+  listColumns: (opts: { config: KaneoConfig; projectId: string }): Promise<ColumnEntry[]> => listColumnsImpl(opts),
 }))
+
+import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
 
 describe('validateStatus', () => {
   const mockConfig: KaneoConfig = {
@@ -102,6 +102,18 @@ describe('validateStatus', () => {
         expect(message).toContain('In Progress')
         expect(message).toContain('Done')
       }
+    })
+  })
+
+  describe('with custom project columns', () => {
+    test('validates against custom project columns', async () => {
+      listColumnsImpl = (): Promise<ColumnEntry[]> =>
+        Promise.resolve([
+          { id: 'col-x', name: 'Backlog', order: 0 },
+          { id: 'col-y', name: 'Shipped', order: 1 },
+        ])
+      const result = await validateStatus(mockConfig, 'proj-1', 'Backlog')
+      expect(result).toBe('backlog')
     })
   })
 

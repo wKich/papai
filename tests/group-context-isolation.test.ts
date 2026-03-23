@@ -2,7 +2,6 @@ import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
 
-// Mock logger and drizzle before importing modules that use them
 mockLogger()
 mockDrizzle()
 
