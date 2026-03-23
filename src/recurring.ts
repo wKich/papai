@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, lte, sql } from 'drizzle-orm'
 
 import { allOccurrencesBetween, nextCronOccurrence, parseCron } from './cron.js'
 import { getDrizzleDb } from './db/drizzle.js'
@@ -273,10 +273,10 @@ export const getDueRecurringTasks = (): RecurringTaskRecord[] => {
   const rows = db
     .select()
     .from(recurringTasks)
-    .where(and(eq(recurringTasks.enabled, '1'), sql`${recurringTasks.nextRun} <= ${now}`))
+    .where(and(eq(recurringTasks.enabled, '1'), lte(recurringTasks.nextRun, now)))
     .all()
 
-  log.debug({ count: rows.length }, 'Due recurring tasks found')
+  log.debug({ count: rows.length, now }, 'Due recurring tasks found')
   return rows.map(toRecord)
 }
 

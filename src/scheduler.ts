@@ -23,6 +23,10 @@ const TICK_INTERVAL_MS = 60 * 1000
 let intervalId: ReturnType<typeof setInterval> | null = null
 let chatProviderRef: ChatProvider | null = null
 let activeTickPromise: Promise<void> | null = null
+let tickCount = 0
+
+/** Heartbeat interval: log at info level every 1 hour (60 ticks). */
+const HEARTBEAT_INTERVAL = 60
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
@@ -35,7 +39,15 @@ const buildProviderForUser = (userId: string): TaskProvider | null => {
     const workspaceId = getKaneoWorkspace(userId)
 
     if (kaneoKey === null || kaneoBaseUrl === undefined || kaneoBaseUrl === '' || workspaceId === null) {
-      log.warn({ userId }, 'Missing Kaneo config for scheduled task')
+      log.warn(
+        {
+          userId,
+          hasApiKey: kaneoKey !== null,
+          hasBaseUrl: kaneoBaseUrl !== undefined && kaneoBaseUrl !== '',
+          hasWorkspaceId: workspaceId !== null,
+        },
+        'Missing Kaneo config for scheduled task',
+      )
       return null
     }
 
@@ -181,9 +193,16 @@ export const tick = (): Promise<void> => {
   const work = (async (): Promise<void> => {
     try {
       const dueTasks = getDueRecurringTasks()
-      if (dueTasks.length === 0) return
+      tickCount++
 
-      log.info({ count: dueTasks.length }, 'Processing due recurring tasks')
+      if (dueTasks.length === 0) {
+        if (tickCount % HEARTBEAT_INTERVAL === 0) {
+          log.info({ tickCount }, 'Scheduler heartbeat: no due tasks')
+        }
+        return
+      }
+
+      log.info({ count: dueTasks.length, tickCount }, 'Processing due recurring tasks')
 
       await dueTasks.reduce<Promise<void>>(
         (chain, task) => chain.then(() => executeRecurringTask(task)),
@@ -218,6 +237,7 @@ export const stopScheduler = (): void => {
     clearInterval(intervalId)
     intervalId = null
     chatProviderRef = null
+    tickCount = 0
     log.info('Scheduler stopped')
   }
 }
