@@ -719,6 +719,34 @@ describe('TaskResource', () => {
     })
   })
 
+  describe('get - error paths', () => {
+    test('throws for 404 (task not found)', async () => {
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })))
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.get('nonexistent-id')
+      await expect(promise).rejects.toThrow()
+    })
+
+    test('throws when projectId does not exist on create', async () => {
+      setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })))
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.create({ projectId: 'invalid', title: 'Test' })
+      await expect(promise).rejects.toThrow()
+    })
+
+    test('search returns empty results for empty query string', async () => {
+      setMockFetch(() =>
+        Promise.resolve(new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: '' }), { status: 200 })),
+      )
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.search({ query: '', workspaceId: 'ws-1' })
+      expect(result).toEqual([])
+    })
+  })
+
   describe('archive', () => {
     test('archives task by adding archive label', async () => {
       setMockFetch(() =>

@@ -52,6 +52,35 @@ describe('shouldTriggerTrim', () => {
     }))
     expect(shouldTriggerTrim(messages)).toBe(false)
   })
+
+  test('returns false for exactly 50 messages with 25 user messages (boundary)', () => {
+    const messages = makeMessages(50)
+    // 50 messages with userEvery=2 → 25 user messages
+    // 50 > TRIM_MIN(50) is false (strict greater), so periodic cannot trigger
+    expect(shouldTriggerTrim(messages)).toBe(false)
+  })
+
+  test('returns false for 51 messages with 26 user messages (not divisible by 10)', () => {
+    const messages = makeMessages(51)
+    // 51 messages with userEvery=2 → 26 user messages
+    // 26 % 10 !== 0, so periodic is false. 51 < 100 so hard cap is false.
+    expect(shouldTriggerTrim(messages)).toBe(false)
+  })
+
+  test('returns true for 51 messages with 20 user messages (periodic trigger at boundary)', () => {
+    // Create 51 messages where exactly 20 are 'user' and 31 are 'assistant'
+    const messages: ModelMessage[] = []
+    for (let i = 0; i < 20; i++) {
+      messages.push({ role: 'user', content: `User msg ${i}` })
+    }
+    for (let i = 0; i < 31; i++) {
+      messages.push({ role: 'assistant', content: `Asst msg ${i}` })
+    }
+    // Verify: 20 user messages, 51 total, 20 % 10 === 0, 51 > 50
+    const actualUserCount = messages.filter((m) => m.role === 'user').length
+    expect(actualUserCount).toBe(20)
+    expect(shouldTriggerTrim(messages)).toBe(true)
+  })
 })
 
 describe('buildMessagesWithMemory', () => {
@@ -315,6 +344,61 @@ describe('runTrimInBackground', () => {
     setCachedHistorySpy.mockRestore()
     getCachedSummarySpy.mockRestore()
     warnSpy.mockRestore()
+  })
+
+  test('concurrent calls for same user — both complete without corruption', async () => {
+    const history1: ModelMessage[] = [
+      { role: 'user', content: 'First conversation' },
+      { role: 'assistant', content: 'Response 1' },
+    ]
+    const history2: ModelMessage[] = [
+      { role: 'user', content: 'Second conversation' },
+      { role: 'assistant', content: 'Response 2' },
+    ]
+
+    const concurrentHistories = new Map<string, ModelMessage[]>()
+    const concurrentConfigs = new Map<string, Map<string, string | null>>()
+    concurrentHistories.set('user1', [...history1])
+    concurrentConfigs.set(
+      'user1',
+      new Map([
+        ['llm_apikey', 'test-key'],
+        ['llm_baseurl', 'http://test.com'],
+        ['small_model', 'test-model'],
+      ]),
+    )
+
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [0], summary: 'Concurrent trim summary' } })
+
+    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
+      (userId: string, key: string) => concurrentConfigs.get(userId)?.get(key) ?? null,
+    )
+    const getCachedHistorySpy = spyOn(cacheModule, 'getCachedHistory').mockImplementation(
+      (userId: string) => concurrentHistories.get(userId) ?? [],
+    )
+    const setCachedHistorySpy = spyOn(cacheModule, 'setCachedHistory').mockImplementation(
+      (userId: string, messages: readonly ModelMessage[]) => {
+        concurrentHistories.set(userId, [...messages])
+      },
+    )
+    const setCachedSummarySpy = spyOn(cacheModule, 'setCachedSummary').mockImplementation(() => {})
+    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+
+    // Fire both concurrently
+    await Promise.all([runTrimInBackground('user1', history1), runTrimInBackground('user1', history2)])
+    await flushMicrotasks()
+
+    // Neither should throw; final history is valid
+    const finalHistory = concurrentHistories.get('user1')
+    expect(finalHistory).toBeDefined()
+    expect(Array.isArray(finalHistory)).toBe(true)
+
+    getCachedConfigSpy.mockRestore()
+    getCachedHistorySpy.mockRestore()
+    setCachedHistorySpy.mockRestore()
+    setCachedSummarySpy.mockRestore()
+    getCachedSummarySpy.mockRestore()
   })
 })
 

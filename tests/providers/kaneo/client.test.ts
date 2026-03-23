@@ -198,4 +198,28 @@ describe('kaneoFetch', () => {
       }
     }
   })
+
+  test('throws when fetch itself throws (network failure)', async () => {
+    setMockFetch(() => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const promise = kaneoFetch(mockConfig, 'GET', '/test', undefined, {}, KaneoTaskResponseSchema)
+    await expect(promise).rejects.toBeInstanceOf(TypeError)
+    await expect(promise).rejects.toThrow('Failed to fetch')
+  })
+
+  test('throws when successful response has invalid JSON body', async () => {
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response('not json', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    const promise = kaneoFetch(mockConfig, 'GET', '/test', undefined, {}, KaneoTaskResponseSchema)
+    await expect(promise).rejects.toThrow()
+  })
 })

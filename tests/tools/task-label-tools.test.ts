@@ -110,6 +110,23 @@ describe('Task Label Tools', () => {
       const tool = makeAddTaskLabelTool(provider)
       expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     })
+
+    test('adding label already present on task — document behavior', async () => {
+      const addTaskLabel = mock(() => Promise.resolve({ taskId: 'task-1', labelId: 'label-1' }))
+      const provider = createMockProvider({ addTaskLabel })
+
+      const tool = makeAddTaskLabelTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', labelId: 'label-1' },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isTaskLabel(result)) throw new Error('Invalid result')
+
+      expect(result.taskId).toBe('task-1')
+      expect(result.labelId).toBe('label-1')
+      expect(addTaskLabel).toHaveBeenCalledWith('task-1', 'label-1')
+    })
   })
 
   describe('makeRemoveTaskLabelTool', () => {

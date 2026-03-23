@@ -1,6 +1,6 @@
 import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 import { eq } from 'drizzle-orm'
 
 import * as schema from '../src/db/schema.js'
@@ -537,6 +537,26 @@ describe('trimWithMemoryModel', () => {
     expect(result.trimmedMessages).toHaveLength(2)
     expect(result.trimmedMessages[0]).toEqual(history[0])
     expect(result.trimmedMessages[1]).toEqual(history[2])
+  })
+
+  test('trimWithMemoryModel with empty history returns empty', async () => {
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ output: { keep_indices: [], summary: 'Empty conversation' } })
+
+    const result = await trimWithMemoryModel([], 0, 10, null, mockModel)
+    expect(result.trimmedMessages).toEqual([])
+    expect(result.summary).toBe('Empty conversation')
+  })
+
+  test('trimWithMemoryModel throws when generateText fails', async () => {
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API failure'))
+
+    const history: ModelMessage[] = [
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hi' },
+    ]
+
+    await expect(trimWithMemoryModel(history, 0, 10, null, mockModel)).rejects.toThrow('LLM API failure')
   })
 })
 

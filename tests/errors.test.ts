@@ -216,3 +216,31 @@ describe('getUserMessage for system errors', () => {
     expect(getUserMessage(systemError.unexpected(new Error('oops')))).toContain('unexpected')
   })
 })
+
+describe('getUserMessage for missing provider error codes', () => {
+  test('returns correct message for projectNotFound', () => {
+    expect(getUserMessage(providerError.projectNotFound('proj-1'))).toContain('proj-1')
+    expect(getUserMessage(providerError.projectNotFound('proj-1'))).toContain('not found')
+  })
+
+  test('returns correct message for commentNotFound', () => {
+    expect(getUserMessage(providerError.commentNotFound('cmt-1'))).toContain('cmt-1')
+    expect(getUserMessage(providerError.commentNotFound('cmt-1'))).toContain('not found')
+  })
+
+  test('returns correct message for relationNotFound', () => {
+    const msg = getUserMessage(providerError.relationNotFound('t-1', 't-2'))
+    expect(msg).toContain('t-1')
+    expect(msg).toContain('t-2')
+  })
+
+  test('returns correct message for statusNotFound', () => {
+    const msg = getUserMessage(providerError.statusNotFound('in-progress', ['to-do', 'done']))
+    expect(msg).toContain('in-progress')
+    expect(msg).toContain('to-do')
+  })
+
+  test('returns correct message for invalidResponse', () => {
+    expect(getUserMessage(providerError.invalidResponse())).toContain('unexpected response')
+  })
+})
