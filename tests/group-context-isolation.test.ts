@@ -1,49 +1,18 @@
-import { Database } from 'bun:sqlite'
 import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
 
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
 
-import * as schema from '../src/db/schema.js'
+// Mock logger and drizzle before importing modules that use them
+mockLogger()
+mockDrizzle()
 
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle<typeof schema>>
-let testSqlite: Database
-
-// Mock getDrizzleDb to return our test database
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-}))
-
-// Import after mock is set up
 import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser } from '../src/users.js'
 
 describe('group context isolation', () => {
-  beforeEach(() => {
-    testSqlite = new Database(':memory:')
-    testDb = drizzle(testSqlite, { schema })
-
-    // Create tables using Drizzle's schema
-    testSqlite.run(`
-      CREATE TABLE users (
-        platform_user_id TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        added_by TEXT NOT NULL,
-        kaneo_workspace_id TEXT
-      )
-    `)
-
-    testSqlite.run(`
-      CREATE TABLE group_members (
-        group_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        added_by TEXT NOT NULL,
-        added_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (group_id, user_id)
-      )
-    `)
+  beforeEach(async () => {
+    await setupTestDb()
   })
 
   test('two groups have independent storage contexts', () => {

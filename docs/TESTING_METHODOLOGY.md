@@ -942,6 +942,90 @@ For each tool, verify:
 
 ---
 
-_Document generated: 2026-03-12_  
-_Based on: API_COMPLIANCE_ANALYSIS.md_  
+---
+
+## 11. Mock Patterns
+
+### 11.1 When to Use Each Pattern
+
+| Pattern                           | Use When                                                  | Example                                                |
+| --------------------------------- | --------------------------------------------------------- | ------------------------------------------------------ |
+| `setMockFetch` / `restoreFetch`   | HTTP-level provider tests (Kaneo, YouTrack)               | `tests/test-helpers.ts`                                |
+| `mock.module()` with mutable impl | Replacing modules before import (AI SDK, drizzle, logger) | `tests/conversation.test.ts`                           |
+| `spyOn()`                         | Partial mocking where you need original module behavior   | `tests/conversation.test.ts` `buildMessagesWithMemory` |
+
+### 11.2 `setMockFetch` / `restoreFetch` (HTTP mocking)
+
+Centralised in `tests/test-helpers.ts`. Use for all provider tests that need to intercept `fetch()`.
+
+```typescript
+import { setMockFetch, restoreFetch } from '../../test-helpers.js'
+
+afterEach(() => {
+  restoreFetch()
+})
+
+test('fetches data', async () => {
+  setMockFetch(async (url, init) => {
+    return new Response(JSON.stringify({ id: '1' }), { status: 200 })
+  })
+  // ...test logic...
+})
+```
+
+### 11.3 `mock.module()` with Mutable Implementation
+
+Use when replacing entire modules (AI SDK, database, logger). Define a mutable `let impl` variable so tests can override behavior per-test, with a named default restored in `beforeEach`.
+
+```typescript
+const defaultImpl = (): Promise<Result> =>
+  Promise.resolve({
+    /* default */
+  })
+let impl = defaultImpl
+
+void mock.module('some-module', () => ({
+  someFunction: (...args: unknown[]) => impl(...args),
+}))
+
+describe('tests', () => {
+  beforeEach(() => {
+    impl = defaultImpl // reset to prevent cross-test leaks
+  })
+
+  test('custom behavior', () => {
+    impl = () => Promise.reject(new Error('fail'))
+    // ...test logic...
+  })
+})
+```
+
+### 11.4 `spyOn()` (Partial Module Mocking)
+
+Use when you need to override specific exports while keeping the rest of the module intact. Always create spies in `beforeEach` and restore in `afterEach` — never inline in test bodies.
+
+```typescript
+let mySpy: ReturnType<typeof spyOn>
+
+beforeEach(() => {
+  mySpy = spyOn(module, 'fn').mockReturnValue('mocked')
+})
+
+afterEach(() => {
+  mySpy.mockRestore()
+})
+```
+
+### 11.5 Mandatory Cleanup Rules
+
+1. **`afterEach(() => restoreFetch())`** — always restore fetch after HTTP mock tests
+2. **`afterEach(() => spy.mockRestore())`** — always restore spies in `afterEach`, not inline
+3. **`afterAll(() => { mock.restore() })`** — when `mock.module()` mocks modules shared by other test files
+4. **`beforeEach(() => impl = defaultImpl)`** — reset mutable impls to prevent cross-test state leaks
+
+---
+
+_Document generated: 2026-03-12_
+_Mock patterns section added: 2026-03-23_
+_Based on: API_COMPLIANCE_ANALYSIS.md_
 _Next review: On next API change or monthly_

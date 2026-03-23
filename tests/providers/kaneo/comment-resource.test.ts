@@ -6,7 +6,7 @@ import { mockLogger } from '../../utils/test-helpers.js'
 mockLogger()
 
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { createMockActivityForList, restoreFetch, setMockFetch } from '../../test-helpers.js'
+import { createMockActivity, restoreFetch, setMockFetch } from '../../test-helpers.js'
 import { CommentResource } from './test-resources.js'
 
 describe('CommentResource', () => {
@@ -38,7 +38,7 @@ describe('CommentResource', () => {
         return Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'comment-1',
                 taskId: 'task-1',
                 type: 'comment',
@@ -71,7 +71,7 @@ describe('CommentResource', () => {
         return Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'comment-2',
                 taskId: 'task-1',
                 type: 'comment',
@@ -101,7 +101,7 @@ describe('CommentResource', () => {
         return Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'comment-3',
                 taskId: 'task-1',
                 type: 'comment',
@@ -139,19 +139,19 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-1',
                 type: 'comment',
                 content: 'Comment 1',
                 createdAt: '2026-03-01T00:00:00Z',
               }),
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-2',
                 type: 'status_changed',
                 content: 'Status changed',
                 createdAt: '2026-03-01T00:00:00Z',
               }),
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-3',
                 type: 'comment',
                 content: 'Comment 2',
@@ -176,13 +176,13 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-1',
                 type: 'comment',
                 content: 'Valid comment',
                 createdAt: '2026-03-01T00:00:00Z',
               }),
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-2',
                 type: 'comment',
                 content: null,
@@ -206,7 +206,7 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-1',
                 type: 'status_changed',
                 content: 'Changed',
@@ -229,7 +229,7 @@ describe('CommentResource', () => {
         Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'act-1',
                 type: 'comment',
                 content: 'Test',
@@ -277,7 +277,7 @@ describe('CommentResource', () => {
         return Promise.resolve(
           new Response(
             JSON.stringify([
-              createMockActivityForList({
+              createMockActivity({
                 id: 'comment-1',
                 taskId: 'task-1',
                 type: 'comment',

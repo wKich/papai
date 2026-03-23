@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -11,14 +11,19 @@ import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
 import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
 import { restoreFetch } from '../../test-helpers.js'
 
+type ColumnEntry = { id: string; name: string; order: number }
+
+const defaultColumns: ColumnEntry[] = [
+  { id: 'col-1', name: 'To Do', order: 0 },
+  { id: 'col-2', name: 'In Progress', order: 1 },
+  { id: 'col-3', name: 'Done', order: 2 },
+]
+
+let listColumnsImpl: (config: KaneoConfig, projectId: string) => Promise<ColumnEntry[]> = () =>
+  Promise.resolve(defaultColumns)
+
 void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-  listColumns: mock(() =>
-    Promise.resolve([
-      { id: 'col-1', name: 'To Do', order: 0 },
-      { id: 'col-2', name: 'In Progress', order: 1 },
-      { id: 'col-3', name: 'Done', order: 2 },
-    ]),
-  ),
+  listColumns: (...args: [KaneoConfig, string]): Promise<ColumnEntry[]> => listColumnsImpl(...args),
 }))
 
 describe('validateStatus', () => {
@@ -26,6 +31,10 @@ describe('validateStatus', () => {
     apiKey: 'test-key',
     baseUrl: 'https://test.kaneo.app',
   }
+
+  beforeEach(() => {
+    listColumnsImpl = (): Promise<ColumnEntry[]> => Promise.resolve(defaultColumns)
+  })
 
   afterEach(() => {
     restoreFetch()

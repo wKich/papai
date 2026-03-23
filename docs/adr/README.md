@@ -26,6 +26,13 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0018](0018-group-chat-support.md)                            | Group Chat Support                                             | 2026-03-20 | Implemented (with divergence)         |
 | [0019](0019-recurring-task-automation.md)                     | Recurring Task Automation                                      | 2026-03-20 | Implemented (with divergence)         |
 | [0020](0020-error-classification-improvements.md)             | Error Classification Improvements (Phase 01)                   | 2026-03-20 | Implemented                           |
+| [0021](0021-fix-false-confidence-tests.md)                    | Fix False-Confidence Tests (Phase 1)                           | 2026-03-22 | Implemented                           |
+| [0022](0022-fill-critical-module-test-gaps.md)                | Fill Critical Module Test Gaps (Phase 2)                       | 2026-03-22 | Implemented                           |
+| [0023](0023-strengthen-schema-validation-tests.md)            | Strengthen Schema & Validation Test Suites (Phase 3)           | 2026-03-22 | Implemented                           |
+| [0024](0024-common-sense-scenario-test-gaps.md)               | Common-Sense Scenario Test Gaps (Phase 4)                      | 2026-03-22 | Implemented                           |
+| [0025](0025-e2e-test-hardening.md)                            | E2E Test Hardening (Phase 5)                                   | 2026-03-22 | Implemented                           |
+| [0026](0026-proactive-assistance.md)                          | Proactive Assistance (Phase 7)                                 | 2026-03-20 | Implemented                           |
+| [0027](0027-proactive-assistance-review-fixes.md)             | Proactive Assistance Review Fixes                              | 2026-03-22 | Implemented                           |
 
 ## Skipped / Not Written
 
