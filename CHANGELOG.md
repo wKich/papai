@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-03-23
+
+### Added
+
+- Add recurring task occurrences tracking and completion hook
+- Implement Phase 07 — proactive assistance
+- **scripts:** Add static analyzer for Bun test mock pollution
+- **proactive:** Implement Phase 07 review fixes
+- Implement custom instructions (save/list/delete via LLM tools)
+
+### Changed
+
+- **scripts:** Replace regex/string analysis with TypeScript AST
+
+### Documentation
+
+- Restore implemented plans and add Architecture Decision Records
+- Archive completed plans and add ADRs 0017-0020
+- Add test improvement roadmap and phase plans
+- Add mock pollution prevention rules to CLAUDE.md
+- Add custom instructions feature design
+- Add custom instructions implementation plan
+
+### Fixed
+
+- Replace mock.spy with spyOn in scheduler test
+- **tests:** Rewrite false-confidence tests to actually test production code
+- **tests:** Rewrite processMessage tests to eliminate mock pollution
+- **tests:** Stop mocking tools/index.js to fix YouTrack tools-integration
+- **tests:** Eliminate mock pollution from bot-auth and recurring-tools test files
+- **tests:** Resolve all mock pollution warnings, enable strict mode
+- **tests:** Add mock.restore() cleanup to prevent mock pollution
+- **tests:** Eliminate mock pollution by removing high-level module mocks
+- Address PR #45 review comments — timestamps, validation, error consistency, test reliability
+- Replace Output.object() with prompt-based JSON parsing for model compatibility
+- Improve scheduler observability and fix test mock types
+- **telegram:** Resolve start() blocking forever preventing post-startup tasks
+- Implement Phase 6 test infrastructure & isolation improvements
+- Improve test isolation and standardize mock patterns (Phase 6)
+- Align listColumns mock signature with real options object API
+- Normalize instruction text, enforce max length, strip createdAt from list output
+
+### Miscellaneous
+
+- Switch stryker to native bun test runner
+
+### Testing
+
+- Increase mutation score to 30.28% (Phase 1)
+- **youtrack:** Add operations and labels tests (Phase 2)
+- Implement Phase 2 test plan — fill critical module gaps
+- **scripts:** Add integration tests for check-mock-pollution
+- Implement Phase 3 schema validation and test reliability improvements
+- Implement Phase 4 common-sense scenario gap tests (~41 new tests)
+
+### Ci
+
+- Disable mutation testing on pull requests
 ## [4.2.0] - 2026-03-21
 
 ### Added
