@@ -1,13 +1,14 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { getConfig } from '../config.js'
+import { getConfig, setConfig } from '../config.js'
 import { parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
 import * as briefingService from './briefing.js'
 import * as reminderService from './reminders.js'
+import * as scheduler from './scheduler.js'
 
 const log = logger.child({ scope: 'proactive:tools' })
 
@@ -170,19 +171,81 @@ function makeRescheduleReminderTool(userId: string): ToolSet[string] {
 
 function makeGetBriefingTool(userId: string, provider: TaskProvider): ToolSet[string] {
   return tool({
-    description: "Manually generate and return today's briefing on demand.",
-    inputSchema: z.object({
-      mode: z
-        .enum(['short', 'full'])
-        .optional()
-        .describe('Briefing mode: "short" for summary counts, "full" for detailed sections'),
-    }),
-    execute: async ({ mode }) => {
-      log.debug({ userId, mode }, 'get_briefing called')
-      const configuredMode = getConfig(userId, 'briefing_mode') === 'short' ? 'short' : 'full'
-      const effectiveMode = mode ?? configuredMode
-      const content = await briefingService.generate(userId, provider, effectiveMode)
+    description: "Manually generate and return today's full briefing on demand.",
+    inputSchema: z.object({}),
+    execute: async () => {
+      log.debug({ userId }, 'get_briefing called')
+      const content = await briefingService.generate(userId, provider)
       return { briefing: content }
+    },
+  })
+}
+
+function makeConfigureBriefingTool(userId: string): ToolSet[string] {
+  return tool({
+    description:
+      'Schedule or cancel the daily morning briefing. The briefing is sent once per day at the configured time in the user\'s timezone. Pass a time like "09:00" (24-hour HH:MM) to enable it, or null to disable it.',
+    inputSchema: z.object({
+      time: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('24-hour HH:MM time string (e.g. "08:30") to schedule the briefing, or null to disable it'),
+    }),
+    execute: ({ time }) => {
+      log.debug({ userId, time }, 'configure_briefing called')
+
+      if (time === null || time === undefined || time === '') {
+        setConfig(userId, 'briefing_time', '')
+        scheduler.unregisterBriefingJob(userId)
+        log.info({ userId }, 'Daily briefing disabled')
+        return { status: 'disabled' }
+      }
+
+      // Validate HH:MM format
+      const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time)
+      if (match === null) {
+        return { error: `Invalid time format "${time}". Please use 24-hour HH:MM format (e.g. "09:00").` }
+      }
+
+      const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+      setConfig(userId, 'briefing_time', time)
+      scheduler.registerBriefingJob(userId, time, timezone)
+
+      log.info({ userId, time, timezone }, 'Daily briefing scheduled')
+      return { status: 'scheduled', time, timezone }
+    },
+  })
+}
+
+function makeConfigureAlertsTool(userId: string): ToolSet[string] {
+  return tool({
+    description:
+      'Enable or disable proactive deadline and staleness alerts. When enabled, the bot will notify you about tasks due soon, overdue tasks, and tasks stuck in the same status for too long.',
+    inputSchema: z.object({
+      enabled: z.boolean().describe('Whether to enable deadline and staleness alerts'),
+      stalenessDays: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe(
+          'How many days a task must remain in the same status before triggering a staleness alert. Defaults to 7.',
+        ),
+    }),
+    execute: ({ enabled, stalenessDays }) => {
+      log.debug({ userId, enabled, stalenessDays }, 'configure_alerts called')
+
+      setConfig(userId, 'deadline_nudges', enabled ? 'enabled' : 'disabled')
+
+      if (stalenessDays !== undefined) {
+        setConfig(userId, 'staleness_days', String(stalenessDays))
+      }
+
+      const effectiveStaleness = stalenessDays ?? Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
+
+      log.info({ userId, enabled, stalenessDays: effectiveStaleness }, 'Alerts configured')
+      return { status: enabled ? 'enabled' : 'disabled', stalenessDays: effectiveStaleness }
     },
   })
 }
@@ -195,5 +258,7 @@ export function makeProactiveTools(userId: string, provider: TaskProvider): Tool
     snooze_reminder: makeSnoozeReminderTool(userId),
     reschedule_reminder: makeRescheduleReminderTool(userId),
     get_briefing: makeGetBriefingTool(userId, provider),
+    configure_briefing: makeConfigureBriefingTool(userId),
+    configure_alerts: makeConfigureAlertsTool(userId),
   }
 }

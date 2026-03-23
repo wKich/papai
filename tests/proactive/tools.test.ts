@@ -31,12 +31,11 @@ describe('Proactive Tools', () => {
 
   beforeEach(async () => {
     await setupTestDb()
-    setConfig(userId, 'briefing_mode', 'full')
     setConfig(userId, 'timezone', 'UTC')
     tools = makeProactiveTools(userId, createMockProvider())
   })
 
-  test('makeProactiveTools returns all 6 tools', () => {
+  test('makeProactiveTools returns all 8 tools', () => {
     const names = Object.keys(tools)
     expect(names).toContain('set_reminder')
     expect(names).toContain('list_reminders')
@@ -44,7 +43,9 @@ describe('Proactive Tools', () => {
     expect(names).toContain('snooze_reminder')
     expect(names).toContain('reschedule_reminder')
     expect(names).toContain('get_briefing')
-    expect(names).toHaveLength(6)
+    expect(names).toContain('configure_briefing')
+    expect(names).toContain('configure_alerts')
+    expect(names).toHaveLength(8)
   })
 
   describe('set_reminder', () => {
@@ -137,13 +138,8 @@ describe('Proactive Tools', () => {
   })
 
   describe('get_briefing', () => {
-    test('calls briefingService.generate with configured mode', async () => {
+    test('returns full briefing', async () => {
       const result: unknown = await exec(tools, 'get_briefing', {})
-      expect(result).toHaveProperty('briefing')
-    })
-
-    test('uses provided mode over configured mode', async () => {
-      const result: unknown = await exec(tools, 'get_briefing', { mode: 'short' })
       expect(result).toHaveProperty('briefing')
     })
 
@@ -157,6 +153,51 @@ describe('Proactive Tools', () => {
       const db = getDrizzleDb()
       const state = db.select().from(userBriefingState).where(eq(userBriefingState.userId, userId)).get()
       expect(state).toBeUndefined()
+    })
+  })
+
+  describe('configure_briefing', () => {
+    test('schedules briefing with valid HH:MM time', async () => {
+      const result: unknown = await exec(tools, 'configure_briefing', { time: '09:00' })
+      expect(result).toHaveProperty('status', 'scheduled')
+      expect(result).toHaveProperty('time', '09:00')
+    })
+
+    test('disables briefing when time is null', async () => {
+      const result: unknown = await exec(tools, 'configure_briefing', { time: null })
+      expect(result).toHaveProperty('status', 'disabled')
+    })
+
+    test('disables briefing when time is empty string', async () => {
+      const result: unknown = await exec(tools, 'configure_briefing', { time: '' })
+      expect(result).toHaveProperty('status', 'disabled')
+    })
+
+    test('returns error for invalid time format', async () => {
+      const result: unknown = await exec(tools, 'configure_briefing', { time: '9am' })
+      expect(result).toHaveProperty('error')
+    })
+  })
+
+  describe('configure_alerts', () => {
+    test('enables alerts', async () => {
+      const result: unknown = await exec(tools, 'configure_alerts', { enabled: true })
+      expect(result).toHaveProperty('status', 'enabled')
+    })
+
+    test('disables alerts', async () => {
+      const result: unknown = await exec(tools, 'configure_alerts', { enabled: false })
+      expect(result).toHaveProperty('status', 'disabled')
+    })
+
+    test('sets staleness_days when provided', async () => {
+      const result: unknown = await exec(tools, 'configure_alerts', { enabled: true, stalenessDays: 14 })
+      expect(result).toHaveProperty('stalenessDays', 14)
+    })
+
+    test('defaults staleness_days to 7 when not provided', async () => {
+      const result: unknown = await exec(tools, 'configure_alerts', { enabled: true })
+      expect(result).toHaveProperty('stalenessDays', 7)
     })
   })
 })

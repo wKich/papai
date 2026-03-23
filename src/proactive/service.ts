@@ -245,7 +245,7 @@ export async function runAlertCycle(
   sendFn: (userId: string, message: string) => Promise<void>,
 ): Promise<AlertCheckResult> {
   const result: AlertCheckResult = { sent: 0, suppressed: 0 }
-  const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const rawStaleness = Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
   const stalenessDays = Number.isFinite(rawStaleness) && rawStaleness >= 1 ? rawStaleness : 7
   try {

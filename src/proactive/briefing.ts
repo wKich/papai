@@ -7,7 +7,7 @@ import type { AlertStateRow } from '../db/schema.js'
 import { logger } from '../logger.js'
 import type { TaskProvider, TaskListItem } from '../providers/types.js'
 import { fetchAllTasks, isTerminalStatus } from './shared.js'
-import type { BriefingMode, BriefingSection, BriefingTask } from './types.js'
+import type { BriefingSection, BriefingTask } from './types.js'
 
 const log = logger.child({ scope: 'proactive:briefing' })
 
@@ -182,20 +182,11 @@ export function formatFull(date: string, sections: BriefingSection[]): string {
   return lines.join('\n')
 }
 
-export function formatShort(sections: BriefingSection[]): string {
-  const counts: string[] = []
-  for (const section of sections) {
-    counts.push(`${section.tasks.length} ${section.title.toLowerCase()}`)
-  }
-  if (counts.length === 0) return 'No tasks require attention today.'
-  return counts.join(' · ')
-}
-
 /** Generate briefing content. Does NOT update user_briefing_state (use generateAndRecord for that). */
-export async function generate(userId: string, provider: TaskProvider, mode: BriefingMode): Promise<string> {
-  log.debug({ userId, mode }, 'generate briefing called')
+export async function generate(userId: string, provider: TaskProvider): Promise<string> {
+  log.debug({ userId }, 'generate briefing called')
 
-  const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const tasks = await fetchAllTasks(provider)
 
   // Fetch alert state rows for the Recently Updated section
@@ -204,10 +195,9 @@ export async function generate(userId: string, provider: TaskProvider, mode: Bri
 
   const sections = buildSections(tasks, timezone, alertStateRows)
   const date = getFormattedDateInTz(timezone)
+  const briefing = formatFull(date, sections)
 
-  const briefing = mode === 'short' ? formatShort(sections) : formatFull(date, sections)
-
-  log.info({ userId, mode, sectionCount: sections.length }, 'Briefing generated')
+  log.info({ userId, sectionCount: sections.length }, 'Briefing generated')
   return briefing
 }
 
@@ -227,9 +217,9 @@ export function recordBriefingDelivery(userId: string, timezone: string): void {
 }
 
 /** Generate briefing content AND record the delivery in user_briefing_state. Use for scheduled/catch-up briefings. */
-export async function generateAndRecord(userId: string, provider: TaskProvider, mode: BriefingMode): Promise<string> {
-  const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
-  const briefing = await generate(userId, provider, mode)
+export async function generateAndRecord(userId: string, provider: TaskProvider): Promise<string> {
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const briefing = await generate(userId, provider)
   recordBriefingDelivery(userId, timezone)
   return briefing
 }
@@ -238,9 +228,9 @@ export async function getMissedBriefing(userId: string, provider: TaskProvider):
   log.debug({ userId }, 'getMissedBriefing called')
 
   const briefingTime = getConfig(userId, 'briefing_time')
-  if (briefingTime === null) return null
+  if (briefingTime === null || briefingTime === '') return null
 
-  const timezone = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const today = getTodayInTz(timezone)
 
   // Check if briefing was already delivered today
@@ -271,8 +261,7 @@ export async function getMissedBriefing(userId: string, provider: TaskProvider):
   if (currentMinutes < briefingMinutes) return null
 
   // Briefing time has passed and wasn't delivered — generate catch-up (records delivery)
-  const mode = getConfig(userId, 'briefing_mode') === 'short' ? 'short' : 'full'
-  const briefing = await generateAndRecord(userId, provider, mode)
+  const briefing = await generateAndRecord(userId, provider)
 
   return `**(Catch-up — missed ${briefingTime} briefing)**\n\n${briefing}`
 }

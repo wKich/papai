@@ -1,7 +1,5 @@
 export type AlertType = 'deadline_nudge' | 'due_today' | 'overdue' | 'staleness' | 'blocked'
 
-export type BriefingMode = 'short' | 'full'
-
 export type BriefingTask = {
   id: string
   title: string
