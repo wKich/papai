@@ -80,7 +80,7 @@ describe('E2E: User Workflows', () => {
 
     // Verify the specific columns were created and are present in the list
     const columns = await listColumns({ config: kaneoConfig, projectId })
-    const columnIds = columns.map(c => c.id)
+    const columnIds = columns.map((c) => c.id)
     expect(columnIds).toContain(toDoColumn.id)
     expect(columnIds).toContain(inProgressColumn.id)
     expect(columnIds).toContain(doneColumn.id)
