@@ -61,13 +61,21 @@ export class TelegramChatProvider implements ChatProvider {
     })
   }
 
-  async start(): Promise<void> {
-    await this.bot.start({
-      onStart: async () => {
-        const me = await this.bot.api.getMe()
-        this.botUsername = me.username ?? null
-        log.info({ botUsername: this.botUsername }, 'Telegram bot is running')
-      },
+  start(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.bot
+        .start({
+          onStart: (botInfo) => {
+            this.botUsername = botInfo.username
+            log.info({ botUsername: this.botUsername }, 'Telegram bot is running')
+            resolve()
+          },
+        })
+        .catch((error: unknown) => {
+          const err = error instanceof Error ? error : new Error(String(error))
+          log.error({ error: err.message }, 'Telegram polling loop exited')
+          reject(err)
+        })
     })
   }
 
