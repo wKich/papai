@@ -461,5 +461,22 @@ describe('Status Tools', () => {
       const tool = makeReorderStatusesTool(provider)
       expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
+
+    test('reorderStatuses with empty statuses array', async () => {
+      const reorderStatuses = mock((_projectId: string, _statuses: { id: string; position: number }[]) =>
+        Promise.resolve(),
+      )
+      const provider = createMockProvider({ reorderStatuses })
+
+      const tool = makeReorderStatusesTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { projectId: 'proj-1', statuses: [] },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(reorderStatuses).toHaveBeenCalledWith('proj-1', [])
+      expect(result).toEqual({ success: true })
+    })
   })
 })

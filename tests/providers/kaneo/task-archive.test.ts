@@ -145,6 +145,15 @@ describe('Archive Label Management', () => {
       const result = await isTaskArchived(mockConfig, 'task-1', 'label-archive')
       expect(result).toBe(false)
     })
+
+    test('throws when labels endpoint returns 500', async () => {
+      setMockFetch(() =>
+        Promise.resolve(new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 })),
+      )
+
+      const promise = isTaskArchived(mockConfig, 'task-1', 'label-archive')
+      await expect(promise).rejects.toThrow()
+    })
   })
 
   describe('addArchiveLabel', () => {
@@ -255,6 +264,45 @@ describe('Archive Label Management', () => {
       await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
 
       expect(callCount).toBeGreaterThanOrEqual(3)
+    })
+
+    test('addArchiveLabel when task already has archive label — idempotent', async () => {
+      setMockFetch((_url: string, options: RequestInit) => {
+        if (options.method === 'GET' && _url.includes('/label/workspace/')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([{ id: 'label-archive', name: 'archived', color: '#808080', workspaceId: 'ws-1' }]),
+              {
+                status: 200,
+              },
+            ),
+          )
+        }
+        if (options.method === 'GET' && _url.includes('/label/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: 'label-archive', name: 'archived', color: '#808080' }), {
+              status: 200,
+            }),
+          )
+        }
+        if (options.method === 'POST') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'tl-1',
+                name: 'archived',
+                color: '#808080',
+                taskId: 'task-1',
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      })
+
+      // Should not throw — re-archiving is safe
+      await addArchiveLabel(mockConfig, 'ws-1', 'task-1')
     })
   })
 })

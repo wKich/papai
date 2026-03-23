@@ -98,4 +98,28 @@ describe('/set Command', () => {
     expect(textCalls).toHaveLength(0)
     expect(getConfig('unauthorized-user', 'main_model')).toBeNull()
   })
+
+  test('stores value that contains spaces', async () => {
+    expect(setHandler).not.toBeNull()
+    const { reply, textCalls } = createMockReply()
+    await setHandler!(
+      createDmMessage(USER_ID, 'llm_baseurl https://example.com/v1 extra'),
+      reply,
+      createAuth(USER_ID, true),
+    )
+    expect(textCalls[0]).toBe('Set llm_baseurl successfully.')
+    expect(getConfig(USER_ID, 'llm_baseurl')).toBe('https://example.com/v1 extra')
+  })
+
+  test('overwrites existing config value', async () => {
+    expect(setHandler).not.toBeNull()
+    const { reply: reply1, textCalls: textCalls1 } = createMockReply()
+    await setHandler!(createDmMessage(USER_ID, 'main_model gpt-4o'), reply1, createAuth(USER_ID, true))
+    expect(textCalls1[0]).toBe('Set main_model successfully.')
+
+    const { reply: reply2, textCalls: textCalls2 } = createMockReply()
+    await setHandler!(createDmMessage(USER_ID, 'main_model gpt-4o-mini'), reply2, createAuth(USER_ID, true))
+    expect(textCalls2[0]).toBe('Set main_model successfully.')
+    expect(getConfig(USER_ID, 'main_model')).toBe('gpt-4o-mini')
+  })
 })

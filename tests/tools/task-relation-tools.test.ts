@@ -167,6 +167,51 @@ describe('Task Relation Tools', () => {
       const tool = makeAddTaskRelationTool(provider)
       expect(schemaValidates(tool, { taskId: 'task-1', relatedTaskId: 'task-2', type: 'invalid' })).toBe(false)
     })
+
+    test('adding self-relation (taskId === relatedTaskId) — document behavior', async () => {
+      const addRelation = mock((_taskId: string, _relatedTaskId: string, _type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-1',
+          type: 'blocks',
+        }),
+      )
+      const provider = createMockProvider({ addRelation })
+
+      const tool = makeAddTaskRelationTool(provider)
+      const result: unknown = await tool.execute!(
+        { taskId: 'task-1', relatedTaskId: 'task-1', type: 'blocks' },
+        { toolCallId: '1', messages: [] },
+      )
+      if (!isTaskRelation(result)) throw new Error('Invalid result')
+
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-1')
+      expect(addRelation).toHaveBeenCalledWith('task-1', 'task-1', 'blocks')
+    })
+
+    test('adding duplicate relation (same taskId/relatedTaskId/type) — both calls succeed', async () => {
+      const addRelation = mock((_taskId: string, _relatedTaskId: string, _type: string) =>
+        Promise.resolve({
+          taskId: 'task-1',
+          relatedTaskId: 'task-2',
+          type: 'blocks',
+        }),
+      )
+      const provider = createMockProvider({ addRelation })
+
+      const tool = makeAddTaskRelationTool(provider)
+      await tool.execute!(
+        { taskId: 'task-1', relatedTaskId: 'task-2', type: 'blocks' },
+        { toolCallId: '1', messages: [] },
+      )
+      await tool.execute!(
+        { taskId: 'task-1', relatedTaskId: 'task-2', type: 'blocks' },
+        { toolCallId: '2', messages: [] },
+      )
+
+      expect(addRelation).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('makeUpdateTaskRelationTool', () => {

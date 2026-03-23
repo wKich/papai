@@ -274,6 +274,26 @@ describe('makeCreateRecurringTaskTool', () => {
     expect(makeCreateRecurringTaskTool('user-1').description).toBeTruthy()
   })
 
+  test('on_complete triggerType ignores cronExpression when both provided', async () => {
+    const tool = makeCreateRecurringTaskTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    const result: unknown = await tool.execute(
+      {
+        title: 'Test',
+        projectId: 'p-1',
+        triggerType: 'on_complete',
+        cronExpression: '0 9 * * 1',
+      },
+      toolCtx,
+    )
+
+    // Result should not contain an error — on_complete does not require cronExpression validation
+    expect(result).not.toHaveProperty('error')
+    // The schedule should be 'after completion of current instance', not a cron description
+    expect(result).toHaveProperty('schedule', 'after completion of current instance')
+  })
+
   test('re-throws when createRecurringTask throws', async () => {
     onMockCall = () => {
       throw new Error('create failed')

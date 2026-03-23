@@ -176,6 +176,112 @@ describe('Task Relations', () => {
       expect(putBody.description).toContain('task-3')
       expect(putBody.description).toContain('task-2')
     })
+
+    test('adds relation with type "blocked_by"', async () => {
+      let putBody: unknown
+
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-2') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify(relatedTaskBase), { status: 200 }))
+        }
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ ...taskBase, description: '' }), { status: 200 }))
+        }
+        if (url.includes('/task/description/task-1') && options.method === 'PUT') {
+          putBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(new Response(JSON.stringify(taskBase), { status: 200 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.addRelation('task-1', 'task-2', 'blocked_by')
+      expect(result.type).toBe('blocked_by')
+      expect(putBody).toMatchObject({ description: expect.stringContaining('blocked_by') as unknown })
+    })
+
+    test('adds relation with type "duplicate_of"', async () => {
+      let putBody: unknown
+
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-2') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify(relatedTaskBase), { status: 200 }))
+        }
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ ...taskBase, description: '' }), { status: 200 }))
+        }
+        if (url.includes('/task/description/task-1') && options.method === 'PUT') {
+          putBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(new Response(JSON.stringify(taskBase), { status: 200 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.addRelation('task-1', 'task-2', 'duplicate_of')
+      expect(result.type).toBe('duplicate_of')
+      expect(putBody).toMatchObject({ description: expect.stringContaining('duplicate_of') as unknown })
+    })
+
+    test('adds relation with type "parent"', async () => {
+      let putBody: unknown
+
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-2') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify(relatedTaskBase), { status: 200 }))
+        }
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ ...taskBase, description: '' }), { status: 200 }))
+        }
+        if (url.includes('/task/description/task-1') && options.method === 'PUT') {
+          putBody = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
+          return Promise.resolve(new Response(JSON.stringify(taskBase), { status: 200 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.addRelation('task-1', 'task-2', 'parent')
+      expect(result.type).toBe('parent')
+      expect(putBody).toMatchObject({ description: expect.stringContaining('parent') as unknown })
+    })
+
+    test('adding self-relation (taskId === relatedTaskId) succeeds — no guard', async () => {
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ ...taskBase, description: '' }), { status: 200 }))
+        }
+        if (url.includes('/task/description/task-1') && options.method === 'PUT') {
+          return Promise.resolve(new Response(JSON.stringify(taskBase), { status: 200 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const result = await resource.addRelation('task-1', 'task-1', 'blocks')
+      expect(result.taskId).toBe('task-1')
+      expect(result.relatedTaskId).toBe('task-1')
+      expect(result.type).toBe('blocks')
+    })
+
+    test('throws classified error when description update returns 500', async () => {
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-2') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify(relatedTaskBase), { status: 200 }))
+        }
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ ...taskBase, description: '' }), { status: 200 }))
+        }
+        if (url.includes('/task/description/task-1') && options.method === 'PUT') {
+          return Promise.resolve(new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.addRelation('task-1', 'task-2', 'blocks')
+      await expect(promise).rejects.toThrow()
+    })
   })
 
   describe('removeRelation', () => {
@@ -318,6 +424,23 @@ describe('Task Relations', () => {
       }
       expect(putBody.description).toContain('task-3')
       expect(putBody.description).toContain('task-2')
+    })
+
+    test('throws relationNotFound when task description has no frontmatter', async () => {
+      setMockFetch((url, options) => {
+        if (url.includes('/task/task-1') && options.method === 'GET') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ ...taskBase, description: 'Just plain text, no frontmatter' }), {
+              status: 200,
+            }),
+          )
+        }
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+      })
+
+      const resource = new TaskResource(mockConfig)
+      const promise = resource.updateRelation('task-1', 'task-2', 'related')
+      await expect(promise).rejects.toMatchObject({ appError: { code: 'relation-not-found' } })
     })
   })
 })

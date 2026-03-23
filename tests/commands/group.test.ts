@@ -107,6 +107,22 @@ describe('group commands', () => {
       lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('User 12345 added to this group.')
     })
+
+    test('adduser persists member in DB', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser @user1', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      const { listGroupMembers } = await import('../../src/groups.js')
+      const members = listGroupMembers('group1')
+      expect(members.some((m) => m.user_id === 'user1')).toBe(true)
+    })
   })
 
   describe('deluser', () => {
@@ -174,6 +190,25 @@ describe('group commands', () => {
 
       lastReply = textCalls[0] ?? null
       expect(lastReply).toBe('User nonexistent removed from this group.')
+    })
+
+    test('deluser removes member from DB', async () => {
+      const { addGroupMember, listGroupMembers, isGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'deluser user1', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      const members = listGroupMembers('group1')
+      expect(members.some((m) => m.user_id === 'user1')).toBe(false)
+      expect(isGroupMember('group1', 'user1')).toBe(false)
     })
   })
 

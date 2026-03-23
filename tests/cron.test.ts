@@ -50,6 +50,13 @@ describe('parseCron', () => {
     // */-1 does not match the step regex so produces no values → parseCron returns null
     expect(parseCron('*/-1 * * * *')).toBeNull()
   })
+
+  test('parses impossible date (Feb 31) without error', () => {
+    const result = parseCron('0 0 31 2 *')
+    // Parser validates individual field bounds (31 valid for dayOfMonth, 2 valid for month)
+    // but does not validate cross-field combos
+    expect(result).not.toBeNull()
+  })
 })
 
 describe('cron matching via nextCronOccurrence', () => {
@@ -115,6 +122,14 @@ describe('nextCronOccurrence', () => {
     // April (0-indexed)
     expect(next!.getUTCMonth()).toBe(3)
   })
+
+  test('returns null for impossible date (Feb 31 — never occurs)', () => {
+    const cron = parseCron('0 0 31 2 *')!
+    const start = new Date('2026-01-01T00:00:00Z')
+    const result = nextCronOccurrence(cron, start)
+    // Feb never has 31 days — the scanner should exhaust its limit and return null
+    expect(result).toBeNull()
+  })
 })
 
 describe('timezone-aware cron matching', () => {
@@ -142,6 +157,18 @@ describe('timezone-aware cron matching', () => {
     const next = nextCronOccurrence(cron, justBefore, 'Invalid/Timezone')
     expect(next).not.toBeNull()
     expect(next!.getUTCHours()).toBe(9)
+  })
+
+  test('handles spring-forward DST gap (2:30 AM does not exist)', () => {
+    // March 8, 2026: US clocks spring forward 2:00 AM → 3:00 AM
+    const cron = parseCron('30 2 * * *')!
+    // 2026-03-08T06:00:00Z = 1:00 AM ET
+    const before = new Date('2026-03-08T06:00:00Z')
+    const result = nextCronOccurrence(cron, before, 'America/New_York')
+    expect(result).not.toBeNull()
+    // The function should return a valid date — either skipping Mar 8 or adjusting
+    // Document the behavior: result should be after the input
+    expect(result!.getTime()).toBeGreaterThan(before.getTime())
   })
 })
 

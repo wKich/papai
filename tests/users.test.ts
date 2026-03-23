@@ -52,6 +52,24 @@ describe('addUser', () => {
     const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
     expect(user?.addedBy).toBe('999')
   })
+
+  test('addUser with existing ID and new username overwrites username', () => {
+    addUser('123', 'admin')
+    addUser('123', 'admin', 'newname')
+    const users = listUsers()
+    const user = users.find((u) => u.platform_user_id === '123')
+    expect(user).toBeDefined()
+    expect(user!.username).toBe('newname')
+  })
+
+  test('addUser with existing ID replaces username with null when no username provided', () => {
+    addUser('456', 'admin', 'oldname')
+    addUser('456', 'admin')
+    const users = listUsers()
+    const user = users.find((u) => u.platform_user_id === '456')
+    expect(user).toBeDefined()
+    expect(user!.username).toBeNull()
+  })
 })
 
 describe('removeUser', () => {
