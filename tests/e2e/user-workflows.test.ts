@@ -74,13 +74,16 @@ describe('E2E: User Workflows', () => {
   })
 
   test('project setup workflow', async () => {
-    await createColumn({ config: kaneoConfig, projectId, name: `To Do ${Date.now()}` })
-    await createColumn({ config: kaneoConfig, projectId, name: `In Progress ${Date.now()}` })
-    await createColumn({ config: kaneoConfig, projectId, name: `Done ${Date.now()}`, isFinal: true })
+    const toDoColumn = await createColumn({ config: kaneoConfig, projectId, name: `To Do ${Date.now()}` })
+    const inProgressColumn = await createColumn({ config: kaneoConfig, projectId, name: `In Progress ${Date.now()}` })
+    const doneColumn = await createColumn({ config: kaneoConfig, projectId, name: `Done ${Date.now()}`, isFinal: true })
 
-    // Verify columns were created
+    // Verify the specific columns were created and are present in the list
     const columns = await listColumns({ config: kaneoConfig, projectId })
-    expect(columns.length).toBeGreaterThanOrEqual(3)
+    const columnIds = columns.map(c => c.id)
+    expect(columnIds).toContain(toDoColumn.id)
+    expect(columnIds).toContain(inProgressColumn.id)
+    expect(columnIds).toContain(doneColumn.id)
 
     const task1 = await createTask({ config: kaneoConfig, projectId, title: 'Task 1' })
     const task2 = await createTask({ config: kaneoConfig, projectId, title: 'Task 2' })
