@@ -46,7 +46,7 @@ describe('E2E: Task Search and Filter', () => {
 
     expect(results.length).toBeGreaterThan(0)
     const found = results.find((t) => t.id === task1.id)
-    expect(found).toBeDefined()
+    expect(found?.id).toBe(task1.id)
   })
 
   test('searches across all projects', async () => {
@@ -66,7 +66,7 @@ describe('E2E: Task Search and Filter', () => {
 
     expect(results.length).toBeGreaterThan(0)
     const found = results.find((t) => t.id === task.id)
-    expect(found).toBeDefined()
+    expect(found?.id).toBe(task.id)
   })
 
   test('returns empty results for non-matching search', async () => {
@@ -78,5 +78,21 @@ describe('E2E: Task Search and Filter', () => {
     })
 
     expect(results.length).toBe(0)
+  })
+
+  test('search with invalid workspace returns empty or throws', async () => {
+    // Kaneo API may return empty results or throw for invalid workspace
+    try {
+      const results = await searchTasks({
+        config: kaneoConfig,
+        query: 'test',
+        workspaceId: 'non-existent-workspace-id',
+      })
+      // If it doesn't throw, it should return empty results
+      expect(results.length).toBe(0)
+    } catch (error) {
+      // If it throws, that's also acceptable behavior
+      expect(error).toBeDefined()
+    }
   })
 })

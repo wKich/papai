@@ -58,6 +58,11 @@ describe('E2E: Task Relations', () => {
       type: 'duplicate',
     })
     expect(relation.type).toBe('duplicate')
+
+    // Verify via re-fetch
+    const task1WithRel = await getTask({ config: kaneoConfig, taskId: task1.id })
+    expect(task1WithRel.description).toContain('duplicate:')
+    expect(task1WithRel.description).toContain(task2.id)
   })
 
   test('adds related relation', async () => {
@@ -73,6 +78,11 @@ describe('E2E: Task Relations', () => {
       type: 'related',
     })
     expect(relation.type).toBe('related')
+
+    // Verify via re-fetch
+    const task1WithRel = await getTask({ config: kaneoConfig, taskId: task1.id })
+    expect(task1WithRel.description).toContain('related:')
+    expect(task1WithRel.description).toContain(task2.id)
   })
 
   test('adds parent relation', async () => {
@@ -88,6 +98,11 @@ describe('E2E: Task Relations', () => {
       type: 'parent',
     })
     expect(relation.type).toBe('parent')
+
+    // Verify via re-fetch
+    const childWithRel = await getTask({ config: kaneoConfig, taskId: childTask.id })
+    expect(childWithRel.description).toContain('parent:')
+    expect(childWithRel.description).toContain(parentTask.id)
   })
 
   test('updates relation type', async () => {
@@ -105,6 +120,12 @@ describe('E2E: Task Relations', () => {
     })
 
     expect(updated.type).toBe('blocks')
+
+    // Verify via re-fetch: old type gone, new type present
+    const task1WithRel = await getTask({ config: kaneoConfig, taskId: task1.id })
+    expect(task1WithRel.description).toContain('blocks:')
+    expect(task1WithRel.description).toContain(task2.id)
+    expect(task1WithRel.description).not.toContain('related:')
   })
 
   test('removes relation', async () => {

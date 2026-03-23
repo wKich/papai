@@ -368,7 +368,7 @@ describe('runTrimInBackground', () => {
     )
 
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0], summary: 'Concurrent trim summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Concurrent trim summary' }) })
 
     const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
       (userId: string, key: string) => concurrentConfigs.get(userId)?.get(key) ?? null,

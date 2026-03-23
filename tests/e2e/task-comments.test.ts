@@ -47,10 +47,9 @@ describe('E2E: Task Comments', () => {
     // POST /activity/comment returns {} (Kaneo API bug: missing .returning() in create-comment.ts
     // https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/create-comment.ts)
     // We work around this by fetching the activity list after posting and returning the real comment.
-    expect(comment.id).toBeDefined()
     expect(comment.id).not.toBe('pending')
     expect(comment.comment).toBe('This is a test comment')
-    expect(comment.createdAt).toBeDefined()
+    expect(typeof comment.createdAt).toBe('string')
 
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
@@ -83,7 +82,6 @@ describe('E2E: Task Comments', () => {
 
     // Real ID is available because add() fetches the activity list after the buggy POST.
     // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/create-comment.ts
-    expect(comment.id).toBeDefined()
     expect(comment.id).not.toBe('pending')
 
     // PUT /activity/comment returns {} (Kaneo API bug: missing .returning() in update-comment.ts
@@ -99,6 +97,11 @@ describe('E2E: Task Comments', () => {
 
     expect(updated.comment).toBe('Updated text')
 
+    // Verify via re-fetch
+    const comments = await getComments({ config: kaneoConfig, taskId: task.id })
+    const updatedComment = comments.find((c) => c.id === comment.id)
+    expect(updatedComment?.comment).toBe('Updated text')
+
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
   })
@@ -111,7 +114,6 @@ describe('E2E: Task Comments', () => {
 
     // Real ID is available because add() fetches the activity list after the buggy POST.
     // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/activity/controllers/create-comment.ts
-    expect(comment.id).toBeDefined()
     expect(comment.id).not.toBe('pending')
 
     // Remove the comment
@@ -123,8 +125,22 @@ describe('E2E: Task Comments', () => {
 
     expect(removed.success).toBe(true)
 
+    // Verify via re-fetch: removed comment should not be in the list
+    const remainingComments = await getComments({ config: kaneoConfig, taskId: task.id })
+    const deletedComment = remainingComments.find((c) => c.id === comment.id)
+    expect(deletedComment).toBeUndefined()
+
     // Cleanup
     await deleteTask({ config: kaneoConfig, taskId: task.id })
+  })
+
+  test('throws error when adding comment to non-existent task', async () => {
+    const promise = addComment({
+      config: kaneoConfig,
+      taskId: 'non-existent-id',
+      comment: 'This should fail',
+    })
+    await expect(promise).rejects.toThrow()
   })
 
   test('handles long comments', async () => {

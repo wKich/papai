@@ -8,7 +8,7 @@ import { listProjects } from '../../src/providers/kaneo/list-projects.js'
 import { updateProject } from '../../src/providers/kaneo/update-project.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
 
-describe('E2E: Project Archive', () => {
+describe('E2E: Project Management', () => {
   let testClient: KaneoTestClient
   let kaneoConfig: KaneoConfig
 
@@ -39,6 +39,12 @@ describe('E2E: Project Archive', () => {
     })
 
     expect(updated.name).toBe('Updated Project Name')
+    expect(updated.description).toBe('Updated description')
+
+    // Verify via re-fetch
+    const projects = await listProjects({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
+    const refetched = projects.find((p) => p.id === project.id)
+    expect(refetched?.name).toBe('Updated Project Name')
   })
 
   test('lists projects in workspace', async () => {

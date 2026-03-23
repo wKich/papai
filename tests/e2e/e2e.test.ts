@@ -17,10 +17,9 @@ setDefaultTimeout(60000)
 // Each suite will use the shared Docker containers (setup by bun-test-setup.ts)
 import './column-management.test.js'
 import './error-handling.test.js'
-import './label-management.test.js'
 import './label-operations.test.js'
-import './project-archive.test.js'
 import './project-lifecycle.test.js'
+import './project-management.test.js'
 import './task-archive.test.js'
 import './task-comments.test.js'
 import './task-lifecycle.test.js'
