@@ -8,14 +8,11 @@ export type TaskProviderConfigKey = 'kaneo_apikey' | 'youtrack_token'
 // LLM config keys (always available)
 export type LlmConfigKey = 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model'
 
-// Internal config keys — managed via LLM tools, not the /set command, not shown in /config
-export type InternalConfigKey = 'briefing_time' | 'deadline_nudges' | 'staleness_days'
-
 // User preference config keys (always available)
 export type PreferenceConfigKey = 'timezone'
 
-// All config keys (includes internal keys for type-safe internal access)
-export type ConfigKey = TaskProviderConfigKey | LlmConfigKey | PreferenceConfigKey | InternalConfigKey
+// All config keys
+export type ConfigKey = TaskProviderConfigKey | LlmConfigKey | PreferenceConfigKey
 
 // Get the task provider from env
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
