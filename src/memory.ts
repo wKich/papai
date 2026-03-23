@@ -1,4 +1,4 @@
-import { generateText, Output, type LanguageModel, type ModelMessage } from 'ai'
+import { generateText, type LanguageModel, type ModelMessage } from 'ai'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -141,7 +141,7 @@ export function extractFactsFromSdkResults(
 // --- Smart trimming with memory model ---
 
 const TrimResultSchema = z.object({
-  keep_indices: z.array(z.number().int().nonnegative()),
+  keep_indices: z.array(z.number().int()),
   summary: z.string(),
 })
 
@@ -162,7 +162,8 @@ Previous summary:
 Conversation (index: [role] content):
 {MESSAGES}
 
-Return JSON exactly matching the schema.`
+Return ONLY a raw JSON object (no markdown, no code fences) with this exact structure:
+{"keep_indices": [<list of integer indices>], "summary": "<summary text>"}`
 
 function clampIndices(selected: number[], trimMin: number, trimMax: number, historyLength: number): number[] {
   if (selected.length > trimMax) {
@@ -180,6 +181,23 @@ function clampIndices(selected: number[], trimMin: number, trimMax: number, hist
     selected.sort((a, b) => a - b)
   }
   return selected
+}
+
+const parseModelResponse = (text: string): z.infer<typeof TrimResultSchema> => {
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  let rawOutput: unknown = null
+  if (jsonMatch !== null) {
+    try {
+      rawOutput = JSON.parse(jsonMatch[0])
+    } catch {
+      // safeParse below will handle the null and produce a useful error
+    }
+  }
+  const parsed = TrimResultSchema.safeParse(rawOutput)
+  if (!parsed.success) {
+    throw new Error(`Memory model returned invalid response: ${parsed.error.message}`)
+  }
+  return parsed.data
 }
 
 export async function trimWithMemoryModel(
@@ -204,12 +222,13 @@ export async function trimWithMemoryModel(
 
   const result = await generateText({
     model,
-    output: Output.object({ schema: TrimResultSchema }),
     prompt,
   })
 
+  const data = parseModelResponse(result.text)
+
   const selected = clampIndices(
-    [...new Set(result.output.keep_indices)].filter((i) => i >= 0 && i < history.length).sort((a, b) => a - b),
+    [...new Set(data.keep_indices)].filter((i) => i >= 0 && i < history.length).sort((a, b) => a - b),
     trimMin,
     trimMax,
     history.length,
@@ -220,12 +239,12 @@ export async function trimWithMemoryModel(
     {
       retained: trimmedMessages.length,
       dropped: history.length - trimmedMessages.length,
-      summaryLength: result.output.summary.length,
+      summaryLength: data.summary.length,
     },
     'Memory model trim complete',
   )
 
-  return { trimmedMessages, summary: result.output.summary }
+  return { trimmedMessages, summary: data.summary }
 }
 
 // --- Context message builder ---

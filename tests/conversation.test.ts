@@ -8,13 +8,12 @@ import { logger } from '../src/logger.js'
 import { flushMicrotasks } from './test-helpers.js'
 
 // Mock the ai module for trimWithMemoryModel
-type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
+type GenerateTextResult = { text: string }
 let generateTextImpl = (): Promise<GenerateTextResult> =>
-  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Updated summary text' } })
+  Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
 
 void mock.module('ai', () => ({
   generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-  Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
 }))
 
 describe('shouldTriggerTrim', () => {
@@ -262,7 +261,7 @@ describe('runTrimInBackground', () => {
       if (callCount === 1) {
         mockHistories.set('user1', [...history, { role: 'user', content: 'New message during trim' }])
       }
-      return Promise.resolve({ output: { keep_indices: [0], summary: 'Trimmed' } })
+      return Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Trimmed' }) })
     }
 
     const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(

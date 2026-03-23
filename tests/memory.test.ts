@@ -25,14 +25,13 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
+type GenerateTextResult = { text: string }
 
 let generateTextImpl = (): Promise<GenerateTextResult> =>
-  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Updated summary text' } })
+  Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
 
 void mock.module('ai', () => ({
   generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-  Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
 }))
 
 import { Database } from 'bun:sqlite'
@@ -404,7 +403,7 @@ describe('trimWithMemoryModel', () => {
   test('returns trimmed messages and summary', async () => {
     const history = makeMessages(5)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 2, 4], summary: 'Test summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 2, 4], summary: 'Test summary' }) })
 
     const result = await trimWithMemoryModel(history, 2, 10, null, mockModel)
 
@@ -418,7 +417,7 @@ describe('trimWithMemoryModel', () => {
   test('filters out-of-range indices', async () => {
     const history = makeMessages(3)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1, 99], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 99], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
@@ -429,7 +428,7 @@ describe('trimWithMemoryModel', () => {
   test('deduplicates indices', async () => {
     const history = makeMessages(5)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [1, 1, 2], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [1, 1, 2], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
@@ -441,7 +440,7 @@ describe('trimWithMemoryModel', () => {
   test('pads to trimMin when model returns too few indices', async () => {
     const history = makeMessages(10)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
 
@@ -451,7 +450,7 @@ describe('trimWithMemoryModel', () => {
   test('caps at trimMax when model returns too many indices', async () => {
     const history = makeMessages(10)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -461,7 +460,7 @@ describe('trimWithMemoryModel', () => {
   test('does not trim when indices equal trimMax', async () => {
     const history = makeMessages(5)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1, 2], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -472,7 +471,7 @@ describe('trimWithMemoryModel', () => {
   test('does not pad when indices equal trimMin', async () => {
     const history = makeMessages(10)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
 
@@ -482,7 +481,7 @@ describe('trimWithMemoryModel', () => {
   test('padded indices are sorted in ascending order', async () => {
     const history = makeMessages(10)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
 
@@ -498,7 +497,7 @@ describe('trimWithMemoryModel', () => {
   test('slices most recent indices when capping at trimMax', async () => {
     const history = makeMessages(10)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0, 1, 2, 3, 4, 5], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -512,7 +511,7 @@ describe('trimWithMemoryModel', () => {
   test('padding fills from highest indices first', async () => {
     const history = makeMessages(6)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [0], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
 
@@ -530,7 +529,7 @@ describe('trimWithMemoryModel', () => {
   test('negative indices are filtered out', async () => {
     const history = makeMessages(5)
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [-1, 0, 2], summary: 'Summary' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [-1, 0, 2], summary: 'Summary' }) })
 
     const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
