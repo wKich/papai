@@ -147,8 +147,9 @@ describe('CONFIG_KEYS', () => {
   })
 
   test('has correct length', () => {
-    // LLM keys (4) + provider-specific key (1) + preference keys (1) + proactive keys (5) = 11
-    expect(CONFIG_KEYS).toHaveLength(11)
+    // LLM keys (4) + provider-specific key (1) + preference keys (1) = 6
+    // Internal keys (briefing_time, deadline_nudges, staleness_days) are excluded from CONFIG_KEYS
+    expect(CONFIG_KEYS).toHaveLength(6)
   })
 })
 

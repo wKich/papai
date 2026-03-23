@@ -91,8 +91,7 @@ async function fireBriefingIfDue(userId: string, cronExpr: string, timezone: str
       return
     }
 
-    const mode = getConfig(userId, 'briefing_mode') === 'short' ? 'short' : 'full'
-    const content = await briefingService.generateAndRecord(userId, provider, mode)
+    const content = await briefingService.generateAndRecord(userId, provider)
     await chatRef.sendMessage(userId, content)
 
     log.info({ userId }, 'Scheduled briefing delivered')
@@ -188,9 +187,9 @@ export function start(chat: ChatProvider, providerBuilder: (userId: string) => T
   for (const user of allUsers) {
     const userId = user.platform_user_id
     const briefingTime = getConfig(userId, 'briefing_time')
-    const briefingTz = getConfig(userId, 'briefing_timezone') ?? getConfig(userId, 'timezone') ?? 'UTC'
+    const briefingTz = getConfig(userId, 'timezone') ?? 'UTC'
 
-    if (briefingTime !== null) {
+    if (briefingTime !== null && briefingTime !== '') {
       registerBriefingJob(userId, briefingTime, briefingTz)
       briefingCount++
     }

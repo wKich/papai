@@ -9,7 +9,6 @@ import { setConfig } from '../../src/config.js'
 import {
   buildSections,
   formatFull,
-  formatShort,
   suggestActions,
   generate,
   generateAndRecord,
@@ -164,29 +163,6 @@ describe('BriefingService', () => {
     })
   })
 
-  describe('formatShort', () => {
-    test('returns single summary line', () => {
-      const sections = [
-        {
-          title: 'Due Today',
-          tasks: [
-            { id: 't1', title: 'A' },
-            { id: 't2', title: 'B' },
-          ],
-        },
-        { title: 'Overdue', tasks: [{ id: 't3', title: 'C' }] },
-      ]
-
-      const result = formatShort(sections)
-      expect(result).toBe('2 due today · 1 overdue')
-    })
-
-    test('returns no-tasks message for empty sections', () => {
-      const result = formatShort([])
-      expect(result).toContain('No tasks require attention')
-    })
-  })
-
   describe('suggestActions', () => {
     test('returns overdue tasks before urgent due-today', () => {
       const sections = [
@@ -223,25 +199,17 @@ describe('BriefingService', () => {
   })
 
   describe('generate', () => {
-    test('in short mode returns single summary line', async () => {
+    test('returns full briefing with section headers in markdown', async () => {
       const provider = makeMockProvider([makeTask({ id: 't1', dueDate: today(), status: 'todo' })])
 
-      const result = await generate('user1', provider, 'short')
-      expect(result).toContain('due today')
-      expect(result).not.toContain('**Due Today**')
-    })
-
-    test('in full mode returns section headers in markdown', async () => {
-      const provider = makeMockProvider([makeTask({ id: 't1', dueDate: today(), status: 'todo' })])
-
-      const result = await generate('user1', provider, 'full')
+      const result = await generate('user1', provider)
       expect(result).toContain('**📋 Morning Briefing')
       expect(result).toContain('**Due Today**')
     })
 
     test('updates user_briefing_state.last_briefing_date', async () => {
       const provider = makeMockProvider([])
-      await generateAndRecord('user1', provider, 'full')
+      await generateAndRecord('user1', provider)
 
       const { getDrizzleDb } = await import('../../src/db/drizzle.js')
       const { userBriefingState } = await import('../../src/db/schema.js')
@@ -261,12 +229,19 @@ describe('BriefingService', () => {
       expect(result).toBeNull()
     })
 
+    test('returns null when briefing_time is empty string', async () => {
+      setConfig('user1', 'briefing_time', '')
+      const provider = makeMockProvider([])
+      const result = await getMissedBriefing('user1', provider)
+      expect(result).toBeNull()
+    })
+
     test('returns null when last_briefing_date is today', async () => {
       setConfig('user1', 'briefing_time', '08:00')
 
       const provider = makeMockProvider([])
       // generateAndRecord sets last_briefing_date to today
-      await generateAndRecord('user1', provider, 'full')
+      await generateAndRecord('user1', provider)
 
       const result = await getMissedBriefing('user1', provider)
       expect(result).toBeNull()
@@ -284,7 +259,6 @@ describe('BriefingService', () => {
       const pastTime = `${String(pastHour).padStart(2, '0')}:${String(pastMinute).padStart(2, '0')}`
 
       setConfig('user1', 'briefing_time', pastTime)
-      setConfig('user1', 'briefing_timezone', 'UTC')
 
       const provider = makeMockProvider([makeTask({ id: 't1', dueDate: today(), status: 'todo' })])
 
@@ -305,7 +279,6 @@ describe('BriefingService', () => {
       const pastTime = `${String(pastHour).padStart(2, '0')}:${String(pastMinute).padStart(2, '0')}`
 
       setConfig('user1', 'briefing_time', pastTime)
-      setConfig('user1', 'briefing_timezone', 'UTC')
 
       const provider = makeMockProvider([])
       const result = await getMissedBriefing('user1', provider)
