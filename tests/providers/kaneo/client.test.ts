@@ -20,9 +20,9 @@ describe('kaneoFetch', () => {
   })
 
   test('makes GET request with correct headers', async () => {
-    let capturedOptions: RequestInit | undefined
+    let capturedHeaders: Record<string, string> = {}
     setMockFetch((_url, options) => {
-      capturedOptions = options
+      capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
       return Promise.resolve(
         new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), {
           status: 200,
@@ -32,24 +32,22 @@ describe('kaneoFetch', () => {
 
     await kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
 
-    expect(capturedOptions).toBeDefined()
-    expect(capturedOptions?.headers).toBeDefined()
+    expect(capturedHeaders['Authorization']).toBe('Bearer test-key')
+    expect(capturedHeaders['Content-Type']).toBe('application/json')
   })
 
   test('throws KaneoApiError on non-ok response', async () => {
     setMockFetch(() => Promise.resolve(new Response('Not found', { status: 404 })))
 
     const promise = kaneoFetch(mockConfig, 'GET', '/tasks/1', undefined, {}, KaneoTaskResponseSchema)
-    expect(promise).rejects.toBeInstanceOf(KaneoApiError)
-    await promise.catch(() => {})
+    await expect(promise).rejects.toBeInstanceOf(KaneoApiError)
   })
 
   test('throws KaneoValidationError on schema mismatch', async () => {
     setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ invalid: 'data' }), { status: 200 })))
 
     const promise = kaneoFetch(mockConfig, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
-    expect(promise).rejects.toBeInstanceOf(KaneoValidationError)
-    await promise.catch(() => {})
+    await expect(promise).rejects.toBeInstanceOf(KaneoValidationError)
   })
 
   test('handles non-JSON error response gracefully', async () => {
@@ -127,9 +125,9 @@ describe('kaneoFetch', () => {
       sessionCookie: 'better-auth.session_token=abc123',
     }
 
-    let capturedOptions: RequestInit | undefined
+    let capturedHeaders: Record<string, string> = {}
     setMockFetch((_url, options) => {
-      capturedOptions = options
+      capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
       return Promise.resolve(
         new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), {
           status: 200,
@@ -139,8 +137,52 @@ describe('kaneoFetch', () => {
 
     await kaneoFetch(configWithCookie, 'GET', '/tasks', undefined, {}, KaneoTaskResponseSchema)
 
-    expect(capturedOptions).toBeDefined()
-    expect(capturedOptions?.headers).toBeDefined()
+    expect(capturedHeaders['Cookie']).toBe('better-auth.session_token=abc123')
+    expect(capturedHeaders['Authorization']).toBeUndefined()
+  })
+
+  test('POST request sends Content-Type: application/json', async () => {
+    let capturedHeaders: Record<string, string> = {}
+    setMockFetch((_url, options) => {
+      capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
+      return Promise.resolve(new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), { status: 200 }))
+    })
+
+    await kaneoFetch(mockConfig, 'POST', '/tasks', { title: 'Test' }, {}, KaneoTaskResponseSchema)
+
+    expect(capturedHeaders['Content-Type']).toBe('application/json')
+  })
+
+  test('PUT request sends correct method and headers', async () => {
+    let capturedMethod = ''
+    let capturedHeaders: Record<string, string> = {}
+    setMockFetch((_url, options) => {
+      capturedMethod = String(options.method ?? '')
+      capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
+      return Promise.resolve(new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), { status: 200 }))
+    })
+
+    await kaneoFetch(mockConfig, 'PUT', '/tasks/1', { title: 'Updated' }, {}, KaneoTaskResponseSchema)
+
+    expect(capturedMethod).toBe('PUT')
+    expect(capturedHeaders['Authorization']).toBe('Bearer test-key')
+    expect(capturedHeaders['Content-Type']).toBe('application/json')
+  })
+
+  test('PATCH request sends correct method and headers', async () => {
+    let capturedMethod = ''
+    let capturedHeaders: Record<string, string> = {}
+    setMockFetch((_url, options) => {
+      capturedMethod = String(options.method ?? '')
+      capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
+      return Promise.resolve(new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), { status: 200 }))
+    })
+
+    await kaneoFetch(mockConfig, 'PATCH', '/tasks/1', { title: 'Patched' }, {}, KaneoTaskResponseSchema)
+
+    expect(capturedMethod).toBe('PATCH')
+    expect(capturedHeaders['Authorization']).toBe('Bearer test-key')
+    expect(capturedHeaders['Content-Type']).toBe('application/json')
   })
 
   test('includes status code in KaneoApiError', async () => {

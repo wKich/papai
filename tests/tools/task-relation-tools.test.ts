@@ -136,7 +136,7 @@ describe('Task Relation Tools', () => {
         { taskId: 'invalid', relatedTaskId: 'task-2', type: 'blocks' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -247,7 +247,7 @@ describe('Task Relation Tools', () => {
         { taskId: 'task-1', relatedTaskId: 'invalid', type: 'blocks' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Relation not found')
+      await expect(promise).rejects.toThrow('Relation not found')
       try {
         await promise
       } catch {
@@ -307,7 +307,7 @@ describe('Task Relation Tools', () => {
         { taskId: 'invalid', relatedTaskId: 'task-2' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -325,7 +325,7 @@ describe('Task Relation Tools', () => {
         { taskId: 'task-1', relatedTaskId: 'invalid' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Relation not found')
+      await expect(promise).rejects.toThrow('Relation not found')
       try {
         await promise
       } catch {

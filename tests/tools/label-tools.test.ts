@@ -96,7 +96,7 @@ describe('Label Tools', () => {
 
       const tool = makeListLabelsTool(provider)
       const promise = getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -173,7 +173,7 @@ describe('Label Tools', () => {
 
       const tool = makeCreateLabelTool(provider)
       const promise = getToolExecutor(tool)({ name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -259,7 +259,7 @@ describe('Label Tools', () => {
 
       const tool = makeUpdateLabelTool(provider)
       const promise = getToolExecutor(tool)({ labelId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Label not found')
+      await expect(promise).rejects.toThrow('Label not found')
       try {
         await promise
       } catch {
@@ -344,7 +344,7 @@ describe('Label Tools', () => {
 
       const tool = makeRemoveLabelTool(provider)
       const promise = getToolExecutor(tool)({ labelId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Label not found')
+      await expect(promise).rejects.toThrow('Label not found')
       try {
         await promise
       } catch {

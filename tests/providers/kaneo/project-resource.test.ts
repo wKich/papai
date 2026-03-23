@@ -208,8 +208,7 @@ describe('ProjectResource', () => {
         workspaceId: 'ws-1',
         name: 'Test',
       })
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 
@@ -262,8 +261,7 @@ describe('ProjectResource', () => {
 
       const resource = new ProjectResource(mockConfig)
       const promise = resource.list('ws-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 
@@ -373,10 +371,9 @@ describe('ProjectResource', () => {
 
       const resource = new ProjectResource(mockConfig)
       const promise = resource.update('invalid', 'ws-1', { name: 'Test' })
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'project-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -396,10 +393,9 @@ describe('ProjectResource', () => {
 
       const resource = new ProjectResource(mockConfig)
       const promise = resource.delete('invalid')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'project-not-found' },
       })
-      await promise.catch(() => {})
     })
 
     test('throws on API error', async () => {
@@ -407,8 +403,7 @@ describe('ProjectResource', () => {
 
       const resource = new ProjectResource(mockConfig)
       const promise = resource.delete('proj-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 })

@@ -103,8 +103,7 @@ describe('ColumnResource', () => {
 
       const resource = new ColumnResource(mockConfig)
       const promise = resource.list('invalid')
-      expect(promise).rejects.toBeInstanceOf(Error)
-      await promise.catch(() => {})
+      await expect(promise).rejects.toBeInstanceOf(Error)
     })
 
     test('throws on API error', async () => {
@@ -112,8 +111,7 @@ describe('ColumnResource', () => {
 
       const resource = new ColumnResource(mockConfig)
       const promise = resource.list('proj-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
 
     test('throws on server error', async () => {
@@ -121,8 +119,7 @@ describe('ColumnResource', () => {
 
       const resource = new ColumnResource(mockConfig)
       const promise = resource.list('proj-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 })

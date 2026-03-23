@@ -102,7 +102,7 @@ describe('Status Tools', () => {
         { projectId: 'invalid' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Project not found')
+      await expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
       } catch {
@@ -120,7 +120,7 @@ describe('Status Tools', () => {
         { projectId: 'proj-1' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -221,7 +221,7 @@ describe('Status Tools', () => {
 
       const tool = makeCreateStatusTool(provider)
       const promise = getToolExecutor(tool)({ projectId: 'proj-1', name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {
@@ -304,7 +304,7 @@ describe('Status Tools', () => {
 
       const tool = makeUpdateStatusTool(provider)
       const promise = getToolExecutor(tool)({ statusId: 'invalid', name: 'Test' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Status not found')
+      await expect(promise).rejects.toThrow('Status not found')
       try {
         await promise
       } catch {
@@ -380,7 +380,7 @@ describe('Status Tools', () => {
 
       const tool = makeDeleteStatusTool(provider)
       const promise = getToolExecutor(tool)({ statusId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Status not found')
+      await expect(promise).rejects.toThrow('Status not found')
       try {
         await promise
       } catch {
@@ -442,7 +442,7 @@ describe('Status Tools', () => {
         },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('API Error')
+      await expect(promise).rejects.toThrow('API Error')
       try {
         await promise
       } catch {

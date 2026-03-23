@@ -132,8 +132,7 @@ describe('LabelResource', () => {
         workspaceId: 'ws-1',
         name: 'test',
       })
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 
@@ -175,8 +174,7 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.list('invalid-ws')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 
@@ -265,10 +263,9 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.update('invalid', { name: 'Test' })
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'label-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -288,10 +285,9 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.remove('invalid')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'label-not-found' },
       })
-      await promise.catch(() => {})
     })
   })
 
@@ -344,10 +340,9 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.addToTask('task-1', 'invalid-label', 'ws-1')
-      expect(promise).rejects.toMatchObject({
+      await expect(promise).rejects.toMatchObject({
         appError: { code: 'label-not-found' },
       })
-      await promise.catch(() => {})
     })
 
     test('includes label details in task-label creation', async () => {
@@ -452,8 +447,7 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.removeFromTask('task-1', 'invalid-label')
-      expect(promise).rejects.toMatchObject({ appError: { code: 'label-not-found' } })
-      await promise.catch(() => {})
+      await expect(promise).rejects.toMatchObject({ appError: { code: 'label-not-found' } })
     })
 
     test('throws when task has no labels with matching name', async () => {
@@ -473,8 +467,7 @@ describe('LabelResource', () => {
 
       const resource = new LabelResource(mockConfig)
       const promise = resource.removeFromTask('task-1', 'ws-label-1')
-      expect(promise).rejects.toThrow()
-      await promise.catch(() => {})
+      await expect(promise).rejects.toThrow()
     })
   })
 })

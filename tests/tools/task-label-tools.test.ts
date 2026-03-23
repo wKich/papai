@@ -76,7 +76,7 @@ describe('Task Label Tools', () => {
         { taskId: 'invalid', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -91,7 +91,7 @@ describe('Task Label Tools', () => {
 
       const tool = makeAddTaskLabelTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'task-1', labelId: 'invalid' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Label not found')
+      await expect(promise).rejects.toThrow('Label not found')
       try {
         await promise
       } catch {
@@ -158,7 +158,7 @@ describe('Task Label Tools', () => {
         { taskId: 'invalid', labelId: 'label-1' },
         { toolCallId: '1', messages: [] },
       )
-      expect(promise).rejects.toThrow('Task not found')
+      await expect(promise).rejects.toThrow('Task not found')
       try {
         await promise
       } catch {
@@ -173,7 +173,7 @@ describe('Task Label Tools', () => {
 
       const tool = makeRemoveTaskLabelTool(provider)
       const promise = getToolExecutor(tool)({ taskId: 'task-1', labelId: 'invalid' }, { toolCallId: '1', messages: [] })
-      expect(promise).rejects.toThrow('Label not found')
+      await expect(promise).rejects.toThrow('Label not found')
       try {
         await promise
       } catch {

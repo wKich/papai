@@ -465,7 +465,7 @@ describe('YouTrackProvider', () => {
       expect(result.type).toBe('related')
     })
 
-    test('throws when relation not found without calling add', () => {
+    test('throws when relation not found without calling add', async () => {
       // Task has no links matching the related task
       mockFetchResponse({
         id: '2-5',
@@ -477,7 +477,7 @@ describe('YouTrackProvider', () => {
       const testProvider = new YouTrackProvider(createConfig())
       const promise = testProvider.updateRelation('TEST-5', 'NON-EXISTENT', 'related')
 
-      expect(promise).rejects.toThrow('Relation not found')
+      await expect(promise).rejects.toThrow('Relation not found')
       // The fetch should only be called once (for the get task to find the link)
       expect(fetchMock?.mock.calls).toHaveLength(1)
     })
