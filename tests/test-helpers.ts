@@ -135,23 +135,6 @@ export function createMockActivity(overrides: Partial<ActivityItem> = {}): Activ
   }
 }
 
-// Activity mock with string createdAt for list endpoint
-export function createMockActivityForList(overrides: Partial<ActivityItem> = {}): ActivityItem {
-  return {
-    id: 'act-1',
-    taskId: 'task-1',
-    type: 'comment',
-    createdAt: '2026-03-01T00:00:00Z',
-    userId: null,
-    content: 'Test comment',
-    externalUserName: null,
-    externalUserAvatar: null,
-    externalSource: null,
-    externalUrl: null,
-    ...overrides,
-  } as ActivityItem
-}
-
 // Complete column mock matching ColumnSchema
 export function createMockColumn(overrides: Partial<Column> = {}): Column {
   return {

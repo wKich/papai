@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach, spyOn } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
@@ -9,12 +9,16 @@ import { flushMicrotasks } from './test-helpers.js'
 
 // Mock the ai module for trimWithMemoryModel
 type GenerateTextResult = { text: string }
-let generateTextImpl = (): Promise<GenerateTextResult> =>
+const defaultGenerateTextImpl = (): Promise<GenerateTextResult> =>
   Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
+let generateTextImpl = defaultGenerateTextImpl
 
 void mock.module('ai', () => ({
   generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
 }))
+
+// Helper type for spy instances that need cleanup
+type SpyInstance = { mockRestore: () => void }
 
 describe('shouldTriggerTrim', () => {
   const makeMessages = (count: number, userEvery = 2): ModelMessage[] =>
@@ -85,10 +89,19 @@ describe('shouldTriggerTrim', () => {
 describe('buildMessagesWithMemory', () => {
   const mockSummaries = new Map<string, string>()
   const mockFacts = new Map<string, Array<{ identifier: string; title: string; url: string; last_seen: string }>>()
+  let getCachedSummarySpy: ReturnType<typeof spyOn<typeof cacheModule, 'getCachedSummary'>>
+  let getCachedFactsSpy: ReturnType<typeof spyOn<typeof cacheModule, 'getCachedFacts'>>
 
   beforeEach(() => {
     mockSummaries.clear()
     mockFacts.clear()
+    getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+    getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+  })
+
+  afterEach(() => {
+    getCachedSummarySpy.mockRestore()
+    getCachedFactsSpy.mockRestore()
   })
 
   test('returns history unchanged when no summary and no facts', () => {
@@ -97,24 +110,17 @@ describe('buildMessagesWithMemory', () => {
       { role: 'assistant', content: 'Hi there' },
     ]
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
-
     const result = buildMessagesWithMemory('user1', history)
 
     expect(result.messages).toEqual(history)
     expect(result.memoryMsg).toBeNull()
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 
   test('prepends system message with summary when summary is present', () => {
     const history: ModelMessage[] = [{ role: 'user', content: 'Hello' }]
     mockSummaries.set('user1', 'User worked on mobile app project')
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(mockSummaries.get('user1')!)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+    getCachedSummarySpy.mockReturnValue(mockSummaries.get('user1')!)
 
     const result = buildMessagesWithMemory('user1', history)
 
@@ -122,17 +128,13 @@ describe('buildMessagesWithMemory', () => {
     const firstMsg = result.messages[0]!
     expect(firstMsg.role).toBe('system')
     expect(firstMsg.content).toContain('User worked on mobile app project')
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 
   test('prepends system message with facts when facts are present', () => {
     const history: ModelMessage[] = [{ role: 'user', content: 'Hello' }]
     mockFacts.set('user1', [{ identifier: '#42', title: 'Fix login bug', url: '', last_seen: '2026-03-01T00:00:00Z' }])
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue(mockFacts.get('user1')!)
+    getCachedFactsSpy.mockReturnValue(mockFacts.get('user1')!)
 
     const result = buildMessagesWithMemory('user1', history)
 
@@ -140,9 +142,6 @@ describe('buildMessagesWithMemory', () => {
     const firstMsg = result.messages[0]!
     expect(firstMsg.role).toBe('system')
     expect(firstMsg.content).toContain('#42')
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 
   test('prepends single system message with both summary and facts when both present', () => {
@@ -150,8 +149,8 @@ describe('buildMessagesWithMemory', () => {
     mockSummaries.set('user1', 'User worked on mobile app project')
     mockFacts.set('user1', [{ identifier: '#42', title: 'Fix login bug', url: '', last_seen: '2026-03-01T00:00:00Z' }])
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(mockSummaries.get('user1')!)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue(mockFacts.get('user1')!)
+    getCachedSummarySpy.mockReturnValue(mockSummaries.get('user1')!)
+    getCachedFactsSpy.mockReturnValue(mockFacts.get('user1')!)
 
     const result = buildMessagesWithMemory('user1', history)
 
@@ -160,26 +159,19 @@ describe('buildMessagesWithMemory', () => {
     expect(systemMsg.role).toBe('system')
     expect(systemMsg.content).toContain('User worked on mobile app project')
     expect(systemMsg.content).toContain('#42')
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 
   test('does not mutate original history array', () => {
     const history: ModelMessage[] = [{ role: 'user', content: 'Hello' }]
     mockSummaries.set('user1', 'Summary text')
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(mockSummaries.get('user1')!)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+    getCachedSummarySpy.mockReturnValue(mockSummaries.get('user1')!)
 
     const originalLength = history.length
     buildMessagesWithMemory('user1', history)
 
     expect(history).toHaveLength(originalLength)
     expect(history[0]).toEqual({ role: 'user', content: 'Hello' })
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 })
 
@@ -187,11 +179,25 @@ describe('runTrimInBackground', () => {
   const mockSummaries = new Map<string, string>()
   const mockHistories = new Map<string, ModelMessage[]>()
   const mockConfigs = new Map<string, Map<string, string | null>>()
+  const spies: SpyInstance[] = []
+
+  function trackSpy<T extends SpyInstance>(spy: T): T {
+    spies.push(spy)
+    return spy
+  }
 
   beforeEach(() => {
+    generateTextImpl = defaultGenerateTextImpl
     mockSummaries.clear()
     mockHistories.clear()
     mockConfigs.clear()
+  })
+
+  afterEach(() => {
+    for (const spy of spies) {
+      spy.mockRestore()
+    }
+    spies.length = 0
   })
 
   test('success path: calls trimWithMemoryModel, saves summary, and updates history', async () => {
@@ -210,34 +216,30 @@ describe('runTrimInBackground', () => {
       ]),
     )
 
-    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
-      (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+    trackSpy(
+      spyOn(cacheModule, 'getCachedConfig').mockImplementation(
+        (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+      ),
     )
-    const getCachedHistorySpy = spyOn(cacheModule, 'getCachedHistory').mockImplementation(
-      (userId: string) => mockHistories.get(userId) ?? [],
+    trackSpy(
+      spyOn(cacheModule, 'getCachedHistory').mockImplementation((userId: string) => mockHistories.get(userId) ?? []),
     )
-    const setCachedHistorySpy = spyOn(cacheModule, 'setCachedHistory').mockImplementation(
-      (userId: string, messages: readonly ModelMessage[]) => {
+    trackSpy(
+      spyOn(cacheModule, 'setCachedHistory').mockImplementation((userId: string, messages: readonly ModelMessage[]) => {
         mockHistories.set(userId, [...messages])
-      },
+      }),
     )
-    const setCachedSummarySpy = spyOn(cacheModule, 'setCachedSummary').mockImplementation(
-      (userId: string, summary: string) => {
+    trackSpy(
+      spyOn(cacheModule, 'setCachedSummary').mockImplementation((userId: string, summary: string) => {
         mockSummaries.set(userId, summary)
-      },
+      }),
     )
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+    trackSpy(spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null))
 
     await runTrimInBackground('user1', history)
     await flushMicrotasks()
 
     expect(mockSummaries.get('user1')).toBe('Updated summary text')
-
-    getCachedConfigSpy.mockRestore()
-    getCachedHistorySpy.mockRestore()
-    setCachedHistorySpy.mockRestore()
-    setCachedSummarySpy.mockRestore()
-    getCachedSummarySpy.mockRestore()
   })
 
   test('preserves new messages added during async trim', async () => {
@@ -264,19 +266,21 @@ describe('runTrimInBackground', () => {
       return Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Trimmed' }) })
     }
 
-    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
-      (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+    trackSpy(
+      spyOn(cacheModule, 'getCachedConfig').mockImplementation(
+        (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+      ),
     )
-    const getCachedHistorySpy = spyOn(cacheModule, 'getCachedHistory').mockImplementation(
-      (userId: string) => mockHistories.get(userId) ?? [],
+    trackSpy(
+      spyOn(cacheModule, 'getCachedHistory').mockImplementation((userId: string) => mockHistories.get(userId) ?? []),
     )
-    const setCachedHistorySpy = spyOn(cacheModule, 'setCachedHistory').mockImplementation(
-      (userId: string, messages: readonly ModelMessage[]) => {
+    trackSpy(
+      spyOn(cacheModule, 'setCachedHistory').mockImplementation((userId: string, messages: readonly ModelMessage[]) => {
         mockHistories.set(userId, [...messages])
-      },
+      }),
     )
-    const setCachedSummarySpy = spyOn(cacheModule, 'setCachedSummary').mockImplementation(() => {})
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+    trackSpy(spyOn(cacheModule, 'setCachedSummary').mockImplementation(() => {}))
+    trackSpy(spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null))
 
     await runTrimInBackground('user1', history)
     await flushMicrotasks()
@@ -284,26 +288,17 @@ describe('runTrimInBackground', () => {
     const finalHistory = mockHistories.get('user1')
     expect(finalHistory).toBeDefined()
     expect(finalHistory!.length).toBeGreaterThanOrEqual(1)
-
-    getCachedConfigSpy.mockRestore()
-    getCachedHistorySpy.mockRestore()
-    setCachedHistorySpy.mockRestore()
-    setCachedSummarySpy.mockRestore()
-    getCachedSummarySpy.mockRestore()
   })
 
   test('config-missing path: logs warning and returns without calling trim', async () => {
     const history: ModelMessage[] = [{ role: 'user', content: 'Hello' }]
     mockHistories.set('user1', [...history])
 
-    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockReturnValue(null)
-    const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {})
+    trackSpy(spyOn(cacheModule, 'getCachedConfig').mockReturnValue(null))
+    trackSpy(spyOn(logger, 'warn').mockImplementation(() => {}))
 
     await runTrimInBackground('user1', history)
     await flushMicrotasks()
-
-    getCachedConfigSpy.mockRestore()
-    warnSpy.mockRestore()
   })
 
   test('handles trimWithMemoryModel failure gracefully', async () => {
@@ -323,26 +318,22 @@ describe('runTrimInBackground', () => {
 
     generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API error'))
 
-    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
-      (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+    trackSpy(
+      spyOn(cacheModule, 'getCachedConfig').mockImplementation(
+        (userId: string, key: string) => mockConfigs.get(userId)?.get(key) ?? null,
+      ),
     )
-    const getCachedHistorySpy = spyOn(cacheModule, 'getCachedHistory').mockImplementation(
-      (userId: string) => mockHistories.get(userId) ?? [],
+    trackSpy(
+      spyOn(cacheModule, 'getCachedHistory').mockImplementation((userId: string) => mockHistories.get(userId) ?? []),
     )
-    const setCachedHistorySpy = spyOn(cacheModule, 'setCachedHistory').mockImplementation(() => {})
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
-    const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {})
+    trackSpy(spyOn(cacheModule, 'setCachedHistory').mockImplementation(() => {}))
+    trackSpy(spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null))
+    trackSpy(spyOn(logger, 'warn').mockImplementation(() => {}))
 
     await runTrimInBackground('user1', history)
     await flushMicrotasks()
 
     expect(mockHistories.get('user1')).toEqual(history)
-
-    getCachedConfigSpy.mockRestore()
-    getCachedHistorySpy.mockRestore()
-    setCachedHistorySpy.mockRestore()
-    getCachedSummarySpy.mockRestore()
-    warnSpy.mockRestore()
   })
 
   test('concurrent calls for same user — both complete without corruption', async () => {
@@ -370,19 +361,23 @@ describe('runTrimInBackground', () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Concurrent trim summary' }) })
 
-    const getCachedConfigSpy = spyOn(cacheModule, 'getCachedConfig').mockImplementation(
-      (userId: string, key: string) => concurrentConfigs.get(userId)?.get(key) ?? null,
+    trackSpy(
+      spyOn(cacheModule, 'getCachedConfig').mockImplementation(
+        (userId: string, key: string) => concurrentConfigs.get(userId)?.get(key) ?? null,
+      ),
     )
-    const getCachedHistorySpy = spyOn(cacheModule, 'getCachedHistory').mockImplementation(
-      (userId: string) => concurrentHistories.get(userId) ?? [],
+    trackSpy(
+      spyOn(cacheModule, 'getCachedHistory').mockImplementation(
+        (userId: string) => concurrentHistories.get(userId) ?? [],
+      ),
     )
-    const setCachedHistorySpy = spyOn(cacheModule, 'setCachedHistory').mockImplementation(
-      (userId: string, messages: readonly ModelMessage[]) => {
+    trackSpy(
+      spyOn(cacheModule, 'setCachedHistory').mockImplementation((userId: string, messages: readonly ModelMessage[]) => {
         concurrentHistories.set(userId, [...messages])
-      },
+      }),
     )
-    const setCachedSummarySpy = spyOn(cacheModule, 'setCachedSummary').mockImplementation(() => {})
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+    trackSpy(spyOn(cacheModule, 'setCachedSummary').mockImplementation(() => {}))
+    trackSpy(spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null))
 
     // Fire both concurrently
     await Promise.all([runTrimInBackground('user1', history1), runTrimInBackground('user1', history2)])
@@ -392,12 +387,6 @@ describe('runTrimInBackground', () => {
     const finalHistory = concurrentHistories.get('user1')
     expect(finalHistory).toBeDefined()
     expect(Array.isArray(finalHistory)).toBe(true)
-
-    getCachedConfigSpy.mockRestore()
-    getCachedHistorySpy.mockRestore()
-    setCachedHistorySpy.mockRestore()
-    setCachedSummarySpy.mockRestore()
-    getCachedSummarySpy.mockRestore()
   })
 })
 
@@ -424,10 +413,19 @@ describe('Story 3: Context retained at message 50+', () => {
 describe('Story 5: Summary injected into context', () => {
   const mockSummaries = new Map<string, string>()
   const mockFacts = new Map<string, Array<{ identifier: string; title: string; url: string; last_seen: string }>>()
+  let getCachedSummarySpy: ReturnType<typeof spyOn<typeof cacheModule, 'getCachedSummary'>>
+  let getCachedFactsSpy: ReturnType<typeof spyOn<typeof cacheModule, 'getCachedFacts'>>
 
   beforeEach(() => {
     mockSummaries.clear()
     mockFacts.clear()
+    getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(null)
+    getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+  })
+
+  afterEach(() => {
+    getCachedSummarySpy.mockRestore()
+    getCachedFactsSpy.mockRestore()
   })
 
   test('buildMessagesWithMemory includes summary in system message for LLM context', () => {
@@ -435,8 +433,7 @@ describe('Story 5: Summary injected into context', () => {
     const summary = 'User worked on mobile app project'
     mockSummaries.set('user1', summary)
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(summary)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+    getCachedSummarySpy.mockReturnValue(summary)
 
     const result = buildMessagesWithMemory('user1', history)
 
@@ -446,25 +443,18 @@ describe('Story 5: Summary injected into context', () => {
     expect(systemMsg.content).toContain(summary)
     expect(result.memoryMsg).toBeDefined()
     expect(result.memoryMsg!.content).toContain(summary)
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 
   test('LLM would have access to summary when responding to "what were we working on?"', () => {
     const history: ModelMessage[] = [{ role: 'user', content: 'What were we working on?' }]
     mockSummaries.set('user1', 'User was working on task #42: Fix login bug in the mobile app')
 
-    const getCachedSummarySpy = spyOn(cacheModule, 'getCachedSummary').mockReturnValue(mockSummaries.get('user1')!)
-    const getCachedFactsSpy = spyOn(cacheModule, 'getCachedFacts').mockReturnValue([])
+    getCachedSummarySpy.mockReturnValue(mockSummaries.get('user1')!)
 
     const result = buildMessagesWithMemory('user1', history)
 
     const systemMsg = result.messages[0]!
     expect(systemMsg.content).toContain('Fix login bug')
     expect(systemMsg.content).toContain('#42')
-
-    getCachedSummarySpy.mockRestore()
-    getCachedFactsSpy.mockRestore()
   })
 })
