@@ -198,7 +198,11 @@ about suppression. Overdue escalation tier selection also moves into `send_alert
 
 ---
 
-## What Gets Removed
+## What Gets Removed (Future Work)
+
+> **Note:** The items below describe the _target end state_ after this design is fully
+> implemented. They are **not** removed in the current PR — they exist in the codebase today
+> and will be phased out in a follow-up PR once the deferred-LLM architecture is in place.
 
 | Removed                                                                                                                                                           | Replaced by                                       |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |

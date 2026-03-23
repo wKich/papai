@@ -173,6 +173,19 @@ describe('Proactive Tools', () => {
       expect(result).toHaveProperty('status', 'disabled')
     })
 
+    test('returns current status when time is omitted and briefing is disabled', async () => {
+      const result: unknown = await exec(tools, 'configure_briefing', {})
+      expect(result).toHaveProperty('status', 'disabled')
+    })
+
+    test('returns current status when time is omitted and briefing is scheduled', async () => {
+      await exec(tools, 'configure_briefing', { time: '08:30' })
+      const result: unknown = await exec(tools, 'configure_briefing', {})
+      expect(result).toHaveProperty('status', 'scheduled')
+      expect(result).toHaveProperty('time', '08:30')
+      expect(result).toHaveProperty('timezone', 'UTC')
+    })
+
     test('returns error for invalid time format', async () => {
       const result: unknown = await exec(tools, 'configure_briefing', { time: '9am' })
       expect(result).toHaveProperty('error')
@@ -198,6 +211,18 @@ describe('Proactive Tools', () => {
     test('defaults staleness_days to 7 when not provided', async () => {
       const result: unknown = await exec(tools, 'configure_alerts', { enabled: true })
       expect(result).toHaveProperty('stalenessDays', 7)
+    })
+
+    test('normalizes invalid stored staleness_days to 7', async () => {
+      setConfig(userId, 'staleness_days', 'garbage')
+      const result: unknown = await exec(tools, 'configure_alerts', { enabled: true })
+      expect(result).toHaveProperty('stalenessDays', 7)
+    })
+
+    test('always persists normalized staleness_days', async () => {
+      await exec(tools, 'configure_alerts', { enabled: true, stalenessDays: 14 })
+      const { getConfig: gc } = await import('../../src/config.js')
+      expect(gc(userId, 'staleness_days')).toBe('14')
     })
   })
 })
