@@ -23,6 +23,50 @@ describe('saveInstruction', () => {
     }
   })
 
+  test('normalizes whitespace and trims text', () => {
+    const result = saveInstruction('ctx-1', '  Always  reply   in  Spanish  ')
+    expect(result.status).toBe('saved')
+    if (result.status === 'saved') {
+      expect(result.instruction.text).toBe('Always reply in Spanish')
+    }
+  })
+
+  test('collapses newlines and tabs into single spaces', () => {
+    const result = saveInstruction('ctx-1', 'Always reply\n\nin\tSpanish')
+    expect(result.status).toBe('saved')
+    if (result.status === 'saved') {
+      expect(result.instruction.text).toBe('Always reply in Spanish')
+    }
+  })
+
+  test('rejects empty string', () => {
+    const result = saveInstruction('ctx-1', '')
+    expect(result.status).toBe('invalid')
+  })
+
+  test('rejects whitespace-only string', () => {
+    const result = saveInstruction('ctx-1', '   \n\t  ')
+    expect(result.status).toBe('invalid')
+  })
+
+  test('rejects text exceeding 500 characters', () => {
+    const longText = 'a'.repeat(501)
+    const result = saveInstruction('ctx-1', longText)
+    expect(result.status).toBe('invalid')
+  })
+
+  test('accepts text at exactly 500 characters', () => {
+    const text = 'a'.repeat(500)
+    const result = saveInstruction('ctx-1', text)
+    expect(result.status).toBe('saved')
+  })
+
+  test('detects duplicates that differ only by whitespace', () => {
+    saveInstruction('ctx-1', 'Always reply in Spanish')
+    const result = saveInstruction('ctx-1', '  Always  reply  in  Spanish  ')
+    expect(result.status).toBe('duplicate')
+  })
+
   test('returns duplicate when >80% word overlap with existing', () => {
     saveInstruction('ctx-1', 'Always reply in Spanish')
     const result = saveInstruction('ctx-1', 'Always reply in spanish language')

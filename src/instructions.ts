@@ -6,12 +6,14 @@ import { logger } from './logger.js'
 const log = logger.child({ scope: 'instructions' })
 
 const MAX_INSTRUCTIONS = 20
+const MAX_INSTRUCTION_LENGTH = 500
 const DUPLICATE_THRESHOLD = 0.8
 
 type SaveResult =
   | { status: 'saved'; instruction: { id: string; text: string } }
   | { status: 'duplicate' }
   | { status: 'cap_reached' }
+  | { status: 'invalid'; message: string }
 
 type DeleteResult = { status: 'deleted' } | { status: 'not_found' }
 
@@ -39,8 +41,23 @@ function isDuplicate(newText: string, existing: readonly { text: string }[]): bo
   return existing.some((e) => jaccardSimilarity(newTokens, tokenize(e.text)) >= DUPLICATE_THRESHOLD)
 }
 
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
 export function saveInstruction(contextId: string, text: string): SaveResult {
   log.debug({ contextId }, 'saveInstruction called')
+
+  const normalized = normalizeText(text)
+  if (normalized.length === 0) {
+    log.warn({ contextId }, 'Empty instruction rejected')
+    return { status: 'invalid', message: 'Instruction text cannot be empty.' }
+  }
+  if (normalized.length > MAX_INSTRUCTION_LENGTH) {
+    log.warn({ contextId, length: normalized.length }, 'Instruction too long')
+    return { status: 'invalid', message: `Instruction text exceeds the ${MAX_INSTRUCTION_LENGTH}-character limit.` }
+  }
+
   const existing = getCachedInstructions(contextId)
 
   if (existing.length >= MAX_INSTRUCTIONS) {
@@ -48,15 +65,15 @@ export function saveInstruction(contextId: string, text: string): SaveResult {
     return { status: 'cap_reached' }
   }
 
-  if (isDuplicate(text, existing)) {
+  if (isDuplicate(normalized, existing)) {
     log.info({ contextId }, 'Duplicate instruction detected')
     return { status: 'duplicate' }
   }
 
   const id = randomUUIDv7()
-  addCachedInstruction(contextId, { id, text })
+  addCachedInstruction(contextId, { id, text: normalized })
   log.info({ contextId, id }, 'Instruction saved')
-  return { status: 'saved', instruction: { id, text } }
+  return { status: 'saved', instruction: { id, text: normalized } }
 }
 
 export function buildInstructionsBlock(contextId: string): string {
