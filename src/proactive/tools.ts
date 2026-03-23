@@ -190,12 +190,23 @@ function makeConfigureBriefingTool(userId: string): ToolSet[string] {
         .string()
         .nullable()
         .optional()
-        .describe('24-hour HH:MM time string (e.g. "08:30") to schedule the briefing, or null to disable it'),
+        .describe(
+          '24-hour HH:MM time string (e.g. "08:30") to schedule the briefing, or null/empty string to disable it. Omit to query current status without changes.',
+        ),
     }),
     execute: ({ time }) => {
       log.debug({ userId, time }, 'configure_briefing called')
 
-      if (time === null || time === undefined || time === '') {
+      if (time === undefined) {
+        const currentTime = getConfig(userId, 'briefing_time') ?? ''
+        const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+        if (currentTime === '') {
+          return { status: 'disabled' }
+        }
+        return { status: 'scheduled', time: currentTime, timezone }
+      }
+
+      if (time === null || time === '') {
         setConfig(userId, 'briefing_time', '')
         scheduler.unregisterBriefingJob(userId)
         log.info({ userId }, 'Daily briefing disabled')
@@ -242,7 +253,14 @@ function makeConfigureAlertsTool(userId: string): ToolSet[string] {
         setConfig(userId, 'staleness_days', String(stalenessDays))
       }
 
-      const effectiveStaleness = stalenessDays ?? Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
+      const storedStaleness = Number.parseInt(getConfig(userId, 'staleness_days') ?? '7', 10)
+      let effectiveStaleness = stalenessDays ?? storedStaleness
+
+      if (!Number.isFinite(effectiveStaleness) || effectiveStaleness < 1) {
+        effectiveStaleness = 7
+      }
+
+      setConfig(userId, 'staleness_days', String(effectiveStaleness))
 
       log.info({ userId, enabled, stalenessDays: effectiveStaleness }, 'Alerts configured')
       return { status: enabled ? 'enabled' : 'disabled', stalenessDays: effectiveStaleness }
