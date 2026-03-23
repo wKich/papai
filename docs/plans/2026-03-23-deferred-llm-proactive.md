@@ -13,32 +13,67 @@ Briefings, alerts, and reminders are currently implemented as code-driven pipeli
 - **Alerts**: Hourly poller → `checkDeadlineNudge()` / `checkOverdue()` / `checkStaleness()` / `checkBlocked()` → hardcoded strings → `sendMessage()`
 - **Reminders**: Timer fires → `sendMessage('🔔 Reminder: ' + text)`
 
-This means the LLM is never involved. The messages are rigid templates, they cannot adapt to context, and they cannot take initiative beyond what the hardcoded logic prescribes. A task with a note saying "this is expected to be delayed" still gets an overdue escalation. A reminder for "review the PR" doesn't fetch the current PR status.
+The messages are rigid templates that cannot adapt to context or take initiative beyond what the hardcoded logic prescribes.
+
+---
+
+## Core Insight: Briefings Are Just Reminders
+
+A briefing is a recurring reminder whose prompt is "generate my morning briefing." At the
+execution level they are identical: a scheduled time arrives, a prompt is sent to the LLM,
+the LLM response is delivered to the user. The only differences are the prompt text and the
+recurrence pattern.
+
+This means a single unified concept — **scheduled prompts** — covers both:
+
+|              | Reminder                                | Briefing                         |
+| ------------ | --------------------------------------- | -------------------------------- |
+| Stored in    | `reminders` table                       | `reminders` table                |
+| `text`       | `"Review the PR"`                       | `"Generate my morning briefing"` |
+| `recurrence` | null or cron                            | `"0 9 * * *"` (daily 9am)        |
+| User tool    | `set_reminder`                          | `set_reminder`                   |
+| Manage via   | `cancel_reminder`, `snooze_reminder`, … | same tools                       |
+
+`configure_briefing("09:00")` is replaced by `set_reminder` with text
+`"Generate my morning briefing"` and recurrence `"0 9 * * *"`. No separate config key
+(`briefing_time`), no separate table (`user_briefing_state`), no separate scheduler path.
+
+**Alerts remain a separate concept.** They are not user-scheduled — they are system-initiated
+responses to task state changes. The user opts into a monitoring behaviour; the system decides
+when to fire based on what it finds in the task tracker. That is a different abstraction from
+"run this prompt at this time."
 
 ---
 
 ## Decision
 
-Replace all three code-driven pipelines with **deferred LLM prompts**: at the scheduled time, the scheduler calls the LLM with a crafted system prompt describing the situation, gives it full tool access, and delivers whatever the LLM produces to the user.
+1. **Unify reminders and briefings** into a single `reminders` table and a single scheduler
+   poller. A briefing is stored and managed identically to any other recurring reminder.
 
-This is identical to how the bot responds to user messages, except:
+2. **Replace all code-driven pipelines with deferred LLM prompts**: when a scheduled prompt
+   fires, the scheduler calls the LLM with the reminder text as the prompt, gives it full
+   tool access, and delivers whatever the LLM produces to the user.
 
-- The trigger is the scheduler, not a user
-- The "user" message is an internal instruction, not visible to the human
-- The conversation is ephemeral — it is not appended to the user's persistent history
+3. **Remove the catch-up briefing mechanic.** It existed because briefings were not
+   independently fired — they depended on the user sending a message. With a proper
+   per-minute poller, a missed briefing fires the moment the bot is running. No catch-up
+   needed.
 
-The user experiences the result exactly the same as they do today (a message from the bot), but the content is now LLM-generated: contextual, natural, and capable of reasoning.
+4. **Keep alerts as a separate system** (hourly poller + `send_alert` tool) because they
+   are not prompt-based — they are state-monitoring-based.
+
+The existing `processMessage` path is unchanged. Scheduled prompt invocations are entirely
+parallel to user conversations: fresh context, no history, errors swallowed.
 
 ---
 
 ## New Entry Point: `processScheduledPrompt`
 
-A new function in `src/llm-orchestrator.ts` (or `src/proactive/deferred.ts`):
+A new function in `src/proactive/deferred.ts`:
 
 ```typescript
 export async function processScheduledPrompt(
   userId: string,
-  systemContext: string,
   prompt: string,
   sendFn: (userId: string, message: string) => Promise<void>,
 ): Promise<void>
@@ -46,102 +81,102 @@ export async function processScheduledPrompt(
 
 Behaviour:
 
-1. Checks required config (LLM key, base URL, model, task provider key). Silently returns if missing — no message sent for a misconfigured scheduled event.
+1. Checks required config (LLM key, base URL, model, task provider key). Silently returns if
+   missing — no message sent for a misconfigured scheduled event.
 2. Builds the LLM client and task provider for `userId`.
-3. Assembles tools: full task tools (`makeTools`) + alert-state tools (see below). **No** reminder management tools — scheduled prompts cannot create new reminders for themselves.
+3. Assembles tools: full task tools (`makeTools`) + scheduled-only tools (`send_alert`,
+   `mark_reminder_delivered`, `advance_reminder_recurrence`). No reminder management tools —
+   scheduled prompts cannot create new reminders for themselves.
 4. Calls `generateText` with:
-   - `system`: a compact base prompt containing today's date/time in the user's timezone, followed by `systemContext`
+   - `system`: minimal base prompt — current date/time in user's timezone, plus instructions
+     to format task references as Markdown links and respond concisely
    - `messages`: a single `user` message containing `prompt`
-   - No prior conversation history — each scheduled invocation is a fresh context
+   - No prior conversation history
 5. If the LLM produces non-empty text, calls `sendFn(userId, text)`.
 6. If the LLM produces empty text (it decided nothing is worth saying), does nothing.
-7. Does **not** append anything to `conversationHistory`. Does **not** run `runTrimInBackground`.
-8. Errors are caught, logged, and swallowed — a failed scheduled delivery must never crash the scheduler.
-
-The existing `processMessage` path is unchanged. Scheduled prompts are entirely parallel to user-initiated conversations.
+7. Does **not** append to conversation history. Does **not** run `runTrimInBackground`.
+8. Errors are caught, logged, and swallowed.
 
 ---
 
 ## Feature Design
 
-### 1. Morning Briefing
+### 1. Reminders and Briefings (unified)
 
-**Trigger**: Per-user `setInterval` registered by `configure_briefing` (HH:MM in user's timezone). Weekday-only enforcement is left to the LLM system context (see below) or can remain as a cron expression gate.
+**Trigger**: The existing per-minute reminder poller. When `fire_at` is in the past for a
+`pending` reminder, call `processScheduledPrompt(userId, reminder.text, sendFn)`.
 
-**System context** passed to `processScheduledPrompt`:
+The LLM receives `reminder.text` as its prompt and full tool access. What it does depends
+entirely on the text:
 
-```
-This is an automated morning briefing. The user has configured you to send them a
-briefing at this time each day.
+- `"Review the PR for task #42"` → optionally calls `get_task("42")` for current status,
+  then writes a natural reminder message
+- `"Generate my morning briefing"` → calls `list_projects`, `list_tasks` per project,
+  writes a structured briefing
+- `"Prepare standup notes"` → fetches in-progress tasks, writes a brief standup summary
+- `"What did I accomplish this week?"` → fetches recently closed tasks, writes a summary
 
-Fetch all projects and their tasks. Produce a full morning briefing covering:
-- Tasks due today
-- Overdue tasks (sorted by how many days overdue)
-- Tasks currently in progress
-- Tasks whose status changed in the last 24 hours
-- 2–3 suggested priority actions for the day
+After generating the response, the LLM calls `mark_reminder_delivered(reminderId)`. If the
+reminder has a recurrence, it also calls `advance_reminder_recurrence(reminderId)`.
 
-Format the briefing in clear markdown. Be concise and actionable. If nothing
-requires attention, say so briefly and warmly.
-
-Record that the briefing was delivered by calling record_briefing_delivery.
-```
-
-**Prompt** (the "user" turn the LLM sees): `"Generate the morning briefing."`
-
-**What the LLM does**: calls `list_projects`, `list_tasks` per project, optionally `get_task` for context, then writes the briefing, then calls `record_briefing_delivery`.
-
-**Catch-up (missed briefing)**: The existing logic in `processMessage` that detects a missed briefing and prepends it to the user's first reply stays. Instead of calling `briefingService.generateAndRecord`, it calls `processScheduledPrompt` with a catch-up variant of the system context:
+**User experience — setting up a briefing:**
 
 ```
-The user's briefing was scheduled for ${briefingTime} but was not delivered. Deliver
-it now as a catch-up. Prefix the briefing with "(Catch-up — missed ${briefingTime} briefing)".
-[... same instructions as above ...]
+User: "Send me a morning briefing every day at 9am"
+LLM:  calls set_reminder({
+        text: "Generate my morning briefing",
+        fireAt: "<next 9am ISO timestamp>",
+        recurrence: "0 9 * * *"
+      })
+LLM:  "Done! I'll send you a morning briefing every day at 9am."
 ```
 
-**`record_briefing_delivery` tool**: a narrow tool available only inside scheduled prompts that writes today's date to `user_briefing_state`. This is what `getMissedBriefing` checks to avoid double-delivery.
+The user can then cancel, snooze, or reschedule it with the same natural language they'd use
+for any reminder.
+
+**System context prepended to the scheduled system prompt** (for all reminder/briefing
+invocations):
+
+```
+You are papai acting on a scheduled prompt. The user is not present — do not ask
+questions. Act on the prompt directly using your tools, then deliver a response.
+Format task references as Markdown links using the task URL. Be concise.
+```
 
 ---
 
 ### 2. Deadline and Staleness Alerts
 
-**Trigger**: Global hourly poller — for each user with `deadline_nudges = 'enabled'`, calls `processScheduledPrompt`.
+**Trigger**: Global hourly poller — for each user with `deadline_nudges = 'enabled'`, calls
+`processScheduledPrompt` with a fixed alert-check prompt.
 
-**System context**:
+**Prompt** sent to the LLM:
 
 ```
-This is an automated alert check. The user has opted in to proactive deadline and
-staleness alerts.
+Check all tasks across all projects for actionable alerts. For each non-terminal task,
+detect the following conditions and call send_alert for each one found:
 
-Fetch all projects and their tasks. For each non-terminal task, check whether any
-of the following alert conditions apply. For each condition that applies, call
-send_alert(taskId, alertType, message) to deliver it. That tool checks the
-suppression window and deduplicates automatically — call it freely for every
-condition you detect; it will silently skip anything that was recently alerted.
-
-Alert conditions to check:
-- DEADLINE_NUDGE: task is due tomorrow and not yet done → "📅 [Task] is due
-  tomorrow. Make sure it's on track."
-- DUE_TODAY: task is due today and not done → "⏰ [Task] is due today."
-- OVERDUE: task is past its due date → escalate based on days overdue:
-    1–2 days: "⚠️ [Task] is N days overdue. Please update its status."
+- DEADLINE_NUDGE: due tomorrow → "📅 [Task] is due tomorrow. Make sure it's on track."
+- DUE_TODAY: due today → "⏰ [Task] is due today."
+- OVERDUE: past due date → escalate by days overdue:
+    1–2 days: "⚠️ [Task] is N day(s) overdue. Please update its status."
     3–5 days: "🔴 [Task] is N days overdue. Please resolve or escalate."
     6+ days:  "🚨 [Task] is now N days overdue. Immediate action required."
-- STALENESS: task has been in the same status for more than ${stalenessDays} days
-  → "🕸️ [Task] has been in '[status]' for N days with no activity."
-- BLOCKED: task is due in ≤1 day and is blocked_by a task that is not yet done
-  → "🚧 [Task] is due in ≤1 day but blocked by [Blocker], which is still '[status]'."
+- STALENESS: same status for more than ${stalenessDays} days →
+    "🕸️ [Task] has been in '[status]' for N days with no activity."
+- BLOCKED: due in ≤1 day and blocked_by an unresolved task →
+    "🚧 [Task] is due in ≤1 day but blocked by [Blocker] ('[status]')."
 
-If no conditions apply, respond with empty text — do not send anything.
-Format task references as Markdown links using the task URL.
-Staleness threshold for this user: ${stalenessDays} days.
+send_alert handles suppression automatically — call it for every condition detected; it
+silently skips anything alerted recently. If nothing applies, respond with empty text.
+Staleness threshold: ${stalenessDays} days.
 ```
 
-**`send_alert` tool**: This tool (only available in scheduled contexts) encapsulates the suppression and escalation state that was previously in `service.ts`:
+**`send_alert` tool** (available in scheduled contexts only):
 
 ```typescript
 tool({
-  description: 'Send an alert for a task. Handles suppression automatically.',
+  description: 'Send an alert for a task. Handles deduplication and suppression automatically.',
   inputSchema: z.object({
     taskId: z.string(),
     alertType: z.enum(['deadline_nudge', 'due_today', 'overdue', 'staleness', 'blocked']),
@@ -156,124 +191,98 @@ tool({
 })
 ```
 
-The suppression logic (`isSuppressed`, `updateAlertState`) and the `alert_state` table remain — they move from `service.ts` into the `send_alert` tool implementation. The LLM no longer needs to reason about suppression at all.
-
-**Design note on overdue escalation**: The current code reads `overdue_days_notified` from the DB to pick an escalation tier. This can remain in `send_alert` — it reads the prior notification count from `alert_state` and includes the right tier message before calling `sendFn`.
-
----
-
-### 3. Reminders
-
-**Trigger**: Per-minute reminder poller. When a reminder's `fire_at` is in the past, call `processScheduledPrompt`.
-
-**System context**:
-
-```
-The user set a reminder that has just fired. Deliver it naturally.
-
-Reminder text: "${reminder.text}"
-${reminder.taskId
-  ? `This reminder is linked to task ${reminder.taskId}. Fetch its current status
-     and mention it in your message (e.g. "Reminder: review the auth PR — it is
-     currently In Review").`
-  : ''}
-
-After delivering the reminder, call mark_reminder_delivered("${reminder.id}").
-If the reminder has a recurrence, call advance_reminder_recurrence("${reminder.id}") as well.
-Keep your message short and friendly.
-```
-
-**Prompt**: `"Deliver the reminder."`
-
-**`mark_reminder_delivered` and `advance_reminder_recurrence` tools**: narrow tools available only in the reminder scheduled context. They wrap the existing `reminderService.markDelivered` and `reminderService.advanceRecurrence` calls.
-
-**What the LLM does**: optionally calls `get_task(taskId)` to fetch current status, writes the reminder message, calls `mark_reminder_delivered`.
+The suppression logic (`isSuppressed`, `updateAlertState`) and the `alert_state` table remain
+unchanged — they move from `service.ts` into the `send_alert` tool. The LLM never reasons
+about suppression. Overdue escalation tier selection also moves into `send_alert` (reads
+`overdue_days_notified` from `alert_state`).
 
 ---
 
 ## What Gets Removed
 
-| File / Function                                                                                                                                                   | Replaced by                                                                                                                  |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `src/proactive/briefing.ts` — `generate`, `generateAndRecord`, `formatFull`, `formatShort`, `buildSections`, `suggestActions`, `recordBriefingDelivery`           | LLM-generated briefing via `processScheduledPrompt`. `recordBriefingDelivery` moves into the `record_briefing_delivery` tool |
-| `src/proactive/briefing.ts` — `getMissedBriefing`                                                                                                                 | Stays, but calls `processScheduledPrompt` instead of `generateAndRecord`                                                     |
-| `src/proactive/service.ts` — `checkDeadlineNudge`, `checkDueToday`, `checkOverdue`, `checkStaleness`, `checkBlocked`, `runAlertCycle`, `runAlertCycleForAllUsers` | `send_alert` tool + LLM reasoning                                                                                            |
-| `src/proactive/shared.ts` — `fetchAllTasks`                                                                                                                       | LLM calls `list_projects` + `list_tasks` directly                                                                            |
-| `src/proactive/types.ts` — `BriefingMode`, `BriefingSection`, `BriefingTask`, `AlertCheckResult`                                                                  | No longer needed                                                                                                             |
-| `src/proactive/scheduler.ts` — `fireBriefingIfDue` calling `briefingService.generateAndRecord`                                                                    | Calls `processScheduledPrompt`                                                                                               |
-| `src/proactive/scheduler.ts` — `pollAlerts` calling `alertService.runAlertCycleForAllUsers`                                                                       | Calls `processScheduledPrompt` per user                                                                                      |
-| `src/proactive/scheduler.ts` — `deliverReminder` calling `chatRef.sendMessage` directly                                                                           | Calls `processScheduledPrompt`                                                                                               |
-| `src/llm-orchestrator.ts` — `import * as briefingService` and catch-up call in `processMessage`                                                                   | Catch-up logic stays but calls `processScheduledPrompt`                                                                      |
+| Removed                                                                                                                                                           | Replaced by                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `src/proactive/briefing.ts` — entire file                                                                                                                         | Briefings become recurring reminders              |
+| `src/proactive/service.ts` — `checkDeadlineNudge`, `checkDueToday`, `checkOverdue`, `checkStaleness`, `checkBlocked`, `runAlertCycle`, `runAlertCycleForAllUsers` | `send_alert` tool + LLM reasoning                 |
+| `src/proactive/shared.ts` — `fetchAllTasks`                                                                                                                       | LLM calls `list_projects` + `list_tasks` directly |
+| `src/proactive/types.ts` — `BriefingSection`, `BriefingTask`, `AlertCheckResult`                                                                                  | No longer needed                                  |
+| `src/proactive/scheduler.ts` — `fireBriefingIfDue`, `registerBriefingJob`, `unregisterBriefingJob`, `cronFromTime`, per-user briefing job map                     | Unified reminder poller handles everything        |
+| `src/proactive/scheduler.ts` — `deliverReminder` direct `sendMessage` call                                                                                        | Replaced by `processScheduledPrompt`              |
+| `src/proactive/scheduler.ts` — `pollAlerts` calling `runAlertCycleForAllUsers`                                                                                    | Calls `processScheduledPrompt` per eligible user  |
+| `src/proactive/tools.ts` — `configure_briefing` tool                                                                                                              | `set_reminder` with briefing text + recurrence    |
+| `src/types/config.ts` — `briefing_time` internal config key                                                                                                       | Stored as a `reminders` row                       |
+| `src/llm-orchestrator.ts` — `import * as briefingService`, `getMissedBriefing` catch-up hook                                                                      | Removed entirely                                  |
+| `user_briefing_state` DB table (migration needed)                                                                                                                 | Delivery state lives in `reminders.status`        |
 
 ## What Gets Added
 
-| Addition                                                                                      | Purpose                                                                                                                                                          |
-| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/proactive/deferred.ts` — `processScheduledPrompt(userId, systemContext, prompt, sendFn)` | Core deferred LLM invocation, shared by all three features                                                                                                       |
-| `src/proactive/deferred.ts` — `makeScheduledTools(userId, sendFn)`                            | Assembles the narrow tool set available to scheduled prompts: `send_alert`, `record_briefing_delivery`, `mark_reminder_delivered`, `advance_reminder_recurrence` |
-| `src/proactive/deferred.ts` — `buildScheduledSystemPrompt(userId, context)`                   | Constructs the system prompt: date/time in user's timezone + `context` string. No conversation instructions, no task-management workflow rules                   |
-| Updated `src/proactive/scheduler.ts`                                                          | `fireBriefingIfDue`, `pollAlerts`, `deliverReminder` all call `processScheduledPrompt`                                                                           |
+| Added                                                                          | Purpose                                                                                                        |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `src/proactive/deferred.ts` — `processScheduledPrompt(userId, prompt, sendFn)` | Core deferred LLM invocation for reminders, briefings, and alerts                                              |
+| `src/proactive/deferred.ts` — `makeScheduledTools(userId, sendFn)`             | Narrow tool set for scheduled contexts: `send_alert`, `mark_reminder_delivered`, `advance_reminder_recurrence` |
+| `src/proactive/deferred.ts` — `SCHEDULED_SYSTEM_PROMPT`                        | Minimal system prompt for all scheduled invocations                                                            |
+| Updated `src/proactive/scheduler.ts` — unified reminder poller                 | Single `pollReminders` loop calls `processScheduledPrompt` for every due reminder (including briefings)        |
+| Updated `src/proactive/scheduler.ts` — alert poller                            | Calls `processScheduledPrompt` per eligible user with the alert-check prompt                                   |
 
 ---
 
 ## Invariants Preserved
 
-- **`alert_state` table** stays. Suppression windows, escalation counters, `last_status_changed_at` for staleness — all still in SQLite. The `send_alert` tool reads and writes this table, so it survives across bot restarts.
-- **`user_briefing_state` table** stays. The `record_briefing_delivery` tool writes to it; `getMissedBriefing` reads from it.
-- **`reminders` table** stays. Reminder CRUD tools (`set_reminder`, `cancel_reminder`, etc.) are unchanged.
-- **`updateAlertState` and `isSuppressed`** stay as functions, called inside the `send_alert` tool.
+- **`reminders` table** stores everything: one-time reminders, recurring reminders, and
+  briefings. `set_reminder`, `cancel_reminder`, `snooze_reminder`, `reschedule_reminder`,
+  `list_reminders` work for all of them.
+- **`alert_state` table** stays unchanged. `isSuppressed` and `updateAlertState` stay as
+  functions, called inside `send_alert`.
 - **No new external dependencies.**
-- **LLM config required**: if the user has not configured `llm_apikey` / `llm_baseurl` / `main_model`, scheduled prompts silently skip. This is the same behaviour as today (already gated by `checkRequiredConfig`).
+- **LLM config required**: misconfigured users are silently skipped.
 
 ---
 
 ## Implementation Tasks
 
-### 1. Add `processScheduledPrompt` and scheduled tool set
+### 1. Core: `processScheduledPrompt`
 
 - [ ] Create `src/proactive/deferred.ts`
-- [ ] Implement `buildScheduledSystemPrompt(userId, context): string` — compact: date/time in `timezone`, no conversation rules
-- [ ] Implement `makeScheduledTools(userId, sendFn): ToolSet` containing `send_alert`, `record_briefing_delivery`, `mark_reminder_delivered`, `advance_reminder_recurrence`
-- [ ] Implement `processScheduledPrompt(userId, systemContext, prompt, sendFn)` — fresh context, no history, errors swallowed
+- [ ] Implement `SCHEDULED_SYSTEM_PROMPT` constant
+- [ ] Implement `makeScheduledTools(userId, sendFn): ToolSet` — `send_alert`,
+      `mark_reminder_delivered`, `advance_reminder_recurrence`
+- [ ] Implement `processScheduledPrompt(userId, prompt, sendFn)` — fresh context, no history,
+      errors swallowed
 - [ ] Unit tests for `processScheduledPrompt` with mocked `generateText`
 
-### 2. Migrate briefings
+### 2. Unify reminder poller
 
-- [ ] Update `fireBriefingIfDue` in `scheduler.ts`: replace `briefingService.generateAndRecord` with `processScheduledPrompt(userId, BRIEFING_SYSTEM_CONTEXT, 'Generate the morning briefing.', sendFn)`
-- [ ] Update `getMissedBriefing` in `briefing.ts`: replace `generateAndRecord` call with `processScheduledPrompt` (catch-up variant); the outer detection logic stays
-- [ ] Implement `record_briefing_delivery` tool inside `makeScheduledTools`
-- [ ] Delete `generate`, `generateAndRecord`, `buildSections`, `suggestActions`, `formatFull`, `formatShort`, `recordBriefingDelivery` from `briefing.ts`
-- [ ] Update briefing-related tests
-
-### 3. Migrate alerts
-
-- [ ] Update `pollAlerts` in `scheduler.ts`: replace `runAlertCycleForAllUsers` with a loop that calls `processScheduledPrompt(userId, alertSystemContext, 'Check for alerts.', sendFn)` per eligible user
-- [ ] Implement `send_alert` tool inside `makeScheduledTools` (wraps `isSuppressed` + `sendFn` + `updateAlertState`)
-- [ ] Delete `checkDeadlineNudge`, `checkDueToday`, `checkOverdue`, `checkStaleness`, `checkBlocked`, `runAlertCycle`, `runAlertCycleForAllUsers` from `service.ts`
-- [ ] Keep `isSuppressed`, `updateAlertState`, `insertNewAlertState` in `service.ts` (used by the `send_alert` tool)
-- [ ] Delete `fetchAllTasks` from `shared.ts` (or keep if still used elsewhere); delete `src/proactive/shared.ts` if empty
-- [ ] Update alert-related tests
-
-### 4. Migrate reminders
-
-- [ ] Update `deliverReminder` in `scheduler.ts`: replace direct `sendMessage` with `processScheduledPrompt(userId, reminderSystemContext(reminder), 'Deliver the reminder.', sendFn)`
-- [ ] Implement `mark_reminder_delivered` and `advance_reminder_recurrence` tools inside `makeScheduledTools`
+- [ ] Update `deliverReminder` in `scheduler.ts` to call `processScheduledPrompt(userId,
+reminder.text, sendFn)` instead of `chatRef.sendMessage`
+- [ ] Implement `mark_reminder_delivered` and `advance_reminder_recurrence` tools in
+      `makeScheduledTools`
 - [ ] Update reminder delivery tests
 
-### 5. Clean up types
+### 3. Remove briefing system
 
-- [ ] Remove `BriefingMode`, `BriefingSection`, `BriefingTask`, `AlertCheckResult` from `src/proactive/types.ts`
-- [ ] Remove `import * as briefingService` from `src/llm-orchestrator.ts` if no longer needed
+- [ ] Delete `src/proactive/briefing.ts`
+- [ ] Remove `registerBriefingJob`, `unregisterBriefingJob`, `fireBriefingIfDue`,
+      `cronFromTime`, briefing job map from `scheduler.ts`
+- [ ] Remove `configure_briefing` tool from `tools.ts`
+- [ ] Remove `briefing_time` from `InternalConfigKey` in `src/types/config.ts`
+- [ ] Remove `getMissedBriefing` catch-up hook from `src/llm-orchestrator.ts`
+- [ ] Write and register DB migration to drop `user_briefing_state` table
+- [ ] Delete briefing tests; update scheduler tests
 
-### 6. System prompt for scheduled context
+### 4. Migrate alerts
 
-The scheduled system prompt is intentionally minimal — no task workflow instructions, no ambiguity resolution rules, no output rules about formatting. Just:
+- [ ] Update `pollAlerts` in `scheduler.ts` to call `processScheduledPrompt` per eligible
+      user with the alert-check prompt
+- [ ] Implement `send_alert` tool in `makeScheduledTools` (move suppression + escalation
+      logic from `service.ts`)
+- [ ] Delete `checkDeadlineNudge`, `checkDueToday`, `checkOverdue`, `checkStaleness`,
+      `checkBlocked`, `runAlertCycle`, `runAlertCycleForAllUsers` from `service.ts`
+- [ ] Keep `isSuppressed`, `updateAlertState`, `insertNewAlertState` in `service.ts`
+- [ ] Delete `fetchAllTasks` from `shared.ts`; delete `shared.ts` if empty
+- [ ] Update alert tests
 
-```
-You are papai, a personal task assistant acting on an automated schedule.
-Current date and time: ${localDate} (${timezone}).
+### 5. Clean up types and imports
 
-${systemContext}
-```
-
-Task names should still be formatted as Markdown links; include that rule in each `systemContext` string.
+- [ ] Remove `BriefingSection`, `BriefingTask`, `AlertCheckResult` from `types.ts`
+- [ ] Remove `import * as briefingService` from `llm-orchestrator.ts`
+- [ ] Remove `briefing_time` from `InternalConfigKey`; update `CONFIG_KEYS` length test
