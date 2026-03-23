@@ -540,7 +540,7 @@ describe('trimWithMemoryModel', () => {
 
   test('trimWithMemoryModel with empty history returns empty', async () => {
     generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ output: { keep_indices: [], summary: 'Empty conversation' } })
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [], summary: 'Empty conversation' }) })
 
     const result = await trimWithMemoryModel([], 0, 10, null, mockModel)
     expect(result.trimmedMessages).toEqual([])

@@ -46,7 +46,12 @@ describe('E2E: Task Archive', () => {
     })
 
     expect(result.id).toBe(task.id)
-    expect(result.archivedAt).toBeDefined()
+    expect(result.archivedAt).toBeTruthy()
+    expect(typeof result.archivedAt).toBe('string')
+
+    // Verify task is still retrievable after archive
+    const retrieved = await getTask({ config: kaneoConfig, taskId: task.id })
+    expect(retrieved.id).toBe(task.id)
   })
 
   test('can still retrieve archived task', async () => {
@@ -65,5 +70,14 @@ describe('E2E: Task Archive', () => {
 
     const retrieved = await getTask({ config: kaneoConfig, taskId: task.id })
     expect(retrieved.id).toBe(task.id)
+  })
+
+  test('throws error when archiving non-existent task', async () => {
+    const promise = archiveTask({
+      config: kaneoConfig,
+      taskId: 'non-existent-id',
+      workspaceId,
+    })
+    await expect(promise).rejects.toThrow()
   })
 })

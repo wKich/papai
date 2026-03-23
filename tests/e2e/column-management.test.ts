@@ -94,6 +94,11 @@ describe('E2E: Column Management', () => {
     })
 
     expect(updated.name).toBe('New Name')
+
+    // Verify via re-fetch
+    const columns = await listColumns({ config: kaneoConfig, projectId })
+    const refetched = columns.find((c) => c.id === column.id)
+    expect(refetched?.name).toBe('New Name')
   })
 
   test('updates column color and icon', async () => {
@@ -110,6 +115,12 @@ describe('E2E: Column Management', () => {
 
     expect(updated.color).toBe('#00FF00')
     expect(updated.icon).toBe('✅')
+
+    // Verify via re-fetch
+    const columns = await listColumns({ config: kaneoConfig, projectId })
+    const refetched = columns.find((c) => c.id === column.id)
+    expect(refetched?.color).toBe('#00FF00')
+    expect(refetched?.icon).toBe('✅')
   })
 
   test('reorders columns', async () => {
@@ -153,6 +164,22 @@ describe('E2E: Column Management', () => {
     createdColumnIds.push(column.id)
 
     expect(column.name).toBe(columnName)
-    expect(column.id).toBeDefined()
+  })
+
+  test('throws error when updating non-existent column', async () => {
+    const promise = updateColumn({
+      config: kaneoConfig,
+      columnId: 'non-existent-id',
+      name: 'X',
+    })
+    await expect(promise).rejects.toThrow()
+  })
+
+  test('throws error when deleting non-existent column', async () => {
+    const promise = deleteColumn({
+      config: kaneoConfig,
+      columnId: 'non-existent-id',
+    })
+    await expect(promise).rejects.toThrow()
   })
 })

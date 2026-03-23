@@ -8,6 +8,7 @@ import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { createColumn } from '../../src/providers/kaneo/create-column.js'
 import { createTask } from '../../src/providers/kaneo/create-task.js'
 import { getTask } from '../../src/providers/kaneo/get-task.js'
+import { listColumns } from '../../src/providers/kaneo/list-columns.js'
 import { listTasks } from '../../src/providers/kaneo/list-tasks.js'
 import { updateTask } from '../../src/providers/kaneo/update-task.js'
 import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
@@ -77,6 +78,10 @@ describe('E2E: User Workflows', () => {
     await createColumn({ config: kaneoConfig, projectId, name: `In Progress ${Date.now()}` })
     await createColumn({ config: kaneoConfig, projectId, name: `Done ${Date.now()}`, isFinal: true })
 
+    // Verify columns were created
+    const columns = await listColumns({ config: kaneoConfig, projectId })
+    expect(columns.length).toBeGreaterThanOrEqual(3)
+
     const task1 = await createTask({ config: kaneoConfig, projectId, title: 'Task 1' })
     const task2 = await createTask({ config: kaneoConfig, projectId, title: 'Task 2' })
     testClient.trackTask(task1.id)
@@ -96,6 +101,7 @@ describe('E2E: User Workflows', () => {
 
     const childWithRel = await getTask({ config: kaneoConfig, taskId: childTask.id })
     expect(childWithRel.description).toContain('parent:')
+    expect(childWithRel.description).toContain(parentTask.id)
   })
 
   test('bulk operations workflow', async () => {
@@ -112,6 +118,15 @@ describe('E2E: User Workflows', () => {
 
     const projectTasks = await pollForTasks(() => listTasks({ config: kaneoConfig, projectId }), 5)
     expect(projectTasks.length).toBeGreaterThanOrEqual(5)
+
+    // Blocked by Kaneo API priority bug — priority updates don't persist correctly.
+    // See docs/KANEO_API_BUGS.md - Bug #2 for details.
+    // When the bug is fixed, uncomment and verify each task's priority:
+    // for (const [index, task] of tasks.entries()) {
+    //   const retrieved = await getTask({ config: kaneoConfig, taskId: task.id })
+    //   const expectedPriority = index < 3 ? 'high' : 'medium'
+    //   expect(retrieved.priority).toBe(expectedPriority)
+    // }
   })
 
   test('task handoff workflow', async () => {
@@ -128,5 +143,6 @@ describe('E2E: User Workflows', () => {
 
     const finalTask = await getTask({ config: kaneoConfig, taskId: task.id })
     expect(finalTask.status).toBe('in-review')
+    expect(finalTask.description).toBe('Updated with technical notes')
   })
 })

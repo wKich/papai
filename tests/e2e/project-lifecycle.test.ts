@@ -23,7 +23,6 @@ describe('E2E: Project Lifecycle', () => {
 
     const projects = await listProjects({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
     const found = projects.find((p) => p.id === project.id)
-    expect(found).toBeDefined()
     expect(found?.name).toBe(project.name)
   })
 
@@ -38,13 +37,29 @@ describe('E2E: Project Lifecycle', () => {
     })
 
     expect(updated.name).toBe('Updated Project Name')
+
+    // Verify via re-fetch
+    const projects = await listProjects({ config: kaneoConfig, workspaceId: testClient.getWorkspaceId() })
+    const refetched = projects.find((p) => p.id === project.id)
+    expect(refetched?.name).toBe('Updated Project Name')
   })
 
   test('lists columns in a project', async () => {
     const project = await testClient.createTestProject(`Column Test ${Date.now()}`)
 
     const columns = await listColumns({ config: kaneoConfig, projectId: project.id })
-    expect(Array.isArray(columns)).toBe(true)
     expect(columns.length).toBeGreaterThan(0)
+    expect(columns[0]).toHaveProperty('name')
+    expect(columns[0]).toHaveProperty('id')
+  })
+
+  test('throws error when updating non-existent project', async () => {
+    const promise = updateProject({
+      config: kaneoConfig,
+      workspaceId: testClient.getWorkspaceId(),
+      projectId: 'non-existent-id',
+      name: 'X',
+    })
+    await expect(promise).rejects.toThrow()
   })
 })
