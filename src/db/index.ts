@@ -14,6 +14,7 @@ import { migration009RecurringTasks } from './migrations/009_recurring_tasks.js'
 import { migration010RecurringTaskOccurrences } from './migrations/010_recurring_task_occurrences.js'
 import { migration011ProactiveAlerts } from './migrations/011_proactive_alerts.js'
 import { migration012UserInstructions } from './migrations/012_user_instructions.js'
+import { migration013SoftDeleteOccurrences } from './migrations/013_soft_delete_occurrences.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -53,6 +54,7 @@ const MIGRATIONS = [
   migration010RecurringTaskOccurrences,
   migration011ProactiveAlerts,
   migration012UserInstructions,
+  migration013SoftDeleteOccurrences,
 ] as const
 
 export const initDb = (): void => {

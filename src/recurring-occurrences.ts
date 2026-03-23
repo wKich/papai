@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 
 import { getDrizzleDb } from './db/drizzle.js'
 import { recurringTaskOccurrences } from './db/schema.js'
@@ -31,7 +31,7 @@ export const findTemplateByTaskId = (taskId: string): RecurringTaskRecord | null
   const occurrence = db
     .select({ templateId: recurringTaskOccurrences.templateId })
     .from(recurringTaskOccurrences)
-    .where(eq(recurringTaskOccurrences.taskId, taskId))
+    .where(and(eq(recurringTaskOccurrences.taskId, taskId), isNull(recurringTaskOccurrences.deletedAt)))
     .get()
 
   if (occurrence === undefined) {
@@ -40,6 +40,19 @@ export const findTemplateByTaskId = (taskId: string): RecurringTaskRecord | null
   }
 
   return getRecurringTask(occurrence.templateId)
+}
+
+/** Soft-delete the occurrence record for a given task (sets deleted_at). */
+export const softDeleteOccurrence = (taskId: string): void => {
+  log.debug({ taskId }, 'softDeleteOccurrence called')
+
+  const db = getDrizzleDb()
+  db.update(recurringTaskOccurrences)
+    .set({ deletedAt: new Date().toISOString() })
+    .where(and(eq(recurringTaskOccurrences.taskId, taskId), isNull(recurringTaskOccurrences.deletedAt)))
+    .run()
+
+  log.info({ taskId }, 'Occurrence soft-deleted')
 }
 
 /** Check whether a status string indicates task completion. */

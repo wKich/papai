@@ -23,6 +23,7 @@ import { migration009RecurringTasks } from '../../src/db/migrations/009_recurrin
 import { migration010RecurringTaskOccurrences } from '../../src/db/migrations/010_recurring_task_occurrences.js'
 import { migration011ProactiveAlerts } from '../../src/db/migrations/011_proactive_alerts.js'
 import { migration012UserInstructions } from '../../src/db/migrations/012_user_instructions.js'
+import { migration013SoftDeleteOccurrences } from '../../src/db/migrations/013_soft_delete_occurrences.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -41,6 +42,7 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration010RecurringTaskOccurrences,
   migration011ProactiveAlerts,
   migration012UserInstructions,
+  migration013SoftDeleteOccurrences,
 ]
 
 // ============================================================================

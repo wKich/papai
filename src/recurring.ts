@@ -12,6 +12,7 @@ export {
   findTemplateByTaskId,
   isCompletionStatus,
   recordOccurrence,
+  softDeleteOccurrence,
 } from './recurring-occurrences.js'
 
 const log = logger.child({ scope: 'recurring' })

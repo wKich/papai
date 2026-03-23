@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
+import { softDeleteOccurrence } from '../recurring.js'
 import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:delete-task' })
@@ -27,7 +28,16 @@ export function makeDeleteTaskTool(provider: TaskProvider): ToolSet[string] {
         return gate
       }
       try {
-        return await provider.deleteTask!(taskId)
+        const result = await provider.deleteTask!(taskId)
+        try {
+          softDeleteOccurrence(taskId)
+        } catch (occErr) {
+          log.warn(
+            { error: occErr instanceof Error ? occErr.message : String(occErr), taskId },
+            'Failed to soft-delete occurrence record',
+          )
+        }
+        return result
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'delete_task' },

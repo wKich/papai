@@ -77,7 +77,8 @@ beforeEach(() => {
       id TEXT PRIMARY KEY,
       template_id TEXT NOT NULL,
       task_id TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')) NOT NULL
+      created_at TEXT DEFAULT (datetime('now')) NOT NULL,
+      deleted_at TEXT
     )
   `)
   testSqlite.run('CREATE INDEX idx_recurring_occurrences_template ON recurring_task_occurrences(template_id)')

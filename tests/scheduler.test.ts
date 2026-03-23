@@ -108,7 +108,7 @@ const setupDb = (): void => {
   testSqlite.run(`
     CREATE TABLE IF NOT EXISTS recurring_task_occurrences (
       id TEXT PRIMARY KEY, template_id TEXT NOT NULL, task_id TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')) NOT NULL
+      created_at TEXT DEFAULT (datetime('now')) NOT NULL, deleted_at TEXT
     )
   `)
 }

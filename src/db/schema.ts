@@ -110,6 +110,7 @@ export const recurringTaskOccurrences = sqliteTable(
     createdAt: text('created_at')
       .notNull()
       .default(sql`(datetime('now'))`),
+    deletedAt: text('deleted_at'),
   },
   (table) => [
     index('idx_recurring_occurrences_template').on(table.templateId),
