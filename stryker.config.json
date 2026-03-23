@@ -1,8 +1,6 @@
 {
-  "testRunner": "command",
-  "commandRunner": {
-    "command": "bun run test"
-  },
+  "testRunner": "bun",
+  "appendPlugins": ["@hughescr/stryker-bun-runner"],
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
   "mutate": [
@@ -17,10 +15,10 @@
     "src/memory.ts",
     "src/users.ts"
   ],
-  "coverageAnalysis": "off",
+  "coverageAnalysis": "perTest",
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
-  "concurrency": 4,
+  "concurrency": 1,
   "timeoutMS": 10000,
   "timeoutFactor": 2,
   "thresholds": {
