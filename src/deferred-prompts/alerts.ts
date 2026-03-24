@@ -33,8 +33,6 @@ export const createAlertPrompt = (
   cooldownMinutes?: number,
 ): AlertPrompt => {
   log.debug({ userId, cooldownMinutes }, 'createAlertPrompt called')
-  alertConditionSchema.parse(condition)
-
   const id = crypto.randomUUID()
   const db = getDrizzleDb()
 
@@ -107,7 +105,6 @@ export const updateAlertPrompt = (
   const set: Partial<typeof alertPrompts.$inferInsert> = {}
   if (updates.prompt !== undefined) set.prompt = updates.prompt
   if (updates.condition !== undefined) {
-    alertConditionSchema.parse(updates.condition)
     set.condition = JSON.stringify(updates.condition)
   }
   if (updates.cooldownMinutes !== undefined) set.cooldownMinutes = updates.cooldownMinutes
