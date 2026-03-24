@@ -50,7 +50,7 @@ type GenerateTextResult = {
   usage: Record<string, unknown>
 }
 
-let generateTextImpl: () => Promise<GenerateTextResult>
+let generateTextImpl: (args?: { messages?: unknown[] }) => Promise<GenerateTextResult>
 
 const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
   Promise.resolve({
@@ -66,7 +66,7 @@ const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
 const realAi = await import('ai')
 void mock.module('ai', () => ({
   ...realAi,
-  generateText: (): Promise<GenerateTextResult> => generateTextImpl(),
+  generateText: (args: { messages?: unknown[] }): Promise<GenerateTextResult> => generateTextImpl(args),
   stepCountIs: (): (() => boolean) => () => false,
 }))
 
@@ -75,6 +75,48 @@ void mock.module('@ai-sdk/openai-compatible', () => ({
     (): ((_model: string) => string) =>
     (_model: string): string =>
       'mock-model',
+}))
+
+// Background events mock
+let unseenEventsImpl: (userId: string) => Array<{
+  id: string
+  userId: string
+  type: string
+  prompt: string
+  response: string
+  createdAt: string
+  injectedAt: string | null
+}> = (): BgEvent[] => []
+
+type BgEvent = {
+  id: string
+  userId: string
+  type: string
+  prompt: string
+  response: string
+  createdAt: string
+  injectedAt: string | null
+}
+type ConsumeResult = { systemContent: string; historyEntries: Array<{ role: 'system'; content: string }> } | null
+
+void mock.module('../src/deferred-prompts/background-events.js', () => ({
+  consumeUnseenEvents: (userId: string): ConsumeResult => {
+    const events = unseenEventsImpl(userId)
+    if (events.length === 0) return null
+    const lines = events.map((e: BgEvent): string => `[${e.createdAt} | ${e.type}] ${e.prompt}\n→ ${e.response}`)
+    return {
+      systemContent: `[Background tasks completed while you were away]\n\n${lines.join('\n\n')}`,
+      historyEntries: events.map((e: BgEvent): { role: 'system'; content: string } => ({
+        role: 'system',
+        content: `[Background: ${e.type} | ${e.createdAt}]\n${e.prompt}\n→ ${e.response}`,
+      })),
+    }
+  },
+  loadUnseenEvents: (userId: string): BgEvent[] => unseenEventsImpl(userId),
+  markEventsInjected: (_ids: string[]): void => {},
+  recordBackgroundEvent: (): void => {},
+  pruneBackgroundEvents: (): void => {},
+  formatBackgroundEventsMessage: (): string => '',
 }))
 
 afterAll(() => {
@@ -115,6 +157,7 @@ beforeEach(async () => {
   _userCaches.clear()
 
   generateTextImpl = defaultGenerateTextResult
+  unseenEventsImpl = (): BgEvent[] => []
   seedConfig()
 })
 
@@ -265,5 +308,97 @@ describe('processMessage — success path history', () => {
     expect(history[0]!.content).toBe('hello')
     expect(history[1]!.role).toBe('assistant')
     expect(history[1]!.content).toBe('Hi!')
+  })
+})
+
+const msgRole = (m: unknown): string => {
+  if (m !== null && typeof m === 'object' && 'role' in m)
+    return String(Object.getOwnPropertyDescriptor(m, 'role')?.value ?? '')
+  return ''
+}
+const msgContent = (m: unknown): string => {
+  if (m !== null && typeof m === 'object' && 'content' in m)
+    return String(Object.getOwnPropertyDescriptor(m, 'content')?.value ?? '')
+  return ''
+}
+
+describe('processMessage — background event injection', () => {
+  beforeEach((): void => {
+    unseenEventsImpl = (): BgEvent[] => []
+  })
+
+  test('prepends system message when unseen events exist', async () => {
+    unseenEventsImpl = (): BgEvent[] => [
+      {
+        id: 'evt-1',
+        userId: 'user-1',
+        type: 'scheduled',
+        prompt: 'create report',
+        response: 'Created report.',
+        createdAt: '2026-03-24T09:00:00Z',
+        injectedAt: null,
+      },
+    ]
+
+    let capturedMessages: unknown[] = []
+    generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
+      capturedMessages = [...(args?.messages ?? [])]
+      return Promise.resolve({
+        text: 'ok',
+        toolCalls: [],
+        toolResults: [],
+        response: { messages: [{ role: 'assistant' as const, content: 'ok' }] },
+        usage: {},
+      })
+    }
+
+    const { reply } = createMockReply()
+    await processMessage(reply, CTX_ID, null, 'hello')
+
+    const systemMessages = capturedMessages.filter((m) => msgRole(m) === 'system')
+    expect(systemMessages.length).toBeGreaterThanOrEqual(1)
+    const bgMsg = systemMessages.find((m) => msgContent(m).includes('Background tasks completed'))
+    expect(bgMsg).toBeDefined()
+    expect(msgContent(bgMsg)).toContain('create report')
+    expect(msgContent(bgMsg)).toContain('Created report.')
+  })
+
+  test('appends background history entries on injection', async () => {
+    unseenEventsImpl = (): BgEvent[] => [
+      {
+        id: 'evt-2',
+        userId: 'user-1',
+        type: 'alert',
+        prompt: 'check overdue',
+        response: '2 overdue.',
+        createdAt: '2026-03-24T09:05:00Z',
+        injectedAt: null,
+      },
+    ]
+
+    const { reply } = createMockReply()
+    await processMessage(reply, CTX_ID, null, 'hello')
+
+    const history = getCachedHistory(CTX_ID)
+    const systemEntries = history.filter((m) => m.role === 'system')
+    expect(systemEntries.length).toBeGreaterThanOrEqual(1)
+    const bgEntry = systemEntries.find((m) => typeof m.content === 'string' && m.content.includes('check overdue'))
+    expect(bgEntry).toBeDefined()
+  })
+
+  test('does not prepend system message when no unseen events', async () => {
+    unseenEventsImpl = (): BgEvent[] => []
+
+    let capturedMessages: unknown[] = []
+    generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
+      capturedMessages = [...(args?.messages ?? [])]
+      return defaultGenerateTextResult()
+    }
+
+    const { reply } = createMockReply()
+    await processMessage(reply, CTX_ID, null, 'hello')
+
+    const bgMessages = capturedMessages.filter((m) => msgContent(m).includes('Background tasks completed'))
+    expect(bgMessages).toHaveLength(0)
   })
 })

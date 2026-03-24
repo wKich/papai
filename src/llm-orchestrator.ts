@@ -6,6 +6,7 @@ import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
+import { consumeUnseenEvents } from './deferred-prompts/background-events.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { buildInstructionsBlock } from './instructions.js'
@@ -119,7 +120,6 @@ const buildSystemPrompt = (provider: TaskProvider, timezone: string, contextId: 
 
 const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
-
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
 const checkRequiredConfig = (contextId: string): string[] => {
@@ -158,7 +158,6 @@ const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: 
 
 const buildProvider = (contextId: string): TaskProvider => {
   log.debug({ contextId, providerName: TASK_PROVIDER }, 'Building provider')
-
   if (TASK_PROVIDER === 'kaneo') {
     const kaneoKey = getConfig(contextId, 'kaneo_apikey')!
     const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
@@ -178,7 +177,6 @@ const buildProvider = (contextId: string): TaskProvider => {
 
   return createProvider(TASK_PROVIDER, {})
 }
-
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
@@ -229,6 +227,12 @@ const callLlm = async (
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
+  const bgResult = consumeUnseenEvents(contextId)
+  const finalMessages =
+    bgResult === null
+      ? messagesWithMemory
+      : [{ role: 'system' as const, content: bgResult.systemContent }, ...messagesWithMemory]
+  if (bgResult !== null) appendHistory(contextId, bgResult.historyEntries)
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -236,7 +240,7 @@ const callLlm = async (
   const result = await generateText({
     model,
     system: buildSystemPrompt(provider, timezone, contextId),
-    messages: messagesWithMemory,
+    messages: finalMessages,
     tools,
     stopWhen: stepCountIs(25),
   })
@@ -275,9 +279,7 @@ export const processMessage = async (
   const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
-
   appendHistory(contextId, [newMessage])
-
   try {
     const result = await callLlm(reply, contextId, username, history)
     const assistantMessages = result.response.messages
