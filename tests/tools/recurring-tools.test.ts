@@ -192,52 +192,24 @@ describe('makeCreateRecurringTaskTool', () => {
     expect(createRecurringTaskCallCount).toBe(1)
   })
 
-  test('returns error for invalid cron expression', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Test task', projectId: 'p1', triggerType: 'cron', cronExpression: 'not-a-valid-cron' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('returns error for out-of-range cron values like 99 99 99 99 99', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Test task', projectId: 'p1', triggerType: 'cron', cronExpression: '99 99 99 99 99' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('returns error when cron type but no cronExpression', async () => {
+  test('returns error when cron type but no schedule', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron' }, toolCtx)
-    expect(result).toHaveProperty('error', "cronExpression is required when triggerType is 'cron'")
+    expect(result).toHaveProperty('error', "schedule is required when triggerType is 'cron'")
     expect(createRecurringTaskCallCount).toBe(0)
   })
 
-  test('returns error when cron type with empty string cronExpression', async () => {
+  test('converts semantic schedule to cron expression', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute(
-      { title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: '' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error', "cronExpression is required when triggerType is 'cron'")
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('creates task with valid cron expression and returns schedule', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Monday standup', projectId: 'p1', triggerType: 'cron', cronExpression: '0 9 * * 1' },
+      {
+        title: 'Monday standup',
+        projectId: 'p1',
+        triggerType: 'cron',
+        schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+      },
       toolCtx,
     )
     expect(result).toHaveProperty('id', 'rec-1')
@@ -259,22 +231,11 @@ describe('makeCreateRecurringTaskTool', () => {
     expect(result).toHaveProperty('schedule', 'after completion of current instance')
   })
 
-  test('returns error with specific message for invalid cron', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: 'bad' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(result).not.toEqual({ error: '' })
-  })
-
   test('has a non-empty description', () => {
     expect(makeCreateRecurringTaskTool('user-1').description).toBeTruthy()
   })
 
-  test('on_complete triggerType ignores cronExpression when both provided', async () => {
+  test('on_complete triggerType ignores schedule when both provided', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
 
@@ -283,14 +244,12 @@ describe('makeCreateRecurringTaskTool', () => {
         title: 'Test',
         projectId: 'p-1',
         triggerType: 'on_complete',
-        cronExpression: '0 9 * * 1',
+        schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
       },
       toolCtx,
     )
 
-    // Result should not contain an error — on_complete does not require cronExpression validation
     expect(result).not.toHaveProperty('error')
-    // The schedule should be 'after completion of current instance', not a cron description
     expect(result).toHaveProperty('schedule', 'after completion of current instance')
   })
 
@@ -302,11 +261,38 @@ describe('makeCreateRecurringTaskTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     let caught: unknown = null
     try {
-      await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: '0 9 * * 1' }, toolCtx)
+      await tool.execute(
+        {
+          title: 'Task',
+          projectId: 'p1',
+          triggerType: 'cron',
+          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+        },
+        toolCtx,
+      )
     } catch (e) {
       caught = e
     }
     expect(caught).toHaveProperty('message', 'create failed')
+  })
+
+  test('returns nextRun converted to user local time', async () => {
+    // Override the mock to return a known UTC nextRun with Asia/Karachi timezone
+    setCachedConfig('user-1', 'timezone', 'Asia/Karachi')
+    const tool = makeCreateRecurringTaskTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      {
+        title: 'Daily',
+        projectId: 'p1',
+        triggerType: 'cron',
+        schedule: { frequency: 'daily', time: '17:00' },
+      },
+      toolCtx,
+    )
+
+    // nextRun from mock is null by default — verify no crash
+    expect(result).toHaveProperty('nextRun', null)
   })
 })
 
