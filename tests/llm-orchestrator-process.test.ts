@@ -97,7 +97,13 @@ type BgEvent = {
   createdAt: string
   injectedAt: string | null
 }
-type ConsumeResult = { systemContent: string; historyEntries: Array<{ role: 'system'; content: string }> } | null
+type ConsumeResult = {
+  eventIds: string[]
+  systemContent: string
+  historyEntries: Array<{ role: 'system'; content: string }>
+} | null
+
+let markEventsInjectedCalls: string[][] = []
 
 void mock.module('../src/deferred-prompts/background-events.js', () => ({
   consumeUnseenEvents: (userId: string): ConsumeResult => {
@@ -105,6 +111,7 @@ void mock.module('../src/deferred-prompts/background-events.js', () => ({
     if (events.length === 0) return null
     const lines = events.map((e: BgEvent): string => `[${e.createdAt} | ${e.type}] ${e.prompt}\n→ ${e.response}`)
     return {
+      eventIds: events.map((e: BgEvent): string => e.id),
       systemContent: `[Background tasks completed while you were away]\n\n${lines.join('\n\n')}`,
       historyEntries: events.map((e: BgEvent): { role: 'system'; content: string } => ({
         role: 'system',
@@ -113,7 +120,9 @@ void mock.module('../src/deferred-prompts/background-events.js', () => ({
     }
   },
   loadUnseenEvents: (userId: string): BgEvent[] => unseenEventsImpl(userId),
-  markEventsInjected: (_ids: string[]): void => {},
+  markEventsInjected: (ids: string[]): void => {
+    markEventsInjectedCalls.push(ids)
+  },
   recordBackgroundEvent: (): void => {},
   pruneBackgroundEvents: (): void => {},
   formatBackgroundEventsMessage: (): string => '',
@@ -158,6 +167,7 @@ beforeEach(async () => {
 
   generateTextImpl = defaultGenerateTextResult
   unseenEventsImpl = (): BgEvent[] => []
+  markEventsInjectedCalls = []
   seedConfig()
 })
 
@@ -400,5 +410,46 @@ describe('processMessage — background event injection', () => {
 
     const bgMessages = capturedMessages.filter((m) => msgContent(m).includes('Background tasks completed'))
     expect(bgMessages).toHaveLength(0)
+  })
+
+  test('marks events as injected only after successful LLM call', async () => {
+    unseenEventsImpl = (): BgEvent[] => [
+      {
+        id: 'evt-mark-1',
+        userId: 'user-1',
+        type: 'scheduled',
+        prompt: 'daily report',
+        response: 'Report done.',
+        createdAt: '2026-03-24T09:00:00Z',
+        injectedAt: null,
+      },
+    ]
+
+    const { reply } = createMockReply()
+    await processMessage(reply, CTX_ID, null, 'hello')
+
+    expect(markEventsInjectedCalls).toHaveLength(1)
+    expect(markEventsInjectedCalls[0]).toEqual(['evt-mark-1'])
+  })
+
+  test('does not mark events as injected when LLM call fails', async () => {
+    unseenEventsImpl = (): BgEvent[] => [
+      {
+        id: 'evt-fail-1',
+        userId: 'user-1',
+        type: 'alert',
+        prompt: 'check overdue',
+        response: '2 overdue.',
+        createdAt: '2026-03-24T09:05:00Z',
+        injectedAt: null,
+      },
+    ]
+
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM crash'))
+
+    const { reply } = createMockReply()
+    await processMessage(reply, CTX_ID, null, 'hello')
+
+    expect(markEventsInjectedCalls).toHaveLength(0)
   })
 })

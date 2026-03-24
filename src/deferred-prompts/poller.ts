@@ -118,15 +118,14 @@ async function executeScheduledPrompt(
   let response: string
   try {
     response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
+    await chat.sendMessage(prompt.userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
-    recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, `Failed: ${errMsg}`)
+    response = `Failed: ${errMsg}`
     await chat.sendMessage(prompt.userId, `Scheduled task failed: ${errMsg}`)
-    return
   }
 
-  await chat.sendMessage(prompt.userId, response)
   recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, response)
   const now = new Date().toISOString()
   if (prompt.cronExpression === null) {
@@ -180,15 +179,14 @@ async function executeSingleAlert(
   let response: string
   try {
     response = await invokeLlm(userId, systemPrompt, userPrompt, buildProviderFn)
+    await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
-    recordBackgroundEvent(userId, 'alert', alert.prompt, `Failed: ${errMsg}`)
+    response = `Failed: ${errMsg}`
     await chat.sendMessage(userId, `Alert task failed: ${errMsg}`)
-    return
   }
 
-  await chat.sendMessage(userId, response)
   recordBackgroundEvent(userId, 'alert', alert.prompt, response)
   const now = new Date().toISOString()
   updateAlertTriggerTime(alert.id, userId, now)

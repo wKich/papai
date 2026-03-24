@@ -6,7 +6,7 @@ import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
-import { consumeUnseenEvents } from './deferred-prompts/background-events.js'
+import { consumeUnseenEvents, markEventsInjected } from './deferred-prompts/background-events.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { buildInstructionsBlock } from './instructions.js'
@@ -197,11 +197,10 @@ const sendLlmResponse = async (
   contextId: string,
   result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
 ): Promise<void> => {
-  const assistantText = result.text
-  const textToFormat = assistantText !== undefined && assistantText !== '' ? assistantText : 'Done.'
+  const textToFormat = result.text !== undefined && result.text !== '' ? result.text : 'Done.'
   await reply.formatted(textToFormat)
   log.info(
-    { contextId, responseLength: assistantText?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
+    { contextId, responseLength: result.text?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
     'Response sent successfully',
   )
 }
@@ -232,7 +231,6 @@ const callLlm = async (
     bgResult === null
       ? messagesWithMemory
       : [{ role: 'system' as const, content: bgResult.systemContent }, ...messagesWithMemory]
-  if (bgResult !== null) appendHistory(contextId, bgResult.historyEntries)
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -245,16 +243,18 @@ const callLlm = async (
     stopWhen: stepCountIs(25),
   })
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+  if (bgResult !== null) {
+    markEventsInjected(bgResult.eventIds)
+    appendHistory(contextId, bgResult.historyEntries)
+  }
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
   return result
 }
 
 const handleMessageError = async (reply: ReplyFn, contextId: string, error: unknown): Promise<void> => {
-  log.error(
-    { contextId, error: isAppError(error) ? error : error instanceof Error ? error.message : String(error) },
-    'Message handling failed',
-  )
+  const errData = isAppError(error) ? error : error instanceof Error ? error.message : String(error)
+  log.error({ contextId, error: errData }, 'Message handling failed')
   if (isAppError(error)) await reply.text(getUserMessage(error))
   else if (error instanceof KaneoClassifiedError || error instanceof YouTrackClassifiedError)
     await reply.text(getUserMessage(error.appError))
