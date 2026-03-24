@@ -245,6 +245,38 @@ describe('update_deferred_prompt', () => {
     if (!update.execute) throw new Error('Tool execute is undefined')
     expect(await update.execute({ id: 'missing', prompt: 'X' }, toolCtx)).toHaveProperty('error')
   })
+
+  test('rejects invalid fire_at on update', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const update = tools['update_deferred_prompt']!
+    if (!create.execute || !update.execute) throw new Error('Tool execute is undefined')
+    const created: unknown = await create.execute(
+      { prompt: 'S', schedule: { fire_at: new Date(Date.now() + 60_000).toISOString() } },
+      toolCtx,
+    )
+    const result: unknown = await update.execute(
+      { id: extractId(created), schedule: { fire_at: 'not-a-date' } },
+      toolCtx,
+    )
+    expect(result).toHaveProperty('error')
+  })
+
+  test('rejects past fire_at on update', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const update = tools['update_deferred_prompt']!
+    if (!create.execute || !update.execute) throw new Error('Tool execute is undefined')
+    const created: unknown = await create.execute(
+      { prompt: 'S', schedule: { fire_at: new Date(Date.now() + 60_000).toISOString() } },
+      toolCtx,
+    )
+    const result: unknown = await update.execute(
+      { id: extractId(created), schedule: { fire_at: '2020-01-01T00:00:00Z' } },
+      toolCtx,
+    )
+    expect(result).toHaveProperty('error')
+  })
 })
 
 describe('cancel_deferred_prompt', () => {

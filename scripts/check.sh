@@ -19,6 +19,9 @@ done
 TMPDIR=$(mktemp -d) || { echo "Failed to create temp dir" >&2; exit 1; }
 trap 'rm -rf "$TMPDIR"' EXIT
 
+# Sanitize check names for safe temp filenames (replace : with _)
+safe_name() { echo "${1//:/_}"; }
+
 if [ "$STAGED_MODE" = true ]; then
   # Get staged files into array
   staged_files=()
@@ -68,8 +71,8 @@ if [ "$STAGED_MODE" = true ]; then
   # Run format:check on staged files
   (
     exit_code=0
-    bunx oxfmt --check "${relevant_files[@]}" >"$TMPDIR/format:check.out" 2>&1 || exit_code=$?
-    echo "$exit_code" >"$TMPDIR/format:check.exit"
+    bunx oxfmt --check "${relevant_files[@]}" >"$TMPDIR/format_check.out" 2>&1 || exit_code=$?
+    echo "$exit_code" >"$TMPDIR/format_check.exit"
   ) &
   format_pid=$!
 
@@ -80,19 +83,20 @@ if [ "$STAGED_MODE" = true ]; then
 
   # Check results and display failures
   for check in "${checks[@]}"; do
-    if [ ! -f "$TMPDIR/$check.exit" ]; then
+    fname=$(safe_name "$check")
+    if [ ! -f "$TMPDIR/$fname.exit" ]; then
       failed=$((failed + 1))
       echo ""
       echo "✗ $check failed (no exit file found)"
       continue
     fi
-    exit_code=$(cat "$TMPDIR/$check.exit")
+    exit_code=$(cat "$TMPDIR/$fname.exit")
     if [ "$exit_code" -ne 0 ]; then
       failed=$((failed + 1))
       echo ""
       echo "✗ $check failed (exit code $exit_code):"
       echo "---"
-      cat "$TMPDIR/$check.out"
+      cat "$TMPDIR/$fname.out"
       echo "---"
     fi
   done
@@ -115,10 +119,11 @@ else
 
   # Run all checks in parallel
   for check in "${checks[@]}"; do
+    fname=$(safe_name "$check")
     (
       exit_code=0
-      bun run "$check" >"$TMPDIR/$check.out" 2>&1 || exit_code=$?
-      echo "$exit_code" >"$TMPDIR/$check.exit"
+      bun run "$check" >"$TMPDIR/$fname.out" 2>&1 || exit_code=$?
+      echo "$exit_code" >"$TMPDIR/$fname.exit"
     ) &
     pids+=($!)
   done
@@ -130,19 +135,20 @@ else
 
   # Check results and display failures
   for check in "${checks[@]}"; do
-    if [ ! -f "$TMPDIR/$check.exit" ]; then
+    fname=$(safe_name "$check")
+    if [ ! -f "$TMPDIR/$fname.exit" ]; then
       failed=$((failed + 1))
       echo ""
       echo "✗ $check failed (no exit file found)"
       continue
     fi
-    exit_code=$(cat "$TMPDIR/$check.exit")
+    exit_code=$(cat "$TMPDIR/$fname.exit")
     if [ "$exit_code" -ne 0 ]; then
       failed=$((failed + 1))
       echo ""
       echo "✗ $check failed (exit code $exit_code):"
       echo "---"
-      cat "$TMPDIR/$check.out"
+      cat "$TMPDIR/$fname.out"
       echo "---"
     fi
   done

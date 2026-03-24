@@ -104,4 +104,17 @@ describe('snapshots', () => {
     expect(user1Snapshots.get('task-1:status')).toBe('todo')
     expect(user2Snapshots.get('task-1:status')).toBe('done')
   })
+
+  test('prunes all snapshots when tasks list is empty', () => {
+    updateSnapshots('user-1', [
+      makeTask({ id: 'task-1', status: 'todo', priority: 'high' }),
+      makeTask({ id: 'task-2', status: 'done' }),
+    ])
+
+    expect(getSnapshotsForUser('user-1').size).toBeGreaterThan(0)
+
+    updateSnapshots('user-1', [])
+
+    expect(getSnapshotsForUser('user-1').size).toBe(0)
+  })
 })
