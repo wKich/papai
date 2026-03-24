@@ -1,8 +1,12 @@
 # Phase 10: Notification Controls & User Preferences
 
+> **Status**: Partially Implemented
+
 ---
 
 # User Story 1: Setting a Timezone for Correct Local Times
+
+**Status**: IMPLEMENTED — Timezone config key exists and is used by scheduler
 
 **As a** remote worker based in a different timezone than the server
 **I want** to tell the assistant my local timezone
@@ -23,6 +27,8 @@
 ---
 
 # User Story 2: Quiet Hours to Silence Messages at Night
+
+**Status**: NOT IMPLEMENTED — Quiet hours system not yet built
 
 **As a** user who receives assistant messages on a personal device
 **I want** to define a range of hours during which the assistant stays silent
@@ -50,6 +56,8 @@
 
 # User Story 3: Configuring Working Days for Briefings and Nudges
 
+**Status**: NOT IMPLEMENTED — Working days configuration not yet built
+
 **As a** user with a non-standard work schedule (e.g., Tuesday–Saturday)
 **I want** to specify which days of the week count as my working days
 **So that** the assistant only sends briefings and task nudges on days when I am actually working
@@ -75,6 +83,8 @@
 ---
 
 # User Story 4: Choosing a Delivery Mode for Notifications
+
+**Status**: NOT IMPLEMENTED — Delivery modes (immediate/digest/muted) not yet built
 
 **As a** user who prefers not to be interrupted throughout the day
 **I want** to choose between receiving messages immediately, receiving them bundled into a single daily digest, or muting all proactive messages entirely
@@ -108,6 +118,8 @@
 
 # User Story 5: Turning Off Specific Notification Features Independently
 
+**Status**: NOT IMPLEMENTED — Per-feature toggles not yet built
+
 **As a** user who finds deadline nudges useful but morning briefings distracting
 **I want** to enable or disable each type of assistant message separately
 **So that** I only receive the proactive messages that are actually valuable to me
@@ -139,6 +151,8 @@
 ---
 
 # User Story 6: Snoozing, Dismissing, or Rescheduling a Received Message
+
+**Status**: NOT IMPLEMENTED — Natural language response handling for proactive messages not yet built
 
 **As a** user who receives a deadline nudge at an inconvenient moment
 **I want** to snooze, dismiss, or reschedule that specific notification directly from the chat
@@ -172,6 +186,8 @@
 
 # User Story 7: Reviewing and Resetting All Notification Preferences
 
+**Status**: NOT IMPLEMENTED — Notification preferences management UI not yet built
+
 **As a** user who has customized many notification settings over time
 **I want** to view all my current preferences in one place and reset them to defaults if needed
 **So that** I have a clear picture of how the assistant is configured and can easily start fresh
@@ -196,14 +212,19 @@
 
 ---
 
-## Technical Problems Solved
+## Implementation Notes
 
-- Messages no longer arrive at 3 AM because all scheduling is offset-aware relative to each user's declared local timezone
-- Users in non-UTC timezones see times expressed correctly instead of in server-local or UTC time
-- Proactive message flooding is eliminated by quiet-hours enforcement, which holds non-urgent messages until the user's active hours resume
-- Users with non-standard work schedules (e.g., four-day weeks, weekend shifts) receive briefings and nudges only on days they are actually working
-- High-volume notification fatigue is reduced by digest mode, which collapses multiple proactive messages into a single daily summary
-- Users who do not want any proactive contact can mute the assistant entirely without disabling the bot
-- Granular per-feature toggles prevent disabling the entire assistant just to silence one specific message type
-- Snoze, dismiss, and reschedule actions close the feedback loop so users can act on a nudge without leaving the chat or losing the underlying task context
-- Accumulated preference drift is addressable through a single reset command rather than manually clearing each setting
+**Currently Working:**
+
+- Timezone configuration via `/set timezone <region>`
+- All scheduled operations respect the user's configured timezone
+
+**Still Needed:**
+
+- Quiet hours start/end time configuration
+- Working days selector (multi-select for days of week)
+- Delivery mode selector (immediate/digest/muted)
+- Per-feature enable/disable toggles
+- Natural language parsing for snooze/dismiss/reschedule responses
+- Preferences summary command
+- Reset preferences command

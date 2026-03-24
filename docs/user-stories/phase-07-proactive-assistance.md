@@ -1,4 +1,12 @@
+# Phase 7: Proactive Assistance — User Stories
+
+> **Status**: Partially Implemented
+
+---
+
 # User Story 1: Morning Briefing at a Chosen Time
+
+**Status**: NOT IMPLEMENTED — Briefing system not yet built
 
 **As a** project manager starting my work day
 **I want** the bot to automatically send me a summary of my tasks at a time I choose each morning
@@ -13,6 +21,8 @@
 ---
 
 # User Story 2: Choosing Between a Short and a Full Briefing
+
+**Status**: NOT IMPLEMENTED — Depends on User Story 1
 
 **As a** busy user who values brevity in the morning
 **I want** to choose whether my daily briefing shows a compact summary or the full breakdown of all sections
@@ -32,6 +42,8 @@
 
 # User Story 3: Missed Briefing Catch-Up on First Message
 
+**Status**: NOT IMPLEMENTED — Depends on User Story 1
+
 **As a** user who sometimes starts the day late or away from the app
 **I want** to still receive my daily briefing the first time I message the bot, if the scheduled delivery was missed
 **So that** I never lose visibility into my task state even when I open the app later than usual
@@ -46,6 +58,8 @@
 
 # User Story 4: Pre-Deadline Nudge for Approaching Due Dates
 
+**Status**: NOT IMPLEMENTED — Alert system for deadlines not yet built
+
 **As a** team member managing several open tasks
 **I want** to receive an automatic reminder the day before a task is due
 **So that** I have time to act on it or escalate before the deadline passes
@@ -59,6 +73,8 @@
 ---
 
 # User Story 5: Due-Day and Overdue Escalation Alerts
+
+**Status**: NOT IMPLEMENTED — Depends on User Story 4
 
 **As a** user responsible for on-time delivery
 **I want** to receive an urgent alert on the day a task is due and a follow-up alert the next day if it is still not done
@@ -82,6 +98,8 @@
 
 # User Story 6: Staleness Alert for Inactive Tasks
 
+**Status**: NOT IMPLEMENTED — Task staleness detection not yet built
+
 **As a** team lead monitoring project health
 **I want** to be alerted when a task has had no progress for a configurable number of days
 **So that** work that has gone silent is surfaced before it becomes a bottleneck
@@ -96,6 +114,8 @@
 
 # User Story 7: Alert for Tasks Blocked Near Their Deadline
 
+**Status**: NOT IMPLEMENTED — Depends on User Stories 4 and 6
+
 **As a** project manager tracking dependency chains
 **I want** to be alerted when a task is approaching its deadline but is still blocked by an unresolved dependency
 **So that** I can intervene on the blocker before the deadline is missed
@@ -109,6 +129,8 @@
 ---
 
 # User Story 8: One-Time Reminders in Natural Language
+
+**Status**: IMPLEMENTED — Deferred prompts system supports scheduled reminders via `create_deferred_prompt`
 
 **As a** user who wants lightweight personal reminders
 **I want** to tell the bot to remind me about something in natural language — like "remind me tomorrow at 9" or "in 3 hours"
@@ -128,6 +150,8 @@
 
 # User Story 9: Repeating Reminders on a Fixed Schedule
 
+**Status**: IMPLEMENTED — Cron-based recurring reminders via `create_deferred_prompt` with `schedule.cron`
+
 **As a** user with recurring responsibilities
 **I want** to set a repeating reminder — such as "every Friday at 4pm" or "every weekday morning"
 **So that** I receive consistent prompts for routine tasks without re-creating the reminder each week
@@ -141,6 +165,8 @@
 ---
 
 # User Story 10: Snooze, Reschedule, and Act from a Reminder
+
+**Status**: NOT IMPLEMENTED — Reminder management via chat responses not yet built
 
 **As a** user who receives a reminder at an inconvenient time
 **I want** to snooze it for a short while, reschedule it to a different time, or mark the related task as done directly from the reminder message
@@ -166,15 +192,19 @@
 
 ---
 
-## Technical Problems Solved
+## Implementation Notes
 
-- The bot had no way to initiate contact — it could only respond, leaving time-sensitive information unseen until the user explicitly asked
-- Users had no single daily entry point summarising their task load, requiring manual queries every morning
-- Deadlines could pass silently with no notification if the user did not check in at the right moment
-- Stale tasks with no recent activity were invisible unless the user actively searched for them
-- Blocked tasks approaching their deadline had no escalation path, requiring users to monitor blockers manually
-- There was no mechanism to schedule future messages or reminders from within the chat interface
-- Recurring responsibilities required the user to re-issue reminder requests manually each cycle
-- Duplicate nudges for the same issue could not be suppressed, risking alert fatigue
-- Users could not act on a reminder (snooze, reschedule, complete the task) from within the reminder message itself
-- Timezone-awareness was absent, making any time-based scheduling unreliable for users outside UTC
+**Currently Working:**
+
+- Deferred prompts with one-time scheduled reminders (`create_deferred_prompt` with `fire_at`)
+- Recurring reminders via cron expressions (`create_deferred_prompt` with `cron`)
+- Listing, updating, and canceling deferred prompts
+- Timezone-aware scheduling
+
+**Still Needed:**
+
+- Morning briefing generation and delivery system
+- Deadline alert detection and notification pipeline
+- Staleness detection based on task activity
+- Natural language response handling for snooze/reschedule
+- Duplicate suppression for reminders
