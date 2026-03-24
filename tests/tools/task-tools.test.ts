@@ -511,6 +511,27 @@ describe('Task Tools', () => {
       const tool = makeGetTaskTool(provider)
       expect(schemaValidates(tool, {})).toBe(false)
     })
+
+    test('returns dueDate converted to user local time', async () => {
+      const provider = createMockProvider({
+        getTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'Test',
+            status: 'todo',
+            url: '',
+            dueDate: '2026-03-25T12:00:00.000Z',
+          }),
+        ),
+      })
+
+      const tool = makeGetTaskTool(provider, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+
+      // Asia/Karachi is UTC+5: 12:00 UTC → 17:00 local
+      expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+    })
   })
 
   describe('makeListTasksTool', () => {
@@ -587,6 +608,25 @@ describe('Task Tools', () => {
       const provider = createMockProvider()
       const tool = makeListTasksTool(provider)
       expect(schemaValidates(tool, {})).toBe(false)
+    })
+
+    test('returns dueDate fields converted to user local time', async () => {
+      const provider = createMockProvider({
+        listTasks: mock(() =>
+          Promise.resolve([
+            { id: 'task-1', title: 'A', status: 'todo', url: '', dueDate: '2026-03-25T12:00:00.000Z' },
+            { id: 'task-2', title: 'B', status: 'todo', url: '', dueDate: undefined },
+          ]),
+        ),
+      })
+
+      const tool = makeListTasksTool(provider, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({ projectId: 'p1' }, { toolCallId: '1', messages: [] })
+
+      if (!Array.isArray(result)) throw new Error('Expected array')
+      expect(result[0]).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+      expect(result[1]).toHaveProperty('dueDate', undefined)
     })
   })
 

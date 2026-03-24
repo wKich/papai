@@ -41,13 +41,13 @@ import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
-function makeCoreTools(provider: TaskProvider): ToolSet {
+function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
   return {
-    create_task: makeCreateTaskTool(provider),
-    update_task: makeUpdateTaskTool(provider, completionHook),
+    create_task: makeCreateTaskTool(provider, userId),
+    update_task: makeUpdateTaskTool(provider, completionHook, userId),
     search_tasks: makeSearchTasksTool(provider),
-    list_tasks: makeListTasksTool(provider),
-    get_task: makeGetTaskTool(provider),
+    list_tasks: makeListTasksTool(provider, userId),
+    get_task: makeGetTaskTool(provider, userId),
   }
 }
 
@@ -161,7 +161,7 @@ function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
 }
 
 export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
-  const tools = makeCoreTools(provider)
+  const tools = makeCoreTools(provider, userId)
   maybeAddArchiveTool(tools, provider)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)

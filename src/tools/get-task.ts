@@ -2,12 +2,14 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:get-task' })
 
-export function makeGetTaskTool(provider: TaskProvider): ToolSet[string] {
+export function makeGetTaskTool(provider: TaskProvider, userId?: string): ToolSet[string] {
   return tool({
     description:
       'Fetch complete details of a single task including description, status, priority, assignee, due date, and relations. For a full picture including comments, also call get_comments with the same task ID.',
@@ -16,7 +18,8 @@ export function makeGetTaskTool(provider: TaskProvider): ToolSet[string] {
       try {
         const task = await provider.getTask(taskId)
         log.info({ taskId }, 'Task fetched via tool')
-        return task
+        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'get_task' },
