@@ -58,6 +58,8 @@ export function updateSnapshots(userId: string, tasks: Task[]): void {
       db.delete(taskSnapshots)
         .where(and(eq(taskSnapshots.userId, userId), notInArray(taskSnapshots.taskId, currentTaskIds)))
         .run()
+    } else {
+      db.delete(taskSnapshots).where(eq(taskSnapshots.userId, userId)).run()
     }
 
     sqlite.run('COMMIT')

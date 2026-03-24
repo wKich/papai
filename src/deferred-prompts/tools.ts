@@ -125,7 +125,12 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
   const updates: { prompt?: string; fireAt?: string; cronExpression?: string } = {}
   if (input.prompt !== undefined) updates.prompt = input.prompt
   if (input.schedule !== undefined) {
-    if (input.schedule.fire_at !== undefined) updates.fireAt = input.schedule.fire_at
+    if (input.schedule.fire_at !== undefined) {
+      const fireAtDate = new Date(input.schedule.fire_at)
+      if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${input.schedule.fire_at}'` }
+      if (fireAtDate.getTime() <= Date.now()) return { error: 'fire_at must be in the future.' }
+      updates.fireAt = fireAtDate.toISOString()
+    }
     if (input.schedule.cron !== undefined) {
       if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
       updates.cronExpression = input.schedule.cron

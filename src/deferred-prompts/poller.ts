@@ -263,6 +263,11 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
 }
 
 export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderFn): void {
+  if (scheduledIntervalId !== null || alertIntervalId !== null) {
+    log.warn('startPollers called while pollers are already running; stopping existing pollers first')
+    stopPollers()
+  }
+
   log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Starting deferred prompt pollers')
 
   void pollScheduledOnce(chat, buildProviderFn)

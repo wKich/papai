@@ -125,4 +125,3 @@ process.on('SIGTERM', () => {
   closeMigrationDbInstance()
   process.exit(0)
 })
-// test
