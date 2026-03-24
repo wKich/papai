@@ -8,4 +8,4 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Check for lint suppression comments in modified files
 "$REPO_ROOT/.claude/hooks/check-no-lint-suppression.sh"
 
-"$SCRIPT_DIR/check-quiet.sh"
+"$SCRIPT_DIR/check-quiet.sh" --staged
