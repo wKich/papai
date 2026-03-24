@@ -87,3 +87,23 @@ export type AlertPrompt = {
   lastTriggeredAt: string | null
   cooldownMinutes: number
 }
+
+// --- Tool result types ---
+
+type ToolError = { error: string }
+
+export type CreateResult =
+  | { status: 'created'; type: 'scheduled'; id: string; fireAt: string; cronExpression: string | null }
+  | { status: 'created'; type: 'alert'; id: string; cooldownMinutes: number }
+  | ToolError
+
+export type ListResult = { prompts: Array<ScheduledPrompt | AlertPrompt> }
+
+export type GetResult = ScheduledPrompt | AlertPrompt | ToolError
+
+export type UpdateResult =
+  | (Omit<ScheduledPrompt, 'status'> & { status: 'updated' })
+  | (Omit<AlertPrompt, 'status'> & { status: 'updated' })
+  | ToolError
+
+export type CancelResult = { status: 'cancelled'; id: string } | ToolError

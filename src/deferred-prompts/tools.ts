@@ -13,13 +13,21 @@ import {
   listScheduledPrompts,
   updateScheduledPrompt,
 } from './scheduled.js'
-import { alertConditionSchema, type AlertCondition } from './types.js'
+import {
+  alertConditionSchema,
+  type AlertCondition,
+  type CancelResult,
+  type CreateResult,
+  type GetResult,
+  type ListResult,
+  type UpdateResult,
+} from './types.js'
 
 const log = logger.child({ scope: 'deferred:tools' })
 
 type ScheduleInput = { fire_at?: string; cron?: string }
 
-function createScheduled(userId: string, prompt: string, schedule: ScheduleInput): unknown {
+function createScheduled(userId: string, prompt: string, schedule: ScheduleInput): CreateResult {
   const hasFireAt = schedule.fire_at !== undefined && schedule.fire_at !== ''
   const hasCron = schedule.cron !== undefined && schedule.cron !== ''
 
@@ -58,7 +66,7 @@ function createScheduled(userId: string, prompt: string, schedule: ScheduleInput
   }
 }
 
-function createAlert(userId: string, prompt: string, condition: unknown, cooldownMinutes?: number): unknown {
+function createAlert(userId: string, prompt: string, condition: unknown, cooldownMinutes?: number): CreateResult {
   const parseResult = alertConditionSchema.safeParse(condition)
   if (!parseResult.success) return { error: `Invalid condition: ${parseResult.error.message}` }
 
@@ -70,7 +78,7 @@ function createAlert(userId: string, prompt: string, condition: unknown, cooldow
 function executeCreate(
   userId: string,
   input: { prompt: string; schedule?: ScheduleInput; condition?: AlertCondition; cooldown_minutes?: number },
-): unknown {
+): CreateResult {
   const hasSchedule = input.schedule !== undefined
   const hasCondition = input.condition !== undefined
   log.debug({ userId, hasSchedule, hasCondition }, 'create_deferred_prompt called')
@@ -87,16 +95,16 @@ function executeCreate(
 function executeList(
   userId: string,
   input: { type?: 'scheduled' | 'alert'; status?: 'active' | 'completed' | 'cancelled' },
-): unknown {
+): ListResult {
   log.debug({ userId, type: input.type, status: input.status }, 'list_deferred_prompts called')
-  const prompts: unknown[] = []
+  const prompts: ListResult['prompts'] = []
   if (input.type !== 'alert') prompts.push(...listScheduledPrompts(userId, input.status))
   if (input.type !== 'scheduled') prompts.push(...listAlertPrompts(userId, input.status))
   log.info({ userId, count: prompts.length }, 'Listed deferred prompts')
   return { prompts }
 }
 
-function executeGet(userId: string, input: { id: string }): unknown {
+function executeGet(userId: string, input: { id: string }): GetResult {
   log.debug({ userId, id: input.id }, 'get_deferred_prompt called')
   return (
     getScheduledPrompt(input.id, userId) ?? getAlertPrompt(input.id, userId) ?? { error: 'Deferred prompt not found.' }
@@ -111,7 +119,7 @@ type UpdateInput = {
   cooldown_minutes?: number
 }
 
-function updateScheduledFields(id: string, userId: string, input: UpdateInput): unknown {
+function updateScheduledFields(id: string, userId: string, input: UpdateInput): UpdateResult {
   if (input.condition !== undefined)
     return { error: 'Cannot apply a condition to a scheduled prompt. Use schedule fields instead.' }
   const updates: { prompt?: string; fireAt?: string; cronExpression?: string } = {}
@@ -126,10 +134,10 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
   const result = updateScheduledPrompt(id, userId, updates)
   if (result === null) return { error: 'Deferred prompt not found.' }
   log.info({ id, userId }, 'Scheduled prompt updated via tool')
-  return { ...result, status: 'updated' }
+  return { ...result, status: 'updated' as const }
 }
 
-function updateAlertFields(id: string, userId: string, input: UpdateInput): unknown {
+function updateAlertFields(id: string, userId: string, input: UpdateInput): UpdateResult {
   if (input.schedule !== undefined)
     return { error: 'Cannot apply a schedule to an alert prompt. Use condition fields instead.' }
   const updates: { prompt?: string; condition?: AlertCondition; cooldownMinutes?: number } = {}
@@ -143,17 +151,17 @@ function updateAlertFields(id: string, userId: string, input: UpdateInput): unkn
   const result = updateAlertPrompt(id, userId, updates)
   if (result === null) return { error: 'Deferred prompt not found.' }
   log.info({ id, userId }, 'Alert prompt updated via tool')
-  return { ...result, status: 'updated' }
+  return { ...result, status: 'updated' as const }
 }
 
-function executeUpdate(userId: string, input: UpdateInput): unknown {
+function executeUpdate(userId: string, input: UpdateInput): UpdateResult {
   log.debug({ userId, id: input.id }, 'update_deferred_prompt called')
   if (getScheduledPrompt(input.id, userId) !== null) return updateScheduledFields(input.id, userId, input)
   if (getAlertPrompt(input.id, userId) !== null) return updateAlertFields(input.id, userId, input)
   return { error: 'Deferred prompt not found.' }
 }
 
-function executeCancel(userId: string, input: { id: string }): unknown {
+function executeCancel(userId: string, input: { id: string }): CancelResult {
   log.debug({ userId, id: input.id }, 'cancel_deferred_prompt called')
   if (cancelScheduledPrompt(input.id, userId) !== null) {
     log.info({ id: input.id, userId, type: 'scheduled' }, 'Deferred prompt cancelled')
