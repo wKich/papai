@@ -36,6 +36,5 @@
   "ignoreExportsUsedInFile": true,
 
   // Ignore migration files (executed at runtime, not imported)
-  // Ignore deferred-prompts barrel (re-exports for public API, knip can't trace through it)
-  "ignore": ["src/db/migrations/**", "src/deferred-prompts/index.ts"],
+  "ignore": ["src/db/migrations/**"],
 }
