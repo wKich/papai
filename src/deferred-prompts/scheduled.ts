@@ -99,11 +99,11 @@ function buildUpdateValues(updates: {
   prompt?: string
   fireAt?: string
   cronExpression?: string
-}): Record<string, string> {
-  const values: Record<string, string> = {}
-  if (updates.prompt !== undefined) values['prompt'] = updates.prompt
-  if (updates.fireAt !== undefined) values['fireAt'] = new Date(updates.fireAt).toISOString()
-  if (updates.cronExpression !== undefined) values['cronExpression'] = updates.cronExpression
+}): Partial<typeof scheduledPrompts.$inferInsert> {
+  const values: Partial<typeof scheduledPrompts.$inferInsert> = {}
+  if (updates.prompt !== undefined) values.prompt = updates.prompt
+  if (updates.fireAt !== undefined) values.fireAt = new Date(updates.fireAt).toISOString()
+  if (updates.cronExpression !== undefined) values.cronExpression = updates.cronExpression
   return values
 }
 
