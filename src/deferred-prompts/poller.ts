@@ -100,7 +100,7 @@ async function executeScheduledPromptsForUser(
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ userId, promptIds, error: errMsg }, 'Scheduled prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
-    await chat.sendMessage(userId, `Scheduled task failed: ${errMsg}`)
+    await chat.sendMessage(userId, `I ran into an error while working on that: ${errMsg}`)
   }
 
   finalizeAllPrompts(prompts, new Date().toISOString(), timezone)
