@@ -3,7 +3,7 @@ import { generateText, stepCountIs, type ModelMessage } from 'ai'
 
 import { getCachedHistory } from '../cache.js'
 import { getConfig } from '../config.js'
-import { buildMessagesWithMemory } from '../conversation.js'
+import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from '../conversation.js'
 import { appendHistory } from '../history.js'
 import { logger } from '../logger.js'
 import { extractFactsFromSdkResults, upsertFact } from '../memory.js'
@@ -85,16 +85,22 @@ function getLlmConfig(userId: string): LlmConfig | string {
 
 type LlmResult = Awaited<ReturnType<typeof generateText>>
 
-function persistProactiveResults(userId: string, result: LlmResult): void {
+function persistProactiveResults(userId: string, result: LlmResult, history: readonly ModelMessage[]): void {
   const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
   if (newFacts.length > 0) {
     for (const fact of newFacts) upsertFact(userId, fact)
     log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive tool results')
   }
 
-  if (result.response.messages.length > 0) {
-    appendHistory(userId, result.response.messages)
-    log.debug({ userId, count: result.response.messages.length }, 'Proactive response appended to history')
+  const assistantMessages = result.response.messages
+  if (assistantMessages.length > 0) {
+    appendHistory(userId, assistantMessages)
+    log.debug({ userId, count: assistantMessages.length }, 'Proactive response appended to history')
+
+    const updatedHistory = [...history, ...assistantMessages]
+    if (shouldTriggerTrim(updatedHistory)) {
+      void runTrimInBackground(userId, updatedHistory)
+    }
   }
 
   log.debug({ userId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
@@ -144,6 +150,6 @@ export async function invokeLlmWithHistory(
     stopWhen: stepCountIs(25),
   })
 
-  persistProactiveResults(userId, result)
+  persistProactiveResults(userId, result, history)
   return result.text ?? 'Done.'
 }
