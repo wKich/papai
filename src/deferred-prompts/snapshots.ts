@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, notInArray } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { taskSnapshots } from '../db/schema.js'
@@ -15,26 +15,6 @@ const SNAPSHOT_FIELDS: Array<{ field: string; extract: (task: Task) => string | 
   { field: 'project', extract: (t) => t.projectId ?? null },
 ]
 
-/** Capture snapshot of a single task's fields. */
-export function captureSnapshot(userId: string, task: Task): void {
-  log.debug({ userId, taskId: task.id }, 'Capturing snapshot')
-  const db = getDrizzleDb()
-  const now = new Date().toISOString()
-
-  for (const { field, extract } of SNAPSHOT_FIELDS) {
-    const value = extract(task)
-    if (value !== null) {
-      db.insert(taskSnapshots)
-        .values({ userId, taskId: task.id, field, value })
-        .onConflictDoUpdate({
-          target: [taskSnapshots.userId, taskSnapshots.taskId, taskSnapshots.field],
-          set: { value, capturedAt: now },
-        })
-        .run()
-    }
-  }
-}
-
 /** Get all snapshots for a user as a Map<string, string>. Key format: "${taskId}:${fieldName}". */
 export function getSnapshotsForUser(userId: string): Map<string, string> {
   log.debug({ userId }, 'Getting snapshots for user')
@@ -49,12 +29,13 @@ export function getSnapshotsForUser(userId: string): Map<string, string> {
   return result
 }
 
-/** Capture snapshots for multiple tasks in a single transaction. */
+/** Capture snapshots for multiple tasks and prune stale entries in a single transaction. */
 export function updateSnapshots(userId: string, tasks: Task[]): void {
   log.debug({ userId, taskCount: tasks.length }, 'Updating snapshots')
   const db = getDrizzleDb()
   const now = new Date().toISOString()
   const sqlite = db.$client
+  const currentTaskIds = tasks.map((t) => t.id)
 
   sqlite.run('BEGIN')
   try {
@@ -72,6 +53,13 @@ export function updateSnapshots(userId: string, tasks: Task[]): void {
         }
       }
     }
+
+    if (currentTaskIds.length > 0) {
+      db.delete(taskSnapshots)
+        .where(and(eq(taskSnapshots.userId, userId), notInArray(taskSnapshots.taskId, currentTaskIds)))
+        .run()
+    }
+
     sqlite.run('COMMIT')
   } catch (error) {
     sqlite.run('ROLLBACK')
