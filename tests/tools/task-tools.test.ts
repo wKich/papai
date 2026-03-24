@@ -267,10 +267,10 @@ describe('Task Tools', () => {
       )
       const provider = createMockProvider({ updateTask })
 
-      const tool = makeUpdateTaskTool(provider)
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
-        { taskId: 'task-1', title: 'New Title', priority: 'high', dueDate: '2026-12-31' },
+        { taskId: 'task-1', title: 'New Title', priority: 'high', dueDate: { date: '2026-12-31' } },
         { toolCallId: '1', messages: [] },
       )
 
@@ -281,7 +281,8 @@ describe('Task Tools', () => {
       const params = call[1] as Record<string, unknown>
       expect(params['title']).toBe('New Title')
       expect(params['priority']).toBe('high')
-      expect(params['dueDate']).toBe('2026-12-31')
+      // dueDate { date: '2026-12-31' } in Asia/Karachi → midnight local = 19:00 UTC previous day
+      expect(params['dueDate']).toBe('2026-12-30T19:00:00.000Z')
     })
 
     test('propagates API errors including 404', async () => {
@@ -389,6 +390,50 @@ describe('Task Tools', () => {
       )
       if (!isTask(result)) throw new Error('Invalid result')
       expect(result.status).toBe('done')
+    })
+
+    test('converts structured dueDate to UTC when updating task', async () => {
+      let capturedDueDate: string | undefined
+      const provider = createMockProvider({
+        updateTask: mock((_id: string, updates: { dueDate?: string }) => {
+          capturedDueDate = updates.dueDate
+          return Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: '' })
+        }),
+      })
+
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2026-03-25', time: '17:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // 17:00 Karachi (UTC+5) = 12:00 UTC
+      expect(capturedDueDate).toBe('2026-03-25T12:00:00.000Z')
+    })
+
+    test('returns dueDate converted back to user local time (UTC→local) on update', async () => {
+      const provider = createMockProvider({
+        updateTask: mock(() =>
+          Promise.resolve({
+            id: 'task-1',
+            title: 'Test',
+            status: 'todo',
+            url: '',
+            dueDate: '2026-03-25T12:00:00.000Z',
+          }),
+        ),
+      })
+
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2026-03-25', time: '17:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // Provider echoed back UTC; tool should convert to Asia/Karachi local time (UTC+5)
+      expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
     })
   })
 
