@@ -89,7 +89,7 @@ function formatTaskStatus(status: string | undefined): string {
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
   const parsed = parseCron(prompt.cronExpression!)
   if (parsed === null) {
-    completeScheduledPrompt(prompt.id, now)
+    completeScheduledPrompt(prompt.id, prompt.userId, now)
     log.warn(
       { id: prompt.id, cronExpression: prompt.cronExpression },
       'Invalid cron expression on recurring prompt, completing',
@@ -99,12 +99,12 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
 
   const next = nextCronOccurrence(parsed, new Date(), timezone)
   if (next === null) {
-    completeScheduledPrompt(prompt.id, now)
+    completeScheduledPrompt(prompt.id, prompt.userId, now)
     log.warn({ id: prompt.id, userId: prompt.userId }, 'Could not compute next cron occurrence, completing prompt')
     return
   }
 
-  advanceScheduledPrompt(prompt.id, next.toISOString(), now)
+  advanceScheduledPrompt(prompt.id, prompt.userId, next.toISOString(), now)
   log.info(
     { id: prompt.id, userId: prompt.userId, nextFireAt: next.toISOString() },
     'Recurring scheduled prompt advanced',
@@ -131,7 +131,7 @@ async function executeScheduledPrompt(
   const now = new Date().toISOString()
 
   if (prompt.cronExpression === null) {
-    completeScheduledPrompt(prompt.id, now)
+    completeScheduledPrompt(prompt.id, prompt.userId, now)
     log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
   } else {
     finalizeRecurring(prompt, now, timezone)

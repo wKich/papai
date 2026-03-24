@@ -172,7 +172,7 @@ describe('advanceScheduledPrompt', () => {
 
     const nextFireAt = new Date(Date.now() + 86_400_000).toISOString()
     const executedAt = new Date().toISOString()
-    advanceScheduledPrompt(created.id, nextFireAt, executedAt)
+    advanceScheduledPrompt(created.id, USER_ID, nextFireAt, executedAt)
 
     const updated = getScheduledPrompt(created.id, USER_ID)
     expect(updated).not.toBeNull()
@@ -188,7 +188,7 @@ describe('completeScheduledPrompt', () => {
     const created = createScheduledPrompt(USER_ID, 'One-shot', { fireAt })
 
     const executedAt = new Date().toISOString()
-    completeScheduledPrompt(created.id, executedAt)
+    completeScheduledPrompt(created.id, USER_ID, executedAt)
 
     const updated = getScheduledPrompt(created.id, USER_ID)
     expect(updated).not.toBeNull()

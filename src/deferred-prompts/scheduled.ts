@@ -172,8 +172,8 @@ export function getScheduledPromptsDue(limit = 100): ScheduledPrompt[] {
   return rows.map(toScheduledPrompt)
 }
 
-export function advanceScheduledPrompt(id: string, nextFireAt: string, lastExecutedAt: string): void {
-  log.debug({ id }, 'advanceScheduledPrompt called')
+export function advanceScheduledPrompt(id: string, userId: string, nextFireAt: string, lastExecutedAt: string): void {
+  log.debug({ id, userId }, 'advanceScheduledPrompt called')
 
   const db = getDrizzleDb()
 
@@ -182,14 +182,14 @@ export function advanceScheduledPrompt(id: string, nextFireAt: string, lastExecu
       fireAt: new Date(nextFireAt).toISOString(),
       lastExecutedAt: new Date(lastExecutedAt).toISOString(),
     })
-    .where(eq(scheduledPrompts.id, id))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
     .run()
 
-  log.info({ id }, 'Scheduled prompt advanced')
+  log.info({ id, userId }, 'Scheduled prompt advanced')
 }
 
-export function completeScheduledPrompt(id: string, lastExecutedAt: string): void {
-  log.debug({ id }, 'completeScheduledPrompt called')
+export function completeScheduledPrompt(id: string, userId: string, lastExecutedAt: string): void {
+  log.debug({ id, userId }, 'completeScheduledPrompt called')
 
   const db = getDrizzleDb()
 
@@ -198,8 +198,8 @@ export function completeScheduledPrompt(id: string, lastExecutedAt: string): voi
       status: 'completed',
       lastExecutedAt: new Date(lastExecutedAt).toISOString(),
     })
-    .where(eq(scheduledPrompts.id, id))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
     .run()
 
-  log.info({ id }, 'Scheduled prompt completed')
+  log.info({ id, userId }, 'Scheduled prompt completed')
 }
