@@ -15,16 +15,23 @@ const log = logger.child({ scope: 'deferred:proactive-llm' })
 
 export type BuildProviderFn = (userId: string) => TaskProvider | null
 
+export type ProactiveTrigger = {
+  /** System-level context (time, type, behavioral instructions). No user-authored text. */
+  systemContext: string
+  /** User-scoped content: the original prompt and any matched task data. */
+  userContent: string
+}
+
 /**
- * Build the proactive trigger system message.
- * Injected temporarily into the conversation — NOT saved to history.
+ * Build a proactive trigger split into system context and user content.
+ * User-authored text stays in userContent to avoid system-prompt elevation.
  */
 export function buildProactiveTrigger(
   type: 'scheduled' | 'alert',
   prompt: string,
   timezone: string,
   matchedTasksSummary?: string,
-): string {
+): ProactiveTrigger {
   const currentTime = new Date().toLocaleString('en-US', {
     timeZone: timezone,
     weekday: 'long',
@@ -36,27 +43,28 @@ export function buildProactiveTrigger(
     hour12: false,
   })
 
-  const lines = [
+  const systemLines = [
     '[PROACTIVE EXECUTION]',
     `Current time: ${currentTime} (${timezone})`,
     `Task type: ${type}`,
-    `Original user request: "${prompt}"`,
-  ]
-
-  if (matchedTasksSummary !== undefined) {
-    lines.push('', 'Matched tasks:', matchedTasksSummary)
-  }
-
-  lines.push(
     '',
     'You are proactively reaching out to the user to fulfill this task.',
     'Do not mention system events, triggers, cron jobs, or scheduled tasks.',
     'Act naturally, as if you just remembered or noticed something relevant.',
     'Keep the tone conversational and directly address the task.',
     'If the task requires action (not just a reminder), use available tools.',
-  )
+  ]
 
-  return lines.join('\n')
+  const userLines = [prompt]
+
+  if (matchedTasksSummary !== undefined) {
+    userLines.push('', 'Matched tasks:', matchedTasksSummary)
+  }
+
+  return {
+    systemContext: systemLines.join('\n'),
+    userContent: userLines.join('\n'),
+  }
 }
 
 type LlmConfig = { apiKey: string; baseURL: string; mainModel: string }
@@ -75,13 +83,32 @@ function getLlmConfig(userId: string): LlmConfig | string {
   return { apiKey, baseURL, mainModel }
 }
 
+type LlmResult = Awaited<ReturnType<typeof generateText>>
+
+function persistProactiveResults(userId: string, result: LlmResult): void {
+  const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
+  if (newFacts.length > 0) {
+    for (const fact of newFacts) upsertFact(userId, fact)
+    log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive tool results')
+  }
+
+  if (result.response.messages.length > 0) {
+    appendHistory(userId, result.response.messages)
+    log.debug({ userId, count: result.response.messages.length }, 'Proactive response appended to history')
+  }
+
+  log.debug({ userId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
+}
+
 /**
  * Invoke the LLM with the user's full conversation history and a proactive trigger.
- * Only the assistant's response is saved to history — the trigger is discarded.
+ * The system context is injected as a system message; the user-authored prompt is
+ * injected as a user message to avoid elevating untrusted text to system priority.
+ * Neither is saved to history.
  */
 export async function invokeLlmWithHistory(
   userId: string,
-  triggerContent: string,
+  trigger: ProactiveTrigger,
   buildProviderFn: BuildProviderFn,
 ): Promise<string> {
   log.debug({ userId }, 'invokeLlmWithHistory called')
@@ -102,7 +129,11 @@ export async function invokeLlmWithHistory(
 
   const history = getCachedHistory(userId)
   const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
-  const finalMessages: ModelMessage[] = [...messagesWithMemory, { role: 'system', content: triggerContent }]
+  const finalMessages: ModelMessage[] = [
+    ...messagesWithMemory,
+    { role: 'system', content: trigger.systemContext },
+    { role: 'user', content: trigger.userContent },
+  ]
 
   log.debug({ userId, mainModel: config.mainModel, historyLength: history.length }, 'Calling generateText')
   const result = await generateText({
@@ -113,17 +144,6 @@ export async function invokeLlmWithHistory(
     stopWhen: stepCountIs(25),
   })
 
-  const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
-  if (newFacts.length > 0) {
-    for (const fact of newFacts) upsertFact(userId, fact)
-    log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive tool results')
-  }
-
-  if (result.response.messages.length > 0) {
-    appendHistory(userId, result.response.messages)
-    log.debug({ userId, count: result.response.messages.length }, 'Proactive response appended to history')
-  }
-
-  log.debug({ userId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
+  persistProactiveResults(userId, result)
   return result.text ?? 'Done.'
 }

@@ -7,7 +7,12 @@ import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
-import { buildProactiveTrigger, invokeLlmWithHistory, type BuildProviderFn } from './proactive-llm.js'
+import {
+  buildProactiveTrigger,
+  invokeLlmWithHistory,
+  type BuildProviderFn,
+  type ProactiveTrigger,
+} from './proactive-llm.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
 import type { ScheduledPrompt } from './types.js'
@@ -56,7 +61,7 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
   )
 }
 
-function buildMergedTrigger(prompts: ScheduledPrompt[], timezone: string): string {
+function buildMergedTrigger(prompts: ScheduledPrompt[], timezone: string): ProactiveTrigger {
   if (prompts.length === 1) {
     return buildProactiveTrigger('scheduled', prompts[0]!.prompt, timezone)
   }
@@ -82,14 +87,14 @@ async function executeScheduledPromptsForUser(
   buildProviderFn: BuildProviderFn,
 ): Promise<void> {
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const triggerContent = buildMergedTrigger(prompts, timezone)
+  const trigger = buildMergedTrigger(prompts, timezone)
   const promptIds = prompts.map((p) => p.id)
 
   log.debug({ userId, promptCount: prompts.length, promptIds }, 'Executing merged scheduled prompts')
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, triggerContent, buildProviderFn)
+    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
@@ -148,11 +153,11 @@ async function executeSingleAlert(
   const conditionDesc = describeCondition(alert.condition)
   const taskList = matchedTasks.map((t) => `- [${t.title}](${t.url})${formatTaskStatus(t.status)}`).join('\n')
   const matchedTasksSummary = `Alert condition: ${conditionDesc}\n${taskList}`
-  const triggerContent = buildProactiveTrigger('alert', alert.prompt, timezone, matchedTasksSummary)
+  const trigger = buildProactiveTrigger('alert', alert.prompt, timezone, matchedTasksSummary)
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, triggerContent, buildProviderFn)
+    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
