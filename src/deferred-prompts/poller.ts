@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, stepCountIs, type ModelMessage } from 'ai'
+import pLimit from 'p-limit'
 
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
@@ -9,7 +10,6 @@ import { logger } from '../logger.js'
 import type { Task, TaskProvider } from '../providers/types.js'
 import { makeTools } from '../tools/index.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
-import { runWithConcurrency } from './concurrency.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
@@ -148,9 +148,9 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   const duePrompts = getScheduledPromptsDue()
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
-  const results = await runWithConcurrency(
-    duePrompts.map((prompt) => (): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn)),
-    MAX_CONCURRENT_LLM_CALLS,
+  const limit = pLimit(MAX_CONCURRENT_LLM_CALLS)
+  const results = await Promise.allSettled(
+    duePrompts.map((prompt) => limit((): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn))),
   )
 
   for (const result of results) {
@@ -212,11 +212,11 @@ async function executeAlertsForUser(
     tasks = await enrichTasks(provider, tasks)
   }
 
-  const alertResults = await runWithConcurrency(
-    alerts.map(
-      (alert) => (): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn),
+  const alertLimit = pLimit(MAX_CONCURRENT_LLM_CALLS)
+  const alertResults = await Promise.allSettled(
+    alerts.map((alert) =>
+      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn)),
     ),
-    MAX_CONCURRENT_LLM_CALLS,
   )
 
   for (const result of alertResults) {
