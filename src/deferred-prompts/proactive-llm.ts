@@ -7,23 +7,12 @@ import { buildMessagesWithMemory } from '../conversation.js'
 import { appendHistory } from '../history.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
+import { buildSystemPrompt } from '../system-prompt.js'
 import { makeTools } from '../tools/index.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
 
 export type BuildProviderFn = (userId: string) => TaskProvider | null
-
-const PROACTIVE_SYSTEM_PROMPT = [
-  'You are papai, a personal assistant that helps the user manage their tasks.',
-  '',
-  'When you receive a [PROACTIVE EXECUTION] system message, you are in proactive mode:',
-  '- Respond as if you spontaneously remembered the task.',
-  '- Never mention triggers, schedules, cron jobs, or system events.',
-  '- Be warm and conversational.',
-  '- If the task requires tool calls, execute them autonomously.',
-  '- Reference prior conversation context naturally if relevant.',
-  '- Keep responses concise and actionable.',
-].join('\n')
 
 /**
  * Build the proactive trigger system message.
@@ -108,7 +97,7 @@ export async function invokeLlmWithHistory(
   const model = createOpenAICompatible({ name: 'openai-compatible', ...config })(config.mainModel)
   const tools = makeTools(provider, userId)
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const systemPrompt = `${PROACTIVE_SYSTEM_PROMPT}\nUser timezone: ${timezone}.`
+  const systemPrompt = buildSystemPrompt(provider, timezone, userId)
 
   const history = getCachedHistory(userId)
   const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
