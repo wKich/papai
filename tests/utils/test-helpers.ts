@@ -27,6 +27,7 @@ import { migration013DeferredPrompts } from '../../src/db/migrations/013_deferre
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
+import { getLogLevel } from '../../src/logger.js'
 
 // Static list of all migrations to avoid dynamic imports with type assertions
 const ALL_MIGRATIONS: readonly Migration[] = [
@@ -134,6 +135,7 @@ export function createLoggerMock(): {
  */
 export function mockLogger(): void {
   void mock.module('../../src/logger.js', () => ({
+    getLogLevel,
     logger: createLoggerMock(),
   }))
 }
