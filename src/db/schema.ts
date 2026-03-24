@@ -193,3 +193,21 @@ export const userInstructions = sqliteTable(
 export type UserInstruction = typeof userInstructions.$inferSelect
 
 export type GroupMember = typeof groupMembers.$inferSelect
+
+export const backgroundEvents = sqliteTable(
+  'background_events',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    type: text('type').notNull(),
+    prompt: text('prompt').notNull(),
+    response: text('response').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    injectedAt: text('injected_at'),
+  },
+  (table) => [index('idx_background_events_user_injected').on(table.userId, table.injectedAt)],
+)
+
+export type BackgroundEventRow = typeof backgroundEvents.$inferSelect

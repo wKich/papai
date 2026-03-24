@@ -5,11 +5,11 @@ import pLimit from 'p-limit'
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
-import { appendHistory } from '../history.js'
 import { logger } from '../logger.js'
 import type { Task, TaskProvider } from '../providers/types.js'
 import { makeTools } from '../tools/index.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
+import { pruneBackgroundEvents, recordBackgroundEvent } from './background-events.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
@@ -74,13 +74,6 @@ async function invokeLlm(
   return result.text ?? 'Done.'
 }
 
-function logToHistory(userId: string, prompt: string, response: string): void {
-  appendHistory(userId, [
-    { role: 'user', content: prompt },
-    { role: 'assistant', content: response },
-  ])
-}
-
 function formatTaskStatus(status: string | undefined): string {
   if (status === undefined) return ''
   return ` (${status})`
@@ -96,7 +89,6 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
     )
     return
   }
-
   const next = nextCronOccurrence(parsed, new Date(), timezone)
   if (next === null) {
     completeScheduledPrompt(prompt.id, prompt.userId, now)
@@ -123,13 +115,19 @@ async function executeScheduledPrompt(
     'Execute the following instruction using available tools. Report results concisely.',
   ].join('\n')
 
-  const response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
+  let response: string
+  try {
+    response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
+    await chat.sendMessage(prompt.userId, response)
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
+    response = `Failed: ${errMsg}`
+    await chat.sendMessage(prompt.userId, `Scheduled task failed: ${errMsg}`)
+  }
 
-  await chat.sendMessage(prompt.userId, response)
-  logToHistory(prompt.userId, prompt.prompt, response)
-
+  recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, response)
   const now = new Date().toISOString()
-
   if (prompt.cronExpression === null) {
     completeScheduledPrompt(prompt.id, prompt.userId, now)
     log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
@@ -178,11 +176,18 @@ async function executeSingleAlert(
   ].join('\n')
   const userPrompt = `Alert condition: ${conditionDesc}\n\nMatched tasks:\n${taskList}\n\nOriginal instruction: "${alert.prompt}"`
 
-  const response = await invokeLlm(userId, systemPrompt, userPrompt, buildProviderFn)
+  let response: string
+  try {
+    response = await invokeLlm(userId, systemPrompt, userPrompt, buildProviderFn)
+    await chat.sendMessage(userId, response)
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
+    response = `Failed: ${errMsg}`
+    await chat.sendMessage(userId, `Alert task failed: ${errMsg}`)
+  }
 
-  await chat.sendMessage(userId, response)
-  logToHistory(userId, alert.prompt, response)
-
+  recordBackgroundEvent(userId, 'alert', alert.prompt, response)
   const now = new Date().toISOString()
   updateAlertTriggerTime(alert.id, userId, now)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
@@ -261,6 +266,8 @@ export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderF
     log.warn('startPollers called while pollers are already running; stopping existing pollers first')
     stopPollers()
   }
+
+  pruneBackgroundEvents()
 
   log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Starting deferred prompt pollers')
 
