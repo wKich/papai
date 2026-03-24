@@ -156,18 +156,19 @@ export function cancelScheduledPrompt(id: string, userId: string): ScheduledProm
   return toScheduledPrompt(row!)
 }
 
-export function getScheduledPromptsDue(limit?: number): ScheduledPrompt[] {
+export function getScheduledPromptsDue(limit = 100): ScheduledPrompt[] {
   log.debug({ limit }, 'getScheduledPromptsDue called')
 
   const db = getDrizzleDb()
   const now = new Date().toISOString()
 
-  const baseQuery = db
+  const rows = db
     .select()
     .from(scheduledPrompts)
     .where(and(eq(scheduledPrompts.status, 'active'), lte(scheduledPrompts.fireAt, now)))
+    .limit(limit ?? 100)
+    .all()
 
-  const rows = limit === undefined ? baseQuery.all() : baseQuery.limit(limit).all()
   return rows.map(toScheduledPrompt)
 }
 
