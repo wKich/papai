@@ -26,6 +26,7 @@ All scripts can be run with `bun <script>` (no `run` keyword needed):
 - `bun test:e2e:watch` — run E2E tests in watch mode
 - `bun check` — run all checks in parallel (lint, typecheck, format:check, knip, test, duplicates, mock-pollution)
 - `bun check-quiet` — run all checks, suppressing success output (used by pre-commit hook)
+- `bun check-quiet --staged` — run lint/typecheck/format on staged files only (fast, used by pre-commit hook)
 - `bun fix` — auto-fix lint and format issues
 - `bun install` — install dependencies
 
