@@ -188,7 +188,7 @@ async function executeSingleAlert(
   logToHistory(userId, 'alert', alert.prompt, response)
 
   const now = new Date().toISOString()
-  updateAlertTriggerTime(alert.id, now)
+  updateAlertTriggerTime(alert.id, userId, now)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
 }
 

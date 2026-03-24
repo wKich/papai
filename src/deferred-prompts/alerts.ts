@@ -139,11 +139,14 @@ export const cancelAlertPrompt = (id: string, userId: string): AlertPrompt | nul
   return getAlertPrompt(id, userId)
 }
 
-export const updateAlertTriggerTime = (id: string, lastTriggeredAt: string): void => {
-  log.debug({ id, lastTriggeredAt }, 'updateAlertTriggerTime called')
+export const updateAlertTriggerTime = (id: string, userId: string, lastTriggeredAt: string): void => {
+  log.debug({ id, userId, lastTriggeredAt }, 'updateAlertTriggerTime called')
   const db = getDrizzleDb()
-  db.update(alertPrompts).set({ lastTriggeredAt }).where(eq(alertPrompts.id, id)).run()
-  log.info({ id }, 'Alert trigger time updated')
+  db.update(alertPrompts)
+    .set({ lastTriggeredAt })
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .run()
+  log.info({ id, userId }, 'Alert trigger time updated')
 }
 
 export const getEligibleAlertPrompts = (): AlertPrompt[] => {

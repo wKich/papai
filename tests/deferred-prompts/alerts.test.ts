@@ -169,7 +169,7 @@ describe('alert prompt CRUD', () => {
     const created = createAlertPrompt('user1', 'Alert', condition)
     const triggerTime = new Date().toISOString()
 
-    updateAlertTriggerTime(created.id, triggerTime)
+    updateAlertTriggerTime(created.id, 'user1', triggerTime)
 
     const found = getAlertPrompt(created.id, 'user1')
     expect(found).not.toBeNull()
@@ -200,7 +200,7 @@ describe('alert prompt CRUD', () => {
 
     // Trigger recently (within cooldown)
     const recentTrigger = new Date().toISOString()
-    updateAlertTriggerTime(alert.id, recentTrigger)
+    updateAlertTriggerTime(alert.id, 'user1', recentTrigger)
 
     const eligible = getEligibleAlertPrompts()
     expect(eligible).toHaveLength(0)
@@ -212,7 +212,7 @@ describe('alert prompt CRUD', () => {
 
     // Trigger 2 minutes ago (past 1 minute cooldown)
     const oldTrigger = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-    updateAlertTriggerTime(alert.id, oldTrigger)
+    updateAlertTriggerTime(alert.id, 'user1', oldTrigger)
 
     const eligible = getEligibleAlertPrompts()
     expect(eligible).toHaveLength(1)
