@@ -1,4 +1,4 @@
-import { and, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { backgroundEvents, type BackgroundEventRow } from '../db/schema.js'
@@ -36,7 +36,7 @@ export const loadUnseenEvents = (userId: string): BackgroundEventRow[] => {
   return db
     .select()
     .from(backgroundEvents)
-    .where(and(sql`${backgroundEvents.userId} = ${userId}`, isNull(backgroundEvents.injectedAt)))
+    .where(and(eq(backgroundEvents.userId, userId), isNull(backgroundEvents.injectedAt)))
     .orderBy(backgroundEvents.createdAt)
     .all()
 }
@@ -72,7 +72,11 @@ export const formatBackgroundEventsMessage = (
 
 export const consumeUnseenEvents = (
   userId: string,
-): { systemContent: string; historyEntries: Array<{ role: 'system'; content: string }> } | null => {
+): {
+  eventIds: string[]
+  systemContent: string
+  historyEntries: Array<{ role: 'system'; content: string }>
+} | null => {
   const events = loadUnseenEvents(userId)
   if (events.length === 0) return null
   log.debug({ userId, count: events.length }, 'Consuming unseen background events')
@@ -81,7 +85,7 @@ export const consumeUnseenEvents = (
     role: 'system' as const,
     content: `[Background: ${e.type} | ${e.createdAt}]\n${e.prompt}\n→ ${e.response}`,
   }))
-  markEventsInjected(events.map((e) => e.id))
-  log.info({ userId, count: events.length }, 'Background events consumed and marked injected')
-  return { systemContent, historyEntries }
+  const eventIds = events.map((e) => e.id)
+  log.info({ userId, count: events.length }, 'Unseen background events loaded for injection')
+  return { eventIds, systemContent, historyEntries }
 }

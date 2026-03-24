@@ -190,6 +190,38 @@ describe('pollScheduledOnce — background events', () => {
     expect(rows[0]!.response).toMatch(/Failed/)
     expect(chat.sentMessages.some((m) => m.userId === userId)).toBe(true)
   })
+
+  test('completes one-shot prompt even when LLM fails', async () => {
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
+    const userId = 'fail-complete-user'
+    setupUserConfig(userId)
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const created = createScheduledPrompt(userId, 'one-time task', { fireAt: pastTime })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    const updated = getScheduledPrompt(created.id, userId)
+    expect(updated).not.toBeNull()
+    expect(updated!.status).toBe('completed')
+  })
+
+  test('advances recurring prompt even when LLM fails', async () => {
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
+    const userId = 'fail-recurring-user'
+    setupUserConfig(userId)
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const created = createScheduledPrompt(userId, 'daily standup', {
+      fireAt: pastTime,
+      cronExpression: '0 9 * * *',
+    })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    const updated = getScheduledPrompt(created.id, userId)
+    expect(updated).not.toBeNull()
+    expect(updated!.status).toBe('active')
+    expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
+  })
 })
 
 describe('pollAlertsOnce', () => {
