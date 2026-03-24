@@ -232,9 +232,16 @@ export const evaluateCondition = (condition: AlertCondition, task: Task, snapsho
 
 // --- Human-readable description ---
 
+/** Sanitize a condition value for safe inclusion in LLM prompts. */
+const sanitizeValue = (value: string | number): string => {
+  const str = String(value)
+  const clean = str.replaceAll(/[\n\r]/g, ' ').slice(0, 200)
+  return `"${clean}"`
+}
+
 export const describeCondition = (condition: AlertCondition): string => {
   if ('and' in condition) return `(${condition.and.map(describeCondition).join(' AND ')})`
   if ('or' in condition) return `(${condition.or.map(describeCondition).join(' OR ')})`
   const { field, op, value } = condition
-  return value === undefined ? `${field} ${op}` : `${field} ${op} ${String(value)}`
+  return value === undefined ? `${field} ${op}` : `${field} ${op} ${sanitizeValue(value)}`
 }
