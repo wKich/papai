@@ -33,6 +33,9 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0025](0025-e2e-test-hardening.md)                            | E2E Test Hardening (Phase 5)                                   | 2026-03-22 | Implemented                           |
 | [0026](0026-proactive-assistance.md)                          | Proactive Assistance (Phase 7)                                 | 2026-03-20 | Implemented                           |
 | [0027](0027-proactive-assistance-review-fixes.md)             | Proactive Assistance Review Fixes                              | 2026-03-22 | Implemented                           |
+| [0028](0028-staged-only-pre-commit-checks.md)                 | Staged-Only Pre-Commit Checks                                  | 2025-03-24 | Implemented                           |
+| [0029](0029-custom-instructions-system.md)                    | Custom Instructions System                                     | 2026-03-22 | Implemented                           |
+| [0030](0030-deferred-prompts-system.md)                       | Deferred Prompts System                                        | 2026-03-23 | Implemented (Supersedes 0026)         |
 
 ## Skipped / Not Written
 

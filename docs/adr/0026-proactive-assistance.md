@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Deprecated (Superseded by ADR-0030)
 
 ## Date
 
