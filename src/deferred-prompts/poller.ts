@@ -163,7 +163,7 @@ async function executeSingleAlert(
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
-    await chat.sendMessage(userId, `Alert task failed: ${errMsg}`)
+    await chat.sendMessage(userId, `Sorry, something went wrong while preparing this update: ${errMsg}`)
   }
 
   const now = new Date().toISOString()
