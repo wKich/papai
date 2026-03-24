@@ -21,11 +21,11 @@ describe('alertConditionSchema', () => {
       expect(result.success).toBe(true)
     })
 
-    test('stale_days with numeric value', () => {
+    test('gt with date value on dueDate', () => {
       const result = alertConditionSchema.safeParse({
-        field: 'task.updatedAt',
-        op: 'stale_days',
-        value: 7,
+        field: 'task.dueDate',
+        op: 'gt',
+        value: '2026-01-01',
       })
       expect(result.success).toBe(true)
     })
@@ -162,10 +162,10 @@ describe('alertConditionSchema', () => {
       expect(result.success).toBe(false)
     })
 
-    test('stale_days operator without value is rejected', () => {
+    test('lt operator without value is rejected', () => {
       const result = alertConditionSchema.safeParse({
-        field: 'task.updatedAt',
-        op: 'stale_days',
+        field: 'task.dueDate',
+        op: 'lt',
       })
       expect(result.success).toBe(false)
     })
@@ -178,7 +178,6 @@ describe('alertConditionSchema', () => {
         'task.priority',
         'task.assignee',
         'task.dueDate',
-        'task.updatedAt',
         'task.project',
         'task.labels',
       ])

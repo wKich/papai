@@ -304,19 +304,6 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition(condition, task, emptySnapshots)).toBe(false)
   })
 
-  test('stale_days returns true for old date', () => {
-    const condition: AlertCondition = { field: 'task.updatedAt', op: 'stale_days', value: 7 }
-    // createdAt is used as fallback for updatedAt
-    const task = makeTask({ createdAt: '2020-01-01T00:00:00Z' })
-    expect(evaluateCondition(condition, task, emptySnapshots)).toBe(true)
-  })
-
-  test('stale_days returns false for recent date', () => {
-    const condition: AlertCondition = { field: 'task.updatedAt', op: 'stale_days', value: 7 }
-    const task = makeTask({ createdAt: new Date().toISOString() })
-    expect(evaluateCondition(condition, task, emptySnapshots)).toBe(false)
-  })
-
   test('gt returns true when date is after value', () => {
     const condition: AlertCondition = { field: 'task.dueDate', op: 'gt', value: '2026-01-01T00:00:00Z' }
     const task = makeTask({ dueDate: '2026-06-01T00:00:00Z' })

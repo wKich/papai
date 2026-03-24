@@ -184,8 +184,6 @@ const getFieldValue = (task: Task, field: string): string | string[] | null | un
       return task.assignee ?? null
     case 'task.dueDate':
       return task.dueDate ?? null
-    case 'task.updatedAt':
-      return task.createdAt ?? null
     case 'task.project':
       return task.projectId ?? null
     case 'task.labels':
@@ -212,11 +210,6 @@ const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, st
     case 'overdue': {
       if (typeof fieldValue !== 'string' || fieldValue === '') return false
       return new Date(fieldValue) < new Date()
-    }
-    case 'stale_days': {
-      if (typeof fieldValue !== 'string' || fieldValue === '') return false
-      const days = typeof value === 'number' ? value : Number(value)
-      return (Date.now() - new Date(fieldValue).getTime()) / (1000 * 60 * 60 * 24) > days
     }
     case 'gt': {
       if (typeof fieldValue !== 'string' || fieldValue === '') return false

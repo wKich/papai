@@ -102,8 +102,8 @@ DEFERRED PROMPTS — The user can set up automated tasks and alerts:
   - Recurring: provide schedule.cron as a 5-field cron expression. Cron times are in the user's timezone (${timezone}).
   - Common patterns: "0 9 * * 1" = every Monday 9am, "0 9 * * *" = daily 9am.
 - ALERTS: Use create_deferred_prompt with a condition to monitor task changes.
-  - Conditions use a filter schema: { field, op, value }. Fields: task.status, task.priority, task.assignee, task.dueDate, task.updatedAt, task.project, task.labels.
-  - Operators: eq, neq, changed_to, lt, gt, overdue, stale_days, contains, not_contains.
+  - Conditions use a filter schema: { field, op, value }. Fields: task.status, task.priority, task.assignee, task.dueDate, task.project, task.labels.
+  - Operators: eq, neq, changed_to, lt, gt, overdue, contains, not_contains.
   - Combine with { and: [...] } or { or: [...] }.
   - Set cooldown_minutes to control how often alerts can fire (default: 60 minutes).
 - Use list_deferred_prompts to show active prompts/alerts. Use cancel_deferred_prompt to cancel one.

@@ -7,7 +7,6 @@ export const CONDITION_FIELDS = [
   'task.priority',
   'task.assignee',
   'task.dueDate',
-  'task.updatedAt',
   'task.project',
   'task.labels',
 ] as const
@@ -19,7 +18,6 @@ export const FIELD_OPERATORS: Record<ConditionField, readonly string[]> = {
   'task.priority': ['eq', 'neq', 'changed_to'],
   'task.assignee': ['eq', 'neq', 'changed_to'],
   'task.dueDate': ['eq', 'lt', 'gt', 'overdue'],
-  'task.updatedAt': ['lt', 'gt', 'stale_days'],
   'task.project': ['eq', 'neq'],
   'task.labels': ['contains', 'not_contains'],
 }

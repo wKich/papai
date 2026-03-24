@@ -97,22 +97,20 @@ Stored in `alert_prompts.condition` as JSON. Validated with Zod v4 at creation t
 
 ### Supported fields and operators
 
-| Field            | Type     | Supported operators         |
-| ---------------- | -------- | --------------------------- |
-| `task.status`    | string   | `eq`, `neq`, `changed_to`   |
-| `task.priority`  | string   | `eq`, `neq`, `changed_to`   |
-| `task.assignee`  | string   | `eq`, `neq`, `changed_to`   |
-| `task.dueDate`   | date     | `eq`, `lt`, `gt`, `overdue` |
-| `task.updatedAt` | date     | `lt`, `gt`, `stale_days`    |
-| `task.project`   | string   | `eq`, `neq`                 |
-| `task.labels`    | string[] | `contains`, `not_contains`  |
+| Field           | Type     | Supported operators         |
+| --------------- | -------- | --------------------------- |
+| `task.status`   | string   | `eq`, `neq`, `changed_to`   |
+| `task.priority` | string   | `eq`, `neq`, `changed_to`   |
+| `task.assignee` | string   | `eq`, `neq`, `changed_to`   |
+| `task.dueDate`  | date     | `eq`, `lt`, `gt`, `overdue` |
+| `task.project`  | string   | `eq`, `neq`                 |
+| `task.labels`   | string[] | `contains`, `not_contains`  |
 
 ### Special operators
 
 - **`changed_to`** — true when the field's current value differs from the snapshot AND matches
   `value`. Snapshot is updated after evaluation.
 - **`overdue`** — `task.dueDate < now()`. No `value` needed.
-- **`stale_days`** — `now() - task.updatedAt > value` days.
 
 ### Combinators
 

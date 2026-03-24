@@ -5,7 +5,7 @@ import type { AlertCondition } from './types.js'
 const log = logger.child({ scope: 'deferred:fetch-tasks' })
 
 /** Fields that require a full getTask call (not available in TaskListItem). */
-const FIELDS_REQUIRING_FULL_TASK = new Set(['task.assignee', 'task.labels', 'task.updatedAt'])
+const FIELDS_REQUIRING_FULL_TASK = new Set(['task.assignee', 'task.labels'])
 
 /** Extract all field names referenced by a condition tree. */
 const extractFields = (condition: AlertCondition): Set<string> => {
