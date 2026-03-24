@@ -19,6 +19,7 @@ const SNAPSHOT_FIELDS: Array<{ field: string; extract: (task: Task) => string | 
 export function captureSnapshot(userId: string, task: Task): void {
   log.debug({ userId, taskId: task.id }, 'Capturing snapshot')
   const db = getDrizzleDb()
+  const now = new Date().toISOString()
 
   for (const { field, extract } of SNAPSHOT_FIELDS) {
     const value = extract(task)
@@ -27,7 +28,7 @@ export function captureSnapshot(userId: string, task: Task): void {
         .values({ userId, taskId: task.id, field, value })
         .onConflictDoUpdate({
           target: [taskSnapshots.userId, taskSnapshots.taskId, taskSnapshots.field],
-          set: { value },
+          set: { value, capturedAt: now },
         })
         .run()
     }
