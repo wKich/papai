@@ -13,9 +13,9 @@ import { buildInstructionsBlock } from './instructions.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
+import { buildProviderForUser } from './providers/factory.js'
 import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { provisionAndConfigure } from './providers/kaneo/provision.js'
-import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import { YouTrackClassifiedError } from './providers/youtrack/classify-error.js'
 import { makeTools } from './tools/index.js'
@@ -156,27 +156,7 @@ const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: 
   }
 }
 
-const buildProvider = (contextId: string): TaskProvider => {
-  log.debug({ contextId, providerName: TASK_PROVIDER }, 'Building provider')
-  if (TASK_PROVIDER === 'kaneo') {
-    const kaneoKey = getConfig(contextId, 'kaneo_apikey')!
-    const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']!
-    const workspaceId = getKaneoWorkspace(contextId)!
-    const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
-    const config: Record<string, string> = isSessionCookie
-      ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
-      : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
-    return createProvider('kaneo', config)
-  }
-
-  if (TASK_PROVIDER === 'youtrack') {
-    const baseUrl = process.env['YOUTRACK_URL']!
-    const token = getConfig(contextId, 'youtrack_token')!
-    return createProvider('youtrack', { baseUrl, token })
-  }
-
-  return createProvider(TASK_PROVIDER, {})
-}
+const buildProvider = (contextId: string): TaskProvider => buildProviderForUser(contextId, true)
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 

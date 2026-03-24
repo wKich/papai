@@ -36,7 +36,7 @@ async function invokeLlm(
   userId: string,
   systemPrompt: string,
   userPrompt: string,
-  buildProviderFn: BuildProviderFn,
+  provider: TaskProvider | BuildProviderFn,
 ): Promise<string> {
   log.debug({ userId }, 'invokeLlm called')
 
@@ -52,14 +52,14 @@ async function invokeLlm(
     return 'Deferred prompt skipped: missing LLM configuration. Use /set to configure llm_apikey, llm_baseurl, and main_model.'
   }
 
-  const provider = buildProviderFn(userId)
-  if (provider === null) {
+  const taskProvider = typeof provider === 'function' ? provider(userId) : provider
+  if (taskProvider === null) {
     log.warn({ userId }, 'Could not build task provider for deferred prompt')
     return 'Deferred prompt skipped: task provider not configured.'
   }
 
   const model = createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })(mainModel)
-  const tools = makeTools(provider, userId)
+  const tools = makeTools(taskProvider, userId)
 
   log.debug({ userId, mainModel }, 'Calling generateText for deferred prompt')
   const result = await generateText({
@@ -160,9 +160,10 @@ async function executeSingleAlert(
   tasks: Task[],
   snapshots: Map<string, string>,
   chat: ChatProvider,
-  buildProviderFn: BuildProviderFn,
+  provider: TaskProvider,
+  evalNow: Date,
 ): Promise<void> {
-  const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots))
+  const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots, evalNow))
   if (matchedTasks.length === 0) return
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
@@ -178,7 +179,7 @@ async function executeSingleAlert(
 
   let response: string
   try {
-    response = await invokeLlm(userId, systemPrompt, userPrompt, buildProviderFn)
+    response = await invokeLlm(userId, systemPrompt, userPrompt, provider)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
@@ -188,8 +189,8 @@ async function executeSingleAlert(
   }
 
   recordBackgroundEvent(userId, 'alert', alert.prompt, response)
-  const now = new Date().toISOString()
-  updateAlertTriggerTime(alert.id, userId, now)
+  const triggerTime = new Date().toISOString()
+  updateAlertTriggerTime(alert.id, userId, triggerTime)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
 }
 
@@ -198,6 +199,7 @@ async function executeAlertsForUser(
   alerts: ReturnType<typeof getEligibleAlertPrompts>,
   chat: ChatProvider,
   buildProviderFn: BuildProviderFn,
+  evalNow: Date,
 ): Promise<void> {
   const provider = buildProviderFn(userId)
   if (provider === null) {
@@ -216,7 +218,7 @@ async function executeAlertsForUser(
   const alertLimit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const alertResults = await Promise.allSettled(
     alerts.map((alert) =>
-      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn)),
+      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, provider, evalNow)),
     ),
   )
 
@@ -233,9 +235,10 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
   log.debug('pollAlertsOnce called')
 
   const eligibleAlerts = getEligibleAlertPrompts()
-  log.debug({ count: eligibleAlerts.length }, 'Eligible alert prompts found')
 
   if (eligibleAlerts.length === 0) return
+
+  const now = new Date()
 
   const byUser = new Map<string, typeof eligibleAlerts>()
   for (const alert of eligibleAlerts) {
@@ -250,7 +253,7 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
   const userLimit = pLimit(MAX_CONCURRENT_USERS)
   const results = await Promise.allSettled(
     [...byUser.entries()].map(([userId, alerts]) =>
-      userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn)),
+      userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn, now)),
     ),
   )
 
@@ -285,12 +288,10 @@ export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderF
 
 export function stopPollers(): void {
   log.info('Stopping deferred prompt pollers')
-
   if (scheduledIntervalId !== null) {
     clearInterval(scheduledIntervalId)
     scheduledIntervalId = null
   }
-
   if (alertIntervalId !== null) {
     clearInterval(alertIntervalId)
     alertIntervalId = null
