@@ -5,19 +5,7 @@ import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-let configTimezone: string | null = 'UTC'
-
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, key: string): string | null => {
-    if (key === 'timezone') return configTimezone
-    return null
-  },
-  setConfig: (): void => {},
-  isConfigKey: (): boolean => true,
-  getAllConfig: (): Record<string, string> => ({}),
-  maskValue: (_k: string, v: string): string => v,
-}))
-
+import { setConfig } from '../../src/config.js'
 import { makeDeferredPromptTools } from '../../src/deferred-prompts/tools.js'
 
 const USER_ID = 'user-1'
@@ -47,7 +35,7 @@ function extractPrompts(result: unknown): unknown[] {
 
 beforeEach(async () => {
   await setupTestDb()
-  configTimezone = 'UTC'
+  setConfig(USER_ID, 'timezone', 'UTC')
 })
 
 afterAll(() => {
