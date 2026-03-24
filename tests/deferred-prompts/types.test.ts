@@ -145,6 +145,30 @@ describe('alertConditionSchema', () => {
       })
       expect(result.success).toBe(false)
     })
+
+    test('eq operator without value is rejected', () => {
+      const result = alertConditionSchema.safeParse({
+        field: 'task.status',
+        op: 'eq',
+      })
+      expect(result.success).toBe(false)
+    })
+
+    test('changed_to operator without value is rejected', () => {
+      const result = alertConditionSchema.safeParse({
+        field: 'task.status',
+        op: 'changed_to',
+      })
+      expect(result.success).toBe(false)
+    })
+
+    test('stale_days operator without value is rejected', () => {
+      const result = alertConditionSchema.safeParse({
+        field: 'task.updatedAt',
+        op: 'stale_days',
+      })
+      expect(result.success).toBe(false)
+    })
   })
 
   describe('exports', () => {

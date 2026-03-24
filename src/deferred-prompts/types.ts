@@ -43,6 +43,14 @@ const leafConditionSchema = z
         path: ['op'],
       })
     }
+    const valuelessOps = new Set(['overdue'])
+    if (!valuelessOps.has(data.op) && data.value === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Operator '${data.op}' requires a value.`,
+        path: ['value'],
+      })
+    }
   })
 
 export type LeafCondition = z.infer<typeof leafConditionSchema>
