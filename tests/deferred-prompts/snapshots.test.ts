@@ -6,7 +6,7 @@ import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-import { captureSnapshot, getSnapshotsForUser, updateSnapshots } from '../../src/deferred-prompts/snapshots.js'
+import { getSnapshotsForUser, updateSnapshots } from '../../src/deferred-prompts/snapshots.js'
 import type { Task } from '../../src/providers/types.js'
 
 afterAll(() => {
@@ -24,17 +24,19 @@ describe('snapshots', () => {
     await setupTestDb()
   })
 
-  test('captures a snapshot for a task', () => {
-    const task = makeTask({
-      id: 'task-1',
-      status: 'in-progress',
-      priority: 'high',
-      assignee: 'alice',
-      dueDate: '2026-04-01',
-      projectId: 'proj-1',
-    })
+  test('captures snapshots for tasks in bulk', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'in-progress',
+        priority: 'high',
+        assignee: 'alice',
+        dueDate: '2026-04-01',
+        projectId: 'proj-1',
+      }),
+    ]
 
-    captureSnapshot('user-1', task)
+    updateSnapshots('user-1', tasks)
 
     const snapshots = getSnapshotsForUser('user-1')
     expect(snapshots.get('task-1:status')).toBe('in-progress')
@@ -45,13 +47,15 @@ describe('snapshots', () => {
   })
 
   test('skips null fields', () => {
-    const task = makeTask({
-      id: 'task-2',
-      status: 'todo',
-      // priority, assignee, dueDate, projectId are undefined → null
-    })
+    const tasks = [
+      makeTask({
+        id: 'task-2',
+        status: 'todo',
+        // priority, assignee, dueDate, projectId are undefined → null
+      }),
+    ]
 
-    captureSnapshot('user-1', task)
+    updateSnapshots('user-1', tasks)
 
     const snapshots = getSnapshotsForUser('user-1')
     expect(snapshots.get('task-2:status')).toBe('todo')
@@ -61,7 +65,7 @@ describe('snapshots', () => {
     expect(snapshots.has('task-2:project')).toBe(false)
   })
 
-  test('updates snapshots in bulk', () => {
+  test('updates snapshots in bulk for multiple tasks', () => {
     const tasks: Task[] = [
       makeTask({ id: 'task-a', status: 'todo', priority: 'low' }),
       makeTask({ id: 'task-b', status: 'done', priority: 'urgent' }),
@@ -78,12 +82,12 @@ describe('snapshots', () => {
 
   test('overwrites existing snapshot values (upsert)', () => {
     const task = makeTask({ id: 'task-1', status: 'todo', priority: 'low' })
-    captureSnapshot('user-1', task)
+    updateSnapshots('user-1', [task])
 
     expect(getSnapshotsForUser('user-1').get('task-1:status')).toBe('todo')
 
     const updated = makeTask({ id: 'task-1', status: 'done', priority: 'high' })
-    captureSnapshot('user-1', updated)
+    updateSnapshots('user-1', [updated])
 
     const snapshots = getSnapshotsForUser('user-1')
     expect(snapshots.get('task-1:status')).toBe('done')
@@ -91,8 +95,8 @@ describe('snapshots', () => {
   })
 
   test('isolates snapshots between users', () => {
-    captureSnapshot('user-1', makeTask({ id: 'task-1', status: 'todo' }))
-    captureSnapshot('user-2', makeTask({ id: 'task-1', status: 'done' }))
+    updateSnapshots('user-1', [makeTask({ id: 'task-1', status: 'todo' })])
+    updateSnapshots('user-2', [makeTask({ id: 'task-1', status: 'done' })])
 
     const user1Snapshots = getSnapshotsForUser('user-1')
     const user2Snapshots = getSnapshotsForUser('user-2')

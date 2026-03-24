@@ -166,7 +166,7 @@ export function getScheduledPromptsDue(limit = 100): ScheduledPrompt[] {
     .select()
     .from(scheduledPrompts)
     .where(and(eq(scheduledPrompts.status, 'active'), lte(scheduledPrompts.fireAt, now)))
-    .limit(limit ?? 100)
+    .limit(limit)
     .all()
 
   return rows.map(toScheduledPrompt)

@@ -47,7 +47,7 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Run all checks
-        run: bun check
+        run: bun check:full
 
   e2e:
     name: E2E Tests

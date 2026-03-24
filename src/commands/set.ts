@@ -2,6 +2,7 @@ import type { ChatProvider, CommandHandler } from '../chat/types.js'
 import { isConfigKey, setConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS } from '../types/config.js'
+import { normalizeTimezone } from '../utils/timezone.js'
 
 const log = logger.child({ scope: 'commands:set' })
 
@@ -30,7 +31,18 @@ export function registerSetCommand(
       await reply.text(`Unknown key: ${key}\nValid keys: ${CONFIG_KEYS.join(', ')}`)
       return
     }
-    setConfig(auth.storageContextId, key, value)
+    let normalizedValue = value
+    if (key === 'timezone') {
+      const resolved = normalizeTimezone(value)
+      if (resolved === null) {
+        await reply.text(
+          `Invalid timezone: "${value}"\nUse an IANA timezone name (e.g. Asia/Karachi) or UTC offset (e.g. UTC+5).`,
+        )
+        return
+      }
+      normalizedValue = resolved
+    }
+    setConfig(auth.storageContextId, key, normalizedValue)
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId, key }, '/set command executed')
     await reply.text(`Set ${key} successfully.`)
   }

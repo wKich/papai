@@ -52,7 +52,7 @@ if [ "$STAGED_MODE" = true ]; then
   # Run lint on staged files
   (
     exit_code=0
-    bun run lint -- "${relevant_files[@]}" >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
+    bunx oxlint --config .oxlintrc.json "${relevant_files[@]}" >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/lint.exit"
   ) &
   lint_pid=$!
@@ -68,7 +68,7 @@ if [ "$STAGED_MODE" = true ]; then
   # Run format:check on staged files
   (
     exit_code=0
-    bun run format:check -- "${relevant_files[@]}" >"$TMPDIR/format:check.out" 2>&1 || exit_code=$?
+    bunx oxfmt --check "${relevant_files[@]}" >"$TMPDIR/format:check.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/format:check.exit"
   ) &
   format_pid=$!
