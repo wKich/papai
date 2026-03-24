@@ -94,7 +94,7 @@ jobs:
             stryker-incremental-master-
 
       - name: Run mutation testing
-        run: bun run test:mutate
+        run: bun run test:mutate:changed
 
       - name: Upload mutation report
         uses: actions/upload-artifact@v4
