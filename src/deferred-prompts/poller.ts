@@ -9,6 +9,7 @@ import { logger } from '../logger.js'
 import type { Task, TaskProvider } from '../providers/types.js'
 import { makeTools } from '../tools/index.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
+import { runWithConcurrency } from './concurrency.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
@@ -20,6 +21,9 @@ const log = logger.child({ scope: 'deferred:poller' })
 const SCHEDULED_POLL_MS = 60_000
 /** 5 minutes */
 const ALERT_POLL_MS = 5 * 60_000
+
+/** Max concurrent LLM invocations per poll cycle. */
+const MAX_CONCURRENT_LLM_CALLS = 5
 
 let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
 let alertIntervalId: ReturnType<typeof setInterval> | null = null
@@ -144,8 +148,9 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   const duePrompts = getScheduledPromptsDue()
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
-  const results = await Promise.allSettled(
-    duePrompts.map((prompt) => executeScheduledPrompt(prompt, chat, buildProviderFn)),
+  const results = await runWithConcurrency(
+    duePrompts.map((prompt) => (): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn)),
+    MAX_CONCURRENT_LLM_CALLS,
   )
 
   for (const result of results) {
@@ -207,8 +212,11 @@ async function executeAlertsForUser(
     tasks = await enrichTasks(provider, tasks)
   }
 
-  const alertResults = await Promise.allSettled(
-    alerts.map((alert) => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn)),
+  const alertResults = await runWithConcurrency(
+    alerts.map(
+      (alert) => (): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn),
+    ),
+    MAX_CONCURRENT_LLM_CALLS,
   )
 
   for (const result of alertResults) {

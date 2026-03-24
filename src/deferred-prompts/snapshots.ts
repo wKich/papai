@@ -49,10 +49,32 @@ export function getSnapshotsForUser(userId: string): Map<string, string> {
   return result
 }
 
-/** Capture snapshots for multiple tasks. */
+/** Capture snapshots for multiple tasks in a single transaction. */
 export function updateSnapshots(userId: string, tasks: Task[]): void {
   log.debug({ userId, taskCount: tasks.length }, 'Updating snapshots')
-  for (const task of tasks) {
-    captureSnapshot(userId, task)
+  const db = getDrizzleDb()
+  const now = new Date().toISOString()
+  const sqlite = db.$client
+
+  sqlite.run('BEGIN')
+  try {
+    for (const task of tasks) {
+      for (const { field, extract } of SNAPSHOT_FIELDS) {
+        const value = extract(task)
+        if (value !== null) {
+          db.insert(taskSnapshots)
+            .values({ userId, taskId: task.id, field, value })
+            .onConflictDoUpdate({
+              target: [taskSnapshots.userId, taskSnapshots.taskId, taskSnapshots.field],
+              set: { value, capturedAt: now },
+            })
+            .run()
+        }
+      }
+    }
+    sqlite.run('COMMIT')
+  } catch (error) {
+    sqlite.run('ROLLBACK')
+    throw error
   }
 }
