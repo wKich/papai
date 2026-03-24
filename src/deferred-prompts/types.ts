@@ -87,5 +87,3 @@ export type AlertPrompt = {
   lastTriggeredAt: string | null
   cooldownMinutes: number
 }
-
-export type DeferredPrompt = ScheduledPrompt | AlertPrompt

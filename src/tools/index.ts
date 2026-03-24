@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai'
 
+import { makeDeferredPromptTools } from '../deferred-prompts/tools.js'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
@@ -170,5 +171,9 @@ export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
   maybeAddDeleteTool(tools, provider)
   addRecurringTools(tools, userId)
   addInstructionTools(tools, userId)
+  if (userId !== undefined) {
+    const deferredTools = makeDeferredPromptTools(userId)
+    Object.assign(tools, deferredTools)
+  }
   return tools
 }
