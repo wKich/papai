@@ -33,14 +33,9 @@ export function alertsNeedFullTasks(alerts: ReadonlyArray<{ condition: AlertCond
   return false
 }
 
-/** Fetch all tasks across all projects for a user. */
-export async function fetchAllTasks(provider: TaskProvider): Promise<Task[]> {
-  if (provider.listProjects === undefined || !provider.capabilities.has('projects.list')) {
-    log.warn('Provider does not support listProjects; alert polling may miss tasks')
-    return []
-  }
-
-  const projects = await provider.listProjects()
+/** Fetch all tasks via listProjects + listTasks (preferred). */
+async function fetchViaProjects(provider: TaskProvider): Promise<Task[]> {
+  const projects = await provider.listProjects!()
   const tasksByProject = await Promise.all(
     projects.map(async (project) => {
       const items = await provider.listTasks(project.id)
@@ -49,8 +44,8 @@ export async function fetchAllTasks(provider: TaskProvider): Promise<Task[]> {
   )
 
   const allItems = tasksByProject.flatMap(({ projectId, items }) => items.map((item) => ({ ...item, projectId })))
-
   log.debug({ projectCount: projects.length, taskCount: allItems.length }, 'Fetched tasks across all projects')
+
   return allItems.map(
     (item): Task => ({
       id: item.id,
@@ -62,6 +57,32 @@ export async function fetchAllTasks(provider: TaskProvider): Promise<Task[]> {
       url: item.url,
     }),
   )
+}
+
+/** Fallback: fetch tasks via searchTasks when listProjects is unavailable. */
+async function fetchViaSearch(provider: TaskProvider): Promise<Task[]> {
+  log.warn('Provider does not support listProjects; falling back to searchTasks')
+  const results = await provider.searchTasks({ query: '' })
+  log.debug({ taskCount: results.length }, 'Fetched tasks via searchTasks fallback')
+
+  return results.map(
+    (item): Task => ({
+      id: item.id,
+      title: item.title,
+      status: item.status,
+      priority: item.priority,
+      projectId: item.projectId,
+      url: item.url,
+    }),
+  )
+}
+
+/** Fetch all tasks for alert evaluation. Uses listProjects+listTasks if available, searchTasks as fallback. */
+export function fetchAllTasks(provider: TaskProvider): Promise<Task[]> {
+  if (provider.listProjects !== undefined && provider.capabilities.has('projects.list')) {
+    return fetchViaProjects(provider)
+  }
+  return fetchViaSearch(provider)
 }
 
 /** Enrich lightweight tasks with full details via getTask (only when conditions need it). */
