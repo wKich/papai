@@ -5,8 +5,8 @@ import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
+import { acquireConversationLock } from './conversation-lock.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
-import { consumeUnseenEvents, markEventsInjected } from './deferred-prompts/background-events.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { buildInstructionsBlock } from './instructions.js'
@@ -109,6 +109,8 @@ DEFERRED PROMPTS — The user can set up automated tasks and alerts:
   - Set cooldown_minutes to control how often alerts can fire (default: 60 minutes).
 - Use list_deferred_prompts to show active prompts/alerts. Use cancel_deferred_prompt to cancel one.
 - For daily briefings, create a recurring scheduled prompt (e.g., cron "0 9 * * *" at 9am).
+
+PROACTIVE MODE — When you receive a [PROACTIVE EXECUTION] system message at the end of the conversation, you are proactively reaching out to the user. Respond as if you spontaneously remembered or noticed something relevant. Never mention system events, triggers, cron jobs, or that this was a scheduled task. Be warm and conversational, reference prior context naturally, execute tool calls autonomously if needed, and keep responses concise.
 
 ${STATIC_RULES}`
 }
@@ -226,11 +228,6 @@ const callLlm = async (
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
-  const bgResult = consumeUnseenEvents(contextId)
-  const finalMessages =
-    bgResult === null
-      ? messagesWithMemory
-      : [{ role: 'system' as const, content: bgResult.systemContent }, ...messagesWithMemory]
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -238,15 +235,11 @@ const callLlm = async (
   const result = await generateText({
     model,
     system: buildSystemPrompt(provider, timezone, contextId),
-    messages: finalMessages,
+    messages: messagesWithMemory,
     tools,
     stopWhen: stepCountIs(25),
   })
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
-  if (bgResult !== null) {
-    markEventsInjected(bgResult.eventIds)
-    appendHistory(contextId, bgResult.historyEntries)
-  }
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
   return result
@@ -276,6 +269,8 @@ export const processMessage = async (
   log.debug({ contextId, userText }, 'processMessage called')
   log.info({ contextId, messageLength: userText.length }, 'Message received from user')
 
+  // Acquire conversation lock to prevent race conditions with proactive prompts
+  const release = await acquireConversationLock(contextId)
   const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
@@ -296,5 +291,7 @@ export const processMessage = async (
   } catch (error) {
     saveHistory(contextId, baseHistory)
     await handleMessageError(reply, contextId, error)
+  } finally {
+    release()
   }
 }
