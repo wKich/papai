@@ -24,6 +24,8 @@ const ALERT_POLL_MS = 5 * 60_000
 
 /** Max concurrent LLM invocations per poll cycle. */
 const MAX_CONCURRENT_LLM_CALLS = 5
+/** Max concurrent user alert evaluations per poll cycle. */
+const MAX_CONCURRENT_USERS = 10
 
 let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
 let alertIntervalId: ReturnType<typeof setInterval> | null = null
@@ -246,8 +248,11 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
     }
   }
 
+  const userLimit = pLimit(MAX_CONCURRENT_USERS)
   const results = await Promise.allSettled(
-    [...byUser.entries()].map(([userId, alerts]) => executeAlertsForUser(userId, alerts, chat, buildProviderFn)),
+    [...byUser.entries()].map(([userId, alerts]) =>
+      userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn)),
+    ),
   )
 
   for (const result of results) {
