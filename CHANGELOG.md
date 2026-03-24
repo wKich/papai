@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-03-24
+
+### Added
+
+- Add migration 013 for deferred prompts tables
+- Add deferred prompt types and alert condition Zod schema
+- Implement task snapshot management for change detection
+- Implement 5 unified deferred prompt LLM tools
+- Implement deferred prompt LLM tools and polling loops
+- Add deferred-prompts barrel export
+- Wire deferred prompt pollers into bot startup/shutdown
+- Add --staged flag to check-quiet script
+- Add timezone validation for /set timezone command
+
+### Changed
+
+- Remove old proactive system, update schema with deferred prompt tables
+- Remove unused deferred-prompts barrel export and knip ignore
+- Add concurrency limit (5) for parallel LLM invocations
+- Replace custom concurrency limiter with p-limit
+- Remove redundant condition validation from CRUD layer
+- Replace raw SQL datetime arithmetic with JS filtering
+
+### Documentation
+
+- Add deferred prompts design document
+- Rewrite deferred prompts implementation plan
+- Update documentation to reflect check-quiet and correct check command list
+- Add --staged flag documentation to CLAUDE.md
+- Update roadmap Phase 7 to reflect deferred prompts, add 7b for provider-gated fields
+- Update ADR status and clean up completed implementation plans
+- Archive outdated documents and add ADR 0031
+
+### Fixed
+
+- Safer configure_briefing/configure_alerts, clarify design doc as future work
+- Register migration 013 in runtime migration list
+- Resolve Drizzle type error in getScheduledPromptsDue
+- Wire deferred prompt tools into makeTools, fix knip issues
+- **scripts:** Address shell script security and robustness issues
+- Replace N+1 task fetching with per-project listTasks approach
+- Add userId ownership checks to advanceScheduledPrompt and completeScheduledPrompt
+- Add explicit return types to tool execute functions
+- **scripts:** Fix word splitting and shell portability issues in check-quiet.sh
+- Validate value presence for operators that require it
+- Update capturedAt on snapshot upsert
+- Remove task.updatedAt from condition fields — providers don't supply it
+- Add searchTasks fallback when provider lacks projects.list
+- Prune stale snapshots for deleted tasks on each poll cycle
+- Add userId ownership check to updateAlertTriggerTime
+- Add concurrency limit (10) for user-level alert fan-out
+- **tests:** Include getLogLevel in logger mock to prevent mock pollution
+- Address PR review feedback from pullrequestreview-3997096442
+- Log actual prompt and response to history, not metadata
+
+### Miscellaneous
+
+- Add check-quiet script to package.json
+- Upgrade TypeScript to v6.0.2
+
+### Security
+
+- Sanitize condition values in describeCondition for LLM prompts
 ## [4.3.0] - 2026-03-23
 
 ### Added
