@@ -24,7 +24,8 @@ All scripts can be run with `bun <script>` (no `run` keyword needed):
 - `bun test:coverage` — run unit tests with coverage
 - `bun test:e2e` — run E2E tests (requires Docker)
 - `bun test:e2e:watch` — run E2E tests in watch mode
-- `bun check` — run all checks in parallel (lint, typecheck, format:check, knip, test, security)
+- `bun check` — run all checks in parallel (lint, typecheck, format:check, knip, test, duplicates, mock-pollution)
+- `bun check-quiet` — run all checks, suppressing success output (used by pre-commit hook)
 - `bun fix` — auto-fix lint and format issues
 - `bun install` — install dependencies
 

@@ -323,7 +323,8 @@ bun test:coverage # Coverage report
 bun test:e2e      # E2E tests (requires Docker)
 
 # All checks
-bun check         # Run lint, typecheck, format:check, knip, test, security
+bun check         # Run lint, typecheck, format:check, knip, test, duplicates, mock-pollution
+bun check-quiet   # Run all checks, suppressing success output (used by pre-commit hook)
 bun fix           # Auto-fix lint and format
 ```
 

@@ -91,7 +91,7 @@ Evidence:
 - `package.json` — `security` and `security:ci` scripts present
 - `CLAUDE.md` — Security section documents `bun run security` and `bun run security:ci` commands
 
-The pre-commit hook integration was partially implemented: `scripts/pre-commit.sh` exists and is wired as the active `.git/hooks/pre-commit`, but it runs `bun check` (lint, typecheck, format, knip, tests) rather than `bun security`. Semgrep scanning is not included in the pre-commit hook; it runs only in CI and on-demand locally via `bun security`.
+The pre-commit hook integration was partially implemented: `scripts/pre-commit.sh` exists and is wired as the active `.git/hooks/pre-commit`, but it runs `./scripts/check-quiet.sh` (which runs lint, typecheck, format:check, knip, test, duplicates, mock-pollution) rather than `bun security`. Semgrep scanning is not included in the pre-commit hook; it runs only in CI and on-demand locally via `bun security`.
 
 ## Related Plans
 
