@@ -56,32 +56,49 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
   )
 }
 
-async function executeScheduledPrompt(
-  prompt: ScheduledPrompt,
+function buildMergedTrigger(prompts: ScheduledPrompt[], timezone: string): string {
+  if (prompts.length === 1) {
+    return buildProactiveTrigger('scheduled', prompts[0]!.prompt, timezone)
+  }
+  const combined = prompts.map((p, i) => `${String(i + 1)}. "${p.prompt}"`).join('\n')
+  return buildProactiveTrigger('scheduled', combined, timezone)
+}
+
+function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
+  for (const prompt of prompts) {
+    if (prompt.cronExpression === null) {
+      completeScheduledPrompt(prompt.id, prompt.userId, now)
+      log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
+    } else {
+      finalizeRecurring(prompt, now, timezone)
+    }
+  }
+}
+
+async function executeScheduledPromptsForUser(
+  userId: string,
+  prompts: ScheduledPrompt[],
   chat: ChatProvider,
   buildProviderFn: BuildProviderFn,
 ): Promise<void> {
-  const timezone = getConfig(prompt.userId, 'timezone') ?? 'UTC'
-  const triggerContent = buildProactiveTrigger('scheduled', prompt.prompt, timezone)
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const triggerContent = buildMergedTrigger(prompts, timezone)
+  const promptIds = prompts.map((p) => p.id)
+
+  log.debug({ userId, promptCount: prompts.length, promptIds }, 'Executing merged scheduled prompts')
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(prompt.userId, triggerContent, buildProviderFn)
-    await chat.sendMessage(prompt.userId, response)
+    response = await invokeLlmWithHistory(userId, triggerContent, buildProviderFn)
+    await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
+    log.error({ userId, promptIds, error: errMsg }, 'Scheduled prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
-    await chat.sendMessage(prompt.userId, `Scheduled task failed: ${errMsg}`)
+    await chat.sendMessage(userId, `Scheduled task failed: ${errMsg}`)
   }
 
-  const now = new Date().toISOString()
-  if (prompt.cronExpression === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
-    log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
-  } else {
-    finalizeRecurring(prompt, now, timezone)
-  }
+  finalizeAllPrompts(prompts, new Date().toISOString(), timezone)
 }
 
 export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: BuildProviderFn): Promise<void> {
@@ -90,14 +107,28 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   const duePrompts = getScheduledPromptsDue()
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
+  if (duePrompts.length === 0) return
+
+  const byUser = new Map<string, ScheduledPrompt[]>()
+  for (const prompt of duePrompts) {
+    const existing = byUser.get(prompt.userId)
+    if (existing === undefined) {
+      byUser.set(prompt.userId, [prompt])
+    } else {
+      existing.push(prompt)
+    }
+  }
+
   const limit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const results = await Promise.allSettled(
-    duePrompts.map((prompt) => limit((): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn))),
+    [...byUser.entries()].map(([userId, prompts]) =>
+      limit((): Promise<void> => executeScheduledPromptsForUser(userId, prompts, chat, buildProviderFn)),
+    ),
   )
 
   for (const result of results) {
     if (result.status === 'rejected') {
-      log.error({ error: String(result.reason) }, 'Error executing scheduled prompt')
+      log.error({ error: String(result.reason) }, 'Error executing scheduled prompts for user')
     }
   }
 }

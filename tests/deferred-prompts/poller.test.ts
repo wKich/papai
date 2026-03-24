@@ -131,6 +131,77 @@ describe('pollScheduledOnce', () => {
     expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
   })
 
+  test('merges multiple due prompts for the same user into one LLM call', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({
+        text: 'All tasks handled.',
+        toolCalls: [],
+        toolResults: [],
+        response: { messages: [] },
+      })
+    }
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const p1 = createScheduledPrompt(USER_ID, 'Check overdue tasks', { fireAt: pastTime })
+    const p2 = createScheduledPrompt(USER_ID, 'Send daily report', { fireAt: pastTime })
+    const p3 = createScheduledPrompt(USER_ID, 'Review pull requests', { fireAt: pastTime })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    // Single LLM call for all three prompts
+    expect(callCount).toBe(1)
+    // Single message sent to user
+    expect(chat.sentMessages).toHaveLength(1)
+    expect(chat.sentMessages[0]!.text).toBe('All tasks handled.')
+
+    // All three should be completed
+    expect(getScheduledPrompt(p1.id, USER_ID)!.status).toBe('completed')
+    expect(getScheduledPrompt(p2.id, USER_ID)!.status).toBe('completed')
+    expect(getScheduledPrompt(p3.id, USER_ID)!.status).toBe('completed')
+  })
+
+  test('merges mixed one-shot and recurring prompts for same user', async () => {
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const oneShot = createScheduledPrompt(USER_ID, 'One-time reminder', { fireAt: pastTime })
+    const recurring = createScheduledPrompt(USER_ID, 'Daily standup', {
+      fireAt: pastTime,
+      cronExpression: '0 9 * * *',
+    })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    expect(chat.sentMessages).toHaveLength(1)
+    expect(getScheduledPrompt(oneShot.id, USER_ID)!.status).toBe('completed')
+    const updatedRecurring = getScheduledPrompt(recurring.id, USER_ID)!
+    expect(updatedRecurring.status).toBe('active')
+    expect(new Date(updatedRecurring.fireAt).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  test('different users get separate LLM calls', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    }
+
+    const otherUser = 'poller-user-2'
+    setupUserConfig(otherUser)
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(USER_ID, 'Task A', { fireAt: pastTime })
+    createScheduledPrompt(USER_ID, 'Task B', { fireAt: pastTime })
+    createScheduledPrompt(otherUser, 'Task C', { fireAt: pastTime })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    // Two LLM calls: one per user
+    expect(callCount).toBe(2)
+    // Two messages: one per user
+    expect(chat.sentMessages).toHaveLength(2)
+  })
+
   test('skips prompt when LLM config is missing', async () => {
     // Create a user without LLM config
     const unconfiguredUser = 'unconfigured-user'
