@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import { skipNextOccurrence } from '../recurring.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:skip-recurring-task' })
 
@@ -28,7 +29,7 @@ export function makeSkipRecurringTaskTool(): ToolSet[string] {
         return {
           id: result.id,
           title: result.title,
-          nextRun: result.nextRun,
+          nextRun: utcToLocal(result.nextRun, result.timezone),
           status: 'skipped — next occurrence updated',
         }
       } catch (error) {

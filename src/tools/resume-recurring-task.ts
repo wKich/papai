@@ -6,6 +6,7 @@ import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { resumeRecurringTask } from '../recurring.js'
 import { createMissedTasks } from '../scheduler.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:resume-recurring-task' })
 
@@ -42,7 +43,7 @@ async function executeResume(input: Input): Promise<unknown> {
     id: record.id,
     title: record.title,
     enabled: record.enabled,
-    nextRun: record.nextRun,
+    nextRun: utcToLocal(record.nextRun, record.timezone),
     schedule,
     status: 'active',
     missedTasksCreated: createdCount,

@@ -440,7 +440,8 @@ describe('makeResumeRecurringTaskTool', () => {
     expect(result).toHaveProperty('id', 'rec-1')
     expect(result).toHaveProperty('title', 'Standup')
     expect(result).toHaveProperty('enabled', true)
-    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00.000Z')
+    // nextRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00')
     expect(result).toHaveProperty('status', 'active')
     expect(result).toHaveProperty('missedTasksCreated', 0)
     expect(result).toHaveProperty('schedule')
@@ -486,6 +487,18 @@ describe('makeResumeRecurringTaskTool', () => {
     const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', createMissed: true }, toolCtx)
     expect(result).toHaveProperty('missedTasksCreated', 0)
     expect(createMissedTasksCalls).toHaveLength(0)
+  })
+
+  test('returns nextRun converted to user local time after resume', async () => {
+    const record = makeRecord({
+      timezone: 'Asia/Karachi',
+      nextRun: '2026-03-25T12:00:00.000Z',
+    })
+    resumeRecurringTaskResult = { record, missedDates: [] }
+    const tool = makeResumeRecurringTaskTool()
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
+    expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
   })
 })
 
@@ -536,7 +549,8 @@ describe('makeSkipRecurringTaskTool', () => {
     const result: unknown = await tool.execute({ recurringTaskId: 'rec-4' }, toolCtx)
     expect(result).toHaveProperty('id', 'rec-4')
     expect(result).toHaveProperty('title', 'Standup')
-    expect(result).toHaveProperty('nextRun', '2026-03-29T09:00:00.000Z')
+    // nextRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result).toHaveProperty('nextRun', '2026-03-29T09:00:00')
     expect(result).toHaveProperty('status', 'skipped — next occurrence updated')
   })
 
@@ -554,6 +568,17 @@ describe('makeSkipRecurringTaskTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute({ recurringTaskId: 'rec-5' }, toolCtx)
     expect(skipNextOccurrenceCalls).toEqual(['rec-5'])
+  })
+
+  test('returns nextRun converted to user local time after skip', async () => {
+    skipNextOccurrenceResult = makeRecord({
+      timezone: 'Asia/Karachi',
+      nextRun: '2026-03-25T12:00:00.000Z',
+    })
+    const tool = makeSkipRecurringTaskTool()
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
+    expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
   })
 })
 
@@ -578,7 +603,8 @@ describe('makeListRecurringTasksTool', () => {
     expect(result[0]).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
     expect(result[0]).toHaveProperty('cronExpression', '0 9 * * 1')
     expect(result[0]).toHaveProperty('enabled', true)
-    expect(result[0]).toHaveProperty('nextRun', '2026-03-22T09:00:00.000Z')
+    // nextRun/lastRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result[0]).toHaveProperty('nextRun', '2026-03-22T09:00:00')
     expect(result[0]).toHaveProperty('lastRun', null)
     expect(result[0]).toHaveProperty('priority', null)
     expect(result[0]).toHaveProperty('assignee', null)
@@ -610,6 +636,22 @@ describe('makeListRecurringTasksTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute({}, toolCtx)
     expect(result).toEqual([])
+  })
+
+  test('returns nextRun and lastRun converted to user local time', async () => {
+    listRecurringTasksResult = [
+      makeRecord({
+        timezone: 'Asia/Karachi',
+        nextRun: '2026-03-25T12:00:00.000Z',
+        lastRun: '2026-03-24T12:00:00.000Z',
+      }),
+    ]
+    const tool = makeListRecurringTasksTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({}, toolCtx)
+    if (!Array.isArray(result)) throw new Error('Expected array')
+    expect(result[0]).toHaveProperty('nextRun', '2026-03-25T17:00:00')
+    expect(result[0]).toHaveProperty('lastRun', '2026-03-24T17:00:00')
   })
 
   test('calls listRecurringTasks with the userId', async () => {

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { listRecurringTasks } from '../recurring.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:list-recurring-tasks' })
 
@@ -30,8 +31,8 @@ export function makeListRecurringTasksTool(userId: string): ToolSet[string] {
               : 'after completion',
           cronExpression: t.cronExpression,
           enabled: t.enabled,
-          nextRun: t.nextRun,
-          lastRun: t.lastRun,
+          nextRun: utcToLocal(t.nextRun, t.timezone),
+          lastRun: utcToLocal(t.lastRun, t.timezone),
           priority: t.priority,
           assignee: t.assignee,
           labels: t.labels,
