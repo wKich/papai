@@ -1,12 +1,5 @@
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 
-export type LocalDatetime = {
-  /** YYYY-MM-DD */
-  date: string
-  /** HH:MM (24-hour) */
-  time?: string
-}
-
 export type SemanticSchedule = {
   frequency: 'daily' | 'weekly' | 'monthly' | 'weekdays' | 'weekends'
   /** HH:MM (24-hour, user's local timezone) */
