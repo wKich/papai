@@ -6,9 +6,10 @@ import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { appendHistory } from '../history.js'
 import { logger } from '../logger.js'
-import type { TaskProvider } from '../providers/types.js'
+import type { Task, TaskProvider } from '../providers/types.js'
 import { makeTools } from '../tools/index.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
+import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
 import type { ScheduledPrompt } from './types.js'
@@ -157,12 +158,12 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
 async function executeSingleAlert(
   alert: ReturnType<typeof getEligibleAlertPrompts>[number],
   userId: string,
-  fullTasks: Awaited<ReturnType<TaskProvider['getTask']>>[],
+  tasks: Task[],
   snapshots: Map<string, string>,
   chat: ChatProvider,
   buildProviderFn: BuildProviderFn,
 ): Promise<void> {
-  const matchedTasks = fullTasks.filter((task) => evaluateCondition(alert.condition, task, snapshots))
+  const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots))
   if (matchedTasks.length === 0) return
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
@@ -198,12 +199,16 @@ async function executeAlertsForUser(
     return
   }
 
-  const tasks = await provider.searchTasks({ query: '', limit: 200 })
+  let tasks = await fetchAllTasks(provider)
   const snapshots = getSnapshotsForUser(userId)
-  const fullTasks = await Promise.all(tasks.map((t) => provider.getTask(t.id)))
+
+  if (tasks.length > 0 && alertsNeedFullTasks(alerts)) {
+    log.debug({ userId, taskCount: tasks.length }, 'Enriching tasks with full details for alert conditions')
+    tasks = await enrichTasks(provider, tasks)
+  }
 
   const alertResults = await Promise.allSettled(
-    alerts.map((alert) => executeSingleAlert(alert, userId, fullTasks, snapshots, chat, buildProviderFn)),
+    alerts.map((alert) => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn)),
   )
 
   for (const result of alertResults) {
@@ -212,7 +217,7 @@ async function executeAlertsForUser(
     }
   }
 
-  updateSnapshots(userId, fullTasks)
+  updateSnapshots(userId, tasks)
 }
 
 export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildProviderFn): Promise<void> {

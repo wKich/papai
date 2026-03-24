@@ -168,14 +168,9 @@ describe('pollAlertsOnce', () => {
     createAlertPrompt(USER_ID, 'Notify on done', { field: 'task.status', op: 'eq', value: 'done' })
 
     const provider = createMockProvider({
-      searchTasks: mock(() => Promise.resolve([{ id: 'task-1', title: 'Test', url: 'http://test/1' }])),
-      getTask: mock(() =>
-        Promise.resolve({
-          id: 'task-1',
-          title: 'Test',
-          status: 'in-progress',
-          url: 'http://test/1',
-        }),
+      listProjects: mock(() => Promise.resolve([{ id: 'proj-1', name: 'Test', url: 'http://test/proj/1' }])),
+      listTasks: mock(() =>
+        Promise.resolve([{ id: 'task-1', title: 'Test', status: 'in-progress', url: 'http://test/1' }]),
       ),
     })
 
@@ -188,12 +183,37 @@ describe('pollAlertsOnce', () => {
     createAlertPrompt(USER_ID, 'Notify on done', { field: 'task.status', op: 'eq', value: 'done' })
 
     const provider = createMockProvider({
-      searchTasks: mock(() => Promise.resolve([{ id: 'task-1', title: 'Completed Task', url: 'http://test/1' }])),
+      listProjects: mock(() => Promise.resolve([{ id: 'proj-1', name: 'Test', url: 'http://test/proj/1' }])),
+      listTasks: mock(() =>
+        Promise.resolve([{ id: 'task-1', title: 'Completed Task', status: 'done', url: 'http://test/1' }]),
+      ),
+    })
+
+    await pollAlertsOnce(chat, () => provider)
+
+    expect(chat.sentMessages).toHaveLength(1)
+    expect(chat.sentMessages[0]!.userId).toBe(USER_ID)
+    expect(chat.sentMessages[0]!.text).toBe('Alert triggered.')
+  })
+
+  test('enriches tasks via getTask when condition references assignee', async () => {
+    createAlertPrompt(USER_ID, 'Notify on alice assignment', {
+      field: 'task.assignee',
+      op: 'eq',
+      value: 'alice',
+    })
+
+    const provider = createMockProvider({
+      listProjects: mock(() => Promise.resolve([{ id: 'proj-1', name: 'Test', url: 'http://test/proj/1' }])),
+      listTasks: mock(() =>
+        Promise.resolve([{ id: 'task-1', title: 'Assigned Task', status: 'todo', url: 'http://test/1' }]),
+      ),
       getTask: mock(() =>
         Promise.resolve({
           id: 'task-1',
-          title: 'Completed Task',
-          status: 'done',
+          title: 'Assigned Task',
+          status: 'todo',
+          assignee: 'alice',
           url: 'http://test/1',
         }),
       ),
@@ -202,7 +222,6 @@ describe('pollAlertsOnce', () => {
     await pollAlertsOnce(chat, () => provider)
 
     expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.userId).toBe(USER_ID)
     expect(chat.sentMessages[0]!.text).toBe('Alert triggered.')
   })
 })
