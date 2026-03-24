@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, stepCountIs, type ModelMessage } from 'ai'
+import { generateText, stepCountIs } from 'ai'
 import pLimit from 'p-limit'
 
 import type { ChatProvider } from '../chat/types.js'
@@ -74,17 +74,11 @@ async function invokeLlm(
   return result.text ?? 'Done.'
 }
 
-function logToHistory(userId: string, type: string, prompt: string, response: string): void {
-  const now = new Date().toISOString()
-  const systemMessage: ModelMessage = {
-    role: 'user',
-    content: `[Deferred Prompt] Type: ${type}\nPrompt: "${prompt}"\nTriggered at: ${now}`,
-  }
-  const assistantMessage: ModelMessage = {
-    role: 'assistant',
-    content: response,
-  }
-  appendHistory(userId, [systemMessage, assistantMessage])
+function logToHistory(userId: string, prompt: string, response: string): void {
+  appendHistory(userId, [
+    { role: 'user', content: prompt },
+    { role: 'assistant', content: response },
+  ])
 }
 
 function formatTaskStatus(status: string | undefined): string {
@@ -132,7 +126,7 @@ async function executeScheduledPrompt(
   const response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
 
   await chat.sendMessage(prompt.userId, response)
-  logToHistory(prompt.userId, 'scheduled', prompt.prompt, response)
+  logToHistory(prompt.userId, prompt.prompt, response)
 
   const now = new Date().toISOString()
 
@@ -187,7 +181,7 @@ async function executeSingleAlert(
   const response = await invokeLlm(userId, systemPrompt, userPrompt, buildProviderFn)
 
   await chat.sendMessage(userId, response)
-  logToHistory(userId, 'alert', alert.prompt, response)
+  logToHistory(userId, alert.prompt, response)
 
   const now = new Date().toISOString()
   updateAlertTriggerTime(alert.id, userId, now)
