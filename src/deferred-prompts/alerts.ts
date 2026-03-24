@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { alertPrompts, type AlertPromptRow } from '../db/schema.js'
@@ -151,25 +151,20 @@ export const updateAlertTriggerTime = (id: string, userId: string, lastTriggered
 
 export const getEligibleAlertPrompts = (): AlertPrompt[] => {
   log.debug('getEligibleAlertPrompts called')
-  const now = new Date().toISOString()
   const db = getDrizzleDb()
+  const nowMs = Date.now()
 
-  const rows = db
-    .select()
-    .from(alertPrompts)
-    .where(
-      and(
-        eq(alertPrompts.status, 'active'),
-        or(
-          isNull(alertPrompts.lastTriggeredAt),
-          sql`datetime(${alertPrompts.lastTriggeredAt}, '+' || ${alertPrompts.cooldownMinutes} || ' minutes') <= datetime(${now})`,
-        ),
-      ),
-    )
-    .all()
+  const rows = db.select().from(alertPrompts).where(eq(alertPrompts.status, 'active')).all()
 
-  log.info({ count: rows.length }, 'Eligible alert prompts found')
-  return rows.map(toAlertPrompt)
+  const eligible = rows.filter((row) => {
+    if (row.lastTriggeredAt === null) return true
+    const triggeredMs = new Date(row.lastTriggeredAt).getTime()
+    const cooldownMs = row.cooldownMinutes * 60_000
+    return nowMs - triggeredMs >= cooldownMs
+  })
+
+  log.info({ total: rows.length, eligible: eligible.length }, 'Eligible alert prompts found')
+  return eligible.map(toAlertPrompt)
 }
 
 // --- Condition evaluation ---
