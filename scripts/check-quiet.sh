@@ -1,5 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
+
+# Check if in git repo
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+  echo "Error: Not in a git repository" >&2
+  exit 1
+fi
 
 # Parse arguments
 STAGED_MODE=false
@@ -14,28 +20,30 @@ TMPDIR=$(mktemp -d) || { echo "Failed to create temp dir" >&2; exit 1; }
 trap 'rm -rf "$TMPDIR"' EXIT
 
 if [ "$STAGED_MODE" = true ]; then
-  # Get staged files
-  staged_files=$(git diff --staged --name-only --diff-filter=ACM 2>/dev/null || true)
+  # Get staged files into array
+  staged_files=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && staged_files+=("$file")
+  done < <(git diff --staged --name-only --diff-filter=ACM 2>/dev/null || true)
 
-  # Filter to relevant file types
-  relevant_files=""
-  for file in $staged_files; do
+  # Build array of relevant files
+  relevant_files=()
+  for file in "${staged_files[@]+${staged_files[@]}}"; do
+    [ -z "$file" ] && continue
     case "$file" in
       *.ts|*.tsx|*.js|*.jsx|*.json|*.md)
-        relevant_files="$relevant_files $file"
+        relevant_files+=("$file")
         ;;
     esac
   done
 
-  # Trim leading space
-  relevant_files=$(echo "$relevant_files" | sed 's/^ *//')
-
-  if [ -z "$relevant_files" ]; then
+  # Check if array is empty
+  if [ ${#relevant_files[@]} -eq 0 ]; then
     echo "ℹ No relevant staged files to check"
     exit 0
   fi
 
-  echo "ℹ Checking staged files: $relevant_files"
+  echo "ℹ Checking staged files: ${relevant_files[*]}"
 
   # Run only lint, typecheck, format on staged files
   checks=("lint" "typecheck" "format:check")
@@ -44,10 +52,10 @@ if [ "$STAGED_MODE" = true ]; then
   # Run lint on staged files
   (
     exit_code=0
-    # shellcheck disable=SC2086
-    bun run lint -- $relevant_files >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
+    bun run lint -- "${relevant_files[@]}" >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/lint.exit"
   ) &
+  lint_pid=$!
 
   # Run typecheck (project-wide, but fast)
   (
@@ -55,17 +63,20 @@ if [ "$STAGED_MODE" = true ]; then
     bun run typecheck >"$TMPDIR/typecheck.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/typecheck.exit"
   ) &
+  typecheck_pid=$!
 
   # Run format:check on staged files
   (
     exit_code=0
-    # shellcheck disable=SC2086
-    bun run format:check -- $relevant_files >"$TMPDIR/format:check.out" 2>&1 || exit_code=$?
+    bun run format:check -- "${relevant_files[@]}" >"$TMPDIR/format:check.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/format:check.exit"
   ) &
+  format_pid=$!
 
   # Wait for all background jobs
-  wait
+  wait "$lint_pid"
+  wait "$typecheck_pid"
+  wait "$format_pid"
 
   # Check results and display failures
   for check in "${checks[@]}"; do
@@ -100,6 +111,7 @@ else
   # Original behavior: run all checks
   checks=("lint" "typecheck" "format:check" "knip" "test" "duplicates" "mock-pollution")
   failed=0
+  pids=()
 
   # Run all checks in parallel
   for check in "${checks[@]}"; do
@@ -108,10 +120,13 @@ else
       bun run "$check" >"$TMPDIR/$check.out" 2>&1 || exit_code=$?
       echo "$exit_code" >"$TMPDIR/$check.exit"
     ) &
+    pids+=($!)
   done
 
   # Wait for all background jobs
-  wait
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
 
   # Check results and display failures
   for check in "${checks[@]}"; do
