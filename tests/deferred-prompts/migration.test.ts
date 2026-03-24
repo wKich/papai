@@ -15,6 +15,8 @@ import { migration010RecurringTaskOccurrences } from '../../src/db/migrations/01
 import { migration011ProactiveAlerts } from '../../src/db/migrations/011_proactive_alerts.js'
 import { migration012UserInstructions } from '../../src/db/migrations/012_user_instructions.js'
 import { migration013DeferredPrompts } from '../../src/db/migrations/013_deferred_prompts.js'
+import { migration014BackgroundEvents } from '../../src/db/migrations/014_background_events.js'
+import { migration015DropBackgroundEvents } from '../../src/db/migrations/015_drop_background_events.js'
 
 const ALL_MIGRATIONS = [
   migration001Initial,
@@ -30,6 +32,8 @@ const ALL_MIGRATIONS = [
   migration011ProactiveAlerts,
   migration012UserInstructions,
   migration013DeferredPrompts,
+  migration014BackgroundEvents,
+  migration015DropBackgroundEvents,
 ]
 
 const getColumnNames = (db: Database, tableName: string): string[] =>
