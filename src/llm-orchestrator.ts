@@ -11,7 +11,6 @@ import { appendHistory, saveHistory } from './history.js'
 import { buildInstructionsBlock } from './instructions.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
-import * as briefingService from './proactive/briefing.js'
 import { ProviderClassifiedError } from './providers/errors.js'
 import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { provisionAndConfigure } from './providers/kaneo/provision.js'
@@ -97,13 +96,18 @@ RECURRING TASKS — The user can set up tasks that repeat automatically:
 - When the user says "stop" or "cancel" a recurring task, use delete_recurring_task.
 - When they say "pause", use pause_recurring_task. When "skip the next one", use skip_recurring_task.
 
-REMINDERS — The user can set reminders that fire at specific times:
-- Use set_reminder to create a reminder. Always resolve natural language time expressions to ISO 8601 timestamps for fireAt.
-- For repeating reminders, resolve the recurrence to a 5-field cron expression.
-- Use list_reminders to show active reminders. Use cancel_reminder to cancel one.
-- Use snooze_reminder to delay a reminder (resolve duration to an ISO timestamp for newFireAt).
-- Use reschedule_reminder to move a reminder to a new time.
-- Use get_briefing to show today's task briefing on demand.
+DEFERRED PROMPTS — The user can set up automated tasks and alerts:
+- SCHEDULED PROMPTS: Use create_deferred_prompt with a schedule to set up one-time or recurring LLM tasks.
+  - One-time: provide schedule.fire_at as an ISO 8601 timestamp. Resolve natural language times to the user's timezone (${timezone}).
+  - Recurring: provide schedule.cron as a 5-field cron expression. Cron times are in the user's timezone (${timezone}).
+  - Common patterns: "0 9 * * 1" = every Monday 9am, "0 9 * * *" = daily 9am.
+- ALERTS: Use create_deferred_prompt with a condition to monitor task changes.
+  - Conditions use a filter schema: { field, op, value }. Fields: task.status, task.priority, task.assignee, task.dueDate, task.project, task.labels.
+  - Operators: eq, neq, changed_to, lt, gt, overdue, contains, not_contains.
+  - Combine with { and: [...] } or { or: [...] }.
+  - Set cooldown_minutes to control how often alerts can fire (default: 60 minutes).
+- Use list_deferred_prompts to show active prompts/alerts. Use cancel_deferred_prompt to cancel one.
+- For daily briefings, create a recurring scheduled prompt (e.g., cron "0 9 * * *" at 9am).
 
 ${STATIC_RULES}`
 }
@@ -275,10 +279,6 @@ export const processMessage = async (
   appendHistory(contextId, [newMessage])
 
   try {
-    if (checkRequiredConfig(contextId).length === 0) {
-      const catchUp = await briefingService.getMissedBriefing(contextId, buildProvider(contextId)).catch(() => null)
-      if (catchUp !== null) await reply.formatted(catchUp)
-    }
     const result = await callLlm(reply, contextId, username, history)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {

@@ -5,8 +5,8 @@
   "categories": {
     "correctness": "error",
     "suspicious": "error",
-    "pedantic": "warn",
-    "perf": "warn"
+    "pedantic": "error",
+    "perf": "error"
   },
   "options": {
     "typeAware": true,

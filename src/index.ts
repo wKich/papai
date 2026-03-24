@@ -4,8 +4,8 @@ import { createChatProvider } from './chat/registry.js'
 import { getConfig } from './config.js'
 import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
+import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
-import { proactiveScheduler } from './proactive/index.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
@@ -82,7 +82,7 @@ void announceNewVersion(chatProvider)
 
 startScheduler(chatProvider)
 
-// Build a task provider for a given user (used by proactive scheduler)
+// Build a task provider for a given user (used by deferred prompt pollers)
 const buildProviderForUser = (userId: string): TaskProvider | null => {
   if (TASK_PROVIDER === 'kaneo') {
     const kaneoKey = getConfig(userId, 'kaneo_apikey')
@@ -104,12 +104,12 @@ const buildProviderForUser = (userId: string): TaskProvider | null => {
   return null
 }
 
-proactiveScheduler.start(chatProvider, buildProviderForUser)
+startPollers(chatProvider, buildProviderForUser)
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
   stopScheduler()
-  proactiveScheduler.stopAll()
+  stopPollers()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
@@ -119,7 +119,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
   stopScheduler()
-  proactiveScheduler.stopAll()
+  stopPollers()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()

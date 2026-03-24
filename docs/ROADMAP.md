@@ -61,48 +61,35 @@ Features:
 
 New config keys: none (memos keyed to user ID)
 
-## Phase 7: Proactive Assistance — Briefings & Reminders
+## Phase 7: Deferred Prompts — Scheduled Tasks & Alerts
 
-> Extends [design doc](docs/plans/2026-03-04-personal-assistant-expansion-design.md#phase-3-proactive-assistance).
+> See [design doc](docs/plans/2026-03-23-deferred-prompts-design.md) for full specification.
 
-**Goal:** papai initiates conversations — sending scheduled briefings, deadline alerts, and user-defined reminders — without waiting to be asked.
+**Goal:** papai executes LLM-powered tasks on a schedule or when conditions are met — replacing rigid briefings, reminders, and alert checks with a unified deferred prompts abstraction.
 
 Key terms:
 
-- **Briefing** — a scheduled digest bundling multiple signals into one message
-- **Nudge** — an automatic reminder derived from task state or deadline policy
-- **Reminder** — a message sent at a user-specified time
+- **Scheduled prompt** — an LLM invocation that fires at a specific time (one-shot) or on a cron schedule (recurring). Subsumes reminders and briefings.
+- **Alert prompt** — an LLM invocation triggered when a deterministic condition is met against task data. The LLM compiles natural language to a filter schema at creation time; the poller evaluates conditions in code.
 
-### 7a. Daily Briefing
+### 7a. Deferred Prompt Engine
 
-- [ ] Morning briefing — cron-scheduled summary sent at a configurable time (`briefing_time` config key)
-- [ ] Configurable sections — due today, overdue, in-progress, recently updated, newly assigned, suggested top-3 actions
-- [ ] Missed briefing catch-up — on first message of the day if scheduled briefing was not received
-- [ ] Briefing modes — short (summary only) and full (all sections)
+- [x] Two-table data model — `scheduled_prompts` and `alert_prompts` with shared TypeScript discriminated union
+- [x] Deterministic alert filter schema — field/operator/value conditions with `and`/`or` combinators, validated by Zod
+- [x] Task snapshot table — `task_snapshots` for `changed_to` change detection across providers
+- [x] Two polling loops — scheduled (60s) and alerts (5min), both with full LLM tool access
+- [x] Five unified LLM tools — `create_deferred_prompt`, `list_deferred_prompts`, `get_deferred_prompt`, `update_deferred_prompt`, `cancel_deferred_prompt`
+- [x] Per-project task fetching — alerts iterate `listProjects` + `listTasks` instead of surrogate search
+- [x] Selective enrichment — only calls `getTask` when conditions reference fields not in `TaskListItem`
+- [x] Execution history logging — deferred prompt results appended to conversation history
 
-New config keys: `briefing_time` (HH:MM or `off`), `timezone`, `briefing_mode` (`short` | `full`)
+### 7b. Provider-Gated Condition Fields
 
-### 7b. Deadline Nudges & Overdue Alerts
-
-- [ ] Pre-deadline nudge — message 1 day before due date
-- [ ] Due-today alert — urgent message on due day if task still open
-- [ ] Missed-deadline alert — follow-up 1 day after due date if not completed
-- [ ] Escalation ladder — soft → urgent → daily escalation for persistently missed deadlines
-- [ ] Staleness detection — alert for tasks with no status change in a configurable period
-- [ ] Blocker detection — alert for tasks whose blockers are unresolved near deadline
-
-New config keys: `deadline_nudge` (`on` | `off`), `stale_task_days`
-
-### 7c. User-Scheduled Reminders
-
-- [ ] One-time reminders — natural language scheduling ("remind me tomorrow at 9" / "in 3 hours")
-- [ ] Task-linked reminders — tied to a specific task ("remind me about ABC one day before deadline")
-- [ ] Repeating reminders — fixed-schedule recurrence ("every weekday at 9:00", "every Friday")
-- [ ] Snooze and reschedule — snooze 15m / 1h / tomorrow morning; reschedule directly from reminder
-- [ ] Dismiss with task action — mark task done directly from reminder message
-- [ ] Duplicate suppression — avoid nudging the same issue repeatedly in a short window
-
-New config keys: none (reminders keyed to user ID; quiet hours handled via notification preferences)
+- [ ] Add `updatedAt?: string` to `Task` type
+- [ ] Populate `updatedAt` in YouTrack mapper (from `issue.updated` timestamp)
+- [ ] Gate `task.updatedAt` field and `stale_days` operator on a new capability (e.g., `tasks.updatedAt`)
+- [ ] Make condition schema provider-aware — validate available fields at alert creation time based on active provider capabilities
+- [ ] Update LLM tool descriptions dynamically to reflect available condition fields
 
 ## Phase 8: Recurring Work Automation
 
@@ -194,13 +181,13 @@ New config keys: per-calendar-provider credentials in `user_config`
 
 ## Terminology Reference
 
-| Term                   | Definition                                                    |
-| ---------------------- | ------------------------------------------------------------- |
-| **Memo**               | Unstructured personal note captured by the user               |
-| **Reminder**           | Message sent at a user-specified time                         |
-| **Nudge**              | Automatic reminder derived from task state or deadline policy |
-| **Repeating reminder** | A reminder that recurs on a schedule                          |
-| **Recurring task**     | A task template that generates new work items each cycle      |
-| **Suggestion**         | Context-triggered assistant recommendation                    |
-| **Briefing**           | Scheduled digest bundling multiple signals into one message   |
-| **Recall**             | Semantic search across memos by meaning                       |
+| Term                 | Definition                                                  |
+| -------------------- | ----------------------------------------------------------- |
+| **Memo**             | Unstructured personal note captured by the user             |
+| **Scheduled prompt** | LLM invocation that fires at a time (one-shot or cron)      |
+| **Alert prompt**     | LLM invocation triggered when a condition is met            |
+| **Deferred prompt**  | Umbrella term for scheduled prompts and alert prompts       |
+| **Recurring task**   | A task template that generates new work items each cycle    |
+| **Suggestion**       | Context-triggered assistant recommendation                  |
+| **Briefing**         | Scheduled digest bundling multiple signals into one message |
+| **Recall**           | Semantic search across memos by meaning                     |

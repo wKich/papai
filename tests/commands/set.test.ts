@@ -122,4 +122,38 @@ describe('/set Command', () => {
     expect(textCalls2[0]).toBe('Set main_model successfully.')
     expect(getConfig(USER_ID, 'main_model')).toBe('gpt-4o-mini')
   })
+
+  describe('timezone normalization', () => {
+    test('UTC+5 is normalized to Etc/GMT-5 before storing', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'timezone UTC+5'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set timezone successfully.')
+      expect(getConfig(USER_ID, 'timezone')).toBe('Etc/GMT-5')
+    })
+
+    test('UTC-5 is normalized to Etc/GMT+5 before storing', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'timezone UTC-5'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set timezone successfully.')
+      expect(getConfig(USER_ID, 'timezone')).toBe('Etc/GMT+5')
+    })
+
+    test('valid IANA timezone is stored as-is', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'timezone Asia/Karachi'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set timezone successfully.')
+      expect(getConfig(USER_ID, 'timezone')).toBe('Asia/Karachi')
+    })
+
+    test('invalid timezone value replies with error', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'timezone BadZone/Invalid'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toContain('Invalid timezone')
+      expect(getConfig(USER_ID, 'timezone')).toBeNull()
+    })
+  })
 })

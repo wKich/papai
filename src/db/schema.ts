@@ -117,59 +117,65 @@ export const recurringTaskOccurrences = sqliteTable(
   ],
 )
 
-export const reminders = sqliteTable(
-  'reminders',
+export const scheduledPrompts = sqliteTable(
+  'scheduled_prompts',
   {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull(),
-    text: text('text').notNull(),
-    taskId: text('task_id'),
+    prompt: text('prompt').notNull(),
     fireAt: text('fire_at').notNull(),
-    recurrence: text('recurrence'),
-    status: text('status').notNull().default('pending'),
+    cronExpression: text('cron_expression'),
+    status: text('status').notNull().default('active'),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(datetime('now'))`),
+    lastExecutedAt: text('last_executed_at'),
   },
   (table) => [
-    index('idx_reminders_user').on(table.userId),
-    index('idx_reminders_status_fire').on(table.status, table.fireAt),
+    index('idx_scheduled_prompts_user').on(table.userId),
+    index('idx_scheduled_prompts_status_fire').on(table.status, table.fireAt),
   ],
 )
 
-export const userBriefingState = sqliteTable('user_briefing_state', {
-  userId: text('user_id').primaryKey(),
-  lastBriefingDate: text('last_briefing_date'),
-  lastBriefingAt: text('last_briefing_at'),
-})
-
-export const alertState = sqliteTable(
-  'alert_state',
+export const alertPrompts = sqliteTable(
+  'alert_prompts',
   {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull(),
-    taskId: text('task_id').notNull(),
-    lastSeenStatus: text('last_seen_status'),
-    lastStatusChangedAt: text('last_status_changed_at'),
-    lastAlertType: text('last_alert_type'),
-    lastAlertSentAt: text('last_alert_sent_at'),
-    suppressUntil: text('suppress_until'),
-    overdueDaysNotified: integer('overdue_days_notified').default(0),
+    prompt: text('prompt').notNull(),
+    condition: text('condition').notNull(),
+    status: text('status').notNull().default('active'),
     createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    lastTriggeredAt: text('last_triggered_at'),
+    cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
+  },
+  (table) => [index('idx_alert_prompts_user').on(table.userId), index('idx_alert_prompts_status').on(table.status)],
+)
+
+export const taskSnapshots = sqliteTable(
+  'task_snapshots',
+  {
+    userId: text('user_id').notNull(),
+    taskId: text('task_id').notNull(),
+    field: text('field').notNull(),
+    value: text('value').notNull(),
+    capturedAt: text('captured_at')
       .notNull()
       .default(sql`(datetime('now'))`),
   },
   (table) => [
-    index('idx_alert_state_user').on(table.userId),
-    index('idx_alert_state_user_task').on(table.userId, table.taskId),
+    primaryKey({ columns: [table.userId, table.taskId, table.field] }),
+    index('idx_task_snapshots_user').on(table.userId),
   ],
 )
 
 export type RecurringTask = typeof recurringTasks.$inferSelect
 export type RecurringTaskOccurrence = typeof recurringTaskOccurrences.$inferSelect
-export type Reminder = typeof reminders.$inferSelect
-export type UserBriefingState = typeof userBriefingState.$inferSelect
-export type AlertStateRow = typeof alertState.$inferSelect
+export type ScheduledPromptRow = typeof scheduledPrompts.$inferSelect
+export type AlertPromptRow = typeof alertPrompts.$inferSelect
+export type TaskSnapshotRow = typeof taskSnapshots.$inferSelect
 
 export const userInstructions = sqliteTable(
   'user_instructions',
