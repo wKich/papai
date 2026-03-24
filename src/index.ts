@@ -1,11 +1,15 @@
 import { announceNewVersion } from './announcements.js'
 import { setupBot } from './bot.js'
 import { createChatProvider } from './chat/registry.js'
+import { getConfig } from './config.js'
 import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
+import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
+import { createProvider } from './providers/registry.js'
+import type { TaskProvider } from './providers/types.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
-import { addUser } from './users.js'
+import { addUser, getKaneoWorkspace } from './users.js'
 
 const hasSetCommands = (chat: unknown): chat is { setCommands: (adminUserId: string) => Promise<void> } =>
   typeof chat === 'object' && chat !== null && 'setCommands' in chat
@@ -78,9 +82,34 @@ void announceNewVersion(chatProvider)
 
 startScheduler(chatProvider)
 
+// Build a task provider for a given user (used by deferred prompt pollers)
+const buildProviderForUser = (userId: string): TaskProvider | null => {
+  if (TASK_PROVIDER === 'kaneo') {
+    const kaneoKey = getConfig(userId, 'kaneo_apikey')
+    const kaneoBaseUrl = process.env['KANEO_CLIENT_URL']
+    const workspaceId = getKaneoWorkspace(userId)
+    if (kaneoKey === null || kaneoBaseUrl === undefined || kaneoBaseUrl === '' || workspaceId === null) return null
+    const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
+    const config: Record<string, string> = isSessionCookie
+      ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
+      : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
+    return createProvider('kaneo', config)
+  }
+  if (TASK_PROVIDER === 'youtrack') {
+    const baseUrl = process.env['YOUTRACK_URL']
+    const token = getConfig(userId, 'youtrack_token')
+    if (baseUrl === undefined || baseUrl === '' || token === null) return null
+    return createProvider('youtrack', { baseUrl, token })
+  }
+  return null
+}
+
+startPollers(chatProvider, buildProviderForUser)
+
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
   stopScheduler()
+  stopPollers()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
@@ -90,6 +119,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
   stopScheduler()
+  stopPollers()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
