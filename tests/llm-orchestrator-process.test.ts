@@ -41,11 +41,6 @@ void mock.module('../src/providers/kaneo/provision.js', () => ({
   provisionAndConfigure: (): Promise<{ status: string }> => Promise.resolve({ status: 'already_configured' }),
 }))
 
-// Conversation lock — use a no-op lock for test simplicity
-void mock.module('../src/conversation-lock.js', () => ({
-  acquireConversationLock: (): Promise<() => void> => Promise.resolve((): void => {}),
-}))
-
 // AI SDK — the key control point for success/failure simulation
 type GenerateTextResult = {
   text: string

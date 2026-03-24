@@ -2,7 +2,6 @@ import pLimit from 'p-limit'
 
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
-import { acquireConversationLock } from '../conversation-lock.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
@@ -65,7 +64,6 @@ async function executeScheduledPrompt(
   const timezone = getConfig(prompt.userId, 'timezone') ?? 'UTC'
   const triggerContent = buildProactiveTrigger('scheduled', prompt.prompt, timezone)
 
-  const release = await acquireConversationLock(prompt.userId)
   let response: string
   try {
     response = await invokeLlmWithHistory(prompt.userId, triggerContent, buildProviderFn)
@@ -75,8 +73,6 @@ async function executeScheduledPrompt(
     log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
     await chat.sendMessage(prompt.userId, `Scheduled task failed: ${errMsg}`)
-  } finally {
-    release()
   }
 
   const now = new Date().toISOString()
@@ -123,7 +119,6 @@ async function executeSingleAlert(
   const matchedTasksSummary = `Alert condition: ${conditionDesc}\n${taskList}`
   const triggerContent = buildProactiveTrigger('alert', alert.prompt, timezone, matchedTasksSummary)
 
-  const release = await acquireConversationLock(userId)
   let response: string
   try {
     response = await invokeLlmWithHistory(userId, triggerContent, buildProviderFn)
@@ -133,8 +128,6 @@ async function executeSingleAlert(
     log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
     await chat.sendMessage(userId, `Alert task failed: ${errMsg}`)
-  } finally {
-    release()
   }
 
   const now = new Date().toISOString()

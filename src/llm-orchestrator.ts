@@ -5,7 +5,6 @@ import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
-import { acquireConversationLock } from './conversation-lock.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
@@ -172,8 +171,6 @@ export const processMessage = async (
   log.debug({ contextId, userText }, 'processMessage called')
   log.info({ contextId, messageLength: userText.length }, 'Message received from user')
 
-  // Acquire conversation lock to prevent race conditions with proactive prompts
-  const release = await acquireConversationLock(contextId)
   const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
@@ -194,7 +191,5 @@ export const processMessage = async (
   } catch (error) {
     saveHistory(contextId, baseHistory)
     await handleMessageError(reply, contextId, error)
-  } finally {
-    release()
   }
 }

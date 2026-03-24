@@ -8,11 +8,6 @@ import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-// Mock conversation lock — no-op for tests
-void mock.module('../../src/conversation-lock.js', () => ({
-  acquireConversationLock: (): Promise<() => void> => Promise.resolve((): void => {}),
-}))
-
 // Mock AI module using mutable implementation pattern
 type GenerateTextResult = {
   text: string
