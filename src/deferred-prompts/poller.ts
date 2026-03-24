@@ -7,7 +7,6 @@ import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
-import { pruneBackgroundEvents, recordBackgroundEvent } from './background-events.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { buildProactiveTrigger, invokeLlmWithHistory, type BuildProviderFn } from './proactive-llm.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
@@ -80,7 +79,6 @@ async function executeScheduledPrompt(
     release()
   }
 
-  recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, response)
   const now = new Date().toISOString()
   if (prompt.cronExpression === null) {
     completeScheduledPrompt(prompt.id, prompt.userId, now)
@@ -139,7 +137,6 @@ async function executeSingleAlert(
     release()
   }
 
-  recordBackgroundEvent(userId, 'alert', alert.prompt, response)
   const now = new Date().toISOString()
   updateAlertTriggerTime(alert.id, userId, now)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
@@ -218,8 +215,6 @@ export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderF
     log.warn('startPollers called while pollers are already running; stopping existing pollers first')
     stopPollers()
   }
-
-  pruneBackgroundEvents()
 
   log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Starting deferred prompt pollers')
 

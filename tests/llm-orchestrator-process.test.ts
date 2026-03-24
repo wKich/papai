@@ -82,12 +82,6 @@ void mock.module('@ai-sdk/openai-compatible', () => ({
       'mock-model',
 }))
 
-// Background events — audit-only, no injection
-void mock.module('../src/deferred-prompts/background-events.js', () => ({
-  recordBackgroundEvent: (): void => {},
-  pruneBackgroundEvents: (): void => {},
-}))
-
 afterAll(() => {
   mock.restore()
 })
