@@ -6,6 +6,7 @@ import { getConfig } from '../config.js'
 import { buildMessagesWithMemory } from '../conversation.js'
 import { appendHistory } from '../history.js'
 import { logger } from '../logger.js'
+import { extractFactsFromSdkResults, upsertFact } from '../memory.js'
 import type { TaskProvider } from '../providers/types.js'
 import { buildSystemPrompt } from '../system-prompt.js'
 import { makeTools } from '../tools/index.js'
@@ -111,6 +112,12 @@ export async function invokeLlmWithHistory(
     tools,
     stopWhen: stepCountIs(25),
   })
+
+  const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
+  if (newFacts.length > 0) {
+    for (const fact of newFacts) upsertFact(userId, fact)
+    log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive tool results')
+  }
 
   if (result.response.messages.length > 0) {
     appendHistory(userId, result.response.messages)
