@@ -32,6 +32,10 @@ describe('localDatetimeToUtc', () => {
   test('falls back to treating time as UTC when timezone is invalid', () => {
     expect(localDatetimeToUtc('2026-03-25', '09:00', 'Not/ATimezone')).toBe('2026-03-25T09:00:00.000Z')
   })
+
+  test('falls back to treating time as UTC when timezone is empty string', () => {
+    expect(localDatetimeToUtc('2026-03-25', '09:00', '')).toBe('2026-03-25T09:00:00.000Z')
+  })
 })
 
 describe('semanticScheduleToCron', () => {

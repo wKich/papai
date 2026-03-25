@@ -27,14 +27,17 @@ const DAY_OF_WEEK_MAP: Record<string, number> = {
 export const localDatetimeToUtc = (date: string, time: string | undefined, timezone: string): string => {
   // fromZonedTime accepts "YYYY-MM-DDTHH:MM:SS" as a local datetime string
   const localStr = `${date}T${time ?? '00:00'}:00`
-  const utcDate = fromZonedTime(localStr, timezone)
-
-  if (Number.isNaN(utcDate.getTime())) {
-    // Invalid timezone — treat as UTC
+  try {
+    const utcDate = fromZonedTime(localStr, timezone)
+    if (Number.isNaN(utcDate.getTime())) {
+      // Invalid timezone returned NaN — treat as UTC
+      return new Date(`${localStr}Z`).toISOString()
+    }
+    return utcDate.toISOString()
+  } catch {
+    // Invalid timezone threw (e.g. empty string) — treat as UTC
     return new Date(`${localStr}Z`).toISOString()
   }
-
-  return utcDate.toISOString()
 }
 
 /**
