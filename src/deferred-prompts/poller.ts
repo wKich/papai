@@ -4,7 +4,7 @@ import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
-import type { Task, TaskProvider } from '../providers/types.js'
+import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import {
@@ -140,7 +140,7 @@ async function executeSingleAlert(
   tasks: Task[],
   snapshots: Map<string, string>,
   chat: ChatProvider,
-  provider: TaskProvider,
+  buildProviderFn: BuildProviderFn,
   evalNow: Date,
 ): Promise<void> {
   const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots, evalNow))
@@ -154,7 +154,7 @@ async function executeSingleAlert(
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, trigger, () => provider)
+    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
@@ -192,7 +192,9 @@ async function executeAlertsForUser(
   const alertLimit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const alertResults = await Promise.allSettled(
     alerts.map((alert) =>
-      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, provider, evalNow)),
+      alertLimit(
+        (): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn, evalNow),
+      ),
     ),
   )
   logSettledErrors(alertResults, 'Error evaluating alert')
