@@ -4,13 +4,31 @@ import { getDrizzleDb } from '../db/drizzle.js'
 import { alertPrompts, type AlertPromptRow } from '../db/schema.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
-import { alertConditionSchema, type AlertCondition, type AlertPrompt, type LeafCondition } from './types.js'
+import {
+  alertConditionSchema,
+  DEFAULT_EXECUTION_METADATA,
+  executionMetadataSchema,
+  type AlertCondition,
+  type AlertPrompt,
+  type ExecutionMetadata,
+  type LeafCondition,
+} from './types.js'
 
 const log = logger.child({ scope: 'deferred:alerts' })
 
 // --- Row mapper ---
 
 const parseStatus = (raw: string): AlertPrompt['status'] => (raw === 'cancelled' ? 'cancelled' : 'active')
+
+function parseExecutionMetadata(raw: string): ExecutionMetadata {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    const result = executionMetadataSchema.safeParse(parsed)
+    return result.success ? result.data : DEFAULT_EXECUTION_METADATA
+  } catch {
+    return DEFAULT_EXECUTION_METADATA
+  }
+}
 
 const toAlertPrompt = (row: AlertPromptRow): AlertPrompt => ({
   type: 'alert',
@@ -22,6 +40,7 @@ const toAlertPrompt = (row: AlertPromptRow): AlertPrompt => ({
   createdAt: row.createdAt,
   lastTriggeredAt: row.lastTriggeredAt,
   cooldownMinutes: row.cooldownMinutes,
+  executionMetadata: parseExecutionMetadata(row.executionMetadata),
 })
 
 // --- CRUD ---
@@ -31,6 +50,7 @@ export const createAlertPrompt = (
   prompt: string,
   condition: AlertCondition,
   cooldownMinutes?: number,
+  executionMetadata?: ExecutionMetadata,
 ): AlertPrompt => {
   log.debug({ userId, cooldownMinutes }, 'createAlertPrompt called')
   const id = crypto.randomUUID()
@@ -46,6 +66,7 @@ export const createAlertPrompt = (
       createdAt: new Date().toISOString(),
       lastTriggeredAt: null,
       cooldownMinutes: cooldownMinutes ?? 60,
+      executionMetadata: JSON.stringify(executionMetadata ?? DEFAULT_EXECUTION_METADATA),
     })
     .run()
 
@@ -87,7 +108,12 @@ export const getAlertPrompt = (id: string, userId: string): AlertPrompt | null =
 export const updateAlertPrompt = (
   id: string,
   userId: string,
-  updates: { prompt?: string; condition?: AlertCondition; cooldownMinutes?: number },
+  updates: {
+    prompt?: string
+    condition?: AlertCondition
+    cooldownMinutes?: number
+    executionMetadata?: ExecutionMetadata
+  },
 ): AlertPrompt | null => {
   log.debug({ id, userId, updates: Object.keys(updates) }, 'updateAlertPrompt called')
   const db = getDrizzleDb()
@@ -109,6 +135,7 @@ export const updateAlertPrompt = (
     set.condition = JSON.stringify(updates.condition)
   }
   if (updates.cooldownMinutes !== undefined) set.cooldownMinutes = updates.cooldownMinutes
+  if (updates.executionMetadata !== undefined) set.executionMetadata = JSON.stringify(updates.executionMetadata)
 
   db.update(alertPrompts)
     .set(set)
