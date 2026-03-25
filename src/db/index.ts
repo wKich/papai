@@ -17,6 +17,7 @@ import { migration012UserInstructions } from './migrations/012_user_instructions
 import { migration013DeferredPrompts } from './migrations/013_deferred_prompts.js'
 import { migration014BackgroundEvents } from './migrations/014_background_events.js'
 import { migration015DropBackgroundEvents } from './migrations/015_drop_background_events.js'
+import { migration016ExecutionMetadata } from './migrations/016_execution_metadata.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -59,6 +60,7 @@ const MIGRATIONS = [
   migration013DeferredPrompts,
   migration014BackgroundEvents,
   migration015DropBackgroundEvents,
+  migration016ExecutionMetadata,
 ] as const
 
 export const initDb = (): void => {
