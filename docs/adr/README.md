@@ -37,6 +37,7 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0029](0029-custom-instructions-system.md)                     | Custom Instructions System                                     | 2026-03-22 | Implemented                           |
 | [0030](0030-deferred-prompts-system.md)                        | Deferred Prompts System                                        | 2026-03-23 | Implemented (Supersedes 0026)         |
 | [0031](0031-provider-agnostic-status-vs-column-abstraction.md) | Provider-Agnostic Status vs Column Abstraction                 | 2026-03-18 | Implemented                           |
+| [0032](0032-timezone-tool-layer-conversion.md)                 | Timezone Tool-Layer Conversion                                 | 2026-03-24 | Implemented                           |
 
 ## Skipped / Not Written
 
