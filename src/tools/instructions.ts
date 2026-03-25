@@ -12,11 +12,7 @@ export function makeSaveInstructionTool(contextId: string): ToolSet[string] {
     description:
       'Save a persistent behavioral preference. Call this when the user expresses how the bot should always behave.',
     inputSchema: z.object({
-      text: z
-        .string()
-        .min(1)
-        .max(500)
-        .describe('The instruction as a short, clear statement, e.g. "Always reply in Spanish"'),
+      text: z.string().min(1).describe('The instruction as a short, clear statement, e.g. "Always reply in Spanish"'),
     }),
     execute: ({ text }) => {
       log.debug({ contextId }, 'save_instruction tool called')
