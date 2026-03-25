@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-03-25
+
+### Added
+
+- Implement background events for deferred prompts
+- **utils:** Add localDatetimeToUtc, semanticScheduleToCron, and utcToLocal utilities
+- **tools:** Accept structured dueDate in create-task and convert local time to UTC
+- **tools:** Accept structured dueDate in update-task and convert local time to UTC
+- **tools:** Thread userId through makeCoreTools; convert UTC dueDate to local in get-task and list-tasks
+- **tools:** Replace raw cronExpression with semantic schedule in create-recurring-task
+- **tools:** Replace raw cronExpression with semantic schedule in update-recurring-task
+- **tools:** Convert UTC nextRun/lastRun to local time in list, resume, and skip recurring task returns
+- **deferred-prompts:** Accept local datetime for fire_at; convert to UTC in tool
+- Add transitive import detection for mock pollution
+- Add source file scanner for import graph building
+- Add transitive mock pollution detection
+- **background-events:** Implement polling and event processing
+
+### Changed
+
+- Proactive AI agent — use conversation history, locking, and natural prompts
+- Extract shared system prompt builder for consistent proactive/interactive behavior
+- **deferred-prompts:** Address review feedback
+- **prompt:** Remove timezone disclosure and conversion instructions from system prompt
+- **poller:** Use BuildProviderFn factory instead of direct TaskProvider
+
+### Documentation
+
+- Add background events design for deferred prompt history integration
+- Add background events implementation plan
+- Add afterEach cleanup guideline for mock pollution
+
+### Fixed
+
+- Address PR #64 review comments — deferred marking, failure handling, tests
+- Persist memory facts from proactive tool results
+- Add afterAll mock.restore to prevent transitive pollution
+- Restrict Pattern 1 victims to test files only
+- **instructions:** Propagate createdAt timestamp from cache to DB sync
+- **tests:** Mock providers/factory.js instead of registry.js in orchestrator tests; add timezone guard in proactive-llm
+
+### Miscellaneous
+
+- Add date-fns and date-fns-tz dependencies
+- Finalize workflow improvements and documentation
+- Remove unused LocalDatetime type export
+- Disable max-lines lint rule for scripts directory
 ## [4.4.0] - 2026-03-24
 
 ### Added
