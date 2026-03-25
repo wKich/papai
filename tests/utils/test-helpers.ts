@@ -151,7 +151,9 @@ export function mockLogger(): void {
 export interface MockReplyResult {
   reply: ReplyFn
   textCalls: string[]
+  redactCalls: string[]
   getReplies: () => string[]
+  getRedactions: () => string[]
 }
 
 /**
@@ -159,6 +161,7 @@ export interface MockReplyResult {
  */
 export function createMockReply(): MockReplyResult {
   const textCalls: string[] = []
+  const redactCalls: string[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
       textCalls.push(content)
@@ -167,16 +170,20 @@ export function createMockReply(): MockReplyResult {
     formatted: (): Promise<void> => Promise.resolve(),
     file: (): Promise<void> => Promise.resolve(),
     typing: (): void => {},
+    redactMessage: (replacementText: string): Promise<void> => {
+      redactCalls.push(replacementText)
+      return Promise.resolve()
+    },
   }
-  return { reply, textCalls, getReplies: () => textCalls }
+  return { reply, textCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
 }
 
 /**
  * Create a mock reply with getter function (legacy compatibility).
  */
-export function createMockReplyLegacy(): { reply: ReplyFn; getReplies: () => string[] } {
-  const { reply, getReplies } = createMockReply()
-  return { reply, getReplies }
+export function createMockReplyLegacy(): { reply: ReplyFn; getReplies: () => string[]; getRedactions: () => string[] } {
+  const { reply, getReplies, getRedactions } = createMockReply()
+  return { reply, getReplies, getRedactions }
 }
 
 // ============================================================================

@@ -156,4 +156,44 @@ describe('/set Command', () => {
       expect(getConfig(USER_ID, 'timezone')).toBeNull()
     })
   })
+
+  describe('message redaction for sensitive keys', () => {
+    test('redacts message when setting llm_apikey', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls, redactCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'llm_apikey sk-secret-key'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set llm_apikey successfully.')
+      expect(redactCalls).toHaveLength(1)
+      expect(redactCalls[0]).toBe('/set llm_apikey [REDACTED]')
+      expect(getConfig(USER_ID, 'llm_apikey')).toBe('sk-secret-key')
+    })
+
+    test('redacts message when setting kaneo_apikey', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls, redactCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'kaneo_apikey super-secret-token'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set kaneo_apikey successfully.')
+      expect(redactCalls).toHaveLength(1)
+      expect(redactCalls[0]).toBe('/set kaneo_apikey [REDACTED]')
+      expect(getConfig(USER_ID, 'kaneo_apikey')).toBe('super-secret-token')
+    })
+
+    test('does not redact message for non-sensitive keys', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls, redactCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'main_model gpt-4o'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set main_model successfully.')
+      expect(redactCalls).toHaveLength(0)
+      expect(getConfig(USER_ID, 'main_model')).toBe('gpt-4o')
+    })
+
+    test('does not redact message for timezone', async () => {
+      expect(setHandler).not.toBeNull()
+      const { reply, textCalls, redactCalls } = createMockReply()
+      await setHandler!(createDmMessage(USER_ID, 'timezone Asia/Tokyo'), reply, createAuth(USER_ID, true))
+      expect(textCalls[0]).toBe('Set timezone successfully.')
+      expect(redactCalls).toHaveLength(0)
+      expect(getConfig(USER_ID, 'timezone')).toBe('Asia/Tokyo')
+    })
+  })
 })

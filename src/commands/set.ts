@@ -1,10 +1,13 @@
 import type { ChatProvider, CommandHandler } from '../chat/types.js'
 import { isConfigKey, setConfig } from '../config.js'
 import { logger } from '../logger.js'
-import { CONFIG_KEYS } from '../types/config.js'
+import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 import { normalizeTimezone } from '../utils/timezone.js'
 
 const log = logger.child({ scope: 'commands:set' })
+
+// Config keys that contain sensitive information and should be redacted
+const SENSITIVE_KEYS: readonly ConfigKey[] = ['llm_apikey', 'kaneo_apikey', 'youtrack_token']
 
 export function registerSetCommand(
   chat: ChatProvider,
@@ -44,6 +47,13 @@ export function registerSetCommand(
     }
     setConfig(auth.storageContextId, key, normalizedValue)
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId, key }, '/set command executed')
+
+    // Redact message if it contains sensitive information
+    if (SENSITIVE_KEYS.includes(key)) {
+      const redactedText = `/set ${key} [REDACTED]`
+      await reply.redactMessage?.(redactedText).catch(() => undefined)
+    }
+
     await reply.text(`Set ${key} successfully.`)
   }
 

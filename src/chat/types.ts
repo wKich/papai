@@ -25,6 +25,8 @@ export type IncomingMessage = {
   isMentioned: boolean
   text: string
   commandMatch?: string
+  /** platform-specific message ID for deletion */
+  messageId?: string
 }
 
 /** Authorization result for message processing. */
@@ -44,6 +46,7 @@ export type ReplyFn = {
   formatted: (markdown: string) => Promise<void>
   file: (file: ChatFile) => Promise<void>
   typing: () => void
+  redactMessage?: (replacementText: string) => Promise<void>
 }
 
 /** The core interface every chat platform provider must implement. */

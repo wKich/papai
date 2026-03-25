@@ -125,6 +125,7 @@ export class TelegramChatProvider implements ChatProvider {
       contextType,
       isMentioned,
       text,
+      messageId: ctx.message?.message_id === undefined ? undefined : String(ctx.message.message_id),
     }
   }
 
@@ -159,6 +160,8 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   private buildReplyFn(ctx: Context): ReplyFn {
+    const chatId = ctx.chat?.id
+    const messageId = ctx.message?.message_id
     return {
       text: async (content: string) => {
         await ctx.reply(content)
@@ -173,6 +176,16 @@ export class TelegramChatProvider implements ChatProvider {
       },
       typing: () => {
         ctx.replyWithChatAction('typing').catch(() => undefined)
+      },
+      redactMessage: async (replacementText: string) => {
+        if (chatId !== undefined && messageId !== undefined) {
+          await this.bot.api.editMessageText(chatId, messageId, replacementText).catch((err: unknown) => {
+            log.warn(
+              { chatId, messageId, error: err instanceof Error ? err.message : String(err) },
+              'Failed to redact message',
+            )
+          })
+        }
       },
     }
   }

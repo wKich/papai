@@ -18,6 +18,7 @@ const MattermostWsEventSchema = z.object({
 })
 
 const MattermostPostSchema = z.object({
+  id: z.string(),
   user_id: z.string(),
   channel_id: z.string(),
   message: z.string(),
@@ -146,7 +147,7 @@ export class MattermostChatProvider implements ChatProvider {
     const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
     const isMentioned = this.isBotMentioned(post.message)
 
-    const reply = this.buildReplyFn(post.channel_id)
+    const reply = this.buildReplyFn(post.channel_id, post.id)
     const command = this.matchCommand(post.message)
 
     const msg: IncomingMessage = {
@@ -160,6 +161,7 @@ export class MattermostChatProvider implements ChatProvider {
       isMentioned,
       text: post.message,
       commandMatch: command?.match,
+      messageId: post.id,
     }
 
     if (command !== null) {
@@ -219,7 +221,7 @@ export class MattermostChatProvider implements ChatProvider {
     return null
   }
 
-  private buildReplyFn(channelId: string): ReplyFn {
+  private buildReplyFn(channelId: string, postId?: string): ReplyFn {
     return {
       text: async (content: string) => {
         await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: content })
@@ -233,6 +235,15 @@ export class MattermostChatProvider implements ChatProvider {
       },
       typing: () => {
         this.wsSend({ seq: this.wsSeq++, action: 'user_typing', data: { channel_id: channelId } })
+      },
+      redactMessage: async (replacementText: string) => {
+        if (postId !== undefined) {
+          await this.apiFetch('PUT', `/api/v4/posts/${postId}/patch`, { message: replacementText }).catch(
+            (err: unknown) => {
+              log.warn({ postId, error: err instanceof Error ? err.message : String(err) }, 'Failed to redact message')
+            },
+          )
+        }
       },
     }
   }
