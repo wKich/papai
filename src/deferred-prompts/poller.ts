@@ -1,16 +1,18 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, stepCountIs } from 'ai'
 import pLimit from 'p-limit'
 
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
-import type { Task, TaskProvider } from '../providers/types.js'
-import { makeTools } from '../tools/index.js'
+import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
-import { pruneBackgroundEvents, recordBackgroundEvent } from './background-events.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
+import {
+  buildProactiveTrigger,
+  invokeLlmWithHistory,
+  type BuildProviderFn,
+  type ProactiveTrigger,
+} from './proactive-llm.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
 import type { ScheduledPrompt } from './types.js'
@@ -25,68 +27,14 @@ const MAX_CONCURRENT_USERS = 10
 let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
 let alertIntervalId: ReturnType<typeof setInterval> | null = null
 
-type BuildProviderFn = (userId: string) => TaskProvider | null
-
-async function invokeLlm(
-  userId: string,
-  systemPrompt: string,
-  userPrompt: string,
-  provider: TaskProvider | BuildProviderFn,
-): Promise<string> {
-  log.debug({ userId }, 'invokeLlm called')
-
-  const apiKey = getConfig(userId, 'llm_apikey')
-  const baseURL = getConfig(userId, 'llm_baseurl')
-  const mainModel = getConfig(userId, 'main_model')
-
-  if (apiKey === null || baseURL === null || mainModel === null) {
-    log.warn(
-      { userId, hasApiKey: apiKey !== null, hasBaseUrl: baseURL !== null, hasModel: mainModel !== null },
-      'Missing LLM config for deferred prompt',
-    )
-    return 'Deferred prompt skipped: missing LLM configuration. Use /set to configure llm_apikey, llm_baseurl, and main_model.'
-  }
-
-  const taskProvider = typeof provider === 'function' ? provider(userId) : provider
-  if (taskProvider === null) {
-    log.warn({ userId }, 'Could not build task provider for deferred prompt')
-    return 'Deferred prompt skipped: task provider not configured.'
-  }
-
-  const model = createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })(mainModel)
-  const tools = makeTools(taskProvider, userId)
-
-  log.debug({ userId, mainModel }, 'Calling generateText for deferred prompt')
-  const result = await generateText({
-    model,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-    tools,
-    stopWhen: stepCountIs(25),
-  })
-
-  log.debug({ userId, toolCalls: result.toolCalls?.length }, 'Deferred prompt LLM response received')
-  return result.text ?? 'Done.'
+function formatTaskStatus(status: string | undefined): string {
+  if (status === undefined) return ''
+  return ` (${status})`
 }
 
 function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
   for (const r of results) {
     if (r.status === 'rejected') log.error({ error: String(r.reason) }, context)
-  }
-}
-
-async function sendResult(
-  chat: ChatProvider,
-  userId: string,
-  response: string,
-  failurePrefix: string,
-  logCtx: Record<string, unknown>,
-): Promise<void> {
-  const text = response.startsWith('Failed: ') ? `${failurePrefix}: ${response.slice(8)}` : response
-  try {
-    await chat.sendMessage(userId, text)
-  } catch (sendError) {
-    log.error({ ...logCtx, error: String(sendError) }, 'Failed to send deferred prompt result')
   }
 }
 
@@ -114,37 +62,49 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
   )
 }
 
-async function executeScheduledPrompt(
-  prompt: ScheduledPrompt,
+function buildMergedTrigger(prompts: ScheduledPrompt[], timezone: string): ProactiveTrigger {
+  if (prompts.length === 1) {
+    return buildProactiveTrigger('scheduled', prompts[0]!.prompt, timezone)
+  }
+  const combined = prompts.map((p, i) => `${String(i + 1)}. "${p.prompt}"`).join('\n')
+  return buildProactiveTrigger('scheduled', combined, timezone)
+}
+
+function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
+  for (const prompt of prompts) {
+    if (prompt.cronExpression === null) {
+      completeScheduledPrompt(prompt.id, prompt.userId, now)
+      log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
+    } else {
+      finalizeRecurring(prompt, now, timezone)
+    }
+  }
+}
+
+async function executeScheduledPromptsForUser(
+  userId: string,
+  prompts: ScheduledPrompt[],
   chat: ChatProvider,
   buildProviderFn: BuildProviderFn,
 ): Promise<void> {
-  const timezone = getConfig(prompt.userId, 'timezone') ?? 'UTC'
-  const systemPrompt = [
-    'You are papai, a task management assistant executing a scheduled task.',
-    `User timezone: ${timezone}.`,
-    'Execute the following instruction using available tools. Report results concisely.',
-  ].join('\n')
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const trigger = buildMergedTrigger(prompts, timezone)
+  const promptIds = prompts.map((p) => p.id)
+
+  log.debug({ userId, promptCount: prompts.length, promptIds }, 'Executing merged scheduled prompts')
 
   let response: string
   try {
-    response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
+    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
+    await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
+    log.error({ userId, promptIds, error: errMsg }, 'Scheduled prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
+    await chat.sendMessage(userId, `I ran into an error while working on that: ${errMsg}`)
   }
 
-  recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, response)
-  await sendResult(chat, prompt.userId, response, 'Scheduled task failed', { id: prompt.id, userId: prompt.userId })
-
-  const now = new Date().toISOString()
-  if (prompt.cronExpression === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
-    log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
-  } else {
-    finalizeRecurring(prompt, now, timezone)
-  }
+  finalizeAllPrompts(prompts, new Date().toISOString(), timezone)
 }
 
 export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: BuildProviderFn): Promise<void> {
@@ -153,11 +113,25 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   const duePrompts = getScheduledPromptsDue()
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
+  if (duePrompts.length === 0) return
+
+  const byUser = new Map<string, ScheduledPrompt[]>()
+  for (const prompt of duePrompts) {
+    const existing = byUser.get(prompt.userId)
+    if (existing === undefined) {
+      byUser.set(prompt.userId, [prompt])
+    } else {
+      existing.push(prompt)
+    }
+  }
+
   const limit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const results = await Promise.allSettled(
-    duePrompts.map((prompt) => limit((): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn))),
+    [...byUser.entries()].map(([userId, prompts]) =>
+      limit((): Promise<void> => executeScheduledPromptsForUser(userId, prompts, chat, buildProviderFn)),
+    ),
   )
-  logSettledErrors(results, 'Error executing scheduled prompt')
+  logSettledErrors(results, 'Error executing scheduled prompts for user')
 }
 
 async function executeSingleAlert(
@@ -166,7 +140,7 @@ async function executeSingleAlert(
   tasks: Task[],
   snapshots: Map<string, string>,
   chat: ChatProvider,
-  provider: TaskProvider,
+  buildProviderFn: BuildProviderFn,
   evalNow: Date,
 ): Promise<void> {
   const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots, evalNow))
@@ -174,34 +148,23 @@ async function executeSingleAlert(
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const conditionDesc = describeCondition(alert.condition)
-  const taskList = matchedTasks
-    .map((t) => {
-      const status = t.status === undefined ? '' : ` (${t.status})`
-      return `- [${t.title}](${t.url})${status}`
-    })
-    .join('\n')
-
-  const systemPrompt = [
-    'You are papai, a task management assistant executing an alert check.',
-    `User timezone: ${timezone}.`,
-    'An alert condition has been triggered. Summarize the situation concisely.',
-  ].join('\n')
-  const userPrompt = `Alert condition: ${conditionDesc}\n\nMatched tasks:\n${taskList}\n\nOriginal instruction: "${alert.prompt}"`
+  const taskList = matchedTasks.map((t) => `- [${t.title}](${t.url})${formatTaskStatus(t.status)}`).join('\n')
+  const matchedTasksSummary = `Alert condition: ${conditionDesc}\n${taskList}`
+  const trigger = buildProactiveTrigger('alert', alert.prompt, timezone, matchedTasksSummary)
 
   let response: string
   try {
-    response = await invokeLlm(userId, systemPrompt, userPrompt, provider)
+    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
+    await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
+    await chat.sendMessage(userId, `Sorry, something went wrong while preparing this update: ${errMsg}`)
   }
 
-  recordBackgroundEvent(userId, 'alert', alert.prompt, response)
-  await sendResult(chat, userId, response, 'Alert task failed', { id: alert.id, userId })
-
-  const triggerTime = new Date().toISOString()
-  updateAlertTriggerTime(alert.id, userId, triggerTime)
+  const now = new Date().toISOString()
+  updateAlertTriggerTime(alert.id, userId, now)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
 }
 
@@ -229,7 +192,9 @@ async function executeAlertsForUser(
   const alertLimit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const alertResults = await Promise.allSettled(
     alerts.map((alert) =>
-      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, provider, evalNow)),
+      alertLimit(
+        (): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn, evalNow),
+      ),
     ),
   )
   logSettledErrors(alertResults, 'Error evaluating alert')
@@ -270,8 +235,6 @@ export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderF
     log.warn('startPollers called while pollers are already running; stopping existing pollers first')
     stopPollers()
   }
-
-  pruneBackgroundEvents()
 
   log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Starting deferred prompt pollers')
 

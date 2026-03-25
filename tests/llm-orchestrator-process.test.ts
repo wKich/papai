@@ -2,7 +2,7 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import { mockLogger, mockDrizzle, createMockReply, setupTestDb, getTestDb } from './utils/test-helpers.js'
+import { mockLogger, mockDrizzle, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 mockLogger()
 mockDrizzle()
@@ -21,14 +21,14 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-// Provider registry — returns a mock provider to avoid real HTTP calls
+// Provider factory — returns a mock provider to avoid real HTTP calls and env var checks
 const mockProvider = {
   name: 'mock',
   capabilities: new Set<string>(),
   getPromptAddendum: (): string => '',
 }
-void mock.module('../src/providers/registry.js', () => ({
-  createProvider: (): typeof mockProvider => mockProvider,
+void mock.module('../src/providers/factory.js', () => ({
+  buildProviderForUser: (): typeof mockProvider => mockProvider,
 }))
 
 // Kaneo provisioning — skip real provisioning
@@ -80,11 +80,8 @@ afterAll(() => {
 // Real module imports (after mocks are registered)
 // ---------------------------------------------------------------------------
 
-import { eq } from 'drizzle-orm'
-
 import { setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
-import * as schema from '../src/db/schema.js'
 import { processMessage } from '../src/llm-orchestrator.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
@@ -263,147 +260,5 @@ describe('processMessage — success path history', () => {
     expect(history[0]!.content).toBe('hello')
     expect(history[1]!.role).toBe('assistant')
     expect(history[1]!.content).toBe('Hi!')
-  })
-})
-
-const msgRole = (m: unknown): string => {
-  if (m !== null && typeof m === 'object' && 'role' in m)
-    return String(Object.getOwnPropertyDescriptor(m, 'role')?.value ?? '')
-  return ''
-}
-const msgContent = (m: unknown): string => {
-  if (m !== null && typeof m === 'object' && 'content' in m)
-    return String(Object.getOwnPropertyDescriptor(m, 'content')?.value ?? '')
-  return ''
-}
-
-describe('processMessage — background event injection', () => {
-  test('prepends system message when unseen events exist', async () => {
-    getTestDb()
-      .insert(schema.backgroundEvents)
-      .values({
-        id: 'evt-1',
-        userId: CTX_ID,
-        type: 'scheduled',
-        prompt: 'create report',
-        response: 'Created report.',
-        createdAt: '2026-03-24T09:00:00Z',
-        injectedAt: null,
-      })
-      .run()
-
-    let capturedMessages: unknown[] = []
-    generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
-      capturedMessages = [...(args?.messages ?? [])]
-      return Promise.resolve({
-        text: 'ok',
-        toolCalls: [],
-        toolResults: [],
-        response: { messages: [{ role: 'assistant' as const, content: 'ok' }] },
-        usage: {},
-      })
-    }
-
-    const { reply } = createMockReply()
-    await processMessage(reply, CTX_ID, null, 'hello')
-
-    const systemMessages = capturedMessages.filter((m) => msgRole(m) === 'system')
-    expect(systemMessages.length).toBeGreaterThanOrEqual(1)
-    const bgMsg = systemMessages.find((m) => msgContent(m).includes('Background tasks completed'))
-    expect(bgMsg).toBeDefined()
-    expect(msgContent(bgMsg)).toContain('create report')
-    expect(msgContent(bgMsg)).toContain('Created report.')
-  })
-
-  test('appends background history entries on injection', async () => {
-    getTestDb()
-      .insert(schema.backgroundEvents)
-      .values({
-        id: 'evt-2',
-        userId: CTX_ID,
-        type: 'alert',
-        prompt: 'check overdue',
-        response: '2 overdue.',
-        createdAt: '2026-03-24T09:05:00Z',
-        injectedAt: null,
-      })
-      .run()
-
-    const { reply } = createMockReply()
-    await processMessage(reply, CTX_ID, null, 'hello')
-
-    const history = getCachedHistory(CTX_ID)
-    const systemEntries = history.filter((m) => m.role === 'system')
-    expect(systemEntries.length).toBeGreaterThanOrEqual(1)
-    const bgEntry = systemEntries.find((m) => typeof m.content === 'string' && m.content.includes('check overdue'))
-    expect(bgEntry).toBeDefined()
-  })
-
-  test('does not prepend system message when no unseen events', async () => {
-    // No events inserted — DB is empty after setupTestDb()
-
-    let capturedMessages: unknown[] = []
-    generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
-      capturedMessages = [...(args?.messages ?? [])]
-      return defaultGenerateTextResult()
-    }
-
-    const { reply } = createMockReply()
-    await processMessage(reply, CTX_ID, null, 'hello')
-
-    const bgMessages = capturedMessages.filter((m) => msgContent(m).includes('Background tasks completed'))
-    expect(bgMessages).toHaveLength(0)
-  })
-
-  test('marks events as injected only after successful LLM call', async () => {
-    getTestDb()
-      .insert(schema.backgroundEvents)
-      .values({
-        id: 'evt-mark-1',
-        userId: CTX_ID,
-        type: 'scheduled',
-        prompt: 'daily report',
-        response: 'Report done.',
-        createdAt: '2026-03-24T09:00:00Z',
-        injectedAt: null,
-      })
-      .run()
-
-    const { reply } = createMockReply()
-    await processMessage(reply, CTX_ID, null, 'hello')
-
-    const rows = getTestDb()
-      .select({ injectedAt: schema.backgroundEvents.injectedAt })
-      .from(schema.backgroundEvents)
-      .where(eq(schema.backgroundEvents.id, 'evt-mark-1'))
-      .all()
-    expect(rows[0]?.injectedAt).not.toBeNull()
-  })
-
-  test('does not mark events as injected when LLM call fails', async () => {
-    getTestDb()
-      .insert(schema.backgroundEvents)
-      .values({
-        id: 'evt-fail-1',
-        userId: CTX_ID,
-        type: 'alert',
-        prompt: 'check overdue',
-        response: '2 overdue.',
-        createdAt: '2026-03-24T09:05:00Z',
-        injectedAt: null,
-      })
-      .run()
-
-    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM crash'))
-
-    const { reply } = createMockReply()
-    await processMessage(reply, CTX_ID, null, 'hello')
-
-    const rows = getTestDb()
-      .select({ injectedAt: schema.backgroundEvents.injectedAt })
-      .from(schema.backgroundEvents)
-      .where(eq(schema.backgroundEvents.id, 'evt-fail-1'))
-      .all()
-    expect(rows[0]?.injectedAt).toBeNull()
   })
 })

@@ -29,11 +29,8 @@ void mock.module('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
 }))
 
-import { eq } from 'drizzle-orm'
-
 import type { ChatProvider } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
-import * as schema from '../../src/db/schema.js'
 import { createAlertPrompt } from '../../src/deferred-prompts/alerts.js'
 import { pollAlertsOnce, pollScheduledOnce } from '../../src/deferred-prompts/poller.js'
 import { createScheduledPrompt, getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
@@ -134,6 +131,77 @@ describe('pollScheduledOnce', () => {
     expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
   })
 
+  test('merges multiple due prompts for the same user into one LLM call', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({
+        text: 'All tasks handled.',
+        toolCalls: [],
+        toolResults: [],
+        response: { messages: [] },
+      })
+    }
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const p1 = createScheduledPrompt(USER_ID, 'Check overdue tasks', { fireAt: pastTime })
+    const p2 = createScheduledPrompt(USER_ID, 'Send daily report', { fireAt: pastTime })
+    const p3 = createScheduledPrompt(USER_ID, 'Review pull requests', { fireAt: pastTime })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    // Single LLM call for all three prompts
+    expect(callCount).toBe(1)
+    // Single message sent to user
+    expect(chat.sentMessages).toHaveLength(1)
+    expect(chat.sentMessages[0]!.text).toBe('All tasks handled.')
+
+    // All three should be completed
+    expect(getScheduledPrompt(p1.id, USER_ID)!.status).toBe('completed')
+    expect(getScheduledPrompt(p2.id, USER_ID)!.status).toBe('completed')
+    expect(getScheduledPrompt(p3.id, USER_ID)!.status).toBe('completed')
+  })
+
+  test('merges mixed one-shot and recurring prompts for same user', async () => {
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const oneShot = createScheduledPrompt(USER_ID, 'One-time reminder', { fireAt: pastTime })
+    const recurring = createScheduledPrompt(USER_ID, 'Daily standup', {
+      fireAt: pastTime,
+      cronExpression: '0 9 * * *',
+    })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    expect(chat.sentMessages).toHaveLength(1)
+    expect(getScheduledPrompt(oneShot.id, USER_ID)!.status).toBe('completed')
+    const updatedRecurring = getScheduledPrompt(recurring.id, USER_ID)!
+    expect(updatedRecurring.status).toBe('active')
+    expect(new Date(updatedRecurring.fireAt).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  test('different users get separate LLM calls', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    }
+
+    const otherUser = 'poller-user-2'
+    setupUserConfig(otherUser)
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(USER_ID, 'Task A', { fireAt: pastTime })
+    createScheduledPrompt(USER_ID, 'Task B', { fireAt: pastTime })
+    createScheduledPrompt(otherUser, 'Task C', { fireAt: pastTime })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    // Two LLM calls: one per user
+    expect(callCount).toBe(2)
+    // Two messages: one per user
+    expect(chat.sentMessages).toHaveLength(2)
+  })
+
   test('skips prompt when LLM config is missing', async () => {
     // Create a user without LLM config
     const unconfiguredUser = 'unconfigured-user'
@@ -148,46 +216,26 @@ describe('pollScheduledOnce', () => {
   })
 })
 
-describe('pollScheduledOnce — background events', () => {
+describe('pollScheduledOnce — error handling', () => {
   let chat: ReturnType<typeof createMockChat>
-  let provider: TaskProvider
 
   beforeEach(async () => {
     await setupTestDb()
     chat = createMockChat()
-    provider = createMockProvider()
     setupUserConfig(USER_ID)
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
   })
 
-  test('records event on successful scheduled prompt execution', async () => {
-    const db = await setupTestDb()
-    setupUserConfig(USER_ID)
-    const pastTime = new Date(Date.now() - 60_000).toISOString()
-    createScheduledPrompt(USER_ID, 'create report task', { fireAt: pastTime })
-
-    await pollScheduledOnce(chat, () => provider)
-
-    const rows = db.select().from(schema.backgroundEvents).where(eq(schema.backgroundEvents.userId, USER_ID)).all()
-    expect(rows).toHaveLength(1)
-    expect(rows[0]!.type).toBe('scheduled')
-    expect(rows[0]!.injectedAt).toBeNull()
-  })
-
-  test('records failure event and notifies user when LLM throws', async () => {
+  test('notifies user when LLM throws', async () => {
     generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
-    const db = await setupTestDb()
     const userId = 'fail-user'
     setupUserConfig(userId)
     const pastTime = new Date(Date.now() - 60_000).toISOString()
     createScheduledPrompt(userId, 'do something', { fireAt: pastTime })
 
-    await pollScheduledOnce(chat, () => provider)
+    await pollScheduledOnce(chat, () => createMockProvider())
 
-    const rows = db.select().from(schema.backgroundEvents).where(eq(schema.backgroundEvents.userId, userId)).all()
-    expect(rows).toHaveLength(1)
-    expect(rows[0]!.response).toMatch(/Failed/)
     expect(chat.sentMessages.some((m) => m.userId === userId)).toBe(true)
   })
 
@@ -198,7 +246,7 @@ describe('pollScheduledOnce — background events', () => {
     const pastTime = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(userId, 'one-time task', { fireAt: pastTime })
 
-    await pollScheduledOnce(chat, () => provider)
+    await pollScheduledOnce(chat, () => createMockProvider())
 
     const updated = getScheduledPrompt(created.id, userId)
     expect(updated).not.toBeNull()
@@ -215,29 +263,12 @@ describe('pollScheduledOnce — background events', () => {
       cronExpression: '0 9 * * *',
     })
 
-    await pollScheduledOnce(chat, () => provider)
+    await pollScheduledOnce(chat, () => createMockProvider())
 
     const updated = getScheduledPrompt(created.id, userId)
     expect(updated).not.toBeNull()
     expect(updated!.status).toBe('active')
     expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
-  })
-
-  test('records correct LLM response even when sendMessage fails', async () => {
-    const db = await setupTestDb()
-    const userId = 'send-fail-user'
-    setupUserConfig(userId)
-    const failChat = createMockChat()
-    failChat.sendMessage = (): Promise<void> => Promise.reject(new Error('Chat down'))
-    const pastTime = new Date(Date.now() - 60_000).toISOString()
-    createScheduledPrompt(userId, 'report', { fireAt: pastTime })
-
-    await pollScheduledOnce(failChat, () => provider)
-
-    const rows = db.select().from(schema.backgroundEvents).where(eq(schema.backgroundEvents.userId, userId)).all()
-    expect(rows).toHaveLength(1)
-    expect(rows[0]!.response).toBe('Task completed.')
-    expect(rows[0]!.response).not.toMatch(/Failed/)
   })
 })
 
