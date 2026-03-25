@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-03-25
+
+### Added
+
+- **tools:** Add ToolMode to gate deferred prompt tools in proactive execution
+- **deferred:** Use proactive mode to exclude scheduling tools during delivery
+- **deferred:** Rewrite proactive trigger with spotlighting and delivery mode framing
+- **prompt:** Rewrite PROACTIVE MODE and add PROMPT CONTENT guidance for deferred prompts
+- **deferred:** Improve prompt field description to guide deliverable content
+
+### Changed
+
+- **prompt:** Remove timezone disclosure and conversion instructions from system prompt
+
+### Documentation
+
+- Add proactive delivery mode design for recursive scheduling fix
+- Add proactive delivery mode implementation plan
+
+### Fixed
+
+- **utils:** Weekly schedule without days now defaults to Monday
+- **utils:** LocalDatetimeToUtc now handles empty-string timezone via try/catch
+- **tools:** Remove duplicate ToolMode declaration
+
+### Miscellaneous
+
+- Move completed datetime review fixes plan to done
+- Add timezone ADR and move completed plans to done
+
+### Styling
+
+- **tools:** Move ToolMode declaration after imports
+
+### Testing
+
+- **utils:** Add DST transition tests for localDatetimeToUtc
 ## [4.5.0] - 2026-03-25
 
 ### Added
