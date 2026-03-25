@@ -2,8 +2,6 @@ import type { ToolSet } from 'ai'
 
 import { makeDeferredPromptTools } from '../deferred-prompts/tools.js'
 import type { TaskProvider } from '../providers/types.js'
-
-export type ToolMode = 'normal' | 'proactive'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
@@ -42,6 +40,8 @@ import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
 import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
+
+export type ToolMode = 'normal' | 'proactive'
 
 function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
   return {
