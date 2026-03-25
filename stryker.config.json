@@ -20,6 +20,7 @@
     "src/conversation.ts"
   ],
   "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "concurrency": 1,

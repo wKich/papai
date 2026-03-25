@@ -49,12 +49,6 @@
       }
     },
     {
-      "files": ["scripts/**/*.ts"],
-      "rules": {
-        "max-lines": "off"
-      }
-    },
-    {
       "files": ["docs/tdd-hooks/**"],
       "rules": {
         "all": "off"
