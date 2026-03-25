@@ -87,6 +87,59 @@ export const DEFAULT_EXECUTION_METADATA: ExecutionMetadata = {
   context_snapshot: null,
 }
 
+export function parseExecutionMetadata(raw: string): ExecutionMetadata {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    const result = executionMetadataSchema.safeParse(parsed)
+    return result.success ? result.data : DEFAULT_EXECUTION_METADATA
+  } catch {
+    return DEFAULT_EXECUTION_METADATA
+  }
+}
+
+// --- Tool input schemas ---
+
+export type FireAtInput = { date: string; time: string }
+export type ScheduleInput = { fire_at?: FireAtInput; cron?: string }
+
+export const scheduleSchema = z.object({
+  fire_at: z
+    .object({
+      date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
+      time: z.string().describe("Time in HH:MM 24-hour format (user's local time)"),
+    })
+    .optional()
+    .describe("One-time trigger in user's local time — tool handles UTC conversion"),
+  cron: z.string().optional().describe('5-field cron expression for recurring execution in local time'),
+})
+
+export const cooldownSchema = z
+  .number()
+  .int()
+  .min(1)
+  .optional()
+  .describe('Minimum minutes between alert triggers (default: 60)')
+
+export const executionInputSchema = z
+  .object({
+    mode: z
+      .enum(EXECUTION_MODES)
+      .describe(
+        'lightweight: simple reminders/nudges needing no tools or history. context: needs conversation history but no tools. full: needs live task tracker operations.',
+      ),
+    delivery_brief: z
+      .string()
+      .describe('Freeform instructions for the executing LLM: intent, tone, key details, entities to reference.'),
+    context_snapshot: z
+      .string()
+      .optional()
+      .describe(
+        'When the user references something from the current conversation, distill only the relevant parts into a summary here.',
+      ),
+  })
+  .optional()
+  .describe('Execution mode classification and delivery instructions for the firing LLM.')
+
 // --- Domain types ---
 
 export type ScheduledPrompt = {

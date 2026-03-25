@@ -7,7 +7,7 @@ import type { Task } from '../providers/types.js'
 import {
   alertConditionSchema,
   DEFAULT_EXECUTION_METADATA,
-  executionMetadataSchema,
+  parseExecutionMetadata,
   type AlertCondition,
   type AlertPrompt,
   type ExecutionMetadata,
@@ -19,16 +19,6 @@ const log = logger.child({ scope: 'deferred:alerts' })
 // --- Row mapper ---
 
 const parseStatus = (raw: string): AlertPrompt['status'] => (raw === 'cancelled' ? 'cancelled' : 'active')
-
-function parseExecutionMetadata(raw: string): ExecutionMetadata {
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    const result = executionMetadataSchema.safeParse(parsed)
-    return result.success ? result.data : DEFAULT_EXECUTION_METADATA
-  } catch {
-    return DEFAULT_EXECUTION_METADATA
-  }
-}
 
 const toAlertPrompt = (row: AlertPromptRow): AlertPrompt => ({
   type: 'alert',

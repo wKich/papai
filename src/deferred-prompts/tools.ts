@@ -2,216 +2,36 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { getConfig } from '../config.js'
-import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
-import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
-import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
 import {
-  cancelScheduledPrompt,
-  createScheduledPrompt,
-  getScheduledPrompt,
-  listScheduledPrompts,
-  updateScheduledPrompt,
-} from './scheduled.js'
-import {
-  alertConditionSchema,
-  type AlertCondition,
-  type CancelResult,
-  type CreateResult,
-  type GetResult,
-  type ListResult,
-  type UpdateResult,
-} from './types.js'
+  executeCancel,
+  executeCreate,
+  executeGet,
+  executeList,
+  executeUpdate,
+  type CreateInput,
+  type ListInput,
+  type UpdateInput,
+} from './tool-handlers.js'
+import { alertConditionSchema, cooldownSchema, executionInputSchema, scheduleSchema } from './types.js'
 
 const log = logger.child({ scope: 'deferred:tools' })
-
-type FireAtInput = { date: string; time: string }
-type ScheduleInput = { fire_at?: FireAtInput; cron?: string }
-type CreateInput = { prompt: string; schedule?: ScheduleInput; condition?: AlertCondition; cooldown_minutes?: number }
-
-function createScheduled(userId: string, prompt: string, schedule: ScheduleInput): CreateResult {
-  const hasFireAt = schedule.fire_at !== undefined
-  const hasCron = schedule.cron !== undefined && schedule.cron !== ''
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-
-  if (hasFireAt) {
-    const { date, time } = schedule.fire_at!
-    const utcStr = localDatetimeToUtc(date, time, timezone)
-    const fireDate = new Date(utcStr)
-    if (Number.isNaN(fireDate.getTime())) return { error: `Invalid fire_at date/time: '${date}T${time}'` }
-    if (fireDate.getTime() <= Date.now()) return { error: 'fire_at must be a future date and time.' }
-  }
-
-  let cronExpression: string | undefined
-  if (hasCron) {
-    if (parseCron(schedule.cron!) === null) return { error: `Invalid cron expression: '${schedule.cron!}'` }
-    cronExpression = schedule.cron!
-  }
-
-  let fireAt: string
-  if (hasFireAt) {
-    fireAt = localDatetimeToUtc(schedule.fire_at!.date, schedule.fire_at!.time, timezone)
-  } else if (hasCron) {
-    const next = nextCronOccurrence(parseCron(cronExpression!)!, new Date(), timezone)
-    if (next === null) return { error: 'Could not compute next occurrence for the given cron expression.' }
-    fireAt = next.toISOString()
-  } else {
-    return { error: 'Schedule must include either fire_at or cron.' }
-  }
-
-  const result = createScheduledPrompt(userId, prompt, { fireAt, cronExpression })
-  log.info({ id: result.id, userId, type: 'scheduled' }, 'Deferred prompt created')
-  return {
-    status: 'created',
-    type: 'scheduled',
-    id: result.id,
-    fireAt: utcToLocal(result.fireAt, timezone) ?? result.fireAt,
-    cronExpression: result.cronExpression,
-  }
-}
-
-function createAlert(userId: string, prompt: string, condition: unknown, cooldownMinutes?: number): CreateResult {
-  const parseResult = alertConditionSchema.safeParse(condition)
-  if (!parseResult.success) return { error: `Invalid condition: ${parseResult.error.message}` }
-
-  const result = createAlertPrompt(userId, prompt, parseResult.data, cooldownMinutes)
-  log.info({ id: result.id, userId, type: 'alert' }, 'Deferred prompt created')
-  return { status: 'created', type: 'alert', id: result.id, cooldownMinutes: result.cooldownMinutes }
-}
-
-function executeCreate(userId: string, input: CreateInput): CreateResult {
-  const hasSchedule = input.schedule !== undefined
-  const hasCondition = input.condition !== undefined
-  log.debug({ userId, hasSchedule, hasCondition }, 'create_deferred_prompt called')
-  if (hasSchedule && hasCondition) return { error: 'Provide either a schedule or a condition, not both.' }
-  if (!hasSchedule && !hasCondition) {
-    return { error: 'Provide either a schedule (for time-based) or a condition (for event-based).' }
-  }
-  if (hasSchedule) return createScheduled(userId, input.prompt, input.schedule!)
-  return createAlert(userId, input.prompt, input.condition, input.cooldown_minutes)
-}
-
-function executeList(
-  userId: string,
-  input: { type?: 'scheduled' | 'alert'; status?: 'active' | 'completed' | 'cancelled' },
-): ListResult {
-  log.debug({ userId, type: input.type, status: input.status }, 'list_deferred_prompts called')
-  const prompts: ListResult['prompts'] = []
-  if (input.type !== 'alert') prompts.push(...listScheduledPrompts(userId, input.status))
-  if (input.type !== 'scheduled') prompts.push(...listAlertPrompts(userId, input.status))
-  log.info({ userId, count: prompts.length }, 'Listed deferred prompts')
-  return { prompts }
-}
-
-function executeGet(userId: string, input: { id: string }): GetResult {
-  log.debug({ userId, id: input.id }, 'get_deferred_prompt called')
-  return (
-    getScheduledPrompt(input.id, userId) ?? getAlertPrompt(input.id, userId) ?? { error: 'Deferred prompt not found.' }
-  )
-}
-
-type UpdateInput = {
-  id: string
-  prompt?: string
-  schedule?: ScheduleInput
-  condition?: AlertCondition
-  cooldown_minutes?: number
-}
-
-function updateScheduledFields(id: string, userId: string, input: UpdateInput): UpdateResult {
-  if (input.condition !== undefined)
-    return { error: 'Cannot apply a condition to a scheduled prompt. Use schedule fields instead.' }
-  const updates: { prompt?: string; fireAt?: string; cronExpression?: string } = {}
-  if (input.prompt !== undefined) updates.prompt = input.prompt
-  if (input.schedule !== undefined) {
-    if (input.schedule.fire_at !== undefined) {
-      const { date, time } = input.schedule.fire_at
-      const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-      const utcStr = localDatetimeToUtc(date, time, timezone)
-      const fireAtDate = new Date(utcStr)
-      if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${date}T${time}'` }
-      if (fireAtDate.getTime() <= Date.now()) return { error: 'fire_at must be in the future.' }
-      updates.fireAt = utcStr
-    }
-    if (input.schedule.cron !== undefined) {
-      if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
-      updates.cronExpression = input.schedule.cron
-    }
-  }
-  const result = updateScheduledPrompt(id, userId, updates)
-  if (result === null) return { error: 'Deferred prompt not found.' }
-  log.info({ id, userId }, 'Scheduled prompt updated via tool')
-  return { ...result, status: 'updated' as const }
-}
-
-function updateAlertFields(id: string, userId: string, input: UpdateInput): UpdateResult {
-  if (input.schedule !== undefined)
-    return { error: 'Cannot apply a schedule to an alert prompt. Use condition fields instead.' }
-  const updates: { prompt?: string; condition?: AlertCondition; cooldownMinutes?: number } = {}
-  if (input.prompt !== undefined) updates.prompt = input.prompt
-  if (input.condition !== undefined) {
-    const parseResult = alertConditionSchema.safeParse(input.condition)
-    if (!parseResult.success) return { error: `Invalid condition: ${parseResult.error.message}` }
-    updates.condition = parseResult.data
-  }
-  if (input.cooldown_minutes !== undefined) updates.cooldownMinutes = input.cooldown_minutes
-  const result = updateAlertPrompt(id, userId, updates)
-  if (result === null) return { error: 'Deferred prompt not found.' }
-  log.info({ id, userId }, 'Alert prompt updated via tool')
-  return { ...result, status: 'updated' as const }
-}
-
-function executeUpdate(userId: string, input: UpdateInput): UpdateResult {
-  log.debug({ userId, id: input.id }, 'update_deferred_prompt called')
-  if (getScheduledPrompt(input.id, userId) !== null) return updateScheduledFields(input.id, userId, input)
-  if (getAlertPrompt(input.id, userId) !== null) return updateAlertFields(input.id, userId, input)
-  return { error: 'Deferred prompt not found.' }
-}
-
-function executeCancel(userId: string, input: { id: string }): CancelResult {
-  log.debug({ userId, id: input.id }, 'cancel_deferred_prompt called')
-  if (cancelScheduledPrompt(input.id, userId) !== null) {
-    log.info({ id: input.id, userId, type: 'scheduled' }, 'Deferred prompt cancelled')
-    return { status: 'cancelled', id: input.id }
-  }
-  if (cancelAlertPrompt(input.id, userId) !== null) {
-    log.info({ id: input.id, userId, type: 'alert' }, 'Deferred prompt cancelled')
-    return { status: 'cancelled', id: input.id }
-  }
-  return { error: 'Deferred prompt not found.' }
-}
 
 function logAndRethrow(name: string, error: unknown): never {
   log.error({ error: error instanceof Error ? error.message : String(error), tool: name }, 'Tool execution failed')
   throw error
 }
-const scheduleSchema = z.object({
-  fire_at: z
-    .object({
-      date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
-      time: z.string().describe("Time in HH:MM 24-hour format (user's local time)"),
-    })
-    .optional()
-    .describe("One-time trigger in user's local time — tool handles UTC conversion"),
-  cron: z.string().optional().describe('5-field cron expression for recurring execution in local time'),
-})
-const cooldownSchema = z
-  .number()
-  .int()
-  .min(1)
-  .optional()
-  .describe('Minimum minutes between alert triggers (default: 60)')
-type ListInput = { type?: 'scheduled' | 'alert'; status?: 'active' | 'completed' | 'cancelled' }
+
 function makeCreateTool(userId: string): ToolSet[string] {
   return tool({
     description:
-      'Create a scheduled task or monitoring alert. Provide either a schedule (for time-based) or a condition (for event-based), not both.',
+      'Create a scheduled task or monitoring alert. Provide either a schedule (for time-based) or a condition (for event-based), not both. Always classify the execution mode based on what the prompt needs at fire time.',
     inputSchema: z.object({
       prompt: z.string().describe('What to do/say when this fires — not scheduling meta-instructions'),
       schedule: scheduleSchema.optional().describe('Time-based trigger (one-time or recurring)'),
       condition: alertConditionSchema.optional().describe('Event-based trigger condition'),
       cooldown_minutes: cooldownSchema,
+      execution: executionInputSchema,
     }),
     execute: (input: CreateInput) => {
       try {
@@ -264,6 +84,7 @@ function makeUpdateTool(userId: string): ToolSet[string] {
       schedule: scheduleSchema.optional().describe('Updated time-based trigger'),
       condition: alertConditionSchema.optional().describe('Updated event-based trigger condition'),
       cooldown_minutes: cooldownSchema,
+      execution: executionInputSchema,
     }),
     execute: (input: UpdateInput) => {
       try {

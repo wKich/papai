@@ -6,7 +6,7 @@ import type { ScheduledPromptRow } from '../db/schema.js'
 import { logger } from '../logger.js'
 import {
   DEFAULT_EXECUTION_METADATA,
-  executionMetadataSchema,
+  parseExecutionMetadata,
   type ExecutionMetadata,
   type ScheduledPrompt,
 } from './types.js'
@@ -19,16 +19,6 @@ function isValidStatus(value: string): value is ScheduledPrompt['status'] {
 
 function toStatus(value: string): ScheduledPrompt['status'] {
   return isValidStatus(value) ? value : 'active'
-}
-
-function parseExecutionMetadata(raw: string): ExecutionMetadata {
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    const result = executionMetadataSchema.safeParse(parsed)
-    return result.success ? result.data : DEFAULT_EXECUTION_METADATA
-  } catch {
-    return DEFAULT_EXECUTION_METADATA
-  }
 }
 
 function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
