@@ -41,6 +41,8 @@ import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
+export type ToolMode = 'normal' | 'proactive'
+
 function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
   return {
     create_task: makeCreateTaskTool(provider, userId),
@@ -160,7 +162,7 @@ function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
   tools['delete_recurring_task'] = makeDeleteRecurringTaskTool()
 }
 
-export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
+export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMode = 'normal'): ToolSet {
   const tools = makeCoreTools(provider, userId)
   maybeAddArchiveTool(tools, provider)
   maybeAddProjectTools(tools, provider)
@@ -171,7 +173,7 @@ export function makeTools(provider: TaskProvider, userId?: string): ToolSet {
   maybeAddDeleteTool(tools, provider)
   addRecurringTools(tools, userId)
   addInstructionTools(tools, userId)
-  if (userId !== undefined) {
+  if (userId !== undefined && mode === 'normal') {
     const deferredTools = makeDeferredPromptTools(userId)
     Object.assign(tools, deferredTools)
   }
