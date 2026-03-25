@@ -208,7 +208,7 @@ function makeCreateTool(userId: string): ToolSet[string] {
     description:
       'Create a scheduled task or monitoring alert. Provide either a schedule (for time-based) or a condition (for event-based), not both.',
     inputSchema: z.object({
-      prompt: z.string().describe('What the LLM should do when this fires'),
+      prompt: z.string().describe('What to do/say when this fires — not scheduling meta-instructions'),
       schedule: scheduleSchema.optional().describe('Time-based trigger (one-time or recurring)'),
       condition: alertConditionSchema.optional().describe('Event-based trigger condition'),
       cooldown_minutes: cooldownSchema,
