@@ -380,6 +380,20 @@ If a test requires mocking 4+ modules (e.g., `llm-orchestrator-process.test.ts` 
 2. Documenting which modules are mocked in a comment at the top of the file
 3. Verifying the full suite still passes: `bun test` (not just `bun test tests/your-file.test.ts`)
 
+#### Rule 6: Beware transitive mock pollution through source file chains
+
+When test file A mocks `src/db/drizzle.js`, test file B can be affected even if B never imports `drizzle.js` directly — as long as something B imports (e.g. `src/poller.ts`) imports something that imports `drizzle.js`. The `scripts/check-mock-pollution.ts` script detects this automatically (Pattern 3).
+
+To prevent transitive pollution, always add `afterAll(() => { mock.restore() })` to any test that mocks a module imported (directly or indirectly) by source files:
+
+```typescript
+afterAll(() => {
+  mock.restore()
+})
+```
+
+Run `bun run mock-pollution` after adding new mocks to verify the suite is still clean.
+
 #### Quick checklist for new test files
 
 - [ ] Mocks are registered **before** imports of code under test

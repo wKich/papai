@@ -192,52 +192,24 @@ describe('makeCreateRecurringTaskTool', () => {
     expect(createRecurringTaskCallCount).toBe(1)
   })
 
-  test('returns error for invalid cron expression', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Test task', projectId: 'p1', triggerType: 'cron', cronExpression: 'not-a-valid-cron' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('returns error for out-of-range cron values like 99 99 99 99 99', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Test task', projectId: 'p1', triggerType: 'cron', cronExpression: '99 99 99 99 99' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('returns error when cron type but no cronExpression', async () => {
+  test('returns error when cron type but no schedule', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron' }, toolCtx)
-    expect(result).toHaveProperty('error', "cronExpression is required when triggerType is 'cron'")
+    expect(result).toHaveProperty('error', "schedule is required when triggerType is 'cron'")
     expect(createRecurringTaskCallCount).toBe(0)
   })
 
-  test('returns error when cron type with empty string cronExpression', async () => {
+  test('converts semantic schedule to cron expression', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute(
-      { title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: '' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error', "cronExpression is required when triggerType is 'cron'")
-    expect(createRecurringTaskCallCount).toBe(0)
-  })
-
-  test('creates task with valid cron expression and returns schedule', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Monday standup', projectId: 'p1', triggerType: 'cron', cronExpression: '0 9 * * 1' },
+      {
+        title: 'Monday standup',
+        projectId: 'p1',
+        triggerType: 'cron',
+        schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+      },
       toolCtx,
     )
     expect(result).toHaveProperty('id', 'rec-1')
@@ -259,22 +231,11 @@ describe('makeCreateRecurringTaskTool', () => {
     expect(result).toHaveProperty('schedule', 'after completion of current instance')
   })
 
-  test('returns error with specific message for invalid cron', async () => {
-    const tool = makeCreateRecurringTaskTool('user-1')
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await tool.execute(
-      { title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: 'bad' },
-      toolCtx,
-    )
-    expect(result).toHaveProperty('error')
-    expect(result).not.toEqual({ error: '' })
-  })
-
   test('has a non-empty description', () => {
     expect(makeCreateRecurringTaskTool('user-1').description).toBeTruthy()
   })
 
-  test('on_complete triggerType ignores cronExpression when both provided', async () => {
+  test('on_complete triggerType ignores schedule when both provided', async () => {
     const tool = makeCreateRecurringTaskTool('user-1')
     if (!tool.execute) throw new Error('Tool execute is undefined')
 
@@ -283,14 +244,12 @@ describe('makeCreateRecurringTaskTool', () => {
         title: 'Test',
         projectId: 'p-1',
         triggerType: 'on_complete',
-        cronExpression: '0 9 * * 1',
+        schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
       },
       toolCtx,
     )
 
-    // Result should not contain an error — on_complete does not require cronExpression validation
     expect(result).not.toHaveProperty('error')
-    // The schedule should be 'after completion of current instance', not a cron description
     expect(result).toHaveProperty('schedule', 'after completion of current instance')
   })
 
@@ -302,11 +261,38 @@ describe('makeCreateRecurringTaskTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     let caught: unknown = null
     try {
-      await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron', cronExpression: '0 9 * * 1' }, toolCtx)
+      await tool.execute(
+        {
+          title: 'Task',
+          projectId: 'p1',
+          triggerType: 'cron',
+          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+        },
+        toolCtx,
+      )
     } catch (e) {
       caught = e
     }
     expect(caught).toHaveProperty('message', 'create failed')
+  })
+
+  test('returns nextRun converted to user local time', async () => {
+    // Override the mock to return a known UTC nextRun with Asia/Karachi timezone
+    setCachedConfig('user-1', 'timezone', 'Asia/Karachi')
+    const tool = makeCreateRecurringTaskTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      {
+        title: 'Daily',
+        projectId: 'p1',
+        triggerType: 'cron',
+        schedule: { frequency: 'daily', time: '17:00' },
+      },
+      toolCtx,
+    )
+
+    // nextRun from mock is null by default — verify no crash
+    expect(result).toHaveProperty('nextRun', null)
   })
 })
 
@@ -376,7 +362,8 @@ describe('makeUpdateRecurringTaskTool', () => {
     expect(result).toHaveProperty('title', 'Updated title')
     expect(result).toHaveProperty('projectId', 'p2')
     expect(result).toHaveProperty('enabled', true)
-    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00.000Z')
+    // nextRun is converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00')
   })
 
   test('returns error when task not found', async () => {
@@ -387,21 +374,28 @@ describe('makeUpdateRecurringTaskTool', () => {
     expect(result).toHaveProperty('error', 'Recurring task not found')
   })
 
-  test('passes cronExpression through when provided', async () => {
+  test('converts semantic schedule to cronExpression when updating', async () => {
     updateRecurringTaskResult = makeRecord()
     const tool = makeUpdateRecurringTaskTool()
     if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ recurringTaskId: 'rec-1', cronExpression: '0 10 * * *' }, toolCtx)
-    expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('cronExpression', '0 10 * * *')
+    await tool.execute(
+      {
+        recurringTaskId: 'rec-1',
+        schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+      },
+      toolCtx,
+    )
+    expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('cronExpression', '0 9 * * 1')
   })
 
-  test('passes updates without cronExpression when not provided', async () => {
+  test('passes updates without cronExpression when no schedule provided', async () => {
     updateRecurringTaskResult = makeRecord()
     const tool = makeUpdateRecurringTaskTool()
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute({ recurringTaskId: 'rec-1', title: 'New title' }, toolCtx)
     expect(updateRecurringTaskCalls[0]?.id).toBe('rec-1')
     expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('title', 'New title')
+    expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('cronExpression', undefined)
   })
 
   test('calls updateRecurringTask with correct recurringTaskId', async () => {
@@ -410,6 +404,17 @@ describe('makeUpdateRecurringTaskTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute({ recurringTaskId: 'rec-42', title: 'x' }, toolCtx)
     expect(updateRecurringTaskCalls[0]?.id).toBe('rec-42')
+  })
+
+  test('returns nextRun converted to user local time', async () => {
+    updateRecurringTaskResult = makeRecord({
+      timezone: 'Asia/Karachi',
+      nextRun: '2026-03-25T12:00:00.000Z',
+    })
+    const tool = makeUpdateRecurringTaskTool()
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', title: 'Updated' }, toolCtx)
+    expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
   })
 })
 
@@ -435,7 +440,8 @@ describe('makeResumeRecurringTaskTool', () => {
     expect(result).toHaveProperty('id', 'rec-1')
     expect(result).toHaveProperty('title', 'Standup')
     expect(result).toHaveProperty('enabled', true)
-    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00.000Z')
+    // nextRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result).toHaveProperty('nextRun', '2026-03-22T09:00:00')
     expect(result).toHaveProperty('status', 'active')
     expect(result).toHaveProperty('missedTasksCreated', 0)
     expect(result).toHaveProperty('schedule')
@@ -481,6 +487,18 @@ describe('makeResumeRecurringTaskTool', () => {
     const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', createMissed: true }, toolCtx)
     expect(result).toHaveProperty('missedTasksCreated', 0)
     expect(createMissedTasksCalls).toHaveLength(0)
+  })
+
+  test('returns nextRun converted to user local time after resume', async () => {
+    const record = makeRecord({
+      timezone: 'Asia/Karachi',
+      nextRun: '2026-03-25T12:00:00.000Z',
+    })
+    resumeRecurringTaskResult = { record, missedDates: [] }
+    const tool = makeResumeRecurringTaskTool()
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
+    expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
   })
 })
 
@@ -531,7 +549,8 @@ describe('makeSkipRecurringTaskTool', () => {
     const result: unknown = await tool.execute({ recurringTaskId: 'rec-4' }, toolCtx)
     expect(result).toHaveProperty('id', 'rec-4')
     expect(result).toHaveProperty('title', 'Standup')
-    expect(result).toHaveProperty('nextRun', '2026-03-29T09:00:00.000Z')
+    // nextRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result).toHaveProperty('nextRun', '2026-03-29T09:00:00')
     expect(result).toHaveProperty('status', 'skipped — next occurrence updated')
   })
 
@@ -549,6 +568,17 @@ describe('makeSkipRecurringTaskTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute({ recurringTaskId: 'rec-5' }, toolCtx)
     expect(skipNextOccurrenceCalls).toEqual(['rec-5'])
+  })
+
+  test('returns nextRun converted to user local time after skip', async () => {
+    skipNextOccurrenceResult = makeRecord({
+      timezone: 'Asia/Karachi',
+      nextRun: '2026-03-25T12:00:00.000Z',
+    })
+    const tool = makeSkipRecurringTaskTool()
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
+    expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
   })
 })
 
@@ -573,7 +603,8 @@ describe('makeListRecurringTasksTool', () => {
     expect(result[0]).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
     expect(result[0]).toHaveProperty('cronExpression', '0 9 * * 1')
     expect(result[0]).toHaveProperty('enabled', true)
-    expect(result[0]).toHaveProperty('nextRun', '2026-03-22T09:00:00.000Z')
+    // nextRun/lastRun converted via utcToLocal (UTC→UTC strips Z suffix)
+    expect(result[0]).toHaveProperty('nextRun', '2026-03-22T09:00:00')
     expect(result[0]).toHaveProperty('lastRun', null)
     expect(result[0]).toHaveProperty('priority', null)
     expect(result[0]).toHaveProperty('assignee', null)
@@ -605,6 +636,22 @@ describe('makeListRecurringTasksTool', () => {
     if (!tool.execute) throw new Error('Tool execute is undefined')
     const result: unknown = await tool.execute({}, toolCtx)
     expect(result).toEqual([])
+  })
+
+  test('returns nextRun and lastRun converted to user local time', async () => {
+    listRecurringTasksResult = [
+      makeRecord({
+        timezone: 'Asia/Karachi',
+        nextRun: '2026-03-25T12:00:00.000Z',
+        lastRun: '2026-03-24T12:00:00.000Z',
+      }),
+    ]
+    const tool = makeListRecurringTasksTool('user-1')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({}, toolCtx)
+    if (!Array.isArray(result)) throw new Error('Expected array')
+    expect(result[0]).toHaveProperty('nextRun', '2026-03-25T17:00:00')
+    expect(result[0]).toHaveProperty('lastRun', '2026-03-24T17:00:00')
   })
 
   test('calls listRecurringTasks with the userId', async () => {

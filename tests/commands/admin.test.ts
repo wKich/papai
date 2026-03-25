@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
 import { registerAdminCommands } from '../../src/commands/admin.js'
@@ -289,4 +289,8 @@ describe('Admin Commands', () => {
       expect(getReplies()[0]).toBe('Only the admin can list users.')
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

@@ -105,6 +105,7 @@ export const updateAlertPrompt = (
   const set: Partial<typeof alertPrompts.$inferInsert> = {}
   if (updates.prompt !== undefined) set.prompt = updates.prompt
   if (updates.condition !== undefined) {
+    alertConditionSchema.parse(updates.condition)
     set.condition = JSON.stringify(updates.condition)
   }
   if (updates.cooldownMinutes !== undefined) set.cooldownMinutes = updates.cooldownMinutes
@@ -163,7 +164,11 @@ export const getEligibleAlertPrompts = (): AlertPrompt[] => {
     return nowMs - triggeredMs >= cooldownMs
   })
 
-  log.info({ total: rows.length, eligible: eligible.length }, 'Eligible alert prompts found')
+  if (eligible.length > 0) {
+    log.info({ total: rows.length, eligible: eligible.length }, 'Eligible alert prompts found')
+  } else {
+    log.debug({ total: rows.length }, 'No eligible alert prompts')
+  }
   return eligible.map(toAlertPrompt)
 }
 
@@ -188,7 +193,7 @@ const getFieldValue = (task: Task, field: string): string | string[] | null | un
   }
 }
 
-const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, string>): boolean => {
+const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, string>, now: Date): boolean => {
   const { field, op, value } = leaf
   const fieldValue = getFieldValue(task, field)
 
@@ -204,7 +209,7 @@ const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, st
     }
     case 'overdue': {
       if (typeof fieldValue !== 'string' || fieldValue === '') return false
-      return new Date(fieldValue) < new Date()
+      return new Date(fieldValue) < now
     }
     case 'gt': {
       if (typeof fieldValue !== 'string' || fieldValue === '') return false
@@ -224,10 +229,15 @@ const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, st
   }
 }
 
-export const evaluateCondition = (condition: AlertCondition, task: Task, snapshots: Map<string, string>): boolean => {
-  if ('and' in condition) return condition.and.every((c) => evaluateCondition(c, task, snapshots))
-  if ('or' in condition) return condition.or.some((c) => evaluateCondition(c, task, snapshots))
-  return evaluateLeaf(condition, task, snapshots)
+export const evaluateCondition = (
+  condition: AlertCondition,
+  task: Task,
+  snapshots: Map<string, string>,
+  now: Date = new Date(),
+): boolean => {
+  if ('and' in condition) return condition.and.every((c) => evaluateCondition(c, task, snapshots, now))
+  if ('or' in condition) return condition.or.some((c) => evaluateCondition(c, task, snapshots, now))
+  return evaluateLeaf(condition, task, snapshots, now)
 }
 
 // --- Human-readable description ---

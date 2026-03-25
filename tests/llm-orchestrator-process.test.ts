@@ -2,21 +2,16 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
+import { mockLogger, mockDrizzle, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 mockLogger()
+mockDrizzle()
 
 // ---------------------------------------------------------------------------
 // Module mocks — ONLY external boundaries and provider infrastructure.
 // config.js, cache.js, history.js, conversation.js, memory.js, users.js
 // are left REAL (backed by the test DB) to avoid cross-file mock pollution.
 // ---------------------------------------------------------------------------
-
-// Database mock — standard pattern shared across test files
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
 
 // db/index.js — needed by cache.ts for background sync (sync errors are non-fatal)
 let testSqlite: import('bun:sqlite').Database
@@ -107,7 +102,7 @@ const seedConfigForContext = (ctxId: string): void => {
 const seedConfig = (): void => seedConfigForContext(CTX_ID)
 
 beforeEach(async () => {
-  testDb = await setupTestDb()
+  await setupTestDb()
   const { Database } = await import('bun:sqlite')
   testSqlite = new Database(':memory:')
 

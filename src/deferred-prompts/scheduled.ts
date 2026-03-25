@@ -1,4 +1,4 @@
-import { and, eq, lte } from 'drizzle-orm'
+import { and, asc, eq, lte } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { scheduledPrompts } from '../db/schema.js'
@@ -166,6 +166,7 @@ export function getScheduledPromptsDue(limit = 100): ScheduledPrompt[] {
     .select()
     .from(scheduledPrompts)
     .where(and(eq(scheduledPrompts.status, 'active'), lte(scheduledPrompts.fireAt, now)))
+    .orderBy(asc(scheduledPrompts.fireAt))
     .limit(limit)
     .all()
 

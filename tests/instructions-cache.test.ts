@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
 
 import { mockLogger, mockDrizzle, setupTestDb, getTestDb } from './utils/test-helpers.js'
 
@@ -61,4 +61,8 @@ describe('instructions cache', () => {
     expect(result).toHaveLength(1)
     expect(result[0]?.text).toBe('From DB')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
 
 import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
@@ -80,4 +80,8 @@ describe('delete_instruction tool', () => {
     const result = await exec(tool, { id: 'unknown' })
     expect(result).toHaveProperty('status', 'not_found')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })

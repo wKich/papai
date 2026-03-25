@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
 import {
   cancelScheduledPrompt,
@@ -25,16 +26,21 @@ import {
 
 const log = logger.child({ scope: 'deferred:tools' })
 
-type ScheduleInput = { fire_at?: string; cron?: string }
+type FireAtInput = { date: string; time: string }
+type ScheduleInput = { fire_at?: FireAtInput; cron?: string }
+type CreateInput = { prompt: string; schedule?: ScheduleInput; condition?: AlertCondition; cooldown_minutes?: number }
 
 function createScheduled(userId: string, prompt: string, schedule: ScheduleInput): CreateResult {
-  const hasFireAt = schedule.fire_at !== undefined && schedule.fire_at !== ''
+  const hasFireAt = schedule.fire_at !== undefined
   const hasCron = schedule.cron !== undefined && schedule.cron !== ''
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
 
   if (hasFireAt) {
-    const fireDate = new Date(schedule.fire_at!)
-    if (Number.isNaN(fireDate.getTime())) return { error: `Invalid fire_at timestamp: '${schedule.fire_at!}'` }
-    if (fireDate.getTime() <= Date.now()) return { error: 'fire_at must be a future timestamp.' }
+    const { date, time } = schedule.fire_at!
+    const utcStr = localDatetimeToUtc(date, time, timezone)
+    const fireDate = new Date(utcStr)
+    if (Number.isNaN(fireDate.getTime())) return { error: `Invalid fire_at date/time: '${date}T${time}'` }
+    if (fireDate.getTime() <= Date.now()) return { error: 'fire_at must be a future date and time.' }
   }
 
   let cronExpression: string | undefined
@@ -45,9 +51,8 @@ function createScheduled(userId: string, prompt: string, schedule: ScheduleInput
 
   let fireAt: string
   if (hasFireAt) {
-    fireAt = new Date(schedule.fire_at!).toISOString()
+    fireAt = localDatetimeToUtc(schedule.fire_at!.date, schedule.fire_at!.time, timezone)
   } else if (hasCron) {
-    const timezone = getConfig(userId, 'timezone') ?? 'UTC'
     const next = nextCronOccurrence(parseCron(cronExpression!)!, new Date(), timezone)
     if (next === null) return { error: 'Could not compute next occurrence for the given cron expression.' }
     fireAt = next.toISOString()
@@ -61,7 +66,7 @@ function createScheduled(userId: string, prompt: string, schedule: ScheduleInput
     status: 'created',
     type: 'scheduled',
     id: result.id,
-    fireAt: result.fireAt,
+    fireAt: utcToLocal(result.fireAt, timezone) ?? result.fireAt,
     cronExpression: result.cronExpression,
   }
 }
@@ -75,19 +80,14 @@ function createAlert(userId: string, prompt: string, condition: unknown, cooldow
   return { status: 'created', type: 'alert', id: result.id, cooldownMinutes: result.cooldownMinutes }
 }
 
-function executeCreate(
-  userId: string,
-  input: { prompt: string; schedule?: ScheduleInput; condition?: AlertCondition; cooldown_minutes?: number },
-): CreateResult {
+function executeCreate(userId: string, input: CreateInput): CreateResult {
   const hasSchedule = input.schedule !== undefined
   const hasCondition = input.condition !== undefined
   log.debug({ userId, hasSchedule, hasCondition }, 'create_deferred_prompt called')
-
   if (hasSchedule && hasCondition) return { error: 'Provide either a schedule or a condition, not both.' }
   if (!hasSchedule && !hasCondition) {
     return { error: 'Provide either a schedule (for time-based) or a condition (for event-based).' }
   }
-
   if (hasSchedule) return createScheduled(userId, input.prompt, input.schedule!)
   return createAlert(userId, input.prompt, input.condition, input.cooldown_minutes)
 }
@@ -126,10 +126,13 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
   if (input.prompt !== undefined) updates.prompt = input.prompt
   if (input.schedule !== undefined) {
     if (input.schedule.fire_at !== undefined) {
-      const fireAtDate = new Date(input.schedule.fire_at)
-      if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${input.schedule.fire_at}'` }
+      const { date, time } = input.schedule.fire_at
+      const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+      const utcStr = localDatetimeToUtc(date, time, timezone)
+      const fireAtDate = new Date(utcStr)
+      if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${date}T${time}'` }
       if (fireAtDate.getTime() <= Date.now()) return { error: 'fire_at must be in the future.' }
-      updates.fireAt = fireAtDate.toISOString()
+      updates.fireAt = utcStr
     }
     if (input.schedule.cron !== undefined) {
       if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
@@ -183,23 +186,23 @@ function logAndRethrow(name: string, error: unknown): never {
   log.error({ error: error instanceof Error ? error.message : String(error), tool: name }, 'Tool execution failed')
   throw error
 }
-
 const scheduleSchema = z.object({
-  fire_at: z.string().optional().describe('ISO 8601 timestamp for one-time execution'),
-  cron: z.string().optional().describe('5-field cron expression for recurring execution'),
+  fire_at: z
+    .object({
+      date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
+      time: z.string().describe("Time in HH:MM 24-hour format (user's local time)"),
+    })
+    .optional()
+    .describe("One-time trigger in user's local time — tool handles UTC conversion"),
+  cron: z.string().optional().describe('5-field cron expression for recurring execution in local time'),
 })
-
 const cooldownSchema = z
   .number()
   .int()
   .min(1)
   .optional()
   .describe('Minimum minutes between alert triggers (default: 60)')
-
-type CreateInput = { prompt: string; schedule?: ScheduleInput; condition?: AlertCondition; cooldown_minutes?: number }
 type ListInput = { type?: 'scheduled' | 'alert'; status?: 'active' | 'completed' | 'cancelled' }
-type IdInput = { id: string }
-
 function makeCreateTool(userId: string): ToolSet[string] {
   return tool({
     description:
@@ -241,7 +244,7 @@ function makeGetTool(userId: string): ToolSet[string] {
   return tool({
     description: 'Get full details of a deferred prompt by ID.',
     inputSchema: z.object({ id: z.string().describe('The deferred prompt ID') }),
-    execute: (input: IdInput) => {
+    execute: (input: { id: string }) => {
       try {
         return executeGet(userId, input)
       } catch (e) {
@@ -276,7 +279,7 @@ function makeCancelTool(userId: string): ToolSet[string] {
   return tool({
     description: 'Cancel a deferred prompt by ID. Works for both scheduled prompts and alerts.',
     inputSchema: z.object({ id: z.string().describe('The deferred prompt ID to cancel') }),
-    execute: (input: IdInput) => {
+    execute: (input: { id: string }) => {
       try {
         return executeCancel(userId, input)
       } catch (e) {

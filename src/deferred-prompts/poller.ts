@@ -4,7 +4,7 @@ import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
-import type { Task } from '../providers/types.js'
+import type { Task, TaskProvider } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import {
@@ -19,14 +19,9 @@ import type { ScheduledPrompt } from './types.js'
 
 const log = logger.child({ scope: 'deferred:poller' })
 
-/** 60 seconds */
 const SCHEDULED_POLL_MS = 60_000
-/** 5 minutes */
 const ALERT_POLL_MS = 5 * 60_000
-
-/** Max concurrent LLM invocations per poll cycle. */
 const MAX_CONCURRENT_LLM_CALLS = 5
-/** Max concurrent user alert evaluations per poll cycle. */
 const MAX_CONCURRENT_USERS = 10
 
 let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
@@ -35,6 +30,12 @@ let alertIntervalId: ReturnType<typeof setInterval> | null = null
 function formatTaskStatus(status: string | undefined): string {
   if (status === undefined) return ''
   return ` (${status})`
+}
+
+function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
+  for (const r of results) {
+    if (r.status === 'rejected') log.error({ error: String(r.reason) }, context)
+  }
 }
 
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
@@ -130,12 +131,7 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
       limit((): Promise<void> => executeScheduledPromptsForUser(userId, prompts, chat, buildProviderFn)),
     ),
   )
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      log.error({ error: String(result.reason) }, 'Error executing scheduled prompts for user')
-    }
-  }
+  logSettledErrors(results, 'Error executing scheduled prompts for user')
 }
 
 async function executeSingleAlert(
@@ -144,9 +140,10 @@ async function executeSingleAlert(
   tasks: Task[],
   snapshots: Map<string, string>,
   chat: ChatProvider,
-  buildProviderFn: BuildProviderFn,
+  provider: TaskProvider,
+  evalNow: Date,
 ): Promise<void> {
-  const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots))
+  const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots, evalNow))
   if (matchedTasks.length === 0) return
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
@@ -157,7 +154,7 @@ async function executeSingleAlert(
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
+    response = await invokeLlmWithHistory(userId, trigger, () => provider)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
@@ -176,6 +173,7 @@ async function executeAlertsForUser(
   alerts: ReturnType<typeof getEligibleAlertPrompts>,
   chat: ChatProvider,
   buildProviderFn: BuildProviderFn,
+  evalNow: Date,
 ): Promise<void> {
   const provider = buildProviderFn(userId)
   if (provider === null) {
@@ -194,15 +192,10 @@ async function executeAlertsForUser(
   const alertLimit = pLimit(MAX_CONCURRENT_LLM_CALLS)
   const alertResults = await Promise.allSettled(
     alerts.map((alert) =>
-      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, buildProviderFn)),
+      alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, provider, evalNow)),
     ),
   )
-
-  for (const result of alertResults) {
-    if (result.status === 'rejected') {
-      log.error({ userId, error: String(result.reason) }, 'Error evaluating alert')
-    }
-  }
+  logSettledErrors(alertResults, 'Error evaluating alert')
 
   updateSnapshots(userId, tasks)
 }
@@ -211,9 +204,10 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
   log.debug('pollAlertsOnce called')
 
   const eligibleAlerts = getEligibleAlertPrompts()
-  log.debug({ count: eligibleAlerts.length }, 'Eligible alert prompts found')
 
   if (eligibleAlerts.length === 0) return
+
+  const now = new Date()
 
   const byUser = new Map<string, typeof eligibleAlerts>()
   for (const alert of eligibleAlerts) {
@@ -228,15 +222,10 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
   const userLimit = pLimit(MAX_CONCURRENT_USERS)
   const results = await Promise.allSettled(
     [...byUser.entries()].map(([userId, alerts]) =>
-      userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn)),
+      userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn, now)),
     ),
   )
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      log.error({ error: String(result.reason) }, 'Error polling alerts for user')
-    }
-  }
+  logSettledErrors(results, 'Error polling alerts for user')
 }
 
 export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderFn): void {
@@ -261,12 +250,10 @@ export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderF
 
 export function stopPollers(): void {
   log.info('Stopping deferred prompt pollers')
-
   if (scheduledIntervalId !== null) {
     clearInterval(scheduledIntervalId)
     scheduledIntervalId = null
   }
-
   if (alertIntervalId !== null) {
     clearInterval(alertIntervalId)
     alertIntervalId = null

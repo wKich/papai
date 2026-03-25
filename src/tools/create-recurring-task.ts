@@ -3,10 +3,11 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
-import { describeCron, parseCron } from '../cron.js'
+import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { createRecurringTask } from '../recurring.js'
 import type { TriggerType } from '../types/recurring.js'
+import { semanticScheduleToCron, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:create-recurring-task' })
 
@@ -21,10 +22,18 @@ const inputSchema = z.object({
   triggerType: z
     .enum(['cron', 'on_complete'])
     .describe("'cron' for fixed schedule, 'on_complete' for after-completion"),
-  cronExpression: z
-    .string()
+  schedule: z
+    .object({
+      frequency: z.enum(['daily', 'weekly', 'monthly', 'weekdays', 'weekends']).describe('How often the task repeats'),
+      time: z.string().describe("Time of day in HH:MM 24-hour format (user's local time)"),
+      days_of_week: z
+        .array(z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']))
+        .optional()
+        .describe('Which days for weekly frequency (e.g. ["mon", "wed", "fri"])'),
+      day_of_month: z.number().int().min(1).max(31).optional().describe('Day of month for monthly frequency (1–31)'),
+    })
     .optional()
-    .describe("5-field cron (min hr dom mon dow). Required for 'cron'. E.g. '0 9 * * 1'"),
+    .describe("Schedule configuration for 'cron' triggerType"),
   catchUp: z.boolean().optional().describe('Create missed occurrences on resume. Default: false'),
 })
 
@@ -33,21 +42,27 @@ type Input = z.infer<typeof inputSchema>
 function executeCreate(userId: string, input: Input): unknown {
   log.debug({ userId, title: input.title, triggerType: input.triggerType }, 'Creating recurring task')
 
-  if (input.triggerType === 'cron' && (input.cronExpression === undefined || input.cronExpression === '')) {
-    return { error: "cronExpression is required when triggerType is 'cron'" }
-  }
-
-  if (input.triggerType === 'cron' && parseCron(input.cronExpression!) === null) {
-    return {
-      error: `Invalid cronExpression '${input.cronExpression!}': unable to parse as a valid 5-field cron expression (min hr dom mon dow)`,
-    }
+  if (input.triggerType === 'cron' && input.schedule === undefined) {
+    return { error: "schedule is required when triggerType is 'cron'" }
   }
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+
+  const cronExpression =
+    input.triggerType === 'cron' && input.schedule !== undefined ? semanticScheduleToCron(input.schedule) : undefined
+
   const record = createRecurringTask({
     userId,
-    ...input,
+    title: input.title,
+    projectId: input.projectId,
+    description: input.description,
+    priority: input.priority,
+    status: input.status,
+    assignee: input.assignee,
+    labels: input.labels,
     triggerType: input.triggerType satisfies TriggerType,
+    cronExpression,
+    catchUp: input.catchUp,
     timezone,
   })
 
@@ -64,7 +79,7 @@ function executeCreate(userId: string, input: Input): unknown {
     projectId: record.projectId,
     triggerType: record.triggerType,
     schedule,
-    nextRun: record.nextRun,
+    nextRun: utcToLocal(record.nextRun, record.timezone),
     enabled: record.enabled,
   }
 }

@@ -71,15 +71,15 @@ if [ "$STAGED_MODE" = true ]; then
   # Run format:check on staged files
   (
     exit_code=0
-    bunx oxfmt --check "${relevant_files[@]}" >"$TMPDIR/format_check.out" 2>&1 || exit_code=$?
+    bunx oxfmt --check --ignore-path=.oxfmtignore "${relevant_files[@]}" >"$TMPDIR/format_check.out" 2>&1 || exit_code=$?
     echo "$exit_code" >"$TMPDIR/format_check.exit"
   ) &
   format_pid=$!
 
-  # Wait for all background jobs
-  wait "$lint_pid"
-  wait "$typecheck_pid"
-  wait "$format_pid"
+  # Wait for all background jobs (|| true prevents set -e from aborting on failure)
+  wait "$lint_pid" || true
+  wait "$typecheck_pid" || true
+  wait "$format_pid" || true
 
   # Check results and display failures
   for check in "${checks[@]}"; do
@@ -128,9 +128,9 @@ else
     pids+=($!)
   done
 
-  # Wait for all background jobs
+  # Wait for all background jobs (|| true prevents set -e from aborting on failure)
   for pid in "${pids[@]}"; do
-    wait "$pid"
+    wait "$pid" || true
   done
 
   # Check results and display failures

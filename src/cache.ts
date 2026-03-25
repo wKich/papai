@@ -277,8 +277,9 @@ export function getCachedInstructions(contextId: string): readonly { id: string;
 export function addCachedInstruction(contextId: string, instruction: { id: string; text: string }): void {
   const cache = getOrCreateCache(contextId)
   cache.instructions ??= []
-  cache.instructions.push({ ...instruction, createdAt: new Date().toISOString() })
-  syncInstructionToDb(contextId, instruction)
+  const createdAt = new Date().toISOString()
+  cache.instructions.push({ ...instruction, createdAt })
+  syncInstructionToDb(contextId, { ...instruction, createdAt })
 }
 
 export function deleteCachedInstruction(contextId: string, id: string): void {

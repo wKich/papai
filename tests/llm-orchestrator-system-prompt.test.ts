@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
 
 import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
 
@@ -33,4 +33,8 @@ describe('buildInstructionsBlock', () => {
     const block = buildInstructionsBlock('ctx-1')
     expect(block).toStartWith('=== Custom instructions ===\n- Always reply in Spanish')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
