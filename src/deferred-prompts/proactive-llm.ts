@@ -148,7 +148,7 @@ export async function invokeLlmWithHistory(
   }
 
   const model = createOpenAICompatible({ name: 'openai-compatible', ...config })(config.mainModel)
-  const tools = makeTools(provider, userId)
+  const tools = makeTools(provider, userId, 'proactive')
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const systemPrompt = buildSystemPrompt(provider, timezone, userId)
 
