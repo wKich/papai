@@ -1,39 +1,27 @@
 #!/usr/bin/env bun
 /**
  * Static analyzer for Bun test mock pollution.
+ * Uses TypeScript compiler API for precise AST-based analysis.
  *
- * Uses the TypeScript compiler API for precise AST-based analysis instead of
- * regex/string heuristics, so it correctly handles all edge cases: nested
- * expressions, aliased identifiers that happen to contain keywords, comments
- * inside mock calls, template literals, etc.
+ * Detects 3 patterns (in a Bun process where all test files share one module registry):
+ *   PATTERN 1 — Barrel mock: mocking a barrel file corrupts sub-module live bindings (HIGH).
+ *               Not fixable with afterAll cleanup; must mock at a lower level.
+ *   PATTERN 2 — Shared module mocked without cleanup: mock persists to other test files (MEDIUM).
+ *               Fix: add afterAll(() => { mock.restore() }).
+ *   PATTERN 3 — Transitive mock pollution: test file B imports src/X which imports the mocked
+ *               module, so B is affected even though it doesn't import the mock target directly (HIGH).
+ *               Fix: add afterAll(() => { mock.restore() }) to the mocker.
  *
- * Detects two patterns that cause cross-file test failures in Bun's shared
- * module registry (all test files run in one process):
- *
- * PATTERN 1 — Barrel mock (HIGH RISK)
- *   A test mocks a barrel module (e.g. commands/index.ts) that re-exports from
- *   sub-modules (e.g. commands/admin.ts). When Bun resolves the barrel's imports
- *   it can corrupt the sub-module's live bindings — so any other test that imports
- *   the sub-module directly receives the mock's value instead of the real one.
- *   This is NOT fixable with afterAll(() => mock.restore()).
- *   Fix: remove the barrel mock; mock at a lower level or skip entirely.
- *
- * PATTERN 2 — Shared module mocked without cleanup (MEDIUM RISK)
- *   A test mocks a module that other test files import directly without mocking.
- *   The mock persists across test files since Bun shares the module registry.
- *   Files that call mock.restore() inside afterAll() are considered mitigated and
- *   are not flagged.
- *   Fix: add afterAll(() => { mock.restore() }), remove the mock, or narrow target.
- *
- * Usage:
- *   bun run scripts/check-mock-pollution.ts
- *   bun run scripts/check-mock-pollution.ts --strict   # treat MEDIUM as error too
+ * Usage: bun run scripts/check-mock-pollution.ts [--strict]
  */
 
 import { existsSync, readFileSync } from 'fs'
 import { dirname, relative, resolve } from 'path'
 
 import ts from 'typescript'
+
+import { findTransitiveImporters } from './check-mock-pollution/graph.js'
+import { buildImportGraph } from './check-mock-pollution/scanner.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -44,24 +32,16 @@ const ROOT =
     : resolve(import.meta.dirname, '..')
 const STRICT = process.argv.includes('--strict')
 
-// Modules that are always safe to mock: they are the intentional mock targets
-// (e.g. external packages, db layer). Only list modules where the mock is
-// architecturally correct and will never be imported without mocking.
-const SAFE_TO_MOCK: readonly string[] = [
-  // External packages are fine — Bun doesn't share them across files in the
-  // same way as project-local modules.
-]
+// Modules always safe to mock (e.g. intentional mock targets never imported without mocking).
+const SAFE_TO_MOCK: readonly string[] = []
 
 // ─── AST helpers ──────────────────────────────────────────────────────────────
 
-/** Parse a source file into a TypeScript AST (no type-checking, parse only). */
 function parseSource(filePath: string): ts.SourceFile {
   const source = readFileSync(filePath, 'utf-8')
-  // setParentNodes=true is required for ts.forEachChild to traverse correctly
   return ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true)
 }
 
-/** Visit every node in the subtree rooted at `node`. */
 function walk(node: ts.Node, visitor: (node: ts.Node) => void): void {
   visitor(node)
   ts.forEachChild(node, (child) => {
@@ -69,24 +49,17 @@ function walk(node: ts.Node, visitor: (node: ts.Node) => void): void {
   })
 }
 
-/** Resolve a relative import specifier from a source file to an absolute path. */
 function resolveSpecifier(fromFile: string, specifier: string): string | null {
-  // external package — skip
   if (!specifier.startsWith('.')) return null
   const fromDir = dirname(fromFile)
   const base = resolve(fromDir, specifier)
-  // Bun imports use .js extensions that map to .ts source files
   for (const candidate of [base, base.replace(/\.js$/, '.ts'), `${base}.ts`, `${base}/index.ts`]) {
     if (existsSync(candidate)) return candidate
   }
   return null
 }
 
-/**
- * Extract all mock.module(specifier, ...) call sites from the AST.
- * Matches the pattern: mock.module('<literal>', factory)
- * Correctly handles `void mock.module(...)` wrappers via full tree walk.
- */
+/** Extract all mock.module(specifier, ...) call sites resolved to absolute paths. */
 function extractMocks(sf: ts.SourceFile, filePath: string): string[] {
   const results: string[] = []
   walk(sf, (node) => {
@@ -103,16 +76,11 @@ function extractMocks(sf: ts.SourceFile, filePath: string): string[] {
   return results
 }
 
-/**
- * Extract all static value import specifiers that resolve to src/ modules.
- * Excludes type-only imports (`import type { X }`) — they are erased at
- * runtime and never trigger module registry entries.
- */
+/** Extract value import specifiers (excludes type-only imports). */
 function extractImports(sf: ts.SourceFile, filePath: string): string[] {
   const results: string[] = []
   walk(sf, (node) => {
     if (!ts.isImportDeclaration(node)) return
-    // Skip type-only imports (`import type { X }`): phaseModifier === TypeKeyword
     if (node.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword) return
     const { moduleSpecifier } = node
     if (!ts.isStringLiteral(moduleSpecifier)) return
@@ -122,11 +90,7 @@ function extractImports(sf: ts.SourceFile, filePath: string): string[] {
   return results
 }
 
-/**
- * Extract sub-module specifiers that a barrel file re-exports.
- * Matches: export { X } from './Y'  and  export * from './Y'
- * Excludes type-only re-exports (`export type { X } from './Y'`).
- */
+/** Extract sub-module specifiers re-exported by a barrel file. */
 function extractReExports(sf: ts.SourceFile, filePath: string): string[] {
   const results: string[] = []
   walk(sf, (node) => {
@@ -140,12 +104,7 @@ function extractReExports(sf: ts.SourceFile, filePath: string): string[] {
   return results
 }
 
-/**
- * Returns true if the file registers an afterAll cleanup via mock.restore().
- * Looks for a CallExpression `afterAll(...)` that contains a descendant
- * CallExpression `mock.restore()` anywhere in its argument subtree.
- * Such files are exempt from Pattern 2: the risk is mitigated by cleanup.
- */
+/** Returns true if the file has afterAll(() => { mock.restore() }) cleanup. */
 function hasRestoreCleanup(sf: ts.SourceFile): boolean {
   let found = false
   walk(sf, (node) => {
@@ -169,21 +128,21 @@ function rel(p: string): string {
   return relative(ROOT, p)
 }
 
-// ─── Scan test files ──────────────────────────────────────────────────────────
+// ─── Scan files ───────────────────────────────────────────────────────────────
 
 const testGlob = new Bun.Glob('tests/**/*.test.ts')
 const testFiles = (await Array.fromAsync(testGlob.scan({ cwd: ROOT }))).map((f) => resolve(ROOT, f))
-// Exclude E2E tests — they run in isolation with Docker
 const unitTests = testFiles.filter((f) => !f.includes('/e2e/'))
 
-type FileInfo = {
-  path: string
-  mocks: string[]
-  imports: string[]
-  hasCleanup: boolean
-}
+type FileInfo = { path: string; mocks: string[]; imports: string[]; hasCleanup: boolean }
 
-const files: FileInfo[] = unitTests.map((filePath) => {
+// Scan test files AND source files to build the complete import graph.
+const allFiles: string[] = [
+  ...unitTests,
+  ...(await Array.fromAsync(new Bun.Glob('src/**/*.ts').scan({ cwd: ROOT }))).map((f) => resolve(ROOT, f)),
+]
+
+const files: FileInfo[] = allFiles.map((filePath) => {
   const sf = parseSource(filePath)
   return {
     path: filePath,
@@ -193,10 +152,10 @@ const files: FileInfo[] = unitTests.map((filePath) => {
   }
 })
 
-// Build indexes: module → files that mock/import it
+const importGraph = buildImportGraph(files.map((f) => ({ path: f.path, imports: f.imports })))
+
 const mockedBy = new Map<string, string[]>()
 const importedBy = new Map<string, string[]>()
-// Track which mocker files have afterAll cleanup
 const mockerHasCleanup = new Map<string, boolean>()
 
 for (const file of files) {
@@ -211,24 +170,20 @@ for (const file of files) {
   }
 }
 
-// ─── Pattern 1: Barrel mock ───────────────────────────────────────────────────
+// ─── Pattern detection ────────────────────────────────────────────────────────
 
 type Issue = { severity: 'HIGH' | 'MEDIUM'; lines: string[] }
 const issues: Issue[] = []
 
+// Pattern 1: Barrel mock
 for (const [mockedModule, mockers] of mockedBy) {
   if (!existsSync(mockedModule)) continue
   const sf = parseSource(mockedModule)
   const reExports = extractReExports(sf, mockedModule)
   if (reExports.length === 0) continue
-
   for (const subModule of reExports) {
-    const directImporters = (importedBy.get(subModule) ?? []).filter(
-      // Only flag files that import sub-module directly AND are NOT the mocker itself
-      (f) => !mockers.includes(f),
-    )
+    const directImporters = (importedBy.get(subModule) ?? []).filter((f) => !mockers.includes(f))
     if (directImporters.length === 0) continue
-
     for (const mocker of mockers) {
       issues.push({
         severity: 'HIGH',
@@ -245,18 +200,13 @@ for (const [mockedModule, mockers] of mockedBy) {
   }
 }
 
-// ─── Pattern 2: Shared module mocked without cleanup ─────────────────────────
-
+// Pattern 2: Shared module mocked without cleanup
 for (const [mockedModule, mockers] of mockedBy) {
   if (SAFE_TO_MOCK.some((s) => mockedModule.endsWith(s))) continue
-
   const directImporters = (importedBy.get(mockedModule) ?? []).filter((f) => !mockers.includes(f))
   if (directImporters.length === 0) continue
-
   for (const mocker of mockers) {
-    // Files with afterAll(() => mock.restore()) cleanup are considered mitigated.
     if (mockerHasCleanup.get(mocker) === true) continue
-
     issues.push({
       severity: 'MEDIUM',
       lines: [
@@ -265,6 +215,31 @@ for (const [mockedModule, mockers] of mockedBy) {
         `  Module : ${rel(mockedModule)}`,
         `  Victims: ${directImporters.map(rel).join(', ')}`,
         `  Fix    : add afterAll(() => { mock.restore() }), or narrow the mock target`,
+      ],
+    })
+  }
+}
+
+// Pattern 3: Transitive mock pollution
+for (const [mockedModule, mockers] of mockedBy) {
+  if (SAFE_TO_MOCK.some((s) => mockedModule.endsWith(s))) continue
+  const transitiveImporters = findTransitiveImporters(mockedModule, importGraph)
+  const directTestImporters = new Set(importedBy.get(mockedModule) ?? [])
+  const affectedTestFiles = transitiveImporters.filter((f) => {
+    return f.endsWith('.test.ts') && !mockers.includes(f) && !directTestImporters.has(f)
+  })
+  if (affectedTestFiles.length === 0) continue
+  for (const mocker of mockers) {
+    if (mockerHasCleanup.get(mocker) === true) continue
+    issues.push({
+      severity: 'HIGH',
+      lines: [
+        `  [HIGH] Transitive mock pollution detected`,
+        `  Mocker : ${rel(mocker)}`,
+        `  Module : ${rel(mockedModule)}`,
+        `  Victims: ${affectedTestFiles.map(rel).join(', ')}`,
+        `  Path   : ${rel(mockedModule)} → ... → ${affectedTestFiles.map(rel).join(', ')}`,
+        `  Fix    : add afterAll(() => { mock.restore() }) to ${rel(mocker)}`,
       ],
     })
   }

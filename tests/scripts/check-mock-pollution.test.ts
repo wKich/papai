@@ -217,6 +217,70 @@ describe('check-mock-pollution — type-only imports', () => {
   })
 })
 
+describe('check-mock-pollution — transitive mock pollution', () => {
+  test('detects when mock affects test through transitive imports', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mock-pollution-transitive-'))
+    try {
+      mkdirSync(join(dir, 'tests'), { recursive: true })
+      mkdirSync(join(dir, 'src', 'db'), { recursive: true })
+
+      writeFileSync(
+        join(dir, 'tests', 'test-a.test.ts'),
+        `
+import { afterAll, mock, test } from 'bun:test'
+void mock.module('../src/db/drizzle.js', () => ({ getDrizzleDb: () => null }))
+test('dummy', () => {})
+`,
+      )
+
+      writeFileSync(
+        join(dir, 'tests', 'test-b.test.ts'),
+        `
+import { test } from 'bun:test'
+import { pollScheduledOnce } from '../src/poller.js'
+test('poll', () => {})
+`,
+      )
+
+      writeFileSync(
+        join(dir, 'src', 'poller.ts'),
+        `
+import { recordBackgroundEvent } from './background-events.js'
+export function pollScheduledOnce() {}
+`,
+      )
+
+      writeFileSync(
+        join(dir, 'src', 'background-events.ts'),
+        `
+import { getDrizzleDb } from './db/drizzle.js'
+export function recordBackgroundEvent() {}
+`,
+      )
+
+      writeFileSync(
+        join(dir, 'src', 'db', 'drizzle.ts'),
+        `
+export function getDrizzleDb() {}
+`,
+      )
+
+      const proc = Bun.spawn(['bun', SCRIPT, '--root', dir], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const stdout = await new Response(proc.stdout).text()
+      await proc.exited
+
+      expect(stdout).toContain('test-b.test.ts')
+      expect(stdout.toLowerCase()).toContain('transitive')
+      expect(proc.exitCode).toBe(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 // Self-check: the checker must pass on the real project with --strict
 describe('check-mock-pollution — self-check on project', () => {
   test('no issues in the real test suite', async () => {
