@@ -182,7 +182,10 @@ for (const [mockedModule, mockers] of mockedBy) {
   const reExports = extractReExports(sf, mockedModule)
   if (reExports.length === 0) continue
   for (const subModule of reExports) {
-    const directImporters = (importedBy.get(subModule) ?? []).filter((f) => !mockers.includes(f))
+    // Only test files matter here; source file victims are handled by Pattern 3.
+    const directImporters = (importedBy.get(subModule) ?? []).filter(
+      (f) => f.endsWith('.test.ts') && !mockers.includes(f),
+    )
     if (directImporters.length === 0) continue
     for (const mocker of mockers) {
       issues.push({
