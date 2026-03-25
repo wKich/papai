@@ -17,14 +17,9 @@ import type { ScheduledPrompt } from './types.js'
 
 const log = logger.child({ scope: 'deferred:poller' })
 
-/** 60 seconds */
 const SCHEDULED_POLL_MS = 60_000
-/** 5 minutes */
 const ALERT_POLL_MS = 5 * 60_000
-
-/** Max concurrent LLM invocations per poll cycle. */
 const MAX_CONCURRENT_LLM_CALLS = 5
-/** Max concurrent user alert evaluations per poll cycle. */
 const MAX_CONCURRENT_USERS = 10
 
 let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
@@ -74,9 +69,25 @@ async function invokeLlm(
   return result.text ?? 'Done.'
 }
 
-function formatTaskStatus(status: string | undefined): string {
-  if (status === undefined) return ''
-  return ` (${status})`
+function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
+  for (const r of results) {
+    if (r.status === 'rejected') log.error({ error: String(r.reason) }, context)
+  }
+}
+
+async function sendResult(
+  chat: ChatProvider,
+  userId: string,
+  response: string,
+  failurePrefix: string,
+  logCtx: Record<string, unknown>,
+): Promise<void> {
+  const text = response.startsWith('Failed: ') ? `${failurePrefix}: ${response.slice(8)}` : response
+  try {
+    await chat.sendMessage(userId, text)
+  } catch (sendError) {
+    log.error({ ...logCtx, error: String(sendError) }, 'Failed to send deferred prompt result')
+  }
 }
 
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
@@ -118,15 +129,15 @@ async function executeScheduledPrompt(
   let response: string
   try {
     response = await invokeLlm(prompt.userId, systemPrompt, prompt.prompt, buildProviderFn)
-    await chat.sendMessage(prompt.userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: prompt.id, userId: prompt.userId, error: errMsg }, 'Scheduled prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
-    await chat.sendMessage(prompt.userId, `Scheduled task failed: ${errMsg}`)
   }
 
   recordBackgroundEvent(prompt.userId, 'scheduled', prompt.prompt, response)
+  await sendResult(chat, prompt.userId, response, 'Scheduled task failed', { id: prompt.id, userId: prompt.userId })
+
   const now = new Date().toISOString()
   if (prompt.cronExpression === null) {
     completeScheduledPrompt(prompt.id, prompt.userId, now)
@@ -146,12 +157,7 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   const results = await Promise.allSettled(
     duePrompts.map((prompt) => limit((): Promise<void> => executeScheduledPrompt(prompt, chat, buildProviderFn))),
   )
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      log.error({ error: String(result.reason) }, 'Error executing scheduled prompt')
-    }
-  }
+  logSettledErrors(results, 'Error executing scheduled prompt')
 }
 
 async function executeSingleAlert(
@@ -168,7 +174,12 @@ async function executeSingleAlert(
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const conditionDesc = describeCondition(alert.condition)
-  const taskList = matchedTasks.map((t) => `- [${t.title}](${t.url})${formatTaskStatus(t.status)}`).join('\n')
+  const taskList = matchedTasks
+    .map((t) => {
+      const status = t.status === undefined ? '' : ` (${t.status})`
+      return `- [${t.title}](${t.url})${status}`
+    })
+    .join('\n')
 
   const systemPrompt = [
     'You are papai, a task management assistant executing an alert check.',
@@ -180,15 +191,15 @@ async function executeSingleAlert(
   let response: string
   try {
     response = await invokeLlm(userId, systemPrompt, userPrompt, provider)
-    await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     log.error({ id: alert.id, userId, error: errMsg }, 'Alert prompt LLM invocation failed')
     response = `Failed: ${errMsg}`
-    await chat.sendMessage(userId, `Alert task failed: ${errMsg}`)
   }
 
   recordBackgroundEvent(userId, 'alert', alert.prompt, response)
+  await sendResult(chat, userId, response, 'Alert task failed', { id: alert.id, userId })
+
   const triggerTime = new Date().toISOString()
   updateAlertTriggerTime(alert.id, userId, triggerTime)
   log.info({ id: alert.id, userId, matchedCount: matchedTasks.length }, 'Alert triggered')
@@ -221,12 +232,7 @@ async function executeAlertsForUser(
       alertLimit((): Promise<void> => executeSingleAlert(alert, userId, tasks, snapshots, chat, provider, evalNow)),
     ),
   )
-
-  for (const result of alertResults) {
-    if (result.status === 'rejected') {
-      log.error({ userId, error: String(result.reason) }, 'Error evaluating alert')
-    }
-  }
+  logSettledErrors(alertResults, 'Error evaluating alert')
 
   updateSnapshots(userId, tasks)
 }
@@ -256,12 +262,7 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
       userLimit((): Promise<void> => executeAlertsForUser(userId, alerts, chat, buildProviderFn, now)),
     ),
   )
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      log.error({ error: String(result.reason) }, 'Error polling alerts for user')
-    }
-  }
+  logSettledErrors(results, 'Error polling alerts for user')
 }
 
 export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderFn): void {

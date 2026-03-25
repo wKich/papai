@@ -1,12 +1,10 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { backgroundEvents, type BackgroundEventRow } from '../db/schema.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'deferred:background-events' })
-
-const RESPONSE_CAP = 2000
 
 export const recordBackgroundEvent = (
   userId: string,
@@ -22,7 +20,7 @@ export const recordBackgroundEvent = (
       userId,
       type,
       prompt,
-      response: response.slice(0, RESPONSE_CAP),
+      response,
       createdAt: new Date().toISOString(),
       injectedAt: null,
     })
@@ -56,7 +54,9 @@ export const pruneBackgroundEvents = (olderThanDays = 30): void => {
   log.debug({ olderThanDays }, 'pruneBackgroundEvents called')
   const db = getDrizzleDb()
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
-  db.delete(backgroundEvents).where(lt(backgroundEvents.createdAt, cutoff)).run()
+  db.delete(backgroundEvents)
+    .where(and(lt(backgroundEvents.createdAt, cutoff), isNotNull(backgroundEvents.injectedAt)))
+    .run()
   log.info({ olderThanDays }, 'Old background events pruned')
 }
 

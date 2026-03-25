@@ -222,6 +222,23 @@ describe('pollScheduledOnce — background events', () => {
     expect(updated!.status).toBe('active')
     expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
   })
+
+  test('records correct LLM response even when sendMessage fails', async () => {
+    const db = await setupTestDb()
+    const userId = 'send-fail-user'
+    setupUserConfig(userId)
+    const failChat = createMockChat()
+    failChat.sendMessage = (): Promise<void> => Promise.reject(new Error('Chat down'))
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(userId, 'report', { fireAt: pastTime })
+
+    await pollScheduledOnce(failChat, () => provider)
+
+    const rows = db.select().from(schema.backgroundEvents).where(eq(schema.backgroundEvents.userId, userId)).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.response).toBe('Task completed.')
+    expect(rows[0]!.response).not.toMatch(/Failed/)
+  })
 })
 
 describe('pollAlertsOnce', () => {

@@ -204,6 +204,10 @@ for (const [mockedModule, mockers] of mockedBy) {
 }
 
 // Pattern 2: Shared module mocked without cleanup
+// Note: Bun runs each test file in its own isolated worker, so mock.module calls
+// in one file do NOT bleed into another file's process. This pattern only matters
+// within a single file's execution context. Files with afterAll(() => { mock.restore() })
+// are considered safe; only flag files that mock shared modules with NO cleanup at all.
 for (const [mockedModule, mockers] of mockedBy) {
   if (SAFE_TO_MOCK.some((s) => mockedModule.endsWith(s))) continue
   const directImporters = (importedBy.get(mockedModule) ?? []).filter((f) => !mockers.includes(f))

@@ -2,21 +2,16 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
+import { mockLogger, mockDrizzle, createMockReply, setupTestDb, getTestDb } from './utils/test-helpers.js'
 
 mockLogger()
+mockDrizzle()
 
 // ---------------------------------------------------------------------------
 // Module mocks — ONLY external boundaries and provider infrastructure.
 // config.js, cache.js, history.js, conversation.js, memory.js, users.js
 // are left REAL (backed by the test DB) to avoid cross-file mock pollution.
 // ---------------------------------------------------------------------------
-
-// Database mock — standard pattern shared across test files
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
 
 // db/index.js — needed by cache.ts for background sync (sync errors are non-fatal)
 let testSqlite: import('bun:sqlite').Database
@@ -77,57 +72,6 @@ void mock.module('@ai-sdk/openai-compatible', () => ({
       'mock-model',
 }))
 
-// Background events mock
-let unseenEventsImpl: (userId: string) => Array<{
-  id: string
-  userId: string
-  type: string
-  prompt: string
-  response: string
-  createdAt: string
-  injectedAt: string | null
-}> = (): BgEvent[] => []
-
-type BgEvent = {
-  id: string
-  userId: string
-  type: string
-  prompt: string
-  response: string
-  createdAt: string
-  injectedAt: string | null
-}
-type ConsumeResult = {
-  eventIds: string[]
-  systemContent: string
-  historyEntries: Array<{ role: 'system'; content: string }>
-} | null
-
-let markEventsInjectedCalls: string[][] = []
-
-void mock.module('../src/deferred-prompts/background-events.js', () => ({
-  consumeUnseenEvents: (userId: string): ConsumeResult => {
-    const events = unseenEventsImpl(userId)
-    if (events.length === 0) return null
-    const lines = events.map((e: BgEvent): string => `[${e.createdAt} | ${e.type}] ${e.prompt}\n→ ${e.response}`)
-    return {
-      eventIds: events.map((e: BgEvent): string => e.id),
-      systemContent: `[Background tasks completed while you were away]\n\n${lines.join('\n\n')}`,
-      historyEntries: events.map((e: BgEvent): { role: 'system'; content: string } => ({
-        role: 'system',
-        content: `[Background: ${e.type} | ${e.createdAt}]\n${e.prompt}\n→ ${e.response}`,
-      })),
-    }
-  },
-  loadUnseenEvents: (userId: string): BgEvent[] => unseenEventsImpl(userId),
-  markEventsInjected: (ids: string[]): void => {
-    markEventsInjectedCalls.push(ids)
-  },
-  recordBackgroundEvent: (): void => {},
-  pruneBackgroundEvents: (): void => {},
-  formatBackgroundEventsMessage: (): string => '',
-}))
-
 afterAll(() => {
   mock.restore()
 })
@@ -136,8 +80,11 @@ afterAll(() => {
 // Real module imports (after mocks are registered)
 // ---------------------------------------------------------------------------
 
+import { eq } from 'drizzle-orm'
+
 import { setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
+import * as schema from '../src/db/schema.js'
 import { processMessage } from '../src/llm-orchestrator.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
@@ -158,7 +105,7 @@ const seedConfigForContext = (ctxId: string): void => {
 const seedConfig = (): void => seedConfigForContext(CTX_ID)
 
 beforeEach(async () => {
-  testDb = await setupTestDb()
+  await setupTestDb()
   const { Database } = await import('bun:sqlite')
   testSqlite = new Database(':memory:')
 
@@ -166,8 +113,6 @@ beforeEach(async () => {
   _userCaches.clear()
 
   generateTextImpl = defaultGenerateTextResult
-  unseenEventsImpl = (): BgEvent[] => []
-  markEventsInjectedCalls = []
   seedConfig()
 })
 
@@ -333,22 +278,19 @@ const msgContent = (m: unknown): string => {
 }
 
 describe('processMessage — background event injection', () => {
-  beforeEach((): void => {
-    unseenEventsImpl = (): BgEvent[] => []
-  })
-
   test('prepends system message when unseen events exist', async () => {
-    unseenEventsImpl = (): BgEvent[] => [
-      {
+    getTestDb()
+      .insert(schema.backgroundEvents)
+      .values({
         id: 'evt-1',
-        userId: 'user-1',
+        userId: CTX_ID,
         type: 'scheduled',
         prompt: 'create report',
         response: 'Created report.',
         createdAt: '2026-03-24T09:00:00Z',
         injectedAt: null,
-      },
-    ]
+      })
+      .run()
 
     let capturedMessages: unknown[] = []
     generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
@@ -374,17 +316,18 @@ describe('processMessage — background event injection', () => {
   })
 
   test('appends background history entries on injection', async () => {
-    unseenEventsImpl = (): BgEvent[] => [
-      {
+    getTestDb()
+      .insert(schema.backgroundEvents)
+      .values({
         id: 'evt-2',
-        userId: 'user-1',
+        userId: CTX_ID,
         type: 'alert',
         prompt: 'check overdue',
         response: '2 overdue.',
         createdAt: '2026-03-24T09:05:00Z',
         injectedAt: null,
-      },
-    ]
+      })
+      .run()
 
     const { reply } = createMockReply()
     await processMessage(reply, CTX_ID, null, 'hello')
@@ -397,7 +340,7 @@ describe('processMessage — background event injection', () => {
   })
 
   test('does not prepend system message when no unseen events', async () => {
-    unseenEventsImpl = (): BgEvent[] => []
+    // No events inserted — DB is empty after setupTestDb()
 
     let capturedMessages: unknown[] = []
     generateTextImpl = (args?: { messages?: unknown[] }): Promise<GenerateTextResult> => {
@@ -413,43 +356,54 @@ describe('processMessage — background event injection', () => {
   })
 
   test('marks events as injected only after successful LLM call', async () => {
-    unseenEventsImpl = (): BgEvent[] => [
-      {
+    getTestDb()
+      .insert(schema.backgroundEvents)
+      .values({
         id: 'evt-mark-1',
-        userId: 'user-1',
+        userId: CTX_ID,
         type: 'scheduled',
         prompt: 'daily report',
         response: 'Report done.',
         createdAt: '2026-03-24T09:00:00Z',
         injectedAt: null,
-      },
-    ]
+      })
+      .run()
 
     const { reply } = createMockReply()
     await processMessage(reply, CTX_ID, null, 'hello')
 
-    expect(markEventsInjectedCalls).toHaveLength(1)
-    expect(markEventsInjectedCalls[0]).toEqual(['evt-mark-1'])
+    const rows = getTestDb()
+      .select({ injectedAt: schema.backgroundEvents.injectedAt })
+      .from(schema.backgroundEvents)
+      .where(eq(schema.backgroundEvents.id, 'evt-mark-1'))
+      .all()
+    expect(rows[0]?.injectedAt).not.toBeNull()
   })
 
   test('does not mark events as injected when LLM call fails', async () => {
-    unseenEventsImpl = (): BgEvent[] => [
-      {
+    getTestDb()
+      .insert(schema.backgroundEvents)
+      .values({
         id: 'evt-fail-1',
-        userId: 'user-1',
+        userId: CTX_ID,
         type: 'alert',
         prompt: 'check overdue',
         response: '2 overdue.',
         createdAt: '2026-03-24T09:05:00Z',
         injectedAt: null,
-      },
-    ]
+      })
+      .run()
 
     generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM crash'))
 
     const { reply } = createMockReply()
     await processMessage(reply, CTX_ID, null, 'hello')
 
-    expect(markEventsInjectedCalls).toHaveLength(0)
+    const rows = getTestDb()
+      .select({ injectedAt: schema.backgroundEvents.injectedAt })
+      .from(schema.backgroundEvents)
+      .where(eq(schema.backgroundEvents.id, 'evt-fail-1'))
+      .all()
+    expect(rows[0]?.injectedAt).toBeNull()
   })
 })
