@@ -21,14 +21,14 @@ void mock.module('../src/db/index.js', () => ({
   initDb: (): void => {},
 }))
 
-// Provider registry — returns a mock provider to avoid real HTTP calls
+// Provider factory — returns a mock provider to avoid real HTTP calls and env var checks
 const mockProvider = {
   name: 'mock',
   capabilities: new Set<string>(),
   getPromptAddendum: (): string => '',
 }
-void mock.module('../src/providers/registry.js', () => ({
-  createProvider: (): typeof mockProvider => mockProvider,
+void mock.module('../src/providers/factory.js', () => ({
+  buildProviderForUser: (): typeof mockProvider => mockProvider,
 }))
 
 // Kaneo provisioning — skip real provisioning

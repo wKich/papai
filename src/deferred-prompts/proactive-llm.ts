@@ -22,6 +22,34 @@ export type ProactiveTrigger = {
   userContent: string
 }
 
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+}
+
+function formatLocalTime(timezone: string): { currentTime: string; displayTimezone: string } {
+  try {
+    return {
+      currentTime: new Date().toLocaleString('en-US', { ...DATE_FORMAT_OPTIONS, timeZone: timezone }),
+      displayTimezone: timezone,
+    }
+  } catch (error) {
+    log.warn(
+      { timezone, error: error instanceof Error ? error.message : String(error) },
+      'Invalid timezone in buildProactiveTrigger; falling back to UTC',
+    )
+    return {
+      currentTime: new Date().toLocaleString('en-US', { ...DATE_FORMAT_OPTIONS, timeZone: 'UTC' }),
+      displayTimezone: 'UTC',
+    }
+  }
+}
+
 /**
  * Build a proactive trigger split into system context and user content.
  * User-authored text stays in userContent to avoid system-prompt elevation.
@@ -32,20 +60,11 @@ export function buildProactiveTrigger(
   timezone: string,
   matchedTasksSummary?: string,
 ): ProactiveTrigger {
-  const currentTime = new Date().toLocaleString('en-US', {
-    timeZone: timezone,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  const { currentTime, displayTimezone } = formatLocalTime(timezone)
 
   const systemLines = [
     '[PROACTIVE EXECUTION]',
-    `Current time: ${currentTime} (${timezone})`,
+    `Current time: ${currentTime} (${displayTimezone})`,
     `Task type: ${type}`,
     '',
     'You are proactively reaching out to the user to fulfill this task.',
