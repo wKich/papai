@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -1067,4 +1067,8 @@ describe('TaskResource', () => {
       await expect(promise).rejects.toThrow('not found')
     })
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
