@@ -68,6 +68,25 @@ export const alertConditionSchema: z.ZodType<AlertCondition> = z.union([
   }),
 ])
 
+// --- Execution metadata ---
+
+export const EXECUTION_MODES = ['lightweight', 'context', 'full'] as const
+export type ExecutionMode = (typeof EXECUTION_MODES)[number]
+
+export const executionMetadataSchema = z.object({
+  mode: z.enum(EXECUTION_MODES),
+  delivery_brief: z.string(),
+  context_snapshot: z.string().nullable().default(null),
+})
+
+export type ExecutionMetadata = z.infer<typeof executionMetadataSchema>
+
+export const DEFAULT_EXECUTION_METADATA: ExecutionMetadata = {
+  mode: 'full',
+  delivery_brief: '',
+  context_snapshot: null,
+}
+
 // --- Domain types ---
 
 export type ScheduledPrompt = {
@@ -80,6 +99,7 @@ export type ScheduledPrompt = {
   status: 'active' | 'completed' | 'cancelled'
   createdAt: string
   lastExecutedAt: string | null
+  executionMetadata: ExecutionMetadata
 }
 
 export type AlertPrompt = {
@@ -92,6 +112,7 @@ export type AlertPrompt = {
   createdAt: string
   lastTriggeredAt: string | null
   cooldownMinutes: number
+  executionMetadata: ExecutionMetadata
 }
 
 // --- Tool result types ---
