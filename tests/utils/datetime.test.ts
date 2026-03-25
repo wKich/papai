@@ -61,8 +61,8 @@ describe('semanticScheduleToCron', () => {
     )
   })
 
-  test('weekly with no days_of_week defaults to every day', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekly', time: '09:00' })).toBe('0 9 * * *')
+  test('weekly with no days_of_week defaults to Monday', () => {
+    expect(semanticScheduleToCron({ frequency: 'weekly', time: '09:00' })).toBe('0 9 * * 1')
   })
 
   test('monthly with explicit day', () => {

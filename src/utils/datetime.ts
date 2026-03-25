@@ -59,7 +59,7 @@ export const semanticScheduleToCron = (schedule: SemanticSchedule): string => {
       return `${m} ${h} * * 0,6`
     case 'weekly': {
       const days = schedule.days_of_week
-      if (days === undefined || days.length === 0) return `${m} ${h} * * *`
+      if (days === undefined || days.length === 0) return `${m} ${h} * * 1`
       const dow = days.map((d) => DAY_OF_WEEK_MAP[d]).join(',')
       return `${m} ${h} * * ${dow}`
     }
