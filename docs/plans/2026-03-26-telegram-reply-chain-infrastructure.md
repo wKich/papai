@@ -336,11 +336,13 @@ git commit -m "feat: implement in-memory message cache
 ```typescript
 // src/message-cache/persistence.ts
 import { queueMicrotask } from 'node:process'
-import { sql } from 'drizzle-orm'
+import { and, eq, gt, lte, sql } from 'drizzle-orm'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { messageMetadata } from '../db/schema.js'
 import type { CachedMessage } from './types.js'
 import { logger } from '../logger.js'
+
+const log = logger.child({ scope: 'message-cache:persistence' })
 
 // Queue for pending writes
 const pendingWrites = new Map<string, CachedMessage>()
@@ -362,7 +364,7 @@ function scheduleFlush(): void {
     try {
       flushPendingWrites()
     } catch (err) {
-      logger.error({ error: err }, 'Failed to flush message cache to database')
+      log.error({ error: err }, 'Failed to flush message cache to database')
     }
   })
 }
@@ -403,9 +405,9 @@ function flushPendingWrites(): void {
       })
       .run()
 
-    logger.debug({ count: writes.length }, 'Persisted messages to database')
+    log.debug({ count: writes.length }, 'Persisted messages to database')
   } catch (err) {
-    logger.error({ error: err, count: writes.length }, 'Failed to persist messages')
+    log.error({ error: err, count: writes.length }, 'Failed to persist messages')
     // Re-queue failed writes
     for (const msg of writes) {
       pendingWrites.set(msg.messageId, msg)
@@ -529,6 +531,8 @@ git commit -m "feat: add SQLite persistence for message cache
 import { getCachedMessage } from './cache.js'
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'message-cache:chain' })
+
 export interface ReplyChainResult {
   chain: string[]
   isComplete: boolean
@@ -544,7 +548,7 @@ export function buildReplyChain(messageId: string, visited: Set<string> = new Se
   while (currentId) {
     // Cycle detection
     if (visited.has(currentId)) {
-      logger.error({ messageId: currentId, chain }, 'Circular reference detected in reply chain')
+      log.error({ messageId: currentId, chain }, 'Circular reference detected in reply chain')
       isComplete = false
       brokenAt = currentId
       break
@@ -558,7 +562,7 @@ export function buildReplyChain(messageId: string, visited: Set<string> = new Se
       // Message not in cache - chain is broken
       isComplete = false
       brokenAt = currentId
-      logger.warn({ messageId: currentId }, 'Message not in cache, stopping chain build')
+      log.warn({ messageId: currentId }, 'Message not in cache, stopping chain build')
       break
     }
 
