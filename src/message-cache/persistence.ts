@@ -118,10 +118,13 @@ export function cleanupExpiredMessages(): void {
   }
 }
 
-// Periodic cleanup (every hour)
-setInterval(
-  () => {
-    cleanupExpiredMessages()
-  },
-  60 * 60 * 1000,
-)
+/** Start hourly cleanup of expired message metadata from the database. */
+export function startMessageCleanupScheduler(): void {
+  setInterval(
+    () => {
+      cleanupExpiredMessages()
+    },
+    60 * 60 * 1000,
+  )
+  log.debug('Message cleanup scheduler started (hourly)')
+}
