@@ -1,31 +1,53 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { mockLogger, setupTestDb, mockDrizzle } from '../utils/test-helpers.js'
+import { and, eq, gt } from 'drizzle-orm'
+
+import { messageMetadata } from '../../src/db/schema.js'
+import type { CachedMessage } from '../../src/message-cache/types.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 // Mock logger before importing modules that use it
 mockLogger()
 
-// Setup test DB and mock drizzle before importing persistence module
-mockDrizzle()
+// Mock getDrizzleDb to return our test database
+let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
+void mock.module('../../src/db/drizzle.js', () => ({
+  getDrizzleDb: (): typeof testDb => testDb,
+}))
 
 afterAll(() => {
   mock.restore()
 })
 
-import { messageMetadata } from '../../src/db/schema.js'
-import {
-  scheduleMessagePersistence,
-  loadMessagesFromDb,
-  cleanupExpiredMessages,
-} from '../../src/message-cache/persistence.js'
+import { scheduleMessagePersistence, cleanupExpiredMessages } from '../../src/message-cache/persistence.js'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
+function loadMessages(contextId: string): CachedMessage[] {
+  const now = Date.now()
+  const rows = testDb
+    .select()
+    .from(messageMetadata)
+    .where(and(eq(messageMetadata.contextId, contextId), gt(messageMetadata.expiresAt, now)))
+    .all()
+
+  return rows.map((row) => ({
+    messageId: row.messageId,
+    contextId: row.contextId,
+    authorId: row.authorId ?? undefined,
+    authorUsername: row.authorUsername ?? undefined,
+    text: row.text ?? undefined,
+    replyToMessageId: row.replyToMessageId ?? undefined,
+    timestamp: row.timestamp,
+  }))
+}
+
 describe('Message Persistence', () => {
   beforeEach(async () => {
-    const db = await setupTestDb()
+    testDb = await setupTestDb()
     // Clear table between tests
-    db.delete(messageMetadata).run()
+    testDb.delete(messageMetadata).run()
   })
 
   test('should persist messages to database via microtask flush', async () => {
@@ -45,7 +67,7 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(1)
     expect(messages[0]?.messageId).toBe('msg-1')
     expect(messages[0]?.text).toBe('Hello world')
@@ -75,7 +97,7 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(2)
   })
 
@@ -104,7 +126,7 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(1)
     expect(messages[0]?.text).toBe('Updated')
   })
@@ -130,11 +152,11 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const chat1Messages = loadMessagesFromDb('chat-1')
+    const chat1Messages = loadMessages('chat-1')
     expect(chat1Messages).toHaveLength(1)
     expect(chat1Messages[0]?.text).toBe('In chat 1')
 
-    const chat2Messages = loadMessagesFromDb('chat-2')
+    const chat2Messages = loadMessages('chat-2')
     expect(chat2Messages).toHaveLength(1)
     expect(chat2Messages[0]?.text).toBe('In chat 2')
   })
@@ -153,7 +175,7 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(0)
   })
 
@@ -180,7 +202,7 @@ describe('Message Persistence', () => {
 
     cleanupExpiredMessages()
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(1)
     expect(messages[0]?.messageId).toBe('msg-new')
   })
@@ -206,8 +228,8 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const chatA = loadMessagesFromDb('chat-A')
-    const chatB = loadMessagesFromDb('chat-B')
+    const chatA = loadMessages('chat-A')
+    const chatB = loadMessages('chat-B')
 
     expect(chatA).toHaveLength(1)
     expect(chatA[0]?.text).toBe('From chat A')
@@ -226,7 +248,7 @@ describe('Message Persistence', () => {
       setTimeout(resolve, 10)
     })
 
-    const messages = loadMessagesFromDb('chat-1')
+    const messages = loadMessages('chat-1')
     expect(messages).toHaveLength(1)
     expect(messages[0]?.authorId).toBeUndefined()
     expect(messages[0]?.authorUsername).toBeUndefined()

@@ -1,22 +1,20 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { clearMessageCache, mockLogger, mockMessageCache } from '../utils/test-helpers.js'
 
-// Mock at the drizzle level to avoid mock pollution
 mockLogger()
-mockDrizzle()
+mockMessageCache()
 
 afterAll(() => {
   mock.restore()
 })
 
-import { cacheMessage, clearMessageCache } from '../../src/message-cache/cache.js'
+import { cacheMessage } from '../../src/message-cache/cache.js'
 import { buildReplyChain } from '../../src/message-cache/chain.js'
 
 describe('Reply Chain Builder', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     clearMessageCache()
-    await setupTestDb()
   })
 
   test('should build linear chain', () => {

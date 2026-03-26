@@ -1,4 +1,4 @@
-import { and, eq, gt, lte, sql } from 'drizzle-orm'
+import { lte, sql } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { messageMetadata } from '../db/schema.js'
@@ -81,28 +81,6 @@ function flushPendingWrites(): void {
     }
     setTimeout(scheduleFlush, 5000)
   }
-}
-
-/** @public */
-export function loadMessagesFromDb(contextId: string): CachedMessage[] {
-  const db = getDrizzleDb()
-  const now = Date.now()
-
-  const rows = db
-    .select()
-    .from(messageMetadata)
-    .where(and(eq(messageMetadata.contextId, contextId), gt(messageMetadata.expiresAt, now)))
-    .all()
-
-  return rows.map((row) => ({
-    messageId: row.messageId,
-    contextId: row.contextId,
-    authorId: row.authorId ?? undefined,
-    authorUsername: row.authorUsername ?? undefined,
-    text: row.text ?? undefined,
-    replyToMessageId: row.replyToMessageId ?? undefined,
-    timestamp: row.timestamp,
-  }))
 }
 
 export function cleanupExpiredMessages(): void {
