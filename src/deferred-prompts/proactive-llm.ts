@@ -10,13 +10,12 @@ import { extractFactsFromSdkResults, upsertFact } from '../memory.js'
 import type { TaskProvider } from '../providers/types.js'
 import { buildSystemPrompt } from '../system-prompt.js'
 import { makeTools } from '../tools/index.js'
-import { buildProactiveTrigger, formatLocalTime, type ProactiveTrigger } from './proactive-trigger.js'
-import { DEFAULT_EXECUTION_METADATA, type ExecutionMetadata } from './types.js'
+import { buildProactiveTrigger, formatLocalTime } from './proactive-trigger.js'
+import type { ExecutionMetadata } from './types.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
 
 export type BuildProviderFn = (userId: string) => TaskProvider | null
-export type { ProactiveTrigger }
 
 type LlmConfig = { apiKey: string; baseURL: string; mainModel: string }
 
@@ -201,14 +200,4 @@ export function dispatchExecution(
     case 'full':
       return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary)
   }
-}
-
-// --- Backward-compatible wrapper (removed in Task 10) ---
-
-export function invokeLlmWithHistory(
-  userId: string,
-  trigger: ProactiveTrigger,
-  buildProviderFn: BuildProviderFn,
-): Promise<string> {
-  return invokeFull(userId, 'scheduled', trigger.userContent, DEFAULT_EXECUTION_METADATA, buildProviderFn)
 }
