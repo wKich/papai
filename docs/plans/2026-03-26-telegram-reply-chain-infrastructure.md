@@ -14,61 +14,117 @@
 
 **Files:**
 
-- Create: `drizzle/migrations/0005_message_metadata.sql`
+- Create: `src/db/migrations/017_message_metadata.ts`
 - Modify: `src/db/schema.ts`
+- Modify: `src/db/index.ts` (import + add to MIGRATIONS)
+- Modify: `tests/utils/test-helpers.ts` (import + add to ALL_MIGRATIONS)
 
-**Step 1: Create migration file**
+**Step 1: Create TypeScript migration**
 
-```sql
--- drizzle/migrations/0005_message_metadata.sql
-CREATE TABLE message_metadata (
-    message_id TEXT PRIMARY KEY,
-    context_id TEXT NOT NULL,
-    author_id TEXT,
-    author_username TEXT,
-    text TEXT,
-    reply_to_message_id TEXT,
-    timestamp INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-);
+```typescript
+// src/db/migrations/017_message_metadata.ts
+import type { Database } from 'bun:sqlite'
+import type { Migration } from '../migrate.js'
 
-CREATE INDEX idx_message_metadata_context_id ON message_metadata(context_id);
-CREATE INDEX idx_message_metadata_expires_at ON message_metadata(expires_at);
-CREATE INDEX idx_message_metadata_reply_to ON message_metadata(reply_to_message_id);
+export const migration017MessageMetadata: Migration = {
+  id: '017_message_metadata',
+  up(db: Database): void {
+    db.run(`
+      CREATE TABLE message_metadata (
+        message_id TEXT PRIMARY KEY,
+        context_id TEXT NOT NULL,
+        author_id TEXT,
+        author_username TEXT,
+        text TEXT,
+        reply_to_message_id TEXT,
+        timestamp INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      )
+    `)
+    db.run(`CREATE INDEX idx_message_metadata_context_id ON message_metadata(context_id)`)
+    db.run(`CREATE INDEX idx_message_metadata_expires_at ON message_metadata(expires_at)`)
+    db.run(`CREATE INDEX idx_message_metadata_reply_to ON message_metadata(reply_to_message_id)`)
+  },
+}
 ```
 
 **Step 2: Add to Drizzle schema**
 
 ```typescript
-// src/db/schema.ts
-export const messageMetadata = sqliteTable('message_metadata', {
-  messageId: text('message_id').primaryKey(),
-  contextId: text('context_id').notNull(),
-  authorId: text('author_id'),
-  authorUsername: text('author_username'),
-  text: text('text'),
-  replyToMessageId: text('reply_to_message_id'),
-  timestamp: integer('timestamp').notNull(),
-  expiresAt: integer('expires_at').notNull(),
-})
+// src/db/schema.ts (append after existing tables)
+export const messageMetadata = sqliteTable(
+  'message_metadata',
+  {
+    messageId: text('message_id').primaryKey(),
+    contextId: text('context_id').notNull(),
+    authorId: text('author_id'),
+    authorUsername: text('author_username'),
+    text: text('text'),
+    replyToMessageId: text('reply_to_message_id'),
+    timestamp: integer('timestamp').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (table) => [
+    index('idx_message_metadata_context_id').on(table.contextId),
+    index('idx_message_metadata_expires_at').on(table.expiresAt),
+    index('idx_message_metadata_reply_to').on(table.replyToMessageId),
+  ],
+)
 ```
 
-**Step 3: Run migration**
+**Step 3: Register in src/db/index.ts**
 
-```bash
-cd /Users/ki/Projects/experiments/papai && bun drizzle-kit migrate
+Add import at the top (after line 20):
+
+```typescript
+import { migration017MessageMetadata } from './migrations/017_message_metadata.js'
 ```
 
-**Expected:** Migration succeeds, table created.
+Add to MIGRATIONS array (after line 63):
 
-**Step 4: Commit**
+```typescript
+const MIGRATIONS = [
+  // ... existing migrations ...
+  migration016ExecutionMetadata,
+  migration017MessageMetadata, // ADD THIS LINE
+] as const
+```
+
+**Step 4: Register in tests/utils/test-helpers.ts**
+
+Add import at the top (after line 29):
+
+```typescript
+import { migration017MessageMetadata } from '../../src/db/migrations/017_message_metadata.js'
+```
+
+Add to ALL_MIGRATIONS array (after line 52):
+
+```typescript
+const ALL_MIGRATIONS: readonly Migration[] = [
+  // ... existing migrations ...
+  migration016ExecutionMetadata,
+  migration017MessageMetadata, // ADD THIS LINE
+]
+```
+
+**Step 5: Verify migration runs**
 
 ```bash
-git add drizzle/migrations/0005_message_metadata.sql src/db/schema.ts
+bun test tests/db/migrate.test.ts
+```
+
+**Expected:** Tests pass, migration runs successfully.
+
+**Step 6: Commit**
+
+```bash
+git add src/db/migrations/017_message_metadata.ts src/db/schema.ts src/db/index.ts tests/utils/test-helpers.ts
 git commit -m "db: add message_metadata table for reply chain tracking
 
-- Stores message metadata with reply relationships
-- Indexed on context_id, expires_at, reply_to_message_id
+- Custom TypeScript migration (017)
+- Drizzle schema definition with indexes
+- Registered in MIGRATIONS and ALL_MIGRATIONS arrays
 - 1-week TTL via expires_at column"
 ```
 
