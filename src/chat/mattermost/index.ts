@@ -144,8 +144,11 @@ export class MattermostChatProvider implements ChatProvider {
     const channelInfo = await this.fetchChannelInfo(post.channel_id)
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
     const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
-    const rootId = post.root_id === undefined || post.root_id === '' ? undefined : post.root_id
-    const reply = this.buildReplyFn(post.channel_id, post.id, rootId)
+    const threadId =
+      post.root_id === undefined || post.root_id === ''
+        ? replyToMessageId
+        : post.root_id
+    const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const msg: IncomingMessage = {
       user: { id: post.user_id, username: post.user_name ?? null, isAdmin },
