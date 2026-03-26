@@ -18,7 +18,7 @@ const MattermostWsEventSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 })
 
-const MattermostPostSchema = z.object({
+export const MattermostPostSchema = z.object({
   id: z.string(),
   user_id: z.string(),
   channel_id: z.string(),
@@ -36,7 +36,7 @@ const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string(
 
 type MattermostWsEvent = z.infer<typeof MattermostWsEventSchema>
 
-function extractReplyId(parentId?: string, rootId?: string): string | undefined {
+export function extractReplyId(parentId?: string, rootId?: string): string | undefined {
   if (parentId !== undefined && parentId !== '') return parentId
   if (rootId !== undefined && rootId !== '') return rootId
   return undefined
