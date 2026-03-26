@@ -1,3 +1,4 @@
+import { scheduleMessagePersistence } from './persistence.js'
 import type { CachedMessage } from './types.js'
 
 // In-memory cache: messageId -> CachedMessage
@@ -8,6 +9,7 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export function cacheMessage(message: CachedMessage): void {
   messageCache.set(message.messageId, message)
+  scheduleMessagePersistence(message)
 }
 
 export function getCachedMessage(messageId: string): CachedMessage | undefined {

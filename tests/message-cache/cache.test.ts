@@ -1,4 +1,14 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
+
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+
+// Mock at the drizzle level (not persistence) to avoid mock pollution
+mockLogger()
+mockDrizzle()
+
+afterAll(() => {
+  mock.restore()
+})
 
 import {
   cacheMessage,
@@ -9,8 +19,9 @@ import {
 } from '../../src/message-cache/cache.js'
 
 describe('Message Cache', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     clearMessageCache()
+    await setupTestDb()
   })
 
   test('should cache and retrieve message', () => {
