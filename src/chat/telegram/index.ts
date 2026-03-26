@@ -3,13 +3,16 @@ import { Bot, InputFile, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
+import { buildReplyContextChain } from '../../reply-context.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
   ContextType,
   IncomingMessage,
+  ReplyContext,
   ReplyFn,
+  ReplyOptions,
 } from '../types.js'
 import { formatLlmOutput } from './format.js'
 
@@ -122,7 +125,6 @@ export class TelegramChatProvider implements ChatProvider {
     const replyToMessageId = ctx.message?.reply_to_message?.message_id
     const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
 
-    // Cache message metadata for reply chain tracking
     if (messageIdStr !== undefined) {
       cacheMessage({
         messageId: messageIdStr,
@@ -135,18 +137,40 @@ export class TelegramChatProvider implements ChatProvider {
       })
     }
 
+    const replyContext = this.extractReplyContext(ctx, contextId)
+
     return {
-      user: {
-        id: String(id),
-        username: ctx.from?.username ?? null,
-        isAdmin,
-      },
+      user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
       contextId,
       contextType,
       isMentioned,
       text,
       messageId: messageIdStr,
       replyToMessageId: replyToMessageIdStr,
+      replyContext,
+    }
+  }
+
+  private extractReplyContext(ctx: Context, contextId: string): ReplyContext | undefined {
+    const replyToMessage = ctx.message?.reply_to_message
+    const replyToMessageId = replyToMessage?.message_id
+    if (replyToMessage === undefined || replyToMessageId === undefined) return undefined
+
+    const idStr = String(replyToMessageId)
+    const quote = ctx.message?.quote
+    const { chain, chainSummary } = buildReplyContextChain(contextId, idStr)
+    const fromId = replyToMessage.from?.id
+    const threadId = ctx.message?.message_thread_id
+
+    return {
+      messageId: idStr,
+      authorId: fromId === undefined ? undefined : String(fromId),
+      authorUsername: replyToMessage.from?.username ?? null,
+      text: replyToMessage.text,
+      quotedText: quote?.text,
+      threadId: threadId === undefined ? undefined : String(threadId),
+      chain,
+      chainSummary,
     }
   }
 
@@ -183,17 +207,30 @@ export class TelegramChatProvider implements ChatProvider {
   private buildReplyFn(ctx: Context): ReplyFn {
     const chatId = ctx.chat?.id
     const messageId = ctx.message?.message_id
+
+    const buildReplyParams = (options?: ReplyOptions): { message_id: number } | undefined => {
+      if (options?.replyToMessageId !== undefined) {
+        return { message_id: parseInt(options.replyToMessageId, 10) }
+      }
+      return messageId === undefined ? undefined : { message_id: messageId }
+    }
+
     return {
-      text: async (content: string) => {
-        await ctx.reply(content)
+      text: async (content: string, options?: ReplyOptions) => {
+        await ctx.reply(content, { reply_parameters: buildReplyParams(options) })
       },
-      formatted: async (markdown: string) => {
+      formatted: async (markdown: string, options?: ReplyOptions) => {
         const formatted = formatLlmOutput(markdown)
-        await ctx.reply(formatted.text, { entities: formatted.entities })
+        await ctx.reply(formatted.text, {
+          entities: formatted.entities,
+          reply_parameters: buildReplyParams(options),
+        })
       },
-      file: async (file) => {
+      file: async (file, options?: ReplyOptions) => {
         const content = typeof file.content === 'string' ? Buffer.from(file.content, 'utf-8') : file.content
-        await ctx.replyWithDocument(new InputFile(content, file.filename))
+        await ctx.replyWithDocument(new InputFile(content, file.filename), {
+          reply_parameters: buildReplyParams(options),
+        })
       },
       typing: () => {
         ctx.replyWithChatAction('typing').catch(() => undefined)

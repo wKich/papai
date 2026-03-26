@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
 import type {
@@ -9,37 +7,35 @@ import type {
   ContextType,
   IncomingMessage,
   ReplyFn,
+  ReplyOptions,
 } from '../types.js'
+import { buildMattermostReplyContext } from './reply-context.js'
+import {
+  ChannelInfoSchema,
+  ChannelMemberSchema,
+  ChannelSchema,
+  extractReplyId,
+  FileUploadSchema,
+  type MattermostPost,
+  MattermostPostSchema,
+  MattermostWsEventSchema,
+  UserMeSchema,
+} from './schema.js'
+
+export { extractReplyId, MattermostPostSchema } from './schema.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
 
-const MattermostWsEventSchema = z.object({
-  event: z.string(),
-  data: z.record(z.string(), z.unknown()),
-})
-
-export const MattermostPostSchema = z.object({
-  id: z.string(),
-  user_id: z.string(),
-  channel_id: z.string(),
-  message: z.string(),
-  user_name: z.string().optional(),
-  root_id: z.string().optional(),
-  parent_id: z.string().optional(),
-})
-
-const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })
-const ChannelSchema = z.object({ id: z.string() })
-const ChannelInfoSchema = z.object({ type: z.string() })
-const ChannelMemberSchema = z.object({ roles: z.string() })
-const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string() })) })
-
-type MattermostWsEvent = z.infer<typeof MattermostWsEventSchema>
-
-export function extractReplyId(parentId?: string, rootId?: string): string | undefined {
-  if (parentId !== undefined && parentId !== '') return parentId
-  if (rootId !== undefined && rootId !== '') return rootId
-  return undefined
+function cacheIncomingPost(post: MattermostPost, replyToMessageId: string | undefined): void {
+  cacheMessage({
+    messageId: post.id,
+    contextId: post.channel_id,
+    authorId: post.user_id,
+    authorUsername: post.user_name,
+    text: post.message,
+    replyToMessageId,
+    timestamp: Date.now(),
+  })
 }
 
 export class MattermostChatProvider implements ChatProvider {
@@ -101,41 +97,32 @@ export class MattermostChatProvider implements ChatProvider {
     const ws = new WebSocket(wsUrl)
     this.ws = ws
     ws.addEventListener('open', () => {
-      this.onWsOpen()
+      log.debug('Mattermost WebSocket connected, authenticating')
+      this.wsSend({ seq: this.wsSeq++, action: 'authentication_challenge', data: { token: this.token } })
     })
     ws.addEventListener('message', (event) => {
-      void this.onWsMessage(event)
+      void this.handleWsMessage(event)
     })
     ws.addEventListener('close', () => {
-      this.onWsClose()
+      log.warn('Mattermost WebSocket closed, reconnecting in 5s')
+      setTimeout(() => {
+        this.connectWebSocket()
+      }, 5000)
     })
     ws.addEventListener('error', (event) => {
       log.error({ event }, 'Mattermost WebSocket error')
     })
   }
 
-  private onWsOpen(): void {
-    log.debug('Mattermost WebSocket connected, authenticating')
-    this.wsSend({ seq: this.wsSeq++, action: 'authentication_challenge', data: { token: this.token } })
-  }
-
-  private onWsClose(): void {
-    log.warn('Mattermost WebSocket closed, reconnecting in 5s')
-    setTimeout(() => {
-      this.connectWebSocket()
-    }, 5000)
-  }
-
-  private async onWsMessage(event: MessageEvent): Promise<void> {
+  private async handleWsMessage(event: MessageEvent): Promise<void> {
     const parsed = MattermostWsEventSchema.safeParse(JSON.parse(String(event.data)))
     if (!parsed.success) return
-    const wsEvent: MattermostWsEvent = parsed.data
-    if (wsEvent.event === 'hello') {
+    if (parsed.data.event === 'hello') {
       log.info('Mattermost WebSocket authenticated')
       return
     }
-    if (wsEvent.event === 'posted') {
-      await this.handlePostedEvent(wsEvent.data)
+    if (parsed.data.event === 'posted') {
+      await this.handlePostedEvent(parsed.data.data)
     }
   }
 
@@ -148,20 +135,17 @@ export class MattermostChatProvider implements ChatProvider {
     if (post.user_id === this.botUserId) return
 
     const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
-    cacheMessage({
-      messageId: post.id,
-      contextId: post.channel_id,
-      authorId: post.user_id,
-      authorUsername: post.user_name,
-      text: post.message,
-      replyToMessageId,
-      timestamp: Date.now(),
-    })
+    cacheIncomingPost(post, replyToMessageId)
 
+    const replyContext =
+      replyToMessageId === undefined
+        ? undefined
+        : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
     const channelInfo = await this.fetchChannelInfo(post.channel_id)
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
     const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
-    const reply = this.buildReplyFn(post.channel_id, post.id)
+    const rootId = post.root_id === undefined || post.root_id === '' ? undefined : post.root_id
+    const reply = this.buildReplyFn(post.channel_id, post.id, rootId)
     const command = this.matchCommand(post.message)
     const msg: IncomingMessage = {
       user: { id: post.user_id, username: post.user_name ?? null, isAdmin },
@@ -172,6 +156,7 @@ export class MattermostChatProvider implements ChatProvider {
       commandMatch: command?.match,
       messageId: post.id,
       replyToMessageId,
+      replyContext,
     }
     if (command !== null) {
       const auth: AuthorizationResult = {
@@ -229,17 +214,25 @@ export class MattermostChatProvider implements ChatProvider {
     return null
   }
 
-  private buildReplyFn(channelId: string, postId?: string): ReplyFn {
+  private buildReplyFn(channelId: string, postId?: string, threadId?: string): ReplyFn {
+    const post = (message: string, options?: ReplyOptions, extra?: Record<string, unknown>): Promise<unknown> =>
+      this.apiFetch('POST', '/api/v4/posts', {
+        channel_id: channelId,
+        message,
+        root_id: options?.threadId ?? threadId ?? '',
+        ...extra,
+      })
+
     return {
-      text: async (content: string) => {
-        await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: content })
+      text: async (content: string, options?: ReplyOptions) => {
+        await post(content, options)
       },
-      formatted: async (markdown: string) => {
-        await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: markdown })
+      formatted: async (markdown: string, options?: ReplyOptions) => {
+        await post(markdown, options)
       },
-      file: async (file) => {
+      file: async (file, options?: ReplyOptions) => {
         const fileId = await this.uploadFile(channelId, file.content, file.filename)
-        await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: '', file_ids: [fileId] })
+        await post('', options, { file_ids: [fileId] })
       },
       typing: () => {
         this.wsSend({ seq: this.wsSeq++, action: 'user_typing', data: { channel_id: channelId } })

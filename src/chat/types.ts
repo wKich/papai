@@ -15,6 +15,26 @@ export type ChatFile = {
   filename: string
 }
 
+/** Context about a message reply or quote. */
+export type ReplyContext = {
+  /** Platform-specific ID of the message being replied to */
+  messageId: string
+  /** User ID of the original message author (if available) */
+  authorId?: string
+  /** Username of the original message author (if available) */
+  authorUsername?: string | null
+  /** Text content of the message being replied to (if available) */
+  text?: string
+  /** For quote-style replies, the specific quoted text */
+  quotedText?: string
+  /** Platform-specific thread/topic ID (Telegram: message_thread_id, Mattermost: root_id) */
+  threadId?: string
+  /** Full reply chain message IDs in chronological order (oldest first) */
+  chain?: string[]
+  /** Summary of earlier messages in the chain (excludes immediate parent) */
+  chainSummary?: string
+}
+
 /** Incoming message from a user. */
 export type IncomingMessage = {
   user: ChatUser
@@ -29,6 +49,8 @@ export type IncomingMessage = {
   messageId?: string
   /** parent message ID if this is a reply */
   replyToMessageId?: string
+  /** Reply or quote context if this message is a reply */
+  replyContext?: ReplyContext
 }
 
 /** Authorization result for message processing. */
@@ -42,11 +64,19 @@ export type AuthorizationResult = {
 /** Command handler signature. */
 export type CommandHandler = (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>
 
+/** Options for reply functions to control threading behavior. */
+export type ReplyOptions = {
+  /** Reply to this specific message ID */
+  replyToMessageId?: string
+  /** Post in this thread/topic */
+  threadId?: string
+}
+
 /** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {
-  text: (content: string) => Promise<void>
-  formatted: (markdown: string) => Promise<void>
-  file: (file: ChatFile) => Promise<void>
+  text: (content: string, options?: ReplyOptions) => Promise<void>
+  formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
+  file: (file: ChatFile, options?: ReplyOptions) => Promise<void>
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
 }
