@@ -1,17 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 
-import { z } from 'zod'
-
-const MattermostPostSchema = z.object({
-  id: z.string(),
-  user_id: z.string(),
-  channel_id: z.string(),
-  message: z.string(),
-  user_name: z.string().optional(),
-  root_id: z.string().optional(),
-  parent_id: z.string().optional(),
-})
-
+import { MattermostPostSchema } from '../../../src/chat/mattermost'
 describe('MattermostPostSchema', () => {
   test('should parse basic post without reply fields', () => {
     const post = {
