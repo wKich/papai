@@ -41,9 +41,8 @@ function flushPendingWrites(): void {
   const writes = Array.from(pendingWrites.values())
   pendingWrites.clear()
 
-  const db = getDrizzleDb()
-
   try {
+    const db = getDrizzleDb()
     db.insert(messageMetadata)
       .values(
         writes.map((msg) => ({
