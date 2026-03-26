@@ -1,20 +1,20 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { clearMessageCache, mockLogger, mockMessageCache } from '../utils/test-helpers.js'
 
 mockLogger()
-mockDrizzle()
+mockMessageCache()
 
 afterAll(() => {
   mock.restore()
 })
 
-import { buildReplyChain, cacheMessage, clearMessageCache } from '../../src/message-cache/index.js'
+import { cacheMessage } from '../../src/message-cache/cache.js'
+import { buildReplyChain } from '../../src/message-cache/index.js'
 
 describe('Message Cache Integration', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     clearMessageCache()
-    await setupTestDb()
   })
 
   test('should cache telegram-style messages and build chain', () => {

@@ -50,13 +50,3 @@ export function getCachedMessage(contextId: string, messageId: string): CachedMe
 
   return cached
 }
-
-/** @public */
-export function hasCachedMessage(contextId: string, messageId: string): boolean {
-  return getCachedMessage(contextId, messageId) !== undefined
-}
-
-/** @public */
-export function clearMessageCache(): void {
-  messageCache.clear()
-}

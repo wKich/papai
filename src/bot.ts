@@ -11,6 +11,7 @@ import {
 import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
+import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, resolveUserByUsername } from './users.js'
 
 const log = logger.child({ scope: 'bot' })
@@ -124,6 +125,7 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
     }
 
     reply.typing()
-    await processMessage(reply, auth.storageContextId, msg.user.username, msg.text)
+    const prompt = buildPromptWithReplyContext(msg)
+    await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
   })
 }

@@ -57,6 +57,61 @@ const ALL_MIGRATIONS: readonly Migration[] = [
 ]
 
 // ============================================================================
+// MESSAGE CACHE TEST HELPERS
+// ============================================================================
+
+import type { CachedMessage } from '../../src/message-cache/types.js'
+
+// Test-local message cache — fully isolated from production
+const testMessageCache = new Map<string, CachedMessage>()
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+function messageCacheKey(contextId: string, messageId: string): string {
+  return `${contextId}:${messageId}`
+}
+
+/**
+ * Mock the message cache module with a test-local implementation.
+ * Call this BEFORE importing modules that use the cache.
+ */
+export function mockMessageCache(): void {
+  void mock.module('../../src/message-cache/cache.js', () => ({
+    cacheMessage: (message: CachedMessage): void => {
+      testMessageCache.set(messageCacheKey(message.contextId, message.messageId), message)
+    },
+    getCachedMessage: (contextId: string, messageId: string): CachedMessage | undefined => {
+      const cached = testMessageCache.get(messageCacheKey(contextId, messageId))
+      if (cached === undefined) return undefined
+      if (Date.now() - cached.timestamp > ONE_WEEK_MS) {
+        testMessageCache.delete(messageCacheKey(contextId, messageId))
+        return undefined
+      }
+      return cached
+    },
+  }))
+}
+
+/**
+ * Clear the test message cache between tests.
+ */
+export function clearMessageCache(): void {
+  testMessageCache.clear()
+}
+
+/**
+ * Check if a message exists in the test message cache.
+ */
+export function hasCachedMessage(contextId: string, messageId: string): boolean {
+  const cached = testMessageCache.get(messageCacheKey(contextId, messageId))
+  if (cached === undefined) return false
+  if (Date.now() - cached.timestamp > ONE_WEEK_MS) {
+    testMessageCache.delete(messageCacheKey(contextId, messageId))
+    return false
+  }
+  return true
+}
+
+// ============================================================================
 // DATABASE & MIGRATION HELPERS
 // ============================================================================
 
