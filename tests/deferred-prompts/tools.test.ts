@@ -311,3 +311,102 @@ describe('cancel_deferred_prompt', () => {
     expect(await cancel.execute({ id: 'non-existent' }, toolCtx)).toHaveProperty('error')
   })
 })
+
+describe('execution metadata', () => {
+  test('creates with execution metadata', async () => {
+    const t = getTools()['create_deferred_prompt']!
+    if (!t.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await t.execute(
+      {
+        prompt: 'Drink water',
+        schedule: { fire_at: futureFireAt() },
+        execution: { mode: 'lightweight', delivery_brief: 'Simple hydration reminder' },
+      },
+      toolCtx,
+    )
+    expect(result).toHaveProperty('status', 'created')
+  })
+
+  test('creates without execution metadata (backward compat)', async () => {
+    const t = getTools()['create_deferred_prompt']!
+    if (!t.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await t.execute({ prompt: 'Remind me', schedule: { fire_at: futureFireAt() } }, toolCtx)
+    expect(result).toHaveProperty('status', 'created')
+  })
+
+  test('persists execution metadata in scheduled prompt', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const get = tools['get_deferred_prompt']!
+    if (!create.execute || !get.execute) throw new Error('Tool execute is undefined')
+
+    const created: unknown = await create.execute(
+      {
+        prompt: 'Check tasks',
+        schedule: { fire_at: futureFireAt() },
+        execution: { mode: 'context', delivery_brief: 'Remind about standup', context_snapshot: 'Sprint discussion' },
+      },
+      toolCtx,
+    )
+    const id = extractId(created)
+    const detail: unknown = await get.execute({ id }, toolCtx)
+
+    expect(detail).toHaveProperty('executionMetadata.mode', 'context')
+    expect(detail).toHaveProperty('executionMetadata.delivery_brief', 'Remind about standup')
+    expect(detail).toHaveProperty('executionMetadata.context_snapshot', 'Sprint discussion')
+  })
+
+  test('persists execution metadata in alert prompt', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const get = tools['get_deferred_prompt']!
+    if (!create.execute || !get.execute) throw new Error('Tool execute is undefined')
+
+    const created: unknown = await create.execute(
+      {
+        prompt: 'Check overdue',
+        condition: { field: 'task.dueDate', op: 'overdue' },
+        execution: { mode: 'full', delivery_brief: 'Check overdue tasks' },
+      },
+      toolCtx,
+    )
+    const id = extractId(created)
+    const detail: unknown = await get.execute({ id }, toolCtx)
+
+    expect(detail).toHaveProperty('executionMetadata.mode', 'full')
+  })
+
+  test('defaults to full mode when no execution provided', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const get = tools['get_deferred_prompt']!
+    if (!create.execute || !get.execute) throw new Error('Tool execute is undefined')
+
+    const created: unknown = await create.execute({ prompt: 'No exec', schedule: { fire_at: futureFireAt() } }, toolCtx)
+    const id = extractId(created)
+    const detail: unknown = await get.execute({ id }, toolCtx)
+
+    expect(detail).toHaveProperty('executionMetadata.mode', 'full')
+  })
+
+  test('updates execution metadata on scheduled prompt', async () => {
+    const tools = getTools()
+    const create = tools['create_deferred_prompt']!
+    const update = tools['update_deferred_prompt']!
+    const get = tools['get_deferred_prompt']!
+    if (!create.execute || !update.execute || !get.execute) throw new Error('Tool execute is undefined')
+
+    const created: unknown = await create.execute({ prompt: 'Test', schedule: { fire_at: futureFireAt() } }, toolCtx)
+    const id = extractId(created)
+
+    const result: unknown = await update.execute(
+      { id, execution: { mode: 'lightweight', delivery_brief: 'Updated brief' } },
+      toolCtx,
+    )
+    expect(result).toHaveProperty('status', 'updated')
+
+    const detail: unknown = await get.execute({ id }, toolCtx)
+    expect(detail).toHaveProperty('executionMetadata.mode', 'lightweight')
+    expect(detail).toHaveProperty('executionMetadata.delivery_brief', 'Updated brief')
+  })
+})
