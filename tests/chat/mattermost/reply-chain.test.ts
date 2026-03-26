@@ -1,11 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-
-function extractReplyId(parentId?: string, rootId?: string): string | undefined {
-  if (parentId !== undefined && parentId !== '') return parentId
-  if (rootId !== undefined && rootId !== '') return rootId
-  return undefined
-}
-
+import { extractReplyId } from '../../src/chat/mattermost'
 describe('Mattermost Reply Chain', () => {
   test('should extract replyToMessageId from parent_id', () => {
     expect(extractReplyId('parent456', '')).toBe('parent456')
