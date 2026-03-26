@@ -5,6 +5,7 @@ import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
+import { startMessageCleanupScheduler } from './message-cache/index.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
@@ -81,6 +82,8 @@ void announceNewVersion(chatProvider)
 startScheduler(chatProvider)
 
 startPollers(chatProvider, (userId) => buildProviderForUser(userId, false))
+
+startMessageCleanupScheduler()
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')

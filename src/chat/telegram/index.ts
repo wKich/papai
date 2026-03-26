@@ -2,6 +2,7 @@ import type { MessageEntity } from '@grammyjs/types/message.js'
 import { Bot, InputFile, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
+import { cacheMessage } from '../../message-cache/index.js'
 import type {
   AuthorizationResult,
   ChatProvider,
@@ -115,6 +116,25 @@ export class TelegramChatProvider implements ChatProvider {
     const text = ctx.message?.text ?? ''
     const isMentioned = this.isBotMentioned(text, ctx.message?.entities)
 
+    const messageId = ctx.message?.message_id
+    const messageIdStr = messageId === undefined ? undefined : String(messageId)
+
+    const replyToMessageId = ctx.message?.reply_to_message?.message_id
+    const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
+
+    // Cache message metadata for reply chain tracking
+    if (messageIdStr !== undefined) {
+      cacheMessage({
+        messageId: messageIdStr,
+        contextId,
+        authorId: String(id),
+        authorUsername: ctx.from?.username ?? undefined,
+        text,
+        replyToMessageId: replyToMessageIdStr,
+        timestamp: Date.now(),
+      })
+    }
+
     return {
       user: {
         id: String(id),
@@ -125,7 +145,8 @@ export class TelegramChatProvider implements ChatProvider {
       contextType,
       isMentioned,
       text,
-      messageId: ctx.message?.message_id === undefined ? undefined : String(ctx.message.message_id),
+      messageId: messageIdStr,
+      replyToMessageId: replyToMessageIdStr,
     }
   }
 
