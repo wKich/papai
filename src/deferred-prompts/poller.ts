@@ -7,12 +7,8 @@ import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
-import {
-  buildProactiveTrigger,
-  invokeLlmWithHistory,
-  type BuildProviderFn,
-  type ProactiveTrigger,
-} from './proactive-llm.js'
+import { invokeLlmWithHistory, type BuildProviderFn } from './proactive-llm.js'
+import { buildProactiveTrigger, type ProactiveTrigger } from './proactive-trigger.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
 import type { ScheduledPrompt } from './types.js'
