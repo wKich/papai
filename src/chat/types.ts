@@ -27,6 +27,8 @@ export type IncomingMessage = {
   commandMatch?: string
   /** platform-specific message ID for deletion */
   messageId?: string
+  /** parent message ID if this is a reply */
+  replyToMessageId?: string
 }
 
 /** Authorization result for message processing. */
