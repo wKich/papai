@@ -5,6 +5,7 @@ import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
+import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
 import { completionHook } from './completion-hook.js'
@@ -20,17 +21,21 @@ import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
 import { makeListLabelsTool } from './list-labels.js'
+import { makeListMemosTool } from './list-memos.js'
 import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListTasksTool } from './list-tasks.js'
 import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
+import { makePromoteMemoTool } from './promote-memo.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
 import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
+import { makeSaveMemoTool } from './save-memo.js'
+import { makeSearchMemosTool } from './search-memos.js'
 import { makeSearchTasksTool } from './search-tasks.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import { makeUpdateCommentTool } from './update-comment.js'
@@ -151,6 +156,15 @@ function addInstructionTools(tools: ToolSet, contextId: string | undefined): voi
   tools['delete_instruction'] = makeDeleteInstructionTool(contextId)
 }
 
+function addMemoTools(tools: ToolSet, provider: TaskProvider, userId: string | undefined): void {
+  if (userId === undefined) return
+  tools['save_memo'] = makeSaveMemoTool(userId)
+  tools['search_memos'] = makeSearchMemosTool(userId)
+  tools['list_memos'] = makeListMemosTool(userId)
+  tools['archive_memos'] = makeArchiveMemosTool(userId)
+  tools['promote_memo'] = makePromoteMemoTool(provider, userId)
+}
+
 function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
   if (userId === undefined) return
   tools['create_recurring_task'] = makeCreateRecurringTaskTool(userId)
@@ -172,6 +186,7 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
   addRecurringTools(tools, userId)
+  addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)
   if (userId !== undefined && mode === 'normal') {
     const deferredTools = makeDeferredPromptTools(userId)

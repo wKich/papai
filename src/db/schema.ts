@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core'
+import { blob, sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   platformUserId: text('platform_user_id').primaryKey(),
@@ -214,3 +214,44 @@ export const messageMetadata = sqliteTable(
     index('idx_message_metadata_reply_to').on(table.contextId, table.replyToMessageId),
   ],
 )
+
+export const memos = sqliteTable(
+  'memos',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    content: text('content').notNull(),
+    summary: text('summary'),
+    tags: text('tags').notNull().default('[]'),
+    embedding: blob('embedding'),
+    status: text('status').notNull().default('active'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [index('idx_memos_user_status_created').on(table.userId, table.status, table.createdAt)],
+)
+
+export const memoLinks = sqliteTable(
+  'memo_links',
+  {
+    id: text('id').primaryKey(),
+    sourceMemoId: text('source_memo_id').notNull(),
+    targetMemoId: text('target_memo_id'),
+    targetTaskId: text('target_task_id'),
+    relationType: text('relation_type').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_memo_links_source').on(table.sourceMemoId),
+    index('idx_memo_links_target_memo').on(table.targetMemoId),
+  ],
+)
+
+export type MemoRow = typeof memos.$inferSelect
+export type MemoLinkRow = typeof memoLinks.$inferSelect
