@@ -1,10 +1,6 @@
 #!/usr/bin/env bun
-import { existsSync } from 'fs'
-import { join } from 'path'
-
 import { $ } from 'bun'
 
-const SEMGREP_DIR = join(process.cwd(), '.semgrep')
 const SEMGREP_IMAGE = 'semgrep/semgrep:1.156.0'
 
 interface RunOptions {
@@ -46,22 +42,7 @@ async function findRunner(): Promise<Runner> {
   )
 }
 
-async function cloneAIRules(): Promise<string> {
-  const aiRulesDir = join(SEMGREP_DIR, 'ai-best-practices')
-
-  if (existsSync(aiRulesDir)) {
-    console.log('🔄 Updating AI best practices rules...')
-    await $`git -C ${aiRulesDir} pull --depth 1`.nothrow().quiet()
-  } else {
-    console.log('📥 Cloning AI best practices rules...')
-    await $`git clone --depth 1 https://github.com/semgrep/ai-best-practices.git ${aiRulesDir}`
-  }
-
-  console.log('✅ AI rules ready')
-  return join(aiRulesDir, 'rules')
-}
-
-function buildScanArgs(aiRulesPath: string, options: RunOptions): string[] {
+function buildScanArgs(options: RunOptions): string[] {
   const args: string[] = [
     'scan',
     '--config',
@@ -75,7 +56,7 @@ function buildScanArgs(aiRulesPath: string, options: RunOptions): string[] {
     '--config',
     'p/cwe-top-25',
     '--config',
-    aiRulesPath,
+    'p/ai-best-practices',
     '--strict',
     '--error',
   ]
@@ -109,8 +90,8 @@ async function execSemgrep(runner: Runner, scanArgs: string[]): Promise<number> 
   return result.exitCode
 }
 
-async function runSemgrep(runner: Runner, aiRulesPath: string, options: RunOptions): Promise<number> {
-  const scanArgs = buildScanArgs(aiRulesPath, options)
+async function runSemgrep(runner: Runner, options: RunOptions): Promise<number> {
+  const scanArgs = buildScanArgs(options)
 
   console.log('\n🔍 Running security scan...\n')
   console.log(`   Rules: OWASP Top 10, TypeScript, JavaScript, Node.js, CWE Top 25, AI best practices`)
@@ -129,14 +110,13 @@ async function main(): Promise<void> {
 
   try {
     const runner = await findRunner()
-    const aiRulesPath = await cloneAIRules()
-    const exitCode = await runSemgrep(runner, aiRulesPath, options)
+    const exitCode = await runSemgrep(runner, options)
 
     if (exitCode === 0) {
       console.log('\n✅ Security scan passed - no issues found')
     } else if (exitCode === 1) {
       console.log('\n⚠️  Security scan found issues')
-      if (options.ci && existsSync('semgrep-results.sarif')) {
+      if (options.ci) {
         console.log('📄 Results saved to semgrep-results.sarif')
       }
     } else {
