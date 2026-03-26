@@ -27,6 +27,7 @@ import { migration013DeferredPrompts } from '../../src/db/migrations/013_deferre
 import { migration014BackgroundEvents } from '../../src/db/migrations/014_background_events.js'
 import { migration015DropBackgroundEvents } from '../../src/db/migrations/015_drop_background_events.js'
 import { migration016ExecutionMetadata } from '../../src/db/migrations/016_execution_metadata.js'
+import { migration017MessageMetadata } from '../../src/db/migrations/017_message_metadata.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -50,6 +51,7 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration014BackgroundEvents,
   migration015DropBackgroundEvents,
   migration016ExecutionMetadata,
+  migration017MessageMetadata,
 ]
 
 // ============================================================================
