@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { logger } from '../../logger.js'
+import { cacheMessage } from '../../message-cache/index.js'
 import type {
   AuthorizationResult,
   ChatProvider,
@@ -17,12 +18,14 @@ const MattermostWsEventSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 })
 
-const MattermostPostSchema = z.object({
+export const MattermostPostSchema = z.object({
   id: z.string(),
   user_id: z.string(),
   channel_id: z.string(),
   message: z.string(),
   user_name: z.string().optional(),
+  root_id: z.string().optional(),
+  parent_id: z.string().optional(),
 })
 
 const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })
@@ -32,6 +35,12 @@ const ChannelMemberSchema = z.object({ roles: z.string() })
 const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string() })) })
 
 type MattermostWsEvent = z.infer<typeof MattermostWsEventSchema>
+
+export function extractReplyId(parentId?: string, rootId?: string): string | undefined {
+  if (parentId !== undefined && parentId !== '') return parentId
+  if (rootId !== undefined && rootId !== '') return rootId
+  return undefined
+}
 
 export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
@@ -133,37 +142,37 @@ export class MattermostChatProvider implements ChatProvider {
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
     const postJson = data['post']
     if (typeof postJson !== 'string') return
-
     const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
     if (!postResult.success) return
     const post = postResult.data
-
     if (post.user_id === this.botUserId) return
 
+    const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
+    cacheMessage({
+      messageId: post.id,
+      contextId: post.channel_id,
+      authorId: post.user_id,
+      authorUsername: post.user_name,
+      text: post.message,
+      replyToMessageId,
+      timestamp: Date.now(),
+    })
+
     const channelInfo = await this.fetchChannelInfo(post.channel_id)
-    const isGroup = channelInfo.type !== 'D'
-    const contextType: ContextType = isGroup ? 'group' : 'dm'
-
+    const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
     const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
-    const isMentioned = this.isBotMentioned(post.message)
-
     const reply = this.buildReplyFn(post.channel_id, post.id)
     const command = this.matchCommand(post.message)
-
     const msg: IncomingMessage = {
-      user: {
-        id: post.user_id,
-        username: post.user_name ?? null,
-        isAdmin,
-      },
+      user: { id: post.user_id, username: post.user_name ?? null, isAdmin },
       contextId: post.channel_id,
       contextType,
-      isMentioned,
+      isMentioned: this.isBotMentioned(post.message),
       text: post.message,
       commandMatch: command?.match,
       messageId: post.id,
+      replyToMessageId,
     }
-
     if (command !== null) {
       const auth: AuthorizationResult = {
         allowed: true,
@@ -174,7 +183,6 @@ export class MattermostChatProvider implements ChatProvider {
       await command.handler(msg, reply, auth)
       return
     }
-
     if (this.messageHandler !== null) {
       await this.messageHandler(msg, reply)
     }
