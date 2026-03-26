@@ -4,20 +4,16 @@
 
 **Goal:** Enable the bot to capture reply/quote context from user messages, include parent message context in prompts, and respond in the correct thread.
 
-**Architecture:** Extend the `IncomingMessage` type with `ReplyContext`, update Telegram and Mattermost providers to extract platform-specific reply metadata. Telegram provides full parent message in the incoming update, while Mattermost requires fetching the parent post via API. Build contextual prompts and integrate threading support into bot responses.
+**Architecture:** Build `ReplyContext` objects in platform providers using existing message-cache infrastructure (cache, chain builder, persistence). Create a prompt builder module that formats reply context for LLM consumption. Update `ReplyFn` to support threading via `ReplyOptions`.
 
-**Tech Stack:** TypeScript, Grammy (Telegram), Mattermost REST API, SQLite (history storage)
+**Tech Stack:** TypeScript, Grammy (Telegram), Mattermost REST API, SQLite (message cache)
 
----
+**Prerequisites (already implemented):**
 
-## Prerequisites
-
-- Read the design document: `docs/plans/2026-03-26-message-reply-quote-context-design.md`
-- Review current chat types: `src/chat/types.ts`
-- Review Telegram provider: `src/chat/telegram/index.ts`
-- Review Mattermost provider: `src/chat/mattermost/index.ts`
-- Review bot handler: `src/bot.ts`
-- Review history module: `src/history.ts`
+- `src/message-cache/` — In-memory cache with SQLite persistence, `cacheMessage()`, `getCachedMessage()`, `buildReplyChain()`, 1-week TTL
+- `IncomingMessage.replyToMessageId` — Both providers already extract and populate this field
+- Both Telegram and Mattermost providers call `cacheMessage()` on every incoming message
+- Mattermost schema includes `root_id` and `parent_id` fields
 
 ---
 
@@ -29,7 +25,7 @@
 
 **Step 1: Add ReplyContext type**
 
-Add to `src/chat/types.ts` after the `ChatFile` type:
+Add after the `ChatFile` type:
 
 ```typescript
 /** Context about a message reply or quote. */
@@ -46,19 +42,18 @@ export type ReplyContext = {
   quotedText?: string
   /** Platform-specific thread/topic ID (Telegram: message_thread_id, Mattermost: root_id) */
   threadId?: string
-  /** Full reply chain - parent message IDs in order */
+  /** Full reply chain message IDs in chronological order (oldest first) */
   chain?: string[]
-  /** Summary of earlier messages in the chain */
+  /** Summary of earlier messages in the chain (excludes immediate parent) */
   chainSummary?: string
 }
 ```
 
-**Step 2: Update IncomingMessage type**
+**Step 2: Add replyContext to IncomingMessage**
 
-Add `replyContext` field to `IncomingMessage`:
+Keep existing `replyToMessageId` (used by message-cache infrastructure). Add `replyContext`:
 
 ```typescript
-/** Incoming message from a user. */
 export type IncomingMessage = {
   user: ChatUser
   /** storage key: userId in DMs, groupId in groups */
@@ -70,6 +65,8 @@ export type IncomingMessage = {
   commandMatch?: string
   /** platform-specific message ID for deletion */
   messageId?: string
+  /** parent message ID if this is a reply */
+  replyToMessageId?: string
   /** Reply or quote context if this message is a reply */
   replyContext?: ReplyContext
 }
@@ -94,7 +91,6 @@ export type ReplyOptions = {
 Update `ReplyFn` to accept optional `ReplyOptions`:
 
 ```typescript
-/** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
   formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
@@ -106,8 +102,9 @@ export type ReplyFn = {
 
 **Step 5: Verify typecheck passes**
 
-Run: `bun run typecheck`
-Expected: No errors (types only, no implementation yet)
+Run: `bun typecheck`
+
+Expected: No errors (ReplyOptions is optional, so all existing callers are compatible)
 
 **Step 6: Commit**
 
@@ -115,10 +112,10 @@ Expected: No errors (types only, no implementation yet)
 git add src/chat/types.ts
 git commit -m "feat(types): add ReplyContext and ReplyOptions types
 
-Add types for capturing message reply/quote metadata:
-- ReplyContext with messageId, author info, text, threadId
+- ReplyContext with messageId, author info, text, quotedText, threadId, chain, chainSummary
 - ReplyOptions for controlling response threading
-- Update IncomingMessage and ReplyFn to use new types"
+- Update ReplyFn to accept optional ReplyOptions
+- Keep existing replyToMessageId for message-cache compatibility"
 ```
 
 ---
@@ -130,33 +127,57 @@ Add types for capturing message reply/quote metadata:
 - Create: `src/reply-context.ts`
 - Test: `tests/reply-context.test.ts`
 
-**Dependencies:**
-
-- This module builds prompts from `ReplyContext` which is populated by platform providers
-- `chain` and `chainSummary` fields require additional implementation (see Task 3 - Optional)
-
-**Note:** Telegram provides full parent message text in the incoming update (`reply_to_message`), so no enrichment is needed for Telegram. Mattermost fetches the parent post via API in the provider (see Task 4). This module only builds the prompt string from existing ReplyContext.
+**Note:** This module uses the existing `getCachedMessage()` and `buildReplyChain()` from `src/message-cache/` — no history lookup needed.
 
 **Step 1: Create the module file**
 
 Create `src/reply-context.ts`:
 
 ```typescript
-import type { IncomingMessage } from './chat/types.js'
+import type { IncomingMessage, ReplyContext } from './chat/types.js'
 import { logger } from './logger.js'
+import { buildReplyChain, getCachedMessage } from './message-cache/index.js'
 
 const log = logger.child({ scope: 'reply-context' })
 
 /**
+ * Builds chain and summary from cached messages for a reply.
+ * Uses the shared message-cache infrastructure (in-memory + SQLite).
+ */
+export function buildReplyContextChain(
+  contextId: string,
+  replyToMessageId: string,
+): { chain?: string[]; chainSummary?: string } {
+  const result = buildReplyChain(contextId, replyToMessageId)
+
+  if (result.chain.length <= 1) {
+    return {}
+  }
+
+  // Build summary from earlier messages (exclude the last = immediate parent, already shown in replyContext.text)
+  const earlierMessages = result.chain.slice(0, -1)
+  const summaries: string[] = []
+
+  for (const msgId of earlierMessages) {
+    const msg = getCachedMessage(contextId, msgId)
+    if (msg === undefined) continue
+    const author = msg.authorUsername ?? 'user'
+    const text = truncate(msg.text ?? '', 100)
+    summaries.push(`${author}: ${text}`)
+  }
+
+  return {
+    chain: result.chain,
+    chainSummary: summaries.length > 0 ? summaries.join(' → ') : undefined,
+  }
+}
+
+/**
  * Builds a prompt string with reply context prepended.
  *
- * Note: ReplyContext is already fully populated by platform providers:
- * - Telegram: Full parent message included in reply_to_message field
- * - Mattermost: Parent post fetched via GET /api/v4/posts/{post_id}
- *
- * Optional chain and chainSummary (see Task 3):
- * - Telegram: Requires message caching infrastructure
- * - Mattermost: Requires thread API integration
+ * ReplyContext is already fully populated by platform providers:
+ * - Telegram: reply_to_message fields + message cache chain
+ * - Mattermost: cached parent or API fetch + message cache chain
  */
 export function buildPromptWithReplyContext(msg: IncomingMessage): string {
   if (msg.replyContext === undefined) {
@@ -194,138 +215,53 @@ function truncate(text: string, maxLength: number): string {
 }
 ```
 
-**Step 2: Write failing tests**
+**Step 2: Write tests**
 
 Create `tests/reply-context.test.ts`:
 
 ```typescript
-import { describe, expect, mock, test, beforeEach, afterAll } from 'bun:test'
+import { describe, expect, test, beforeEach, afterAll, mock } from 'bun:test'
 import type { IncomingMessage } from '../src/chat/types.js'
+import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
 
-// Mock the history module
-const mockGetHistory = mock(() => Promise.resolve([]))
-void mock.module('../src/history.js', () => ({
-  getHistory: mockGetHistory,
-}))
+mockLogger()
 
-// Mock logger
-void mock.module('../src/logger.js', () => ({
-  logger: {
-    child: () => ({
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-    }),
-  },
-}))
+const testDb = setupTestDb()
+mockDrizzle(testDb.db)
 
-import { enrichWithReplyContext, buildPromptWithReplyContext } from '../src/reply-context.js'
-
-describe('enrichWithReplyContext', () => {
-  beforeEach(() => {
-    mockGetHistory.mockClear()
-  })
-
-  afterAll(() => {
-    mock.restore()
-  })
-
-  test('returns message unchanged when no reply context', async () => {
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: 'Hello',
-    }
-
-    const result = await enrichWithReplyContext(msg)
-
-    expect(result).toBe(msg)
-    expect(mockGetHistory).not.toHaveBeenCalled()
-  })
-
-  test('looks up parent message from history', async () => {
-    mockGetHistory.mockImplementation(() =>
-      Promise.resolve([
-        {
-          id: 1,
-          userId: 'user2',
-          role: 'user',
-          content: 'Original message',
-          timestamp: Date.now(),
-          metadata: { messageId: 'msg123' },
-        },
-      ]),
-    )
-
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: 'Reply text',
-      replyContext: {
-        messageId: 'msg123',
-      },
-    }
-
-    const result = await enrichWithReplyContext(msg)
-
-    expect(result.replyContext?.text).toBe('Original message')
-    expect(result.replyContext?.authorId).toBe('user2')
-  })
-
-  test('handles missing parent message gracefully', async () => {
-    mockGetHistory.mockImplementation(() => Promise.resolve([]))
-
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: 'Reply text',
-      replyContext: {
-        messageId: 'nonexistent',
-      },
-    }
-
-    const result = await enrichWithReplyContext(msg)
-
-    expect(result.replyContext?.text).toBeUndefined()
-    expect(result.replyContext?.authorId).toBeUndefined()
-  })
+afterAll(() => {
+  mock.restore()
 })
+
+import { buildPromptWithReplyContext, buildReplyContextChain } from '../src/reply-context.js'
+import { cacheMessage, clearMessageCache } from '../src/message-cache/index.js'
+
+function makeDmMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
+  return {
+    user: { id: 'user1', username: 'testuser', isAdmin: false },
+    contextId: 'ctx1',
+    contextType: 'dm',
+    isMentioned: false,
+    text: 'Hello world',
+    ...overrides,
+  }
+}
 
 describe('buildPromptWithReplyContext', () => {
   test('returns plain text when no reply context', () => {
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
-      text: 'Hello world',
-    }
-
-    const result = buildPromptWithReplyContext(msg)
-
-    expect(result).toBe('Hello world')
+    const msg = makeDmMessage({ text: 'Hello world' })
+    expect(buildPromptWithReplyContext(msg)).toBe('Hello world')
   })
 
   test('includes parent message context', () => {
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
+    const msg = makeDmMessage({
       text: 'Can you update it?',
       replyContext: {
         messageId: 'msg123',
         authorUsername: 'otheruser',
         text: 'Task #123 needs review',
       },
-    }
+    })
 
     const result = buildPromptWithReplyContext(msg)
 
@@ -335,66 +271,150 @@ describe('buildPromptWithReplyContext', () => {
   })
 
   test('includes quoted text', () => {
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
+    const msg = makeDmMessage({
       text: 'This part is important',
       replyContext: {
         messageId: 'msg123',
         quotedText: 'Important detail here',
       },
-    }
+    })
 
     const result = buildPromptWithReplyContext(msg)
 
     expect(result).toContain('[Quoted text: "Important detail here"]')
   })
 
-  test('truncates long messages', () => {
+  test('includes chain summary', () => {
+    const msg = makeDmMessage({
+      text: 'Follow-up question',
+      replyContext: {
+        messageId: 'msg3',
+        authorUsername: 'bob',
+        text: 'Second message',
+        chainSummary: 'alice: First message',
+      },
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('[Earlier context: alice: First message]')
+    expect(result).toContain('[Replying to message from bob:')
+    expect(result).toContain('Follow-up question')
+  })
+
+  test('truncates long parent messages', () => {
     const longText = 'a'.repeat(300)
-    const msg: IncomingMessage = {
-      user: { id: 'user1', username: 'testuser', isAdmin: false },
-      contextId: 'ctx1',
-      contextType: 'dm',
-      isMentioned: false,
+    const msg = makeDmMessage({
       text: 'Short question',
       replyContext: {
         messageId: 'msg123',
         authorUsername: 'user',
         text: longText,
       },
-    }
+    })
 
     const result = buildPromptWithReplyContext(msg)
 
     expect(result).toContain('...')
     expect(result.length).toBeLessThan(longText.length + 100)
   })
+
+  test('falls back to "user" when authorUsername is missing', () => {
+    const msg = makeDmMessage({
+      text: 'Reply',
+      replyContext: {
+        messageId: 'msg123',
+        text: 'Original',
+      },
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('[Replying to message from user:')
+  })
+})
+
+describe('buildReplyContextChain', () => {
+  beforeEach(() => {
+    clearMessageCache()
+  })
+
+  test('returns empty when chain has only one message', () => {
+    cacheMessage({
+      messageId: 'A',
+      contextId: 'ctx1',
+      text: 'Root message',
+      timestamp: Date.now(),
+    })
+
+    const result = buildReplyContextChain('ctx1', 'A')
+
+    expect(result.chain).toBeUndefined()
+    expect(result.chainSummary).toBeUndefined()
+  })
+
+  test('builds chain summary for multi-message chain', () => {
+    cacheMessage({ messageId: 'A', contextId: 'ctx1', authorUsername: 'alice', text: 'First', timestamp: Date.now() })
+    cacheMessage({
+      messageId: 'B',
+      contextId: 'ctx1',
+      authorUsername: 'bob',
+      text: 'Second',
+      replyToMessageId: 'A',
+      timestamp: Date.now(),
+    })
+    cacheMessage({
+      messageId: 'C',
+      contextId: 'ctx1',
+      authorUsername: 'alice',
+      text: 'Third',
+      replyToMessageId: 'B',
+      timestamp: Date.now(),
+    })
+
+    // Build chain from C (the parent being replied to)
+    const result = buildReplyContextChain('ctx1', 'C')
+
+    expect(result.chain).toEqual(['A', 'B', 'C'])
+    // Summary excludes C (the immediate parent) — only earlier messages
+    expect(result.chainSummary).toContain('alice: First')
+    expect(result.chainSummary).toContain('bob: Second')
+  })
+
+  test('returns undefined chainSummary when earlier messages not cached', () => {
+    // Only the parent is cached, earlier messages expired/missing
+    cacheMessage({
+      messageId: 'C',
+      contextId: 'ctx1',
+      text: 'Third',
+      replyToMessageId: 'B',
+      timestamp: Date.now(),
+    })
+
+    const result = buildReplyContextChain('ctx1', 'C')
+
+    // Chain is broken at B
+    expect(result.chain).toBeUndefined()
+    expect(result.chainSummary).toBeUndefined()
+  })
 })
 ```
 
-**Step 3: Run tests to verify they fail**
+**Step 3: Run tests**
 
 Run: `bun test tests/reply-context.test.ts`
-Expected: Tests fail with module not found errors
 
-**Step 4: Run tests to verify they pass**
-
-Run: `bun test tests/reply-context.test.ts`
 Expected: All tests pass
 
-**Step 5: Commit**
+**Step 4: Commit**
 
 ```bash
 git add src/reply-context.ts tests/reply-context.test.ts
-git commit -m "feat(reply-context): add context enrichment module
+git commit -m "feat: add reply context prompt builder module
 
-Create reply-context module with:
-- enrichWithReplyContext() to look up parent messages
-- buildPromptWithReplyContext() to format context for LLM
-- Full test coverage for context enrichment scenarios"
+- buildReplyContextChain() builds chain and summary from message cache
+- buildPromptWithReplyContext() formats context for LLM prompt
+- Uses existing message-cache infrastructure (no history lookup needed)"
 ```
 
 ---
@@ -406,11 +426,14 @@ Create reply-context module with:
 - Modify: `src/chat/telegram/index.ts`
 - Test: `tests/chat/telegram/reply-context.test.ts`
 
-**Step 1: Update extractMessage to capture reply context**
+**Step 1: Update extractMessage to build ReplyContext**
 
-Modify `extractMessage` method in `src/chat/telegram/index.ts`:
+Modify `extractMessage` method (lines 107-151) in `src/chat/telegram/index.ts`. The method already caches messages and extracts `replyToMessageId`. Add ReplyContext building:
 
 ```typescript
+import { buildReplyContextChain } from '../../reply-context.js'
+import type { ..., ReplyContext } from '../types.js'
+
 private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
   const id = ctx.from?.id
   if (id === undefined) return null
@@ -423,20 +446,45 @@ private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
   const text = ctx.message?.text ?? ''
   const isMentioned = this.isBotMentioned(text, ctx.message?.entities)
 
-  // Extract reply context
-  const replyToMessage = ctx.message?.reply_to_message
-  const quote = ctx.message?.quote
+  const messageId = ctx.message?.message_id
+  const messageIdStr = messageId === undefined ? undefined : String(messageId)
 
-  const replyContext = replyToMessage !== undefined ? {
-    messageId: String(replyToMessage.message_id),
-    authorId: replyToMessage.from?.id !== undefined ? String(replyToMessage.from.id) : undefined,
-    authorUsername: replyToMessage.from?.username ?? null,
-    text: replyToMessage.text,
-    quotedText: quote?.text,
-    threadId: ctx.message?.message_thread_id !== undefined
-      ? String(ctx.message.message_thread_id)
-      : undefined,
-  } : undefined
+  const replyToMessage = ctx.message?.reply_to_message
+  const replyToMessageId = replyToMessage?.message_id
+  const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
+
+  // Cache message metadata for reply chain tracking
+  if (messageIdStr !== undefined) {
+    cacheMessage({
+      messageId: messageIdStr,
+      contextId,
+      authorId: String(id),
+      authorUsername: ctx.from?.username ?? undefined,
+      text,
+      replyToMessageId: replyToMessageIdStr,
+      timestamp: Date.now(),
+    })
+  }
+
+  // Build reply context if this is a reply
+  let replyContext: ReplyContext | undefined
+  if (replyToMessage !== undefined && replyToMessageIdStr !== undefined) {
+    const quote = ctx.message?.quote
+    const { chain, chainSummary } = buildReplyContextChain(contextId, replyToMessageIdStr)
+
+    replyContext = {
+      messageId: replyToMessageIdStr,
+      authorId: replyToMessage.from?.id !== undefined ? String(replyToMessage.from.id) : undefined,
+      authorUsername: replyToMessage.from?.username ?? null,
+      text: replyToMessage.text,
+      quotedText: quote?.text,
+      threadId: ctx.message?.message_thread_id !== undefined
+        ? String(ctx.message.message_thread_id)
+        : undefined,
+      chain,
+      chainSummary,
+    }
+  }
 
   return {
     user: {
@@ -448,7 +496,8 @@ private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
     contextType,
     isMentioned,
     text,
-    messageId: ctx.message?.message_id === undefined ? undefined : String(ctx.message.message_id),
+    messageId: messageIdStr,
+    replyToMessageId: replyToMessageIdStr,
     replyContext,
   }
 }
@@ -456,15 +505,14 @@ private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
 
 **Step 2: Update buildReplyFn to support threading**
 
-Modify `buildReplyFn` method:
+Modify `buildReplyFn` method (lines 183-212) to pass `reply_parameters`:
 
 ```typescript
-import type { ReplyFn, ReplyOptions } from '../types.js'
+import type { ..., ReplyOptions } from '../types.js'
 
 private buildReplyFn(ctx: Context): ReplyFn {
   const chatId = ctx.chat?.id
   const messageId = ctx.message?.message_id
-
   return {
     text: async (content: string, options?: ReplyOptions) => {
       const replyParams = options?.replyToMessageId !== undefined
@@ -472,10 +520,7 @@ private buildReplyFn(ctx: Context): ReplyFn {
         : messageId !== undefined
           ? { message_id: messageId }
           : undefined
-
-      await ctx.reply(content, {
-        reply_parameters: replyParams,
-      })
+      await ctx.reply(content, { reply_parameters: replyParams })
     },
     formatted: async (markdown: string, options?: ReplyOptions) => {
       const formatted = formatLlmOutput(markdown)
@@ -484,20 +529,18 @@ private buildReplyFn(ctx: Context): ReplyFn {
         : messageId !== undefined
           ? { message_id: messageId }
           : undefined
-
       await ctx.reply(formatted.text, {
         entities: formatted.entities,
         reply_parameters: replyParams,
       })
     },
-    file: async (file: ChatFile, options?: ReplyOptions) => {
+    file: async (file, options?: ReplyOptions) => {
       const content = typeof file.content === 'string' ? Buffer.from(file.content, 'utf-8') : file.content
       const replyParams = options?.replyToMessageId !== undefined
         ? { message_id: parseInt(options.replyToMessageId, 10) }
         : messageId !== undefined
           ? { message_id: messageId }
           : undefined
-
       await ctx.replyWithDocument(new InputFile(content, file.filename), {
         reply_parameters: replyParams,
       })
@@ -524,437 +567,100 @@ private buildReplyFn(ctx: Context): ReplyFn {
 Create `tests/chat/telegram/reply-context.test.ts`:
 
 ```typescript
-import { describe, expect, test, mock, beforeAll, afterAll } from 'bun:test'
-import type { Context } from 'grammy'
+import { describe, expect, test } from 'bun:test'
+import type { ReplyContext } from '../../../src/chat/types.js'
 
-// Mock dependencies
-void mock.module('../../../src/logger.js', () => ({
-  logger: {
-    child: () => ({
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-    }),
-  },
-}))
+describe('Telegram reply context extraction logic', () => {
+  test('builds ReplyContext from reply_to_message', () => {
+    // Simulate what extractMessage does
+    const replyToMessage = {
+      message_id: 111,
+      from: { id: 222, username: 'originaluser' },
+      text: 'Original message',
+    }
+    const quote = undefined
 
-void mock.module('../../../src/chat/telegram/format.js', () => ({
-  formatLlmOutput: (text: string) => ({ text, entities: [] }),
-}))
+    const replyContext: ReplyContext = {
+      messageId: String(replyToMessage.message_id),
+      authorId: String(replyToMessage.from.id),
+      authorUsername: replyToMessage.from.username ?? null,
+      text: replyToMessage.text,
+      quotedText: quote?.text,
+    }
 
-import { TelegramChatProvider } from '../../../src/chat/telegram/index.js'
-
-describe('TelegramChatProvider reply context', () => {
-  let provider: TelegramChatProvider
-
-  beforeAll(() => {
-    process.env.TELEGRAM_BOT_TOKEN = 'test-token'
-    provider = new TelegramChatProvider()
-  })
-
-  afterAll(() => {
-    mock.restore()
-  })
-
-  test('extracts reply context from reply_to_message', () => {
-    const mockContext = {
-      from: { id: 123, username: 'testuser' },
-      chat: { id: 456, type: 'private' },
-      message: {
-        message_id: 789,
-        text: 'Reply text',
-        reply_to_message: {
-          message_id: 111,
-          from: { id: 222, username: 'originaluser' },
-          text: 'Original message',
-        },
-      },
-    } as unknown as Context
-
-    // Access private method via any
-    const msg = (provider as unknown as { extractMessage(ctx: Context, isAdmin: boolean): unknown }).extractMessage(
-      mockContext,
-      false,
-    )
-
-    expect(msg).not.toBeNull()
-    expect(msg?.replyContext).toBeDefined()
-    expect(msg?.replyContext?.messageId).toBe('111')
-    expect(msg?.replyContext?.authorId).toBe('222')
-    expect(msg?.replyContext?.authorUsername).toBe('originaluser')
-    expect(msg?.replyContext?.text).toBe('Original message')
+    expect(replyContext.messageId).toBe('111')
+    expect(replyContext.authorId).toBe('222')
+    expect(replyContext.authorUsername).toBe('originaluser')
+    expect(replyContext.text).toBe('Original message')
+    expect(replyContext.quotedText).toBeUndefined()
   })
 
   test('extracts quote text from reply', () => {
-    const mockContext = {
-      from: { id: 123, username: 'testuser' },
-      chat: { id: 456, type: 'private' },
-      message: {
-        message_id: 789,
-        text: 'Reply text',
-        reply_to_message: {
-          message_id: 111,
-          from: { id: 222, username: 'originaluser' },
-          text: 'Full original message',
-        },
-        quote: {
-          text: 'Quoted portion',
-        },
-      },
-    } as unknown as Context
+    const replyToMessage = {
+      message_id: 111,
+      from: { id: 222, username: 'originaluser' },
+      text: 'Full original message',
+    }
+    const quote = { text: 'Quoted portion' }
 
-    const msg = (provider as unknown as { extractMessage(ctx: Context, isAdmin: boolean): unknown }).extractMessage(
-      mockContext,
-      false,
-    )
+    const replyContext: ReplyContext = {
+      messageId: String(replyToMessage.message_id),
+      authorId: String(replyToMessage.from.id),
+      authorUsername: replyToMessage.from.username ?? null,
+      text: replyToMessage.text,
+      quotedText: quote.text,
+    }
 
-    expect(msg?.replyContext?.quotedText).toBe('Quoted portion')
+    expect(replyContext.quotedText).toBe('Quoted portion')
   })
 
   test('extracts message_thread_id for forum topics', () => {
-    const mockContext = {
-      from: { id: 123, username: 'testuser' },
-      chat: { id: 456, type: 'supergroup' },
-      message: {
-        message_id: 789,
-        text: 'Message in topic',
-        message_thread_id: 999,
-        reply_to_message: {
-          message_id: 111,
-          from: { id: 222, username: 'originaluser' },
-          text: 'Original',
-        },
-      },
-    } as unknown as Context
+    const messageThreadId = 999
+    const replyToMessage = {
+      message_id: 111,
+      from: { id: 222, username: 'user' },
+      text: 'Original',
+    }
 
-    const msg = (provider as unknown as { extractMessage(ctx: Context, isAdmin: boolean): unknown }).extractMessage(
-      mockContext,
-      false,
-    )
+    const replyContext: ReplyContext = {
+      messageId: String(replyToMessage.message_id),
+      threadId: String(messageThreadId),
+      text: replyToMessage.text,
+    }
 
-    expect(msg?.replyContext?.threadId).toBe('999')
+    expect(replyContext.threadId).toBe('999')
   })
 
   test('returns undefined replyContext when not a reply', () => {
-    const mockContext = {
-      from: { id: 123, username: 'testuser' },
-      chat: { id: 456, type: 'private' },
-      message: {
-        message_id: 789,
-        text: 'Standalone message',
-      },
-    } as unknown as Context
+    const replyToMessage = undefined
+    const replyContext = replyToMessage !== undefined ? { messageId: 'irrelevant' } : undefined
 
-    const msg = (provider as unknown as { extractMessage(ctx: Context, isAdmin: boolean): unknown }).extractMessage(
-      mockContext,
-      false,
-    )
-
-    expect(msg?.replyContext).toBeUndefined()
+    expect(replyContext).toBeUndefined()
   })
 })
 ```
 
-**Step 4: Run typecheck**
+**Step 4: Run typecheck and tests**
 
-Run: `bun run typecheck`
-Expected: No errors
+```bash
+bun typecheck
+bun test tests/chat/telegram/reply-context.test.ts
+```
 
-**Step 5: Run tests**
+Expected: All pass
 
-Run: `bun test tests/chat/telegram/reply-context.test.ts`
-Expected: All tests pass
-
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
 git add src/chat/telegram/index.ts tests/chat/telegram/reply-context.test.ts
-git commit -m "feat(telegram): capture reply context and support threading
+git commit -m "feat(telegram): build ReplyContext and support threading
 
-Update Telegram provider to:
 - Extract reply_to_message metadata into ReplyContext
 - Capture quote text when available
+- Build chain/chainSummary from message cache
 - Support message_thread_id for forum topics
-- Update ReplyFn to pass reply_parameters for threading
-
-Add comprehensive tests for reply context extraction."
+- Update buildReplyFn with reply_parameters for threading"
 ```
-
----
-
-## Task 3: Implement Chain History Support (Optional)
-
-**Dependencies:**
-
-- Task 2 (ReplyContext types)
-- See reference docs:
-  - [Telegram Chain History](2026-03-26-telegram-chain-history.md)
-  - [Mattermost Chain History](2026-03-26-mattermost-chain-history.md)
-
-**Purpose:** Implement `chain` and `chainSummary` fields in `ReplyContext` to provide context from earlier messages in conversation threads. This is an optional enhancement - the core reply context works without it.
-
-**Platform Approaches:**
-
-### Telegram Chain History
-
-Telegram Bot API only provides the immediate parent message. To build a chain, we need:
-
-1. **Message Cache Service** - Cache all incoming messages with their reply metadata
-2. **Chain Builder** - Walk back through cached messages to build the chain array
-3. **Summary Generator** - Build human-readable summary from cached messages
-
-**Files:**
-
-- Create: `src/chat/telegram/message-cache.ts`
-- Modify: `src/chat/telegram/index.ts` (to populate chain from cache)
-
-**Implementation:**
-
-```typescript
-// src/chat/telegram/message-cache.ts
-interface CachedMessage {
-  messageId: string
-  text?: string
-  authorId?: string
-  authorUsername?: string | null
-  replyToMessageId?: string
-  timestamp: number
-}
-
-const messageCache = new Map<string, CachedMessage>()
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-export function cacheMessage(
-  messageId: string,
-  text: string | undefined,
-  from: { id?: number; username?: string } | undefined,
-  replyToMessageId: number | undefined,
-): void {
-  messageCache.set(messageId, {
-    messageId,
-    text,
-    authorId: from?.id ? String(from.id) : undefined,
-    authorUsername: from?.username ?? null,
-    replyToMessageId: replyToMessageId ? String(replyToMessageId) : undefined,
-    timestamp: Date.now(),
-  })
-
-  // Prune old entries periodically
-  pruneCache()
-}
-
-function pruneCache(): void {
-  const cutoff = Date.now() - CACHE_TTL_MS
-  for (const [id, msg] of messageCache) {
-    if (msg.timestamp < cutoff) {
-      messageCache.delete(id)
-    }
-  }
-}
-
-export function buildChain(messageId: string, maxDepth: number = 3): string[] | undefined {
-  const chain: string[] = []
-  let currentId: string | undefined = messageId
-
-  while (currentId && chain.length < maxDepth) {
-    const cached = messageCache.get(currentId)
-    if (!cached?.replyToMessageId) break
-
-    chain.push(cached.replyToMessageId)
-    currentId = cached.replyToMessageId
-  }
-
-  return chain.length > 0 ? chain : undefined
-}
-
-export function buildChainSummary(chain: string[]): string | undefined {
-  if (chain.length === 0) return undefined
-
-  const summaries = chain
-    .slice(0, -1) // Exclude immediate parent (already in text field)
-    .map((msgId) => {
-      const msg = messageCache.get(msgId)
-      if (!msg) return null
-      return `${msg.authorUsername || 'user'}: ${truncate(msg.text || '', 100)}`
-    })
-    .filter(Boolean)
-
-  return summaries.length > 0 ? summaries.join(' → ') : undefined
-}
-
-function truncate(text: string, maxLength: number): string {
-  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
-}
-```
-
-### Mattermost Chain History
-
-Mattermost provides thread API to fetch all posts in a thread:
-
-1. **Thread API Client** - Fetch thread via `GET /api/v4/posts/{id}/thread`
-2. **Thread Cache** - Cache thread data to avoid duplicate API calls
-3. **Chain Builder** - Extract ordered post IDs from thread response
-
-**Files:**
-
-- Create: `src/chat/mattermost/thread-cache.ts`
-- Modify: `src/chat/mattermost/index.ts` (to fetch thread and build chain)
-
-**Implementation:**
-
-```typescript
-// src/chat/mattermost/thread-cache.ts
-interface ThreadData {
-  posts: Post[]
-  fetchedAt: number
-}
-
-const threadCache = new Map<string, ThreadData>()
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-
-export async function getThread(apiFetch: ApiFetchFn, threadId: string): Promise<Post[]> {
-  const cached = threadCache.get(threadId)
-
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return cached.posts
-  }
-
-  const response = await apiFetch('GET', `/api/v4/posts/${threadId}/thread`)
-
-  // Parse response: { order: string[], posts: Record<string, Post> }
-  const posts = response.order.map((id: string) => response.posts[id])
-
-  threadCache.set(threadId, {
-    posts,
-    fetchedAt: Date.now(),
-  })
-
-  return posts
-}
-
-export function buildChainFromThread(
-  thread: Post[],
-  currentPostId: string,
-  maxDepth: number = 3,
-): string[] | undefined {
-  const currentIndex = thread.findIndex((p) => p.id === currentPostId)
-  if (currentIndex <= 0) return undefined
-
-  const chain: string[] = []
-  const startIndex = Math.max(0, currentIndex - maxDepth)
-
-  for (let i = startIndex; i < currentIndex; i++) {
-    chain.push(thread[i].id)
-  }
-
-  return chain.length > 0 ? chain : undefined
-}
-
-export function buildChainSummary(thread: Post[], chain: string[]): string | undefined {
-  const postsById = new Map(thread.map((p) => [p.id, p]))
-
-  const summaries = chain
-    .slice(0, -1) // Exclude immediate parent
-    .map((postId) => {
-      const post = postsById.get(postId)
-      if (!post) return null
-      return `${post.user_name || 'user'}: ${truncate(post.message, 100)}`
-    })
-    .filter((s): s is string => s !== null)
-
-  return summaries.length > 0 ? summaries.join(' → ') : undefined
-}
-```
-
-### Integration in Provider
-
-Update provider to use chain builders when creating ReplyContext:
-
-**Telegram:**
-
-```typescript
-// In extractMessage()
-import { cacheMessage, buildChain, buildChainSummary } from './message-cache.js'
-
-// Cache this message first
-if (ctx.message) {
-  cacheMessage(
-    String(ctx.message.message_id),
-    ctx.message.text,
-    ctx.message.from,
-    ctx.message.reply_to_message?.message_id,
-  )
-}
-
-// Build chain if this is a reply
-let chain: string[] | undefined
-let chainSummary: string | undefined
-
-if (replyToMessage) {
-  const parentId = String(replyToMessage.message_id)
-  chain = buildChain(parentId) // Walk back from parent
-  if (chain) {
-    chainSummary = buildChainSummary(chain)
-  }
-}
-
-const replyContext: ReplyContext | undefined = replyToMessage
-  ? {
-      messageId: String(replyToMessage.message_id),
-      authorId: replyToMessage.from?.id ? String(replyToMessage.from.id) : undefined,
-      authorUsername: replyToMessage.from?.username ?? null,
-      text: replyToMessage.text,
-      quotedText: quote?.text,
-      threadId: ctx.message?.message_thread_id ? String(ctx.message.message_thread_id) : undefined,
-      chain, // ← Optional: requires message cache
-      chainSummary, // ← Optional: requires message cache
-    }
-  : undefined
-```
-
-**Mattermost:**
-
-```typescript
-// In handlePostedEvent()
-import { getThread, buildChainFromThread, buildChainSummary } from './thread-cache.js'
-
-if (rootId) {
-  try {
-    // Fetch parent post
-    const parentPost = await this.apiFetch('GET', `/api/v4/posts/${rootId}`)
-
-    // Fetch thread for chain building (optional)
-    let chain: string[] | undefined
-    let chainSummary: string | undefined
-
-    try {
-      const thread = await getThread(this.apiFetch.bind(this), rootId)
-      chain = buildChainFromThread(thread, post.id)
-      if (chain) {
-        chainSummary = buildChainSummary(thread, chain)
-      }
-    } catch (threadError) {
-      log.warn({ error: threadError }, 'Failed to fetch thread for chain')
-    }
-
-    replyContext = {
-      messageId: rootId,
-      threadId: rootId,
-      text: parentPost.message,
-      authorId: parentPost.user_id,
-      authorUsername: parentPost.user_name ?? null,
-      chain, // ← Optional: requires thread API
-      chainSummary, // ← Optional: requires thread API
-    }
-  } catch (error) {
-    // Fallback: minimal context for threading
-    replyContext = { messageId: rootId, threadId: rootId }
-  }
-}
-```
-
-**Note:** Chain functionality is optional - if cache/thread fetch fails, the bot still works with just immediate parent context.
 
 ---
 
@@ -963,75 +669,99 @@ if (rootId) {
 **Files:**
 
 - Modify: `src/chat/mattermost/index.ts`
-- Test: `tests/chat/mattermost/reply-context.test.ts`
+- Test: `tests/chat/mattermost/reply-context.test.ts` (update existing)
 
-**Step 1: Update handlePostedEvent to parse root_id and fetch parent post**
+**Step 1: Update handlePostedEvent to build ReplyContext**
 
-Modify `handlePostedEvent` method in `src/chat/mattermost/index.ts`:
+Modify `handlePostedEvent` method (lines 142-189). Message caching is already done. Add ReplyContext building after the cache call:
 
 ```typescript
+import { cacheMessage, getCachedMessage } from '../../message-cache/index.js'
+import { buildReplyContextChain } from '../../reply-context.js'
+import type { ..., ReplyContext, ReplyOptions } from '../types.js'
+
 private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
   const postJson = data['post']
   if (typeof postJson !== 'string') return
-
   const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
   if (!postResult.success) return
   const post = postResult.data
-
   if (post.user_id === this.botUserId) return
 
-  // Parse root_id for threading
-  const postData = JSON.parse(postJson) as { root_id?: string }
-  const rootId = postData.root_id
+  const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
+  cacheMessage({
+    messageId: post.id,
+    contextId: post.channel_id,
+    authorId: post.user_id,
+    authorUsername: post.user_name,
+    text: post.message,
+    replyToMessageId,
+    timestamp: Date.now(),
+  })
 
-  const channelInfo = await this.fetchChannelInfo(post.channel_id)
-  const isGroup = channelInfo.type !== 'D'
-  const contextType: ContextType = isGroup ? 'group' : 'dm'
-
-  const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
-  const isMentioned = this.isBotMentioned(post.message)
-
-  // Build reply context - fetch parent post if this is a reply
+  // Build reply context if this is a reply
   let replyContext: ReplyContext | undefined
-  if (rootId !== undefined && rootId !== '') {
-    try {
-      // Fetch parent post from Mattermost API
-      const parentPost = await this.apiFetch('GET', `/api/v4/posts/${rootId}`)
+  if (replyToMessageId !== undefined) {
+    const threadId = post.root_id !== undefined && post.root_id !== '' ? post.root_id : replyToMessageId
+    const { chain, chainSummary } = buildReplyContextChain(post.channel_id, replyToMessageId)
+
+    // Try to get parent message from cache first
+    const parentMsg = getCachedMessage(post.channel_id, replyToMessageId)
+    if (parentMsg !== undefined) {
       replyContext = {
-        messageId: rootId,
-        threadId: rootId,
-        text: parentPost.message,
-        authorId: parentPost.user_id,
-        authorUsername: parentPost.user_name ?? null,
+        messageId: replyToMessageId,
+        threadId,
+        text: parentMsg.text,
+        authorId: parentMsg.authorId,
+        authorUsername: parentMsg.authorUsername ?? null,
+        chain,
+        chainSummary,
       }
-    } catch (error) {
-      log.warn({ error: error instanceof Error ? error.message : String(error), rootId }, 'Failed to fetch parent post')
-      // Still create replyContext with just IDs for threading
-      replyContext = {
-        messageId: rootId,
-        threadId: rootId,
+    } else {
+      // Parent not in cache — fetch via API
+      try {
+        const parentPost = await this.apiFetch('GET', `/api/v4/posts/${replyToMessageId}`, undefined)
+        const parsed = MattermostPostSchema.safeParse(parentPost)
+        if (parsed.success) {
+          replyContext = {
+            messageId: replyToMessageId,
+            threadId,
+            text: parsed.data.message,
+            authorId: parsed.data.user_id,
+            authorUsername: parsed.data.user_name ?? null,
+            chain,
+            chainSummary,
+          }
+        } else {
+          replyContext = { messageId: replyToMessageId, threadId }
+        }
+      } catch (error) {
+        log.warn(
+          { error: error instanceof Error ? error.message : String(error), replyToMessageId },
+          'Failed to fetch parent post for reply context',
+        )
+        replyContext = { messageId: replyToMessageId, threadId }
       }
     }
   }
 
+  const channelInfo = await this.fetchChannelInfo(post.channel_id)
+  const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
+  const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
+  const rootId = post.root_id !== undefined && post.root_id !== '' ? post.root_id : undefined
   const reply = this.buildReplyFn(post.channel_id, post.id, rootId)
   const command = this.matchCommand(post.message)
-
   const msg: IncomingMessage = {
-    user: {
-      id: post.user_id,
-      username: post.user_name ?? null,
-      isAdmin,
-    },
+    user: { id: post.user_id, username: post.user_name ?? null, isAdmin },
     contextId: post.channel_id,
     contextType,
-    isMentioned,
+    isMentioned: this.isBotMentioned(post.message),
     text: post.message,
     commandMatch: command?.match,
     messageId: post.id,
+    replyToMessageId,
     replyContext,
   }
-
   if (command !== null) {
     const auth: AuthorizationResult = {
       allowed: true,
@@ -1042,43 +772,40 @@ private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
     await command.handler(msg, reply, auth)
     return
   }
-
   if (this.messageHandler !== null) {
     await this.messageHandler(msg, reply)
   }
 }
 ```
 
-**Step 2: Update buildReplyFn to pass root_id**
+**Step 2: Update buildReplyFn to support threading via root_id**
 
-Modify `buildReplyFn` method:
+Update `buildReplyFn` signature to accept `threadId` and pass `root_id` in posts:
 
 ```typescript
-import type { ReplyFn, ReplyOptions } from '../types.js'
-
 private buildReplyFn(channelId: string, postId?: string, threadId?: string): ReplyFn {
   return {
     text: async (content: string, options?: ReplyOptions) => {
       await this.apiFetch('POST', '/api/v4/posts', {
         channel_id: channelId,
         message: content,
-        root_id: options?.threadId ?? threadId ?? postId,
+        root_id: options?.threadId ?? threadId ?? '',
       })
     },
     formatted: async (markdown: string, options?: ReplyOptions) => {
       await this.apiFetch('POST', '/api/v4/posts', {
         channel_id: channelId,
         message: markdown,
-        root_id: options?.threadId ?? threadId ?? postId,
+        root_id: options?.threadId ?? threadId ?? '',
       })
     },
-    file: async (file: ChatFile, options?: ReplyOptions) => {
+    file: async (file, options?: ReplyOptions) => {
       const fileId = await this.uploadFile(channelId, file.content, file.filename)
       await this.apiFetch('POST', '/api/v4/posts', {
         channel_id: channelId,
         message: '',
         file_ids: [fileId],
-        root_id: options?.threadId ?? threadId ?? postId,
+        root_id: options?.threadId ?? threadId ?? '',
       })
     },
     typing: () => {
@@ -1097,187 +824,73 @@ private buildReplyFn(channelId: string, postId?: string, threadId?: string): Rep
 }
 ```
 
-**Step 3: Write tests**
+**Step 3: Update tests**
 
-Create `tests/chat/mattermost/reply-context.test.ts`:
+Update `tests/chat/mattermost/reply-chain.test.ts` to include ReplyContext extraction tests:
 
 ```typescript
-import { describe, expect, test, mock, beforeAll, afterAll } from 'bun:test'
+// Add to existing test file
 
-// Mock dependencies
-void mock.module('../../../src/logger.js', () => ({
-  logger: {
-    child: () => ({
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-    }),
-  },
-}))
-
-import { MattermostChatProvider } from '../../../src/chat/mattermost/index.js'
-
-describe('MattermostChatProvider reply context', () => {
-  let provider: MattermostChatProvider
-
-  beforeAll(() => {
-    process.env.MATTERMOST_URL = 'http://localhost:8065'
-    process.env.MATTERMOST_BOT_TOKEN = 'test-token'
-    provider = new MattermostChatProvider()
-  })
-
-  afterAll(() => {
-    mock.restore()
-  })
-
-  test('parses root_id from post data', async () => {
-    const postData = {
-      id: 'post123',
+describe('Mattermost Reply Context', () => {
+  test('should build ReplyContext from cached parent', () => {
+    const post = {
+      id: 'reply123',
       user_id: 'user456',
       channel_id: 'channel789',
-      message: 'Reply in thread',
-      root_id: 'root111',
-      user_name: 'testuser',
+      message: 'Reply message',
+      parent_id: 'parent456',
+      root_id: 'root789',
     }
 
-    // Test that root_id is extracted correctly
-    // This would be tested via the handlePostedEvent flow in integration tests
-    expect(postData.root_id).toBe('root111')
+    const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
+    const threadId = post.root_id !== '' ? post.root_id : replyToMessageId
+
+    expect(replyToMessageId).toBe('parent456')
+    expect(threadId).toBe('root789')
   })
 
-  test('buildReplyFn includes root_id in posts', async () => {
-    // Mock the apiFetch method
-    const apiCalls: unknown[] = []
-    const mockApiFetch = mock((method: string, path: string, body: unknown) => {
-      apiCalls.push({ method, path, body })
-      return Promise.resolve({})
-    })
+  test('should use root_id as threadId when available', () => {
+    const post = { root_id: 'root123', parent_id: '' }
+    const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
+    const threadId = post.root_id !== '' ? post.root_id : replyToMessageId
 
-    // Set up the provider with mocked apiFetch
-    const providerAny = provider as unknown as {
-      apiFetch: typeof mockApiFetch
-      buildReplyFn: (channelId: string, postId?: string, threadId?: string) => unknown
-    }
-    providerAny.apiFetch = mockApiFetch
-
-    const reply = providerAny.buildReplyFn('channel123', 'post456', 'root789')
-
-    await (reply as { text: (content: string) => Promise<void> }).text('Test message')
-
-    expect(apiCalls.length).toBe(1)
-    expect((apiCalls[0] as { body: { root_id: string } }).body.root_id).toBe('root789')
+    expect(threadId).toBe('root123')
   })
 
-  test('buildReplyFn uses options threadId over default', async () => {
-    const apiCalls: unknown[] = []
-    const mockApiFetch = mock((method: string, path: string, body: unknown) => {
-      apiCalls.push({ method, path, body })
-      return Promise.resolve({})
-    })
+  test('should fall back to replyToMessageId as threadId', () => {
+    const post = { root_id: '', parent_id: 'parent456' }
+    const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
+    const threadId = post.root_id !== '' ? post.root_id : replyToMessageId
 
-    const providerAny = provider as unknown as {
-      apiFetch: typeof mockApiFetch
-      buildReplyFn: (channelId: string, postId?: string, threadId?: string) => unknown
-    }
-    providerAny.apiFetch = mockApiFetch
-
-    const reply = providerAny.buildReplyFn('channel123', 'post456', 'root789')
-
-    await (reply as { text: (content: string, options?: { threadId?: string }) => Promise<void> }).text(
-      'Test message',
-      { threadId: 'override999' },
-    )
-
-    expect(apiCalls.length).toBe(1)
-    expect((apiCalls[0] as { body: { root_id: string } }).body.root_id).toBe('override999')
+    expect(threadId).toBe('parent456')
   })
 })
 ```
 
-**Step 4: Run typecheck**
-
-Run: `bun run typecheck`
-Expected: No errors
-
-**Step 5: Run tests**
-
-Run: `bun test tests/chat/mattermost/reply-context.test.ts`
-Expected: All tests pass
-
-**Step 6: Commit**
+**Step 4: Run typecheck and tests**
 
 ```bash
-git add src/chat/mattermost/index.ts tests/chat/mattermost/reply-context.test.ts
-git commit -m "feat(mattermost): parse root_id and support threading
+bun typecheck
+bun test tests/chat/mattermost/
+```
 
-Update Mattermost provider to:
-- Parse root_id from incoming post data
-- Build ReplyContext for threaded messages
-- Pass root_id when posting replies
-- Support ReplyOptions for dynamic threading
+Expected: All pass
 
-Add tests for root_id parsing and reply routing."
+**Step 5: Commit**
+
+```bash
+git add src/chat/mattermost/index.ts tests/chat/mattermost/reply-chain.test.ts
+git commit -m "feat(mattermost): build ReplyContext and support threading
+
+- Build ReplyContext from cached parent or API fallback
+- Build chain/chainSummary from message cache
+- Pass root_id in buildReplyFn for threading
+- Graceful fallback when parent post unavailable"
 ```
 
 ---
 
-## Task 5: Update History Storage to Include Message IDs
-
-**Files:**
-
-- Modify: `src/history.ts`
-- Modify: `src/bot.ts` (to pass messageId when storing)
-
-**Step 1: Review current history storage**
-
-Check how messages are currently stored in `src/history.ts` to understand where to add messageId metadata.
-
-**Step 2: Update bot.ts to store messageId in history**
-
-Find where incoming messages are added to history and update to include messageId:
-
-```typescript
-// In src/bot.ts, when handling messages
-await addToHistory(contextId, {
-  userId: msg.user.id,
-  role: 'user',
-  content: msg.text,
-  messageId: msg.messageId, // Add this
-})
-```
-
-**Step 3: Update where bot responses are stored**
-
-Similarly, when storing bot responses:
-
-```typescript
-// After sending reply, store with messageId if available
-await addToHistory(contextId, {
-  userId: 'bot',
-  role: 'assistant',
-  content: responseText,
-  messageId: responseMessageId, // Track this from platform response
-})
-```
-
-Note: You may need to update ReplyFn return types to return message IDs, or handle this asynchronously.
-
-**Step 4: Commit**
-
-```bash
-git add src/bot.ts src/history.ts
-git commit -m "feat(history): store message IDs in conversation history
-
-Update history storage to include messageId in metadata:
-- Store incoming message IDs from platform
-- Store outgoing response message IDs
-- Enables message tracking for future features"
-```
-
----
-
-## Task 6: Integrate Reply Context into Bot Message Handling
+## Task 5: Integrate Reply Context into Bot Message Handler
 
 **Files:**
 
@@ -1285,148 +898,106 @@ Update history storage to include messageId in metadata:
 
 **Step 1: Import prompt builder**
 
-At the top of `src/bot.ts`:
+Add at the top of `src/bot.ts`:
 
 ```typescript
 import { buildPromptWithReplyContext } from './reply-context.js'
 ```
 
-**Step 2: Update message handler to build contextual prompt**
+**Step 2: Use enriched prompt in message handler**
 
-Find the message handling flow and add prompt building:
+Update the `chat.onMessage` handler (lines 101-128) to use `buildPromptWithReplyContext`:
 
 ```typescript
-async function handleMessage(msg: IncomingMessage, reply: ReplyFn): Promise<void> {
-  // Enrich message with reply context
-  msg = await enrichWithReplyContext(msg)
+chat.onMessage(async (msg, reply) => {
+  const auth = checkAuthorizationExtended(
+    msg.user.id,
+    msg.user.username,
+    msg.contextId,
+    msg.contextType,
+    msg.user.isAdmin,
+  )
 
-  // Build prompt with context
-  const prompt = buildPromptWithReplyContext(msg)
-
-  // Build reply options for threading
-  const replyOptions: import('./chat/types.js').ReplyOptions = {}
-  if (msg.replyContext !== undefined) {
-    replyOptions.threadId = msg.replyContext.threadId
-    replyOptions.replyToMessageId = msg.replyContext.messageId
+  if (!auth.allowed) {
+    if (msg.isMentioned) {
+      await reply.text(
+        "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser @{username}`",
+      )
+    }
+    return
   }
 
-  // Process with LLM (using enriched prompt)
-  // ... existing LLM processing ...
+  const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
+  const isNaturalLanguage = !hasCommand
+  if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
+    return
+  }
 
-  // Send response with threading options
-  await reply.formatted(responseText, replyOptions)
-}
+  reply.typing()
+  const prompt = buildPromptWithReplyContext(msg)
+  await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+})
 ```
 
-**Step 3: Update system prompt (optional)**
+**Step 3: Run typecheck**
 
-Consider updating the system prompt to inform the LLM about reply context format:
+Run: `bun typecheck`
 
-```typescript
-// In system prompt building
-REPLY CONTEXT FORMAT:
-When a user replies to a message, you'll see context like:
-- [Replying to message from username: "message text"]
-- [Quoted text: "quoted portion"]
-- [Earlier context: summary]
-
-Use this context to understand what the user is referencing.
-```
-
-**Step 4: Run typecheck**
-
-Run: `bun run typecheck`
 Expected: No errors
 
-**Step 5: Commit**
+**Step 4: Commit**
 
 ```bash
 git add src/bot.ts
-git commit -m "feat(bot): integrate reply context enrichment
+git commit -m "feat(bot): use reply context in LLM prompts
 
-Update bot message handler to:
-- Enrich incoming messages with reply context
-- Build prompts with parent message context
-- Pass threading options when responding
-- Maintain conversation flow in threads"
+- Build enriched prompt with parent message context
+- Pass enriched text to processMessage instead of raw msg.text
+- Bot now understands what message the user is replying to"
 ```
 
 ---
 
-## Task 7: Update Command Handlers (if needed)
-
-**Files:**
-
-- Review: `src/commands/*.ts`
-
-**Step 1: Check command handlers for reply needs**
-
-Review command handlers to see if any need to support replies. Most commands likely don't need changes since they handle specific actions rather than conversational context.
-
-**Step 2: Update ReplyFn usage in commands**
-
-If any commands use `reply.text()` or `reply.formatted()`, they should work with the new optional `ReplyOptions` parameter without changes (backwards compatible).
-
----
-
-## Task 8: Run Full Test Suite
+## Task 6: Run Full Test Suite
 
 **Step 1: Run all tests**
 
 Run: `bun test`
-Expected: All tests pass (except E2E if not configured)
 
-**Step 2: Run typecheck**
+Expected: All tests pass
 
-Run: `bun run typecheck`
-Expected: No errors
+**Step 2: Run full check**
 
-**Step 3: Run linter**
+Run: `bun check:full`
 
-Run: `bun run lint`
-Expected: No errors
+Expected: All checks pass (lint, typecheck, format, knip, tests)
 
-**Step 4: Run formatter check**
+**Step 3: Fix any issues found**
 
-Run: `bun run format:check`
-Expected: No issues
+If knip reports unused exports in `src/message-cache/`, remove `@public` annotations from:
 
----
+- `src/message-cache/cache.ts` — `hasCachedMessage`, `clearMessageCache`
+- `src/message-cache/chain.ts` — `buildReplyChain`
+- `src/message-cache/persistence.ts` — `startMessageCleanupScheduler`
 
-## Task 9: Integration Testing (Manual)
+These functions are now used by `src/reply-context.ts` and the providers, so `@public` annotations should no longer be needed. Verify by running `bun knip` after removal.
 
-**Setup:**
+**Step 4: Commit**
 
-1. Configure bot with Telegram and/or Mattermost
-2. Start the bot: `bun start`
-
-**Test Scenarios:**
-
-**Telegram:**
-
-1. Send a message: "Task #123 needs review"
-2. Reply to that message: "Update it to done"
-3. Verify bot sees context and knows to update Task #123
-4. Verify bot response appears as a reply in the thread
-
-**Mattermost:**
-
-1. Post in a channel: "Task #456 is ready"
-2. Reply in thread: "Can you archive it?"
-3. Verify bot understands which task to archive
-4. Verify bot response appears in the thread (not top-level)
+```bash
+git add .
+git commit -m "chore: fix lint/knip/format issues from reply context integration"
+```
 
 ---
 
-## Task 10: Final Commit and Documentation
+## Task 7: Final Verification and CHANGELOG
 
 **Step 1: Final verification**
 
-Run full check:
+Run: `bun check:full`
 
-```bash
-bun run check:full
-```
+Expected: All checks pass
 
 **Step 2: Update CHANGELOG.md**
 
@@ -1437,9 +1008,10 @@ Add entry for this feature:
 
 ### Added
 
-- Message reply and quote context awareness (#XXX)
-  - Bot now captures when users reply to or quote messages
-  - Parent message context is included in LLM prompts
+- Message reply and quote context awareness
+  - Bot captures when users reply to or quote messages
+  - Parent message context included in LLM prompts
+  - Reply chain summaries for multi-level threads
   - Bot responses thread correctly in Telegram and Mattermost
 ```
 
@@ -1454,12 +1026,25 @@ git commit -m "docs: update changelog with reply context feature"
 
 ## Summary
 
-This implementation adds reply/quote context awareness to papai:
+### Files Created
 
-1. **Types** — `ReplyContext`, `ReplyOptions`, updated `IncomingMessage` and `ReplyFn`
-2. **Context Enrichment** — New module looks up parent messages from history
-3. **Telegram** — Extracts `reply_to_message`, `quote`, `message_thread_id`
-4. **Mattermost** — Parses `root_id` for threading
-5. **Bot Integration** — Enriches all messages, builds contextual prompts, threads responses
+- `src/reply-context.ts` — Prompt builder with chain summary helper
+- `tests/reply-context.test.ts` — Unit tests for prompt builder
+- `tests/chat/telegram/reply-context.test.ts` — Telegram reply context tests
 
-The bot now understands conversation context when users reply to messages, leading to more accurate responses and better conversation flow.
+### Files Modified
+
+- `src/chat/types.ts` — Add `ReplyContext`, `ReplyOptions`; update `ReplyFn`
+- `src/chat/telegram/index.ts` — Build `ReplyContext` in `extractMessage`, threading in `buildReplyFn`
+- `src/chat/mattermost/index.ts` — Build `ReplyContext` in `handlePostedEvent`, threading in `buildReplyFn`
+- `src/bot.ts` — Use `buildPromptWithReplyContext()` before calling `processMessage`
+- `tests/chat/mattermost/reply-chain.test.ts` — Add ReplyContext extraction tests
+- `src/message-cache/*.ts` — Remove `@public` knip annotations (now used directly)
+
+### Key Design Decisions
+
+1. **Keep `replyToMessageId` AND `replyContext`** — `replyToMessageId` is used by message-cache for chain building; `replyContext` is the rich object for LLM prompts. Different consumers, different needs.
+2. **No `enrichWithReplyContext()` function** — Providers build complete `ReplyContext` objects directly. Telegram gets parent data from Grammy context; Mattermost uses cache with API fallback.
+3. **Reuse existing message-cache** — `buildReplyChain()` and `getCachedMessage()` provide chain data. No duplicate cache modules in providers.
+4. **`ReplyOptions` is optional** — Backwards compatible. Providers auto-thread based on incoming message context; `ReplyOptions` allows overriding.
+5. **Chain summary excludes immediate parent** — Parent text is shown in `[Replying to...]` section; chain summary only shows earlier messages to avoid duplication.

@@ -1,8 +1,8 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
-// Mock at the drizzle level (not persistence) to avoid mock pollution
+// Mock logger and DB before importing modules that use them
 mockLogger()
 mockDrizzle()
 
@@ -10,18 +10,23 @@ afterAll(() => {
   mock.restore()
 })
 
-import { cacheMessage, getCachedMessage, hasCachedMessage, clearMessageCache } from '../../src/message-cache/cache.js'
+import { cacheMessage, getCachedMessage } from '../../src/message-cache/cache.js'
+
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const ONE_MINUTE_MS = 60 * 1000
 
 describe('Message Cache', () => {
   beforeEach(async () => {
-    clearMessageCache()
     await setupTestDb()
   })
 
+  // Each test uses unique contextId/messageId prefixes to avoid sharing state
+  // across tests, since the in-memory Map in cache.ts persists for the process lifetime.
+
   test('should cache and retrieve message', () => {
     const message = {
-      messageId: '123',
-      contextId: 'chat-456',
+      messageId: 'cache-msg-1',
+      contextId: 'ctx-cache',
       authorId: 'user-789',
       text: 'Hello',
       timestamp: Date.now(),
@@ -29,36 +34,56 @@ describe('Message Cache', () => {
 
     cacheMessage(message)
 
-    const retrieved = getCachedMessage('chat-456', '123')
+    const retrieved = getCachedMessage('ctx-cache', 'cache-msg-1')
     expect(retrieved).toBeDefined()
     expect(retrieved?.text).toBe('Hello')
   })
 
   test('should return undefined for non-existent message', () => {
-    const result = getCachedMessage('chat-1', 'non-existent')
+    const result = getCachedMessage('ctx-noexist', 'non-existent-msg')
     expect(result).toBeUndefined()
   })
 
   test('should store messages in cache', () => {
-    expect(hasCachedMessage('c1', '1')).toBe(false)
-    cacheMessage({ messageId: '1', contextId: 'c1', timestamp: Date.now() })
-    expect(hasCachedMessage('c1', '1')).toBe(true)
+    expect(getCachedMessage('ctx-store', 'store-1')).toBeUndefined()
+    cacheMessage({ messageId: 'store-1', contextId: 'ctx-store', timestamp: Date.now() })
+    expect(getCachedMessage('ctx-store', 'store-1')).toBeDefined()
   })
 
   test('should check if message is cached', () => {
-    cacheMessage({ messageId: '1', contextId: 'c1', timestamp: Date.now() })
-    expect(hasCachedMessage('c1', '1')).toBe(true)
-    expect(hasCachedMessage('c1', '2')).toBe(false)
+    cacheMessage({ messageId: 'check-1', contextId: 'ctx-check', timestamp: Date.now() })
+    expect(getCachedMessage('ctx-check', 'check-1')).toBeDefined()
+    expect(getCachedMessage('ctx-check', 'check-2')).toBeUndefined()
   })
 
   test('should isolate messages by contextId', () => {
-    cacheMessage({ messageId: '1', contextId: 'chat-A', text: 'From A', timestamp: Date.now() })
-    cacheMessage({ messageId: '1', contextId: 'chat-B', text: 'From B', timestamp: Date.now() })
+    cacheMessage({ messageId: 'iso-1', contextId: 'ctx-iso-A', text: 'From A', timestamp: Date.now() })
+    cacheMessage({ messageId: 'iso-1', contextId: 'ctx-iso-B', text: 'From B', timestamp: Date.now() })
 
-    const fromA = getCachedMessage('chat-A', '1')
-    const fromB = getCachedMessage('chat-B', '1')
+    const fromA = getCachedMessage('ctx-iso-A', 'iso-1')
+    const fromB = getCachedMessage('ctx-iso-B', 'iso-1')
 
     expect(fromA?.text).toBe('From A')
     expect(fromB?.text).toBe('From B')
+  })
+
+  test('should expire messages that exceed TTL', () => {
+    const expiredTimestamp = Date.now() - ONE_WEEK_MS - 1000
+
+    cacheMessage({ messageId: 'ttl-expired', contextId: 'ctx-ttl', text: 'Expired', timestamp: expiredTimestamp })
+
+    const result = getCachedMessage('ctx-ttl', 'ttl-expired')
+    expect(result).toBeUndefined()
+  })
+
+  test('should return messages within TTL', () => {
+    // 1 minute before expiry
+    const freshTimestamp = Date.now() - ONE_WEEK_MS + ONE_MINUTE_MS
+
+    cacheMessage({ messageId: 'ttl-fresh', contextId: 'ctx-ttl', text: 'Fresh', timestamp: freshTimestamp })
+
+    const result = getCachedMessage('ctx-ttl', 'ttl-fresh')
+    expect(result).toBeDefined()
+    expect(result?.text).toBe('Fresh')
   })
 })
