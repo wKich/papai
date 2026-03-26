@@ -1,11 +1,12 @@
 # Phase 06: Personal Memory & Recall — Development Plan
 
-**Created**: 2026-03-20  
-**Scope**: User stories from `docs/user-stories/phase-06-personal-memory-recall.md`  
-**Storage decision**: Option A — SQLite + Vercel AI SDK brute-force (see `docs/plans/2026-03-20-memory-storage-research.md`)  
-**Embedding strategy**: Remote embeddings via user's configured LLM endpoint (`ai.embed()`)  
-**Runtime**: Bun  
-**Test runner**: `bun:test`  
+**Created**: 2026-03-20
+**Revised**: 2026-03-27
+**Scope**: User stories from `docs/user-stories/phase-06-personal-memory-recall.md`
+**Storage decision**: Option A — SQLite + Vercel AI SDK brute-force (see `docs/plans/2026-03-20-memory-storage-research.md`)
+**Embedding strategy**: Remote embeddings via user's configured LLM endpoint (`ai.embed()`)
+**Runtime**: Bun
+**Test runner**: `bun:test`
 **Linter**: oxlint (no `eslint-disable`, no `@ts-ignore`)
 
 ---
@@ -47,32 +48,37 @@
 
 ### What is already in place
 
-| Feature                                                               | Status       | Location                                  |
-| --------------------------------------------------------------------- | ------------ | ----------------------------------------- |
-| SQLite via `bun:sqlite` + Drizzle ORM                                 | ✅ Complete  | `src/db/drizzle.ts`, `src/db/schema.ts`   |
-| Migration runner with ordered, validated migrations                   | ✅ Complete  | `src/db/migrate.ts`, `src/db/index.ts`    |
-| Per-user config (`llm_apikey`, `llm_baseurl`, etc.)                   | ✅ Complete  | `src/config.ts`, `src/types/config.ts`    |
-| Vercel AI SDK (`ai` ^6.0.116) with `embed()` and `cosineSimilarity()` | ✅ Installed | `package.json`, `ai` package              |
-| `@ai-sdk/openai-compatible` for LLM provider                          | ✅ Complete  | `src/llm-orchestrator.ts`                 |
-| Tool pattern: `tool()` + Zod schema + `execute()`                     | ✅ Complete  | `src/tools/create-task.ts` et al.         |
-| Tool registration in `makeTools()`                                    | ✅ Complete  | `src/tools/index.ts`                      |
-| LLM system prompt in `llm-orchestrator.ts`                            | ✅ Complete  | `src/llm-orchestrator.ts`                 |
-| `MemoryFact` type + `memoryFacts` table                               | ✅ Complete  | `src/types/memory.ts`, `src/db/schema.ts` |
-| In-memory user cache (`userCaches`)                                   | ✅ Complete  | `src/cache.ts`                            |
-| Cache write-back via `queueMicrotask`                                 | ✅ Complete  | `src/cache-db.ts`                         |
+| Feature                                                               | Status       | Location                                           |
+| --------------------------------------------------------------------- | ------------ | -------------------------------------------------- |
+| SQLite via `bun:sqlite` + Drizzle ORM                                 | ✅ Complete  | `src/db/drizzle.ts`, `src/db/schema.ts`            |
+| Migration runner with ordered, validated migrations (001–016)         | ✅ Complete  | `src/db/migrate.ts`, `src/db/index.ts`             |
+| Per-user config (`llm_apikey`, `llm_baseurl`, etc.)                   | ✅ Complete  | `src/config.ts`, `src/types/config.ts`             |
+| Vercel AI SDK (`ai` ^6.0.134) with `embed()` and `cosineSimilarity()` | ✅ Installed | `package.json`, `ai` package                       |
+| `@ai-sdk/openai-compatible` for LLM provider                          | ✅ Complete  | `src/llm-orchestrator.ts`                          |
+| Tool pattern: `tool()` + Zod v4 schema + `execute()`                  | ✅ Complete  | `src/tools/create-task.ts` et al.                  |
+| Tool registration in `makeTools()` with helper functions              | ✅ Complete  | `src/tools/index.ts`                               |
+| LLM system prompt in `system-prompt.ts`                               | ✅ Complete  | `src/system-prompt.ts`                             |
+| `MemoryFact` type + `memoryFacts` table                               | ✅ Complete  | `src/types/memory.ts`, `src/db/schema.ts`          |
+| In-memory user cache (`userCaches`)                                   | ✅ Complete  | `src/cache.ts`                                     |
+| Cache write-back via `queueMicrotask`                                 | ✅ Complete  | `src/cache-db.ts`                                  |
+| Recurring tasks (CRUD, cron/on_complete triggers, pollers)            | ✅ Complete  | `src/tools/create-recurring-task.ts` et al.        |
+| User instructions (save/list/delete persistent preferences)           | ✅ Complete  | `src/instructions.ts`, `src/tools/instructions.ts` |
+| Deferred prompts (scheduled tasks + alert monitoring)                 | ✅ Complete  | `src/deferred-prompts/`                            |
+| Proactive delivery mode (LLM-driven deferred prompt execution)        | ✅ Complete  | `src/deferred-prompts/proactive-llm.ts`            |
+| Confirmation gate for destructive actions                             | ✅ Complete  | `src/tools/confirmation-gate.ts`                   |
 
 ### Confirmed gaps (all new work)
 
 | #   | Gap / New Feature                                            | Story     | File(s) to create or modify                                                                               |
 | --- | ------------------------------------------------------------ | --------- | --------------------------------------------------------------------------------------------------------- |
-| G1  | No `memos` table, no `memos_fts` FTS5 virtual table          | US1–US7   | `src/db/schema.ts` (new tables), new migration `009_memos.ts`                                             |
-| G2  | No `memo_links` table                                        | US5       | `src/db/schema.ts`, `009_memos.ts`                                                                        |
+| G1  | No `memos` table, no `memos_fts` FTS5 virtual table          | US1–US7   | `src/db/schema.ts` (new tables), new migration `017_memos.ts`                                             |
+| G2  | No `memo_links` table                                        | US5       | `src/db/schema.ts`, `017_memos.ts`                                                                        |
 | G3  | No `embedding_model` config key                              | US4       | `src/types/config.ts`                                                                                     |
 | G4  | No memo persistence layer                                    | US1–US7   | `src/memos.ts` (new)                                                                                      |
 | G5  | No embedding helper (call `embed()` against user's endpoint) | US4       | `src/memos.ts` or `src/embeddings.ts` (new)                                                               |
 | G6  | No LLM tools for memo CRUD, search, archive, promote         | US1–US7   | `src/tools/save-memo.ts`, `search-memos.ts`, `list-memos.ts`, `archive-memos.ts`, `promote-memo.ts` (new) |
 | G7  | Memo tools not registered in `makeTools()`                   | US1–US7   | `src/tools/index.ts`                                                                                      |
-| G8  | System prompt has no memo routing guidance                   | US2       | `src/llm-orchestrator.ts`                                                                                 |
+| G8  | System prompt has no memo routing guidance                   | US2       | `src/system-prompt.ts`                                                                                    |
 | G9  | No memo context injection into conversation                  | US4 (opt) | `src/conversation.ts`                                                                                     |
 | G10 | No unit or integration tests for any memo functionality      | All       | `tests/memos.test.ts`, `tests/tools/memo-tools.test.ts` (new)                                             |
 
@@ -84,7 +90,7 @@
 
 ```
 User message
-  └─ processMessage (llm-orchestrator.ts)
+  └─ processMessage (llm-orchestrator.ts) + buildSystemPrompt (system-prompt.ts)
        ├─ buildMessagesWithMemory      ← injects any relevant memos as context (optional enrichment)
        └─ generateText (Vercel AI SDK)
             └─ LLM calls tools as needed:
@@ -224,19 +230,21 @@ Tags are extracted by the LLM when calling `save_memo`. The tool input schema in
 
 ### Phase A: Schema & Persistence Layer (Day 1)
 
-- [ ] **A1**: Add `embedding_model` to `ConfigKey` in `src/types/config.ts` and `CONFIG_KEYS` array
+- [ ] **A1**: Add `embedding_model` to config types in `src/types/config.ts`
+  - Add `'embedding_model'` to the `LlmConfigKey` union type (it is an LLM-related key)
+  - Add it to the `llmKeys` array inside `getConfigKeysForProvider()`
   - Estimate: 0.5h ±0.25h | Priority: H
   - Acceptance: `getConfig(userId, 'embedding_model')` compiles and returns `null` when unset; `/set embedding_model text-embedding-3-small` works via existing `/set` command
   - Dependencies: none
 
-- [ ] **A2**: Write migration `src/db/migrations/009_memos.ts` — creates `memos`, `memos_fts` (FTS5 + triggers), `memo_links` tables
+- [ ] **A2**: Write migration `src/db/migrations/017_memos.ts` — creates `memos`, `memos_fts` (FTS5 + triggers), `memo_links` tables
   - Estimate: 1h ±0.25h | Priority: H
   - Acceptance: Migration `up()` runs without error against a fresh in-memory SQLite. `SELECT * FROM memos_fts` is valid after migration. `PRAGMA foreign_keys=ON` is satisfied.
   - Dependencies: A1
 
-- [ ] **A3**: Register migration `009_memos` in `src/db/index.ts` `MIGRATIONS` array
+- [ ] **A3**: Register migration `017_memos` in `src/db/index.ts` `MIGRATIONS` array
   - Estimate: 0.25h | Priority: H
-  - Acceptance: `initDb()` runs all 9 migrations in sequence without error
+  - Acceptance: `initDb()` runs all 17 migrations in sequence without error
   - Dependencies: A2
 
 - [ ] **A4**: Add Drizzle schema definitions for `memos` and `memo_links` in `src/db/schema.ts`
@@ -265,7 +273,7 @@ Tags are extracted by the LLM when calling `save_memo`. The tool input schema in
 
 ### Phase B: Tool Layer (Day 2)
 
-All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `execute()`.
+All tools follow the existing pattern: `tool()` from `ai`, Zod v4 input schema, `execute()`. Each tool is exported as a factory function (`makeSaveMemoTool(userId)`) returning `ToolSet[string]`, matching the pattern in `src/tools/instructions.ts` and `src/deferred-prompts/tools.ts`. Tools use a scoped pino child logger (`logger.child({ scope: 'tool:memo' })`).
 
 - [ ] **B1**: Create `src/tools/save-memo.ts` — `save_memo` tool
   - Input schema: `{ content: string, tags: string[] (optional), summary: string (optional) }`
@@ -307,13 +315,16 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 
 ### Phase C: Tool Registration & System Prompt (Day 3, morning)
 
-- [ ] **C1**: Register all five memo tools in `src/tools/index.ts` `makeTools()` — no capability guard needed (memos are always available)
+- [ ] **C1**: Register all five memo tools in `src/tools/index.ts` via a new `addMemoTools(tools, userId)` helper — no capability guard needed (memos are always available, like instructions/recurring tasks)
+  - Follow the existing helper pattern: `addInstructionTools(tools, contextId)`, `addRecurringTools(tools, userId)`
+  - Import tool factories from individual files and assign to the tools object
+  - Call `addMemoTools(tools, userId)` inside `makeTools()` after the existing non-provider tool registrations
   - Estimate: 0.5h | Priority: H
-  - Acceptance: `makeTools(provider)` returns an object containing `save_memo`, `search_memos`, `list_memos`, `archive_memos`, `promote_memo`
+  - Acceptance: `makeTools(provider, userId)` returns an object containing `save_memo`, `search_memos`, `list_memos`, `archive_memos`, `promote_memo`
   - Dependencies: B1–B5
 
-- [ ] **C2**: Add memo routing guidance to the system prompt in `src/llm-orchestrator.ts`
-  - Add a `MEMOS` section after `RELATION TYPES`, covering:
+- [ ] **C2**: Add memo routing guidance to the system prompt in `src/system-prompt.ts`
+  - Add a `MEMOS` section to `STATIC_RULES` after `RELATION TYPES`, covering:
     - When to call `save_memo` vs `create_task` (observation vs action)
     - How to populate `tags` from the user message (hashtags, "tag: X", or LLM inference)
     - How to explain match rationale in `search_memos` results ("This note matched because…")
@@ -406,7 +417,7 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 | LLM routes observational messages as tasks instead of memos                 | Medium      | Low    | System prompt routing section (C2) + tool descriptions encode the contract; if user corrects, bot re-routes                                              | Developer |
 | `archive_memos` destructive action runs without user consent                | Low         | High   | Apply same `confidence` + confirmation-gate pattern as `archive_task` for date-range archives                                                            | Developer |
 | Tag JSON parsing fails on malformed input                                   | Low         | Low    | Tags stored as validated JSON array; tool input schema uses `z.array(z.string())` so only valid arrays reach the DB                                      | Developer |
-| Migration `009` conflicts with future migrations                            | Low         | Low    | Migration validator in `migrate.ts` already rejects duplicate prefixes and out-of-order IDs                                                              | Developer |
+| Migration `017` conflicts with future migrations                            | Low         | Low    | Migration validator in `migrate.ts` already rejects duplicate prefixes and out-of-order IDs                                                              | Developer |
 | Embedding BLOB causes significant DB size growth                            | Low         | Low    | 1536-dim Float32 = 6 KB per memo; 1000 memos = 6 MB — negligible alongside conversation history                                                          | Developer |
 
 ---
@@ -419,7 +430,7 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 | -------------------------------- | --------------------------------------------------------------- |
 | `src/memos.ts`                   | Memo persistence layer (CRUD, FTS5, embedding storage, archive) |
 | `src/embeddings.ts`              | `embed()` wrapper with graceful fallback                        |
-| `src/db/migrations/009_memos.ts` | Migration: `memos`, `memos_fts`, FTS5 triggers, `memo_links`    |
+| `src/db/migrations/017_memos.ts` | Migration: `memos`, `memos_fts`, FTS5 triggers, `memo_links`    |
 | `src/tools/save-memo.ts`         | `save_memo` AI tool                                             |
 | `src/tools/search-memos.ts`      | `search_memos` AI tool (semantic + keyword)                     |
 | `src/tools/list-memos.ts`        | `list_memos` AI tool                                            |
@@ -431,14 +442,14 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 
 ### Modified files
 
-| File                      | Change                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/db/schema.ts`        | Add `memos`, `memo_links` Drizzle table definitions and inferred types                               |
-| `src/db/index.ts`         | Register `migration009Memos` in `MIGRATIONS` array                                                   |
-| `src/types/config.ts`     | Add `'embedding_model'` to `ConfigKey` union and `CONFIG_KEYS` array                                 |
-| `src/tools/index.ts`      | Register `save_memo`, `search_memos`, `list_memos`, `archive_memos`, `promote_memo` in `makeTools()` |
-| `src/llm-orchestrator.ts` | Add MEMOS routing section to system prompt                                                           |
-| `package.json`            | Add new test directories to `test` and `test:coverage` scripts if necessary                          |
+| File                   | Change                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `src/db/schema.ts`     | Add `memos`, `memo_links` Drizzle table definitions and inferred types            |
+| `src/db/index.ts`      | Register `migration017Memos` in `MIGRATIONS` array (after existing 16 migrations) |
+| `src/types/config.ts`  | Add `'embedding_model'` to `ConfigKey` union and `CONFIG_KEYS` array              |
+| `src/tools/index.ts`   | Add `addMemoTools(tools, userId)` helper and call it in `makeTools()`             |
+| `src/system-prompt.ts` | Add MEMOS routing section to `STATIC_RULES`                                       |
+| `package.json`         | Add new test directories to `test` and `test:coverage` scripts if necessary       |
 
 ---
 
@@ -451,7 +462,7 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 - [ ] `tests/memos.test.ts` covers: insert, retrieve, list ordering, FTS5 keyword search, FTS5 trigger sync (insert/update/delete), embedding BLOB round-trip, archive by tag, archive by date, per-user isolation
 - [ ] `tests/tools/memo-tools.test.ts` covers: each tool's happy path and at least one failure/edge case
 - [ ] `bun test` exits 0
-- [ ] Database migration `009` runs cleanly against an empty DB and an existing populated DB (no data loss)
+- [ ] Database migration `017` runs cleanly against an empty DB and an existing populated DB (no data loss)
 - [ ] Semantic search falls back silently to FTS5 when `embed()` throws (test via mock in D2/D3)
 - [ ] Manual smoke tests E1–E7 all pass against a live LLM endpoint
 
@@ -459,14 +470,14 @@ All tools follow the existing pattern: `tool()` from `ai`, Zod input schema, `ex
 
 ## Out of Scope
 
-| Item                                         | Reason                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Memo sharing between users                   | Phase 06 is a personal memo store; group context is covered by Phase group-chat work       |
-| Local ONNX embeddings                        | Adds native dependency and 80–100 MB model files; remote embeddings cover the use case     |
-| Memo versioning / edit history               | Not required by any US1–US7 acceptance criteria                                            |
-| Scheduled / automatic expiry of memos by TTL | US7 covers manual archive; automatic scheduled cleanup is Phase 07+ (proactive assistance) |
-| Dedicated `/memo` command prefix             | US2 explicitly requires the LLM to route without special command syntax                    |
-| sqlite-vec or any SQLite extension           | Bun extension loading on Linux is unresolved; Option A covers our scale without it         |
+| Item                                         | Reason                                                                                 |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Memo sharing between users                   | Phase 06 is a personal memo store; group context is covered by Phase group-chat work   |
+| Local ONNX embeddings                        | Adds native dependency and 80–100 MB model files; remote embeddings cover the use case |
+| Memo versioning / edit history               | Not required by any US1–US7 acceptance criteria                                        |
+| Scheduled / automatic expiry of memos by TTL | US7 covers manual archive; could be implemented as a deferred prompt in a follow-up    |
+| Dedicated `/memo` command prefix             | US2 explicitly requires the LLM to route without special command syntax                |
+| sqlite-vec or any SQLite extension           | Bun extension loading on Linux is unresolved; Option A covers our scale without it     |
 
 ---
 
@@ -517,4 +528,4 @@ import { cosineSimilarity } from 'ai'
 const score = cosineSimilarity(vecA, vecB) // number in [-1, 1]
 ```
 
-Both functions are already exported from `ai` ^6.0.116 — no new imports from external packages are needed.
+Both functions are already exported from `ai` ^6.0.134 — no new imports from external packages are needed.

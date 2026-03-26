@@ -17,6 +17,7 @@ Telegram Bot API provides only the **immediate parent** message in `reply_to_mes
 ## Solution
 
 Use a **hybrid approach** combining:
+
 1. **Local message metadata cache** with 1-week TTL
 2. **Background persistence** to SQLite
 3. **Chain builder** that walks back through cached messages
@@ -132,7 +133,7 @@ Cache message 789's metadata
 buildReplyChain("789"):
   - Look up 789 in cache
   - Found: replyToMessageId = "456"
-  - Look up 456 in cache  
+  - Look up 456 in cache
   - Found: replyToMessageId = "123"
   - Look up 123 in cache
   - Found: no replyToMessageId (root message)
@@ -216,6 +217,7 @@ This implementation focuses on **Telegram provider** (`src/chat/telegram/`). How
 ## Files to Create/Modify
 
 ### New Files
+
 - `src/message-cache/types.ts` - Type definitions
 - `src/message-cache/index.ts` - Cache API
 - `src/message-cache/chain.ts` - Chain builder
@@ -223,6 +225,7 @@ This implementation focuses on **Telegram provider** (`src/chat/telegram/`). How
 - `tests/message-cache/` - Test directory
 
 ### Modified Files
+
 - `src/db/schema.ts` - Add messageMetadata table
 - `src/db/migrations/` - New migration file
 - `src/chat/types.ts` - Add replyToMessageId to IncomingMessage

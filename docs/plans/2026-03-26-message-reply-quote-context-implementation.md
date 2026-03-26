@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Enable the bot to capture reply/quote context from user messages, enrich prompts with historical context, and respond in the correct thread.
+**Goal:** Enable the bot to capture reply/quote context from user messages, include parent message context in prompts, and respond in the correct thread.
 
-**Architecture:** Extend the `IncomingMessage` type with `ReplyContext`, update Telegram and Mattermost providers to extract platform-specific reply metadata, create a context enrichment module that looks up parent messages from history, and integrate threading support into bot responses.
+**Architecture:** Extend the `IncomingMessage` type with `ReplyContext`, update Telegram and Mattermost providers to extract platform-specific reply metadata. Telegram provides full parent message in the incoming update, while Mattermost requires fetching the parent post via API. Build contextual prompts and integrate threading support into bot responses.
 
 **Tech Stack:** TypeScript, Grammy (Telegram), Mattermost REST API, SQLite (history storage)
 
@@ -123,12 +123,19 @@ Add types for capturing message reply/quote metadata:
 
 ---
 
-## Task 2: Create Reply Context Enrichment Module
+## Task 2: Create Reply Context Prompt Builder Module
 
 **Files:**
 
 - Create: `src/reply-context.ts`
 - Test: `tests/reply-context.test.ts`
+
+**Dependencies:**
+
+- This module builds prompts from `ReplyContext` which is populated by platform providers
+- `chain` and `chainSummary` fields require additional implementation (see Task 3 - Optional)
+
+**Note:** Telegram provides full parent message text in the incoming update (`reply_to_message`), so no enrichment is needed for Telegram. Mattermost fetches the parent post via API in the provider (see Task 4). This module only builds the prompt string from existing ReplyContext.
 
 **Step 1: Create the module file**
 
@@ -136,86 +143,20 @@ Create `src/reply-context.ts`:
 
 ```typescript
 import type { IncomingMessage } from './chat/types.js'
-import { getHistory } from './history.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'reply-context' })
 
 /**
- * Enriches an incoming message with reply context by looking up
- * the parent message from conversation history.
- */
-export async function enrichWithReplyContext(msg: IncomingMessage): Promise<IncomingMessage> {
-  if (msg.replyContext === undefined) {
-    return msg
-  }
-
-  log.debug({ contextId: msg.contextId, messageId: msg.replyContext.messageId }, 'Enriching message with reply context')
-
-  try {
-    // Look up parent message from conversation history
-    const parentMessage = await lookupMessageFromHistory(msg.contextId, msg.replyContext.messageId)
-
-    if (parentMessage !== null) {
-      msg.replyContext.text = parentMessage.text
-      msg.replyContext.authorId = parentMessage.userId
-      log.debug({ parentUserId: parentMessage.userId }, 'Found parent message in history')
-    } else {
-      log.warn({ messageId: msg.replyContext.messageId }, 'Parent message not found in history')
-    }
-
-    // Build reply chain summary if chain exists
-    if (msg.replyContext.chain !== undefined && msg.replyContext.chain.length > 0) {
-      const chainSummary = await buildChainSummary(msg.contextId, msg.replyContext.chain)
-      msg.replyContext.chainSummary = chainSummary
-    }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Error enriching reply context')
-  }
-
-  return msg
-}
-
-async function lookupMessageFromHistory(
-  contextId: string,
-  messageId: string,
-): Promise<{ text: string; userId: string } | null> {
-  const history = await getHistory(contextId)
-  const entry = history.find((h) => h.metadata?.messageId === messageId)
-
-  if (entry !== undefined) {
-    return { text: entry.content, userId: entry.userId }
-  }
-
-  return null
-}
-
-async function buildChainSummary(contextId: string, chain: string[]): Promise<string> {
-  const history = await getHistory(contextId)
-  const messages = chain
-    .map((id) => history.find((h) => h.metadata?.messageId === id))
-    .filter((m): m is NonNullable<typeof m> => m !== undefined)
-
-  if (messages.length === 0) {
-    return ''
-  }
-
-  // Summarize earlier messages in chain (not the immediate parent)
-  return messages
-    .slice(0, -1)
-    .map((m) => `${m.userId}: ${truncate(m.content, 100)}`)
-    .join(' → ')
-}
-
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text
-  }
-  return text.slice(0, maxLength) + '...'
-}
-
-/**
  * Builds a prompt string with reply context prepended.
+ *
+ * Note: ReplyContext is already fully populated by platform providers:
+ * - Telegram: Full parent message included in reply_to_message field
+ * - Mattermost: Parent post fetched via GET /api/v4/posts/{post_id}
+ *
+ * Optional chain and chainSummary (see Task 3):
+ * - Telegram: Requires message caching infrastructure
+ * - Mattermost: Requires thread API integration
  */
 export function buildPromptWithReplyContext(msg: IncomingMessage): string {
   if (msg.replyContext === undefined) {
@@ -241,7 +182,15 @@ export function buildPromptWithReplyContext(msg: IncomingMessage): string {
     return msg.text
   }
 
+  log.debug({ contextParts: context.length }, 'Built prompt with reply context')
   return context.join('\n') + '\n\n' + msg.text
+}
+
+function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text
+  }
+  return text.slice(0, maxLength) + '...'
 }
 ```
 
@@ -734,6 +683,281 @@ Add comprehensive tests for reply context extraction."
 
 ---
 
+## Task 3: Implement Chain History Support (Optional)
+
+**Dependencies:**
+
+- Task 2 (ReplyContext types)
+- See reference docs:
+  - [Telegram Chain History](2026-03-26-telegram-chain-history.md)
+  - [Mattermost Chain History](2026-03-26-mattermost-chain-history.md)
+
+**Purpose:** Implement `chain` and `chainSummary` fields in `ReplyContext` to provide context from earlier messages in conversation threads. This is an optional enhancement - the core reply context works without it.
+
+**Platform Approaches:**
+
+### Telegram Chain History
+
+Telegram Bot API only provides the immediate parent message. To build a chain, we need:
+
+1. **Message Cache Service** - Cache all incoming messages with their reply metadata
+2. **Chain Builder** - Walk back through cached messages to build the chain array
+3. **Summary Generator** - Build human-readable summary from cached messages
+
+**Files:**
+
+- Create: `src/chat/telegram/message-cache.ts`
+- Modify: `src/chat/telegram/index.ts` (to populate chain from cache)
+
+**Implementation:**
+
+```typescript
+// src/chat/telegram/message-cache.ts
+interface CachedMessage {
+  messageId: string
+  text?: string
+  authorId?: string
+  authorUsername?: string | null
+  replyToMessageId?: string
+  timestamp: number
+}
+
+const messageCache = new Map<string, CachedMessage>()
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+export function cacheMessage(
+  messageId: string,
+  text: string | undefined,
+  from: { id?: number; username?: string } | undefined,
+  replyToMessageId: number | undefined,
+): void {
+  messageCache.set(messageId, {
+    messageId,
+    text,
+    authorId: from?.id ? String(from.id) : undefined,
+    authorUsername: from?.username ?? null,
+    replyToMessageId: replyToMessageId ? String(replyToMessageId) : undefined,
+    timestamp: Date.now(),
+  })
+
+  // Prune old entries periodically
+  pruneCache()
+}
+
+function pruneCache(): void {
+  const cutoff = Date.now() - CACHE_TTL_MS
+  for (const [id, msg] of messageCache) {
+    if (msg.timestamp < cutoff) {
+      messageCache.delete(id)
+    }
+  }
+}
+
+export function buildChain(messageId: string, maxDepth: number = 3): string[] | undefined {
+  const chain: string[] = []
+  let currentId: string | undefined = messageId
+
+  while (currentId && chain.length < maxDepth) {
+    const cached = messageCache.get(currentId)
+    if (!cached?.replyToMessageId) break
+
+    chain.push(cached.replyToMessageId)
+    currentId = cached.replyToMessageId
+  }
+
+  return chain.length > 0 ? chain : undefined
+}
+
+export function buildChainSummary(chain: string[]): string | undefined {
+  if (chain.length === 0) return undefined
+
+  const summaries = chain
+    .slice(0, -1) // Exclude immediate parent (already in text field)
+    .map((msgId) => {
+      const msg = messageCache.get(msgId)
+      if (!msg) return null
+      return `${msg.authorUsername || 'user'}: ${truncate(msg.text || '', 100)}`
+    })
+    .filter(Boolean)
+
+  return summaries.length > 0 ? summaries.join(' → ') : undefined
+}
+
+function truncate(text: string, maxLength: number): string {
+  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
+}
+```
+
+### Mattermost Chain History
+
+Mattermost provides thread API to fetch all posts in a thread:
+
+1. **Thread API Client** - Fetch thread via `GET /api/v4/posts/{id}/thread`
+2. **Thread Cache** - Cache thread data to avoid duplicate API calls
+3. **Chain Builder** - Extract ordered post IDs from thread response
+
+**Files:**
+
+- Create: `src/chat/mattermost/thread-cache.ts`
+- Modify: `src/chat/mattermost/index.ts` (to fetch thread and build chain)
+
+**Implementation:**
+
+```typescript
+// src/chat/mattermost/thread-cache.ts
+interface ThreadData {
+  posts: Post[]
+  fetchedAt: number
+}
+
+const threadCache = new Map<string, ThreadData>()
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+export async function getThread(apiFetch: ApiFetchFn, threadId: string): Promise<Post[]> {
+  const cached = threadCache.get(threadId)
+
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.posts
+  }
+
+  const response = await apiFetch('GET', `/api/v4/posts/${threadId}/thread`)
+
+  // Parse response: { order: string[], posts: Record<string, Post> }
+  const posts = response.order.map((id: string) => response.posts[id])
+
+  threadCache.set(threadId, {
+    posts,
+    fetchedAt: Date.now(),
+  })
+
+  return posts
+}
+
+export function buildChainFromThread(
+  thread: Post[],
+  currentPostId: string,
+  maxDepth: number = 3,
+): string[] | undefined {
+  const currentIndex = thread.findIndex((p) => p.id === currentPostId)
+  if (currentIndex <= 0) return undefined
+
+  const chain: string[] = []
+  const startIndex = Math.max(0, currentIndex - maxDepth)
+
+  for (let i = startIndex; i < currentIndex; i++) {
+    chain.push(thread[i].id)
+  }
+
+  return chain.length > 0 ? chain : undefined
+}
+
+export function buildChainSummary(thread: Post[], chain: string[]): string | undefined {
+  const postsById = new Map(thread.map((p) => [p.id, p]))
+
+  const summaries = chain
+    .slice(0, -1) // Exclude immediate parent
+    .map((postId) => {
+      const post = postsById.get(postId)
+      if (!post) return null
+      return `${post.user_name || 'user'}: ${truncate(post.message, 100)}`
+    })
+    .filter((s): s is string => s !== null)
+
+  return summaries.length > 0 ? summaries.join(' → ') : undefined
+}
+```
+
+### Integration in Provider
+
+Update provider to use chain builders when creating ReplyContext:
+
+**Telegram:**
+
+```typescript
+// In extractMessage()
+import { cacheMessage, buildChain, buildChainSummary } from './message-cache.js'
+
+// Cache this message first
+if (ctx.message) {
+  cacheMessage(
+    String(ctx.message.message_id),
+    ctx.message.text,
+    ctx.message.from,
+    ctx.message.reply_to_message?.message_id,
+  )
+}
+
+// Build chain if this is a reply
+let chain: string[] | undefined
+let chainSummary: string | undefined
+
+if (replyToMessage) {
+  const parentId = String(replyToMessage.message_id)
+  chain = buildChain(parentId) // Walk back from parent
+  if (chain) {
+    chainSummary = buildChainSummary(chain)
+  }
+}
+
+const replyContext: ReplyContext | undefined = replyToMessage
+  ? {
+      messageId: String(replyToMessage.message_id),
+      authorId: replyToMessage.from?.id ? String(replyToMessage.from.id) : undefined,
+      authorUsername: replyToMessage.from?.username ?? null,
+      text: replyToMessage.text,
+      quotedText: quote?.text,
+      threadId: ctx.message?.message_thread_id ? String(ctx.message.message_thread_id) : undefined,
+      chain, // ← Optional: requires message cache
+      chainSummary, // ← Optional: requires message cache
+    }
+  : undefined
+```
+
+**Mattermost:**
+
+```typescript
+// In handlePostedEvent()
+import { getThread, buildChainFromThread, buildChainSummary } from './thread-cache.js'
+
+if (rootId) {
+  try {
+    // Fetch parent post
+    const parentPost = await this.apiFetch('GET', `/api/v4/posts/${rootId}`)
+
+    // Fetch thread for chain building (optional)
+    let chain: string[] | undefined
+    let chainSummary: string | undefined
+
+    try {
+      const thread = await getThread(this.apiFetch.bind(this), rootId)
+      chain = buildChainFromThread(thread, post.id)
+      if (chain) {
+        chainSummary = buildChainSummary(thread, chain)
+      }
+    } catch (threadError) {
+      log.warn({ error: threadError }, 'Failed to fetch thread for chain')
+    }
+
+    replyContext = {
+      messageId: rootId,
+      threadId: rootId,
+      text: parentPost.message,
+      authorId: parentPost.user_id,
+      authorUsername: parentPost.user_name ?? null,
+      chain, // ← Optional: requires thread API
+      chainSummary, // ← Optional: requires thread API
+    }
+  } catch (error) {
+    // Fallback: minimal context for threading
+    replyContext = { messageId: rootId, threadId: rootId }
+  }
+}
+```
+
+**Note:** Chain functionality is optional - if cache/thread fetch fails, the bot still works with just immediate parent context.
+
+---
+
 ## Task 4: Update Mattermost Provider
 
 **Files:**
@@ -741,7 +965,7 @@ Add comprehensive tests for reply context extraction."
 - Modify: `src/chat/mattermost/index.ts`
 - Test: `tests/chat/mattermost/reply-context.test.ts`
 
-**Step 1: Update handlePostedEvent to parse root_id**
+**Step 1: Update handlePostedEvent to parse root_id and fetch parent post**
 
 Modify `handlePostedEvent` method in `src/chat/mattermost/index.ts`:
 
@@ -767,11 +991,28 @@ private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
   const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
   const isMentioned = this.isBotMentioned(post.message)
 
-  // Build reply context if this is a threaded message
-  const replyContext = rootId !== undefined && rootId !== '' ? {
-    messageId: rootId,
-    threadId: rootId,
-  } : undefined
+  // Build reply context - fetch parent post if this is a reply
+  let replyContext: ReplyContext | undefined
+  if (rootId !== undefined && rootId !== '') {
+    try {
+      // Fetch parent post from Mattermost API
+      const parentPost = await this.apiFetch('GET', `/api/v4/posts/${rootId}`)
+      replyContext = {
+        messageId: rootId,
+        threadId: rootId,
+        text: parentPost.message,
+        authorId: parentPost.user_id,
+        authorUsername: parentPost.user_name ?? null,
+      }
+    } catch (error) {
+      log.warn({ error: error instanceof Error ? error.message : String(error), rootId }, 'Failed to fetch parent post')
+      // Still create replyContext with just IDs for threading
+      replyContext = {
+        messageId: rootId,
+        threadId: rootId,
+      }
+    }
+  }
 
   const reply = this.buildReplyFn(post.channel_id, post.id, rootId)
   const command = this.matchCommand(post.message)
@@ -1026,12 +1267,12 @@ Note: You may need to update ReplyFn return types to return message IDs, or hand
 
 ```bash
 git add src/bot.ts src/history.ts
-git commit -m "feat(history): store message IDs for reply lookups
+git commit -m "feat(history): store message IDs in conversation history
 
 Update history storage to include messageId in metadata:
 - Store incoming message IDs from platform
 - Store outgoing response message IDs
-- Enables reply context lookups"
+- Enables message tracking for future features"
 ```
 
 ---
@@ -1042,17 +1283,17 @@ Update history storage to include messageId in metadata:
 
 - Modify: `src/bot.ts`
 
-**Step 1: Import enrichment function**
+**Step 1: Import prompt builder**
 
 At the top of `src/bot.ts`:
 
 ```typescript
-import { enrichWithReplyContext, buildPromptWithReplyContext } from './reply-context.js'
+import { buildPromptWithReplyContext } from './reply-context.js'
 ```
 
-**Step 2: Update message handler to enrich context**
+**Step 2: Update message handler to build contextual prompt**
 
-Find the message handling flow and add enrichment:
+Find the message handling flow and add prompt building:
 
 ```typescript
 async function handleMessage(msg: IncomingMessage, reply: ReplyFn): Promise<void> {

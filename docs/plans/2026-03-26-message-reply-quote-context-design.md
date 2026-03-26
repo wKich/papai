@@ -44,6 +44,17 @@ export type ReplyContext = {
 }
 ```
 
+**Note on `chain` and `chainSummary`:**
+
+These fields provide context from earlier messages in a conversation thread. Neither platform natively provides a complete chain of message IDs in the incoming event:
+
+- **Telegram**: Bot API only provides immediate parent via `reply_to_message`. Full chain requires building from local message cache (see: [Telegram Chain History](2026-03-26-telegram-chain-history.md))
+- **Mattermost**: WebSocket provides `root_id` only. Full chain requires fetching thread via `GET /api/v4/posts/{id}/thread` (see: [Mattermost Chain History](2026-03-26-mattermost-chain-history.md))
+
+Both platforms require **additional implementation work** to support chain functionality.
+
+````
+
 **Update `IncomingMessage`:**
 
 ```typescript
@@ -57,7 +68,7 @@ export type IncomingMessage = {
   messageId?: string
   replyContext?: ReplyContext // NEW
 }
-```
+````
 
 **Update `ReplyFn` and add `ReplyOptions`:**
 
@@ -167,59 +178,76 @@ private buildReplyFn(channelId: string, postId?: string, threadId?: string): Rep
 }
 ```
 
-### 3. Context Enrichment Module
+### 3. Platform-Specific Context Extraction
 
-**New module: `src/reply-context.ts`**
+**Telegram** — Full parent message included in update:
+
+Telegram Bot API provides the complete parent message in the `reply_to_message` field of incoming updates. No additional API calls or history lookups are needed.
 
 ```typescript
-import type { IncomingMessage, ReplyContext } from './chat/types.js'
-import { getHistory } from './history.js'
+private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
+  // ... existing extraction ...
 
-export async function enrichWithReplyContext(msg: IncomingMessage): Promise<IncomingMessage> {
-  if (!msg.replyContext) return msg
+  const replyToMessage = ctx.message?.reply_to_message
+  const quote = ctx.message?.quote
 
-  // Look up parent message from history
-  const parentMessage = await lookupMessageFromHistory(msg.contextId, msg.replyContext.messageId)
+  // Full parent message text is already available!
+  const replyContext: ReplyContext | undefined = replyToMessage ? {
+    messageId: String(replyToMessage.message_id),
+    authorId: replyToMessage.from?.id ? String(replyToMessage.from.id) : undefined,
+    authorUsername: replyToMessage.from?.username ?? null,
+    text: replyToMessage.text,  // ← Full text from reply_to_message
+    quotedText: quote?.text,
+    threadId: ctx.message?.message_thread_id ? String(ctx.message.message_thread_id) : undefined,
+  } : undefined
 
-  if (parentMessage) {
-    msg.replyContext.text = parentMessage.text
-    msg.replyContext.authorId = parentMessage.userId
+  return {
+    // ... existing fields ...
+    replyContext,  // Already complete, no enrichment needed
   }
-
-  // Build reply chain summary
-  if (msg.replyContext.chain && msg.replyContext.chain.length > 0) {
-    msg.replyContext.chainSummary = await buildChainSummary(msg.contextId, msg.replyContext.chain)
-  }
-
-  return msg
-}
-
-async function lookupMessageFromHistory(
-  contextId: string,
-  messageId: string,
-): Promise<{ text: string; userId: string } | null> {
-  const history = await getHistory(contextId)
-  const entry = history.find((h) => h.metadata?.messageId === messageId)
-  return entry ? { text: entry.content, userId: entry.userId } : null
-}
-
-async function buildChainSummary(contextId: string, chain: string[]): Promise<string> {
-  const history = await getHistory(contextId)
-  const messages = chain.map((id) => history.find((h) => h.metadata?.messageId === id)).filter(Boolean)
-
-  if (messages.length === 0) return ''
-
-  // Summarize earlier messages in chain (not the immediate parent)
-  return messages
-    .slice(0, -1)
-    .map((m) => `${m.userId}: ${truncate(m.content, 100)}`)
-    .join(' → ')
-}
-
-function truncate(text: string, maxLength: number): string {
-  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
 }
 ```
+
+**Mattermost** — Fetch parent post via API:
+
+Mattermost only provides `root_id` in the incoming event. We must fetch the parent post via REST API.
+
+```typescript
+private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
+  // ... existing code ...
+
+  const post = postResult.data
+  const postData = JSON.parse(postJson) as { root_id?: string }
+  const rootId = postData.root_id
+
+  let replyContext: ReplyContext | undefined
+
+  if (rootId) {
+    // Fetch parent post from Mattermost API
+    const parentPost = await this.apiFetch('GET', `/api/v4/posts/${rootId}`)
+
+    replyContext = {
+      messageId: rootId,
+      threadId: rootId,
+      text: parentPost.message,        // ← Fetched from API
+      authorId: parentPost.user_id,
+      authorUsername: parentPost.user_name ?? null,
+    }
+  }
+
+  const msg: IncomingMessage = {
+    // ... existing fields ...
+    replyContext,  // Complete after API fetch
+  }
+}
+```
+
+**Key Difference:**
+
+| Platform   | Parent Text Source                       | Requires API Call? |
+| ---------- | ---------------------------------------- | ------------------ |
+| Telegram   | Included in `reply_to_message`           | No                 |
+| Mattermost | Must fetch via `/api/v4/posts/{post_id}` | Yes                |
 
 ### 4. Bot-Level Integration
 
@@ -290,6 +318,114 @@ export async function addToHistory(contextId: string, entry: HistoryEntry & { me
   })
 }
 ```
+
+## Workflow
+
+```mermaid
+flowchart TD
+    subgraph Entry["Entry Points"]
+        T[Telegram Message Received]
+        M[Mattermost Message Received]
+    end
+
+    subgraph Extract["Provider Extraction"]
+        T --> T1{Has reply_to_message?}
+        T1 -->|Yes| T2[Extract messageId<br/>authorId<br/>authorUsername<br/>text]
+        T1 -->|No| T3[replyContext = undefined]
+        T2 --> T4{Has quote?}
+        T4 -->|Yes| T5[Extract quotedText]
+        T4 -->|No| T6[Skip quote]
+        T5 --> T7{Has message_thread_id?}
+        T6 --> T7
+        T7 -->|Yes| T8[Extract threadId]
+        T7 -->|No| T9[Skip thread]
+        T8 --> T10[Build ReplyContext]
+        T9 --> T10
+
+        M --> M1{Has root_id?}
+        M1 -->|Yes| M2[Extract messageId<br/>threadId = root_id]
+        M1 -->|No| M3[replyContext = undefined]
+        M2 --> M4[Build ReplyContext]
+    end
+
+    subgraph Build["Build Prompt"]
+        T10 --> P1{replyContext exists?}
+        M4 --> P1
+        M3 --> P11[Use original text]
+        P1 -->|No| P11
+        P1 -->|Yes| P2[buildPromptWithReplyContext]
+        P2 --> P3{Has text?}
+        P3 -->|Yes| P4[Add: [Replying to<br/>message from<br/>author: "text"]]
+        P3 -->|No| P5
+        P4 --> P5{Has quotedText?}
+        P5 -->|Yes| P6[Add: [Quoted text:<br/>"quotedText"]]
+        P5 -->|No| P7
+        P6 --> P7{Has chainSummary?}
+        P7 -->|Yes| P8[Add: [Earlier<br/>context:<br/>summary]]
+        P7 -->|No| P9
+        P8 --> P10[Join context +<br/>original message]
+        P9 --> P10
+    end
+
+    subgraph Response["Response Handling"]
+        P10 --> R1[Process with LLM]
+        P11 --> R1
+        R1 --> R2[Generate response]
+        R2 --> R3{replyContext exists?}
+        R3 -->|Yes| R4[Build ReplyOptions:<br/>- threadId<br/>- replyToMessageId]
+        R3 -->|No| R5[Empty ReplyOptions]
+        R4 --> R6[Send via reply.formatted<br/>with options]
+        R5 --> R6
+    end
+
+    subgraph Platform["Platform-Specific Response"]
+        R6 --> R7{Platform?}
+        R7 -->|Telegram| R8[Use reply_parameters<br/>with message_id]
+        R7 -->|Mattermost| R9[Use root_id in<br/>POST /api/v4/posts]
+    end
+
+    R8 --> END[Message sent<br/>in correct thread]
+    R9 --> END
+
+    style Entry fill:#e1f5e1
+    style Extract fill:#e3f2fd
+    style Build fill:#fff3e0
+    style Prompt fill:#fce4ec
+    style Response fill:#f3e5f5
+    style Platform fill:#e8f5e9
+```
+
+### Entry Points (2)
+
+- **Telegram** — Message received via Grammy context
+- **Mattermost** — Message received via WebSocket event
+
+### Key Conditions (6)
+
+1. `Has reply_to_message?` / `Has root_id?` — determines if context extraction occurs
+2. `Has quote?` — captures quoted text (Telegram only)
+3. `Has message_thread_id?` — captures forum topic/thread ID
+4. `replyContext exists?` — includes context in prompt or skips
+5. `Has chain?` — builds multi-message chain summaries
+6. `Platform?` — routes to Telegram or Mattermost response logic
+
+### Outcomes (4)
+
+1. **Standalone message** — No context, plain prompt, no threading
+2. **Reply with context** — Parent message text included in prompt
+3. **Reply with quote** — Quoted portion highlighted in prompt
+4. **Threaded conversation** — Bot responds in same thread using platform APIs
+
+### Data Flow
+
+```
+Raw Message → Extract Reply Metadata → Build Contextual Prompt → LLM → Threaded Response
+```
+
+**Platform Differences:**
+
+- **Telegram**: Full parent message included in `reply_to_message` field
+- **Mattermost**: Must fetch parent post via `GET /api/v4/posts/{post_id}`
 
 ## Files Changed
 
