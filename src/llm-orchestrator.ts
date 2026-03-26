@@ -127,9 +127,31 @@ const callLlm = async (
   return result
 }
 
+const extractErrorDetails = (error: unknown): Record<string, unknown> => {
+  if (APICallError.isInstance(error)) {
+    return {
+      type: 'APICallError',
+      message: error.message,
+      statusCode: error.statusCode,
+      url: error.url,
+      responseBody: error.responseBody,
+      responseHeaders: error.responseHeaders,
+      isRetryable: error.isRetryable,
+      data: error.data,
+    }
+  }
+  if (isAppError(error)) {
+    return { type: 'AppError', errorType: error.type, code: error.code }
+  }
+  if (error instanceof Error) {
+    return { type: error.name, message: error.message }
+  }
+  return { type: 'unknown', value: String(error) }
+}
+
 const handleMessageError = async (reply: ReplyFn, contextId: string, error: unknown): Promise<void> => {
-  const errData = isAppError(error) ? error : error instanceof Error ? error.message : String(error)
-  log.error({ contextId, error: errData }, 'Message handling failed')
+  const errDetails = extractErrorDetails(error)
+  log.error({ contextId, error: errDetails }, 'Message handling failed')
   if (isAppError(error)) await reply.text(getUserMessage(error))
   else if (error instanceof KaneoClassifiedError || error instanceof YouTrackClassifiedError)
     await reply.text(getUserMessage(error.appError))
