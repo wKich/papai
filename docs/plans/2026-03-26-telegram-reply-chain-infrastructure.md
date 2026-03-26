@@ -336,6 +336,7 @@ git commit -m "feat: implement in-memory message cache
 ```typescript
 // src/message-cache/persistence.ts
 import { queueMicrotask } from 'node:process'
+import { sql } from 'drizzle-orm'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { messageMetadata } from '../db/schema.js'
 import type { CachedMessage } from './types.js'
@@ -391,13 +392,13 @@ async function flushPendingWrites(): Promise<void> {
       .onConflictDoUpdate({
         target: messageMetadata.messageId,
         set: {
-          contextId: db.values(contextId),
-          authorId: db.values(authorId),
-          authorUsername: db.values(authorUsername),
-          text: db.values(text),
-          replyToMessageId: db.values(replyToMessageId),
-          timestamp: db.values(timestamp),
-          expiresAt: db.values(expiresAt),
+          contextId: sql.raw('excluded.context_id'),
+          authorId: sql.raw('excluded.author_id'),
+          authorUsername: sql.raw('excluded.author_username'),
+          text: sql.raw('excluded.text'),
+          replyToMessageId: sql.raw('excluded.reply_to_message_id'),
+          timestamp: sql.raw('excluded.timestamp'),
+          expiresAt: sql.raw('excluded.expires_at'),
         },
       })
 
