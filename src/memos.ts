@@ -104,17 +104,25 @@ export function listMemos(userId: string, limit: number = 10, status: string = '
   return rows.map(drizzleRowToMemo)
 }
 
-export function updateMemoEmbedding(memoId: string, embedding: Float32Array): void {
-  log.debug({ memoId, embeddingDim: embedding.length }, 'updateMemoEmbedding called')
+export function updateMemoEmbedding(userId: string, memoId: string, embedding: Float32Array): void {
+  log.debug({ userId, memoId, embeddingDim: embedding.length }, 'updateMemoEmbedding called')
   const db = getDrizzleDb()
   const buffer = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength)
-  db.update(memos).set({ embedding: buffer, updatedAt: new Date().toISOString() }).where(eq(memos.id, memoId)).run()
-  log.info({ memoId }, 'Memo embedding updated')
+  db.update(memos)
+    .set({ embedding: buffer, updatedAt: new Date().toISOString() })
+    .where(and(eq(memos.id, memoId), eq(memos.userId, userId)))
+    .run()
+  log.info({ userId, memoId }, 'Memo embedding updated')
+}
+
+function sanitizeFtsQuery(query: string): string {
+  return `"${query.replace(/"/g, '""')}"`
 }
 
 export function keywordSearchMemos(userId: string, query: string, limit: number = 5): readonly Memo[] {
   log.debug({ userId, query, limit }, 'keywordSearchMemos called')
   const db = getDrizzleDb()
+  const safeQuery = sanitizeFtsQuery(query)
   const rows = db
     .select({
       id: memos.id,
@@ -132,7 +140,7 @@ export function keywordSearchMemos(userId: string, query: string, limit: number 
       and(
         eq(memos.userId, userId),
         eq(memos.status, 'active'),
-        sql`${memos.id} IN (SELECT m.id FROM memos m INNER JOIN memos_fts f ON m.rowid = f.rowid WHERE f.memos_fts MATCH ${query} AND m.user_id = ${userId} AND m.status = 'active')`,
+        sql`${memos.id} IN (SELECT m.id FROM memos m INNER JOIN memos_fts f ON m.rowid = f.rowid WHERE f.memos_fts MATCH ${safeQuery} AND m.user_id = ${userId} AND m.status = 'active')`,
       ),
     )
     .limit(limit)
@@ -201,10 +209,15 @@ function archiveByDate(userId: string, beforeDate: string): number {
   return count
 }
 
+/**
+ * Archive memos matching the given filter. Filters are mutually exclusive —
+ * only the first matching filter (tag > memoIds > beforeDate) is applied.
+ * The tool layer ensures only one filter is provided per call.
+ */
 export function archiveMemos(userId: string, filter: ArchiveFilter): number {
   log.debug({ userId, filter }, 'archiveMemos called')
-  if (filter.tag !== undefined) return archiveByTag(userId, filter.tag)
   if (filter.memoIds !== undefined && filter.memoIds.length > 0) return archiveByIds(userId, filter.memoIds)
+  if (filter.tag !== undefined) return archiveByTag(userId, filter.tag)
   if (filter.beforeDate !== undefined) return archiveByDate(userId, filter.beforeDate)
   log.warn({ userId }, 'archiveMemos called with no filter')
   return 0

@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
-import { getMemo, addMemoLink } from '../memos.js'
+import { getMemo, addMemoLink, archiveMemos } from '../memos.js'
 import type { TaskProvider } from '../providers/types.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
@@ -50,14 +50,27 @@ async function promoteToTask(
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const resolvedDueDate = dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
 
-  const task = await provider.createTask({
-    projectId,
-    title: taskTitle,
-    description: memo.content,
-    dueDate: resolvedDueDate,
-  })
+  let task: Awaited<ReturnType<typeof provider.createTask>>
+  try {
+    task = await provider.createTask({
+      projectId,
+      title: taskTitle,
+      description: memo.content,
+      dueDate: resolvedDueDate,
+    })
+  } catch (error) {
+    log.error(
+      { userId, memoId, error: error instanceof Error ? error.message : String(error) },
+      'Failed to create task from memo',
+    )
+    return {
+      status: 'error',
+      message: `Failed to create task: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
 
   addMemoLink(memoId, task.id, 'action_for')
+  archiveMemos(userId, { memoIds: [memoId] })
   log.info({ userId, memo_id: memoId, taskId: task.id }, 'Memo promoted to task')
 
   return {

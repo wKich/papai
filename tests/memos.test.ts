@@ -157,6 +157,25 @@ describe('keywordSearchMemos (FTS5)', () => {
     expect(results.length).toBe(0)
   })
 
+  test('FTS trigger: update content, search finds new content', () => {
+    const memo = saveMemo('user1', 'original content about apples', [])
+    expect(keywordSearchMemos('user1', 'apples').length).toBe(1)
+    expect(keywordSearchMemos('user1', 'bananas').length).toBe(0)
+
+    // Update content directly to trigger FTS update trigger
+    const rawDb = testDb.$client
+    rawDb.prepare(`UPDATE memos SET content = 'updated content about bananas' WHERE id = ?`).run(memo.id)
+
+    expect(keywordSearchMemos('user1', 'bananas').length).toBe(1)
+    expect(keywordSearchMemos('user1', 'apples').length).toBe(0)
+  })
+
+  test('handles special characters in query without crashing', () => {
+    saveMemo('user1', 'meeting notes AND action items', [])
+    const results = keywordSearchMemos('user1', 'AND OR "special*')
+    expect(Array.isArray(results)).toBe(true)
+  })
+
   test('per-user isolation in search', () => {
     saveMemo('user1', 'shared keyword alpha', [])
     saveMemo('user2', 'shared keyword alpha', [])
@@ -176,7 +195,7 @@ describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
   test('stores and retrieves Float32Array correctly', () => {
     const memo = saveMemo('user1', 'test embedding', [])
     const vec = new Float32Array([0.1, 0.2, 0.3, 0.4])
-    updateMemoEmbedding(memo.id, vec)
+    updateMemoEmbedding('user1', memo.id, vec)
 
     const loaded = loadEmbeddingsForUser('user1')
     expect(loaded.length).toBe(1)
@@ -190,8 +209,8 @@ describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
     const memo1 = saveMemo('user1', 'has embedding', [])
     saveMemo('user1', 'no embedding', [])
     const memo3 = saveMemo('user1', 'will be archived', [])
-    updateMemoEmbedding(memo1.id, new Float32Array([1, 2]))
-    updateMemoEmbedding(memo3.id, new Float32Array([3, 4]))
+    updateMemoEmbedding('user1', memo1.id, new Float32Array([1, 2]))
+    updateMemoEmbedding('user1', memo3.id, new Float32Array([3, 4]))
     archiveMemos('user1', { memoIds: [memo3.id] })
 
     const loaded = loadEmbeddingsForUser('user1')

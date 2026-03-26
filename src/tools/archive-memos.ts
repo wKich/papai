@@ -33,10 +33,13 @@ export function makeArchiveMemosTool(userId: string): ToolSet[string] {
         return { status: 'error', message: 'At least one filter (tag, before_date, or memo_ids) is required.' }
       }
 
-      const gate = checkConfidence(confidence, buildDescription(tag, before_date, memo_ids))
-      if (gate !== null) {
-        log.warn({ userId, confidence }, 'archive_memos blocked — confirmation required')
-        return gate
+      const isIdBased = memo_ids !== undefined && memo_ids.length > 0
+      if (!isIdBased) {
+        const gate = checkConfidence(confidence, buildDescription(tag, before_date, memo_ids))
+        if (gate !== null) {
+          log.warn({ userId, confidence }, 'archive_memos blocked — confirmation required')
+          return gate
+        }
       }
 
       const count = archiveMemos(userId, { tag, beforeDate: before_date, memoIds: memo_ids })

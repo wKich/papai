@@ -1,26 +1,12 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 mockLogger()
 mockDrizzle()
 
-let configStore: Record<string, string> = {}
-void mock.module('../../src/config.js', () => ({
-  getConfig: (_userId: string, key: string): string | null => configStore[key] ?? null,
-  setConfig: (_userId: string, key: string, value: string): void => {
-    configStore[key] = value
-  },
-}))
-
-type EmbeddingResult = number[] | null
-let tryGetEmbeddingImpl = (): Promise<EmbeddingResult> => Promise.resolve(null)
-void mock.module('../../src/embeddings.js', () => ({
-  getEmbedding: (): Promise<number[]> => Promise.resolve([0.1, 0.2, 0.3]),
-  tryGetEmbedding: (..._args: unknown[]): Promise<EmbeddingResult> => tryGetEmbeddingImpl(),
-}))
-
 import { _userCaches } from '../../src/cache.js'
+import { setConfig } from '../../src/config.js'
 import { saveMemo } from '../../src/memos.js'
 import { makeArchiveMemosTool } from '../../src/tools/archive-memos.js'
 import { makeListMemosTool } from '../../src/tools/list-memos.js'
@@ -28,10 +14,6 @@ import { makePromoteMemoTool } from '../../src/tools/promote-memo.js'
 import { makeSaveMemoTool } from '../../src/tools/save-memo.js'
 import { makeSearchMemosTool } from '../../src/tools/search-memos.js'
 import { createMockProvider } from './mock-provider.js'
-
-afterAll(() => {
-  mock.restore()
-})
 
 async function exec(
   toolInstance: ReturnType<typeof makeSaveMemoTool>,
@@ -45,7 +27,6 @@ async function exec(
 describe('save_memo tool', () => {
   beforeEach(async () => {
     _userCaches.clear()
-    configStore = {}
     await setupTestDb()
   })
 
@@ -65,8 +46,6 @@ describe('save_memo tool', () => {
 describe('search_memos tool', () => {
   beforeEach(async () => {
     _userCaches.clear()
-    configStore = {}
-    tryGetEmbeddingImpl = (): Promise<EmbeddingResult> => Promise.resolve(null)
     await setupTestDb()
   })
 
@@ -97,7 +76,6 @@ describe('search_memos tool', () => {
 describe('list_memos tool', () => {
   beforeEach(async () => {
     _userCaches.clear()
-    configStore = {}
     await setupTestDb()
   })
 
@@ -120,7 +98,6 @@ describe('list_memos tool', () => {
 describe('archive_memos tool', () => {
   beforeEach(async () => {
     _userCaches.clear()
-    configStore = {}
     await setupTestDb()
   })
 
@@ -129,7 +106,7 @@ describe('archive_memos tool', () => {
     expect(result).toHaveProperty('status', 'error')
   })
 
-  test('requires confirmation when confidence is low', async () => {
+  test('requires confirmation when confidence is low for non-ID archive', async () => {
     saveMemo('user1', 'note', ['tag'])
     const result = await exec(makeArchiveMemosTool('user1'), { tag: 'tag', confidence: 0.5 })
     expect(result).toHaveProperty('status', 'confirmation_required')
@@ -144,11 +121,11 @@ describe('archive_memos tool', () => {
     expect(result).toHaveProperty('count', 1)
   })
 
-  test('archives by memo IDs', async () => {
+  test('archives by memo IDs without confirmation gate', async () => {
     const memo = saveMemo('user1', 'specific note', [])
     saveMemo('user1', 'other', [])
 
-    const result = await exec(makeArchiveMemosTool('user1'), { memo_ids: [memo.id], confidence: 1.0 })
+    const result = await exec(makeArchiveMemosTool('user1'), { memo_ids: [memo.id], confidence: 0.5 })
     expect(result).toHaveProperty('status', 'archived')
     expect(result).toHaveProperty('count', 1)
   })
@@ -157,8 +134,8 @@ describe('archive_memos tool', () => {
 describe('promote_memo tool', () => {
   beforeEach(async () => {
     _userCaches.clear()
-    configStore = {}
     await setupTestDb()
+    setConfig('user1', 'timezone', 'UTC')
   })
 
   test('promotes memo to task', async () => {
@@ -173,7 +150,24 @@ describe('promote_memo tool', () => {
 
   test('returns error for nonexistent memo', async () => {
     const provider = createMockProvider()
-    const result = await exec(makePromoteMemoTool(provider, 'user1'), { memo_id: 'nonexistent', project_id: 'proj-1' })
+    const result = await exec(makePromoteMemoTool(provider, 'user1'), {
+      memo_id: 'nonexistent',
+      project_id: 'proj-1',
+    })
     expect(result).toHaveProperty('status', 'error')
+  })
+
+  test('returns error when provider.createTask fails', async () => {
+    const memo = saveMemo('user1', 'will fail', [])
+    const provider = createMockProvider({
+      createTask: () => Promise.reject(new Error('API unavailable')),
+    })
+
+    const result = await exec(makePromoteMemoTool(provider, 'user1'), {
+      memo_id: memo.id,
+      project_id: 'proj-1',
+    })
+    expect(result).toHaveProperty('status', 'error')
+    expect(result).toHaveProperty('message')
   })
 })

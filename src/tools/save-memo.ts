@@ -30,11 +30,18 @@ export function makeSaveMemoTool(userId: string): ToolSet[string] {
       const baseUrl = getConfig(userId, 'llm_baseurl')
       const embeddingModel = getConfig(userId, 'embedding_model')
       if (apiKey !== null && baseUrl !== null && embeddingModel !== null) {
-        void tryGetEmbedding(content, apiKey, baseUrl, embeddingModel).then((embedding) => {
-          if (embedding !== null) {
-            updateMemoEmbedding(memo.id, new Float32Array(embedding))
-          }
-        })
+        void tryGetEmbedding(content, apiKey, baseUrl, embeddingModel)
+          .then((embedding) => {
+            if (embedding !== null) {
+              updateMemoEmbedding(userId, memo.id, new Float32Array(embedding))
+            }
+          })
+          .catch((error: unknown) => {
+            log.error(
+              { memoId: memo.id, error: error instanceof Error ? error.message : String(error) },
+              'Embedding failed',
+            )
+          })
       }
 
       return { id: memo.id, content: memo.content, tags: memo.tags, createdAt: memo.createdAt }
