@@ -17,6 +17,7 @@ import { migration012UserInstructions } from '../../src/db/migrations/012_user_i
 import { migration013DeferredPrompts } from '../../src/db/migrations/013_deferred_prompts.js'
 import { migration014BackgroundEvents } from '../../src/db/migrations/014_background_events.js'
 import { migration015DropBackgroundEvents } from '../../src/db/migrations/015_drop_background_events.js'
+import { migration016ExecutionMetadata } from '../../src/db/migrations/016_execution_metadata.js'
 
 const ALL_MIGRATIONS = [
   migration001Initial,
@@ -34,6 +35,7 @@ const ALL_MIGRATIONS = [
   migration013DeferredPrompts,
   migration014BackgroundEvents,
   migration015DropBackgroundEvents,
+  migration016ExecutionMetadata,
 ]
 
 const getColumnNames = (db: Database, tableName: string): string[] =>
@@ -52,6 +54,7 @@ describe('migration 013: deferred prompts', () => {
   let db: Database
 
   beforeEach(() => {
+    if (db !== undefined) db.close()
     db = new Database(':memory:')
     runMigrations(db, [...ALL_MIGRATIONS])
   })
@@ -98,5 +101,39 @@ describe('migration 013: deferred prompts', () => {
     expect(names).not.toContain('reminders')
     expect(names).not.toContain('user_briefing_state')
     expect(names).not.toContain('alert_state')
+  })
+})
+
+describe('migration 016: execution metadata', () => {
+  let db: Database
+
+  beforeEach(() => {
+    if (db !== undefined) db.close()
+    db = new Database(':memory:')
+    runMigrations(db, [...ALL_MIGRATIONS])
+  })
+
+  afterAll(() => {
+    db.close()
+  })
+
+  test('adds execution_metadata to scheduled_prompts', () => {
+    const columns = getColumnNames(db, 'scheduled_prompts')
+    expect(columns).toContain('execution_metadata')
+  })
+
+  test('adds execution_metadata to alert_prompts', () => {
+    const columns = getColumnNames(db, 'alert_prompts')
+    expect(columns).toContain('execution_metadata')
+  })
+
+  test('default value is empty JSON object', () => {
+    db.run(
+      "INSERT INTO scheduled_prompts (id, user_id, prompt, fire_at, status) VALUES ('t1', 'u1', 'test', '2026-01-01T00:00:00Z', 'active')",
+    )
+    const row = db
+      .query<{ execution_metadata: string }, []>("SELECT execution_metadata FROM scheduled_prompts WHERE id = 't1'")
+      .get()
+    expect(row?.execution_metadata).toBe('{}')
   })
 })

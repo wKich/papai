@@ -130,6 +130,7 @@ export const scheduledPrompts = sqliteTable(
       .notNull()
       .default(sql`(datetime('now'))`),
     lastExecutedAt: text('last_executed_at'),
+    executionMetadata: text('execution_metadata').notNull().default('{}'),
   },
   (table) => [
     index('idx_scheduled_prompts_user').on(table.userId),
@@ -150,6 +151,7 @@ export const alertPrompts = sqliteTable(
       .default(sql`(datetime('now'))`),
     lastTriggeredAt: text('last_triggered_at'),
     cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
+    executionMetadata: text('execution_metadata').notNull().default('{}'),
   },
   (table) => [index('idx_alert_prompts_user').on(table.userId), index('idx_alert_prompts_status').on(table.status)],
 )

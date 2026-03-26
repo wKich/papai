@@ -5,7 +5,7 @@ import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 mockLogger()
 mockDrizzle()
 
-import { buildProactiveTrigger } from '../../src/deferred-prompts/proactive-llm.js'
+import { buildProactiveTrigger } from '../../src/deferred-prompts/proactive-trigger.js'
 import { buildSystemPrompt } from '../../src/system-prompt.js'
 import { createMockProvider } from '../tools/mock-provider.js'
 

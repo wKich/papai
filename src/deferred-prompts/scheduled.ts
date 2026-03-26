@@ -4,7 +4,12 @@ import { getDrizzleDb } from '../db/drizzle.js'
 import { scheduledPrompts } from '../db/schema.js'
 import type { ScheduledPromptRow } from '../db/schema.js'
 import { logger } from '../logger.js'
-import type { ScheduledPrompt } from './types.js'
+import {
+  DEFAULT_EXECUTION_METADATA,
+  parseExecutionMetadata,
+  type ExecutionMetadata,
+  type ScheduledPrompt,
+} from './types.js'
 
 const log = logger.child({ scope: 'deferred:scheduled' })
 
@@ -27,6 +32,7 @@ function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
     status: toStatus(row.status),
     createdAt: row.createdAt,
     lastExecutedAt: row.lastExecutedAt,
+    executionMetadata: parseExecutionMetadata(row.executionMetadata),
   }
 }
 
@@ -34,6 +40,7 @@ export function createScheduledPrompt(
   userId: string,
   prompt: string,
   schedule: { fireAt: string; cronExpression?: string },
+  executionMetadata?: ExecutionMetadata,
 ): ScheduledPrompt {
   log.debug({ userId, hasCron: schedule.cronExpression !== undefined }, 'createScheduledPrompt called')
 
@@ -49,6 +56,7 @@ export function createScheduledPrompt(
       fireAt,
       cronExpression: schedule.cronExpression ?? null,
       status: 'active',
+      executionMetadata: JSON.stringify(executionMetadata ?? DEFAULT_EXECUTION_METADATA),
     })
     .run()
 
@@ -99,18 +107,20 @@ function buildUpdateValues(updates: {
   prompt?: string
   fireAt?: string
   cronExpression?: string
+  executionMetadata?: ExecutionMetadata
 }): Partial<typeof scheduledPrompts.$inferInsert> {
   const values: Partial<typeof scheduledPrompts.$inferInsert> = {}
   if (updates.prompt !== undefined) values.prompt = updates.prompt
   if (updates.fireAt !== undefined) values.fireAt = new Date(updates.fireAt).toISOString()
   if (updates.cronExpression !== undefined) values.cronExpression = updates.cronExpression
+  if (updates.executionMetadata !== undefined) values.executionMetadata = JSON.stringify(updates.executionMetadata)
   return values
 }
 
 export function updateScheduledPrompt(
   id: string,
   userId: string,
-  updates: { prompt?: string; fireAt?: string; cronExpression?: string },
+  updates: { prompt?: string; fireAt?: string; cronExpression?: string; executionMetadata?: ExecutionMetadata },
 ): ScheduledPrompt | null {
   log.debug({ id, userId }, 'updateScheduledPrompt called')
 
