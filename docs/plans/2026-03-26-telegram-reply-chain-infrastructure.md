@@ -741,55 +741,63 @@ Enables reply chain tracking for telegram and future providers"
 **Files:**
 
 - Modify: `src/chat/telegram/index.ts`
-- Modify: `src/chat/telegram/extract-message.ts` (if exists, otherwise inline in index.ts)
 
-**Step 1: Update extractMessage to cache and return replyToMessageId**
+**Step 1: Update the private extractMessage method**
+
+Modify the existing `private extractMessage` method (around line 106-130) to:
+
+1. Import and use `cacheMessage` from message-cache
+2. Extract `reply_to_message.message_id` from the context
+3. Add `replyToMessageId` to the returned IncomingMessage
 
 ```typescript
 // src/chat/telegram/index.ts
 import { cacheMessage } from '../../message-cache/index.js'
 
-// In extractMessage function (around line 106-130)
-function extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage {
-  const message = ctx.message
-  if (!message) throw new Error('No message in context')
+// Modify the existing private extractMessage method
+private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
+  const id = ctx.from?.id
+  if (id === undefined) return null
 
-  const userId = message.from?.id
-  const username = message.from?.username ?? `user_${userId}`
-  const chatId = ctx.chat?.id
+  const chatType = ctx.chat?.type
+  const isGroup = chatType === 'group' || chatType === 'supergroup' || chatType === 'channel'
+  const contextId = String(ctx.chat?.id ?? id)
+  const contextType: ContextType = isGroup ? 'group' : 'dm'
 
-  if (!userId || !chatId) {
-    throw new Error('Missing user or chat ID')
+  const text = ctx.message?.text ?? ''
+  const isMentioned = this.isBotMentioned(text, ctx.message?.entities)
+
+  const messageId = ctx.message?.message_id
+  const messageIdStr = messageId === undefined ? undefined : String(messageId)
+
+  const replyToMessageId = ctx.message?.reply_to_message?.message_id
+  const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
+
+  // Cache message metadata for reply chain tracking (if we have a message ID)
+  if (messageIdStr !== undefined) {
+    cacheMessage({
+      messageId: messageIdStr,
+      contextId,
+      authorId: String(id),
+      authorUsername: ctx.from?.username ?? undefined,
+      text,
+      replyToMessageId: replyToMessageIdStr,
+      timestamp: Date.now(),
+    })
   }
 
-  const contextId = ctx.chat?.type === 'private' ? String(userId) : String(chatId)
-  const contextType = ctx.chat?.type === 'private' ? 'dm' : 'group'
-  const isMentioned = message.text?.includes(`@${ctx.me?.username}`) ?? false
-  const text = message.text ?? ''
-  const messageId = String(message.message_id)
-  const replyToMessageId = message.reply_to_message?.message_id
-    ? String(message.reply_to_message.message_id)
-    : undefined
-
-  // Cache message metadata for reply chain tracking
-  cacheMessage({
-    messageId,
-    contextId,
-    authorId: String(userId),
-    authorUsername: username,
-    text,
-    replyToMessageId,
-    timestamp: Date.now(),
-  })
-
   return {
-    user: { id: String(userId), username, isAdmin },
+    user: {
+      id: String(id),
+      username: ctx.from?.username ?? null,
+      isAdmin,
+    },
     contextId,
     contextType,
     isMentioned,
     text,
-    messageId,
-    replyToMessageId,
+    messageId: messageIdStr,
+    replyToMessageId: replyToMessageIdStr,
   }
 }
 ```
@@ -814,9 +822,10 @@ bun test tests/chat/telegram/
 git add src/chat/telegram/index.ts
 git commit -m "feat(telegram): extract and cache reply metadata
 
-- Extract reply_to_message.message_id
-- Cache message metadata on every incoming message
-- Add replyToMessageId to IncomingMessage"
+- Extract reply_to_message.message_id from Telegram context
+- Cache message metadata on every incoming message with ID
+- Add replyToMessageId to IncomingMessage return type
+- Maintains existing null-return semantics for invalid messages"
 ```
 
 ---
