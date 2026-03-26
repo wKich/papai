@@ -99,8 +99,11 @@ async function invokeLightweight(
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
+    const history = getCachedHistory(userId)
     appendHistory(userId, assistantMessages)
     log.debug({ userId, count: assistantMessages.length }, 'Lightweight response appended to history')
+    const updatedHistory = [...history, ...assistantMessages]
+    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(userId, updatedHistory)
   }
   return result.text ?? 'Done.'
 }
