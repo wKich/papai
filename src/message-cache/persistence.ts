@@ -15,7 +15,7 @@ let isFlushScheduled = false
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export function scheduleMessagePersistence(message: CachedMessage): void {
-  pendingWrites.set(message.messageId, message)
+  pendingWrites.set(`${message.contextId}:${message.messageId}`, message)
   scheduleFlush()
 }
 
@@ -58,9 +58,8 @@ function flushPendingWrites(): void {
         })),
       )
       .onConflictDoUpdate({
-        target: messageMetadata.messageId,
+        target: [messageMetadata.contextId, messageMetadata.messageId],
         set: {
-          contextId: sql`excluded.context_id`,
           authorId: sql`excluded.author_id`,
           authorUsername: sql`excluded.author_username`,
           text: sql`excluded.text`,

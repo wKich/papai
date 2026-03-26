@@ -185,6 +185,36 @@ describe('Message Persistence', () => {
     expect(messages[0]?.messageId).toBe('msg-new')
   })
 
+  test('should not collide on same messageId across different contexts', async () => {
+    const now = Date.now()
+
+    scheduleMessagePersistence({
+      messageId: '1',
+      contextId: 'chat-A',
+      text: 'From chat A',
+      timestamp: now,
+    })
+
+    scheduleMessagePersistence({
+      messageId: '1',
+      contextId: 'chat-B',
+      text: 'From chat B',
+      timestamp: now,
+    })
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10)
+    })
+
+    const chatA = loadMessagesFromDb('chat-A')
+    const chatB = loadMessagesFromDb('chat-B')
+
+    expect(chatA).toHaveLength(1)
+    expect(chatA[0]?.text).toBe('From chat A')
+    expect(chatB).toHaveLength(1)
+    expect(chatB[0]?.text).toBe('From chat B')
+  })
+
   test('should convert optional fields to undefined on load', async () => {
     scheduleMessagePersistence({
       messageId: 'msg-minimal',

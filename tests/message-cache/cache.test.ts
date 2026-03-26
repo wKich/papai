@@ -29,25 +29,36 @@ describe('Message Cache', () => {
 
     cacheMessage(message)
 
-    const retrieved = getCachedMessage('123')
+    const retrieved = getCachedMessage('chat-456', '123')
     expect(retrieved).toBeDefined()
     expect(retrieved?.text).toBe('Hello')
   })
 
   test('should return undefined for non-existent message', () => {
-    const result = getCachedMessage('non-existent')
+    const result = getCachedMessage('chat-1', 'non-existent')
     expect(result).toBeUndefined()
   })
 
   test('should store messages in cache', () => {
-    expect(hasCachedMessage('1')).toBe(false)
+    expect(hasCachedMessage('c1', '1')).toBe(false)
     cacheMessage({ messageId: '1', contextId: 'c1', timestamp: Date.now() })
-    expect(hasCachedMessage('1')).toBe(true)
+    expect(hasCachedMessage('c1', '1')).toBe(true)
   })
 
   test('should check if message is cached', () => {
     cacheMessage({ messageId: '1', contextId: 'c1', timestamp: Date.now() })
-    expect(hasCachedMessage('1')).toBe(true)
-    expect(hasCachedMessage('2')).toBe(false)
+    expect(hasCachedMessage('c1', '1')).toBe(true)
+    expect(hasCachedMessage('c1', '2')).toBe(false)
+  })
+
+  test('should isolate messages by contextId', () => {
+    cacheMessage({ messageId: '1', contextId: 'chat-A', text: 'From A', timestamp: Date.now() })
+    cacheMessage({ messageId: '1', contextId: 'chat-B', text: 'From B', timestamp: Date.now() })
+
+    const fromA = getCachedMessage('chat-A', '1')
+    const fromB = getCachedMessage('chat-B', '1')
+
+    expect(fromA?.text).toBe('From A')
+    expect(fromB?.text).toBe('From B')
   })
 })

@@ -1,4 +1,4 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
@@ -25,7 +25,7 @@ describe('Reply Chain Builder', () => {
     cacheMessage({ messageId: 'B', contextId: 'c1', replyToMessageId: 'A', timestamp: Date.now() })
     cacheMessage({ messageId: 'C', contextId: 'c1', replyToMessageId: 'B', timestamp: Date.now() })
 
-    const result = buildReplyChain('C')
+    const result = buildReplyChain('c1', 'C')
     expect(result.chain).toEqual(['A', 'B', 'C'])
     expect(result.isComplete).toBe(true)
   })
@@ -33,7 +33,7 @@ describe('Reply Chain Builder', () => {
   test('should detect missing parent', () => {
     cacheMessage({ messageId: 'C', contextId: 'c1', replyToMessageId: 'B', timestamp: Date.now() })
 
-    const result = buildReplyChain('C')
+    const result = buildReplyChain('c1', 'C')
     expect(result.chain).toEqual(['C'])
     expect(result.isComplete).toBe(false)
     expect(result.brokenAt).toBe('B')
@@ -44,7 +44,7 @@ describe('Reply Chain Builder', () => {
     cacheMessage({ messageId: 'B', contextId: 'c1', replyToMessageId: 'A', timestamp: Date.now() })
     cacheMessage({ messageId: 'C', contextId: 'c1', replyToMessageId: 'B', timestamp: Date.now() })
 
-    const result = buildReplyChain('C')
+    const result = buildReplyChain('c1', 'C')
     expect(result.chain).toEqual(['A', 'B', 'C'])
     expect(result.isComplete).toBe(false)
   })
@@ -52,13 +52,13 @@ describe('Reply Chain Builder', () => {
   test('should handle single message (no replies)', () => {
     cacheMessage({ messageId: 'A', contextId: 'c1', timestamp: Date.now() })
 
-    const result = buildReplyChain('A')
+    const result = buildReplyChain('c1', 'A')
     expect(result.chain).toEqual(['A'])
     expect(result.isComplete).toBe(true)
   })
 
   test('should handle non-existent starting message', () => {
-    const result = buildReplyChain('non-existent')
+    const result = buildReplyChain('c1', 'non-existent')
     expect(result.chain).toEqual([])
     expect(result.isComplete).toBe(false)
     expect(result.brokenAt).toBe('non-existent')

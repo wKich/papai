@@ -10,7 +10,11 @@ export interface ReplyChainResult {
 }
 
 /** @public */
-export function buildReplyChain(messageId: string, visited: Set<string> = new Set()): ReplyChainResult {
+export function buildReplyChain(
+  contextId: string,
+  messageId: string,
+  visited: Set<string> = new Set(),
+): ReplyChainResult {
   const chain: string[] = []
   let currentId: string | undefined = messageId
   let isComplete = true
@@ -27,7 +31,7 @@ export function buildReplyChain(messageId: string, visited: Set<string> = new Se
 
     visited.add(currentId)
 
-    const message = getCachedMessage(currentId)
+    const message = getCachedMessage(contextId, currentId)
     if (message === undefined) {
       // Message not in cache - chain is broken
       isComplete = false

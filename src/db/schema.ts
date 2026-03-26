@@ -199,8 +199,8 @@ export type GroupMember = typeof groupMembers.$inferSelect
 export const messageMetadata = sqliteTable(
   'message_metadata',
   {
-    messageId: text('message_id').primaryKey(),
     contextId: text('context_id').notNull(),
+    messageId: text('message_id').notNull(),
     authorId: text('author_id'),
     authorUsername: text('author_username'),
     text: text('text'),
@@ -209,8 +209,8 @@ export const messageMetadata = sqliteTable(
     expiresAt: integer('expires_at').notNull(),
   },
   (table) => [
-    index('idx_message_metadata_context_id').on(table.contextId),
+    primaryKey({ columns: [table.contextId, table.messageId] }),
     index('idx_message_metadata_expires_at').on(table.expiresAt),
-    index('idx_message_metadata_reply_to').on(table.replyToMessageId),
+    index('idx_message_metadata_reply_to').on(table.contextId, table.replyToMessageId),
   ],
 )
