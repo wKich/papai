@@ -76,10 +76,11 @@ function flushPendingWrites(): void {
       { error: err instanceof Error ? err.message : String(err), count: writes.length },
       'Failed to persist messages',
     )
-    // Re-queue failed writes
+    // Re-queue failed writes and schedule retry
     for (const msg of writes) {
-      pendingWrites.set(msg.messageId, msg)
+      pendingWrites.set(`${msg.contextId}:${msg.messageId}`, msg)
     }
+    setTimeout(scheduleFlush, 5000)
   }
 }
 
