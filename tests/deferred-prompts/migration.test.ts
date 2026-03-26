@@ -54,6 +54,7 @@ describe('migration 013: deferred prompts', () => {
   let db: Database
 
   beforeEach(() => {
+    if (db !== undefined) db.close()
     db = new Database(':memory:')
     runMigrations(db, [...ALL_MIGRATIONS])
   })
@@ -107,6 +108,7 @@ describe('migration 016: execution metadata', () => {
   let db: Database
 
   beforeEach(() => {
+    if (db !== undefined) db.close()
     db = new Database(':memory:')
     runMigrations(db, [...ALL_MIGRATIONS])
   })
