@@ -10,13 +10,7 @@ afterAll(() => {
   mock.restore()
 })
 
-import {
-  cacheMessage,
-  getCachedMessage,
-  hasCachedMessage,
-  clearMessageCache,
-  getMessageCacheSize,
-} from '../../src/message-cache/cache.js'
+import { cacheMessage, getCachedMessage, hasCachedMessage, clearMessageCache } from '../../src/message-cache/cache.js'
 
 describe('Message Cache', () => {
   beforeEach(async () => {
@@ -45,10 +39,10 @@ describe('Message Cache', () => {
     expect(result).toBeUndefined()
   })
 
-  test('should track cache size', () => {
-    expect(getMessageCacheSize()).toBe(0)
+  test('should store messages in cache', () => {
+    expect(hasCachedMessage('1')).toBe(false)
     cacheMessage({ messageId: '1', contextId: 'c1', timestamp: Date.now() })
-    expect(getMessageCacheSize()).toBe(1)
+    expect(hasCachedMessage('1')).toBe(true)
   })
 
   test('should check if message is cached', () => {

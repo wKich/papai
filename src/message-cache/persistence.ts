@@ -84,6 +84,7 @@ function flushPendingWrites(): void {
   }
 }
 
+/** @public */
 export function loadMessagesFromDb(contextId: string): CachedMessage[] {
   const db = getDrizzleDb()
   const now = Date.now()

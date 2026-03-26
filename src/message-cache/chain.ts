@@ -9,6 +9,7 @@ export interface ReplyChainResult {
   brokenAt?: string
 }
 
+/** @public */
 export function buildReplyChain(messageId: string, visited: Set<string> = new Set()): ReplyChainResult {
   const chain: string[] = []
   let currentId: string | undefined = messageId

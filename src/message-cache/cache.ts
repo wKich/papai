@@ -26,29 +26,12 @@ export function getCachedMessage(messageId: string): CachedMessage | undefined {
   return cached
 }
 
+/** @public */
 export function hasCachedMessage(messageId: string): boolean {
   return getCachedMessage(messageId) !== undefined
 }
 
-export function getMessageCacheSize(): number {
-  return messageCache.size
-}
-
+/** @public */
 export function clearMessageCache(): void {
   messageCache.clear()
-}
-
-export function getAllCachedMessages(): CachedMessage[] {
-  const now = Date.now()
-  const valid: CachedMessage[] = []
-
-  for (const [id, msg] of messageCache) {
-    if (now - msg.timestamp <= ONE_WEEK_MS) {
-      valid.push(msg)
-    } else {
-      messageCache.delete(id)
-    }
-  }
-
-  return valid
 }

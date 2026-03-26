@@ -7,14 +7,3 @@ export interface CachedMessage {
   replyToMessageId?: string
   timestamp: number
 }
-
-export interface MessageMetadataRow {
-  message_id: string
-  context_id: string
-  author_id: string | null
-  author_username: string | null
-  text: string | null
-  reply_to_message_id: string | null
-  timestamp: number
-  expires_at: number
-}
