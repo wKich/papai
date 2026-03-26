@@ -24,10 +24,9 @@ export function buildReplyContextChain(
 
   for (const msgId of earlierMessages) {
     const msg = getCachedMessage(contextId, msgId)
-    if (msg === undefined) continue
+    if (msg === undefined || msg.text === undefined || msg.text === '') continue
     const author = msg.authorUsername ?? 'user'
-    const text = truncate(msg.text ?? '', 100)
-    summaries.push(`${author}: ${text}`)
+    summaries.push(`${author}: ${msg.text}`)
   }
 
   return {
@@ -52,7 +51,7 @@ export function buildPromptWithReplyContext(msg: IncomingMessage): string {
 
   if (msg.replyContext.text !== undefined) {
     const author = msg.replyContext.authorUsername ?? 'user'
-    context.push(`[Replying to message from ${author}: "${truncate(msg.replyContext.text, 200)}"]`)
+    context.push(`[Replying to message from ${author}: "${msg.replyContext.text}"]`)
   }
 
   if (msg.replyContext.quotedText !== undefined) {
@@ -69,11 +68,4 @@ export function buildPromptWithReplyContext(msg: IncomingMessage): string {
 
   log.debug({ contextParts: context.length }, 'Built prompt with reply context')
   return context.join('\n') + '\n\n' + msg.text
-}
-
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text
-  }
-  return text.slice(0, maxLength) + '...'
 }

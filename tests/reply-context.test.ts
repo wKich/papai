@@ -79,23 +79,6 @@ describe('buildPromptWithReplyContext', () => {
     expect(result).toContain('Follow-up question')
   })
 
-  test('truncates long parent messages', () => {
-    const longText = 'a'.repeat(300)
-    const msg = makeDmMessage({
-      text: 'Short question',
-      replyContext: {
-        messageId: 'msg123',
-        authorUsername: 'user',
-        text: longText,
-      },
-    })
-
-    const result = buildPromptWithReplyContext(msg)
-
-    expect(result).toContain('...')
-    expect(result.length).toBeLessThan(longText.length + 100)
-  })
-
   test('falls back to "user" when authorUsername is missing', () => {
     const msg = makeDmMessage({
       text: 'Reply',
