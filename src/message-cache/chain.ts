@@ -9,7 +9,6 @@ export interface ReplyChainResult {
   brokenAt?: string
 }
 
-/** @public */
 export function buildReplyChain(
   contextId: string,
   messageId: string,
