@@ -7,11 +7,10 @@ import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
-import { invokeLlmWithHistory, type BuildProviderFn } from './proactive-llm.js'
-import { buildProactiveTrigger, type ProactiveTrigger } from './proactive-trigger.js'
+import { dispatchExecution, type BuildProviderFn } from './proactive-llm.js'
 import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
-import type { ScheduledPrompt } from './types.js'
+import type { ExecutionMetadata, ExecutionMode, ScheduledPrompt } from './types.js'
 
 const log = logger.child({ scope: 'deferred:poller' })
 
@@ -58,12 +57,24 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
   )
 }
 
-function buildMergedTrigger(prompts: ScheduledPrompt[], timezone: string): ProactiveTrigger {
-  if (prompts.length === 1) {
-    return buildProactiveTrigger('scheduled', prompts[0]!.prompt, timezone)
+const MODE_PRIORITY: Record<ExecutionMode, number> = { lightweight: 0, context: 1, full: 2 }
+const MODE_BY_PRIORITY: ExecutionMode[] = ['lightweight', 'context', 'full']
+
+function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMetadata {
+  let maxPriority = 0
+  const briefs: string[] = []
+  const snapshots: string[] = []
+  for (const p of prompts) {
+    const m = p.executionMetadata
+    maxPriority = Math.max(maxPriority, MODE_PRIORITY[m.mode])
+    if (m.delivery_brief !== '') briefs.push(m.delivery_brief)
+    if (m.context_snapshot !== null) snapshots.push(m.context_snapshot)
   }
-  const combined = prompts.map((p, i) => `${String(i + 1)}. "${p.prompt}"`).join('\n')
-  return buildProactiveTrigger('scheduled', combined, timezone)
+  return {
+    mode: MODE_BY_PRIORITY[maxPriority]!,
+    delivery_brief: briefs.join('\n---\n'),
+    context_snapshot: snapshots.length > 0 ? snapshots.join('\n---\n') : null,
+  }
 }
 
 function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
@@ -84,14 +95,16 @@ async function executeScheduledPromptsForUser(
   buildProviderFn: BuildProviderFn,
 ): Promise<void> {
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const trigger = buildMergedTrigger(prompts, timezone)
+  const metadata = mergeExecutionMetadata(prompts)
+  const mergedPrompt =
+    prompts.length === 1 ? prompts[0]!.prompt : prompts.map((p, i) => `${String(i + 1)}. "${p.prompt}"`).join('\n')
   const promptIds = prompts.map((p) => p.id)
 
-  log.debug({ userId, promptCount: prompts.length, promptIds }, 'Executing merged scheduled prompts')
+  log.debug({ userId, promptCount: prompts.length, promptIds, mode: metadata.mode }, 'Executing scheduled prompts')
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
+    response = await dispatchExecution(userId, 'scheduled', mergedPrompt, metadata, buildProviderFn)
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
@@ -142,15 +155,20 @@ async function executeSingleAlert(
   const matchedTasks = tasks.filter((task) => evaluateCondition(alert.condition, task, snapshots, evalNow))
   if (matchedTasks.length === 0) return
 
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const conditionDesc = describeCondition(alert.condition)
   const taskList = matchedTasks.map((t) => `- [${t.title}](${t.url})${formatTaskStatus(t.status)}`).join('\n')
   const matchedTasksSummary = `Alert condition: ${conditionDesc}\n${taskList}`
-  const trigger = buildProactiveTrigger('alert', alert.prompt, timezone, matchedTasksSummary)
 
   let response: string
   try {
-    response = await invokeLlmWithHistory(userId, trigger, buildProviderFn)
+    response = await dispatchExecution(
+      userId,
+      'alert',
+      alert.prompt,
+      alert.executionMetadata,
+      buildProviderFn,
+      matchedTasksSummary,
+    )
     await chat.sendMessage(userId, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
