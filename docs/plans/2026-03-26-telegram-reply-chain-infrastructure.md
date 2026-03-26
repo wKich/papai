@@ -359,24 +359,24 @@ function scheduleFlush(): void {
   isFlushScheduled = true
   queueMicrotask(() => {
     isFlushScheduled = false
-    flushPendingWrites().catch((err) => {
+    try {
+      flushPendingWrites()
+    } catch (err) {
       logger.error({ error: err }, 'Failed to flush message cache to database')
-    })
+    }
   })
 }
 
-async function flushPendingWrites(): Promise<void> {
+function flushPendingWrites(): void {
   if (pendingWrites.size === 0) return
 
   const writes = Array.from(pendingWrites.values())
   pendingWrites.clear()
 
   const db = getDrizzleDb()
-  const now = Date.now()
 
   try {
-    await db
-      .insert(messageMetadata)
+    db.insert(messageMetadata)
       .values(
         writes.map((msg) => ({
           messageId: msg.messageId,
@@ -401,6 +401,7 @@ async function flushPendingWrites(): Promise<void> {
           expiresAt: sql.raw('excluded.expires_at'),
         },
       })
+      .run()
 
     logger.debug({ count: writes.length }, 'Persisted messages to database')
   } catch (err) {
@@ -412,32 +413,33 @@ async function flushPendingWrites(): Promise<void> {
   }
 }
 
-export async function loadMessagesFromDb(contextId: string): Promise<CachedMessage[]> {
+export function loadMessagesFromDb(contextId: string): CachedMessage[] {
   const db = getDrizzleDb()
   const now = Date.now()
 
-  const rows = await db
+  const rows = db
     .select()
     .from(messageMetadata)
-    .where((fields) => and(eq(fields.contextId, contextId), gt(fields.expiresAt, now)))
+    .where(and(eq(messageMetadata.contextId, contextId), gt(messageMetadata.expiresAt, now)))
+    .all()
 
   return rows.map((row) => ({
-    messageId: row.message_id,
-    contextId: row.context_id,
-    authorId: row.author_id ?? undefined,
-    authorUsername: row.author_username ?? undefined,
+    messageId: row.messageId,
+    contextId: row.contextId,
+    authorId: row.authorId ?? undefined,
+    authorUsername: row.authorUsername ?? undefined,
     text: row.text ?? undefined,
-    replyToMessageId: row.reply_to_message_id ?? undefined,
+    replyToMessageId: row.replyToMessageId ?? undefined,
     timestamp: row.timestamp,
   }))
 }
 
-export async function cleanupExpiredMessages(): Promise<void> {
+export function cleanupExpiredMessages(): void {
   const db = getDrizzleDb()
   const now = Date.now()
 
   try {
-    await db.delete(messageMetadata).where(lte(messageMetadata.expiresAt, now))
+    db.delete(messageMetadata).where(lte(messageMetadata.expiresAt, now)).run()
     logger.debug('Cleaned up expired message metadata')
   } catch (err) {
     logger.error({ error: err }, 'Failed to cleanup expired messages')
@@ -479,15 +481,15 @@ describe('Message Persistence', () => {
     mockLogger()
   })
 
-  test('should schedule writes to database', async () => {
+  test('should schedule writes to database', () => {
     // Test that scheduleMessagePersistence queues writes
   })
 
-  test('should load messages from database', async () => {
+  test('should load messages from database', () => {
     // Test loadMessagesFromDb
   })
 
-  test('should cleanup expired messages', async () => {
+  test('should cleanup expired messages', () => {
     // Test cleanupExpiredMessages
   })
 })
@@ -575,10 +577,6 @@ export function buildReplyChain(messageId: string, visited: Set<string> = new Se
     brokenAt,
   }
 }
-
-export function buildReplyChainAsync(messageId: string): Promise<ReplyChainResult> {
-  return Promise.resolve(buildReplyChain(messageId))
-}
 ```
 
 **Step 2: Write tests**
@@ -586,7 +584,7 @@ export function buildReplyChainAsync(messageId: string): Promise<ReplyChainResul
 ```typescript
 // tests/message-cache/chain.test.ts
 import { describe, test, expect, beforeEach } from 'bun:test'
-import { buildReplyChain, buildReplyChainAsync } from '../../src/message-cache/chain.js'
+import { buildReplyChain } from '../../src/message-cache/chain.js'
 import { cacheMessage, clearMessageCache } from '../../src/message-cache/cache.js'
 
 describe('Reply Chain Builder', () => {
@@ -631,14 +629,6 @@ describe('Reply Chain Builder', () => {
     expect(result.chain).toEqual(['A'])
     expect(result.isComplete).toBe(true)
   })
-
-  test('should work with async version', async () => {
-    cacheMessage({ messageId: 'A', contextId: 'c1', timestamp: Date.now() })
-    cacheMessage({ messageId: 'B', contextId: 'c1', replyToMessageId: 'A', timestamp: Date.now() })
-
-    const result = await buildReplyChainAsync('B')
-    expect(result.chain).toEqual(['A', 'B'])
-  })
 })
 ```
 
@@ -674,7 +664,7 @@ git commit -m "feat: implement reply chain builder
 ```typescript
 // src/message-cache/index.ts
 export { cacheMessage, getCachedMessage, hasCachedMessage } from './cache.js'
-export { buildReplyChain, buildReplyChainAsync } from './chain.js'
+export { buildReplyChain } from './chain.js'
 export { scheduleMessagePersistence, loadMessagesFromDb } from './persistence.js'
 export type { CachedMessage, MessageMetadataRow } from './types.js'
 export type { ReplyChainResult } from './chain.js'
