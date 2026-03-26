@@ -38,6 +38,8 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0030](0030-deferred-prompts-system.md)                        | Deferred Prompts System                                        | 2026-03-23 | Implemented (Supersedes 0026)         |
 | [0031](0031-provider-agnostic-status-vs-column-abstraction.md) | Provider-Agnostic Status vs Column Abstraction                 | 2026-03-18 | Implemented                           |
 | [0032](0032-timezone-tool-layer-conversion.md)                 | Timezone Tool-Layer Conversion                                 | 2026-03-24 | Implemented                           |
+| [0033](0033-proactive-delivery-mode-recursive-loop-fix.md)     | Proactive Delivery Mode — Fix Recursive Scheduling Loop        | 2026-03-25 | Approved                              |
+| [0034](0034-deferred-prompt-execution-modes.md)                | Deferred Prompt Execution Modes                                | 2026-03-26 | Approved                              |
 
 ## Skipped / Not Written
 
