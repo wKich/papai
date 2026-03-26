@@ -442,11 +442,19 @@ export function cleanupExpiredMessages(): void {
 
   try {
     db.delete(messageMetadata).where(lte(messageMetadata.expiresAt, now)).run()
-    logger.debug('Cleaned up expired message metadata')
+    log.debug('Cleaned up expired message metadata')
   } catch (err) {
-    logger.error({ error: err }, 'Failed to cleanup expired messages')
+    log.error({ error: err }, 'Failed to cleanup expired messages')
   }
 }
+
+// Schedule periodic cleanup (every hour)
+setInterval(
+  () => {
+    cleanupExpiredMessages()
+  },
+  60 * 60 * 1000,
+)
 ```
 
 **Step 2: Update cache.ts to integrate persistence**
