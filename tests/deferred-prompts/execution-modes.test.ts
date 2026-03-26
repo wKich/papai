@@ -18,7 +18,7 @@ type GenerateTextResult = {
   toolResults: unknown[]
   response: { messages: ModelMessage[] }
 }
-type GenerateTextCall = { model: unknown; system: unknown; messages: unknown[]; tools: unknown }
+type GenerateTextCall = { model: string; system: string; messages: ModelMessage[]; tools: unknown }
 const generateTextCalls: GenerateTextCall[] = []
 
 let generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
@@ -102,7 +102,7 @@ describe('dispatchExecution', () => {
     test('uses minimal system prompt', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      const system = generateTextCalls[0]!.system as string
+      const system = generateTextCalls[0]!.system
       expect(system).toContain('[PROACTIVE EXECUTION]')
       expect(system).not.toContain('DEFERRED PROMPTS')
     })
@@ -110,7 +110,7 @@ describe('dispatchExecution', () => {
     test('includes delivery brief in messages', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       const systemMsgs = messages.filter((m) => m.role === 'system')
       expect(systemMsgs.some((m) => typeof m.content === 'string' && m.content.includes('[DELIVERY BRIEF]'))).toBe(true)
       expect(
@@ -121,7 +121,7 @@ describe('dispatchExecution', () => {
     test('wraps prompt in deferred task delimiters', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       const userMsgs = messages.filter((m) => m.role === 'user')
       expect(userMsgs.some((m) => typeof m.content === 'string' && m.content.includes('===DEFERRED_TASK==='))).toBe(
         true,
@@ -133,7 +133,7 @@ describe('dispatchExecution', () => {
       setupUserConfig()
       appendHistory(USER_ID, [{ role: 'user', content: 'old message' }])
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('old message'))).toBe(false)
     })
 
@@ -141,7 +141,7 @@ describe('dispatchExecution', () => {
       setupUserConfig()
       const withSnapshot: ExecutionMetadata = { ...metadata, context_snapshot: 'User discussed migration' }
       await dispatchExecution(USER_ID, 'scheduled', 'remind about migration', withSnapshot, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       const systemMsgs = messages.filter((m) => m.role === 'system')
       expect(
         systemMsgs.some((m) => typeof m.content === 'string' && m.content.includes('[CONTEXT FROM CREATION TIME]')),
@@ -151,7 +151,7 @@ describe('dispatchExecution', () => {
     test('omits context snapshot message when null', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       expect(
         messages.some(
           (m) => typeof m.content === 'string' && String(m.content).includes('[CONTEXT FROM CREATION TIME]'),
@@ -177,7 +177,7 @@ describe('dispatchExecution', () => {
       setupUserConfig()
       appendHistory(USER_ID, [{ role: 'user', content: 'history message' }])
       await dispatchExecution(USER_ID, 'scheduled', 'standup reminder', metadata, () => null)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('history message'))).toBe(true)
     })
 
@@ -190,7 +190,7 @@ describe('dispatchExecution', () => {
     test('uses minimal system prompt', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'standup reminder', metadata, () => null)
-      const system = generateTextCalls[0]!.system as string
+      const system = generateTextCalls[0]!.system
       expect(system).toContain('[PROACTIVE EXECUTION]')
     })
   })
@@ -220,7 +220,7 @@ describe('dispatchExecution', () => {
       setupUserConfig()
       const provider = createMockProvider()
       await dispatchExecution(USER_ID, 'scheduled', 'check overdue', metadata, () => provider)
-      const system = generateTextCalls[0]!.system as string
+      const system = generateTextCalls[0]!.system
       // Full system prompt includes provider-specific content
       expect(system.length).toBeGreaterThan(200)
     })
@@ -230,7 +230,7 @@ describe('dispatchExecution', () => {
       const provider = createMockProvider()
       appendHistory(USER_ID, [{ role: 'user', content: 'full mode history' }])
       await dispatchExecution(USER_ID, 'scheduled', 'check overdue', metadata, () => provider)
-      const messages = generateTextCalls[0]!.messages as ModelMessage[]
+      const messages = generateTextCalls[0]!.messages
       expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('full mode history'))).toBe(true)
     })
 
