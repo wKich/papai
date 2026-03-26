@@ -23,6 +23,8 @@ const MattermostPostSchema = z.object({
   channel_id: z.string(),
   message: z.string(),
   user_name: z.string().optional(),
+  root_id: z.string().optional(),
+  parent_id: z.string().optional(),
 })
 
 const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })
