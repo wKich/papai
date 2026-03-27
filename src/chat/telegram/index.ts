@@ -95,6 +95,7 @@ export class TelegramChatProvider implements ChatProvider {
   async setCommands(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },
+      { command: 'setup', description: 'Interactive configuration wizard' },
       { command: 'set', description: 'Set a config value — /set <key> <value>' },
       { command: 'config', description: 'View current configuration' },
       { command: 'clear', description: 'Clear conversation history and memory' },

@@ -42,7 +42,11 @@ function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<str
     return data['main_model'] ?? value
   }
 
-  if (trimmedValue === 'default' || trimmedValue === 'skip') {
+  if (key === 'llm_baseurl' && trimmedValue === 'default') {
+    return 'https://api.openai.com/v1'
+  }
+
+  if (trimmedValue === 'skip') {
     return ''
   }
 
@@ -206,7 +210,7 @@ export function saveWizardConfig(userId: string, storageContextId: string, confi
   let savedCount = 0
   for (const [key, value] of Object.entries(session.data)) {
     if (value !== undefined && value !== '' && isConfigKey(key)) {
-      setConfig(userId, key, value)
+      setConfig(session.storageContextId, key, value)
       savedCount++
     }
   }

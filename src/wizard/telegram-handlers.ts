@@ -11,10 +11,11 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery()
 
   switch (data) {
-    case 'wizard_confirm':
-      saveWizardConfig(userId, storageContextId, true)
-      await ctx.editMessageText('✅ Configuration saved successfully!')
+    case 'wizard_confirm': {
+      const result = saveWizardConfig(userId, storageContextId, true)
+      await ctx.editMessageText(result.message)
       break
+    }
     case 'wizard_cancel':
       cancelWizard(userId, storageContextId)
       await ctx.editMessageText('❌ Wizard cancelled. Type /setup to restart.')

@@ -281,10 +281,12 @@ describe('Wizard Engine', () => {
       const session = await getWizardSession(userId, storageContextId)
       expect(session).toBeNull()
 
-      // Check that config values were saved
-      expect(getConfig(userId, 'llm_apikey')).not.toBeNull()
-      expect(getConfig(userId, 'kaneo_apikey')).not.toBeNull()
-      expect(getConfig(userId, 'timezone')).not.toBeNull()
+      // Check that config values were saved under storageContextId
+      expect(getConfig(storageContextId, 'llm_apikey')).not.toBeNull()
+      expect(getConfig(storageContextId, 'kaneo_apikey')).not.toBeNull()
+      expect(getConfig(storageContextId, 'timezone')).not.toBeNull()
+      // Verify NOT saved under userId (group context fix)
+      expect(getConfig(userId, 'llm_apikey')).toBeNull()
     })
 
     test('does not save when not confirmed', async () => {

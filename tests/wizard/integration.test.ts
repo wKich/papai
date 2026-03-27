@@ -101,15 +101,15 @@ describe('Wizard Integration', () => {
     expect(saveResult.message).toContain('Configuration saved successfully')
     expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
 
-    // Verify config was saved using getConfig
-    expect(getConfig(userId, 'llm_apikey')).toBe('sk-api-key')
-    expect(getConfig(userId, 'main_model')).toBe('gpt-4')
-    expect(getConfig(userId, 'small_model')).toBe('gpt-4')
-    expect(getConfig(userId, 'kaneo_apikey')).toBe('kaneo-token')
-    expect(getConfig(userId, 'timezone')).toBe('UTC')
+    // Verify config was saved under storageContextId
+    expect(getConfig(storageContextId, 'llm_apikey')).toBe('sk-api-key')
+    expect(getConfig(storageContextId, 'main_model')).toBe('gpt-4')
+    expect(getConfig(storageContextId, 'small_model')).toBe('gpt-4')
+    expect(getConfig(storageContextId, 'kaneo_apikey')).toBe('kaneo-token')
+    expect(getConfig(storageContextId, 'timezone')).toBe('UTC')
 
     // Verify skipped value was NOT saved
-    expect(getConfig(userId, 'embedding_model')).toBeNull()
+    expect(getConfig(storageContextId, 'embedding_model')).toBeNull()
   })
 
   test('should handle processWizardMessage', async () => {
@@ -238,8 +238,8 @@ describe('Wizard Integration', () => {
     const saveResult = await saveWizardConfig(userId, storageContextId, true)
     expect(saveResult.success).toBe(true)
 
-    // Verify YouTrack token was saved
-    expect(getConfig(userId, 'youtrack_token')).toBe('youtrack-token')
+    // Verify YouTrack token was saved under storageContextId
+    expect(getConfig(storageContextId, 'youtrack_token')).toBe('youtrack-token')
   })
 
   test('should skip only optional steps', async () => {
