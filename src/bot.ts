@@ -1,4 +1,4 @@
-import type { AuthorizationResult, ChatProvider, ContextType } from './chat/types.js'
+import type { AuthorizationResult, ChatProvider, ContextType, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -7,12 +7,14 @@ import {
   registerGroupCommand,
   registerHelpCommand,
   registerSetCommand,
+  registerSetupCommand,
 } from './commands/index.js'
 import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, resolveUserByUsername } from './users.js'
+import { hasActiveWizard, processWizardMessage } from './wizard/index.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -91,15 +93,67 @@ export const checkAuthorizationExtended = (
   return getUnauthorizedDmAuth(userId)
 }
 
-export function setupBot(chat: ChatProvider, adminUserId: string): void {
+function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerHelpCommand(chat)
+  registerSetupCommand(chat, checkAuthorization)
   registerSetCommand(chat, checkAuthorization)
   registerConfigCommand(chat, checkAuthorization)
   registerContextCommand(chat, adminUserId)
   registerClearCommand(chat, checkAuthorization, adminUserId)
   registerAdminCommands(chat, adminUserId)
   registerGroupCommand(chat)
+}
+
+async function handleWizardMessage(
+  userId: string,
+  storageContextId: string,
+  text: string,
+  reply: ReplyFn,
+): Promise<boolean> {
+  if (!hasActiveWizard(userId, storageContextId)) {
+    return false
+  }
+
+  const wizardResult = await processWizardMessage(userId, storageContextId, text)
+
+  if (wizardResult.handled) {
+    if (wizardResult.response !== undefined && wizardResult.response !== '') {
+      await reply.text(wizardResult.response)
+    }
+    return true
+  }
+
+  return false
+}
+
+async function handleMessage(msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult): Promise<void> {
+  // Check authorization
+  if (!auth.allowed) {
+    if (msg.isMentioned) {
+      await reply.text(
+        "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser @{username}`",
+      )
+    }
+    return
+  }
+
+  const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
+  const isNaturalLanguage = !hasCommand
+  if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
+    // Silent ignore - natural language in groups requires mention
+    return
+  }
+
+  reply.typing()
+  const prompt = buildPromptWithReplyContext(msg)
+  await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+}
+
+export function setupBot(chat: ChatProvider, adminUserId: string): void {
+  registerCommands(chat, adminUserId)
+
   chat.onMessage(async (msg, reply) => {
+    // Get authorization FIRST (needed for wizard storage context)
     const auth = checkAuthorizationExtended(
       msg.user.id,
       msg.user.username,
@@ -108,24 +162,18 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
       msg.user.isAdmin,
     )
 
-    if (!auth.allowed) {
-      if (msg.isMentioned) {
-        await reply.text(
-          "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser @{username}`",
-        )
-      }
-      return
+    // WIZARD INTERCEPTION - Platform agnostic
+    // Check if user is in active wizard session AND message is not a command
+    // Commands (starting with /) are always routed to their handlers, even during wizard
+    const isCommand = msg.text.startsWith('/')
+
+    // Use auth.storageContextId (not msg.contextId) for wizard lookup
+    // This ensures DM wizards use userId, group wizards use groupId
+    if (!isCommand) {
+      const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply)
+      if (wasWizardHandled) return
     }
 
-    const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
-    const isNaturalLanguage = !hasCommand
-    if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
-      // Silent ignore - natural language in groups requires mention
-      return
-    }
-
-    reply.typing()
-    const prompt = buildPromptWithReplyContext(msg)
-    await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+    await handleMessage(msg, reply, auth)
   })
 }

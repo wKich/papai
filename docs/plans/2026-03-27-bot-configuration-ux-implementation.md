@@ -79,7 +79,7 @@ describe('WizardSession type', () => {
   test('should accept valid session', () => {
     const session: WizardSession = {
       userId: '123',
-      contextId: '123',
+      storageContextId: '123',
       startedAt: Date.now(),
       currentStep: 1,
       totalSteps: 7,
@@ -872,37 +872,37 @@ import { createWizard, advanceStep, getCurrentPrompt, saveWizardConfig } from '.
 
 describe('Wizard Engine', () => {
   const userId = 'test-user'
-  const contextId = 'test-context'
+  const storageContextId = 'test-context'
 
   beforeEach(async () => {
     // Clean up any existing sessions
     const { deleteWizardSession } = await import('../../src/wizard/state.js')
-    await deleteWizardSession(userId, contextId)
+    await deleteWizardSession(userId, storageContextId)
   })
 
   test('should create wizard', async () => {
-    const result = await createWizard(userId, contextId, 'telegram', 'kaneo')
+    const result = await createWizard(userId, storageContextId, 'telegram', 'kaneo')
     expect(result.success).toBe(true)
     expect(result.prompt).toContain('LLM API key')
   })
 
   test('should advance step', async () => {
-    await createWizard(userId, contextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
-    const result = await advanceStep(userId, contextId, 'sk-test-key', false)
+    const result = await advanceStep(userId, storageContextId, 'sk-test-key', false)
     expect(result.success).toBe(true)
     expect(result.isComplete).toBe(false)
     expect(result.prompt).toContain('base URL')
   })
 
   test('should complete wizard', async () => {
-    await createWizard(userId, contextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
     // Simulate completing all steps
     const steps = ['sk-key', 'https://api.openai.com/v1', 'gpt-4', 'gpt-3.5', 'skip', 'kaneo-token', 'UTC']
 
     for (const value of steps) {
-      const result = await advanceStep(userId, contextId, value, false)
+      const result = await advanceStep(userId, storageContextId, value, false)
       if (!result.isComplete) {
         expect(result.success).toBe(true)
       }
@@ -1164,7 +1164,7 @@ export async function processWizardMessage(
   }
 
   // Handle step advancement
-  const result = await advanceStep(userId, contextId, text, false)
+  const result = await advanceStep(userId, storageContextId, text, false)
 
   if (result.success) {
     return {
@@ -1231,10 +1231,12 @@ const log = logger.child({ scope: 'wizard:telegram' })
 
 export async function handleWizardCallback(ctx: Context): Promise<void> {
   const userId = String(ctx.from?.id ?? '')
-  const contextId = String(ctx.chat?.id ?? userId)
+  // For Telegram: chat.id == userId in DMs, chat.id == groupId in groups
+  // This matches storageContextId resolution in bot.ts
+  const storageContextId = String(ctx.chat?.id ?? userId)
   const data = (ctx.callbackQuery as { data?: string })?.data ?? ''
 
-  if (userId === '' || contextId === '') {
+  if (userId === '' || storageContextId === '') {
     return
   }
 
@@ -1247,15 +1249,15 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
 
   switch (data) {
     case 'wizard_confirm':
-      await saveWizardConfig(userId, contextId, true)
+      await saveWizardConfig(userId, storageContextId, true)
       await ctx.editMessageText('✅ Configuration saved successfully!')
       break
     case 'wizard_cancel':
-      await cancelWizard(userId, contextId)
+      await cancelWizard(userId, storageContextId)
       await ctx.editMessageText('❌ Wizard cancelled. Type /setup to restart.')
       break
     case 'wizard_restart':
-      await cancelWizard(userId, contextId)
+      await cancelWizard(userId, storageContextId)
       await ctx.reply('Restarting wizard... Type /setup to begin.')
       break
   }
@@ -1666,36 +1668,36 @@ import { hasActiveWizard, deleteWizardSession } from '../../src/wizard/state.js'
 
 describe('Wizard Integration', () => {
   const userId = 'test-user'
-  const contextId = 'test-context'
+  const storageContextId = 'test-context'
 
   beforeEach(async () => {
-    await deleteWizardSession(userId, contextId)
+    await deleteWizardSession(userId, storageContextId)
   })
 
   test('should complete full wizard flow', async () => {
     // Start wizard
-    const startResult = await createWizard(userId, contextId, 'telegram', 'kaneo')
+    const startResult = await createWizard(userId, storageContextId, 'telegram', 'kaneo')
     expect(startResult.success).toBe(true)
-    expect(hasActiveWizard(userId, contextId)).toBe(true)
+    expect(hasActiveWizard(userId, storageContextId)).toBe(true)
 
     // Complete all steps
     const steps = ['sk-api-key', 'https://api.openai.com/v1', 'gpt-4', 'same', 'skip', 'kaneo-token', 'UTC']
 
     for (const value of steps) {
-      const result = await advanceStep(userId, contextId, value, true)
+      const result = await advanceStep(userId, storageContextId, value, true)
       expect(result.success).toBe(true)
     }
 
     // Confirm
-    const saveResult = await saveWizardConfig(userId, contextId, true)
+    const saveResult = await saveWizardConfig(userId, storageContextId, true)
     expect(saveResult.success).toBe(true)
-    expect(hasActiveWizard(userId, contextId)).toBe(false)
+    expect(hasActiveWizard(userId, storageContextId)).toBe(false)
   })
 
   test('should handle processWizardMessage', async () => {
-    await createWizard(userId, contextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
-    const result = await processWizardMessage(userId, contextId, 'sk-test-key')
+    const result = await processWizardMessage(userId, storageContextId, 'sk-test-key')
     expect(result.handled).toBe(true)
     expect(result.response).toContain('base URL')
   })

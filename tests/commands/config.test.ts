@@ -61,8 +61,10 @@ describe('/config Command', () => {
     expect(output.length).toBeGreaterThan(0)
     const lines = output.split('\n').filter((line) => line.trim().length > 0)
     expect(lines.length).toBeGreaterThan(0)
-    // Every non-empty line should show "(not set)" since no keys are configured
-    expect(lines.every((line) => line.includes('(not set)'))).toBe(true)
+    // Every config line should show "(not set)" since no keys are configured
+    // (exclude the hint line at the end)
+    const configLines = lines.filter((line) => line.includes(':'))
+    expect(configLines.every((line) => line.includes('(not set)'))).toBe(true)
   })
 
   test('rejects unauthorized user silently', async () => {

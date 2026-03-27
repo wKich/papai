@@ -4,6 +4,7 @@ import { Bot, InputFile, type Context } from 'grammy'
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
 import { buildReplyContextChain } from '../../reply-context.js'
+import { handleWizardCallback } from '../../wizard/telegram-handlers.js'
 import type {
   AuthorizationResult,
   ChatProvider,
@@ -66,6 +67,10 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   start(): Promise<void> {
+    this.bot.on('callback_query:data', async (ctx) => {
+      await handleWizardCallback(ctx)
+    })
+
     return new Promise<void>((resolve, reject) => {
       this.bot
         .start({

@@ -28,7 +28,7 @@ export function registerConfigCommand(
       return `${key}: ${maskValue(key, value)}`
     })
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command executed')
-    await reply.text(lines.join('\n'))
+    await reply.text(lines.join('\n') + '\n\n💡 Use `/setup` to edit configuration interactively.')
   }
 
   chat.registerCommand('config', handler)
