@@ -432,19 +432,10 @@ Expected: FAIL with "Module not found"
  */
 
 import { logger } from '../logger.js'
+import { normalizeTimezone } from '../utils/timezone.js'
 import type { WizardStep, WizardData } from './types.js'
 
 const log = logger.child({ scope: 'wizard:steps' })
-
-// IANA timezone validation (basic check)
-function isValidTimezone(tz: string): boolean {
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz })
-    return true
-  } catch {
-    return false
-  }
-}
 
 // URL validation
 function isValidUrl(url: string): boolean {
@@ -518,10 +509,14 @@ export function getWizardSteps(taskProvider: 'kaneo' | 'youtrack'): WizardStep[]
     {
       id: 'timezone',
       key: 'timezone',
-      prompt: '🌍 Enter your timezone (e.g., America/New_York, UTC):',
+      prompt: '🌍 Enter your timezone (e.g., America/New_York, UTC, UTC+5):',
       validate: (value: string) => {
-        if (!isValidTimezone(value)) {
-          return { valid: false, error: 'Invalid timezone. Use IANA format (e.g., America/New_York)' }
+        const normalized = normalizeTimezone(value)
+        if (normalized === null) {
+          return {
+            valid: false,
+            error: 'Invalid timezone. Use IANA format (e.g., America/New_York) or UTC offset (e.g., UTC+5)',
+          }
         }
         return { valid: true }
       },
