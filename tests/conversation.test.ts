@@ -1,21 +1,32 @@
-import { mock, describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test'
+import { afterAll, mock, describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import * as cacheModule from '../src/cache.js'
-import { shouldTriggerTrim, buildMessagesWithMemory, runTrimInBackground } from '../src/conversation.js'
-import { logger } from '../src/logger.js'
-import { flushMicrotasks } from './test-helpers.js'
-
-// Mock the ai module for trimWithMemoryModel
+// Define local type and mutable implementation BEFORE mocking
 type GenerateTextResult = { text: string }
 const defaultGenerateTextImpl = (): Promise<GenerateTextResult> =>
   Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
 let generateTextImpl = defaultGenerateTextImpl
 
+// Mock the ai module BEFORE importing code that uses it
 void mock.module('ai', () => ({
   generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
 }))
+
+// Mock openai-compatible to ensure conversation.ts is loaded with consistent module
+// instances (avoids stale cache.ts references from @ai-sdk/openai-compatible mock/restore
+// pollution caused by other test files running before this one)
+void mock.module('@ai-sdk/openai-compatible', () => ({
+  createOpenAICompatible:
+    (): ((_model: string) => string) =>
+    (_model: string): string =>
+      'mock-model',
+}))
+
+import * as cacheModule from '../src/cache.js'
+import { shouldTriggerTrim, buildMessagesWithMemory, runTrimInBackground } from '../src/conversation.js'
+import { logger } from '../src/logger.js'
+import { flushMicrotasks } from './test-helpers.js'
 
 // Helper type for spy instances that need cleanup
 type SpyInstance = { mockRestore: () => void }
@@ -457,4 +468,8 @@ describe('Story 5: Summary injected into context', () => {
     expect(systemMsg.content).toContain('Fix login bug')
     expect(systemMsg.content).toContain('#42')
   })
+})
+
+afterAll(() => {
+  mock.restore()
 })
