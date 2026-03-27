@@ -268,8 +268,8 @@ const log = logger.child({ scope: 'wizard:state' })
 // In-memory cache for active sessions
 const activeSessions = new Map<string, WizardSession>()
 
-function getSessionKey(userId: string, contextId: string): string {
-  return `${userId}:${contextId}`
+function getSessionKey(userId: string, storageContextId: string): string {
+  return `${userId}:${storageContextId}`
 }
 
 interface CreateSessionParams {
@@ -1351,13 +1351,24 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
   registerGroupCommand(chat)
 
   chat.onMessage(async (msg, reply) => {
+    // Get authorization FIRST (needed for wizard storage context)
+    const auth = checkAuthorizationExtended(
+      msg.user.id,
+      msg.user.username,
+      msg.contextId,
+      msg.contextType,
+      msg.user.isAdmin,
+    )
+
     // WIZARD INTERCEPTION - Platform agnostic
     // Check if user is in active wizard session AND message is not a command
     // Commands (starting with /) are always routed to their handlers, even during wizard
     const isCommand = msg.text.startsWith('/')
 
-    if (hasActiveWizard(msg.user.id, msg.contextId) && !isCommand) {
-      const wizardResult = await processWizardMessage(msg.user.id, msg.contextId, msg.text)
+    // Use auth.storageContextId (not msg.contextId) for wizard lookup
+    // This ensures DM wizards use userId, group wizards use groupId
+    if (hasActiveWizard(msg.user.id, auth.storageContextId) && !isCommand) {
+      const wizardResult = await processWizardMessage(msg.user.id, auth.storageContextId, msg.text)
 
       if (wizardResult.handled) {
         if (wizardResult.response) {
@@ -1367,15 +1378,7 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
       }
     }
 
-    // Existing authorization and message processing
-    const auth = checkAuthorizationExtended(
-      msg.user.id,
-      msg.user.username,
-      msg.contextId,
-      msg.contextType,
-      msg.user.isAdmin,
-    )
-
+    // Check authorization
     if (!auth.allowed) {
       if (msg.isMentioned) {
         await reply.text(
