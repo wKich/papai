@@ -1434,19 +1434,25 @@ Wizard engine handles subsequent messages via bot.ts interception."
 
 ---
 
-## Phase 5: Mattermost Integration
+## Phase 5: Mattermost Integration (Text-Based)
 
 ### Task 9: Create Mattermost Wizard Handler
+
+**Important:** Mattermost wizard uses text-based message flow (same as existing commands). The current Mattermost adapter uses WebSocket-only communication without HTTP endpoints, so Interactive Dialogs cannot be used. The wizard works identically to Telegram - text prompts and responses via regular messages.
 
 **Files:**
 
 - Create: `src/wizard/mattermost-handlers.ts`
 
-**Step 1: Create Mattermost handler**
+**Step 1: Create Mattermost handler (Text-Based)**
+
+Mattermost wizard uses the same text-based flow as existing commands (no Interactive Dialogs required):
 
 ```typescript
 /**
  * Mattermost-specific wizard handlers
+ * Uses text-based message flow (same as existing commands)
+ * No Interactive Dialogs required - works with current WebSocket-only adapter
  */
 
 import { logger } from '../logger.js'
@@ -1458,66 +1464,60 @@ const TASK_PROVIDER = (process.env['TASK_PROVIDER'] as 'kaneo' | 'youtrack') ?? 
 
 interface MattermostContext {
   userId: string
-  contextId: string
+  storageContextId: string
   channelId: string
-  triggerId?: string
 }
 
-export async function handleMattermostWizardCommand(
-  ctx: MattermostContext,
-  text: string,
-): Promise<{ response_type: string; text: string }> {
+/**
+ * Handle Mattermost /setup command
+ * Returns text response that gets sent via existing reply mechanism
+ */
+export async function handleMattermostWizardCommand(ctx: MattermostContext, text: string): Promise<string> {
   if (text.trim() === '' || text === 'setup') {
-    const result = await createWizard(ctx.userId, ctx.contextId, 'mattermost', TASK_PROVIDER)
+    const result = await createWizard(ctx.userId, ctx.storageContextId, 'mattermost', TASK_PROVIDER)
 
     if (result.success && result.prompt) {
-      return {
-        response_type: 'ephemeral',
-        text: result.prompt,
-      }
+      return result.prompt
     }
 
-    return {
-      response_type: 'ephemeral',
-      text: result.error ?? 'Failed to start wizard',
-    }
+    return result.error ?? 'Failed to start wizard. Please try again.'
   }
 
-  return {
-    response_type: 'ephemeral',
-    text: 'Unknown command. Use `/papai-setup` to start the wizard.',
-  }
+  return 'Unknown command. Use `/setup` to start the wizard.'
 }
 
-export function buildConfigDialog(): Record<string, unknown> {
-  return {
-    title: '⚙️ Configuration',
-    icon_url: '',
-    callback_id: 'papai_config_dialog',
-    elements: [
-      {
-        type: 'select',
-        label: 'Select setting to configure',
-        options: [
-          { text: '🤖 LLM Settings', value: 'llm' },
-          { text: '📋 Provider Settings', value: 'provider' },
-          { text: '🌍 General Settings', value: 'general' },
-        ],
-      },
-    ],
-    submit_label: 'Configure',
-  }
+/**
+ * Handle wizard step responses in Mattermost
+ * Called from bot.ts when wizard is active and user sends non-command message
+ */
+export async function handleMattermostWizardResponse(
+  ctx: MattermostContext,
+  text: string,
+): Promise<{ handled: boolean; response?: string }> {
+  // This function is a thin wrapper around the engine
+  // The actual processing happens in processWizardMessage() in bot.ts
+  // This is here for any Mattermost-specific formatting if needed
+  return { handled: false }
 }
 ```
+
+**Note:** Mattermost wizard uses the same platform-agnostic text flow as Telegram:
+
+1. User types `/setup` → triggers `createWizard()` via setup command
+2. Bot responds with first prompt
+3. User types value (not a command) → `bot.ts` calls `processWizardMessage()`
+4. Engine handles the step logic
+5. No Interactive Dialogs or slash command registration needed
 
 **Step 2: Commit**
 
 ```bash
 git add src/wizard/mattermost-handlers.ts
-git commit -m "feat(mattermost): add wizard handlers for Mattermost
+git commit -m "feat(mattermost): add wizard handlers for Mattermost (text-based)
 
-Add Mattermost-specific command handler and dialog builders.
-Wizard flow still handled by platform-agnostic engine."
+Add Mattermost-specific command handler using text-based flow.
+Works with existing WebSocket adapter - no Interactive Dialogs needed.
+Wizard flow handled by platform-agnostic engine."
 ```
 
 ---
