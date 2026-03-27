@@ -1,4 +1,8 @@
-# Papai
+# Papai — Personal Adroit Proactive AI
+
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Papai logo" width="600">
+</p>
 
 <p align="center">Natural language task management for Telegram and Mattermost</p>
 
@@ -34,7 +38,7 @@
 
 ## Overview
 
-Papai is a chat bot that enables natural language task management through any OpenAI-compatible LLM. Deploy it on Telegram or Mattermost, connect to Kaneo or YouTrack task trackers, and manage your team's work through conversational interfaces.
+Papai (**P**ersonal **A**droit **P**roactive **AI**) is a chat bot that enables natural language task management through any OpenAI-compatible LLM. Deploy it on Telegram or Mattermost, connect to Kaneo or YouTrack task trackers, and manage your team's work through conversational interfaces.
 
 The bot interprets natural language requests, invokes appropriate operations through LLM tool-calling, and responds with task status, updates, and search results. Each user maintains isolated credentials, conversation history, and long-term memory for context-aware interactions.
 
