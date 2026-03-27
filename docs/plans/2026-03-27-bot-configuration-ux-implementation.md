@@ -115,6 +115,8 @@ Expected: FAIL with "Cannot find module"
  * Wizard session types and interfaces
  */
 
+import type { ConfigKey } from '../types/config.js'
+
 export interface WizardSession {
   userId: string
   contextId: string
@@ -127,20 +129,13 @@ export interface WizardSession {
   taskProvider: 'kaneo' | 'youtrack'
 }
 
-export interface WizardData {
-  llm_apikey?: string
-  llm_baseurl?: string
-  main_model?: string
-  small_model?: string
-  embedding_model?: string
-  kaneo_apikey?: string
-  youtrack_token?: string
-  timezone?: string
-}
+// Derive from ConfigKey to maintain single source of truth
+// Automatically includes new config keys when they are added
+export type WizardData = Partial<Record<ConfigKey, string>>
 
 export interface WizardStep {
   id: string
-  key: keyof WizardData
+  key: ConfigKey
   prompt: string
   validate: (value: string) => { valid: boolean; error?: string }
   liveCheck?: (value: string, data: Partial<WizardData>) => Promise<{ valid: boolean; error?: string }>
@@ -866,6 +861,7 @@ Expected: FAIL with "Module not found"
 
 import { logger } from '../logger.js'
 import { setConfig } from '../config.js'
+import type { ConfigKey } from '../types/config.js'
 import { createWizardSession, updateWizardSession, getWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists, validateProviderToken } from './validation.js'
@@ -967,7 +963,7 @@ export async function advanceStep(
   return getNextPrompt(userId, contextId)
 }
 
-function normalizeValue(key: keyof WizardData, value: string, data: Partial<WizardData>): string {
+function normalizeValue(key: ConfigKey, value: string, data: Partial<WizardData>): string {
   if (key === 'small_model' && value === 'same') {
     return data.main_model ?? value
   }
@@ -1033,7 +1029,7 @@ export async function saveWizardConfig(userId: string, contextId: string, confir
   // Save all config values
   for (const [key, value] of Object.entries(session.data)) {
     if (value !== undefined && value !== '') {
-      setConfig(contextId, key as keyof WizardData, value)
+      setConfig(contextId, key as ConfigKey, value)
     }
   }
 
