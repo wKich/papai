@@ -1,7 +1,7 @@
-# Papai — Personal Adroit Proactive AI
+# PAPAI — Personal Adroit Proactive AI
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="Papai logo" width="600">
+  <img src="docs/assets/logo.png" alt="PAPAI logo" width="600">
 </p>
 
 <p align="center">Natural language task management for Telegram and Mattermost</p>
