@@ -7,6 +7,7 @@
   "module": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
+    "start:debug": "DEBUG_SERVER=true bun run src/index.ts",
     "knip": "knip-bun --strict",
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint --config .oxlintrc.json .",
@@ -15,7 +16,7 @@
     "format:check": "oxfmt --check . --ignore-path=.oxfmtignore",
     "security": "bun run scripts/run-semgrep.ts",
     "security:ci": "bun run scripts/run-semgrep.ts --ci",
-    "test": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/proactive tests/*.test.ts",
+    "test": "bun test tests/providers tests/tools tests/scripts tests/db tests/utils tests/schemas tests/proactive tests/debug tests/*.test.ts",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:mutate": "stryker run",

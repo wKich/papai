@@ -85,10 +85,19 @@ startPollers(chatProvider, (userId) => buildProviderForUser(userId, false))
 
 startMessageCleanupScheduler()
 
+let stopDebugServerFn: (() => void) | null = null
+
+if (process.env['DEBUG_SERVER'] === 'true') {
+  const { startDebugServer, stopDebugServer } = await import('./debug/server.js')
+  startDebugServer()
+  stopDebugServerFn = stopDebugServer
+}
+
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
   stopScheduler()
   stopPollers()
+  stopDebugServerFn?.()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
@@ -99,6 +108,7 @@ process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
   stopScheduler()
   stopPollers()
+  stopDebugServerFn?.()
   void chatProvider.stop()
   closeDrizzleDb()
   closeMigrationDbInstance()
