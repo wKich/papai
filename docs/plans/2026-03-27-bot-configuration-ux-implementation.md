@@ -1290,8 +1290,11 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
 
   chat.onMessage(async (msg, reply) => {
     // WIZARD INTERCEPTION - Platform agnostic
-    // Check if user is in active wizard session
-    if (hasActiveWizard(msg.user.id, msg.contextId)) {
+    // Check if user is in active wizard session AND message is not a command
+    // Commands (starting with /) are always routed to their handlers, even during wizard
+    const isCommand = msg.text.startsWith('/')
+
+    if (hasActiveWizard(msg.user.id, msg.contextId) && !isCommand) {
       const wizardResult = await processWizardMessage(msg.user.id, msg.contextId, msg.text)
 
       if (wizardResult.handled) {
