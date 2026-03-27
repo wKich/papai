@@ -19,6 +19,7 @@ import { migration014BackgroundEvents } from './migrations/014_background_events
 import { migration015DropBackgroundEvents } from './migrations/015_drop_background_events.js'
 import { migration016ExecutionMetadata } from './migrations/016_execution_metadata.js'
 import { migration017MessageMetadata } from './migrations/017_message_metadata.js'
+import { migration018Memos } from './migrations/018_memos.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -63,6 +64,7 @@ const MIGRATIONS = [
   migration015DropBackgroundEvents,
   migration016ExecutionMetadata,
   migration017MessageMetadata,
+  migration018Memos,
 ] as const
 
 export const initDb = (): void => {

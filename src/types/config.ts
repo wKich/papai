@@ -6,7 +6,7 @@
 export type TaskProviderConfigKey = 'kaneo_apikey' | 'youtrack_token'
 
 // LLM config keys (always available)
-export type LlmConfigKey = 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model'
+export type LlmConfigKey = 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model' | 'embedding_model'
 
 // User preference config keys (always available)
 export type PreferenceConfigKey = 'timezone'
@@ -22,7 +22,7 @@ const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 const PREFERENCE_KEYS: readonly PreferenceConfigKey[] = ['timezone']
 
 function getConfigKeysForProvider(provider: string): readonly ConfigKey[] {
-  const llmKeys: readonly LlmConfigKey[] = ['llm_apikey', 'llm_baseurl', 'main_model', 'small_model']
+  const llmKeys: readonly LlmConfigKey[] = ['llm_apikey', 'llm_baseurl', 'main_model', 'small_model', 'embedding_model']
 
   if (provider === 'youtrack') {
     return [...llmKeys, 'youtrack_token', ...PREFERENCE_KEYS]

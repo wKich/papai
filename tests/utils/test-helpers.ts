@@ -28,6 +28,7 @@ import { migration014BackgroundEvents } from '../../src/db/migrations/014_backgr
 import { migration015DropBackgroundEvents } from '../../src/db/migrations/015_drop_background_events.js'
 import { migration016ExecutionMetadata } from '../../src/db/migrations/016_execution_metadata.js'
 import { migration017MessageMetadata } from '../../src/db/migrations/017_message_metadata.js'
+import { migration018Memos } from '../../src/db/migrations/018_memos.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -52,6 +53,7 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration015DropBackgroundEvents,
   migration016ExecutionMetadata,
   migration017MessageMetadata,
+  migration018Memos,
 ]
 
 // ============================================================================
