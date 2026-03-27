@@ -5,6 +5,101 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-03-27
+
+### Added
+
+- Redact sensitive values in /set command messages
+- **db:** Add execution_metadata column to deferred prompt tables
+- **schema:** Add executionMetadata column to scheduled and alert prompt tables
+- **types:** Add ExecutionMetadata type and schema for deferred prompts
+- **deferred:** Update row mappers and CRUD to handle executionMetadata
+- **tools:** Add execution parameter to create/update deferred prompt tools
+- **deferred:** Implement execution mode dispatch with lightweight, context, and full modes
+- **poller:** Use dispatchExecution for mode-aware deferred prompt execution
+- Implement in-memory message cache
+- Add SQLite persistence for message cache
+- Implement reply chain builder
+- **telegram:** Extract and cache reply metadata
+- **mattermost:** Add root_id and parent_id to post schema
+- **mattermost:** Cache incoming messages and populate replyToMessageId
+- **llm-orchestrator:** Add detailed APICallError logging for production debugging
+- Implement personal memory & recall (Phase 06)
+- Add message reply and quote context awareness
+
+### Changed
+
+- **deferred:** Remove invokeLlmWithHistory backward compat wrapper
+- Extract DB cleanup interval into explicit startup function
+- **mattermost:** Export extractReplyId and MattermostPostSchema
+- Remove test-only exports from message-cache source
+
+### Documentation
+
+- Add deferred prompt execution modes design
+- Add execution modes implementation plan
+- Add design for message reply and quote context
+- Add implementation plan for message reply and quote context
+- **adr:** Add ADRs 0033, 0034 and 0008 for deferred prompts and architecture
+- **plans:** Archive completed proactive and deferred prompt plans to done/
+- **plans:** Update existing plans for memory recall and reply context
+- **plans:** Remove plans moved to done/ archive
+- **user-stories:** Add repo integration user stories
+- Add Mattermost reply chain implementation design
+- Add Mattermost reply chain implementation plan
+- Add project logo and update README
+
+### Fixed
+
+- **test:** Remove unsafe type assertions in execution-modes tests
+- **deferred:** Load history before appending in lightweight mode
+- **test:** Close previous DB before creating new one in migration tests
+- **plan:** Correct migration system instructions
+- **plan:** Correct Drizzle onConflictDoUpdate syntax
+- **plan:** Make all Drizzle operations synchronous
+- **plan:** Use scoped child loggers
+- **plan:** Add scheduled cleanup for expired messages
+- **plan:** Align Task 8 with actual class-based extractMessage
+- **security:** Use registry rule pack instead of deprecated ai-best-practices repo
+- Use composite key (context_id, message_id) for message_metadata
+- Schedule retry flush after persistence failure
+- Add periodic sweep for expired message cache entries
+- **tests:** Test real cache implementation by mocking only DB dependency
+- Address review findings for memo feature
+- Address review feedback from pullrequestreview-4016459408
+- Refine auto-mode fallback and clarify archiveMemos doc comment
+- **tests:** Resolve mock pollution in conversation tests
+
+### Miscellaneous
+
+- **security:** Remove unused .semgrep/config.yml
+- Increate mutation testing concurrency
+- Remove @public from buildReplyChain (now used by reply-context)
+
+### Testing
+
+- **migration:** Add tests for execution_metadata column migration
+- **deferred:** Add failing tests for execution mode dispatch
+- **tools:** Add tests for execution parameter on deferred prompt tools
+- Add integration tests, fix knip unused exports
+- **mattermost:** Add schema parsing tests for reply fields
+- **mattermost:** Add reply chain extraction tests
+
+### Db
+
+- Add message_metadata table for reply chain tracking
+
+### Design
+
+- Telegram reply chain infrastructure for message context
+
+### Plan
+
+- Add implementation plan for telegram reply chain infrastructure
+
+### Types
+
+- Add CachedMessage and MessageMetadataRow types
 ## [Unreleased]
 
 ### Added
