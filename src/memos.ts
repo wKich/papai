@@ -170,13 +170,14 @@ export function loadEmbeddingsForUser(userId: string): readonly { id: string; em
 function archiveByTag(userId: string, tag: string): number {
   const rawDb = getRawDb()
   const before = countActive(userId)
+  const now = new Date().toISOString()
   rawDb
     .prepare(
-      `UPDATE memos SET status = 'archived', updated_at = datetime('now')
+      `UPDATE memos SET status = 'archived', updated_at = ?
        WHERE user_id = ? AND status = 'active'
          AND id IN (SELECT m.id FROM memos m, json_each(m.tags) WHERE m.user_id = ? AND m.status = 'active' AND json_each.value = ?)`,
     )
-    .run(userId, userId, tag)
+    .run(now, userId, userId, tag)
   const count = before - countActive(userId)
   log.info({ userId, tag, count }, 'Memos archived by tag')
   return count
@@ -186,11 +187,12 @@ function archiveByIds(userId: string, ids: readonly string[]): number {
   const rawDb = getRawDb()
   const placeholders = ids.map(() => '?').join(', ')
   const before = countActive(userId)
+  const now = new Date().toISOString()
   rawDb
     .prepare(
-      `UPDATE memos SET status = 'archived', updated_at = datetime('now') WHERE user_id = ? AND status = 'active' AND id IN (${placeholders})`,
+      `UPDATE memos SET status = 'archived', updated_at = ? WHERE user_id = ? AND status = 'active' AND id IN (${placeholders})`,
     )
-    .run(userId, ...ids)
+    .run(now, userId, ...ids)
   const count = before - countActive(userId)
   log.info({ userId, count }, 'Memos archived by IDs')
   return count
@@ -199,20 +201,23 @@ function archiveByIds(userId: string, ids: readonly string[]): number {
 function archiveByDate(userId: string, beforeDate: string): number {
   const rawDb = getRawDb()
   const before = countActive(userId)
+  const now = new Date().toISOString()
   rawDb
     .prepare(
-      `UPDATE memos SET status = 'archived', updated_at = datetime('now') WHERE user_id = ? AND status = 'active' AND created_at <= ?`,
+      `UPDATE memos SET status = 'archived', updated_at = ? WHERE user_id = ? AND status = 'active' AND created_at <= ?`,
     )
-    .run(userId, beforeDate)
+    .run(now, userId, beforeDate)
   const count = before - countActive(userId)
   log.info({ userId, count }, 'Memos archived by date')
   return count
 }
 
 /**
- * Archive memos matching the given filter. Filters are mutually exclusive —
- * only the first matching filter (tag > memoIds > beforeDate) is applied.
- * The tool layer ensures only one filter is provided per call.
+ * Archive memos matching the given filter.
+ *
+ * If multiple filters are provided, only the highest-precedence one is applied,
+ * in the order: memoIds > tag > beforeDate.
+ * The tool layer validates that exactly one filter is provided per call.
  */
 export function archiveMemos(userId: string, filter: ArchiveFilter): number {
   log.debug({ userId, filter }, 'archiveMemos called')

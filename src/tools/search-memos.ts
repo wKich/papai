@@ -52,9 +52,10 @@ export function makeSearchMemosTool(userId: string): ToolSet[string] {
         return doKeywordSearch(userId, query, limit, 'keyword')
       }
 
-      const semanticResult = await trySemanticMode(userId, query, limit)
-      if (semanticResult !== null) {
-        return semanticResult
+      const semantic = await trySemanticMode(userId, query, limit)
+
+      if (semantic.available) {
+        return semantic.result
       }
 
       if (mode === 'semantic') {
@@ -73,18 +74,20 @@ function doKeywordSearch(userId: string, query: string, limit: number, mode: str
   return { results, mode }
 }
 
-async function trySemanticMode(userId: string, query: string, limit: number): Promise<SearchResult | null> {
+async function trySemanticMode(
+  userId: string,
+  query: string,
+  limit: number,
+): Promise<{ available: true; result: SearchResult } | { available: false }> {
   const apiKey = getConfig(userId, 'llm_apikey')
   const baseUrl = getConfig(userId, 'llm_baseurl')
   const embeddingModel = getConfig(userId, 'embedding_model')
-  if (apiKey === null || baseUrl === null || embeddingModel === null) return null
+  if (apiKey === null || baseUrl === null || embeddingModel === null) return { available: false }
 
   const queryVec = await tryGetEmbedding(query, apiKey, baseUrl, embeddingModel)
-  if (queryVec === null) return null
+  if (queryVec === null) return { available: false }
 
   const results = trySemanticSearch(userId, queryVec, limit)
-  if (results.length === 0) return null
-
   log.info({ userId, query, mode: 'semantic', resultCount: results.length }, 'Semantic search completed')
-  return { results, mode: 'semantic' }
+  return { available: true, result: { results, mode: 'semantic' } }
 }

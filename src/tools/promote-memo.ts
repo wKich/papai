@@ -14,8 +14,8 @@ export function makePromoteMemoTool(provider: TaskProvider, userId: string): Too
   return tool({
     description: 'Promote a personal note to a tracked task. Call list_memos or search_memos first to get the memo_id.',
     inputSchema: z.object({
-      memo_id: z.string().describe('The memo ID to promote'),
-      project_id: z.string().describe('Project ID — call list_projects first'),
+      memoId: z.string().describe('The memo ID to promote'),
+      projectId: z.string().describe('Project ID — call list_projects first'),
       title: z.string().optional().describe('Task title — defaults to memo content (truncated)'),
       dueDate: z
         .object({
@@ -25,9 +25,9 @@ export function makePromoteMemoTool(provider: TaskProvider, userId: string): Too
         .optional()
         .describe("Due date in the user's local time"),
     }),
-    execute: ({ memo_id, project_id, title, dueDate }) => {
-      log.debug({ userId, memo_id, project_id }, 'promote_memo called')
-      return promoteToTask(provider, userId, memo_id, project_id, title, dueDate)
+    execute: ({ memoId, projectId, title, dueDate }) => {
+      log.debug({ userId, memoId, projectId }, 'promote_memo called')
+      return promoteToTask(provider, userId, memoId, projectId, title, dueDate)
     },
   })
 }
@@ -75,10 +75,10 @@ async function promoteToTask(
 
   return {
     status: 'promoted',
-    task_id: task.id,
-    task_title: task.title,
-    task_url: task.url,
-    memo_id: memoId,
+    taskId: task.id,
+    taskTitle: task.title,
+    taskUrl: task.url,
+    memoId,
     dueDate: utcToLocal(task.dueDate, timezone),
   }
 }

@@ -16,34 +16,42 @@ function buildDescription(tag?: string, beforeDate?: string, memoIds?: string[])
 
 export function makeArchiveMemosTool(userId: string): ToolSet[string] {
   return tool({
-    description: 'Archive personal notes by tag, date, or specific IDs. At least one filter must be provided.',
+    description: 'Archive personal notes by tag, date, or specific IDs. Exactly one filter must be provided.',
     inputSchema: z.object({
       tag: z.string().optional().describe('Archive all memos with this tag'),
-      before_date: z.string().optional().describe('Archive memos created before this ISO date'),
-      memo_ids: z.array(z.string()).optional().describe('Archive specific memos by ID'),
+      beforeDate: z.string().optional().describe('Archive memos created before this ISO date'),
+      memoIds: z.array(z.string()).optional().describe('Archive specific memos by ID'),
       confidence: confidenceField,
     }),
-    execute: ({ tag, before_date, memo_ids, confidence }) => {
-      log.debug({ userId, tag, before_date, memoIdCount: memo_ids?.length, confidence }, 'archive_memos called')
+    execute: ({ tag, beforeDate, memoIds, confidence }) => {
+      log.debug({ userId, tag, beforeDate, memoIdCount: memoIds?.length, confidence }, 'archive_memos called')
 
-      const hasFilter =
-        tag !== undefined || before_date !== undefined || (memo_ids !== undefined && memo_ids.length > 0)
-      if (!hasFilter) {
+      const filterCount =
+        (tag === undefined ? 0 : 1) +
+        (beforeDate === undefined ? 0 : 1) +
+        (memoIds === undefined || memoIds.length === 0 ? 0 : 1)
+
+      if (filterCount === 0) {
         log.warn({ userId }, 'archive_memos rejected — no filter provided')
-        return { status: 'error', message: 'At least one filter (tag, before_date, or memo_ids) is required.' }
+        return { status: 'error', message: 'Exactly one filter (tag, beforeDate, or memoIds) is required.' }
       }
 
-      const isIdBased = memo_ids !== undefined && memo_ids.length > 0
+      if (filterCount > 1) {
+        log.warn({ userId, tag, beforeDate, memoIdCount: memoIds?.length }, 'archive_memos rejected — multiple filters')
+        return { status: 'error', message: 'Exactly one filter (tag, beforeDate, or memoIds) must be provided.' }
+      }
+
+      const isIdBased = memoIds !== undefined && memoIds.length > 0
       if (!isIdBased) {
-        const gate = checkConfidence(confidence, buildDescription(tag, before_date, memo_ids))
+        const gate = checkConfidence(confidence, buildDescription(tag, beforeDate, memoIds))
         if (gate !== null) {
           log.warn({ userId, confidence }, 'archive_memos blocked — confirmation required')
           return gate
         }
       }
 
-      const count = archiveMemos(userId, { tag, beforeDate: before_date, memoIds: memo_ids })
-      log.info({ userId, count, tag, before_date }, 'Memos archived via tool')
+      const count = archiveMemos(userId, { tag, beforeDate, memoIds })
+      log.info({ userId, count, tag, beforeDate }, 'Memos archived via tool')
       return { status: 'archived', count }
     },
   })
