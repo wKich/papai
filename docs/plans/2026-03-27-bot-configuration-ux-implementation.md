@@ -487,7 +487,7 @@ export function getWizardSteps(taskProvider: 'kaneo' | 'youtrack'): WizardStep[]
       key: 'small_model',
       prompt: "⚡ Enter small model name (or 'same' to use main model):",
       validate: (value: string) => {
-        if (value.trim().length === 0 && value !== 'same') {
+        if (value.trim() === '') {
           return { valid: false, error: "Please enter a model name or 'same'" }
         }
         return { valid: true }
@@ -499,7 +499,7 @@ export function getWizardSteps(taskProvider: 'kaneo' | 'youtrack'): WizardStep[]
       prompt: "📊 Enter embedding model (or 'skip' to use default):",
       isOptional: true,
       validate: (value: string) => {
-        if (value.trim().length === 0 && value !== 'skip') {
+        if (value.trim() === '') {
           return { valid: false, error: "Please enter a model name or 'skip'" }
         }
         return { valid: true }
