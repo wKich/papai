@@ -20,6 +20,46 @@
 
 ---
 
+## Architecture Design
+
+**CRITICAL - Platform-Agnostic Design:**
+
+The wizard must maintain the existing architecture where `bot.ts` is the platform-agnostic orchestration layer:
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    ARCHITECTURE FLOW                           │
+└────────────────────────────────────────────────────────────────┘
+
+  User Message
+       │
+       ▼
+  ┌─────────┐   Platform extraction   ┌──────────┐
+  │Telegram │ ──────────────────────→ │ bot.ts   │
+  │Provider │                         │ message  │
+  └─────────┘                         │ handler  │
+                                      └────┬─────┘
+                                           │
+              ┌────────────────────────────┼────────────────────┐
+              │                            │                    │
+              ▼                            ▼                    ▼
+         ┌──────────┐               ┌──────────┐         ┌──────────┐
+         │ Check    │──Yes──→       │ Process  │         │ Normal   │
+         │ wizard   │   handle      │ command  │         │ message  │
+         │ active?  │   wizard      │          │         │ flow     │
+         └──────────┘               └──────────┘         └──────────┘
+              │ No
+              │
+              └────────────────────────────────────────────────────┘
+
+Key Points:
+- Wizard check happens in bot.ts (platform-agnostic)
+- ChatProvider interface unchanged
+- Platform-specific callbacks registered in provider.start()
+```
+
+---
+
 ## Phase 1: Core Wizard Engine
 
 ### Task 1: Create Wizard State Types
@@ -107,6 +147,13 @@ export interface WizardStep {
 }
 
 export type WizardState = 'idle' | 'active' | 'completed' | 'cancelled'
+
+// Platform-agnostic wizard result for bot.ts integration
+export interface WizardProcessResult {
+  handled: boolean
+  response?: string
+  requiresInput?: boolean
+}
 ```
 
 **Step 4: Run test to verify it passes**
@@ -134,7 +181,6 @@ Includes validation and live check interfaces."
 **Files:**
 
 - Create: `src/wizard/state.ts`
-- Modify: `src/db/schema.ts` (add wizard_sessions table)
 - Test: `tests/wizard/state.test.ts`
 
 **Step 1: Write the failing test**
@@ -146,6 +192,7 @@ import {
   getWizardSession,
   updateWizardSession,
   deleteWizardSession,
+  hasActiveWizard,
 } from '../../src/wizard/state.js'
 
 describe('Wizard State Store', () => {
@@ -169,6 +216,14 @@ describe('Wizard State Store', () => {
     expect(retrieved?.userId).toBe(userId)
   })
 
+  test('should check active wizard', async () => {
+    expect(hasActiveWizard(userId, contextId)).toBe(false)
+
+    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram' })
+
+    expect(hasActiveWizard(userId, contextId)).toBe(true)
+  })
+
   test('should update session data', async () => {
     await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram' })
 
@@ -188,6 +243,7 @@ describe('Wizard State Store', () => {
 
     const session = await getWizardSession(userId, contextId)
     expect(session).toBeNull()
+    expect(hasActiveWizard(userId, contextId)).toBe(false)
   })
 })
 ```
@@ -207,7 +263,6 @@ Expected: FAIL with "Module not found"
  * Wizard state management with SQLite persistence
  */
 
-import { getDrizzleDb } from '../db/drizzle.js'
 import { logger } from '../logger.js'
 import type { WizardSession, WizardData } from './types.js'
 
@@ -251,6 +306,11 @@ export async function getWizardSession(userId: string, contextId: string): Promi
   return activeSessions.get(key) ?? null
 }
 
+export function hasActiveWizard(userId: string, contextId: string): boolean {
+  const key = getSessionKey(userId, contextId)
+  return activeSessions.has(key)
+}
+
 interface UpdateSessionData {
   currentStep?: number
   data?: Partial<WizardData>
@@ -286,11 +346,6 @@ export async function deleteWizardSession(userId: string, contextId: string): Pr
   activeSessions.delete(key)
   log.debug({ userId, contextId }, 'Wizard session deleted')
 }
-
-export function hasActiveWizard(userId: string, contextId: string): boolean {
-  const key = getSessionKey(userId, contextId)
-  return activeSessions.has(key)
-}
 ```
 
 **Step 4: Run test to verify it passes**
@@ -308,7 +363,7 @@ git add src/wizard/state.ts tests/wizard/state.test.ts
 git commit -m "feat(wizard): add wizard state management
 
 Add in-memory session storage with create, update, delete operations.
-Sessions are keyed by userId:contextId for isolation."
+Includes hasActiveWizard() for checking wizard state."
 ```
 
 ---
@@ -563,7 +618,7 @@ Includes timezone, URL, and required field validation."
 **Step 1: Write the failing test**
 
 ```typescript
-import { describe, expect, test, mock } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists } from '../../src/wizard/validation.js'
 
 describe('Live Validation', () => {
@@ -815,7 +870,7 @@ import { setConfig } from '../config.js'
 import { createWizardSession, updateWizardSession, getWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists, validateProviderToken } from './validation.js'
-import type { WizardData } from './types.js'
+import type { WizardData, WizardProcessResult } from './types.js'
 
 const log = logger.child({ scope: 'wizard:engine' })
 
@@ -1013,6 +1068,54 @@ export async function restartWizardStep(userId: string, contextId: string): Prom
 
   return getNextPrompt(userId, contextId)
 }
+
+// Platform-agnostic wizard message processor for bot.ts
+export async function processWizardMessage(
+  userId: string,
+  contextId: string,
+  text: string,
+): Promise<WizardProcessResult> {
+  const session = await getWizardSession(userId, contextId)
+
+  if (session === null) {
+    return { handled: false }
+  }
+
+  // Handle cancellation
+  if (text.toLowerCase() === 'cancel') {
+    await cancelWizard(userId, contextId)
+    return {
+      handled: true,
+      response: '❌ Wizard cancelled. Type /setup to restart.',
+    }
+  }
+
+  // Handle confirmation
+  if (text.toLowerCase() === 'yes' || text.toLowerCase() === 'confirm') {
+    const result = await saveWizardConfig(userId, contextId, true)
+    return {
+      handled: true,
+      response: result.prompt ?? 'Configuration saved!',
+    }
+  }
+
+  // Handle step advancement
+  const result = await advanceStep(userId, contextId, text, false)
+
+  if (result.success) {
+    return {
+      handled: true,
+      response: result.isComplete ? (result.summary ?? result.prompt) : result.prompt,
+      requiresInput: !result.isComplete,
+    }
+  } else {
+    return {
+      handled: true,
+      response: result.error ?? 'Invalid input. Please try again.',
+      requiresInput: true,
+    }
+  }
+}
 ```
 
 **Step 4: Run test to verify it passes**
@@ -1030,142 +1133,37 @@ git add src/wizard/engine.ts tests/wizard/engine.test.ts
 git commit -m "feat(wizard): add wizard engine
 
 Add core wizard orchestration with step advancement, validation,
-summary display, and config saving."
+summary display, and config saving. Includes processWizardMessage() for bot.ts integration."
 ```
 
 ---
 
-## Phase 4: Telegram UI
+## Phase 4: Platform Integration (Corrected Architecture)
 
-### Task 6: Create Telegram Wizard UI
+### Task 6: Add Wizard Callback Handler to Telegram Provider
 
 **Files:**
 
-- Create: `src/chat/telegram/wizard-ui.ts`
-- Modify: `src/chat/telegram/index.ts` (integrate wizard)
+- Modify: `src/chat/telegram/index.ts` (add callback handler in start method)
+- Create: `src/wizard/telegram-handlers.ts` (callback handler)
 
-**Step 1: Write the failing test**
+**Step 1: Create Telegram callback handler**
 
-```typescript
-import { describe, expect, test, mock } from 'bun:test'
-import { handleWizardMessage } from '../../../src/chat/telegram/wizard-ui.js'
-
-describe('Telegram Wizard UI', () => {
-  test('should handle wizard message', async () => {
-    const ctx = {
-      from: { id: 123, username: 'testuser' },
-      chat: { id: 123, type: 'private' },
-      message: { text: '/setup', message_id: 1 },
-      reply: mock(() => Promise.resolve()),
-    }
-
-    const result = await handleWizardMessage(ctx as unknown)
-    expect(result).toBeDefined()
-  })
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-```bash
-bun test tests/chat/telegram/wizard-ui.test.ts
-```
-
-Expected: FAIL with "Module not found"
-
-**Step 3: Write minimal implementation**
+Create `src/wizard/telegram-handlers.ts`:
 
 ```typescript
 /**
- * Telegram-specific wizard UI components
+ * Telegram-specific wizard callback handlers
+ * Called from TelegramChatProvider.start()
  */
 
 import { InlineKeyboard } from 'grammy'
-import { logger } from '../../logger.js'
-import { createWizard, advanceStep, saveWizardConfig, cancelWizard } from '../../wizard/engine.js'
-import { hasActiveWizard } from '../../wizard/state.js'
 import type { Context } from 'grammy'
+import { logger } from '../logger.js'
+import { saveWizardConfig, cancelWizard } from './engine.js'
+import { getWizardSession } from './state.js'
 
-const log = logger.child({ scope: 'chat:telegram:wizard' })
-
-const TASK_PROVIDER = (process.env['TASK_PROVIDER'] as 'kaneo' | 'youtrack') ?? 'kaneo'
-
-export async function handleWizardMessage(ctx: Context): Promise<boolean> {
-  const userId = String(ctx.from?.id ?? '')
-  const contextId = String(ctx.chat?.id ?? userId)
-  const text = ctx.message?.text ?? ''
-
-  if (userId === '' || contextId === '') {
-    return false
-  }
-
-  // Check if there's an active wizard
-  if (!hasActiveWizard(userId, contextId)) {
-    // Only handle /setup command
-    if (text === '/setup') {
-      const result = await createWizard(userId, contextId, 'telegram', TASK_PROVIDER)
-
-      if (result.success && result.prompt) {
-        const keyboard = buildWizardKeyboard()
-        await ctx.reply(result.prompt, { reply_markup: keyboard })
-      } else {
-        await ctx.reply(result.error ?? 'Failed to start wizard')
-      }
-      return true
-    }
-    return false
-  }
-
-  // Handle wizard responses
-  if (text.toLowerCase() === 'cancel') {
-    await cancelWizard(userId, contextId)
-    await ctx.reply('❌ Wizard cancelled. Type /setup to restart.')
-    return true
-  }
-
-  if (text.toLowerCase() === 'yes' || text.toLowerCase() === 'confirm') {
-    const result = await saveWizardConfig(userId, contextId, true)
-    await ctx.reply(result.prompt ?? 'Configuration saved!')
-    return true
-  }
-
-  if (text.toLowerCase() === 'edit') {
-    // TODO: Implement edit mode
-    await ctx.reply('Edit mode not yet implemented. Type /setup to restart.')
-    return true
-  }
-
-  // Process step input
-  const result = await advanceStep(userId, contextId, text, false)
-
-  if (result.success) {
-    if (result.isComplete && result.summary) {
-      const keyboard = new InlineKeyboard()
-        .text('✅ Confirm', 'wizard_confirm')
-        .text('🔄 Restart', 'wizard_restart')
-        .text('❌ Cancel', 'wizard_cancel')
-
-      await ctx.reply(result.prompt ?? result.summary, { reply_markup: keyboard })
-    } else if (result.prompt) {
-      const keyboard = buildWizardKeyboard()
-      await ctx.reply(result.prompt, { reply_markup: keyboard })
-    }
-  } else {
-    // Show error with retry options
-    const keyboard = new InlineKeyboard()
-      .text('🔁 Retry', 'wizard_retry')
-      .text('⏭️ Skip', 'wizard_skip')
-      .text('❓ Help', 'wizard_help')
-
-    await ctx.reply(result.error ?? 'Invalid input', { reply_markup: keyboard })
-  }
-
-  return true
-}
-
-function buildWizardKeyboard(): InlineKeyboard {
-  return new InlineKeyboard().text('❌ Cancel', 'wizard_cancel')
-}
+const log = logger.child({ scope: 'wizard:telegram' })
 
 export async function handleWizardCallback(ctx: Context): Promise<void> {
   const userId = String(ctx.from?.id ?? '')
@@ -1173,6 +1171,11 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
   const data = (ctx.callbackQuery as { data?: string })?.data ?? ''
 
   if (userId === '' || contextId === '') {
+    return
+  }
+
+  // Only handle wizard-related callbacks
+  if (!data.startsWith('wizard_')) {
     return
   }
 
@@ -1189,148 +1192,263 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
       break
     case 'wizard_restart':
       await cancelWizard(userId, contextId)
-      const result = await createWizard(userId, contextId, 'telegram', TASK_PROVIDER)
-      if (result.success && result.prompt) {
-        await ctx.editMessageText(result.prompt)
-      }
-      break
-    case 'wizard_retry':
-      // Re-show current prompt
-      const session = await import('../../wizard/state.js').then((m) => m.getWizardSession(userId, contextId))
-      if (session) {
-        await ctx.editMessageText(
-          session.currentStep === 0 ? 'Welcome! ' + result?.prompt : (result?.prompt ?? 'Please enter the value:'),
-        )
-      }
-      break
-    case 'wizard_skip':
-      // Skip current step
-      const skipResult = await advanceStep(userId, contextId, 'skip', false)
-      if (skipResult.success && skipResult.prompt) {
-        await ctx.editMessageText(skipResult.prompt)
-      }
+      await ctx.reply('Restarting wizard... Type /setup to begin.')
       break
   }
 }
 
-// Declare result variable that's used in switch cases
-let result: { success: boolean; prompt?: string } | null = null
+export function buildWizardKeyboard(): InlineKeyboard {
+  return new InlineKeyboard().text('❌ Cancel', 'wizard_cancel')
+}
+
+export function buildSummaryKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('✅ Confirm', 'wizard_confirm')
+    .text('🔄 Restart', 'wizard_restart')
+    .text('❌ Cancel', 'wizard_cancel')
+}
 ```
 
-**Step 4: Run test to verify it passes**
+**Step 2: Modify Telegram provider to register callback handler**
 
-```bash
-bun test tests/chat/telegram/wizard-ui.test.ts
-```
-
-Expected: PASS
-
-**Step 5: Commit**
-
-```bash
-git add src/chat/telegram/wizard-ui.ts tests/chat/telegram/wizard-ui.test.ts
-git commit -m "feat(telegram): add wizard UI components
-
-Add Telegram-specific wizard UI with inline keyboards for
-step navigation, confirmation, and error recovery."
-```
-
----
-
-### Task 7: Integrate Wizard into Telegram Provider
-
-**Files:**
-
-- Modify: `src/chat/telegram/index.ts`
-
-**Step 1: Read current Telegram provider**
-
-```bash
-head -100 src/chat/telegram/index.ts
-```
-
-**Step 2: Modify Telegram provider to integrate wizard**
-
-Add import and integration in `src/chat/telegram/index.ts`:
+In `src/chat/telegram/index.ts`, modify the `start()` method:
 
 ```typescript
-// Add to imports
-import { handleWizardMessage, handleWizardCallback } from './wizard-ui.js'
-import { hasActiveWizard } from '../../wizard/state.js'
+// Add import
+import { handleWizardCallback } from '../../wizard/telegram-handlers.js'
 
-// In onMessage method, before regular message handling:
-onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void {
-  this.bot.on('message:text', async (ctx) => {
-    // Check if wizard is active
-    const userId = String(ctx.from?.id ?? '')
-    const contextId = String(ctx.chat?.id ?? userId)
-
-    if (hasActiveWizard(userId, contextId)) {
-      const handled = await handleWizardMessage(ctx)
-      if (handled) return
-    }
-
-    // Regular message handling
-    const isAdmin = await this.checkAdminStatus(ctx)
-    const msg = this.extractMessage(ctx, isAdmin)
-    if (msg === null) return
-    const reply = this.buildReplyFn(ctx)
-    await this.withTypingIndicator(ctx, () => handler(msg, reply))
-  })
-
-  // Register callback handler for wizard buttons
+// In start() method, add callback handler:
+start(): Promise<void> {
+  // Register wizard callback handler
   this.bot.on('callback_query:data', async (ctx) => {
     await handleWizardCallback(ctx)
+  })
+
+  return new Promise<void>((resolve, reject) => {
+    this.bot
+      .start({
+        onStart: (botInfo) => {
+          this.botUsername = botInfo.username
+          log.info({ botUsername: this.botUsername }, 'Telegram bot is running')
+          resolve()
+        },
+      })
+      .catch((error: unknown) => {
+        const err = error instanceof Error ? error : new Error(String(error))
+        log.error({ error: err.message }, 'Telegram polling loop exited')
+        reject(err)
+      })
   })
 }
 ```
 
-**Step 3: Add /setup command**
+**Step 3: DO NOT modify onMessage**
 
-In `setCommands` method, add:
+The `onMessage` method remains unchanged. Wizard interception happens in `bot.ts`.
+
+**Step 4: Commit**
+
+```bash
+git add src/wizard/telegram-handlers.ts src/chat/telegram/index.ts
+git commit -m "feat(telegram): add wizard callback handlers
+
+Register callback query handler in Telegram provider.start().
+DO NOT modify onMessage - wizard interception happens in bot.ts."
+```
+
+---
+
+### Task 7: Integrate Wizard into Bot.ts (Platform-Agnostic)
+
+**Files:**
+
+- Modify: `src/bot.ts`
+
+**Step 1: Read current bot.ts structure**
+
+Already read - shows `onMessage` is called once from `setupBot()` with a single handler.
+
+**Step 2: Modify bot.ts to add wizard interception**
 
 ```typescript
-const userCmds = [
-  { command: 'help', description: 'Show available commands' },
-  { command: 'setup', description: 'Run configuration wizard' }, // NEW
-  { command: 'set', description: 'Open configuration menu' }, // UPDATED
-  { command: 'config', description: 'View current configuration' },
-  { command: 'clear', description: 'Clear conversation history and memory' },
-]
+// Add imports at top
+import { registerSetupCommand } from './commands/setup.js'
+import { hasActiveWizard, processWizardMessage } from './wizard/index.js'
+
+// In setupBot function, add setup command registration
+export function setupBot(chat: ChatProvider, adminUserId: string): void {
+  registerHelpCommand(chat)
+  registerSetupCommand(chat, checkAuthorization)
+  registerSetCommand(chat, checkAuthorization)
+  registerConfigCommand(chat, checkAuthorization)
+  registerContextCommand(chat, adminUserId)
+  registerClearCommand(chat, checkAuthorization, adminUserId)
+  registerAdminCommands(chat, adminUserId)
+  registerGroupCommand(chat)
+
+  chat.onMessage(async (msg, reply) => {
+    // WIZARD INTERCEPTION - Platform agnostic
+    // Check if user is in active wizard session
+    if (hasActiveWizard(msg.user.id, msg.contextId)) {
+      const wizardResult = await processWizardMessage(msg.user.id, msg.contextId, msg.text)
+
+      if (wizardResult.handled) {
+        if (wizardResult.response) {
+          await reply.text(wizardResult.response)
+        }
+        return
+      }
+    }
+
+    // Existing authorization and message processing
+    const auth = checkAuthorizationExtended(
+      msg.user.id,
+      msg.user.username,
+      msg.contextId,
+      msg.contextType,
+      msg.user.isAdmin,
+    )
+
+    if (!auth.allowed) {
+      if (msg.isMentioned) {
+        await reply.text(
+          "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser @{username}`",
+        )
+      }
+      return
+    }
+
+    const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
+    const isNaturalLanguage = !hasCommand
+    if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
+      return
+    }
+
+    reply.typing()
+    const prompt = buildPromptWithReplyContext(msg)
+    await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+  })
+}
+```
+
+**Step 3: Create wizard index.ts for clean exports**
+
+Create `src/wizard/index.ts`:
+
+```typescript
+/**
+ * Wizard module exports
+ */
+
+export { hasActiveWizard } from './state.js'
+export { processWizardMessage } from './engine.js'
+export { createWizard } from './engine.js'
+export type { WizardProcessResult } from './types.js'
 ```
 
 **Step 4: Commit**
 
 ```bash
-git add src/chat/telegram/index.ts
-git commit -m "feat(telegram): integrate wizard into provider
+git add src/bot.ts src/wizard/index.ts
+git commit -m "feat(bot): integrate wizard into message flow (platform-agnostic)
 
-Add wizard message handling and callback query support.
-Register /setup command and integrate with existing flow."
+Add wizard interception in bot.ts before authorization check.
+Wizard state check is platform-agnostic, callbacks handled by providers.
+Maintains existing architecture where bot.ts is the orchestration layer."
 ```
 
 ---
 
-## Phase 5: Mattermost UI
-
-### Task 8: Create Mattermost Wizard UI
+### Task 8: Create Setup Command
 
 **Files:**
 
-- Create: `src/chat/mattermost/wizard-ui.ts`
+- Create: `src/commands/setup.ts`
+- Modify: `src/commands/index.ts`
+- Test: `tests/commands/setup.test.ts`
 
-**Step 1: Write minimal implementation**
+**Step 1: Create setup command**
+
+```typescript
+import type { ChatProvider, CommandHandler, AuthorizationResult } from '../chat/types.js'
+import { logger } from '../logger.js'
+import { createWizard } from '../wizard/engine.js'
+
+const log = logger.child({ scope: 'commands:setup' })
+
+const TASK_PROVIDER = (process.env['TASK_PROVIDER'] as 'kaneo' | 'youtrack') ?? 'kaneo'
+
+export function registerSetupCommand(
+  chat: ChatProvider,
+  checkAuthorization: (userId: string, username?: string | null) => boolean,
+): void {
+  const handler: CommandHandler = async (msg, reply, auth) => {
+    if (!auth.allowed) {
+      await reply.text('You are not authorized to use this bot.')
+      return
+    }
+
+    log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
+
+    // Create wizard session - actual prompts handled by wizard engine
+    const platform = chat.name as 'telegram' | 'mattermost'
+    const result = await createWizard(msg.user.id, auth.storageContextId, platform, TASK_PROVIDER)
+
+    if (result.success && result.prompt) {
+      await reply.text(result.prompt)
+    } else {
+      await reply.text(result.error ?? 'Failed to start wizard. Please try again.')
+    }
+  }
+
+  chat.registerCommand('setup', handler)
+}
+```
+
+**Step 2: Update commands index**
+
+```typescript
+export { registerAdminCommands } from './admin.js'
+export { registerClearCommand } from './clear.js'
+export { registerConfigCommand } from './config.js'
+export { registerContextCommand } from './context.js'
+export { registerGroupCommand } from './group.js'
+export { registerHelpCommand } from './help.js'
+export { registerSetCommand } from './set.js'
+export { registerSetupCommand } from './setup.js'
+```
+
+**Step 3: Commit**
+
+```bash
+git add src/commands/setup.ts src/commands/index.ts
+git commit -m "feat(commands): add /setup command
+
+Add setup command that creates wizard session and triggers first prompt.
+Wizard engine handles subsequent messages via bot.ts interception."
+```
+
+---
+
+## Phase 5: Mattermost Integration
+
+### Task 9: Create Mattermost Wizard Handler
+
+**Files:**
+
+- Create: `src/wizard/mattermost-handlers.ts`
+
+**Step 1: Create Mattermost handler**
 
 ```typescript
 /**
- * Mattermost-specific wizard UI components
+ * Mattermost-specific wizard handlers
  */
 
-import { logger } from '../../logger.js'
-import { createWizard, advanceStep, saveWizardConfig, cancelWizard } from '../../wizard/engine.js'
-import { hasActiveWizard } from '../../wizard/state.js'
+import { logger } from '../logger.js'
+import { createWizard, saveWizardConfig, cancelWizard } from './engine.js'
 
-const log = logger.child({ scope: 'chat:mattermost:wizard' })
+const log = logger.child({ scope: 'wizard:mattermost' })
 
 const TASK_PROVIDER = (process.env['TASK_PROVIDER'] as 'kaneo' | 'youtrack') ?? 'kaneo'
 
@@ -1338,18 +1456,13 @@ interface MattermostContext {
   userId: string
   contextId: string
   channelId: string
-  postId?: string
   triggerId?: string
 }
 
-export async function handleWizardSlashCommand(
+export async function handleMattermostWizardCommand(
   ctx: MattermostContext,
   text: string,
-): Promise<{
-  response_type: string
-  text: string
-  [key: string]: unknown
-}> {
+): Promise<{ response_type: string; text: string }> {
   if (text.trim() === '' || text === 'setup') {
     const result = await createWizard(ctx.userId, ctx.contextId, 'mattermost', TASK_PROVIDER)
 
@@ -1368,20 +1481,8 @@ export async function handleWizardSlashCommand(
 
   return {
     response_type: 'ephemeral',
-    text: 'Unknown wizard command. Use `/papai-setup` to start the wizard.',
+    text: 'Unknown command. Use `/papai-setup` to start the wizard.',
   }
-}
-
-export async function handleWizardDialog(
-  ctx: MattermostContext,
-  values: Record<string, string>,
-): Promise<{ text: string; [key: string]: unknown }> {
-  // Handle dialog submissions for configuration
-  const response: { text: string; [key: string]: unknown } = {
-    text: 'Configuration updated',
-  }
-
-  return response
 }
 
 export function buildConfigDialog(): Record<string, unknown> {
@@ -1403,135 +1504,21 @@ export function buildConfigDialog(): Record<string, unknown> {
     submit_label: 'Configure',
   }
 }
-
-export function buildLlmSettingsDialog(): Record<string, unknown> {
-  return {
-    title: '🤖 LLM Configuration',
-    elements: [
-      {
-        type: 'text',
-        label: 'API Key',
-        name: 'llm_apikey',
-        placeholder: 'sk-...',
-      },
-      {
-        type: 'text',
-        label: 'Base URL',
-        name: 'llm_baseurl',
-        placeholder: 'https://...',
-      },
-      {
-        type: 'text',
-        label: 'Main Model',
-        name: 'main_model',
-        placeholder: 'gpt-4',
-      },
-      {
-        type: 'text',
-        label: 'Small Model',
-        name: 'small_model',
-        placeholder: 'gpt-3.5',
-      },
-    ],
-    submit_label: 'Save',
-    notify_on_cancel: true,
-  }
-}
 ```
 
 **Step 2: Commit**
 
 ```bash
-git add src/chat/mattermost/wizard-ui.ts
-git commit -m "feat(mattermost): add wizard UI components
+git add src/wizard/mattermost-handlers.ts
+git commit -m "feat(mattermost): add wizard handlers for Mattermost
 
-Add Mattermost-specific wizard UI with slash commands and
-interactive dialogs for configuration management."
+Add Mattermost-specific command handler and dialog builders.
+Wizard flow still handled by platform-agnostic engine."
 ```
 
 ---
 
 ## Phase 6: Commands Update
-
-### Task 9: Create Setup Command
-
-**Files:**
-
-- Create: `src/commands/setup.ts`
-- Modify: `src/commands/index.ts` (export setup command)
-
-**Step 1: Write the failing test**
-
-```typescript
-import { describe, expect, test, mock } from 'bun:test'
-import { registerSetupCommand } from '../../src/commands/setup.js'
-import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
-
-describe('Setup Command', () => {
-  test('should register setup command', () => {
-    const mockChat = {
-      registerCommand: mock((name: string, handler: unknown) => {}),
-    } as unknown as ChatProvider
-
-    registerSetupCommand(mockChat)
-    expect(mockChat.registerCommand).toHaveBeenCalled()
-  })
-})
-```
-
-**Step 2: Write minimal implementation**
-
-```typescript
-import type { ChatProvider, CommandHandler } from '../chat/types.js'
-import { logger } from '../logger.js'
-import { createWizard } from '../wizard/engine.js'
-
-const log = logger.child({ scope: 'commands:setup' })
-
-const TASK_PROVIDER = (process.env['TASK_PROVIDER'] as 'kaneo' | 'youtrack') ?? 'kaneo'
-
-export function registerSetupCommand(chat: ChatProvider): void {
-  const handler: CommandHandler = async (msg, reply, auth) => {
-    if (!auth.allowed) {
-      await reply.text('You are not authorized to use this bot.')
-      return
-    }
-
-    log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
-
-    // Wizard is platform-specific, so we just acknowledge here
-    // The actual wizard handling is done in the chat provider
-    await reply.text('Starting configuration wizard... Type /setup to begin.')
-  }
-
-  chat.registerCommand('setup', handler)
-}
-```
-
-**Step 3: Update commands index**
-
-```typescript
-export { registerAdminCommands } from './admin.js'
-export { registerClearCommand } from './clear.js'
-export { registerConfigCommand } from './config.js'
-export { registerContextCommand } from './context.js'
-export { registerGroupCommand } from './group.js'
-export { registerHelpCommand } from './help.js'
-export { registerSetCommand } from './set.js'
-export { registerSetupCommand } from './setup.js' // NEW
-```
-
-**Step 4: Commit**
-
-```bash
-git add src/commands/setup.ts src/commands/index.ts tests/commands/setup.test.ts
-git commit -m "feat(commands): add /setup command
-
-Add setup command handler that triggers the configuration wizard.
-Command is registered with all chat providers."
-```
-
----
 
 ### Task 10: Update Set Command
 
@@ -1539,23 +1526,19 @@ Command is registered with all chat providers."
 
 - Modify: `src/commands/set.ts`
 
-**Step 1: Modify set command to open menu**
+**Step 1: Modify set command**
 
-Update `src/commands/set.ts` to check for platform and open appropriate menu:
+Add helpful message when called without arguments:
 
 ```typescript
-// When /set is called without arguments, open the configuration menu
 const match = (msg.commandMatch ?? '').trim()
 if (match === '') {
-  // Open configuration menu
-  if (msg.contextType === 'group') {
-    await reply.text('Configuration menu:\n\nUse /set <key> <value> to set a specific value.')
-  } else {
-    // For DMs, suggest the wizard
-    await reply.text(
-      '💡 Tip: Use /setup for an interactive configuration wizard, or /set <key> <value> for manual configuration.',
-    )
-  }
+  await reply.text(
+    '💡 **Configuration Help**\n\n' +
+      'Use `/setup` for an interactive wizard (recommended)\n' +
+      'Or use `/set <key> <value>` for manual configuration\n\n' +
+      'Example: `/set llm_apikey sk-...`',
+  )
   return
 }
 ```
@@ -1564,10 +1547,9 @@ if (match === '') {
 
 ```bash
 git add src/commands/set.ts
-git commit -m "feat(commands): update /set to show help message
+git commit -m "feat(commands): update /set to show wizard suggestion
 
-When /set is called without arguments, show helpful message
-suggesting the wizard or manual configuration."
+When /set is called without arguments, suggest the wizard first."
 ```
 
 ---
@@ -1578,135 +1560,98 @@ suggesting the wizard or manual configuration."
 
 - Modify: `src/commands/config.ts`
 
-**Step 1: Modify config command to add edit option**
+**Step 1: Modify config command**
 
-Update `src/commands/config.ts` to include an edit button/message:
+Add hint after showing config:
 
 ```typescript
-// After showing config, add edit option for Telegram
-if (msg.contextType === 'dm') {
-  await reply.text(lines.join('\n') + '\n\n💡 Use /setup to edit configuration interactively.')
-}
+await reply.text(lines.join('\n') + '\n\n💡 Use `/setup` to edit configuration interactively.')
 ```
 
 **Step 2: Commit**
 
 ```bash
 git add src/commands/config.ts
-git commit -m "feat(commands): update /config with edit hint
+git commit -m "feat(commands): update /config with wizard hint
 
 Add helpful message suggesting /setup for interactive editing."
 ```
 
 ---
 
-## Phase 7: Integration
+## Phase 7: Testing & Finalization
 
-### Task 12: Integrate Wizard into Bot
-
-**Files:**
-
-- Modify: `src/bot.ts`
-
-**Step 1: Add wizard integration to bot.ts**
-
-Add import and check for incomplete configuration:
-
-```typescript
-// Add to imports
-import { getAllConfig } from './config.js'
-import { hasActiveWizard } from './wizard/state.js'
-
-// In setupBot function, add wizard detection
-export async function setupBot(chat: ChatProvider, adminUserId: string): Promise<void> {
-  // ... existing setup code ...
-
-  // Check for incomplete configuration and suggest wizard
-  chat.onMessage(async (msg, reply) => {
-    // Check if user needs setup
-    const config = getAllConfig(msg.user.id)
-    const needsSetup = !config.llm_apikey || !config.main_model
-
-    if (needsSetup && !hasActiveWizard(msg.user.id, msg.contextId)) {
-      await reply.text(
-        '👋 Welcome! It looks like you need to configure the bot.\n\nType /setup to run the interactive configuration wizard.',
-      )
-      return
-    }
-
-    // ... existing message handling ...
-  })
-}
-```
-
-**Step 2: Register setup command in bot.ts**
-
-```typescript
-// Add to imports
-import { registerSetupCommand } from './commands/setup.js'
-
-// In setupBot function, add:
-registerSetupCommand(chat)
-```
-
-**Step 3: Commit**
-
-```bash
-git add src/bot.ts
-git commit -m "feat(bot): integrate wizard and detect incomplete config
-
-Add automatic detection of incomplete configuration.
-Suggest wizard to new users. Register /setup command."
-```
-
----
-
-## Phase 8: Testing & Polish
-
-### Task 13: Add E2E Wizard Test
+### Task 12: Create Wizard Integration Tests
 
 **Files:**
 
-- Create: `tests/e2e/wizard.test.ts`
+- Create: `tests/wizard/integration.test.ts`
 
-**Step 1: Write E2E test**
+**Step 1: Write integration test**
 
 ```typescript
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
+import { describe, expect, test, beforeEach } from 'bun:test'
+import { createWizard, advanceStep, saveWizardConfig, processWizardMessage } from '../../src/wizard/engine.js'
+import { hasActiveWizard, deleteWizardSession } from '../../src/wizard/state.js'
 
-describe('Configuration Wizard E2E', () => {
-  let testClient: KaneoTestClient
+describe('Wizard Integration', () => {
+  const userId = 'test-user'
+  const contextId = 'test-context'
 
   beforeEach(async () => {
-    testClient = createTestClient()
-    await testClient.cleanup()
+    await deleteWizardSession(userId, contextId)
   })
 
-  afterEach(async () => {
-    await testClient.cleanup()
+  test('should complete full wizard flow', async () => {
+    // Start wizard
+    const startResult = await createWizard(userId, contextId, 'telegram', 'kaneo')
+    expect(startResult.success).toBe(true)
+    expect(hasActiveWizard(userId, contextId)).toBe(true)
+
+    // Complete all steps
+    const steps = ['sk-api-key', 'https://api.openai.com/v1', 'gpt-4', 'same', 'skip', 'kaneo-token', 'UTC']
+
+    for (const value of steps) {
+      const result = await advanceStep(userId, contextId, value, true)
+      expect(result.success).toBe(true)
+    }
+
+    // Confirm
+    const saveResult = await saveWizardConfig(userId, contextId, true)
+    expect(saveResult.success).toBe(true)
+    expect(hasActiveWizard(userId, contextId)).toBe(false)
   })
 
-  test('should complete wizard flow', async () => {
-    // This test would require full bot integration
-    // For now, just verify the test setup works
-    expect(testClient).toBeDefined()
+  test('should handle processWizardMessage', async () => {
+    await createWizard(userId, contextId, 'telegram', 'kaneo')
+
+    const result = await processWizardMessage(userId, contextId, 'sk-test-key')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('base URL')
   })
 })
 ```
 
-**Step 2: Commit**
+**Step 2: Run test**
 
 ```bash
-git add tests/e2e/wizard.test.ts
-git commit -m "test(e2e): add wizard e2e test scaffold
+bun test tests/wizard/integration.test.ts
+```
 
-Add end-to-end test structure for configuration wizard."
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add tests/wizard/integration.test.ts
+git commit -m "test(wizard): add integration tests
+
+Test complete wizard flow including platform-agnostic message processing."
 ```
 
 ---
 
-### Task 14: Final Integration Testing
+### Task 13: Final Verification
 
 **Step 1: Run all tests**
 
@@ -1714,96 +1659,93 @@ Add end-to-end test structure for configuration wizard."
 bun test
 ```
 
-**Step 2: Run type checking**
+**Step 2: Type checking**
 
 ```bash
 bun typecheck
 ```
 
-**Step 3: Run linting**
+**Step 3: Linting**
 
 ```bash
 bun lint
 ```
 
-**Step 4: Commit if all pass**
+**Step 4: Format**
 
 ```bash
-git commit -m "test: verify all tests pass for wizard implementation
+bun format
+```
 
-- All unit tests passing
+**Step 5: Commit**
+
+```bash
+git commit -m "chore: final verification of wizard implementation
+
+- All tests passing
 - Type checking passes
-- Linting passes"
+- Linting passes
+- Formatting applied"
 ```
 
 ---
 
 ## Summary
 
+### Corrected Architecture
+
+```
+✅ Platform-Agnostic Design:
+   - bot.ts checks hasActiveWizard() before processing
+   - processWizardMessage() handles wizard logic
+   - Providers unchanged (no interception in onMessage)
+
+✅ Platform-Specific Code:
+   - Telegram: Callback handlers in telegram-handlers.ts
+   - Mattermost: Command handlers in mattermost-handlers.ts
+   - Registered in provider.start(), not onMessage
+
+✅ Clean Separation:
+   - Wizard engine is platform-agnostic
+   - UI adapters handle platform specifics
+   - ChatProvider interface unchanged
+```
+
 ### Files Created
 
 ```
 src/wizard/
-├── types.ts           # Type definitions
-├── state.ts           # Session management
-├── steps.ts           # Step definitions
-├── validation.ts      # Live validation
-└── engine.ts          # Core engine
-
-src/chat/telegram/
-└── wizard-ui.ts       # Telegram UI
-
-src/chat/mattermost/
-└── wizard-ui.ts       # Mattermost UI
+├── index.ts                    # Clean exports
+├── types.ts                    # Type definitions
+├── state.ts                    # Session management
+├── steps.ts                    # Step definitions
+├── validation.ts               # Live validation
+├── engine.ts                   # Core engine
+├── telegram-handlers.ts        # Telegram callbacks
+└── mattermost-handlers.ts      # Mattermost handlers
 
 src/commands/
-└── setup.ts           # Setup command
+└── setup.ts                    # Setup command
 
 tests/wizard/
 ├── types.test.ts
 ├── state.test.ts
 ├── steps.test.ts
 ├── validation.test.ts
-└── engine.test.ts
-
-tests/chat/telegram/
-└── wizard-ui.test.ts
-
-tests/e2e/
-└── wizard.test.ts
+├── engine.test.ts
+└── integration.test.ts
 ```
 
 ### Files Modified
 
 ```
-src/chat/telegram/index.ts     # Integrate wizard
-src/commands/index.ts          # Export setup command
-src/commands/set.ts            # Update to show menu
-src/commands/config.ts         # Add edit hint
-src/bot.ts                     # Detect incomplete config
+src/bot.ts                      # Add wizard interception
+src/commands/index.ts           # Export setup command
+src/commands/set.ts             # Suggest wizard
+src/commands/config.ts          # Add wizard hint
+src/chat/telegram/index.ts      # Register callbacks in start()
 ```
-
-### Testing Checklist
-
-- [ ] Unit tests for all wizard components
-- [ ] Integration tests for full wizard flow
-- [ ] Telegram UI tests with mocked API
-- [ ] Mattermost dialog tests
-- [ ] E2E test scaffold
-- [ ] Type checking passes
-- [ ] Linting passes
-
-### Deployment Notes
-
-1. No database migrations needed (uses in-memory storage)
-2. Add `/setup` command to BotFather commands
-3. Update help text to mention wizard
-4. Monitor for wizard completion rates
 
 ---
 
-**Plan complete and saved to `docs/plans/2026-03-27-bot-configuration-ux-implementation.md`.**
-
-## Next Steps
-
-**Ready for implementation!** Use the executing-plans skill to implement this plan task-by-task.
+**Plan complete with corrected architecture. The wizard now maintains platform-agnostic design while providing platform-native UIs.**
