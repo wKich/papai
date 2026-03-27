@@ -124,6 +124,7 @@ export interface WizardSession {
   data: WizardData
   skippedSteps: number[]
   platform: 'telegram' | 'mattermost'
+  taskProvider: 'kaneo' | 'youtrack'
 }
 
 export interface WizardData {
@@ -205,6 +206,7 @@ describe('Wizard State Store', () => {
       contextId,
       totalSteps: 7,
       platform: 'telegram',
+      taskProvider: 'kaneo',
     })
 
     expect(session.userId).toBe(userId)
@@ -219,13 +221,13 @@ describe('Wizard State Store', () => {
   test('should check active wizard', async () => {
     expect(hasActiveWizard(userId, contextId)).toBe(false)
 
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram' })
+    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
 
     expect(hasActiveWizard(userId, contextId)).toBe(true)
   })
 
   test('should update session data', async () => {
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram' })
+    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
 
     await updateWizardSession(userId, contextId, {
       currentStep: 1,
@@ -238,7 +240,7 @@ describe('Wizard State Store', () => {
   })
 
   test('should delete session', async () => {
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram' })
+    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
     await deleteWizardSession(userId, contextId)
 
     const session = await getWizardSession(userId, contextId)
@@ -280,6 +282,7 @@ interface CreateSessionParams {
   contextId: string
   totalSteps: number
   platform: 'telegram' | 'mattermost'
+  taskProvider: 'kaneo' | 'youtrack'
 }
 
 export async function createWizardSession(params: CreateSessionParams): Promise<WizardSession> {
@@ -292,6 +295,7 @@ export async function createWizardSession(params: CreateSessionParams): Promise<
     data: {},
     skippedSteps: [],
     platform: params.platform,
+    taskProvider: params.taskProvider,
   }
 
   const key = getSessionKey(params.userId, params.contextId)
@@ -890,7 +894,7 @@ export async function createWizard(
 ): Promise<WizardResult> {
   const steps = getWizardSteps(taskProvider)
 
-  await createWizardSession({ userId, contextId, totalSteps: steps.length, platform })
+  await createWizardSession({ userId, contextId, totalSteps: steps.length, platform, taskProvider })
 
   const firstStep = steps[0]
   if (firstStep === undefined) {
@@ -916,8 +920,7 @@ export async function advanceStep(
     return { success: false, error: 'No active wizard session. Type /setup to start.' }
   }
 
-  const taskProvider = session.data.kaneo_apikey !== undefined ? 'kaneo' : 'youtrack'
-  const currentStep = getStepByIndex(taskProvider, session.currentStep)
+  const currentStep = getStepByIndex(session.taskProvider, session.currentStep)
 
   if (currentStep === null) {
     return { success: false, error: 'Invalid wizard state' }
@@ -961,9 +964,9 @@ export async function advanceStep(
   log.debug({ userId, contextId, step: currentStep.id }, 'Wizard step completed')
 
   // Check if complete
-  const steps = getWizardSteps(taskProvider)
+  const steps = getWizardSteps(session.taskProvider)
   if (session.currentStep + 1 >= steps.length) {
-    return showSummary(userId, contextId, taskProvider)
+    return showSummary(userId, contextId, session.taskProvider)
   }
 
   return getNextPrompt(userId, contextId)
@@ -988,8 +991,7 @@ async function getNextPrompt(userId: string, contextId: string): Promise<WizardR
     return { success: false, error: 'Session expired' }
   }
 
-  const taskProvider = session.data.kaneo_apikey !== undefined ? 'kaneo' : 'youtrack'
-  const nextStep = getStepByIndex(taskProvider, session.currentStep)
+  const nextStep = getStepByIndex(session.taskProvider, session.currentStep)
 
   if (nextStep === null) {
     return { success: false, error: 'No more steps' }
