@@ -13,6 +13,25 @@ export interface ValidationResult {
 }
 
 export async function validateLlmApiKey(apiKey: string, baseUrl: string): Promise<ValidationResult> {
-  log.debug({ baseUrl }, 'Validating LLM API key')
-  return { success: true }
+  try {
+    const response = await fetch(`${baseUrl}/models`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (response.status === 401) {
+      return { success: false, message: '❌ Invalid API key. Please check and try again.' }
+    }
+
+    if (!response.ok) {
+      return { success: false, message: `❌ API error: ${response.status} ${response.statusText}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'API key validation failed')
+    return { success: false, message: '❌ Connection failed. Please check your internet connection.' }
+  }
 }
