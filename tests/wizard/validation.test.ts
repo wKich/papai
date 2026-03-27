@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { validateLlmApiKey, validateLlmBaseUrl } from '../../src/wizard/validation.js'
+import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists } from '../../src/wizard/validation.js'
 
 describe('validateLlmApiKey', () => {
   const originalFetch = globalThis.fetch
@@ -92,5 +92,44 @@ describe('validateLlmBaseUrl', () => {
     const result = await validateLlmBaseUrl('http://localhost:99999')
     expect(result.success).toBe(false)
     expect(result.message).toContain('Cannot connect')
+  })
+})
+
+describe('validateModelExists', () => {
+  const originalFetch = globalThis.fetch
+
+  beforeEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  test('should succeed when model exists', async () => {
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }, { id: 'gpt-3.5-turbo' }] }),
+        }),
+      { preconnect: globalThis.fetch.preconnect },
+    ) as unknown as typeof fetch
+
+    const result = await validateModelExists('gpt-4', 'sk-test', 'https://api.openai.com/v1')
+    expect(result.success).toBe(true)
+  })
+
+  test('should fail when model does not exist', async () => {
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+        }),
+      { preconnect: globalThis.fetch.preconnect },
+    ) as unknown as typeof fetch
+
+    const result = await validateModelExists('nonexistent-model', 'sk-test', 'https://api.openai.com/v1')
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('not found')
   })
 })

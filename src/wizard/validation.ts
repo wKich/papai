@@ -3,6 +3,8 @@
  * Makes real HTTP requests to verify connectivity
  */
 
+import * as z from 'zod'
+
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'wizard:validation' })
@@ -11,6 +13,10 @@ export interface ValidationResult {
   readonly success: boolean
   readonly message?: string
 }
+
+const ModelListSchema = z.object({
+  data: z.array(z.object({ id: z.string() })).optional(),
+})
 
 export async function validateLlmApiKey(apiKey: string, baseUrl: string): Promise<ValidationResult> {
   try {
@@ -46,5 +52,44 @@ export async function validateLlmBaseUrl(baseUrl: string): Promise<ValidationRes
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Base URL validation failed')
     return { success: false, message: '❌ Cannot connect to the provided URL. Please check and try again.' }
+  }
+}
+
+export async function validateModelExists(
+  modelName: string,
+  apiKey: string,
+  baseUrl: string,
+): Promise<ValidationResult> {
+  try {
+    const response = await fetch(`${baseUrl}/models`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      return { success: false, message: '❌ Could not fetch model list' }
+    }
+
+    const data = ModelListSchema.parse(await response.json())
+    const models = data.data ?? []
+    const exists = models.some((m) => m.id === modelName)
+
+    if (!exists) {
+      const suggestions = models
+        .slice(0, 3)
+        .map((m) => m.id)
+        .join(', ')
+      return {
+        success: false,
+        message: `❌ Model '${modelName}' not found. Some available models: ${suggestions}...`,
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Model validation failed')
+    return { success: false, message: '❌ Could not verify model. Please try again.' }
   }
 }
