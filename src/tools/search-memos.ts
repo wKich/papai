@@ -55,7 +55,10 @@ export function makeSearchMemosTool(userId: string): ToolSet[string] {
       const semantic = await trySemanticMode(userId, query, limit)
 
       if (semantic.available) {
-        return semantic.result
+        if (mode === 'semantic' || semantic.result.results.length > 0) {
+          return semantic.result
+        }
+        return doKeywordSearch(userId, query, limit, 'keyword_fallback')
       }
 
       if (mode === 'semantic') {

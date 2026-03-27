@@ -215,9 +215,8 @@ function archiveByDate(userId: string, beforeDate: string): number {
 /**
  * Archive memos matching the given filter.
  *
- * If multiple filters are provided, only the highest-precedence one is applied,
- * in the order: memoIds > tag > beforeDate.
- * The tool layer validates that exactly one filter is provided per call.
+ * Exactly one filter should be provided per call (enforced by the tool layer).
+ * If multiple filters are somehow passed, precedence is: memoIds > tag > beforeDate.
  */
 export function archiveMemos(userId: string, filter: ArchiveFilter): number {
   log.debug({ userId, filter }, 'archiveMemos called')
