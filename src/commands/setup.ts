@@ -28,7 +28,7 @@ export function registerSetupCommand(
 
     // Create wizard session - actual prompts handled by wizard engine
     const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
-    const result = await createWizard(msg.user.id, auth.storageContextId, platform, TASK_PROVIDER)
+    const result = createWizard(msg.user.id, auth.storageContextId, platform, TASK_PROVIDER)
 
     if (result.success) {
       await reply.text(result.prompt)

@@ -2,7 +2,7 @@
  * Wizard engine - core orchestration for interactive configuration setup
  */
 
-import { setConfig } from '../config.js'
+import { isConfigKey, setConfig } from '../config.js'
 import { logger } from '../logger.js'
 import type { ConfigKey } from '../types/config.js'
 import { createWizardSession, getWizardSession, updateWizardSession, deleteWizardSession } from './state.js'
@@ -146,13 +146,12 @@ function completeStep(
   return { success: true, prompt: getNextPrompt(userId, storageContextId) }
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function createWizard(
+export function createWizard(
   userId: string,
   storageContextId: string,
   platform: 'telegram' | 'mattermost',
   taskProvider: TaskProvider,
-): Promise<CreateWizardResult> {
+): CreateWizardResult {
   const steps = getWizardSteps(taskProvider)
 
   createWizardSession({
@@ -196,12 +195,7 @@ export async function advanceStep(
   return completeStep(userId, storageContextId, currentStep, value, session)
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function saveWizardConfig(
-  userId: string,
-  storageContextId: string,
-  confirmed: boolean,
-): Promise<SaveWizardResult> {
+export function saveWizardConfig(userId: string, storageContextId: string, confirmed: boolean): SaveWizardResult {
   if (!confirmed) {
     return { success: false, message: 'Configuration not saved. Type "cancel" to exit or continue editing.' }
   }
@@ -211,9 +205,8 @@ export async function saveWizardConfig(
 
   let savedCount = 0
   for (const [key, value] of Object.entries(session.data)) {
-    if (value !== undefined && value !== '') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      setConfig(userId, key as ConfigKey, value)
+    if (value !== undefined && value !== '' && isConfigKey(key)) {
+      setConfig(userId, key, value)
       savedCount++
     }
   }
@@ -252,7 +245,7 @@ export async function processWizardMessage(
 
   const isComplete = session.currentStep >= session.totalSteps
   if (isComplete && (trimmedText === 'yes' || trimmedText === 'confirm')) {
-    const result = await saveWizardConfig(userId, storageContextId, true)
+    const result = saveWizardConfig(userId, storageContextId, true)
     return { handled: true, response: result.message }
   }
 

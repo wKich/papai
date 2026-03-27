@@ -12,7 +12,7 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
 
   switch (data) {
     case 'wizard_confirm':
-      await saveWizardConfig(userId, storageContextId, true)
+      saveWizardConfig(userId, storageContextId, true)
       await ctx.editMessageText('✅ Configuration saved successfully!')
       break
     case 'wizard_cancel':
