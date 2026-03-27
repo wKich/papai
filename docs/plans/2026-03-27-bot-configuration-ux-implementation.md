@@ -616,29 +616,92 @@ Includes timezone, URL, and required field validation."
 **Step 1: Write the failing test**
 
 ```typescript
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists } from '../../src/wizard/validation.js'
 
 describe('Live Validation', () => {
+  beforeEach(() => {
+    // Restore fetch to clean state before each test
+    restoreFetch()
+  })
+
+  afterEach(() => {
+    // Clean up mocks after each test
+    restoreFetch()
+  })
+
   test('should validate API key with test call', async () => {
+    setMockFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+      } as Response),
+    )
+
     const result = await validateLlmApiKey('sk-test', 'https://api.openai.com/v1')
     expect(result.valid).toBe(true)
   })
 
   test('should reject invalid API key', async () => {
+    setMockFetch(() =>
+      Promise.resolve({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      } as Response),
+    )
+
     const result = await validateLlmApiKey('invalid-key', 'https://api.openai.com/v1')
     expect(result.valid).toBe(false)
     expect(result.error).toContain('API key')
   })
 
   test('should validate base URL', async () => {
+    setMockFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+      } as Response),
+    )
+
     const result = await validateLlmBaseUrl('https://api.openai.com/v1')
     expect(result.valid).toBe(true)
   })
 
   test('should reject unreachable URL', async () => {
+    setMockFetch(() => Promise.reject(new Error('Connection refused')))
+
     const result = await validateLlmBaseUrl('http://localhost:99999')
     expect(result.valid).toBe(false)
+  })
+
+  test('should validate model exists', async () => {
+    setMockFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: [{ id: 'gpt-4' }, { id: 'gpt-3.5-turbo' }] }),
+      } as Response),
+    )
+
+    const result = await validateModelExists('gpt-4', 'sk-test', 'https://api.openai.com/v1')
+    expect(result.valid).toBe(true)
+  })
+
+  test('should reject non-existent model', async () => {
+    setMockFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+      } as Response),
+    )
+
+    const result = await validateModelExists('nonexistent-model', 'sk-test', 'https://api.openai.com/v1')
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('not found')
   })
 })
 ```
