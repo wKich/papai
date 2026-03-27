@@ -35,3 +35,16 @@ export async function validateLlmApiKey(apiKey: string, baseUrl: string): Promis
     return { success: false, message: '❌ Connection failed. Please check your internet connection.' }
   }
 }
+
+export async function validateLlmBaseUrl(baseUrl: string): Promise<ValidationResult> {
+  try {
+    const response = await fetch(baseUrl, { method: 'HEAD' })
+    if (!response.ok && response.status !== 404) {
+      return { success: false, message: `❌ Server returned error: ${response.status}` }
+    }
+    return { success: true }
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Base URL validation failed')
+    return { success: false, message: '❌ Cannot connect to the provided URL. Please check and try again.' }
+  }
+}

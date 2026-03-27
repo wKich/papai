@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { validateLlmApiKey } from '../../src/wizard/validation.js'
+import { validateLlmApiKey, validateLlmBaseUrl } from '../../src/wizard/validation.js'
 
 describe('validateLlmApiKey', () => {
   const originalFetch = globalThis.fetch
@@ -60,5 +60,37 @@ describe('validateLlmApiKey with mocked fetch', () => {
     const result = await validateLlmApiKey('sk-invalid', 'https://api.openai.com/v1')
     expect(result.success).toBe(false)
     expect(result.message).toContain('Invalid API key')
+  })
+})
+
+describe('validateLlmBaseUrl', () => {
+  const originalFetch = globalThis.fetch
+
+  beforeEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  test('should succeed when URL is reachable', async () => {
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+        }),
+      { preconnect: globalThis.fetch.preconnect },
+    ) as unknown as typeof fetch
+
+    const result = await validateLlmBaseUrl('https://api.openai.com/v1')
+    expect(result.success).toBe(true)
+  })
+
+  test('should fail when URL is unreachable', async () => {
+    globalThis.fetch = Object.assign(() => Promise.reject(new Error('Connection refused')), {
+      preconnect: globalThis.fetch.preconnect,
+    }) as unknown as typeof fetch
+
+    const result = await validateLlmBaseUrl('http://localhost:99999')
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Cannot connect')
   })
 })
