@@ -119,7 +119,7 @@ import type { ConfigKey } from '../types/config.js'
 
 export interface WizardSession {
   userId: string
-  contextId: string
+  storageContextId: string
   startedAt: number
   currentStep: number
   totalSteps: number
@@ -193,12 +193,12 @@ import {
 
 describe('Wizard State Store', () => {
   const userId = 'test-user-123'
-  const contextId = 'test-context-456'
+  const storageContextId = 'test-context-456'
 
   test('should create and retrieve session', async () => {
     const session = await createWizardSession({
       userId,
-      contextId,
+      storageContextId,
       totalSteps: 7,
       platform: 'telegram',
       taskProvider: 'kaneo',
@@ -208,39 +208,39 @@ describe('Wizard State Store', () => {
     expect(session.currentStep).toBe(0)
     expect(session.data).toEqual({})
 
-    const retrieved = await getWizardSession(userId, contextId)
+    const retrieved = await getWizardSession(userId, storageContextId)
     expect(retrieved).not.toBeNull()
     expect(retrieved?.userId).toBe(userId)
   })
 
   test('should check active wizard', async () => {
-    expect(hasActiveWizard(userId, contextId)).toBe(false)
+    expect(hasActiveWizard(userId, storageContextId)).toBe(false)
 
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
+    await createWizardSession({ userId, storageContextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
 
-    expect(hasActiveWizard(userId, contextId)).toBe(true)
+    expect(hasActiveWizard(userId, storageContextId)).toBe(true)
   })
 
   test('should update session data', async () => {
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
+    await createWizardSession({ userId, storageContextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
 
-    await updateWizardSession(userId, contextId, {
+    await updateWizardSession(userId, storageContextId, {
       currentStep: 1,
       data: { llm_apikey: 'sk-test' },
     })
 
-    const session = await getWizardSession(userId, contextId)
+    const session = await getWizardSession(userId, storageContextId)
     expect(session?.currentStep).toBe(1)
     expect(session?.data.llm_apikey).toBe('sk-test')
   })
 
   test('should delete session', async () => {
-    await createWizardSession({ userId, contextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
-    await deleteWizardSession(userId, contextId)
+    await createWizardSession({ userId, storageContextId, totalSteps: 7, platform: 'telegram', taskProvider: 'kaneo' })
+    await deleteWizardSession(userId, storageContextId)
 
-    const session = await getWizardSession(userId, contextId)
+    const session = await getWizardSession(userId, storageContextId)
     expect(session).toBeNull()
-    expect(hasActiveWizard(userId, contextId)).toBe(false)
+    expect(hasActiveWizard(userId, storageContextId)).toBe(false)
   })
 })
 ```
@@ -274,7 +274,7 @@ function getSessionKey(userId: string, contextId: string): string {
 
 interface CreateSessionParams {
   userId: string
-  contextId: string
+  storageContextId: string
   totalSteps: number
   platform: 'telegram' | 'mattermost'
   taskProvider: 'kaneo' | 'youtrack'
@@ -283,7 +283,7 @@ interface CreateSessionParams {
 export async function createWizardSession(params: CreateSessionParams): Promise<WizardSession> {
   const session: WizardSession = {
     userId: params.userId,
-    contextId: params.contextId,
+    storageContextId: params.storageContextId,
     startedAt: Date.now(),
     currentStep: 0,
     totalSteps: params.totalSteps,
@@ -293,20 +293,20 @@ export async function createWizardSession(params: CreateSessionParams): Promise<
     taskProvider: params.taskProvider,
   }
 
-  const key = getSessionKey(params.userId, params.contextId)
+  const key = getSessionKey(params.userId, params.storageContextId)
   activeSessions.set(key, session)
 
-  log.debug({ userId: params.userId, contextId: params.contextId }, 'Wizard session created')
+  log.debug({ userId: params.userId, storageContextId: params.storageContextId }, 'Wizard session created')
   return session
 }
 
-export async function getWizardSession(userId: string, contextId: string): Promise<WizardSession | null> {
-  const key = getSessionKey(userId, contextId)
+export async function getWizardSession(userId: string, storageContextId: string): Promise<WizardSession | null> {
+  const key = getSessionKey(userId, storageContextId)
   return activeSessions.get(key) ?? null
 }
 
-export function hasActiveWizard(userId: string, contextId: string): boolean {
-  const key = getSessionKey(userId, contextId)
+export function hasActiveWizard(userId: string, storageContextId: string): boolean {
+  const key = getSessionKey(userId, storageContextId)
   return activeSessions.has(key)
 }
 
@@ -316,12 +316,16 @@ interface UpdateSessionData {
   skippedSteps?: number[]
 }
 
-export async function updateWizardSession(userId: string, contextId: string, update: UpdateSessionData): Promise<void> {
-  const key = getSessionKey(userId, contextId)
+export async function updateWizardSession(
+  userId: string,
+  storageContextId: string,
+  update: UpdateSessionData,
+): Promise<void> {
+  const key = getSessionKey(userId, storageContextId)
   const session = activeSessions.get(key)
 
   if (session === undefined) {
-    log.warn({ userId, contextId }, 'Attempted to update non-existent wizard session')
+    log.warn({ userId, storageContextId }, 'Attempted to update non-existent wizard session')
     return
   }
 
@@ -337,13 +341,13 @@ export async function updateWizardSession(userId: string, contextId: string, upd
     session.skippedSteps = update.skippedSteps
   }
 
-  log.debug({ userId, contextId, currentStep: session.currentStep }, 'Wizard session updated')
+  log.debug({ userId, storageContextId, currentStep: session.currentStep }, 'Wizard session updated')
 }
 
-export async function deleteWizardSession(userId: string, contextId: string): Promise<void> {
-  const key = getSessionKey(userId, contextId)
+export async function deleteWizardSession(userId: string, storageContextId: string): Promise<void> {
+  const key = getSessionKey(userId, storageContextId)
   activeSessions.delete(key)
-  log.debug({ userId, contextId }, 'Wizard session deleted')
+  log.debug({ userId, storageContextId }, 'Wizard session deleted')
 }
 ```
 
@@ -879,20 +883,20 @@ interface WizardResult {
 
 export async function createWizard(
   userId: string,
-  contextId: string,
+  storageContextId: string,
   platform: 'telegram' | 'mattermost',
   taskProvider: 'kaneo' | 'youtrack',
 ): Promise<WizardResult> {
   const steps = getWizardSteps(taskProvider)
 
-  await createWizardSession({ userId, contextId, totalSteps: steps.length, platform, taskProvider })
+  await createWizardSession({ userId, storageContextId, totalSteps: steps.length, platform, taskProvider })
 
   const firstStep = steps[0]
   if (firstStep === undefined) {
     return { success: false, error: 'No steps defined' }
   }
 
-  log.info({ userId, contextId, platform }, 'Wizard created')
+  log.info({ userId, storageContextId, platform }, 'Wizard created')
 
   return {
     success: true,
@@ -902,11 +906,11 @@ export async function createWizard(
 
 export async function advanceStep(
   userId: string,
-  contextId: string,
+  storageContextId: string,
   value: string,
   skipValidation: boolean,
 ): Promise<WizardResult> {
-  const session = await getWizardSession(userId, contextId)
+  const session = await getWizardSession(userId, storageContextId)
   if (session === null) {
     return { success: false, error: 'No active wizard session. Type /setup to start.' }
   }
@@ -923,12 +927,12 @@ export async function advanceStep(
       return { success: false, error: 'This step cannot be skipped' }
     }
 
-    await updateWizardSession(userId, contextId, {
+    await updateWizardSession(userId, storageContextId, {
       currentStep: session.currentStep + 1,
       skippedSteps: [...session.skippedSteps, session.currentStep],
     })
 
-    return getNextPrompt(userId, contextId)
+    return getNextPrompt(userId, storageContextId)
   }
 
   // Basic validation
@@ -947,20 +951,20 @@ export async function advanceStep(
 
   // Store value
   const normalizedValue = normalizeValue(currentStep.key, value, session.data)
-  await updateWizardSession(userId, contextId, {
+  await updateWizardSession(userId, storageContextId, {
     currentStep: session.currentStep + 1,
     data: { [currentStep.key]: normalizedValue },
   })
 
-  log.debug({ userId, contextId, step: currentStep.id }, 'Wizard step completed')
+  log.debug({ userId, storageContextId, step: currentStep.id }, 'Wizard step completed')
 
   // Check if complete
   const steps = getWizardSteps(session.taskProvider)
   if (session.currentStep + 1 >= steps.length) {
-    return showSummary(userId, contextId, session.taskProvider)
+    return showSummary(userId, storageContextId, session.taskProvider)
   }
 
-  return getNextPrompt(userId, contextId)
+  return getNextPrompt(userId, storageContextId)
 }
 
 function normalizeValue(key: ConfigKey, value: string, data: Partial<WizardData>): string {
@@ -976,8 +980,8 @@ function normalizeValue(key: ConfigKey, value: string, data: Partial<WizardData>
   return value
 }
 
-async function getNextPrompt(userId: string, contextId: string): Promise<WizardResult> {
-  const session = await getWizardSession(userId, contextId)
+async function getNextPrompt(userId: string, storageContextId: string): Promise<WizardResult> {
+  const session = await getWizardSession(userId, storageContextId)
   if (session === null) {
     return { success: false, error: 'Session expired' }
   }
@@ -998,10 +1002,10 @@ async function getNextPrompt(userId: string, contextId: string): Promise<WizardR
 
 async function showSummary(
   userId: string,
-  contextId: string,
+  storageContextId: string,
   taskProvider: 'kaneo' | 'youtrack',
 ): Promise<WizardResult> {
-  const session = await getWizardSession(userId, contextId)
+  const session = await getWizardSession(userId, storageContextId)
   if (session === null) {
     return { success: false, error: 'Session expired' }
   }
@@ -1016,26 +1020,30 @@ async function showSummary(
   }
 }
 
-export async function saveWizardConfig(userId: string, contextId: string, confirmed: boolean): Promise<WizardResult> {
+export async function saveWizardConfig(
+  userId: string,
+  storageContextId: string,
+  confirmed: boolean,
+): Promise<WizardResult> {
   if (!confirmed) {
     return { success: false, error: 'Configuration cancelled. Type /setup to restart.' }
   }
 
-  const session = await getWizardSession(userId, contextId)
+  const session = await getWizardSession(userId, storageContextId)
   if (session === null) {
     return { success: false, error: 'Session expired' }
   }
 
-  // Save all config values
+  // Save all config values using the storageContextId from session
   for (const [key, value] of Object.entries(session.data)) {
     if (value !== undefined && value !== '') {
-      setConfig(contextId, key as ConfigKey, value)
+      setConfig(session.storageContextId, key as ConfigKey, value)
     }
   }
 
-  await deleteWizardSession(userId, contextId)
+  await deleteWizardSession(userId, storageContextId)
 
-  log.info({ userId, contextId }, 'Wizard configuration saved')
+  log.info({ userId, storageContextId }, 'Wizard configuration saved')
 
   return {
     success: true,
@@ -1044,31 +1052,31 @@ export async function saveWizardConfig(userId: string, contextId: string, confir
   }
 }
 
-export async function cancelWizard(userId: string, contextId: string): Promise<void> {
-  await deleteWizardSession(userId, contextId)
-  log.info({ userId, contextId }, 'Wizard cancelled')
+export async function cancelWizard(userId: string, storageContextId: string): Promise<void> {
+  await deleteWizardSession(userId, storageContextId)
+  log.info({ userId, storageContextId }, 'Wizard cancelled')
 }
 
-export async function restartWizardStep(userId: string, contextId: string): Promise<WizardResult> {
-  const session = await getWizardSession(userId, contextId)
+export async function restartWizardStep(userId: string, storageContextId: string): Promise<WizardResult> {
+  const session = await getWizardSession(userId, storageContextId)
   if (session === null || session.currentStep === 0) {
     return { success: false, error: 'Cannot restart' }
   }
 
-  await updateWizardSession(userId, contextId, {
+  await updateWizardSession(userId, storageContextId, {
     currentStep: session.currentStep - 1,
   })
 
-  return getNextPrompt(userId, contextId)
+  return getNextPrompt(userId, storageContextId)
 }
 
 // Platform-agnostic wizard message processor for bot.ts
 export async function processWizardMessage(
   userId: string,
-  contextId: string,
+  storageContextId: string,
   text: string,
 ): Promise<WizardProcessResult> {
-  const session = await getWizardSession(userId, contextId)
+  const session = await getWizardSession(userId, storageContextId)
 
   if (session === null) {
     return { handled: false }
@@ -1076,7 +1084,7 @@ export async function processWizardMessage(
 
   // Handle cancellation
   if (text.toLowerCase() === 'cancel') {
-    await cancelWizard(userId, contextId)
+    await cancelWizard(userId, storageContextId)
     return {
       handled: true,
       response: '❌ Wizard cancelled. Type /setup to restart.',
@@ -1085,7 +1093,7 @@ export async function processWizardMessage(
 
   // Handle confirmation
   if (text.toLowerCase() === 'yes' || text.toLowerCase() === 'confirm') {
-    const result = await saveWizardConfig(userId, contextId, true)
+    const result = await saveWizardConfig(userId, storageContextId, true)
     return {
       handled: true,
       response: result.prompt ?? 'Configuration saved!',
