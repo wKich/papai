@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 
+import { getSessionSnapshots } from '../../src/cache-snapshots.js'
+import { _userCaches } from '../../src/cache.js'
 import { getPollerSnapshot } from '../../src/deferred-prompts/poller.js'
 import { getMessageCacheSnapshot } from '../../src/message-cache/cache.js'
 import { getPendingWritesCount, getIsFlushScheduled } from '../../src/message-cache/persistence.js'
 import { getSchedulerSnapshot } from '../../src/scheduler.js'
+import { getWizardSnapshots, createWizardSession, deleteWizardSession } from '../../src/wizard/state.js'
 
 describe('message-cache persistence accessors', () => {
   test('getPendingWritesCount returns a number', () => {
@@ -72,5 +75,131 @@ describe('getPollerSnapshot', () => {
     const snap = getPollerSnapshot()
     expect(snap.scheduledRunning).toBe(false)
     expect(snap.alertsRunning).toBe(false)
+  })
+})
+
+describe('getWizardSnapshots', () => {
+  test('returns empty array when no sessions exist', () => {
+    const snaps = getWizardSnapshots('nonexistent-user')
+    expect(snaps).toEqual([])
+  })
+
+  test('returns only sessions for requested userId', () => {
+    createWizardSession({
+      userId: 'admin-1',
+      storageContextId: 'admin-1',
+      totalSteps: 5,
+      platform: 'telegram',
+      taskProvider: 'kaneo',
+    })
+    createWizardSession({
+      userId: 'other-user',
+      storageContextId: 'other-user',
+      totalSteps: 5,
+      platform: 'telegram',
+      taskProvider: 'kaneo',
+    })
+
+    const snaps = getWizardSnapshots('admin-1')
+    expect(snaps).toHaveLength(1)
+    expect(snaps[0]!.userId).toBe('admin-1')
+    expect(snaps[0]!).toHaveProperty('currentStep')
+    expect(snaps[0]!).toHaveProperty('totalSteps')
+    expect(snaps[0]!).toHaveProperty('platform')
+    expect(snaps[0]!).toHaveProperty('taskProvider')
+    expect(snaps[0]!).toHaveProperty('skippedSteps')
+    expect(snaps[0]!).toHaveProperty('dataKeys')
+    expect(snaps[0]!).not.toHaveProperty('data')
+
+    deleteWizardSession('admin-1', 'admin-1')
+    deleteWizardSession('other-user', 'other-user')
+  })
+})
+
+describe('getSessionSnapshots', () => {
+  afterEach(() => {
+    _userCaches.clear()
+  })
+
+  test('returns empty array when no sessions exist', () => {
+    const snaps = getSessionSnapshots('nonexistent')
+    expect(snaps).toEqual([])
+  })
+
+  test('returns only sessions for requested userId', () => {
+    _userCaches.set('admin-1', {
+      history: [{ role: 'user', content: 'hello' }],
+      summary: 'test summary',
+      facts: [{ identifier: 'TASK-1', title: 'Fix bug', url: 'http://example.com', last_seen: '2026-03-28' }],
+      instructions: [{ id: 'i1', text: 'be concise', createdAt: '2026-03-28' }],
+      config: new Map([
+        ['llm_apikey', 'sk-test'],
+        ['main_model', 'gpt-4o'],
+      ]),
+      workspaceId: 'ws-1',
+      tools: {},
+      lastAccessed: Date.now(),
+    })
+    _userCaches.set('other-user', {
+      history: [],
+      summary: null,
+      facts: [],
+      instructions: null,
+      config: new Map(),
+      workspaceId: null,
+      tools: null,
+      lastAccessed: Date.now(),
+    })
+
+    const snaps = getSessionSnapshots('admin-1')
+    expect(snaps).toHaveLength(1)
+    expect(snaps[0]!.userId).toBe('admin-1')
+    expect(snaps[0]!.historyLength).toBe(1)
+    expect(snaps[0]!.summary).toBe('test summary')
+    expect(snaps[0]!.factsCount).toBe(1)
+    expect(snaps[0]!.facts).toHaveLength(1)
+    expect(snaps[0]!.configKeys).toContain('llm_apikey')
+    expect(snaps[0]!.configKeys).toContain('main_model')
+    expect(snaps[0]!.workspaceId).toBe('ws-1')
+    expect(snaps[0]!.hasTools).toBe(true)
+    expect(snaps[0]!.instructionsCount).toBe(1)
+  })
+
+  test('does not expose config values', () => {
+    _userCaches.set('admin-1', {
+      history: [],
+      summary: null,
+      facts: [],
+      instructions: null,
+      config: new Map([['llm_apikey', 'sk-secret-key']]),
+      workspaceId: null,
+      tools: null,
+      lastAccessed: Date.now(),
+    })
+
+    const snaps = getSessionSnapshots('admin-1')
+    const snap = snaps[0]!
+    expect(snap.configKeys).toContain('llm_apikey')
+    expect(snap).not.toHaveProperty('config')
+  })
+
+  test('filters out internal _loaded flags from configKeys', () => {
+    _userCaches.set('admin-1', {
+      history: [],
+      summary: null,
+      facts: [],
+      instructions: null,
+      config: new Map([
+        ['main_model', 'gpt-4o'],
+        ['history_loaded', 'true'],
+        ['summary_loaded', 'true'],
+      ]),
+      workspaceId: null,
+      tools: null,
+      lastAccessed: Date.now(),
+    })
+
+    const snaps = getSessionSnapshots('admin-1')
+    expect(snaps[0]!.configKeys).toEqual(['main_model'])
   })
 })

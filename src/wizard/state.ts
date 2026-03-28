@@ -146,3 +146,61 @@ export const deleteWizardSession = (userId: string, storageContextId: string): b
 
   return existed
 }
+
+// 30 minutes
+const WIZARD_SESSION_TTL_MS = 30 * 60 * 1000
+
+/**
+ * Clean up expired wizard sessions
+ * Removes sessions older than WIZARD_SESSION_TTL_MS
+ */
+export type WizardSnapshot = {
+  userId: string
+  storageContextId: string
+  startedAt: string
+  currentStep: number
+  totalSteps: number
+  platform: 'telegram' | 'mattermost'
+  taskProvider: 'kaneo' | 'youtrack'
+  skippedSteps: number[]
+  dataKeys: string[]
+}
+
+export function getWizardSnapshots(userId: string): WizardSnapshot[] {
+  const snapshots: WizardSnapshot[] = []
+  for (const session of activeSessions.values()) {
+    if (session.userId !== userId) continue
+    snapshots.push({
+      userId: session.userId,
+      storageContextId: session.storageContextId,
+      startedAt: session.startedAt.toISOString(),
+      currentStep: session.currentStep,
+      totalSteps: session.totalSteps,
+      platform: session.platform,
+      taskProvider: session.taskProvider,
+      skippedSteps: [...session.skippedSteps],
+      dataKeys: Object.keys(session.data),
+    })
+  }
+  return snapshots
+}
+
+export function cleanupExpiredWizardSessions(): void {
+  const now = Date.now()
+  const expired: string[] = []
+
+  for (const [key, session] of activeSessions) {
+    if (now - session.startedAt.getTime() > WIZARD_SESSION_TTL_MS) {
+      expired.push(key)
+    }
+  }
+
+  for (const key of expired) {
+    activeSessions.delete(key)
+    logger.debug({ sessionKey: key }, 'Expired wizard session removed')
+  }
+
+  if (expired.length > 0) {
+    logger.info({ expiredCount: expired.length }, 'Cleaned up expired wizard sessions')
+  }
+}
