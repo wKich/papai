@@ -10,23 +10,20 @@ const messageCache = new Map<string, CachedMessage>()
 // 1 week in milliseconds
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
-// Sweep expired entries once a day
-setInterval(
-  () => {
-    const now = Date.now()
-    let swept = 0
-    for (const [key, msg] of messageCache) {
-      if (now - msg.timestamp > ONE_WEEK_MS) {
-        messageCache.delete(key)
-        swept++
-      }
+/** Sweep expired entries from the in-memory message cache. */
+export function sweepExpiredMessages(): void {
+  const now = Date.now()
+  let swept = 0
+  for (const [key, msg] of messageCache) {
+    if (now - msg.timestamp > ONE_WEEK_MS) {
+      messageCache.delete(key)
+      swept++
     }
-    if (swept > 0) {
-      log.info({ swept, remaining: messageCache.size }, 'Swept expired message cache entries')
-    }
-  },
-  24 * 60 * 60 * 1000,
-)
+  }
+  if (swept > 0) {
+    log.info({ swept, remaining: messageCache.size }, 'Swept expired message cache entries')
+  }
+}
 
 function cacheKey(contextId: string, messageId: string): string {
   return `${contextId}:${messageId}`
