@@ -7,6 +7,7 @@
 
 import type { ChatProvider } from './chat/types.js'
 import { getConfig } from './config.js'
+import { emit } from './debug/event-bus.js'
 import { logger } from './logger.js'
 import { createProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
@@ -126,6 +127,7 @@ const executeRecurringTask = async (task: RecurringTaskRecord): Promise<void> =>
       { recurringTaskId: task.id, createdTaskId: created.id, title: task.title },
       'Recurring task instance created',
     )
+    emit('scheduler:task_executed', { userId: task.userId, recurringTaskId: task.id, createdTaskId: created.id })
 
     await applyLabels(provider, created.id, task.labels)
     recordOccurrence(task.id, created.id)
@@ -194,6 +196,7 @@ export const tick = (): Promise<void> => {
     try {
       const dueTasks = getDueRecurringTasks()
       tickCount++
+      emit('scheduler:tick', { tickCount, dueTaskCount: dueTasks.length })
 
       if (dueTasks.length === 0) {
         if (tickCount % HEARTBEAT_INTERVAL === 0) {

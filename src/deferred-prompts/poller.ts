@@ -3,6 +3,7 @@ import pLimit from 'p-limit'
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
+import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { scheduler } from '../scheduler-instance.js'
@@ -14,12 +15,10 @@ import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
 import type { ExecutionMetadata, ExecutionMode, ScheduledPrompt } from './types.js'
 
 const log = logger.child({ scope: 'deferred:poller' })
-
 const SCHEDULED_POLL_MS = 60_000
 const ALERT_POLL_MS = 5 * 60_000
 const MAX_CONCURRENT_LLM_CALLS = 5
 const MAX_CONCURRENT_USERS = 10
-
 let isRunning = false
 
 function formatTaskStatus(status: string | undefined): string {
@@ -96,7 +95,6 @@ async function executeScheduledPromptsForUser(
   const promptIds = prompts.map((p) => p.id)
 
   log.debug({ userId, promptCount: prompts.length, promptIds, mode: metadata.mode }, 'Executing scheduled prompts')
-
   let response: string
   try {
     response = await dispatchExecution(userId, 'scheduled', mergedPrompt, metadata, buildProviderFn)
@@ -115,6 +113,7 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   log.debug('pollScheduledOnce called')
 
   const duePrompts = getScheduledPromptsDue()
+  emit('poller:scheduled', { dueCount: duePrompts.length })
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
   if (duePrompts.length === 0) return
@@ -215,6 +214,7 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
   log.debug('pollAlertsOnce called')
 
   const eligibleAlerts = getEligibleAlertPrompts()
+  emit('poller:alerts', { eligibleCount: eligibleAlerts.length })
 
   if (eligibleAlerts.length === 0) return
 

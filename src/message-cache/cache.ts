@@ -1,3 +1,4 @@
+import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
 import { getPendingWritesCount, getIsFlushScheduled, scheduleMessagePersistence } from './persistence.js'
 import type { CachedMessage } from './types.js'
@@ -21,6 +22,7 @@ export function sweepExpiredMessages(): void {
     }
   }
   if (swept > 0) {
+    emit('msgcache:sweep', { swept, remaining: messageCache.size })
     log.info({ swept, remaining: messageCache.size }, 'Swept expired message cache entries')
   }
 }
