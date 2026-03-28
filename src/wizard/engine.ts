@@ -53,11 +53,18 @@ function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<str
   return value.trim()
 }
 
+function getStepContext(data: Readonly<Record<string, string | undefined>>): { apiKey?: string; baseUrl?: string } {
+  return {
+    apiKey: data['llm_apikey'],
+    baseUrl: data['llm_baseurl'],
+  }
+}
+
 function getNextPrompt(userId: string, storageContextId: string): string {
   const session = getWizardSession(userId, storageContextId)
   if (session === null) return 'Error: Wizard session not found'
 
-  const step = getStepByIndex(session.taskProvider, session.currentStep)
+  const step = getStepByIndex(session.taskProvider, session.currentStep, getStepContext(session.data))
   if (step === undefined) return 'Error: Invalid step index'
 
   return step.prompt
@@ -113,8 +120,11 @@ async function validateAndStoreValue(
     return `❌ ${validationError}\n\n${currentStep.prompt}\n\nPlease try again:`
   }
 
-  if (currentStep.liveCheck !== undefined && !currentStep.liveCheck(value)) {
-    return `❌ Invalid value. Please check and try again.\n\n${currentStep.prompt}`
+  if (currentStep.liveCheck !== undefined) {
+    const liveResult = await currentStep.liveCheck(value)
+    if (!liveResult.success) {
+      return `${liveResult.message}\n\n${currentStep.prompt}\n\nPlease try again:`
+    }
   }
 
   return null
@@ -183,7 +193,7 @@ export async function advanceStep(
   const session = getWizardSession(userId, storageContextId)
   if (session === null) return { success: false, prompt: 'Error: Wizard session not found' }
 
-  const currentStep = getStepByIndex(session.taskProvider, session.currentStep)
+  const currentStep = getStepByIndex(session.taskProvider, session.currentStep, getStepContext(session.data))
   if (currentStep === undefined) return { success: false, prompt: 'Error: Invalid step configuration' }
 
   const trimmedValue = value.trim().toLowerCase()

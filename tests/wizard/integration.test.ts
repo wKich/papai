@@ -2,7 +2,7 @@
  * Wizard integration tests - full flow testing from creation to completion
  */
 
-import { describe, expect, test, beforeEach, afterAll } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test, afterAll } from 'bun:test'
 import { mock } from 'bun:test'
 
 // Import config to verify values were stored
@@ -38,6 +38,8 @@ afterAll(() => {
   mock.restore()
 })
 
+// Global fetch mock for integration tests (returns success by default)
+const originalFetch = globalThis.fetch
 describe('Wizard Integration', () => {
   const userId = 'test-user'
   const storageContextId = 'test-context'
@@ -45,6 +47,23 @@ describe('Wizard Integration', () => {
   beforeEach(async () => {
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
+    // Reset fetch to return success by default
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
+            }),
+        }),
+      { preconnect: originalFetch.preconnect },
+    ) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
   })
 
   test('should complete full wizard flow', async () => {

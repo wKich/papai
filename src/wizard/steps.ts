@@ -153,8 +153,12 @@ export function validateStep(stepId: string, value: string): Promise<string | nu
   return Promise.resolve(result)
 }
 
-export function getStepByIndex(taskProvider: TaskProvider, index: number): WizardStep | undefined {
-  const steps = getWizardSteps(taskProvider)
+export function getStepByIndex(
+  taskProvider: TaskProvider,
+  index: number,
+  context?: { apiKey?: string; baseUrl?: string },
+): WizardStep | undefined {
+  const steps = getWizardSteps(taskProvider, context)
   return steps[index]
 }
 

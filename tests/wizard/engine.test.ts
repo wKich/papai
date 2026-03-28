@@ -2,7 +2,7 @@
  * Tests for wizard engine - interactive configuration setup
  */
 
-import { describe, expect, test, beforeEach, afterAll } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test, afterAll } from 'bun:test'
 import { mock } from 'bun:test'
 
 // Import config to verify values were stored
@@ -69,6 +69,8 @@ afterAll(() => {
   mock.restore()
 })
 
+// Global fetch mock for engine tests (returns success by default)
+const originalFetch = globalThis.fetch
 describe('Wizard Engine', () => {
   const userId = 'user123'
   const storageContextId = 'ctx-456'
@@ -78,6 +80,23 @@ describe('Wizard Engine', () => {
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
     loggerCalls.length = 0
+    // Reset fetch to return success by default with comprehensive model list
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
+            }),
+        }),
+      { preconnect: originalFetch.preconnect },
+    ) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
   })
 
   describe('createWizard', () => {
@@ -487,5 +506,38 @@ describe('Wizard Engine', () => {
       expect(steps.length).toBe(7)
       expect(steps[5]?.key).toBe('youtrack_token')
     })
+  })
+})
+
+describe('Wizard engine with live validation', () => {
+  const userId = 'test-user-live'
+  const storageContextId = 'test-context-live'
+
+  beforeEach(async () => {
+    await deleteWizardSession(userId, storageContextId)
+  })
+
+  test('should validate API key during step advancement', async () => {
+    // Mock fetch to simulate API key validation
+    const testFetch = globalThis.fetch
+    globalThis.fetch = Object.assign(
+      () =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+        }),
+      { preconnect: globalThis.fetch.preconnect },
+    ) as unknown as typeof fetch
+
+    try {
+      createWizard(userId, storageContextId, 'telegram', 'kaneo')
+
+      const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
+      expect(result.success).toBe(false)
+      expect(result.prompt).toContain('Invalid API key')
+    } finally {
+      globalThis.fetch = testFetch
+    }
   })
 })
