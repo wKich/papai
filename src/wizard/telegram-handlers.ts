@@ -1,6 +1,7 @@
 import type { Context } from 'grammy'
 
-import { saveWizardConfig, cancelWizard } from './engine.js'
+import { cancelWizard } from './engine.js'
+import { validateAndSaveWizardConfig } from './save.js'
 
 export async function handleWizardCallback(ctx: Context): Promise<void> {
   const userId = String(ctx.from?.id ?? '')
@@ -12,7 +13,7 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
 
   switch (data) {
     case 'wizard_confirm': {
-      const result = saveWizardConfig(userId, storageContextId, true)
+      const result = await validateAndSaveWizardConfig(userId, storageContextId)
       await ctx.editMessageText(result.message)
       break
     }

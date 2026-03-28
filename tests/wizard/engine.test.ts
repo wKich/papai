@@ -58,11 +58,11 @@ void mock.module('../../src/logger.js', () => ({
 import {
   createWizard,
   advanceStep,
-  saveWizardConfig,
   cancelWizard,
   processWizardMessage,
   getWizardSteps,
 } from '../../src/wizard/engine.js'
+import { validateAndSaveWizardConfig } from '../../src/wizard/save.js'
 import { getWizardSession, deleteWizardSession } from '../../src/wizard/state.js'
 
 afterAll(() => {
@@ -291,7 +291,7 @@ describe('Wizard Engine', () => {
       await advanceStep(userId, storageContextId, 'kaneo-key')
       await advanceStep(userId, storageContextId, 'UTC')
 
-      const result = await saveWizardConfig(userId, storageContextId, true)
+      const result = await validateAndSaveWizardConfig(userId, storageContextId)
 
       expect(result.success).toBe(true)
       expect(result.message).toContain('Configuration saved successfully')
@@ -308,14 +308,15 @@ describe('Wizard Engine', () => {
       expect(getConfig(userId, 'llm_apikey')).toBeNull()
     })
 
-    test('does not save when not confirmed', async () => {
+    test('validates all fields before saving', async () => {
       await createWizard(userId, storageContextId, 'telegram', 'kaneo')
       await advanceStep(userId, storageContextId, 'sk-test12345')
 
-      const result = await saveWizardConfig(userId, storageContextId, false)
+      const result = await validateAndSaveWizardConfig(userId, storageContextId)
 
+      // Should fail validation because wizard is not complete (models not set)
       expect(result.success).toBe(false)
-      expect(result.message).toContain('Configuration not saved')
+      expect(result.message).toContain('Configuration validation failed')
       expect(getConfig(userId, 'llm_apikey')).toBeNull()
     })
 
@@ -331,14 +332,14 @@ describe('Wizard Engine', () => {
       await advanceStep(userId, storageContextId, 'kaneo-key')
       await advanceStep(userId, storageContextId, 'UTC')
 
-      await saveWizardConfig(userId, storageContextId, true)
+      await validateAndSaveWizardConfig(userId, storageContextId)
 
       // Skipped values should not be saved
       expect(getConfig(userId, 'embedding_model')).toBeNull()
     })
 
     test('returns error for non-existent session', async () => {
-      const result = await saveWizardConfig(userId, storageContextId, true)
+      const result = await validateAndSaveWizardConfig(userId, storageContextId)
 
       expect(result.success).toBe(false)
       expect(result.message).toContain('Wizard session not found')
@@ -355,7 +356,7 @@ describe('Wizard Engine', () => {
       await advanceStep(userId, storageContextId, 'UTC')
 
       loggerCalls = []
-      await saveWizardConfig(userId, storageContextId, true)
+      await validateAndSaveWizardConfig(userId, storageContextId)
 
       const saveLogs = loggerCalls.filter((call) => call.level === 'info' && call.args[1] === 'Configuration saved')
       expect(saveLogs.length).toBeGreaterThan(0)

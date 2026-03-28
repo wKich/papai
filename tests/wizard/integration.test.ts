@@ -31,7 +31,8 @@ void mock.module('../../src/logger.js', () => ({
 // Note: Not mocking config.js - using real implementation to avoid test pollution
 
 // Import after mocking
-import { createWizard, advanceStep, saveWizardConfig, processWizardMessage } from '../../src/wizard/engine.js'
+import { createWizard, advanceStep, processWizardMessage } from '../../src/wizard/engine.js'
+import { validateAndSaveWizardConfig } from '../../src/wizard/save.js'
 import { hasActiveWizard, deleteWizardSession } from '../../src/wizard/state.js'
 
 afterAll(() => {
@@ -115,7 +116,7 @@ describe('Wizard Integration', () => {
     expect(step7.prompt).toContain('Kaneo API Key:')
 
     // Confirm
-    const saveResult = await saveWizardConfig(userId, storageContextId, true)
+    const saveResult = await validateAndSaveWizardConfig(userId, storageContextId)
     expect(saveResult.success).toBe(true)
     expect(saveResult.message).toContain('Configuration saved successfully')
     expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
@@ -254,7 +255,7 @@ describe('Wizard Integration', () => {
     await advanceStep(userId, storageContextId, 'America/New_York', true)
 
     // Save
-    const saveResult = await saveWizardConfig(userId, storageContextId, true)
+    const saveResult = await validateAndSaveWizardConfig(userId, storageContextId)
     expect(saveResult.success).toBe(true)
 
     // Verify YouTrack token was saved under storageContextId
@@ -298,7 +299,7 @@ describe('Wizard Integration', () => {
     await advanceStep(userId, storageContextId, 'kaneo-key', true)
     await advanceStep(userId, storageContextId, 'UTC', true)
 
-    await saveWizardConfig(userId, storageContextId, true)
+    await validateAndSaveWizardConfig(userId, storageContextId)
 
     // llm_baseurl should not be in saved config (empty value means it wasn't saved)
     expect(getConfig(userId, 'llm_baseurl')).toBeNull()
