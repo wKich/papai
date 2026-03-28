@@ -8,7 +8,7 @@
 
 import { logger } from '../logger.js'
 import { FatalError, RetryableError, SchedulerError } from './scheduler.errors.js'
-import { getErrorMessage, getErrorObject, type Emitters, type Task } from './scheduler.helpers.js'
+import { calculateBackoff, getErrorMessage, getErrorObject, type Emitters, type Task } from './scheduler.helpers.js'
 import type { SchedulerOptions } from './scheduler.types.js'
 
 /**
@@ -40,9 +40,7 @@ const scheduleRetry = (
 ): void => {
   task.retryAttempt++
   const maxRetryDelay = schedulerOptions.maxRetryDelay
-  const baseDelay = Math.min(2 ** task.retryAttempt * 1000, maxRetryDelay)
-  const jitter = baseDelay * 0.1 * Math.random()
-  const delay = Math.floor(baseDelay + jitter)
+  const delay = calculateBackoff(task.retryAttempt, maxRetryDelay)
 
   logger.warn(
     {
