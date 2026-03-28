@@ -29,6 +29,16 @@ import type {
 } from './scheduler.types.js'
 
 /**
+ * Event handler type mapping for type-safe event registration.
+ */
+interface EventHandlerMap {
+  tick: TickHandler
+  error: ErrorHandler
+  retry: RetryHandler
+  fatalError: FatalErrorHandler
+}
+
+/**
  * Scheduler interface returned by createScheduler.
  */
 export interface Scheduler {
@@ -40,10 +50,7 @@ export interface Scheduler {
   stopAll: () => void
   hasTask: (name: string) => boolean
   getTaskState: (name: string) => TaskState | null
-  on: (
-    event: 'tick' | 'error' | 'retry' | 'fatalError',
-    handler: TickHandler | ErrorHandler | RetryHandler | FatalErrorHandler,
-  ) => void
+  on: <E extends keyof EventHandlerMap>(event: E, handler: EventHandlerMap[E]) => void
 }
 
 /**
@@ -64,6 +71,50 @@ const createBoundFunctions = (
   }
 
   return { start: boundStart, stop: boundStop }
+}
+
+interface SchedulerMethods {
+  register: (name: string, config: Omit<TaskConfig, 'name'>) => void
+  unregister: (name: string) => void
+  startAll: () => void
+  stopAll: () => void
+  hasTask: (name: string) => boolean
+  getState: (name: string) => TaskState | null
+  on: <E extends keyof EventHandlerMap>(event: E, handler: EventHandlerMap[E]) => void
+}
+
+const createSchedulerMethods = (
+  context: SchedulerContext,
+  start: (name: string) => void,
+  stop: (name: string) => void,
+  events: EventEmitter,
+): SchedulerMethods => {
+  const register = (name: string, config: Omit<TaskConfig, 'name'>): void => {
+    registerTask(context, name, config, start)
+  }
+
+  const unregister = (name: string): void => {
+    unregisterTask(context, name, stop)
+  }
+
+  const startAll = (): void => {
+    startAllTasks(context, start)
+  }
+
+  const stopAll = (): void => {
+    stopAllTasks(context, stop)
+  }
+
+  const hasTask = (name: string): boolean => taskExists(context, name)
+
+  const getState = (name: string): TaskState | null => getTaskState(context, name)
+
+  const on = <E extends keyof EventHandlerMap>(event: E, handler: EventHandlerMap[E]): void => {
+    const handlerSets: { [K in keyof EventHandlerMap]: Set<EventHandlerMap[K]> } = events
+    handlerSets[event].add(handler)
+  }
+
+  return { register, unregister, startAll, stopAll, hasTask, getState, on }
 }
 
 /**
@@ -92,52 +143,18 @@ export const createScheduler = (options?: SchedulerOptions): Scheduler => {
 
   const boundFunctions = createBoundFunctions(context)
   const { start, stop } = boundFunctions
-
-  const register = (name: string, config: Omit<TaskConfig, 'name'>): void => {
-    registerTask(context, name, config, start)
-  }
-
-  const unregister = (name: string): void => {
-    unregisterTask(context, name, stop)
-  }
-
-  const startAll = (): void => {
-    startAllTasks(context, start)
-  }
-
-  const stopAll = (): void => {
-    stopAllTasks(context, stop)
-  }
-
-  const hasTask = (name: string): boolean => taskExists(context, name)
-
-  const getState = (name: string): TaskState | null => getTaskState(context, name)
-
-  const on = (
-    event: 'tick' | 'error' | 'retry' | 'fatalError',
-    handler: TickHandler | ErrorHandler | RetryHandler | FatalErrorHandler,
-  ): void => {
-    if (event === 'tick') {
-      events.tick.add(handler as unknown as TickHandler)
-    } else if (event === 'error') {
-      events.error.add(handler as unknown as ErrorHandler)
-    } else if (event === 'retry') {
-      events.retry.add(handler as unknown as RetryHandler)
-    } else if (event === 'fatalError') {
-      events.fatalError.add(handler as unknown as FatalErrorHandler)
-    }
-  }
+  const methods = createSchedulerMethods(context, start, stop, events)
 
   return {
-    register,
+    register: methods.register,
     start,
     stop,
-    unregister,
-    startAll,
-    stopAll,
-    hasTask,
-    getTaskState: getState,
-    on,
+    unregister: methods.unregister,
+    startAll: methods.startAll,
+    stopAll: methods.stopAll,
+    hasTask: methods.hasTask,
+    getTaskState: methods.getState,
+    on: methods.on,
   }
 }
 
