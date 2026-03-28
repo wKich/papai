@@ -1,61 +1,55 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists } from '../../src/wizard/validation.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
 describe('validateLlmApiKey', () => {
-  const originalFetch = globalThis.fetch
-
   beforeEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('should return success for valid API key', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [{ id: 'gpt-4' }] }), {
           status: 200,
-          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+          statusText: 'OK',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
     const result = await validateLlmApiKey('sk-test', 'https://api.openai.com/v1')
     expect(result.success).toBe(true)
   })
 })
 
 describe('validateLlmApiKey with mocked fetch', () => {
-  const originalFetch = globalThis.fetch
-
   beforeEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('should succeed when API returns 200', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [{ id: 'gpt-4' }] }), {
           status: 200,
-          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+          statusText: 'OK',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
     const result = await validateLlmApiKey('sk-valid', 'https://api.openai.com/v1')
     expect(result.success).toBe(true)
   })
 
   test('should fail when API returns 401', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: false,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response('', {
           status: 401,
           statusText: 'Unauthorized',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
     const result = await validateLlmApiKey('sk-invalid', 'https://api.openai.com/v1')
     expect(result.success).toBe(false)
@@ -64,30 +58,26 @@ describe('validateLlmApiKey with mocked fetch', () => {
 })
 
 describe('validateLlmBaseUrl', () => {
-  const originalFetch = globalThis.fetch
-
   beforeEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('should succeed when URL is reachable', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response('', {
           status: 200,
+          statusText: 'OK',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
     const result = await validateLlmBaseUrl('https://api.openai.com/v1')
     expect(result.success).toBe(true)
   })
 
   test('should fail when URL is unreachable', async () => {
-    globalThis.fetch = Object.assign(() => Promise.reject(new Error('Connection refused')), {
-      preconnect: globalThis.fetch.preconnect,
-    }) as unknown as typeof fetch
+    setMockFetch(() => Promise.reject(new Error('Connection refused')))
 
     const result = await validateLlmBaseUrl('http://localhost:99999')
     expect(result.success).toBe(false)
@@ -96,37 +86,33 @@ describe('validateLlmBaseUrl', () => {
 })
 
 describe('validateModelExists', () => {
-  const originalFetch = globalThis.fetch
-
   beforeEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('should succeed when model exists', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [{ id: 'gpt-4' }, { id: 'gpt-3.5-turbo' }] }), {
           status: 200,
-          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }, { id: 'gpt-3.5-turbo' }] }),
+          statusText: 'OK',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
     const result = await validateModelExists('gpt-4', 'sk-test', 'https://api.openai.com/v1')
     expect(result.success).toBe(true)
   })
 
   test('should fail when model does not exist', async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [{ id: 'gpt-4' }] }), {
           status: 200,
-          json: () => Promise.resolve({ data: [{ id: 'gpt-4' }] }),
+          statusText: 'OK',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
     const result = await validateModelExists('nonexistent-model', 'sk-test', 'https://api.openai.com/v1')
     expect(result.success).toBe(false)

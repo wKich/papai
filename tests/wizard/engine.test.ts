@@ -7,6 +7,7 @@ import { mock } from 'bun:test'
 
 // Import config to verify values were stored
 import { getConfig } from '../../src/config.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // Setup mocks
@@ -70,7 +71,6 @@ afterAll(() => {
 })
 
 // Global fetch mock for engine tests (returns success by default)
-const originalFetch = globalThis.fetch
 describe('Wizard Engine', () => {
   const userId = 'user123'
   const storageContextId = 'ctx-456'
@@ -81,22 +81,20 @@ describe('Wizard Engine', () => {
     await deleteWizardSession(userId, storageContextId)
     loggerCalls.length = 0
     // Reset fetch to return success by default with comprehensive model list
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
-            }),
-        }),
-      { preconnect: originalFetch.preconnect },
-    ) as unknown as typeof fetch
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
+          }),
+          { status: 200, statusText: 'OK' },
+        ),
+      ),
+    )
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   describe('createWizard', () => {
@@ -520,26 +518,20 @@ describe('Wizard engine with end-of-wizard validation', () => {
 
   test('should allow step advancement without validation', async () => {
     // Mock fetch to simulate API key validation failure
-    const testFetch = globalThis.fetch
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: false,
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response('', {
           status: 401,
           statusText: 'Unauthorized',
         }),
-      { preconnect: globalThis.fetch.preconnect },
-    ) as unknown as typeof fetch
+      ),
+    )
 
-    try {
-      createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
-      // Should advance without validation error
-      const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
-      expect(result.success).toBe(true)
-      expect(result.prompt).toContain('🌐 Enter base URL')
-    } finally {
-      globalThis.fetch = testFetch
-    }
+    // Should advance without validation error
+    const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
+    expect(result.success).toBe(true)
+    expect(result.prompt).toContain('🌐 Enter base URL')
   })
 })

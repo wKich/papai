@@ -7,6 +7,7 @@ import { mock } from 'bun:test'
 
 // Import config to verify values were stored
 import { getConfig } from '../../src/config.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // Setup mocks
@@ -40,7 +41,6 @@ afterAll(() => {
 })
 
 // Global fetch mock for integration tests (returns success by default)
-const originalFetch = globalThis.fetch
 describe('Wizard Integration', () => {
   const userId = 'test-user'
   const storageContextId = 'test-context'
@@ -49,22 +49,20 @@ describe('Wizard Integration', () => {
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
     // Reset fetch to return success by default
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
-            }),
-        }),
-      { preconnect: originalFetch.preconnect },
-    ) as unknown as typeof fetch
+    setMockFetch(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }, { id: 'gpt-3.5-turbo' }],
+          }),
+          { status: 200, statusText: 'OK' },
+        ),
+      ),
+    )
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('should complete full wizard flow', async () => {
