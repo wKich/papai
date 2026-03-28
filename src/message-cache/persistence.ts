@@ -100,3 +100,11 @@ export function startMessageCleanupScheduler(): void {
   // Cleanup is now scheduled by the global scheduler
   log.debug('Message cleanup scheduler registered (hourly)')
 }
+
+export function getPendingWritesCount(): number {
+  return pendingWrites.size
+}
+
+export function getIsFlushScheduled(): boolean {
+  return isFlushScheduled
+}

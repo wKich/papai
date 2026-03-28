@@ -1,5 +1,5 @@
 import { logger } from '../logger.js'
-import { scheduleMessagePersistence } from './persistence.js'
+import { getPendingWritesCount, getIsFlushScheduled, scheduleMessagePersistence } from './persistence.js'
 import type { CachedMessage } from './types.js'
 
 const log = logger.child({ scope: 'message-cache' })
@@ -46,4 +46,20 @@ export function getCachedMessage(contextId: string, messageId: string): CachedMe
   }
 
   return cached
+}
+
+export type MessageCacheSnapshot = {
+  size: number
+  ttlMs: number
+  pendingWrites: number
+  isFlushScheduled: boolean
+}
+
+export function getMessageCacheSnapshot(): MessageCacheSnapshot {
+  return {
+    size: messageCache.size,
+    ttlMs: ONE_WEEK_MS,
+    pendingWrites: getPendingWritesCount(),
+    isFlushScheduled: getIsFlushScheduled(),
+  }
 }
