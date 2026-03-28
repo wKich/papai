@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
 import { mockLogger } from '../../../utils/test-helpers.js'
 
 mockLogger()
@@ -18,7 +19,6 @@ import {
 
 // --- Fetch mocking infrastructure ---
 
-const originalFetch = globalThis.fetch
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
 
 const config: YouTrackConfig = {
@@ -29,11 +29,7 @@ const config: YouTrackConfig = {
 const installFetchMock = (handler: () => Promise<Response>): void => {
   const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = m
-  globalThis.fetch = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      m(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init ?? {}),
-    { preconnect: globalThis.fetch.preconnect },
-  )
+  setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
 const mockFetchResponse = (data: unknown, status = 200): void => {
@@ -95,7 +91,7 @@ describe('getYouTrackProject', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('retrieves project and maps fields', async () => {
@@ -173,7 +169,7 @@ describe('listYouTrackProjects', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('returns mapped projects', async () => {
@@ -251,7 +247,7 @@ describe('createYouTrackProject', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('creates project and returns mapped result', async () => {
@@ -315,7 +311,7 @@ describe('updateYouTrackProject', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('updates project with name', async () => {
@@ -378,7 +374,7 @@ describe('archiveYouTrackProject', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('archives project and returns id', async () => {

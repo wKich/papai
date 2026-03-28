@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
 import { mockLogger } from '../../../utils/test-helpers.js'
 
 mockLogger()
@@ -17,9 +18,8 @@ import {
   updateYouTrackTask,
 } from '../../../../src/providers/youtrack/operations/tasks.js'
 
-// --- Fetch mocking infrastructure (mirrors provider.test.ts) ---
+// --- Fetch mocking infrastructure ---
 
-const originalFetch = globalThis.fetch
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
 
 const config: YouTrackConfig = {
@@ -30,11 +30,7 @@ const config: YouTrackConfig = {
 const installFetchMock = (handler: () => Promise<Response>): void => {
   const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = m
-  globalThis.fetch = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      m(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init ?? {}),
-    { preconnect: globalThis.fetch.preconnect },
-  )
+  setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
 const mockFetchResponse = (data: unknown, status = 200): void => {
@@ -121,7 +117,7 @@ describe('createYouTrackTask', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('creates task and returns mapped result', async () => {
@@ -251,7 +247,7 @@ describe('getYouTrackTask', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('retrieves task by id', async () => {
@@ -332,7 +328,7 @@ describe('updateYouTrackTask', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('updates task with title', async () => {
@@ -417,7 +413,7 @@ describe('listYouTrackTasks', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('returns mapped list items', async () => {
@@ -477,7 +473,7 @@ describe('searchYouTrackTasks', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('returns mapped search results', async () => {
@@ -566,7 +562,7 @@ describe('deleteYouTrackTask', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('deletes task and returns id', async () => {

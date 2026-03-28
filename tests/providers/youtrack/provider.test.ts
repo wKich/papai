@@ -5,9 +5,7 @@ import { z } from 'zod'
 import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
-
-// Store the original fetch
-const originalFetch = globalThis.fetch
+import { restoreFetch, setMockFetch } from '../../test-helpers.js'
 
 // Store reference to current fetch mock for call inspection
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>> | undefined
@@ -20,13 +18,7 @@ const createConfig = (): YouTrackConfig => ({
 const installFetchMock = (handler: () => Promise<Response>): void => {
   const mocked = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = mocked
-  globalThis.fetch = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      return mocked(url, init ?? {})
-    },
-    { preconnect: globalThis.fetch.preconnect },
-  )
+  setMockFetch((url: string, init: RequestInit) => mocked(url, init))
 }
 
 const mockFetchResponse = (data: unknown, status = 200): void => {
@@ -94,7 +86,7 @@ describe('YouTrackProvider', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
     fetchMock = undefined
   })
 

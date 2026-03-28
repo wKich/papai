@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { restoreFetch, setMockFetch } from '../../test-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 mockLogger()
@@ -19,7 +20,6 @@ import {
 
 // --- Fetch mocking infrastructure ---
 
-const originalFetch = globalThis.fetch
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
 
 const config: YouTrackConfig = {
@@ -30,11 +30,7 @@ const config: YouTrackConfig = {
 const installFetchMock = (handler: () => Promise<Response>): void => {
   const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = m
-  globalThis.fetch = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      m(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init ?? {}),
-    { preconnect: globalThis.fetch.preconnect },
-  )
+  setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
 const mockFetchResponse = (data: unknown, status = 200): void => {
@@ -67,11 +63,7 @@ const mockFetchSequence = (responses: Array<{ data: unknown; status?: number }>)
     )
   })
   fetchMock = m
-  globalThis.fetch = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      m(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init ?? {}),
-    { preconnect: globalThis.fetch.preconnect },
-  )
+  setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
 const FetchCallSchema = z.tuple([
@@ -140,7 +132,7 @@ describe('listYouTrackLabels', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('returns mapped labels', async () => {
@@ -210,7 +202,7 @@ describe('createYouTrackLabel', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('creates label and returns mapped result', async () => {
@@ -271,7 +263,7 @@ describe('updateYouTrackLabel', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('updates label name and returns mapped result', async () => {
@@ -332,7 +324,7 @@ describe('removeYouTrackLabel', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('removes label and returns id', async () => {
@@ -374,7 +366,7 @@ describe('addYouTrackTaskLabel', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('adds label to task and returns ids', async () => {
@@ -438,7 +430,7 @@ describe('removeYouTrackTaskLabel', () => {
   })
 
   afterEach(() => {
-    globalThis.fetch = originalFetch
+    restoreFetch()
   })
 
   test('removes label from task and returns ids', async () => {
