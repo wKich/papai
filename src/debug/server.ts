@@ -39,7 +39,9 @@ function handleEvents(req: Request): Response {
 }
 
 function parseIntParam(value: string | null): number | undefined {
-  return value === null ? undefined : Number.parseInt(value, 10)
+  if (value === null) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function handleLogs(url: URL): Response {
