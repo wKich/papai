@@ -1,9 +1,43 @@
-import type { ChatProvider, CommandHandler } from '../chat/types.js'
+import type { ChatButton, ChatProvider, CommandHandler } from '../chat/types.js'
 import { getAllConfig, maskValue } from '../config.js'
 import { logger } from '../logger.js'
-import { CONFIG_KEYS } from '../types/config.js'
+import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 
 const log = logger.child({ scope: 'commands:config' })
+
+const FIELD_DISPLAY_NAMES: Record<ConfigKey, string> = {
+  llm_apikey: 'LLM API Key',
+  llm_baseurl: 'Base URL',
+  main_model: 'Main Model',
+  small_model: 'Small Model',
+  embedding_model: 'Embedding Model',
+  kaneo_apikey: 'Kaneo API Key',
+  youtrack_token: 'YouTrack Token',
+  timezone: 'Timezone',
+}
+
+function getFieldEmoji(key: ConfigKey): string {
+  const emojiMap: Record<ConfigKey, string> = {
+    llm_apikey: '🔑',
+    llm_baseurl: '🌐',
+    main_model: '🤖',
+    small_model: '⚡',
+    embedding_model: '📊',
+    kaneo_apikey: '🔐',
+    youtrack_token: '🔐',
+    timezone: '🌍',
+  }
+  return emojiMap[key] ?? '⚙️'
+}
+
+function formatConfigLine(key: ConfigKey, value: string | undefined): string {
+  const displayName = FIELD_DISPLAY_NAMES[key]
+  const emoji = getFieldEmoji(key)
+  if (value === undefined) {
+    return `${emoji} ${displayName}: *(not set)*`
+  }
+  return `${emoji} ${displayName}: ${maskValue(key, value)}`
+}
 
 export function registerConfigCommand(
   chat: ChatProvider,
@@ -20,15 +54,32 @@ export function registerConfigCommand(
 
     log.debug({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command called')
     const config = getAllConfig(auth.storageContextId)
-    const lines = CONFIG_KEYS.map((key) => {
+
+    const lines = ['⚙️ **Current Configuration**\n']
+
+    for (const key of CONFIG_KEYS) {
       const value = config[key]
-      if (value === undefined) {
-        return `${key}: (not set)`
-      }
-      return `${key}: ${maskValue(key, value)}`
+      lines.push(formatConfigLine(key, value))
+    }
+
+    lines.push('\n💡 Click a field below to edit it, or use `/setup` to configure everything.')
+
+    // Create buttons for each config field
+    const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
+      text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
+      callbackData: `config_edit_${key}`,
+      style: config[key] === undefined ? 'secondary' : 'primary',
+    }))
+
+    // Add full setup button at the end
+    buttons.push({
+      text: '🔄 Full Setup',
+      callbackData: 'wizard_restart',
+      style: 'primary',
     })
+
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command executed')
-    await reply.text(lines.join('\n') + '\n\n💡 Use `/setup` to edit configuration interactively.')
+    await reply.buttons(lines.join('\n'), { buttons })
   }
 
   chat.registerCommand('config', handler)

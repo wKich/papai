@@ -15,6 +15,7 @@ export interface CreateWizardSessionParams {
   readonly totalSteps: number
   readonly platform: 'telegram' | 'mattermost'
   readonly taskProvider: 'kaneo' | 'youtrack'
+  readonly initialData?: WizardData
 }
 
 /**
@@ -39,7 +40,7 @@ const createSessionKey = (userId: string, storageContextId: string): string => `
  * Returns existing session if one already exists for this user/context
  */
 export const createWizardSession = (params: CreateWizardSessionParams): WizardSession => {
-  const { userId, storageContextId, totalSteps, platform, taskProvider } = params
+  const { userId, storageContextId, totalSteps, platform, taskProvider, initialData } = params
   const key = createSessionKey(userId, storageContextId)
 
   const existingSession = activeSessions.get(key)
@@ -54,7 +55,7 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
     startedAt: new Date(),
     currentStep: 0,
     totalSteps,
-    data: {},
+    data: initialData ?? {},
     skippedSteps: [],
     platform,
     taskProvider,
@@ -62,7 +63,10 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
 
   activeSessions.set(key, session)
 
-  logger.info({ userId, storageContextId, totalSteps, platform, taskProvider }, 'Wizard session created')
+  logger.info(
+    { userId, storageContextId, totalSteps, platform, taskProvider, hasInitialData: initialData !== undefined },
+    'Wizard session created',
+  )
 
   return session
 }

@@ -2,8 +2,9 @@
  * Wizard engine - core orchestration for interactive configuration setup
  */
 
+import { getAllConfig } from '../config.js'
 import { logger } from '../logger.js'
-import type { ConfigKey } from '../types/config.js'
+import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 import { validateAndSaveWizardConfig } from './save.js'
 import { createWizardSession, getWizardSession, updateWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
@@ -54,6 +55,16 @@ function getNextPrompt(userId: string, storageContextId: string): string {
 
   const step = getStepByIndex(session.taskProvider, session.currentStep)
   if (step === undefined) return 'Error: Invalid step index'
+
+  // Check if there's an existing value for this step
+  const existingValue = session.data[step.key]
+  if (existingValue !== undefined && existingValue !== '') {
+    const maskedValue =
+      step.key.includes('apikey') || step.key.includes('token')
+        ? `${existingValue.slice(0, 4)}...${existingValue.slice(-4)}`
+        : existingValue
+    return `${step.prompt}\n\n💡 Current value: ${maskedValue} (type new value to change, or "skip" to keep)`
+  }
 
   return step.prompt
 }
@@ -152,20 +163,43 @@ export function createWizard(
 ): CreateWizardResult {
   const steps = getWizardSteps(taskProvider)
 
+  // Pre-populate with existing config values
+  const existingConfig = getAllConfig(storageContextId)
+  const initialData: Partial<Record<ConfigKey, string>> = {}
+
+  for (const key of CONFIG_KEYS) {
+    const value = existingConfig[key]
+    if (value !== undefined) {
+      initialData[key] = value
+    }
+  }
+
   createWizardSession({
     userId,
     storageContextId,
     totalSteps: steps.length,
     platform,
     taskProvider,
+    initialData,
   })
 
-  logger.info({ userId, storageContextId, platform, taskProvider }, 'Wizard created')
+  logger.info({ userId, storageContextId, platform, taskProvider }, 'Wizard created with existing config')
 
   const firstStep = steps[0]
   if (firstStep === undefined) return { success: false, prompt: 'Error: No wizard steps configured' }
 
-  return { success: true, prompt: `${WELCOME_MESSAGE}\n\n${firstStep.prompt}` }
+  // Check if there's an existing value for the first step
+  const existingValue = initialData[firstStep.key]
+  let prompt = firstStep.prompt
+  if (existingValue !== undefined && existingValue !== '') {
+    const maskedValue =
+      firstStep.key.includes('apikey') || firstStep.key.includes('token')
+        ? `${existingValue.slice(0, 4)}...${existingValue.slice(-4)}`
+        : existingValue
+    prompt = `${firstStep.prompt}\n\n💡 Current value: ${maskedValue} (type new value to change, or "skip" to keep)`
+  }
+
+  return { success: true, prompt: `${WELCOME_MESSAGE}\n\n${prompt}` }
 }
 
 export async function advanceStep(

@@ -56,7 +56,7 @@
       }
     },
     {
-      "files": ["src/chat/mattermost/index.ts", "src/chat/telegram/index.ts"],
+      "files": ["src/chat/mattermost/index.ts", "src/chat/telegram/index.ts", "src/wizard/config-handlers.ts"],
       "rules": {
         "max-lines": "off",
         "max-lines-per-function": "off"
