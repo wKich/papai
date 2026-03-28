@@ -637,7 +637,7 @@ describe('createScheduler', () => {
       }).toThrow('Invalid cron expression')
     })
 
-    test('should start cron task and calculate next run', async () => {
+    test('should start cron task and calculate next run', () => {
       const scheduler = createScheduler()
 
       scheduler.register('cron-task', {
@@ -652,12 +652,13 @@ describe('createScheduler', () => {
       expect(state!.nextRun).not.toBe(null)
       // Next run should be in the future (within next hour)
       expect(state!.nextRun!.getTime()).toBeGreaterThan(Date.now())
-      expect(state!.nextRun!.getTime()).toBeLessThan(Date.now() + 3600 * 1000 + 5000) // +5s tolerance
+      // +5s tolerance for test
+      expect(state!.nextRun!.getTime()).toBeLessThan(Date.now() + 3600 * 1000 + 5000)
 
       scheduler.stop('cron-task')
     })
 
-    test('should clear nextRun when stopping cron task', async () => {
+    test('should clear nextRun when stopping cron task', () => {
       const scheduler = createScheduler()
 
       scheduler.register('cron-task', {
@@ -680,7 +681,8 @@ describe('createScheduler', () => {
         handler: (): void => {
           executed = true
         },
-        cron: '@yearly', // Very long interval
+        // Very long interval (once per year)
+        cron: '@yearly',
         options: { immediate: true },
       })
 

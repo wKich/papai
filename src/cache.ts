@@ -40,25 +40,22 @@ export const _userCaches = userCaches
 
 const SESSION_TTL_MS = 30 * 60 * 1000
 
-setInterval(
-  () => {
-    const now = Date.now()
-    const expired: string[] = []
-    for (const [userId, cache] of userCaches) {
-      if (now - cache.lastAccessed > SESSION_TTL_MS) {
-        expired.push(userId)
-      }
+export function cleanupExpiredCaches(): void {
+  const now = Date.now()
+  const expired: string[] = []
+  for (const [userId, cache] of userCaches) {
+    if (now - cache.lastAccessed > SESSION_TTL_MS) {
+      expired.push(userId)
     }
-    for (const userId of expired) {
-      userCaches.delete(userId)
-      log.debug({ userId }, 'Expired user cache removed')
-    }
-    if (expired.length > 0) {
-      log.info({ expiredCount: expired.length }, 'Cleaned up expired user caches')
-    }
-  },
-  5 * 60 * 1000,
-)
+  }
+  for (const userId of expired) {
+    userCaches.delete(userId)
+    log.debug({ userId }, 'Expired user cache removed')
+  }
+  if (expired.length > 0) {
+    log.info({ expiredCount: expired.length }, 'Cleaned up expired user caches')
+  }
+}
 
 function getOrCreateCache(userId: string): UserCache {
   let cache = userCaches.get(userId)

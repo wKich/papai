@@ -19,6 +19,22 @@ export interface SchedulerContext {
 }
 
 /**
+ * Validate task config has exactly one of interval or cron.
+ */
+const validateTaskConfig = (config: Omit<TaskConfig, 'name'>): void => {
+  const hasCron = config.cron !== undefined
+  const hasInterval = config.interval !== undefined
+
+  if (hasCron && hasInterval) {
+    throw new Error('Task cannot have both interval and cron')
+  }
+
+  if (!hasCron && !hasInterval) {
+    throw new Error('Task must have either interval or cron')
+  }
+}
+
+/**
  * Register a new task.
  */
 export const registerTask = (
@@ -33,15 +49,7 @@ export const registerTask = (
     throw new TaskAlreadyExistsError(name)
   }
 
-  // Validate that only one of interval or cron is provided
-  if (config.cron !== undefined && config.interval !== undefined) {
-    throw new Error('Task cannot have both interval and cron')
-  }
-
-  // Validate cron is present if no interval
-  if (config.cron === undefined && config.interval === undefined) {
-    throw new Error('Task must have either interval or cron')
-  }
+  validateTaskConfig(config)
 
   const mergedOptions = mergeTaskOptions(config.options, schedulerOptions)
 
@@ -63,10 +71,7 @@ export const registerTask = (
 
   tasks.set(name, task)
 
-  logger.info(
-    { taskName: name, interval: task.interval, cron: task.cron, options: mergedOptions },
-    'Task registered',
-  )
+  logger.info({ taskName: name, interval: task.interval, cron: task.cron, options: mergedOptions }, 'Task registered')
 
   if (mergedOptions.immediate) {
     startFn(name)
