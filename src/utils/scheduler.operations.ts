@@ -33,15 +33,27 @@ export const registerTask = (
     throw new TaskAlreadyExistsError(name)
   }
 
+  // Validate that only one of interval or cron is provided
+  if (config.cron !== undefined && config.interval !== undefined) {
+    throw new Error('Task cannot have both interval and cron')
+  }
+
+  // Validate cron is present if no interval
+  if (config.cron === undefined && config.interval === undefined) {
+    throw new Error('Task must have either interval or cron')
+  }
+
   const mergedOptions = mergeTaskOptions(config.options, schedulerOptions)
 
   const task: Task = {
     name,
     handler: config.handler,
-    interval: config.interval ?? 60000,
+    interval: config.interval ?? 0,
+    cron: config.cron ?? null,
     options: mergedOptions,
     running: false,
     intervalId: null,
+    timeoutId: null,
     lastRun: null,
     nextRun: null,
     errorCount: 0,
@@ -51,7 +63,10 @@ export const registerTask = (
 
   tasks.set(name, task)
 
-  logger.info({ taskName: name, interval: task.interval, options: mergedOptions }, 'Task registered')
+  logger.info(
+    { taskName: name, interval: task.interval, cron: task.cron, options: mergedOptions },
+    'Task registered',
+  )
 
   if (mergedOptions.immediate) {
     startFn(name)
@@ -75,13 +90,19 @@ export const startTask = (context: SchedulerContext, name: string, stopFn: (name
   }
 
   task.running = true
-  scheduleTask(task, schedulerOptions, emitters, stopFn)
 
   // Execute immediately if configured
   if (task.options.immediate) {
     queueMicrotask(() => {
-      void executeTask(task, schedulerOptions, emitters, stopFn)
+      void executeTask(task, schedulerOptions, emitters, stopFn).then(() => {
+        // For cron tasks, scheduling is handled after execution completes
+        if (task.cron === null) {
+          scheduleTask(task, schedulerOptions, emitters, stopFn)
+        }
+      })
     })
+  } else {
+    scheduleTask(task, schedulerOptions, emitters, stopFn)
   }
 
   logger.info({ taskName: name }, 'Task started')
@@ -105,11 +126,19 @@ export const stopTask = (context: SchedulerContext, name: string): void => {
 
   task.running = false
 
+  // Clear interval for interval-based tasks
   if (task.intervalId !== null) {
     clearInterval(task.intervalId)
     task.intervalId = null
   }
 
+  // Clear timeout for cron-based tasks
+  if (task.timeoutId !== null) {
+    clearTimeout(task.timeoutId)
+    task.timeoutId = null
+  }
+
+  // Clear retry timeout
   if (task.retryTimeoutId !== null) {
     clearTimeout(task.retryTimeoutId)
     task.retryTimeoutId = null

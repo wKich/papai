@@ -589,4 +589,110 @@ describe('createScheduler', () => {
       expect(scheduler.hasTask('test-task')).toBe(true)
     })
   })
+
+  describe('cron expression support', () => {
+    test('should register task with cron expression', () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('cron-task', {
+        handler: (): void => {},
+        cron: '*/5 * * * *',
+      })
+
+      expect(scheduler.hasTask('cron-task')).toBe(true)
+    })
+
+    test('should throw when both interval and cron provided', () => {
+      const scheduler = createScheduler()
+
+      expect(() => {
+        scheduler.register('invalid-task', {
+          handler: (): void => {},
+          interval: 1000,
+          cron: '*/5 * * * *',
+        })
+      }).toThrow('Task cannot have both interval and cron')
+    })
+
+    test('should throw when neither interval nor cron provided', () => {
+      const scheduler = createScheduler()
+
+      expect(() => {
+        scheduler.register('invalid-task', {
+          handler: (): void => {},
+        })
+      }).toThrow('Task must have either interval or cron')
+    })
+
+    test('should throw on invalid cron expression when starting', () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('invalid-cron-task', {
+        handler: (): void => {},
+        cron: 'invalid-cron',
+      })
+
+      expect(() => {
+        scheduler.start('invalid-cron-task')
+      }).toThrow('Invalid cron expression')
+    })
+
+    test('should start cron task and calculate next run', async () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('cron-task', {
+        handler: (): void => {},
+        cron: '@hourly',
+      })
+
+      scheduler.start('cron-task')
+      const state = scheduler.getTaskState('cron-task')
+
+      expect(state!.running).toBe(true)
+      expect(state!.nextRun).not.toBe(null)
+      // Next run should be in the future (within next hour)
+      expect(state!.nextRun!.getTime()).toBeGreaterThan(Date.now())
+      expect(state!.nextRun!.getTime()).toBeLessThan(Date.now() + 3600 * 1000 + 5000) // +5s tolerance
+
+      scheduler.stop('cron-task')
+    })
+
+    test('should clear nextRun when stopping cron task', async () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('cron-task', {
+        handler: (): void => {},
+        cron: '@daily',
+      })
+
+      scheduler.start('cron-task')
+      expect(scheduler.getTaskState('cron-task')!.nextRun).not.toBe(null)
+
+      scheduler.stop('cron-task')
+      expect(scheduler.getTaskState('cron-task')!.nextRun).toBe(null)
+    })
+
+    test('cron task should support immediate execution', async () => {
+      const scheduler = createScheduler()
+      let executed = false
+
+      scheduler.register('cron-task', {
+        handler: (): void => {
+          executed = true
+        },
+        cron: '@yearly', // Very long interval
+        options: { immediate: true },
+      })
+
+      scheduler.start('cron-task')
+
+      // Wait for immediate execution
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+
+      expect(executed).toBe(true)
+      scheduler.stop('cron-task')
+    })
+  })
 })

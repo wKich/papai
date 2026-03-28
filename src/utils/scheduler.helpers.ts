@@ -25,9 +25,11 @@ export interface Task {
   readonly name: string
   readonly handler: TaskHandler
   readonly interval: number
+  readonly cron: string | null
   readonly options: Required<TaskOptions>
   running: boolean
   intervalId: ReturnType<typeof setInterval> | null
+  timeoutId: ReturnType<typeof setTimeout> | null
   lastRun: Date | null
   nextRun: Date | null
   errorCount: number

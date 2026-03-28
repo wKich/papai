@@ -175,6 +175,54 @@ export const executeTask = async (
 }
 
 /**
+ * Calculate next run time for a cron expression.
+ *
+ * @param cronExpr - Valid cron expression
+ * @returns Milliseconds until next execution
+ */
+export const calculateNextCronRun = (cronExpr: string): number => {
+  const next = Bun.cron.parse(cronExpr)
+  if (next === null) {
+    throw new Error(`Invalid cron expression: ${cronExpr}`)
+  }
+  return next.getTime() - Date.now()
+}
+
+/**
+ * Schedule next execution for a cron-based task.
+ *
+ * Uses setTimeout instead of setInterval to handle varying intervals.
+ */
+const scheduleCronTask = (
+  task: Task,
+  schedulerOptions: Required<SchedulerOptions>,
+  emitters: Emitters,
+  stopTask: (name: string) => void,
+): void => {
+  if (task.cron === null) {
+    return
+  }
+
+  const delay = calculateNextCronRun(task.cron)
+  task.nextRun = new Date(Date.now() + delay)
+
+  task.timeoutId = setTimeout(() => {
+    void executeTask(task, schedulerOptions, emitters, stopTask).then(() => {
+      // Reschedule after execution if still running
+      if (task.running && task.cron !== null) {
+        scheduleCronTask(task, schedulerOptions, emitters, stopTask)
+      }
+    })
+  }, delay)
+
+  if (task.options.unref && task.timeoutId !== null) {
+    task.timeoutId.unref()
+  }
+
+  logger.debug({ taskName: task.name, cron: task.cron, delay }, 'Cron task scheduled')
+}
+
+/**
  * Schedule a task for periodic execution.
  */
 export const scheduleTask = (
@@ -183,6 +231,13 @@ export const scheduleTask = (
   emitters: Emitters,
   stopTask: (name: string) => void,
 ): void => {
+  // Cron-based tasks use setTimeout and reschedule
+  if (task.cron !== null) {
+    scheduleCronTask(task, schedulerOptions, emitters, stopTask)
+    return
+  }
+
+  // Interval-based tasks use setInterval
   if (task.intervalId !== null) {
     return
   }
