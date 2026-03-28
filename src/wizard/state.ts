@@ -3,6 +3,7 @@
  * In-memory store for active wizard sessions
  */
 
+import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
 import type { WizardSession, WizardData } from './types.js'
 
@@ -62,6 +63,7 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
   }
 
   activeSessions.set(key, session)
+  emit('wizard:created', { userId, storageContextId, totalSteps, platform, taskProvider })
 
   logger.info(
     { userId, storageContextId, totalSteps, platform, taskProvider, hasInitialData: initialData !== undefined },
@@ -123,6 +125,8 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
     session.skippedSteps = [...session.skippedSteps, ...skippedSteps]
   }
 
+  emit('wizard:updated', { userId, storageContextId, currentStep: session.currentStep })
+
   logger.info(
     { userId, storageContextId, currentStep, hasData: data !== undefined, hasSkipped: skippedSteps !== undefined },
     'Wizard session updated',
@@ -139,6 +143,7 @@ export const deleteWizardSession = (userId: string, storageContextId: string): b
 
   if (existed) {
     activeSessions.delete(key)
+    emit('wizard:deleted', { userId, storageContextId })
     logger.info({ userId, storageContextId }, 'Wizard session deleted')
   } else {
     logger.warn({ userId, storageContextId }, 'Attempted to delete non-existent wizard session')
