@@ -1,0 +1,39 @@
+import type { ChatProvider, CommandHandler } from '../chat/types.js'
+import { logger } from '../logger.js'
+
+const log = logger.child({ scope: 'commands:start' })
+
+export function registerStartCommand(chat: ChatProvider): void {
+  const handler: CommandHandler = async (msg, reply, auth) => {
+    if (!auth.allowed) {
+      await reply.text('You are not authorized to use this bot.')
+      return
+    }
+
+    log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/start command executed')
+
+    const welcomeMessage = `👋 **Welcome to papai!**
+
+I'm your task management assistant. I can help you:
+
+📋 **Create and manage tasks** via natural language
+🔍 **Search and update** existing tasks
+⚙️ **Configure integrations** with your task tracker
+
+**Get Started:**
+🚀 **/setup** - Configure your settings (API keys, models, etc.)
+📊 **/config** - View your current configuration
+❓ **/help** - Show available commands
+
+**Quick Tips:**
+• Type your requests naturally (e.g., "create task: review PR #123")
+• I'll remember our conversation context
+• Use "/clear" to reset conversation history
+
+Let's get you set up! 🎯`
+
+    await reply.text(welcomeMessage)
+  }
+
+  chat.registerCommand('start', handler)
+}

@@ -7,6 +7,7 @@ import {
   registerGroupCommand,
   registerHelpCommand,
   registerSetupCommand,
+  registerStartCommand,
 } from './commands/index.js'
 import { getAllConfig } from './config.js'
 import { isGroupMember } from './groups.js'
@@ -96,6 +97,7 @@ export const checkAuthorizationExtended = (
 
 function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerHelpCommand(chat)
+  registerStartCommand(chat)
   registerSetupCommand(chat, checkAuthorization)
   registerConfigCommand(chat, checkAuthorization)
   registerContextCommand(chat, adminUserId)
