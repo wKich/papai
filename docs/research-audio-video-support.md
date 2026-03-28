@@ -152,30 +152,122 @@ const message: ModelMessage = {
 
 **Verdict:** Not recommended for v1 due to provider compatibility issues. Could be a future opt-in mode.
 
-### Strategy C: Video Frame Extraction + Transcription
+### Strategy C: Video Frame Extraction + Audio Transcription
 
-For video messages, extract key frames as images and audio track as text.
+Decompose video into frames (images) and audio, process each modality separately.
 
 **How it works:**
 
 ```
-User sends video → Download → Extract audio → Transcribe
-                            → Extract key frames → Send as ImageParts to LLM
+User sends video → Download
+                 → Extract audio track → Whisper STT → text transcription
+                 → Extract key frames  → Send as ImageParts to vision LLM
+                 → Combine: "[Video transcription]: ... [Frame descriptions]: ..."
 ```
 
-**Requires:** ffmpeg (or similar) for frame extraction and audio demuxing.
+**Frame extraction approaches:**
+
+1. **ffmpeg (system dependency)**
+
+   ```bash
+   # Extract 1 frame per second
+   ffmpeg -i input.mp4 -vf "fps=1" -q:v 2 frame_%04d.jpg
+   # Extract only keyframes (I-frames) — fewer frames, faster
+   ffmpeg -i input.mp4 -vf "select='eq(pict_type,I)'" -vsync vfr frame_%04d.jpg
+   ```
+
+   - Most reliable and flexible
+   - Requires ffmpeg installed on the host (not bundled with Bun)
+   - Can also extract audio: `ffmpeg -i input.mp4 -vn -acodec libopus audio.ogg`
+
+2. **Bun/JS-native libraries (no system dependency)**
+   - `mp4box.js` — MP4 demuxing in pure JS, can extract raw video frames but doesn't decode them to images
+   - `ffmpeg.wasm` — WebAssembly port of ffmpeg, runs in Bun but ~30MB bundle and slower than native
+   - No mature pure-JS solution for reliable frame extraction
+
+3. **Telegram thumbnail** — Telegram provides a `thumbnail` (`PhotoSize`) on video messages. Send just the thumbnail as an `ImagePart` — zero processing needed, but only one frame and low resolution.
+
+**Sending frames to the LLM:**
+
+The `@ai-sdk/openai-compatible` provider supports `image/*` parts — it converts them to `image_url` with base64 data. So extracted JPEG frames can be sent directly:
+
+```typescript
+const message: ModelMessage = {
+  role: 'user',
+  content: [
+    { type: 'text', text: '[Video transcription]: Create a task for the bug shown in this recording' },
+    { type: 'file', data: frame1Bytes, mediaType: 'image/jpeg' },
+    { type: 'file', data: frame2Bytes, mediaType: 'image/jpeg' },
+    { type: 'file', data: frame3Bytes, mediaType: 'image/jpeg' },
+    { type: 'text', text: 'The user sent a video message with the above frames and transcription.' },
+  ],
+}
+```
 
 **Pros:**
 
-- Rich understanding of video content
+- Works with any vision-capable model (GPT-4o, Claude, Gemini, LLaVA, etc.)
+- Understands visual content (screen recordings, screenshots of bugs, whiteboard photos)
+- Combined with STT, provides comprehensive video understanding
 
 **Cons:**
 
-- Heavy dependency (ffmpeg)
-- Complex pipeline
-- Most video messages in a task bot context are accidental or screen recordings where audio transcription alone suffices
+- ffmpeg system dependency (or slow WASM alternative)
+- Multiple frames = high token cost (~1000 tokens per image, 10 frames = ~10k tokens)
+- Adds 1-3s processing latency for frame extraction
+- Not all user-configured models support vision
 
-**Verdict:** Overkill for v1. Audio transcription covers 95% of use cases.
+**Token cost for video frames:**
+
+| Frames extracted | Approx. image tokens | + Audio transcription | Total added tokens |
+| ---------------- | -------------------- | --------------------- | ------------------ |
+| 1 (thumbnail)    | ~1,000               | ~100-500              | ~1,500             |
+| 5 (1/10s)        | ~5,000               | ~100-500              | ~5,500             |
+| 10 (1/5s)        | ~10,000              | ~100-500              | ~10,500            |
+
+**Verdict:** Viable for Phase 2 if ffmpeg is available. Thumbnail-only approach works without dependencies.
+
+### Strategy D: Native Video Input (Google Gemini)
+
+Send the entire video file to an LLM that natively understands video.
+
+**Current provider support (as of early 2026):**
+
+| Provider         | Native video input | Notes                                                  |
+| ---------------- | ------------------ | ------------------------------------------------------ |
+| Google Gemini    | Yes                | 1.5 Pro, 1.5 Flash, 2.0 Flash — up to ~1hr video       |
+| OpenAI GPT-4o    | No                 | Image input only; no video via API                     |
+| Anthropic Claude | No                 | Image input only; no video via API                     |
+| Open-source      | Limited            | Video-LLaVA, Qwen-VL — require custom inference setups |
+
+**Gemini video API format:**
+
+```json
+{
+  "contents": [
+    {
+      "parts": [
+        { "fileData": { "mimeType": "video/mp4", "fileUri": "https://generativelanguage.googleapis.com/..." } },
+        { "text": "Describe what happens in this video" }
+      ]
+    }
+  ]
+}
+```
+
+Gemini tokenizes video at ~263 tokens/second (1 fps sampling). A 30-second video ≈ 8,000 tokens. Audio track adds ~32 tokens/second.
+
+**Critical blocker for this codebase:** The bot uses `@ai-sdk/openai-compatible`, which explicitly **rejects video MIME types** with `UnsupportedFunctionalityError` (verified in `convert-to-openai-compatible-chat-messages.ts:138`). The provider only maps:
+
+- `image/*` → `image_url`
+- `audio/*` → `input_audio` (wav/mp3 only)
+- `application/pdf` → `file`
+- `text/*` → `text`
+- Everything else → **throws error**
+
+To use Gemini's native video, the bot would need to add `@ai-sdk/google` as a dependency and allow users to select it as their provider. This is a significant architectural change since the current provider system assumes OpenAI-compatible APIs only.
+
+**Verdict:** Not feasible with the current `@ai-sdk/openai-compatible` provider. Would require adding `@ai-sdk/google` support, which is a separate feature.
 
 ## Recommended Implementation Plan
 
@@ -224,23 +316,65 @@ Voice note → Telegram adapter downloads bytes → IncomingMessage.attachments
 - If download fails: reply "Could not download voice message. Please try sending as text."
 - If transcription fails: reply "Could not transcribe voice message. Please try again or send as text."
 
-### Phase 2: Video Message Support
+### Phase 2: Video Message Processing
 
-**Scope:** Extract audio from video messages, transcribe, optionally send thumbnail to vision model.
+**Scope:** Handle video messages with audio transcription + optional visual understanding.
 
-**Additional changes:**
-| File | Change |
-|------|--------|
-| `src/chat/telegram/index.ts` | Register handlers for `message:video`, `message:video_note` |
-| `src/bot.ts` | For video attachments, extract and transcribe audio track |
+**Sub-phases:**
 
-**Options for audio extraction from video:**
+#### Phase 2a: Audio-only (no new dependencies)
 
-1. **Send entire video file to Whisper** — Whisper API accepts `mp4` and extracts audio automatically. Simplest approach.
-2. **Use ffmpeg** — Extract audio track before sending. More efficient for large videos but adds a system dependency.
-3. **Thumbnail only** — Send video thumbnail as an image to a vision model. Loses audio content.
+Send the entire video file to Whisper — it accepts `mp4` and extracts audio automatically.
 
-**Recommendation:** Option 1 (send mp4 to Whisper) for simplicity. Whisper handles mp4 natively.
+| File                         | Change                                                           |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `src/chat/telegram/index.ts` | Register handlers for `message:video`, `message:video_note`      |
+| `src/bot.ts`                 | For video attachments, send to Whisper STT (same as voice notes) |
+
+This reuses the Phase 1 STT pipeline with zero additional work.
+
+#### Phase 2b: Thumbnail vision (no new dependencies)
+
+Telegram provides a `thumbnail` on video/video_note messages. Send it as an `ImagePart` alongside the audio transcription.
+
+| File                         | Change                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `src/chat/telegram/index.ts` | Extract `video.thumbnail` file_id, download as JPEG                         |
+| `src/llm-orchestrator.ts`    | Build multi-part content: `[ImagePart(thumbnail), TextPart(transcription)]` |
+
+Requires a vision-capable model. Graceful degradation: skip thumbnail if model doesn't support images.
+
+#### Phase 2c: Full frame extraction (requires ffmpeg)
+
+Extract multiple frames at key intervals for richer visual understanding.
+
+| File                      | Change                                                            |
+| ------------------------- | ----------------------------------------------------------------- |
+| `src/video-processing.ts` | New: ffmpeg-based frame extraction utility                        |
+| `src/llm-orchestrator.ts` | Build multi-part content with multiple `ImagePart` frames         |
+| `src/bot.ts`              | Detect ffmpeg availability, fall back to thumbnail if unavailable |
+
+**Recommended frame extraction strategy:**
+
+- Short videos (<30s): 1 frame every 5 seconds (max 6 frames)
+- Longer videos (30s-2min): 1 frame every 15 seconds (max 8 frames)
+- Very long videos (>2min): first frame + last frame + 4 evenly spaced (max 6 frames)
+- Always include first and last frame
+
+**ffmpeg availability detection:**
+
+```typescript
+async function isFFmpegAvailable(): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(['ffmpeg', '-version'], { stdout: 'ignore', stderr: 'ignore' })
+    return (await proc.exited) === 0
+  } catch {
+    return false
+  }
+}
+```
+
+**Recommendation:** Implement 2a first (trivial), then 2b (low effort, high value for screen recordings), then 2c only if users request richer video understanding.
 
 ### Phase 3: Native Multimodal (Future)
 
@@ -330,11 +464,13 @@ Mattermost doesn't have native voice/video messages in the same way as Telegram,
 
 ## Summary
 
-| Phase   | Scope                           | Complexity              | Dependencies                       |
-| ------- | ------------------------------- | ----------------------- | ---------------------------------- |
-| Phase 1 | Voice/audio → transcribe → text | Medium                  | STT API (OpenAI-compatible)        |
-| Phase 2 | Video → transcribe audio track  | Low (on top of Phase 1) | Same STT API (Whisper handles mp4) |
-| Phase 3 | Native multimodal to LLM        | High                    | Multimodal-capable LLM             |
-| TTS     | Text → voice response           | Medium                  | TTS API (OpenAI-compatible)        |
+| Phase    | Scope                                    | Complexity              | Dependencies                       |
+| -------- | ---------------------------------------- | ----------------------- | ---------------------------------- |
+| Phase 1  | Voice/audio → transcribe → text          | Medium                  | STT API (OpenAI-compatible)        |
+| Phase 2a | Video → transcribe audio track           | Low (on top of Phase 1) | Same STT API (Whisper handles mp4) |
+| Phase 2b | Video → thumbnail + transcription        | Low                     | Vision-capable LLM                 |
+| Phase 2c | Video → frame extraction + transcription | Medium                  | ffmpeg + vision-capable LLM        |
+| Phase 3  | Native multimodal audio/video to LLM     | High                    | `@ai-sdk/google` or multimodal LLM |
+| TTS      | Text → voice response                    | Medium                  | TTS API (OpenAI-compatible)        |
 
-**Recommended starting point:** Phase 1 (voice transcription) — it covers the primary use case, requires no multimodal LLM, preserves the entire existing pipeline, and is cheapest to operate.
+**Recommended starting point:** Phase 1 (voice transcription) → Phase 2a (video audio, trivial extension) → Phase 2b (thumbnail vision, high value for screen recordings).
