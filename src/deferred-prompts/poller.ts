@@ -5,6 +5,7 @@ import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
+import { scheduler } from '../scheduler-instance.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
 import { dispatchExecution, type BuildProviderFn } from './proactive-llm.js'
@@ -19,8 +20,7 @@ const ALERT_POLL_MS = 5 * 60_000
 const MAX_CONCURRENT_LLM_CALLS = 5
 const MAX_CONCURRENT_USERS = 10
 
-let scheduledIntervalId: ReturnType<typeof setInterval> | null = null
-let alertIntervalId: ReturnType<typeof setInterval> | null = null
+let isRunning = false
 
 function formatTaskStatus(status: string | undefined): string {
   if (status === undefined) return ''
@@ -245,33 +245,41 @@ export async function pollAlertsOnce(chat: ChatProvider, buildProviderFn: BuildP
 }
 
 export function startPollers(chat: ChatProvider, buildProviderFn: BuildProviderFn): void {
-  if (scheduledIntervalId !== null || alertIntervalId !== null) {
-    log.warn('startPollers called while pollers are already running; stopping existing pollers first')
-    stopPollers()
+  if (isRunning) {
+    log.warn('Pollers already running')
+    return
   }
 
-  log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Starting deferred prompt pollers')
+  isRunning = true
 
-  void pollScheduledOnce(chat, buildProviderFn)
-  void pollAlertsOnce(chat, buildProviderFn)
+  // Register scheduled poll task
+  scheduler.register('deferred-scheduled-poll', {
+    interval: SCHEDULED_POLL_MS,
+    handler: () => pollScheduledOnce(chat, buildProviderFn),
+    options: { immediate: true },
+  })
 
-  scheduledIntervalId = setInterval(() => {
-    void pollScheduledOnce(chat, buildProviderFn)
-  }, SCHEDULED_POLL_MS)
+  // Register alert poll task
+  scheduler.register('deferred-alert-poll', {
+    interval: ALERT_POLL_MS,
+    handler: () => pollAlertsOnce(chat, buildProviderFn),
+    options: { immediate: true },
+  })
 
-  alertIntervalId = setInterval(() => {
-    void pollAlertsOnce(chat, buildProviderFn)
-  }, ALERT_POLL_MS)
+  // Start both tasks
+  scheduler.start('deferred-scheduled-poll')
+  scheduler.start('deferred-alert-poll')
+
+  log.info({ scheduledPollMs: SCHEDULED_POLL_MS, alertPollMs: ALERT_POLL_MS }, 'Started deferred prompt pollers')
 }
 
 export function stopPollers(): void {
   log.info('Stopping deferred prompt pollers')
-  if (scheduledIntervalId !== null) {
-    clearInterval(scheduledIntervalId)
-    scheduledIntervalId = null
-  }
-  if (alertIntervalId !== null) {
-    clearInterval(alertIntervalId)
-    alertIntervalId = null
-  }
+
+  scheduler.stop('deferred-scheduled-poll')
+  scheduler.stop('deferred-alert-poll')
+  scheduler.unregister('deferred-scheduled-poll')
+  scheduler.unregister('deferred-alert-poll')
+
+  isRunning = false
 }
