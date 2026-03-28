@@ -54,11 +54,21 @@
       "rules": {
         "max-lines": "off",
         "max-lines-per-function": "off",
+        "max-depth": "off",
+        "no-negated-condition": "off",
+        "no-param-reassign": "off",
         "typescript/explicit-function-return-type": "off",
         "typescript/explicit-module-boundary-types": "off",
         "typescript/no-explicit-any": "off",
         "typescript/no-unsafe-type-assertion": "off",
-        "no-param-reassign": "off"
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/strict-boolean-expressions": "off",
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-floating-promises": "off"
       }
     },
     {
