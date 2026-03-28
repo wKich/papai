@@ -7,6 +7,7 @@ import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
 import { startMessageCleanupScheduler } from './message-cache/index.js'
 import { buildProviderForUser } from './providers/factory.js'
+import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
 
@@ -85,6 +86,9 @@ startPollers(chatProvider, (userId) => buildProviderForUser(userId, false))
 
 startMessageCleanupScheduler()
 
+// Start the central scheduler with all cleanup tasks
+scheduler.startAll()
+
 let stopDebugServerFn: (() => void) | null = null
 
 if (process.env['DEBUG_SERVER'] === 'true') {
@@ -96,6 +100,7 @@ if (process.env['DEBUG_SERVER'] === 'true') {
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down gracefully')
   stopScheduler()
+  scheduler.stopAll()
   stopPollers()
   stopDebugServerFn?.()
   void chatProvider.stop()
@@ -107,6 +112,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down gracefully')
   stopScheduler()
+  scheduler.stopAll()
   stopPollers()
   stopDebugServerFn?.()
   void chatProvider.stop()
