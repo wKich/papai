@@ -1,5 +1,6 @@
 import { normalizeTimezone } from '../utils/timezone.js'
 import type { WizardStep } from './types.js'
+import { validateLlmApiKey } from './validation.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
@@ -14,34 +15,19 @@ const PROVIDER_SPECIFIC_STEP: Record<TaskProvider, { key: 'kaneo_apikey' | 'yout
   },
 }
 
-type LlmConfigKey = 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model' | 'embedding_model'
-
-type LlmStep = { id: LlmConfigKey; prompt: string; isOptional?: boolean }
-
-const LLM_STEPS: LlmStep[] = [
-  { id: 'llm_apikey', prompt: '🔑 Enter your LLM API key:' },
-  { id: 'llm_baseurl', prompt: "🌐 Enter base URL (or 'default' for OpenAI):" },
-  {
-    id: 'main_model',
-    prompt: '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):',
-  },
-  {
-    id: 'small_model',
-    prompt: "⚡ Enter small model name (or 'same' to use main model):",
-  },
-  {
-    id: 'embedding_model',
-    prompt: "📊 Enter embedding model (or 'skip' to use default):",
-    isOptional: true,
-  },
-]
-
-function createStep(id: string, key: WizardStep['key'], prompt: string, isOptional?: boolean): WizardStep {
+function createStep(
+  id: string,
+  key: WizardStep['key'],
+  prompt: string,
+  isOptional?: boolean,
+  liveCheck?: WizardStep['liveCheck'],
+): WizardStep {
   return {
     id,
     key,
     prompt,
     validate: (value: string) => Promise.resolve(validateStep(key, value)),
+    liveCheck,
     isOptional,
   }
 }
@@ -50,7 +36,13 @@ export function getWizardSteps(taskProvider: TaskProvider): WizardStep[] {
   const providerStep = PROVIDER_SPECIFIC_STEP[taskProvider]
 
   return [
-    ...LLM_STEPS.map((s) => createStep(s.id, s.id, s.prompt, s.isOptional)),
+    createStep('llm_apikey', 'llm_apikey', '🔑 Enter your LLM API key:', undefined, (value: string) =>
+      validateLlmApiKey(value, 'https://api.openai.com/v1'),
+    ),
+    createStep('llm_baseurl', 'llm_baseurl', "🌐 Enter base URL (or 'default' for OpenAI):"),
+    createStep('main_model', 'main_model', '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):'),
+    createStep('small_model', 'small_model', "⚡ Enter small model name (or 'same' to use main model):"),
+    createStep('embedding_model', 'embedding_model', "📊 Enter embedding model (or 'skip' to use default):", true),
     createStep(providerStep.key, providerStep.key, providerStep.prompt),
     createStep('timezone', 'timezone', '🌍 Enter your timezone (e.g., America/New_York, UTC, UTC+5):'),
   ]

@@ -344,3 +344,13 @@ describe('formatSummary', () => {
     expect(summary).toContain('Timezone: Not set')
   })
 })
+
+describe('Wizard steps live validation', () => {
+  test('llm_apikey step should have liveCheck function', () => {
+    const steps = getWizardSteps('kaneo')
+    const apiKeyStep = steps.find((s) => s.key === 'llm_apikey')
+
+    expect(apiKeyStep).toBeDefined()
+    expect(apiKeyStep?.liveCheck).toBeDefined()
+  })
+})
