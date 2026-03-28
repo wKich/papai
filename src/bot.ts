@@ -10,6 +10,7 @@ import {
   registerStartCommand,
 } from './commands/index.js'
 import { getAllConfig } from './config.js'
+import { emit } from './debug/event-bus.js'
 import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
@@ -196,41 +197,75 @@ async function handleMessage(msg: IncomingMessage, reply: ReplyFn, auth: Authori
   await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
 }
 
+async function maybeInterceptWizard(
+  chat: ChatProvider,
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+): Promise<boolean> {
+  const isCommand = msg.text.startsWith('/')
+
+  // AUTO-START WIZARD FOR NEW USERS
+  // Only auto-start for authorized users (to maintain silent drop for unauthorized)
+  if (!isCommand && auth.allowed) {
+    const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
+    const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
+    if (wasWizardAutoStarted) return true
+  }
+
+  // Use auth.storageContextId (not msg.contextId) for wizard lookup
+  // This ensures DM wizards use userId, group wizards use groupId
+  if (!isCommand) {
+    const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply)
+    if (wasWizardHandled) return true
+  }
+
+  return false
+}
+
+async function onIncomingMessage(chat: ChatProvider, msg: IncomingMessage, reply: ReplyFn): Promise<void> {
+  emit('message:received', {
+    userId: msg.user.id,
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+    textLength: msg.text.length,
+    isCommand: msg.text.startsWith('/'),
+  })
+
+  // Get authorization FIRST (needed for wizard storage context)
+  const auth = checkAuthorizationExtended(
+    msg.user.id,
+    msg.user.username,
+    msg.contextId,
+    msg.contextType,
+    msg.user.isAdmin,
+  )
+
+  emit('auth:check', {
+    userId: msg.user.id,
+    allowed: auth.allowed,
+    isBotAdmin: auth.isBotAdmin,
+    isGroupAdmin: auth.isGroupAdmin,
+    storageContextId: auth.storageContextId,
+  })
+
+  // WIZARD INTERCEPTION - Platform agnostic
+  // Commands (starting with /) are always routed to their handlers, even during wizard
+  if (await maybeInterceptWizard(chat, msg, reply, auth)) return
+
+  const start = Date.now()
+  try {
+    await handleMessage(msg, reply, auth)
+  } finally {
+    emit('message:replied', {
+      userId: msg.user.id,
+      contextId: msg.contextId,
+      duration: Date.now() - start,
+    })
+  }
+}
+
 export function setupBot(chat: ChatProvider, adminUserId: string): void {
   registerCommands(chat, adminUserId)
-
-  chat.onMessage(async (msg, reply) => {
-    // Get authorization FIRST (needed for wizard storage context)
-    const auth = checkAuthorizationExtended(
-      msg.user.id,
-      msg.user.username,
-      msg.contextId,
-      msg.contextType,
-      msg.user.isAdmin,
-    )
-
-    // WIZARD INTERCEPTION - Platform agnostic
-    // Check if user is in active wizard session AND message is not a command
-    // Commands (starting with /) are always routed to their handlers, even during wizard
-    const isCommand = msg.text.startsWith('/')
-
-    // AUTO-START WIZARD FOR NEW USERS
-    // If user has no config and no active wizard, start wizard automatically
-    // This happens only on first interaction after auto-provisioning
-    // Only auto-start for authorized users (to maintain silent drop for unauthorized)
-    if (!isCommand && auth.allowed) {
-      const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
-      const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
-      if (wasWizardAutoStarted) return
-    }
-
-    // Use auth.storageContextId (not msg.contextId) for wizard lookup
-    // This ensures DM wizards use userId, group wizards use groupId
-    if (!isCommand) {
-      const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply)
-      if (wasWizardHandled) return
-    }
-
-    await handleMessage(msg, reply, auth)
-  })
+  chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply))
 }

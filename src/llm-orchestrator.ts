@@ -6,6 +6,7 @@ import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
+import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { logger } from './logger.js'
@@ -89,6 +90,57 @@ const sendLlmResponse = async (
   )
 }
 
+const invokeModel = async (
+  contextId: string,
+  mainModel: string,
+  model: ReturnType<ReturnType<typeof buildOpenAI>>,
+  provider: TaskProvider,
+  tools: ToolSet,
+  timezone: string,
+  messagesWithMemory: ModelMessage[],
+): Promise<Awaited<ReturnType<typeof generateText>>> => {
+  const start = Date.now()
+  emit('llm:start', {
+    userId: contextId,
+    model: mainModel,
+    messageCount: messagesWithMemory.length,
+    toolCount: Object.keys(tools).length,
+  })
+  const result = await generateText({
+    model,
+    system: buildSystemPrompt(provider, timezone, contextId),
+    messages: messagesWithMemory,
+    tools,
+    stopWhen: stepCountIs(25),
+    experimental_onToolCallStart(event) {
+      emit('llm:tool_call', {
+        userId: contextId,
+        toolName: event.toolCall.toolName,
+        toolCallId: event.toolCall.toolCallId,
+        args: event.toolCall.input,
+      })
+    },
+    experimental_onToolCallFinish(event) {
+      emit('llm:tool_result', {
+        userId: contextId,
+        toolName: event.toolCall.toolName,
+        toolCallId: event.toolCall.toolCallId,
+        durationMs: event.durationMs,
+        success: event.success,
+        ...(event.success ? {} : { error: String(event.error) }),
+      })
+    },
+  })
+  emit('llm:end', {
+    userId: contextId,
+    model: mainModel,
+    steps: result.steps.length,
+    totalDuration: Date.now() - start,
+    tokenUsage: result.usage,
+  })
+  return result
+}
+
 const callLlm = async (
   reply: ReplyFn,
   contextId: string,
@@ -114,13 +166,7 @@ const callLlm = async (
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
   )
-  const result = await generateText({
-    model,
-    system: buildSystemPrompt(provider, timezone, contextId),
-    messages: messagesWithMemory,
-    tools,
-    stopWhen: stepCountIs(25),
-  })
+  const result = await invokeModel(contextId, mainModel, model, provider, tools, timezone, messagesWithMemory)
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
@@ -191,6 +237,11 @@ export const processMessage = async (
       void runTrimInBackground(contextId, [...history, ...assistantMessages])
     }
   } catch (error) {
+    emit('llm:error', {
+      userId: contextId,
+      error: error instanceof Error ? error.message : String(error),
+      model: getConfig(contextId, 'main_model') ?? 'unknown',
+    })
     saveHistory(contextId, baseHistory)
     await handleMessageError(reply, contextId, error)
   }

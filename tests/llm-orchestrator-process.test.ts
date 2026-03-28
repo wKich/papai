@@ -41,6 +41,7 @@ type GenerateTextResult = {
   text: string
   toolCalls: never[]
   toolResults: never[]
+  steps: unknown[]
   response: { messages: ModelMessage[] }
   usage: Record<string, unknown>
 }
@@ -52,6 +53,7 @@ const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
     text: 'Hello!',
     toolCalls: [],
     toolResults: [],
+    steps: [],
     response: { messages: [{ role: 'assistant' as const, content: 'Hello!' }] },
     usage: {},
   })
@@ -246,6 +248,7 @@ describe('processMessage — success path history', () => {
         text: 'Hi!',
         toolCalls: [],
         toolResults: [],
+        steps: [],
         response: { messages: [{ role: 'assistant' as const, content: 'Hi!' }] },
         usage: {},
       })
