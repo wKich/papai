@@ -162,23 +162,23 @@ All events carry `userId` in their payload where applicable. `state-collector.ts
 
 ### `bot.ts` — 3 emit points
 
-| Event | Location | Payload |
-|---|---|---|
-| `message:received` | `chat.onMessage` callback, before auth check | `{ userId, contextId, contextType, textLength, isCommand }` |
-| `auth:check` | After `checkAuthorizationExtended` returns | `{ userId, allowed, isBotAdmin, isGroupAdmin, storageContextId }` |
-| `message:replied` | After `handleMessage` completes (wrap with timing) | `{ userId, contextId, duration }` |
+| Event              | Location                                           | Payload                                                           |
+| ------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
+| `message:received` | `chat.onMessage` callback, before auth check       | `{ userId, contextId, contextType, textLength, isCommand }`       |
+| `auth:check`       | After `checkAuthorizationExtended` returns         | `{ userId, allowed, isBotAdmin, isGroupAdmin, storageContextId }` |
+| `message:replied`  | After `handleMessage` completes (wrap with timing) | `{ userId, contextId, duration }`                                 |
 
 Duration measurement: capture `const start = Date.now()` before `handleMessage`, emit after it resolves/rejects.
 
 ### `llm-orchestrator.ts` — 5 emit points via SDK callbacks
 
-| SDK Callback | Stability | Debug Event | Payload |
-|---|---|---|---|
-| `experimental_onStart` | experimental | `llm:start` | `{ userId, model: event.model.modelId, messageCount, toolCount }` |
-| `experimental_onToolCallStart` | experimental | `llm:tool_call` | `{ userId, toolName, toolCallId, args: event.input }` |
-| `experimental_onToolCallFinish` | experimental | `llm:tool_result` | `{ userId, toolName, toolCallId, durationMs, success, error? }` |
-| *(manual, after generateText)* | — | `llm:end` | `{ userId, model, steps, totalDuration, tokenUsage }` |
-| *(catch block)* | — | `llm:error` | `{ userId, error, model }` |
+| SDK Callback                    | Stability    | Debug Event       | Payload                                                           |
+| ------------------------------- | ------------ | ----------------- | ----------------------------------------------------------------- |
+| `experimental_onStart`          | experimental | `llm:start`       | `{ userId, model: event.model.modelId, messageCount, toolCount }` |
+| `experimental_onToolCallStart`  | experimental | `llm:tool_call`   | `{ userId, toolName, toolCallId, args: event.input }`             |
+| `experimental_onToolCallFinish` | experimental | `llm:tool_result` | `{ userId, toolName, toolCallId, durationMs, success, error? }`   |
+| _(manual, after generateText)_  | —            | `llm:end`         | `{ userId, model, steps, totalDuration, tokenUsage }`             |
+| _(catch block)_                 | —            | `llm:error`       | `{ userId, error, model }`                                        |
 
 `onFinish` does not provide wall-clock duration. `const start = Date.now()` is captured before `generateText()` and `duration = Date.now() - start` is computed after it returns.
 
@@ -186,51 +186,51 @@ Tool call `output` is **excluded** from `llm:tool_result` — may contain user c
 
 ### `cache.ts` — 3 event types, 15 emit points
 
-| Event | Emit points | Payload |
-|---|---|---|
-| `cache:load` | 6 cache-miss branches (history, summary, facts, config, workspace, instructions) | `{ userId, field }` |
-| `cache:sync` | 8 mutation functions (set/append history, set summary, upsert fact, set config, set workspace, add/delete instruction) | `{ userId, field, operation }` |
-| `cache:expire` | TTL cleanup `setInterval` (one event per expired user) | `{ userId }` |
+| Event          | Emit points                                                                                                            | Payload                        |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `cache:load`   | 6 cache-miss branches (history, summary, facts, config, workspace, instructions)                                       | `{ userId, field }`            |
+| `cache:sync`   | 8 mutation functions (set/append history, set summary, upsert fact, set config, set workspace, add/delete instruction) | `{ userId, field, operation }` |
+| `cache:expire` | TTL cleanup `setInterval` (one event per expired user)                                                                 | `{ userId }`                   |
 
 No config values, no summary text, no fact content, no history messages — only field names and operation types.
 
 ### `conversation.ts` — 2 events
 
-| Event | Location | Payload |
-|---|---|---|
-| `trim:start` | `runTrimInBackground` entry | `{ userId, historyLength, reason }` |
-| `trim:end` | After success (line 55) or catch (line 57) | `{ userId, kept, dropped, success }` or `{ userId, error, success: false }` |
+| Event        | Location                                   | Payload                                                                     |
+| ------------ | ------------------------------------------ | --------------------------------------------------------------------------- |
+| `trim:start` | `runTrimInBackground` entry                | `{ userId, historyLength, reason }`                                         |
+| `trim:end`   | After success (line 55) or catch (line 57) | `{ userId, kept, dropped, success }` or `{ userId, error, success: false }` |
 
 ### `wizard/state.ts` — 3 events
 
-| Event | Location | Payload |
-|---|---|---|
-| `wizard:created` | `createWizardSession`, after `activeSessions.set()` | `{ userId, storageContextId, totalSteps, platform, taskProvider }` |
-| `wizard:updated` | `updateWizardSession`, after mutation | `{ userId, storageContextId, currentStep }` |
-| `wizard:deleted` | `deleteWizardSession`, after `activeSessions.delete()` | `{ userId, storageContextId }` |
+| Event            | Location                                               | Payload                                                            |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `wizard:created` | `createWizardSession`, after `activeSessions.set()`    | `{ userId, storageContextId, totalSteps, platform, taskProvider }` |
+| `wizard:updated` | `updateWizardSession`, after mutation                  | `{ userId, storageContextId, currentStep }`                        |
+| `wizard:deleted` | `deleteWizardSession`, after `activeSessions.delete()` | `{ userId, storageContextId }`                                     |
 
 ### `scheduler.ts` — 2 events
 
-| Event | Location | Payload |
-|---|---|---|
-| `scheduler:tick` | `tick()`, after `tickCount++` | `{ tickCount, dueTaskCount }` |
+| Event                     | Location                           | Payload                                      |
+| ------------------------- | ---------------------------------- | -------------------------------------------- |
+| `scheduler:tick`          | `tick()`, after `tickCount++`      | `{ tickCount, dueTaskCount }`                |
 | `scheduler:task_executed` | `executeRecurringTask`, on success | `{ userId, recurringTaskId, createdTaskId }` |
 
 `scheduler:tick` has no `userId` — global event, passes through unfiltered. `scheduler:task_executed` carries `userId` — filtered by `state-collector.ts`.
 
 ### `deferred-prompts/poller.ts` — 2 events
 
-| Event | Location | Payload |
-|---|---|---|
-| `poller:scheduled` | `pollScheduledOnce`, after querying due prompts | `{ dueCount }` |
-| `poller:alerts` | `pollAlertsOnce`, after querying eligible alerts | `{ eligibleCount }` |
+| Event              | Location                                         | Payload             |
+| ------------------ | ------------------------------------------------ | ------------------- |
+| `poller:scheduled` | `pollScheduledOnce`, after querying due prompts  | `{ dueCount }`      |
+| `poller:alerts`    | `pollAlertsOnce`, after querying eligible alerts | `{ eligibleCount }` |
 
 No `userId` — global events, unfiltered.
 
 ### `message-cache/cache.ts` — 1 event
 
-| Event | Location | Payload |
-|---|---|---|
+| Event            | Location                                       | Payload                |
+| ---------------- | ---------------------------------------------- | ---------------------- |
 | `msgcache:sweep` | Daily sweep `setInterval`, after deletion loop | `{ swept, remaining }` |
 
 No `userId` — global event, unfiltered.
@@ -289,46 +289,46 @@ Built from `llm:start` -> `llm:tool_call`/`llm:tool_result` -> `llm:end`/`llm:er
 
 ### State Snapshot Broadcasts
 
-| Snapshot event | Triggered by | Data |
-|---|---|---|
-| `state:sessions` | Any `cache:*` event for admin | `getSessionSnapshots(adminUserId)` |
-| `state:cache` | `cache:sync` / `cache:load` for admin | Full admin session snapshot |
-| `state:stats` | `message:received` / `llm:end` (debounced) | Current stats counters |
-| `llm:full` | `llm:end` for admin | Complete LLM trace from ring buffer |
+| Snapshot event   | Triggered by                               | Data                                |
+| ---------------- | ------------------------------------------ | ----------------------------------- |
+| `state:sessions` | Any `cache:*` event for admin              | `getSessionSnapshots(adminUserId)`  |
+| `state:cache`    | `cache:sync` / `cache:load` for admin      | Full admin session snapshot         |
+| `state:stats`    | `message:received` / `llm:end` (debounced) | Current stats counters              |
+| `llm:full`       | `llm:end` for admin                        | Complete LLM trace from ring buffer |
 
 ## Changes Summary
 
 ### New exports (snapshot functions)
 
-| File | New export | ~Lines |
-|---|---|---|
-| `src/cache.ts` | `getSessionSnapshots(userId)` | ~15 |
-| `src/wizard/state.ts` | `getWizardSnapshots(userId)` | ~10 |
-| `src/scheduler.ts` | `getSchedulerSnapshot()` | ~8 |
-| `src/deferred-prompts/poller.ts` | `getPollerSnapshot()` | ~6 |
-| `src/message-cache/cache.ts` | `getMessageCacheSnapshot()` | ~6 |
-| `src/message-cache/persistence.ts` | `getPendingWritesCount()`, `getIsFlushScheduled()` | ~4 |
+| File                               | New export                                         | ~Lines |
+| ---------------------------------- | -------------------------------------------------- | ------ |
+| `src/cache.ts`                     | `getSessionSnapshots(userId)`                      | ~15    |
+| `src/wizard/state.ts`              | `getWizardSnapshots(userId)`                       | ~10    |
+| `src/scheduler.ts`                 | `getSchedulerSnapshot()`                           | ~8     |
+| `src/deferred-prompts/poller.ts`   | `getPollerSnapshot()`                              | ~6     |
+| `src/message-cache/cache.ts`       | `getMessageCacheSnapshot()`                        | ~6     |
+| `src/message-cache/persistence.ts` | `getPendingWritesCount()`, `getIsFlushScheduled()` | ~4     |
 
 ### `emit()` calls added
 
-| File | Emit calls | ~Lines added |
-|---|---|---|
-| `src/bot.ts` | 3 (`message:received`, `auth:check`, `message:replied`) | ~10 |
-| `src/llm-orchestrator.ts` | 5 via SDK callbacks + catch block | ~20 |
-| `src/cache.ts` | 15 (6 loads + 8 syncs + 1 expiry) | ~16 |
-| `src/conversation.ts` | 2 (`trim:start`, `trim:end`) | ~6 |
-| `src/wizard/state.ts` | 3 (`created`, `updated`, `deleted`) | ~4 |
-| `src/scheduler.ts` | 2 (`tick`, `task_executed`) | ~4 |
-| `src/deferred-prompts/poller.ts` | 2 (`scheduled`, `alerts`) | ~3 |
-| `src/message-cache/cache.ts` | 1 (`sweep`) | ~2 |
+| File                             | Emit calls                                              | ~Lines added |
+| -------------------------------- | ------------------------------------------------------- | ------------ |
+| `src/bot.ts`                     | 3 (`message:received`, `auth:check`, `message:replied`) | ~10          |
+| `src/llm-orchestrator.ts`        | 5 via SDK callbacks + catch block                       | ~20          |
+| `src/cache.ts`                   | 15 (6 loads + 8 syncs + 1 expiry)                       | ~16          |
+| `src/conversation.ts`            | 2 (`trim:start`, `trim:end`)                            | ~6           |
+| `src/wizard/state.ts`            | 3 (`created`, `updated`, `deleted`)                     | ~4           |
+| `src/scheduler.ts`               | 2 (`tick`, `task_executed`)                             | ~4           |
+| `src/deferred-prompts/poller.ts` | 2 (`scheduled`, `alerts`)                               | ~3           |
+| `src/message-cache/cache.ts`     | 1 (`sweep`)                                             | ~2           |
 
 ### Modified files
 
-| File | Change | ~Lines |
-|---|---|---|
-| `src/debug/state-collector.ts` | Rewrite: admin filtering, stats, LLM trace buffer, snapshots | ~150-180 |
-| `src/debug/server.ts` | `startDebugServer(adminUserId)` signature, passes to `init()` | ~3 |
-| `src/index.ts` | `startDebugServer(adminUserId)` call | ~1 |
+| File                           | Change                                                        | ~Lines   |
+| ------------------------------ | ------------------------------------------------------------- | -------- |
+| `src/debug/state-collector.ts` | Rewrite: admin filtering, stats, LLM trace buffer, snapshots  | ~150-180 |
+| `src/debug/server.ts`          | `startDebugServer(adminUserId)` signature, passes to `init()` | ~3       |
+| `src/index.ts`                 | `startDebugServer(adminUserId)` call                          | ~1       |
 
 ### Total
 
