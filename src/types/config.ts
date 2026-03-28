@@ -17,7 +17,7 @@ export type ConfigKey = TaskProviderConfigKey | LlmConfigKey | PreferenceConfigK
 // Get the task provider from env
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
-// User-visible config keys: shown in /config and settable via /set
+// User-visible config keys: shown in /config and settable via /setup
 // Internal keys are intentionally excluded here
 const PREFERENCE_KEYS: readonly PreferenceConfigKey[] = ['timezone']
 

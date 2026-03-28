@@ -59,8 +59,16 @@ export async function sendButtonReply(
 ): Promise<void> {
   const keyboard = new InlineKeyboard()
   if (options.buttons !== undefined) {
-    for (const btn of options.buttons) {
-      keyboard.text(btn.text, btn.callbackData)
+    for (let i = 0; i < options.buttons.length; i += 2) {
+      const btn1 = options.buttons[i]
+      const btn2 = options.buttons[i + 1]
+      if (btn1 !== undefined) {
+        keyboard.text(btn1.text, btn1.callbackData)
+      }
+      if (btn2 !== undefined) {
+        keyboard.text(btn2.text, btn2.callbackData)
+      }
+      keyboard.row()
     }
   }
   await ctx.reply(content, {

@@ -91,7 +91,7 @@ async function provisionUserKaneo(reply: ReplyFn, userId: string): Promise<void>
       `Kaneo account created.\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n🌐 ${outcome.kaneoUrl}`,
     )
   } else if (outcome.status === 'failed') {
-    await reply.text(`Note: Kaneo auto-provisioning failed (${outcome.error}). User can configure manually via /set.`)
+    await reply.text(`Note: Kaneo auto-provisioning failed (${outcome.error}). User can configure manually via /setup.`)
   }
 }
 

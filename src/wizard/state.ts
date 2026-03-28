@@ -134,6 +134,30 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
 }
 
 /**
+ * Reset wizard session to step 0 while preserving all collected data
+ * Returns true if session was reset, false if no session exists
+ */
+export const resetWizardSession = (userId: string, storageContextId: string): boolean => {
+  const key = createSessionKey(userId, storageContextId)
+  const session = activeSessions.get(key)
+
+  if (session === undefined) {
+    logger.warn({ userId, storageContextId }, 'Attempted to reset non-existent wizard session')
+    return false
+  }
+
+  session.currentStep = 0
+  session.skippedSteps = []
+  emit('wizard:updated', { userId, storageContextId, currentStep: 0 })
+  logger.info(
+    { userId, storageContextId, preservedKeys: Object.keys(session.data).length },
+    'Wizard session reset to step 0',
+  )
+
+  return true
+}
+
+/**
  * Delete a wizard session
  * Returns true if a session was deleted, false otherwise
  */

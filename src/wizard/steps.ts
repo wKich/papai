@@ -1,3 +1,5 @@
+import { maskValue } from '../config.js'
+import type { ConfigKey } from '../types/config.js'
 import { normalizeTimezone } from '../utils/timezone.js'
 import type { WizardStep } from './types.js'
 
@@ -110,28 +112,21 @@ export function getStepByIndex(taskProvider: TaskProvider, index: number): Wizar
   return steps[index]
 }
 
-function maskValue(value: string): string {
-  if (value.length <= 8) {
-    return value
-  }
-  return `${value.slice(0, 4)}...${value.slice(-4)}`
-}
-
-function getMaskedValue(value: string | undefined): string {
+function getDisplayValue(key: ConfigKey, value: string | undefined): string {
   if (value === undefined || value === '') {
     return 'Not set'
   }
-  return maskValue(value)
+  return maskValue(key, value)
 }
 
 export function formatSummary(data: Record<string, string | undefined>, taskProvider: TaskProvider): string {
   const lines = ['Configuration Summary', '===================', '']
 
   // LLM Configuration
-  lines.push(`LLM API Key: ${getMaskedValue(data['llm_apikey'])}`)
-  lines.push(`Base URL: ${data['llm_baseurl'] ?? 'Not set'}`)
-  lines.push(`Main Model: ${data['main_model'] ?? 'Not set'}`)
-  lines.push(`Small Model: ${data['small_model'] ?? 'Not set'}`)
+  lines.push(`LLM API Key: ${getDisplayValue('llm_apikey', data['llm_apikey'])}`)
+  lines.push(`Base URL: ${getDisplayValue('llm_baseurl', data['llm_baseurl'])}`)
+  lines.push(`Main Model: ${getDisplayValue('main_model', data['main_model'])}`)
+  lines.push(`Small Model: ${getDisplayValue('small_model', data['small_model'])}`)
 
   const embeddingModel = data['embedding_model']
   if (embeddingModel !== undefined) {
@@ -142,15 +137,15 @@ export function formatSummary(data: Record<string, string | undefined>, taskProv
 
   // Provider-specific
   if (taskProvider === 'kaneo') {
-    lines.push(`Kaneo API Key: ${getMaskedValue(data['kaneo_apikey'])}`)
+    lines.push(`Kaneo API Key: ${getDisplayValue('kaneo_apikey', data['kaneo_apikey'])}`)
   } else if (taskProvider === 'youtrack') {
-    lines.push(`YouTrack Token: ${getMaskedValue(data['youtrack_token'])}`)
+    lines.push(`YouTrack Token: ${getDisplayValue('youtrack_token', data['youtrack_token'])}`)
   }
 
   lines.push('')
 
   // Preferences
-  lines.push(`Timezone: ${data['timezone'] ?? 'Not set'}`)
+  lines.push(`Timezone: ${getDisplayValue('timezone', data['timezone'])}`)
 
   return lines.join('\n')
 }

@@ -263,12 +263,12 @@ describe('formatSummary', () => {
     const summary = formatSummary(data, 'kaneo')
 
     expect(summary).toContain('Configuration Summary')
-    expect(summary).toContain('LLM API Key: sk-a...f456')
+    expect(summary).toContain('LLM API Key: ****f456')
     expect(summary).toContain('Base URL: https://api.openai.com')
     expect(summary).toContain('Main Model: gpt-4')
     expect(summary).toContain('Small Model: same')
     expect(summary).toContain('Embedding Model: skip')
-    expect(summary).toContain('Kaneo API Key: my-s...-key')
+    expect(summary).toContain('Kaneo API Key: ****-key')
     expect(summary).toContain('Timezone: America/New_York')
   })
 
@@ -286,12 +286,12 @@ describe('formatSummary', () => {
     const summary = formatSummary(data, 'youtrack')
 
     expect(summary).toContain('Configuration Summary')
-    expect(summary).toContain('LLM API Key: sk-s...tkey')
+    expect(summary).toContain('LLM API Key: ****tkey')
     expect(summary).toContain('Base URL: default')
     expect(summary).toContain('Main Model: claude-3-opus')
     expect(summary).toContain('Small Model: claude-3-sonnet')
     expect(summary).toContain('Embedding Model: text-embedding-3-small')
-    expect(summary).toContain('YouTrack Token: perm...oken')
+    expect(summary).toContain('YouTrack Token: ****oken')
     expect(summary).toContain('Timezone: UTC')
   })
 
@@ -302,7 +302,7 @@ describe('formatSummary', () => {
 
     const summary = formatSummary(data, 'kaneo')
 
-    expect(summary).toContain('sk-a...wxyz')
+    expect(summary).toContain('****wxyz')
   })
 
   test('masks API key correctly - short key', () => {
@@ -312,7 +312,7 @@ describe('formatSummary', () => {
 
     const summary = formatSummary(data, 'kaneo')
 
-    expect(summary).toContain('sk-abc')
+    expect(summary).toContain('****-abc')
   })
 
   test('handles missing optional values', () => {
@@ -327,7 +327,7 @@ describe('formatSummary', () => {
 
     const summary = formatSummary(data, 'kaneo')
 
-    expect(summary).toContain('LLM API Key: sk-test')
+    expect(summary).toContain('LLM API Key: ****test')
     expect(summary).not.toContain('Embedding Model')
   })
 

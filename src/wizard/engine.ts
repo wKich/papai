@@ -55,7 +55,7 @@ function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<str
   return value.trim()
 }
 
-function getNextPrompt(userId: string, storageContextId: string): string {
+export function getNextPrompt(userId: string, storageContextId: string): string {
   const session = getWizardSession(userId, storageContextId)
   if (session === null) return 'Error: Wizard session not found'
 

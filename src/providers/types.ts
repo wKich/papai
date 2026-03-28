@@ -145,7 +145,7 @@ export interface TaskProvider {
   /** Capabilities this provider supports beyond core task CRUD. */
   readonly capabilities: ReadonlySet<Capability>
 
-  /** Config keys this provider needs (shown in /config, validated by /set). */
+  /** Config keys this provider needs (shown in /config, validated by /setup). */
   readonly configRequirements: readonly ProviderConfigRequirement[]
 
   // --- Core task operations (required) ---

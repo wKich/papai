@@ -56,7 +56,7 @@ describe('help command', () => {
     expect(capturedText).toContain('/user add')
     expect(capturedText).toContain('/user remove')
     expect(capturedText).toContain('/users')
-    expect(capturedText).toContain('/set')
+    expect(capturedText).toContain('/setup')
     expect(capturedText).toContain('/config')
     expect(capturedText).toContain('/clear')
     expect(capturedText).toContain('/context')
@@ -77,7 +77,7 @@ describe('help command', () => {
     await lastHandler!(dmMsg, mockReply, auth)
 
     expect(capturedText).toContain('/help')
-    expect(capturedText).toContain('/set')
+    expect(capturedText).toContain('/setup')
     expect(capturedText).toContain('/config')
     expect(capturedText).toContain('/clear')
     expect(capturedText).not.toContain('/user add')
@@ -103,7 +103,7 @@ describe('help command', () => {
     expect(capturedText).toContain('/group users')
     expect(capturedText).toContain('@botname')
     // Not shown to regular members
-    expect(capturedText).not.toContain('/set')
+    expect(capturedText).not.toContain('/setup')
     expect(capturedText).not.toContain('Admin commands:')
   })
 
@@ -121,7 +121,7 @@ describe('help command', () => {
 
     await lastHandler!(groupMsg, mockReply, auth)
 
-    expect(capturedText).toContain('/set')
+    expect(capturedText).toContain('/setup')
     expect(capturedText).toContain('/config')
     expect(capturedText).toContain('/clear')
     expect(capturedText).toContain('Admin commands:')

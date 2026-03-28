@@ -151,7 +151,7 @@ const callLlm = async (
   const missing = checkRequiredConfig(contextId)
   if (missing.length > 0) {
     log.warn({ contextId, missing }, 'Missing required config keys')
-    await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /set <key> <value> to configure.`)
+    await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /setup to configure.`)
     throw new Error('Missing configuration')
   }
   const llmApiKey = getConfig(contextId, 'llm_apikey')!

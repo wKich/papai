@@ -8,7 +8,7 @@ const DM_USER_HELP = [
   '',
   'Commands:',
   '/help — Show this message',
-  '/set <key> <value> — Set a config value',
+  '/setup — Interactive configuration wizard',
   '/config — View current configuration',
   '/clear — Clear conversation history and memory',
   '',
@@ -47,7 +47,7 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
     text += [
       '',
       'Admin commands:',
-      '/set <key> <value> — Set group configuration',
+      '/setup — Interactive configuration wizard',
       '/config — View group configuration',
       '/clear — Clear group conversation history',
     ].join('\n')

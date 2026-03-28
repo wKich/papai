@@ -59,7 +59,7 @@ const getValidationMessage = (error: ValidationError): string => {
 const getSystemMessage = (error: SystemError): string => {
   switch (error.code) {
     case 'config-missing':
-      return `Configuration error: ${error.variable} is not set. Please use /set command to configure.`
+      return `Configuration error: ${error.variable} is not set. Please use /setup to configure.`
     case 'network-error':
       return `Network error: ${error.message}. Please check your connection and try again.`
     case 'unexpected':

@@ -31,6 +31,9 @@ function setupUserConfig(userId: string): void {
   setConfig(userId, 'llm_apikey', 'sk-test1234')
   setConfig(userId, 'llm_baseurl', 'https://api.test.com')
   setConfig(userId, 'main_model', 'gpt-4')
+  setConfig(userId, 'small_model', 'gpt-4')
+  setConfig(userId, 'kaneo_apikey', 'test-kaneo-key')
+  setConfig(userId, 'timezone', 'UTC')
 }
 
 describe('Bot Authorization Gate', () => {

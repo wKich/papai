@@ -1,8 +1,8 @@
 import type { Context } from 'grammy'
 
-import { cancelWizard, createWizard, processWizardMessage } from './engine.js'
+import { cancelWizard, getNextPrompt, processWizardMessage } from './engine.js'
 import { validateAndSaveWizardConfig } from './save.js'
-import { getWizardSession } from './state.js'
+import { getWizardSession, resetWizardSession } from './state.js'
 
 async function handleSkipButton(ctx: Context, userId: string, storageContextId: string, data: string): Promise<void> {
   const skipValue = data === 'wizard_skip_small_model' ? 'same' : 'skip'
@@ -45,10 +45,9 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
     case 'wizard_edit': {
       const session = getWizardSession(userId, storageContextId)
       if (session !== null) {
-        const { platform, taskProvider } = session
-        cancelWizard(userId, storageContextId)
-        const result = createWizard(userId, storageContextId, platform, taskProvider)
-        await ctx.editMessageText(result.prompt)
+        resetWizardSession(userId, storageContextId)
+        const prompt = getNextPrompt(userId, storageContextId)
+        await ctx.editMessageText(`🔧 Editing configuration from the beginning...\n\n${prompt}`)
       }
       break
     }

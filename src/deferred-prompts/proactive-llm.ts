@@ -28,7 +28,7 @@ function getLlmConfig(userId: string): LlmConfig | string {
       { userId, hasApiKey: apiKey !== null, hasBaseUrl: baseURL !== null, hasModel: mainModel !== null },
       'Missing LLM config for deferred prompt',
     )
-    return 'Deferred prompt skipped: missing LLM configuration. Use /set to configure llm_apikey, llm_baseurl, and main_model.'
+    return 'Deferred prompt skipped: missing LLM configuration. Use /setup to configure llm_apikey, llm_baseurl, and main_model.'
   }
   return { apiKey, baseURL, mainModel }
 }

@@ -120,7 +120,7 @@ beforeEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe('processMessage — missing configuration', () => {
-  test('missing LLM config keys replies with key names and /set', async () => {
+  test('missing LLM config keys replies with key names and /setup', async () => {
     // Use a fresh user ID that has no config at all, then seed only partial config
     const freshCtx = 'missing-config-1'
     setCachedConfig(freshCtx, 'llm_baseurl', 'http://localhost:11434')
@@ -134,7 +134,7 @@ describe('processMessage — missing configuration', () => {
 
     expect(textCalls.length).toBeGreaterThanOrEqual(1)
     expect(textCalls[0]).toContain('llm_apikey')
-    expect(textCalls[0]).toContain('/set')
+    expect(textCalls[0]).toContain('/setup')
   })
 
   test('missing multiple config keys lists all in reply', async () => {

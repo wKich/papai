@@ -79,7 +79,7 @@ function saveValidatedConfig(
 
   return {
     success: true,
-    message: `✅ Configuration saved successfully! ${savedCount} setting(s) configured.\n\nYou can use /config to view your settings or /set to modify them.`,
+    message: `✅ Configuration saved successfully! ${savedCount} setting(s) configured.\n\nYou can use /config to view your settings or /setup to modify them.`,
   }
 }
 

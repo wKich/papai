@@ -5,6 +5,7 @@ import { addClient, init, removeClient } from './state-collector.js'
 const log = logger.child({ scope: 'debug-server' })
 
 const DEFAULT_PORT = 9100
+const DEFAULT_HOSTNAME = '127.0.0.1'
 
 function getPort(): number {
   const env = process.env['DEBUG_PORT']
@@ -13,6 +14,23 @@ function getPort(): number {
     if (!Number.isNaN(parsed) && parsed > 0 && parsed < 65536) return parsed
   }
   return DEFAULT_PORT
+}
+
+function getHostname(): string {
+  return process.env['DEBUG_HOSTNAME'] ?? DEFAULT_HOSTNAME
+}
+
+function getDebugToken(): string | null {
+  return process.env['DEBUG_TOKEN'] ?? null
+}
+
+function isAuthorizedRequest(req: Request): boolean {
+  const token = getDebugToken()
+  // No token required if not set
+  if (token === null) return true
+
+  const headerToken = req.headers.get('Authorization')?.replace('Bearer ', '')
+  return headerToken === token
 }
 
 function handleEvents(req: Request): Response {
@@ -64,11 +82,18 @@ export function startDebugServer(adminUserId: string): void {
   logMultistream.add({ stream: logBufferStream })
 
   const port = getPort()
+  const hostname = getHostname()
+  const token = getDebugToken()
 
   server = Bun.serve({
     port,
+    hostname,
     idleTimeout: 0,
     fetch(req) {
+      if (!isAuthorizedRequest(req)) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+
       const url = new URL(req.url)
 
       if (url.pathname === '/events') return handleEvents(req)
@@ -91,7 +116,7 @@ export function startDebugServer(adminUserId: string): void {
     },
   })
 
-  log.info({ port }, 'Debug server started')
+  log.info({ port, hostname, authEnabled: token !== null }, 'Debug server started')
 }
 
 export function stopDebugServer(): void {

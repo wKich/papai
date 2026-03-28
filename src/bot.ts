@@ -15,9 +15,9 @@ import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
-import { CONFIG_KEYS } from './types/config.js'
 import { isAuthorized, resolveUserByUsername } from './users.js'
 import { createWizard, hasActiveWizard, processWizardMessage } from './wizard/index.js'
+import { getWizardSteps } from './wizard/steps.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -107,13 +107,16 @@ function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerGroupCommand(chat)
 }
 
-function userNeedsSetup(storageContextId: string): boolean {
+function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtrack'): boolean {
   const config = getAllConfig(storageContextId)
+  const steps = getWizardSteps(taskProvider)
 
-  // Check if any required config keys are set
-  // Consider user needs setup if they have fewer than 3 config values
-  const configuredCount = CONFIG_KEYS.filter((key) => config[key] !== undefined).length
-  return configuredCount < 3
+  // Check if any required step is missing a value
+  return steps.some((step) => {
+    if (step.isOptional === true) return false
+    const value = config[step.key]
+    return value === undefined || value === ''
+  })
 }
 
 async function autoStartWizardIfNeeded(
@@ -127,13 +130,14 @@ async function autoStartWizardIfNeeded(
     return false
   }
 
+  // Auto-start the wizard
+  const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
+
   // Don't auto-start if user already has config
-  if (!userNeedsSetup(storageContextId)) {
+  if (!userNeedsSetup(storageContextId, taskProvider)) {
     return false
   }
 
-  // Auto-start the wizard
-  const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
   const result = createWizard(userId, storageContextId, platform, taskProvider)
 
   if (result.success) {
