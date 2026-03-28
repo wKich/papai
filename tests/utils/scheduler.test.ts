@@ -4,20 +4,31 @@
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import type { Logger } from 'pino'
-
-import { FatalError, RetryableError, TaskAlreadyExistsError } from '../../src/utils/scheduler.errors.js'
+import {
+  FatalError,
+  RetryableError,
+  TaskAlreadyExistsError,
+  TaskNotFoundError,
+} from '../../src/utils/scheduler.errors.js'
 import type { ErrorEvent, FatalErrorEvent, RetryEvent, TickEvent } from '../../src/utils/scheduler.types.js'
 
+// Simple mock logger type that matches what we need
+interface MockLogger {
+  debug: () => void
+  info: () => void
+  warn: () => void
+  error: () => void
+  child: () => MockLogger
+}
+
 // Create mutable logger implementation for mocking
-let loggerImpl: Logger = {
+let loggerImpl: MockLogger = {
   debug: (): void => {},
   info: (): void => {},
   warn: (): void => {},
   error: (): void => {},
-  child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } =>
-    loggerImpl as unknown as { debug: () => void; info: () => void; warn: () => void; error: () => void },
-} as unknown as Logger
+  child: (): MockLogger => loggerImpl,
+}
 
 // Mock logger before importing scheduler
 void mock.module('../../src/logger.js', () => ({
@@ -35,9 +46,8 @@ describe('createScheduler', () => {
       info: (): void => {},
       warn: (): void => {},
       error: (): void => {},
-      child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } =>
-        loggerImpl as unknown as { debug: () => void; info: () => void; warn: () => void; error: () => void },
-    } as unknown as Logger
+      child: (): MockLogger => loggerImpl,
+    }
   })
 
   afterAll(() => {
@@ -519,6 +529,64 @@ describe('createScheduler', () => {
       expect(scheduler.hasTask('test-task')).toBe(true)
 
       scheduler.stop('test-task')
+    })
+  })
+
+  describe('unregister', () => {
+    test('should unregister a task', () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('test-task', {
+        handler: (): void => {},
+        interval: 1000,
+      })
+
+      expect(scheduler.hasTask('test-task')).toBe(true)
+
+      scheduler.unregister('test-task')
+
+      expect(scheduler.hasTask('test-task')).toBe(false)
+    })
+
+    test('should stop running task before unregistering', () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('test-task', {
+        handler: (): void => {},
+        interval: 1000,
+      })
+
+      scheduler.start('test-task')
+      scheduler.unregister('test-task')
+
+      expect(scheduler.hasTask('test-task')).toBe(false)
+    })
+
+    test('should throw TaskNotFoundError for non-existent task', () => {
+      const scheduler = createScheduler()
+
+      expect(() => {
+        scheduler.unregister('non-existent')
+      }).toThrow(TaskNotFoundError)
+    })
+
+    test('should allow re-registration after unregister', () => {
+      const scheduler = createScheduler()
+
+      scheduler.register('test-task', {
+        handler: (): void => {},
+        interval: 1000,
+      })
+
+      scheduler.unregister('test-task')
+
+      // Should not throw
+      scheduler.register('test-task', {
+        handler: (): void => {},
+        interval: 2000,
+      })
+
+      expect(scheduler.hasTask('test-task')).toBe(true)
     })
   })
 })
