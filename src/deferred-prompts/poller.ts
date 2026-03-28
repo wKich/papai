@@ -26,13 +26,11 @@ function formatTaskStatus(status: string | undefined): string {
   if (status === undefined) return ''
   return ` (${status})`
 }
-
 function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
   for (const r of results) {
     if (r.status === 'rejected') log.error({ error: String(r.reason) }, context)
   }
 }
-
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
   const parsed = parseCron(prompt.cronExpression!)
   if (parsed === null) {
@@ -59,7 +57,6 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
 
 const MODE_PRIORITY: Record<ExecutionMode, number> = { lightweight: 0, context: 1, full: 2 }
 const MODE_BY_PRIORITY: ExecutionMode[] = ['lightweight', 'context', 'full']
-
 function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMetadata {
   let maxPriority = 0
   const briefs: string[] = []
@@ -76,7 +73,6 @@ function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMetadata {
     context_snapshot: snapshots.length > 0 ? snapshots.join('\n---\n') : null,
   }
 }
-
 function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
   for (const prompt of prompts) {
     if (prompt.cronExpression === null) {
@@ -87,7 +83,6 @@ function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: s
     }
   }
 }
-
 async function executeScheduledPromptsForUser(
   userId: string,
   prompts: ScheduledPrompt[],
@@ -282,4 +277,24 @@ export function stopPollers(): void {
   scheduler.unregister('deferred-alert-poll')
 
   isRunning = false
+}
+
+export type PollerSnapshot = {
+  scheduledRunning: boolean
+  alertsRunning: boolean
+  scheduledIntervalMs: number
+  alertIntervalMs: number
+  maxConcurrentLlmCalls: number
+  maxConcurrentUsers: number
+}
+
+export function getPollerSnapshot(): PollerSnapshot {
+  return {
+    scheduledRunning: isRunning,
+    alertsRunning: isRunning,
+    scheduledIntervalMs: SCHEDULED_POLL_MS,
+    alertIntervalMs: ALERT_POLL_MS,
+    maxConcurrentLlmCalls: MAX_CONCURRENT_LLM_CALLS,
+    maxConcurrentUsers: MAX_CONCURRENT_USERS,
+  }
 }

@@ -247,3 +247,23 @@ export const stopScheduler = (): void => {
     log.info('Stopped recurring task scheduler')
   }
 }
+
+export type SchedulerSnapshot = {
+  running: boolean
+  tickCount: number
+  tickIntervalMs: number
+  heartbeatInterval: number
+  activeTickInProgress: boolean
+  taskProvider: string
+}
+
+export function getSchedulerSnapshot(): SchedulerSnapshot {
+  return {
+    running: scheduler.hasTask('recurring-tasks'),
+    tickCount,
+    tickIntervalMs: TICK_INTERVAL_MS,
+    heartbeatInterval: HEARTBEAT_INTERVAL,
+    activeTickInProgress: activeTickPromise !== null,
+    taskProvider: TASK_PROVIDER,
+  }
+}
