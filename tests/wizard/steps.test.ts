@@ -364,3 +364,21 @@ describe('Base URL step live validation', () => {
     expect(baseUrlStep?.liveCheck).toBeDefined()
   })
 })
+
+describe('Model steps live validation', () => {
+  test('main_model step should have liveCheck function when context provided', () => {
+    const steps = getWizardSteps('kaneo', { apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' })
+    const modelStep = steps.find((s) => s.key === 'main_model')
+
+    expect(modelStep).toBeDefined()
+    expect(modelStep?.liveCheck).toBeDefined()
+  })
+
+  test('small_model step should have liveCheck function when context provided', () => {
+    const steps = getWizardSteps('kaneo', { apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' })
+    const modelStep = steps.find((s) => s.key === 'small_model')
+
+    expect(modelStep).toBeDefined()
+    expect(modelStep?.liveCheck).toBeDefined()
+  })
+})

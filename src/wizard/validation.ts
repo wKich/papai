@@ -93,3 +93,19 @@ export async function validateModelExists(
     return { success: false, message: '❌ Could not verify model. Please try again.' }
   }
 }
+
+/**
+ * Create a model validator that uses provided API credentials
+ * Note: This is a factory that creates a closure over the credentials
+ */
+export function createModelValidator(
+  apiKey: string,
+  baseUrl: string,
+): (modelName: string) => Promise<ValidationResult> {
+  return (modelName: string): Promise<ValidationResult> => {
+    if (modelName === 'same') {
+      return Promise.resolve({ success: true })
+    }
+    return validateModelExists(modelName, apiKey, baseUrl)
+  }
+}
