@@ -52,7 +52,7 @@ describe('Wizard Types', () => {
         return Promise.resolve(value.startsWith('sk-') ? null : 'Invalid API key format')
       },
       liveCheck: (value: string) => {
-        return value.length > 0
+        return Promise.resolve({ success: value.length > 0 })
       },
       isOptional: false,
     }

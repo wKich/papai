@@ -3,6 +3,7 @@
  */
 
 import type { ConfigKey } from '../types/config.js'
+import type { ValidationResult } from './validation.js'
 
 /**
  * User session tracking for the configuration wizard
@@ -32,7 +33,7 @@ export interface WizardStep {
   key: ConfigKey
   prompt: string
   validate: (value: string) => Promise<string | null>
-  liveCheck?: (value: string) => boolean
+  liveCheck?: (value: string) => Promise<ValidationResult>
   isOptional?: boolean
 }
 
