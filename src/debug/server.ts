@@ -1,4 +1,5 @@
-import { logger } from '../logger.js'
+import { logger, logMultistream } from '../logger.js'
+import { logBuffer, logBufferStream } from './log-buffer.js'
 import { addClient, removeClient } from './state-collector.js'
 
 const log = logger.child({ scope: 'debug-server' })
@@ -14,9 +15,51 @@ function getPort(): number {
   return DEFAULT_PORT
 }
 
+function handleEvents(req: Request): Response {
+  let ctrl: ReadableStreamDefaultController
+  const stream = new ReadableStream({
+    start(controller): void {
+      ctrl = controller
+      addClient(controller)
+      req.signal.addEventListener('abort', () => {
+        removeClient(controller)
+      })
+    },
+    cancel(): void {
+      removeClient(ctrl)
+    },
+  })
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  })
+}
+
+function parseIntParam(value: string | null): number | undefined {
+  return value === null ? undefined : Number.parseInt(value, 10)
+}
+
+function handleLogs(url: URL): Response {
+  const results = logBuffer.search({
+    level: parseIntParam(url.searchParams.get('level')),
+    scope: url.searchParams.get('scope') ?? undefined,
+    q: url.searchParams.get('q') ?? undefined,
+    limit: parseIntParam(url.searchParams.get('limit')),
+  })
+
+  return new Response(JSON.stringify(results), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 let server: ReturnType<typeof Bun.serve> | null = null
 
 export function startDebugServer(): void {
+  logMultistream.add({ stream: logBufferStream })
+
   const port = getPort()
 
   server = Bun.serve({
@@ -25,26 +68,13 @@ export function startDebugServer(): void {
     fetch(req) {
       const url = new URL(req.url)
 
-      if (url.pathname === '/events') {
-        let ctrl: ReadableStreamDefaultController
-        const stream = new ReadableStream({
-          start(controller): void {
-            ctrl = controller
-            addClient(controller)
-            req.signal.addEventListener('abort', () => {
-              removeClient(controller)
-            })
-          },
-          cancel(): void {
-            removeClient(ctrl)
-          },
-        })
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
+      if (url.pathname === '/events') return handleEvents(req)
+
+      if (url.pathname === '/logs') return handleLogs(url)
+
+      if (url.pathname === '/logs/stats') {
+        return new Response(JSON.stringify(logBuffer.stats()), {
+          headers: { 'Content-Type': 'application/json' },
         })
       }
 
