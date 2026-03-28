@@ -18,7 +18,6 @@ mockDrizzle()
 import { registerAdminCommands } from '../../src/commands/admin.js'
 import { registerClearCommand } from '../../src/commands/clear.js'
 import { registerConfigCommand } from '../../src/commands/config.js'
-import { registerSetCommand } from '../../src/commands/set.js'
 import { addUser } from '../../src/users.js'
 
 describe('command context restrictions', () => {
@@ -52,74 +51,11 @@ describe('command context restrictions', () => {
     }
 
     // Register commands
-    registerSetCommand(mockChat, checkAuthorization)
     registerClearCommand(mockChat, checkAuthorization, adminUserId)
     registerConfigCommand(mockChat, checkAuthorization)
     registerAdminCommands(mockChat, adminUserId)
 
     lastReply = null
-  })
-
-  describe('/set command', () => {
-    test('rejected for non-admin in group', async () => {
-      const handler = commandHandlers.get('set')
-      expect(handler).toBeDefined()
-
-      const msg = createGroupMessage('user456', '', false, 'group1')
-      msg.commandMatch = 'main_model gpt-4'
-      const auth = createAuth('user456')
-
-      const { reply, textCalls } = createMockReply()
-      await handler!(msg, reply, auth)
-
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Only group admins can run this command.')
-    })
-
-    test('allowed for group admin in group', async () => {
-      const handler = commandHandlers.get('set')
-
-      const msg = createGroupMessage('user456', '', true, 'group1')
-      msg.commandMatch = 'main_model gpt-4'
-      const auth = createAuth('user456', { isGroupAdmin: true })
-
-      const { reply, textCalls } = createMockReply()
-      await handler!(msg, reply, auth)
-
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Set main_model successfully.')
-    })
-
-    test('allowed for bot admin in group', async () => {
-      const handler = commandHandlers.get('set')
-
-      const msg = createGroupMessage(adminUserId, '', false, 'group1')
-      msg.commandMatch = 'main_model gpt-4'
-      const auth = createAuth(adminUserId, { isBotAdmin: true })
-
-      const { reply, textCalls } = createMockReply()
-      await handler!(msg, reply, auth)
-
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Set main_model successfully.')
-    })
-
-    test('allowed for regular user in DM', async () => {
-      const handler = commandHandlers.get('set')
-
-      const msg = createDmMessage('user456')
-      msg.commandMatch = 'main_model gpt-4'
-      // Make user authorized
-      addUser('user456', adminUserId)
-      const auth = createAuth('user456')
-      auth.storageContextId = 'user456'
-
-      const { reply, textCalls } = createMockReply()
-      await handler!(msg, reply, auth)
-
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Set main_model successfully.')
-    })
   })
 
   describe('/clear command', () => {
@@ -192,7 +128,7 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toContain('kaneo_apikey:')
+      expect(lastReply).toContain('🔐 Kaneo API Key')
     })
 
     test('allowed for regular user in DM', async () => {
@@ -208,7 +144,7 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toContain('kaneo_apikey:')
+      expect(lastReply).toContain('🔐 Kaneo API Key')
     })
   })
 

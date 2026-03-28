@@ -217,7 +217,8 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
     // AUTO-START WIZARD FOR NEW USERS
     // If user has no config and no active wizard, start wizard automatically
     // This happens only on first interaction after auto-provisioning
-    if (!isCommand) {
+    // Only auto-start for authorized users (to maintain silent drop for unauthorized)
+    if (!isCommand && auth.allowed) {
       const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
       const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
       if (wasWizardAutoStarted) return

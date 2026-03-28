@@ -132,36 +132,36 @@ Single static HTML file (`src/debug/dashboard.html`), ~400-500 lines. Vanilla JS
 
 ## HTTP Endpoints
 
-| Endpoint         | Purpose                                                    |
-| ---------------- | ---------------------------------------------------------- |
-| `GET /events`    | SSE stream -- single data channel for all state and events |
-| `GET /logs`      | Search/filter ring buffer (query params: level, scope, q, limit) |
-| `GET /logs/stats`| Ring buffer metadata (count, capacity, oldest, newest)     |
-| `GET /dashboard` | Serves the static HTML dashboard                           |
+| Endpoint          | Purpose                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `GET /events`     | SSE stream -- single data channel for all state and events       |
+| `GET /logs`       | Search/filter ring buffer (query params: level, scope, q, limit) |
+| `GET /logs/stats` | Ring buffer metadata (count, capacity, oldest, newest)           |
+| `GET /dashboard`  | Serves the static HTML dashboard                                 |
 
 ## New Files
 
 | File                           | Purpose                                                                  | ~Lines |
 | ------------------------------ | ------------------------------------------------------------------------ | ------ |
 | `src/debug/event-bus.ts`       | Event emitter, subscribe/unsubscribe, zero-overhead guard                | ~30    |
-| `src/debug/server.ts`          | `Bun.serve()` — SSE, log search, dashboard routes                       | ~100   |
+| `src/debug/server.ts`          | `Bun.serve()` — SSE, log search, dashboard routes                        | ~100   |
 | `src/debug/log-buffer.ts`      | Ring buffer (65535 entries), search, stream adapter for pino.multistream | ~80    |
-| `src/debug/state-collector.ts` | SSE broadcast, stats counters, LLM trace ring buffer, state snapshots   | ~200   |
+| `src/debug/state-collector.ts` | SSE broadcast, stats counters, LLM trace ring buffer, state snapshots    | ~200   |
 | `src/debug/dashboard.html`     | Static 4-panel dashboard (vanilla JS + EventSource + fetch)              | ~500   |
 
 **Total new:** ~910 lines across 5 files.
 
 ## Changes to Existing Files
 
-| File                      | Change                                                                    | ~Lines |
-| ------------------------- | ------------------------------------------------------------------------- | ------ |
-| `src/logger.ts`           | Always use `pino.multistream([stdout])`, export multistream for `.add()`  | ~5     |
-| `src/index.ts`            | Conditional debug server startup via dynamic import                       | ~5     |
-| `src/bot.ts`              | Add `emit()` calls for message lifecycle + auth                           | ~8     |
-| `src/llm-orchestrator.ts` | Add `emit()` calls for LLM tracing                                        | ~12    |
-| `src/cache.ts`            | Add `emit()` calls for cache mutations + state snapshots                  | ~8     |
-| `src/conversation.ts`     | Add `emit()` calls for trim events                                        | ~4     |
-| `package.json`            | `start:debug` script (no new dependencies)                                | ~1     |
+| File                      | Change                                                                   | ~Lines |
+| ------------------------- | ------------------------------------------------------------------------ | ------ |
+| `src/logger.ts`           | Always use `pino.multistream([stdout])`, export multistream for `.add()` | ~5     |
+| `src/index.ts`            | Conditional debug server startup via dynamic import                      | ~5     |
+| `src/bot.ts`              | Add `emit()` calls for message lifecycle + auth                          | ~8     |
+| `src/llm-orchestrator.ts` | Add `emit()` calls for LLM tracing                                       | ~12    |
+| `src/cache.ts`            | Add `emit()` calls for cache mutations + state snapshots                 | ~8     |
+| `src/conversation.ts`     | Add `emit()` calls for trim events                                       | ~4     |
+| `package.json`            | `start:debug` script (no new dependencies)                               | ~1     |
 
 **Total changes:** ~43 lines of additions to existing files.
 

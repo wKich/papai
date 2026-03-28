@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
 import { startDebugServer, stopDebugServer } from '../../src/debug/server.js'
+import { restoreFetch } from '../test-helpers.js'
 
 const TEST_PORT = 19100
 
 describe('debug-server', () => {
   beforeAll(() => {
+    restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
     startDebugServer()
   })

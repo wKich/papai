@@ -21,9 +21,17 @@ void mock.module('../../src/llm-orchestrator.js', () => ({
 }))
 
 import { setupBot } from '../../src/bot.js'
+import { setConfig } from '../../src/config.js'
 import { addUser, isAuthorized, removeUser } from '../../src/users.js'
 
 const ADMIN_ID = 'admin-bot-auth'
+
+// Setup user config to bypass wizard auto-start
+function setupUserConfig(userId: string): void {
+  setConfig(userId, 'llm_apikey', 'sk-test1234')
+  setConfig(userId, 'llm_baseurl', 'https://api.test.com')
+  setConfig(userId, 'main_model', 'gpt-4')
+}
 
 describe('Bot Authorization Gate', () => {
   let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
@@ -70,6 +78,7 @@ describe('Bot Authorization Gate', () => {
   describe('Authorized user — message processed', () => {
     test('calls processMessage for authorized user', async () => {
       addUser('auth-user', ADMIN_ID)
+      setupUserConfig('auth-user')
       expect(messageHandler).not.toBeNull()
       const { reply } = createMockReply()
       await messageHandler!(createDmMessage('auth-user', 'hello'), reply)
@@ -86,6 +95,7 @@ describe('Bot Authorization Gate', () => {
       const { reply } = createMockReply()
       // First message from real user ID with that username
       const msg = createDmMessage('real-555', 'hello', 'newuser')
+      setupUserConfig('real-555')
       await messageHandler!(msg, reply)
       expect(processMessageCallCount).toBe(1)
       expect(isAuthorized('real-555')).toBe(true)
@@ -97,6 +107,7 @@ describe('Bot Authorization Gate', () => {
       const { reply: reply1 } = createMockReply()
       // First message - resolves username
       const msg1 = createDmMessage('real-666', 'hello', 'resolveduser')
+      setupUserConfig('real-666')
       await messageHandler!(msg1, reply1)
       expect(processMessageCallCount).toBe(1)
 
@@ -111,6 +122,7 @@ describe('Bot Authorization Gate', () => {
   describe('Access revoked during session', () => {
     test('drops message after user is removed', async () => {
       addUser('removable-user', ADMIN_ID)
+      setupUserConfig('removable-user')
       expect(messageHandler).not.toBeNull()
 
       // First message — authorized

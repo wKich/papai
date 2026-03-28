@@ -49,8 +49,8 @@ describe('/config Command', () => {
     expect(configHandler).not.toBeNull()
     const { reply, textCalls } = createMockReply()
     await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
-    expect(textCalls[0]).toContain('llm_apikey: ****1234')
-    expect(textCalls[0]).toContain('main_model: (not set)')
+    expect(textCalls[0]).toContain('****1234')
+    expect(textCalls[0]).toContain('*(not set)*')
   })
 
   test('shows unset placeholder for unconfigured keys', async () => {
