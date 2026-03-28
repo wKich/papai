@@ -13,6 +13,7 @@ import type { TaskProvider } from './providers/types.js'
 import type { Task } from './providers/types.js'
 import { recordOccurrence } from './recurring-occurrences.js'
 import { type RecurringTaskRecord, getDueRecurringTasks, getRecurringTask, markExecuted } from './recurring.js'
+import { scheduler } from './scheduler-instance.js'
 import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'scheduler' })
@@ -20,7 +21,6 @@ const log = logger.child({ scope: 'scheduler' })
 /** Scheduler tick interval: 60 seconds */
 const TICK_INTERVAL_MS = 60 * 1000
 
-let intervalId: ReturnType<typeof setInterval> | null = null
 let chatProviderRef: ChatProvider | null = null
 let activeTickPromise: Promise<void> | null = null
 let tickCount = 0
@@ -219,25 +219,31 @@ export const tick = (): Promise<void> => {
 }
 
 export const startScheduler = (chatProvider: ChatProvider): void => {
-  if (intervalId !== null) {
+  if (scheduler.hasTask('recurring-tasks')) {
     log.warn('Scheduler already running')
     return
   }
 
   chatProviderRef = chatProvider
-  log.info({ intervalMs: TICK_INTERVAL_MS }, 'Starting recurring task scheduler')
-  intervalId = setInterval(() => void tick(), TICK_INTERVAL_MS)
 
-  // Run immediately on start to catch any overdue tasks
-  void tick()
+  scheduler.register('recurring-tasks', {
+    interval: TICK_INTERVAL_MS,
+    handler: async () => {
+      await tick()
+    },
+    options: { immediate: true },
+  })
+
+  scheduler.start('recurring-tasks')
+  log.info({ intervalMs: TICK_INTERVAL_MS }, 'Started recurring task scheduler')
 }
 
 export const stopScheduler = (): void => {
-  if (intervalId !== null) {
-    clearInterval(intervalId)
-    intervalId = null
+  if (scheduler.hasTask('recurring-tasks')) {
+    scheduler.stop('recurring-tasks')
+    scheduler.unregister('recurring-tasks')
     chatProviderRef = null
     tickCount = 0
-    log.info('Scheduler stopped')
+    log.info('Stopped recurring task scheduler')
   }
 }
