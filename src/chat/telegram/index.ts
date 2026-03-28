@@ -1,5 +1,5 @@
 import type { MessageEntity } from '@grammyjs/types/message.js'
-import { Bot, InputFile, type Context, InlineKeyboard } from 'grammy'
+import { Bot, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
@@ -17,6 +17,13 @@ import type {
   ReplyOptions,
 } from '../types.js'
 import { formatLlmOutput } from './format.js'
+import {
+  createReplyParamsBuilder,
+  sendButtonReply,
+  sendFileReply,
+  sendFormattedReply,
+  sendTextReply,
+} from './reply-helpers.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
 
@@ -220,31 +227,13 @@ export class TelegramChatProvider implements ChatProvider {
   private buildReplyFn(ctx: Context): ReplyFn {
     const chatId = ctx.chat?.id
     const messageId = ctx.message?.message_id
-
-    const buildReplyParams = (options?: ReplyOptions): { message_id: number } | undefined => {
-      if (options?.replyToMessageId !== undefined) {
-        return { message_id: parseInt(options.replyToMessageId, 10) }
-      }
-      return messageId === undefined ? undefined : { message_id: messageId }
-    }
+    const buildReplyParams = createReplyParamsBuilder(ctx)
 
     return {
-      text: async (content: string, options?: ReplyOptions) => {
-        await ctx.reply(content, { reply_parameters: buildReplyParams(options) })
-      },
-      formatted: async (markdown: string, options?: ReplyOptions) => {
-        const formatted = formatLlmOutput(markdown)
-        await ctx.reply(formatted.text, {
-          entities: formatted.entities,
-          reply_parameters: buildReplyParams(options),
-        })
-      },
-      file: async (file, options?: ReplyOptions) => {
-        const content = typeof file.content === 'string' ? Buffer.from(file.content, 'utf-8') : file.content
-        await ctx.replyWithDocument(new InputFile(content, file.filename), {
-          reply_parameters: buildReplyParams(options),
-        })
-      },
+      text: (content: string, options?: ReplyOptions) => sendTextReply(ctx, content, buildReplyParams, options),
+      formatted: (markdown: string, options?: ReplyOptions) =>
+        sendFormattedReply(ctx, markdown, buildReplyParams, options),
+      file: (file, options?: ReplyOptions) => sendFileReply(ctx, file, buildReplyParams, options),
       typing: () => {
         ctx.replyWithChatAction('typing').catch(() => undefined)
       },
@@ -258,18 +247,7 @@ export class TelegramChatProvider implements ChatProvider {
           })
         }
       },
-      buttons: async (content: string, options) => {
-        const keyboard = new InlineKeyboard()
-        if (options.buttons !== undefined) {
-          for (const btn of options.buttons) {
-            keyboard.text(btn.text, btn.callbackData)
-          }
-        }
-        await ctx.reply(content, {
-          reply_markup: keyboard,
-          reply_parameters: buildReplyParams(options),
-        })
-      },
+      buttons: (content: string, options) => sendButtonReply(ctx, content, buildReplyParams, options),
     }
   }
 

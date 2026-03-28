@@ -7,9 +7,9 @@ import type {
   ContextType,
   IncomingMessage,
   ReplyFn,
-  ReplyOptions,
 } from '../types.js'
 import { buildMattermostReplyContext } from './reply-context.js'
+import { createMattermostReplyFn } from './reply-helpers.js'
 import {
   ChannelInfoSchema,
   ChannelMemberSchema,
@@ -215,62 +215,16 @@ export class MattermostChatProvider implements ChatProvider {
   }
 
   private buildReplyFn(channelId: string, postId?: string, threadId?: string): ReplyFn {
-    const post = (message: string, options?: ReplyOptions, extra?: Record<string, unknown>): Promise<unknown> =>
-      this.apiFetch('POST', '/api/v4/posts', {
-        channel_id: channelId,
-        message,
-        root_id: options?.threadId ?? threadId ?? '',
-        ...extra,
-      })
-
-    return {
-      text: async (content: string, options?: ReplyOptions) => {
-        await post(content, options)
-      },
-      formatted: async (markdown: string, options?: ReplyOptions) => {
-        await post(markdown, options)
-      },
-      file: async (file, options?: ReplyOptions) => {
-        const fileId = await this.uploadFile(channelId, file.content, file.filename)
-        await post('', options, { file_ids: [fileId] })
-      },
-      typing: () => {
-        this.wsSend({ seq: this.wsSeq++, action: 'user_typing', data: { channel_id: channelId } })
-      },
-      redactMessage: async (replacementText: string) => {
-        if (postId !== undefined) {
-          await this.apiFetch('PUT', `/api/v4/posts/${postId}/patch`, { message: replacementText }).catch(
-            (err: unknown) => {
-              log.warn({ postId, error: err instanceof Error ? err.message : String(err) }, 'Failed to redact message')
-            },
-          )
-        }
-      },
-      buttons: async (content: string, options) => {
-        const actions =
-          options.buttons?.map((btn) => ({
-            name: btn.text,
-            integration: {
-              url: `${this.baseUrl}/api/v4/actions/placeholder`,
-              context: {
-                action: btn.callbackData,
-              },
-            },
-            style: btn.style ?? 'default',
-          })) ?? []
-
-        const props = {
-          attachments: [
-            {
-              text: content,
-              actions,
-            },
-          ],
-        }
-
-        await post(content, options, { props })
-      },
-    }
+    return createMattermostReplyFn({
+      channelId,
+      postId,
+      threadId,
+      baseUrl: this.baseUrl,
+      getWsSeq: () => this.wsSeq++,
+      apiFetch: this.apiFetch.bind(this),
+      wsSend: this.wsSend.bind(this),
+      uploadFile: this.uploadFile.bind(this),
+    })
   }
 
   private async uploadFile(channelId: string, content: Buffer | string, filename: string): Promise<string> {

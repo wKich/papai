@@ -1,9 +1,43 @@
 import type { Context } from 'grammy'
 
 import { getConfig, isConfigKey } from '../config.js'
+import type { ConfigKey } from '../types/config.js'
 import { createWizard, cancelWizard } from './engine.js'
 import { getWizardSession, updateWizardSession } from './state.js'
 import { getWizardSteps } from './steps.js'
+
+function extractConfigKey(data: string): ConfigKey | null {
+  const key = data.replace('config_edit_', '')
+  return isConfigKey(key) ? key : null
+}
+
+function getDisplayValue(storageContextId: string, key: ConfigKey): string {
+  const currentValue = getConfig(storageContextId, key)
+  return currentValue ?? '(not set)'
+}
+
+function findStepIndex(key: ConfigKey): number {
+  const steps = getWizardSteps('kaneo')
+  return steps.findIndex((s) => s.key === key)
+}
+
+function setupWizardForEditing(userId: string, storageContextId: string, key: ConfigKey, stepIndex: number): string {
+  const existingSession = getWizardSession(userId, storageContextId)
+  if (existingSession !== null) {
+    cancelWizard(userId, storageContextId)
+  }
+
+  createWizard(userId, storageContextId, 'telegram', 'kaneo')
+
+  updateWizardSession(userId, storageContextId, {
+    currentStep: stepIndex,
+    data: existingSession?.data ?? {},
+  })
+
+  const steps = getWizardSteps('kaneo')
+  const step = steps[stepIndex]
+  return step?.prompt ?? `Enter new value for ${key}:`
+}
 
 /**
  * Handle configuration edit callbacks from inline buttons
@@ -16,43 +50,21 @@ export async function handleConfigCallback(ctx: Context): Promise<void> {
   if (!data.startsWith('config_edit_')) return
   await ctx.answerCallbackQuery()
 
-  const key = data.replace('config_edit_', '')
-  if (!isConfigKey(key)) {
+  const key = extractConfigKey(data)
+  if (key === null) {
     await ctx.editMessageText('❌ Invalid configuration field.')
     return
   }
 
-  // Get current value to show user
-  const currentValue = getConfig(storageContextId, key)
-  const displayValue = currentValue ?? '(not set)'
-
-  // Check if wizard already active
-  const existingSession = getWizardSession(userId, storageContextId)
-  if (existingSession !== null) {
-    // Cancel existing wizard and start fresh for this field
-    cancelWizard(userId, storageContextId)
-  }
-
-  // Start wizard (creates new session)
-  createWizard(userId, storageContextId, 'telegram', 'kaneo')
-
-  // Find the step index for this key
-  const steps = getWizardSteps('kaneo')
-  const stepIndex = steps.findIndex((s) => s.key === key)
+  const displayValue = getDisplayValue(storageContextId, key)
+  const stepIndex = findStepIndex(key)
 
   if (stepIndex === -1) {
     await ctx.editMessageText('❌ This field cannot be edited through the wizard.')
     return
   }
 
-  // Set wizard to the specific step
-  updateWizardSession(userId, storageContextId, {
-    currentStep: stepIndex,
-    data: existingSession?.data ?? {},
-  })
-
-  const step = steps[stepIndex]
-  const prompt = step?.prompt ?? `Enter new value for ${key}:`
+  const prompt = setupWizardForEditing(userId, storageContextId, key, stepIndex)
 
   await ctx.editMessageText(
     `✏️ Editing **${key}**\n\n` +
