@@ -354,3 +354,13 @@ describe('Wizard steps live validation', () => {
     expect(apiKeyStep?.liveCheck).toBeDefined()
   })
 })
+
+describe('Base URL step live validation', () => {
+  test('llm_baseurl step should have liveCheck function', () => {
+    const steps = getWizardSteps('kaneo')
+    const baseUrlStep = steps.find((s) => s.key === 'llm_baseurl')
+
+    expect(baseUrlStep).toBeDefined()
+    expect(baseUrlStep?.liveCheck).toBeDefined()
+  })
+})

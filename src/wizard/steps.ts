@@ -1,6 +1,6 @@
 import { normalizeTimezone } from '../utils/timezone.js'
 import type { WizardStep } from './types.js'
-import { validateLlmApiKey } from './validation.js'
+import { validateLlmApiKey, validateLlmBaseUrl } from './validation.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
@@ -39,7 +39,19 @@ export function getWizardSteps(taskProvider: TaskProvider): WizardStep[] {
     createStep('llm_apikey', 'llm_apikey', '🔑 Enter your LLM API key:', undefined, (value: string) =>
       validateLlmApiKey(value, 'https://api.openai.com/v1'),
     ),
-    createStep('llm_baseurl', 'llm_baseurl', "🌐 Enter base URL (or 'default' for OpenAI):"),
+    createStep(
+      'llm_baseurl',
+      'llm_baseurl',
+      "🌐 Enter base URL (or 'default' for OpenAI):",
+      undefined,
+      (value: string) => {
+        // Skip validation for 'default' keyword
+        if (value.trim().toLowerCase() === 'default') {
+          return Promise.resolve({ success: true })
+        }
+        return validateLlmBaseUrl(value)
+      },
+    ),
     createStep('main_model', 'main_model', '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):'),
     createStep('small_model', 'small_model', "⚡ Enter small model name (or 'same' to use main model):"),
     createStep('embedding_model', 'embedding_model', "📊 Enter embedding model (or 'skip' to use default):", true),
