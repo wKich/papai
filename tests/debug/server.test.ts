@@ -20,7 +20,7 @@ describe('debug-server', () => {
   beforeAll(() => {
     restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
-    startDebugServer()
+    startDebugServer('test-admin')
     seedLogBuffer()
   })
 

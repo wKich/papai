@@ -1,6 +1,6 @@
 import { logger, logMultistream } from '../logger.js'
 import { logBuffer, logBufferStream } from './log-buffer.js'
-import { addClient, removeClient } from './state-collector.js'
+import { addClient, init, removeClient } from './state-collector.js'
 
 const log = logger.child({ scope: 'debug-server' })
 
@@ -59,7 +59,8 @@ function handleLogs(url: URL): Response {
 
 let server: ReturnType<typeof Bun.serve> | null = null
 
-export function startDebugServer(): void {
+export function startDebugServer(adminUserId: string): void {
+  init(adminUserId)
   logMultistream.add({ stream: logBufferStream })
 
   const port = getPort()

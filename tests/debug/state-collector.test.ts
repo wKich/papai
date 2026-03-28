@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 import { emit } from '../../src/debug/event-bus.js'
-import { addClient, removeClient } from '../../src/debug/state-collector.js'
+import { addClient, init, removeClient } from '../../src/debug/state-collector.js'
 
 type MockController = {
   ctrl: ReadableStreamDefaultController
@@ -11,7 +11,6 @@ type MockController = {
 function createMockController(): MockController {
   const enqueueMock = mock<(chunk: unknown) => void>(() => {})
   const closeMock = mock(() => {})
-  // Build an object matching the shape ReadableStreamDefaultController expects
   const ctrl: ReadableStreamDefaultController = {
     enqueue: (chunk: unknown): void => enqueueMock(chunk),
     close: (): void => closeMock(),
@@ -25,8 +24,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function parseSsePayload(call: [unknown]): { event: string; data: Record<string, unknown> } {
-  const raw = new Uint8Array(call[0] instanceof Uint8Array ? call[0] : [])
+function getFirstCallArg(enqueueMock: MockController['enqueueMock']): unknown {
+  return enqueueMock.mock.calls[0]?.[0]
+}
+
+function parseSseFromUnknown(chunk: unknown): { event: string; data: Record<string, unknown> } {
+  const raw = new Uint8Array(chunk instanceof Uint8Array ? chunk : [])
   const text = new TextDecoder().decode(raw)
   const eventMatch = text.match(/^event: (.+)$/m)
   const dataMatch = text.match(/^data: (.+)$/m)
@@ -35,6 +38,12 @@ function parseSsePayload(call: [unknown]): { event: string; data: Record<string,
     event: eventMatch?.[1] ?? '',
     data: isRecord(parsed) ? parsed : {},
   }
+}
+
+function getAllSseEvents(
+  enqueueMock: MockController['enqueueMock'],
+): Array<{ event: string; data: Record<string, unknown> }> {
+  return enqueueMock.mock.calls.map((call) => parseSseFromUnknown(call[0]))
 }
 
 describe('state-collector', () => {
@@ -51,65 +60,95 @@ describe('state-collector', () => {
   }
 
   test('addClient sends state:init immediately', () => {
+    init('admin-1')
     const { ctrl, enqueueMock } = createMockController()
     addClient(track(ctrl))
 
     expect(enqueueMock).toHaveBeenCalledTimes(1)
-
-    const firstCall = enqueueMock.mock.calls[0]
-    expect(firstCall).toBeDefined()
-    const { event, data } = parseSsePayload(firstCall!)
+    const { event, data } = parseSseFromUnknown(getFirstCallArg(enqueueMock))
     expect(event).toBe('state:init')
     expect(data['type']).toBe('state:init')
   })
 
-  test('events broadcast to all connected clients', () => {
-    const { ctrl: ctrl1, enqueueMock: enqueue1 } = createMockController()
-    const { ctrl: ctrl2, enqueueMock: enqueue2 } = createMockController()
-    addClient(track(ctrl1))
-    addClient(track(ctrl2))
+  test('state:init contains all snapshot sections', () => {
+    init('admin-1')
+    const { ctrl, enqueueMock } = createMockController()
+    addClient(track(ctrl))
 
-    emit('test:broadcast', { value: 42 })
+    const { data } = parseSseFromUnknown(getFirstCallArg(enqueueMock))
+    const initData = data['data']
+    expect(isRecord(initData)).toBe(true)
+    if (!isRecord(initData)) return
+    expect(initData).toHaveProperty('sessions')
+    expect(initData).toHaveProperty('wizards')
+    expect(initData).toHaveProperty('scheduler')
+    expect(initData).toHaveProperty('pollers')
+    expect(initData).toHaveProperty('messageCache')
+    expect(initData).toHaveProperty('stats')
+    expect(initData).toHaveProperty('recentLlm')
+  })
 
-    // 1 for state:init + 1 for broadcast
-    expect(enqueue1).toHaveBeenCalledTimes(2)
-    expect(enqueue2).toHaveBeenCalledTimes(2)
+  test('admin events are broadcast to clients', () => {
+    init('admin-1')
+    const { ctrl, enqueueMock } = createMockController()
+    addClient(track(ctrl))
 
-    const secondCall = enqueue1.mock.calls[1]
-    expect(secondCall).toBeDefined()
-    const { event } = parseSsePayload(secondCall!)
-    expect(event).toBe('test:broadcast')
+    emit('message:received', { userId: 'admin-1', textLength: 10 })
+
+    expect(enqueueMock).toHaveBeenCalledTimes(2)
+    const events = getAllSseEvents(enqueueMock)
+    expect(events[1]?.event).toBe('message:received')
+  })
+
+  test('non-admin user events are filtered out', () => {
+    init('admin-1')
+    const { ctrl, enqueueMock } = createMockController()
+    addClient(track(ctrl))
+
+    emit('message:received', { userId: 'other-user', textLength: 10 })
+
+    expect(enqueueMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('global events (no userId) pass through unfiltered', () => {
+    init('admin-1')
+    const { ctrl, enqueueMock } = createMockController()
+    addClient(track(ctrl))
+
+    emit('scheduler:tick', { tickCount: 1, dueTaskCount: 0 })
+
+    expect(enqueueMock).toHaveBeenCalledTimes(2)
+    const events = getAllSseEvents(enqueueMock)
+    expect(events[1]?.event).toBe('scheduler:tick')
   })
 
   test('removeClient stops delivery to that client', () => {
+    init('admin-1')
     const { ctrl, enqueueMock } = createMockController()
     addClient(ctrl)
     removeClient(ctrl)
 
-    emit('after:remove', {})
+    emit('message:received', { userId: 'admin-1', textLength: 5 })
 
-    // Only the state:init call, no broadcast
     expect(enqueueMock).toHaveBeenCalledTimes(1)
   })
 
   test('dead client (enqueue throws) is removed silently', () => {
+    init('admin-1')
     const { ctrl, enqueueMock: badEnqueue } = createMockController()
     const { ctrl: goodCtrl, enqueueMock: goodEnqueue } = createMockController()
     addClient(track(ctrl))
     addClient(track(goodCtrl))
 
-    // Make ctrl throw on next enqueue
     badEnqueue.mockImplementation(() => {
       throw new Error('stream closed')
     })
 
-    expect(() => emit('error:test', {})).not.toThrow()
+    expect(() => emit('test:event', { userId: 'admin-1' })).not.toThrow()
 
-    // Good client still receives events
     badEnqueue.mockImplementation(() => {})
-    emit('after:error', {})
+    emit('test:after', { userId: 'admin-1' })
 
-    // state:init + error:test + after:error = 3
     expect(goodEnqueue).toHaveBeenCalledTimes(3)
   })
 })

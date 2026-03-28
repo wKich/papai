@@ -93,7 +93,7 @@ let stopDebugServerFn: (() => void) | null = null
 
 if (process.env['DEBUG_SERVER'] === 'true') {
   const { startDebugServer, stopDebugServer } = await import('./debug/server.js')
-  startDebugServer()
+  startDebugServer(adminUserId)
   stopDebugServerFn = stopDebugServer
 }
 
