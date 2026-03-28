@@ -48,19 +48,7 @@
         "typescript/await-thenable": "off"
       }
     },
-    {
-      "files": ["src/utils/scheduler.errors.ts"],
-      "rules": {
-        "max-classes-per-file": "off"
-      }
-    },
-    {
-      "files": ["src/utils/scheduler.ts"],
-      "rules": {
-        "max-lines-per-function": "off",
-        "no-unsafe-type-assertion": "off"
-      }
-    },
+
     {
       "files": ["docs/tdd-hooks/**"],
       "rules": {
