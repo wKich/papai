@@ -229,7 +229,8 @@ export class MattermostChatProvider implements ChatProvider {
 
   private async uploadFile(channelId: string, content: Buffer | string, filename: string): Promise<string> {
     const body = new FormData()
-    const blob = new Blob([content])
+    const blobContent = typeof content === 'string' ? content : new Uint8Array(content)
+    const blob = new Blob([blobContent])
     body.append('files', blob, filename)
     const url = `${this.baseUrl}/api/v4/files?channel_id=${encodeURIComponent(channelId)}`
     const res = await fetch(url, {

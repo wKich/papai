@@ -17,10 +17,10 @@ function seedLogBuffer(): void {
 }
 
 describe('debug-server', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
-    startDebugServer('test-admin')
+    await startDebugServer('test-admin')
     seedLogBuffer()
   })
 
@@ -30,12 +30,47 @@ describe('debug-server', () => {
     delete process.env['DEBUG_PORT']
   })
 
-  test('GET /dashboard returns HTML', async () => {
+  test('GET /dashboard returns dashboard HTML', async () => {
     const res = await fetch(`http://localhost:${TEST_PORT}/dashboard`)
     expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('text/html')
+    const ct = res.headers.get('content-type')
+    expect(ct).toContain('text/html')
     const body = await res.text()
-    expect(body).toContain('papai debug dashboard')
+    expect(body).toContain('<html')
+    expect(body).toContain('papai debug')
+  })
+
+  test('GET /dashboard.css returns CSS', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard.css`)
+    expect(res.status).toBe(200)
+    const ct = res.headers.get('content-type')
+    expect(ct).toContain('text/css')
+    const body = await res.text()
+    expect(body).toContain('#log-explorer')
+  })
+
+  test('GET /dashboard-state.js returns JavaScript', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard-state.js`)
+    expect(res.status).toBe(200)
+    const ct = res.headers.get('content-type')
+    expect(ct).toContain('javascript')
+    const body = await res.text()
+    expect(body).toContain('EventSource')
+  })
+
+  test('GET /dashboard-ui.js returns JavaScript', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard-ui.js`)
+    expect(res.status).toBe(200)
+    const ct = res.headers.get('content-type')
+    expect(ct).toContain('javascript')
+    const body = await res.text()
+    expect(body).toContain('getElementById')
+  })
+
+  test('GET /dashboard.xyz returns 404', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard.xyz`)
+    expect(res.status).toBe(404)
+    await res.body?.cancel()
   })
 
   test('GET /events returns SSE headers', async () => {

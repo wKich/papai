@@ -77,9 +77,61 @@ function handleLogs(url: URL): Response {
 
 let server: ReturnType<typeof Bun.serve> | null = null
 
-export function startDebugServer(adminUserId: string): void {
+const DASHBOARD_DIR = new URL('.', import.meta.url).pathname
+const jsCache = new Map<string, string>()
+
+async function transpileDashboard(): Promise<void> {
+  const buildResult = await Bun.build({
+    entrypoints: [
+      new URL('dashboard-state.ts', import.meta.url).pathname,
+      new URL('dashboard-ui.ts', import.meta.url).pathname,
+    ],
+  })
+  const entries = await Promise.all(
+    buildResult.outputs.map(async (output) => {
+      const name = output.path.split('/').pop() ?? ''
+      return [name, await output.text()] as const
+    }),
+  )
+  for (const [name, content] of entries) {
+    jsCache.set(name, content)
+  }
+}
+
+function handleDashboardFile(pathname: string): Response {
+  if (pathname === '/dashboard') {
+    return new Response(Bun.file(`${DASHBOARD_DIR}dashboard.html`))
+  }
+
+  // Remove leading slash to get filename
+  const filename = pathname.slice(1)
+  const ext = filename.split('.').pop()
+
+  // Serve transpiled JS from cache
+  if (ext === 'js') {
+    const content = jsCache.get(filename)
+    if (content !== undefined) {
+      return new Response(content, {
+        headers: { 'Content-Type': 'text/javascript' },
+      })
+    }
+    return new Response('Not found', { status: 404 })
+  }
+
+  // Serve CSS directly from file
+  if (ext === 'css') {
+    const filePath = `${DASHBOARD_DIR}${filename}`
+    const file = Bun.file(filePath)
+    return new Response(file)
+  }
+
+  return new Response('Not found', { status: 404 })
+}
+
+export async function startDebugServer(adminUserId: string): Promise<void> {
   init(adminUserId)
   logMultistream.add({ stream: logBufferStream })
+  await transpileDashboard()
 
   const port = getPort()
   const hostname = getHostname()
@@ -106,10 +158,12 @@ export function startDebugServer(adminUserId: string): void {
         })
       }
 
-      if (url.pathname === '/dashboard') {
-        return new Response('<html><body><h1>papai debug dashboard</h1><p>Coming in Session 4</p></body></html>', {
-          headers: { 'Content-Type': 'text/html' },
-        })
+      if (
+        url.pathname === '/dashboard' ||
+        url.pathname.startsWith('/dashboard.') ||
+        url.pathname.startsWith('/dashboard-')
+      ) {
+        return handleDashboardFile(url.pathname)
       }
 
       return new Response('Not found', { status: 404 })
