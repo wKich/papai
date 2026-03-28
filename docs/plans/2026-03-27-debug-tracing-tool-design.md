@@ -79,13 +79,13 @@ export function emit(type: string, data: Record<string, unknown>) {
 
 #### State snapshot events (full state embedded)
 
-| Event type       | Payload                                                                                         | Trigger                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `state:init`     | `{ sessions[], stats{}, recentLlm[] }`                                                          | New SSE connection (bootstrap)                      |
-| `state:sessions` | `{ sessions: [{ userId, lastAccessed, historyLength, factsCount, hasSummary, configKeys[] }] }` | Session change (new, expired, updated)              |
-| `state:cache`    | `{ userId, history (last 10), summary, facts[], config {}, workspaceId, toolCount }`            | Any cache mutation for that user                    |
-| `state:stats`    | `{ uptime, activeSessions, totalMessages, totalLlmCalls, totalToolCalls }`                      | On `message:replied` / `llm:end` (debounced ~500ms) |
-| `llm:full`       | `{ userId, model, messages (truncated), toolCalls[], tokenUsage, duration, error? }`            | On `llm:end` -- dashboard accumulates client-side   |
+| Event type    | Payload                                                                                   | Trigger                                              |
+| ------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `state:init`  | `{ sessions[], wizards[], scheduler{}, pollers{}, messageCache{}, stats{}, recentLlm[] }` | New SSE connection (bootstrap)                       |
+| `state:stats` | `{ startedAt, totalMessages, totalLlmCalls, totalToolCalls }`                             | On `message:received` / `llm:end` (debounced ~500ms) |
+| `llm:full`    | `{ userId, model, steps, totalTokens{}, duration, toolCalls[], error? }`                  | On `llm:end` -- dashboard accumulates client-side    |
+
+**Note:** `state:sessions` and `state:cache` events were removed. The dashboard maintains client-side state from `state:init` bootstrap + raw lifecycle event deltas (`cache:load`, `cache:sync`, `cache:expire`, `wizard:created`, etc.). This keeps the server-side state-collector simple and avoids re-querying snapshot functions on every mutation.
 
 ## Dashboard UI
 
@@ -126,8 +126,8 @@ Single static HTML file (`src/debug/dashboard.html`), ~400-500 lines. Vanilla JS
 **4 panels:**
 
 1. **Header** -- SSE connection status, global stats from `state:stats`
-2. **Sessions (left top)** -- from `state:sessions`, click to expand full cache via `state:cache`
-3. **LLM Trace (left bottom)** -- chronological `llm:full` events, click for detail (messages, tool calls, tokens)
+2. **Sessions (left top)** -- bootstrapped from `state:init.sessions`, updated client-side via `cache:load`/`cache:sync`/`cache:expire` deltas
+3. **LLM Trace (left bottom)** -- chronological `llm:full` events, click for detail (tool calls, tokens, durations)
 4. **Log Explorer (right)** -- `fetch('/logs?...')` queries against ring buffer REST API + SSE `log:entry` for live tailing. Filter by scope, level, text.
 
 ## HTTP Endpoints
@@ -238,10 +238,24 @@ Session 2 (pino log pipeline)  ──┘
 - Log explorer panel via `GET /logs` REST API + SSE `log:entry` events for live tailing
 - Serve at `GET /dashboard`
 
+**Client-side state management (REQUIRED):**
+
+The dashboard MUST maintain its own client-side state from `state:init` bootstrap + raw lifecycle event deltas. There are no server-side `state:sessions` or `state:cache` convenience events — the state-collector forwards raw events only.
+
+- On SSE connect: receive `state:init` with full snapshot (`sessions[]`, `wizards[]`, `scheduler{}`, `pollers{}`, `messageCache{}`, `stats{}`, `recentLlm[]`). Store as client-side state.
+- On `cache:load` / `cache:sync`: update the corresponding session's fields client-side (e.g., increment history count on `{ field: 'history', operation: 'append' }`)
+- On `cache:expire`: remove the session from the client-side sessions list
+- On `wizard:created` / `wizard:updated` / `wizard:deleted`: update client-side wizard state
+- On `state:stats`: replace stats counters
+- On `llm:full`: append to LLM trace list
+- On `scheduler:tick`, `poller:scheduled`, `poller:alerts`, `msgcache:sweep`: update infrastructure status indicators
+
+This approach keeps the server-side state-collector simple (no re-querying snapshot functions on every mutation) and moves rendering logic to the dashboard where it belongs.
+
 **Acceptance criteria:**
 
 - `localhost:9100/dashboard` opens in browser
 - Header shows live connection status and stats
-- Sessions panel updates in real-time as users interact
+- Sessions panel bootstraps from `state:init` and updates in real-time via lifecycle event deltas
 - LLM trace panel shows tool calls, tokens, durations
 - Log explorer searches and filters logs via ring buffer REST API

@@ -289,12 +289,12 @@ Built from `llm:start` -> `llm:tool_call`/`llm:tool_result` -> `llm:end`/`llm:er
 
 ### State Snapshot Broadcasts
 
-| Snapshot event   | Triggered by                               | Data                                |
-| ---------------- | ------------------------------------------ | ----------------------------------- |
-| `state:sessions` | Any `cache:*` event for admin              | `getSessionSnapshots(adminUserId)`  |
-| `state:cache`    | `cache:sync` / `cache:load` for admin      | Full admin session snapshot         |
-| `state:stats`    | `message:received` / `llm:end` (debounced) | Current stats counters              |
-| `llm:full`       | `llm:end` for admin                        | Complete LLM trace from ring buffer |
+| Snapshot event | Triggered by                               | Data                                |
+| -------------- | ------------------------------------------ | ----------------------------------- |
+| `state:stats`  | `message:received` / `llm:end` (debounced) | Current stats counters              |
+| `llm:full`     | `llm:end` for admin                        | Complete LLM trace from ring buffer |
+
+**Note:** `state:sessions` and `state:cache` were removed. The dashboard (Session 4) maintains client-side state from `state:init` bootstrap + raw lifecycle event deltas (`cache:load`, `cache:sync`, `cache:expire`). This keeps the state-collector simple and avoids re-querying snapshot functions on every mutation.
 
 ## Changes Summary
 
