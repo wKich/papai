@@ -8,12 +8,14 @@ import {
   registerHelpCommand,
   registerSetupCommand,
 } from './commands/index.js'
+import { getAllConfig } from './config.js'
 import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
+import { CONFIG_KEYS } from './types/config.js'
 import { isAuthorized, resolveUserByUsername } from './users.js'
-import { hasActiveWizard, processWizardMessage } from './wizard/index.js'
+import { createWizard, hasActiveWizard, processWizardMessage } from './wizard/index.js'
 
 const log = logger.child({ scope: 'bot' })
 
@@ -102,6 +104,43 @@ function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerGroupCommand(chat)
 }
 
+function userNeedsSetup(storageContextId: string): boolean {
+  const config = getAllConfig(storageContextId)
+
+  // Check if any required config keys are set
+  // Consider user needs setup if they have fewer than 3 config values
+  const configuredCount = CONFIG_KEYS.filter((key) => config[key] !== undefined).length
+  return configuredCount < 3
+}
+
+async function autoStartWizardIfNeeded(
+  userId: string,
+  storageContextId: string,
+  platform: 'telegram' | 'mattermost',
+  reply: ReplyFn,
+): Promise<boolean> {
+  // Don't auto-start if wizard is already active
+  if (hasActiveWizard(userId, storageContextId)) {
+    return false
+  }
+
+  // Don't auto-start if user already has config
+  if (!userNeedsSetup(storageContextId)) {
+    return false
+  }
+
+  // Auto-start the wizard
+  const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
+  const result = createWizard(userId, storageContextId, platform, taskProvider)
+
+  if (result.success) {
+    await reply.text(result.prompt)
+    return true
+  }
+
+  return false
+}
+
 async function handleWizardMessage(
   userId: string,
   storageContextId: string,
@@ -172,6 +211,15 @@ export function setupBot(chat: ChatProvider, adminUserId: string): void {
     // Check if user is in active wizard session AND message is not a command
     // Commands (starting with /) are always routed to their handlers, even during wizard
     const isCommand = msg.text.startsWith('/')
+
+    // AUTO-START WIZARD FOR NEW USERS
+    // If user has no config and no active wizard, start wizard automatically
+    // This happens only on first interaction after auto-provisioning
+    if (!isCommand) {
+      const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
+      const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
+      if (wasWizardAutoStarted) return
+    }
 
     // Use auth.storageContextId (not msg.contextId) for wizard lookup
     // This ensures DM wizards use userId, group wizards use groupId
