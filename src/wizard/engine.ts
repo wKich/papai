@@ -7,7 +7,7 @@ import type { ConfigKey } from '../types/config.js'
 import { validateAndSaveWizardConfig } from './save.js'
 import { createWizardSession, getWizardSession, updateWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
-import type { WizardProcessResult } from './types.js'
+import type { WizardButton, WizardProcessResult } from './types.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
@@ -220,7 +220,11 @@ export async function processWizardMessage(
   if (isComplete && (trimmedText === 'yes' || trimmedText === 'confirm')) {
     // Run validation before saving
     const result = await validateAndSaveWizardConfig(userId, storageContextId)
-    return { handled: true, response: result.message }
+    const wizardButtons: WizardButton[] | undefined = result.buttons?.map((btn) => ({
+      text: btn.text,
+      action: btn.action === 'wizard_edit' ? 'edit' : 'cancel',
+    }))
+    return { handled: true, response: result.message, buttons: wizardButtons }
   }
 
   const result = await advanceStep(userId, storageContextId, text)

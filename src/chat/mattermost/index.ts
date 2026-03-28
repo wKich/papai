@@ -246,6 +246,30 @@ export class MattermostChatProvider implements ChatProvider {
           )
         }
       },
+      buttons: async (content: string, options) => {
+        const actions =
+          options.buttons?.map((btn) => ({
+            name: btn.text,
+            integration: {
+              url: `${this.baseUrl}/api/v4/actions/placeholder`,
+              context: {
+                action: btn.callbackData,
+              },
+            },
+            style: btn.style ?? 'default',
+          })) ?? []
+
+        const props = {
+          attachments: [
+            {
+              text: content,
+              actions,
+            },
+          ],
+        }
+
+        await post(content, options, { props })
+      },
     }
   }
 

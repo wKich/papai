@@ -235,6 +235,10 @@ export function createMockReply(): MockReplyResult {
       redactCalls.push(replacementText)
       return Promise.resolve()
     },
+    buttons: (content: string): Promise<void> => {
+      textCalls.push(content)
+      return Promise.resolve()
+    },
   }
   return { reply, textCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
 }

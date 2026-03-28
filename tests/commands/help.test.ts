@@ -31,6 +31,7 @@ describe('help command', () => {
     formatted: (): Promise<void> => Promise.resolve(),
     file: (): Promise<void> => Promise.resolve(),
     typing: (): void => {},
+    buttons: (): Promise<void> => Promise.resolve(),
   }
 
   beforeEach(() => {

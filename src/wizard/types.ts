@@ -38,10 +38,20 @@ export interface WizardStep {
 }
 
 /**
+ * Button for wizard interactions
+ */
+export interface WizardButton {
+  text: string
+  action: 'save' | 'edit' | 'cancel' | 'retry'
+  style?: 'primary' | 'secondary' | 'danger'
+}
+
+/**
  * Result returned from processing a wizard interaction
  */
 export interface WizardProcessResult {
   handled: boolean
   response?: string
   requiresInput?: boolean
+  buttons?: WizardButton[]
 }

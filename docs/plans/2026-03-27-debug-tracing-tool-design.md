@@ -198,20 +198,24 @@ Session 2 (pino + pinorama)  ────┘
 - Bot runs normally without `DEBUG_SERVER` set
 - Event bus emit() is a no-op with zero overhead when no listeners
 
-### Session 2: Pino to Pinorama Log Pipeline
+### Session 2: Pino Log Pipeline (revised — ring buffer, no pinorama)
+
+> **Revised:** pinorama-server requires Fastify (Session 1 used `Bun.serve()`), pinorama-transport uses Worker Threads (broken on Bun). Replaced with zero-dependency in-memory ring buffer. Full design: `docs/plans/2026-03-28-session2-pino-log-pipeline-design.md`
 
 **Scope:**
 
-- `src/debug/pino-stream.ts`
-- `src/logger.ts` multistream setup
-- `src/debug/server.ts` register pinorama-server plugin
-- `package.json` add pinorama-server, pinorama-client
+- `src/debug/log-buffer.ts` — ring buffer (65535 entries) + writable stream adapter
+- `src/logger.ts` — always-multistream (`pino.multistream([stdout])`) with dynamic `.add()`
+- `src/debug/server.ts` — add `GET /logs` and `GET /logs/stats` routes, connect buffer on startup
+- No new dependencies
 
 **Acceptance criteria:**
 
-- Logs appear in Pinorama search API (`curl localhost:9100/pinorama/search`)
+- `curl localhost:9100/logs` returns JSON array of recent log entries
+- `curl localhost:9100/logs?level=40&scope=main` returns filtered results
+- `curl localhost:9100/logs/stats` returns buffer metadata
 - Normal stdout logging unaffected
-- No log loss under normal message volume
+- No new dependencies added
 
 ### Session 3: Instrument Source Modules
 
@@ -235,7 +239,7 @@ Session 2 (pino + pinorama)  ────┘
 
 - `src/debug/dashboard.html` (4-panel layout)
 - SSE consumer for header, sessions, LLM trace panels
-- pinorama-client integration for log explorer panel
+- Log explorer panel via `GET /logs` REST API + SSE `log:entry` events for live tailing
 - Serve at `GET /dashboard`
 
 **Acceptance criteria:**
@@ -244,4 +248,4 @@ Session 2 (pino + pinorama)  ────┘
 - Header shows live connection status and stats
 - Sessions panel updates in real-time as users interact
 - LLM trace panel shows tool calls, tokens, durations
-- Log explorer searches and filters logs via Pinorama
+- Log explorer searches and filters logs via ring buffer REST API

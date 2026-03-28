@@ -7,9 +7,16 @@ import { logger } from '../logger.js'
 import { deleteWizardSession, getWizardSession } from './state.js'
 import { validateWizardConfig, type ValidationSummary } from './validation.js'
 
+interface ValidationErrorDetail {
+  field: string
+  message: string
+}
+
 interface SaveWizardResult {
   readonly success: boolean
   readonly message: string
+  readonly buttons?: Array<{ text: string; action: string }>
+  readonly errors?: ValidationErrorDetail[]
 }
 
 interface ConfigValidationInput {
@@ -23,13 +30,13 @@ function performConfigValidation(input: ConfigValidationInput): Promise<Validati
   return validateWizardConfig(input)
 }
 
-function formatValidationMessage(summary: ValidationSummary): string {
-  if (summary.isValid) {
-    return ''
-  }
+interface ValidationMessageResult {
+  message: string
+  buttons: Array<{ text: string; action: string }>
+  errors: ValidationErrorDetail[]
+}
 
-  const lines = ['❌ Configuration validation failed:', '', 'Please fix these issues:', '']
-
+function formatValidationMessage(summary: ValidationSummary): ValidationMessageResult {
   const fieldDisplayNames: Record<string, string> = {
     llm_apikey: 'API Key',
     llm_baseurl: 'Base URL',
@@ -37,17 +44,21 @@ function formatValidationMessage(summary: ValidationSummary): string {
     small_model: 'Small Model',
   }
 
+  const lines = ['❌ Configuration validation failed:', '', 'Please fix these issues:', '']
+
   for (const error of summary.errors) {
     const displayName = fieldDisplayNames[error.field] ?? error.field
     lines.push(`  • ${displayName}: ${error.message}`)
   }
 
-  lines.push('')
-  lines.push('What would you like to do?')
-  lines.push('• Type "edit" to review and edit your configuration')
-  lines.push('• Type "cancel" to exit without saving')
-
-  return lines.join('\n')
+  return {
+    message: lines.join('\n'),
+    buttons: [
+      { text: '🔧 Edit Configuration', action: 'wizard_edit' },
+      { text: '❌ Cancel', action: 'wizard_cancel' },
+    ],
+    errors: summary.errors.map((e) => ({ field: e.field, message: e.message })),
+  }
 }
 
 function saveValidatedConfig(
@@ -89,9 +100,12 @@ export async function validateAndSaveWizardConfig(userId: string, storageContext
   const validationResult = await performConfigValidation(input)
 
   if (!validationResult.isValid) {
+    const formatted = formatValidationMessage(validationResult)
     return {
       success: false,
-      message: formatValidationMessage(validationResult),
+      message: formatted.message,
+      buttons: formatted.buttons,
+      errors: formatted.errors,
     }
   }
 

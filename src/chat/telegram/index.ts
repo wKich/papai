@@ -1,5 +1,5 @@
 import type { MessageEntity } from '@grammyjs/types/message.js'
-import { Bot, InputFile, type Context } from 'grammy'
+import { Bot, InputFile, type Context, InlineKeyboard } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
@@ -250,6 +250,18 @@ export class TelegramChatProvider implements ChatProvider {
             )
           })
         }
+      },
+      buttons: async (content: string, options) => {
+        const keyboard = new InlineKeyboard()
+        if (options.buttons !== undefined) {
+          for (const btn of options.buttons) {
+            keyboard.text(btn.text, btn.callbackData)
+          }
+        }
+        await ctx.reply(content, {
+          reply_markup: keyboard,
+          reply_parameters: buildReplyParams(options),
+        })
       },
     }
   }

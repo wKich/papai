@@ -117,7 +117,15 @@ async function handleWizardMessage(
   const wizardResult = await processWizardMessage(userId, storageContextId, text)
 
   if (wizardResult.handled) {
-    if (wizardResult.response !== undefined && wizardResult.response !== '') {
+    if (wizardResult.buttons !== undefined && wizardResult.buttons.length > 0) {
+      // Send message with buttons
+      const chatButtons: import('./chat/types.js').ChatButton[] = wizardResult.buttons.map((btn) => ({
+        text: btn.text,
+        callbackData: `wizard_${btn.action}`,
+        style: btn.action === 'cancel' ? 'danger' : 'primary',
+      }))
+      await reply.buttons(wizardResult.response ?? '', { buttons: chatButtons })
+    } else if (wizardResult.response !== undefined && wizardResult.response !== '') {
       await reply.text(wizardResult.response)
     }
     return true

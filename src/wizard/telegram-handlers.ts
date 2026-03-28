@@ -1,7 +1,8 @@
 import type { Context } from 'grammy'
 
-import { cancelWizard } from './engine.js'
+import { cancelWizard, createWizard } from './engine.js'
 import { validateAndSaveWizardConfig } from './save.js'
+import { getWizardSession } from './state.js'
 
 export async function handleWizardCallback(ctx: Context): Promise<void> {
   const userId = String(ctx.from?.id ?? '')
@@ -25,5 +26,18 @@ export async function handleWizardCallback(ctx: Context): Promise<void> {
       cancelWizard(userId, storageContextId)
       await ctx.reply('Restarting wizard... Type /setup to begin.')
       break
+    case 'wizard_edit': {
+      // Get existing session to preserve data
+      const session = getWizardSession(userId, storageContextId)
+      if (session !== null) {
+        // Reset to step 0 to allow editing
+        const platform = session.platform
+        const taskProvider = session.taskProvider
+        cancelWizard(userId, storageContextId)
+        const result = createWizard(userId, storageContextId, platform, taskProvider)
+        await ctx.editMessageText(result.prompt)
+      }
+      break
+    }
   }
 }

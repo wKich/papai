@@ -72,6 +72,18 @@ export type ReplyOptions = {
   threadId?: string
 }
 
+/** Button for interactive messages */
+export interface ChatButton {
+  text: string
+  callbackData: string
+  style?: 'primary' | 'secondary' | 'danger'
+}
+
+/** Extended reply options with buttons */
+export interface ButtonReplyOptions extends ReplyOptions {
+  buttons?: ChatButton[]
+}
+
 /** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
@@ -79,6 +91,7 @@ export type ReplyFn = {
   file: (file: ChatFile, options?: ReplyOptions) => Promise<void>
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
+  buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
 }
 
 /** The core interface every chat platform provider must implement. */
