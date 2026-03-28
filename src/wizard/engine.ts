@@ -12,6 +12,16 @@ import type { WizardButton, WizardProcessResult } from './types.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
+function buildSkipButtons(stepKey: string): WizardButton[] | undefined {
+  if (stepKey === 'small_model') {
+    return [{ text: 'Use same as main model', action: 'skip_small_model', style: 'secondary' }]
+  }
+  if (stepKey === 'embedding_model') {
+    return [{ text: 'Skip (no semantic search)', action: 'skip_embedding', style: 'secondary' }]
+  }
+  return undefined
+}
+
 interface CreateWizardResult {
   readonly success: boolean
   readonly prompt: string
@@ -36,10 +46,6 @@ function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<str
 
   if (trimmedValue === 'same' && key === 'small_model') {
     return data['main_model'] ?? value
-  }
-
-  if (key === 'llm_baseurl' && trimmedValue === 'default') {
-    return 'https://api.openai.com/v1'
   }
 
   if (trimmedValue === 'skip') {
@@ -262,6 +268,19 @@ export async function processWizardMessage(
   }
 
   const result = await advanceStep(userId, storageContextId, text)
+
+  // Check if current step has skip buttons
+  const currentSession = getWizardSession(userId, storageContextId)
+  if (currentSession !== null) {
+    const currentStep = getStepByIndex(currentSession.taskProvider, currentSession.currentStep)
+    if (currentStep !== null && currentStep !== undefined) {
+      const skipButtons = buildSkipButtons(currentStep.key)
+      if (skipButtons !== undefined) {
+        return { handled: true, response: result.prompt, requiresInput: true, buttons: skipButtons }
+      }
+    }
+  }
+
   return { handled: true, response: result.prompt, requiresInput: true }
 }
 

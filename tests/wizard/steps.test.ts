@@ -48,14 +48,14 @@ describe('getWizardSteps', () => {
     const steps = getWizardSteps('kaneo')
     const step = steps.find((s: WizardStep) => s.key === 'llm_baseurl')
 
-    expect(step?.prompt).toBe("🌐 Enter base URL (or 'default' for OpenAI):")
+    expect(step?.prompt).toBe('🌐 Enter base URL (e.g., https://api.openai.com/v1):')
   })
 
   test('main_model step has correct prompt', () => {
     const steps = getWizardSteps('kaneo')
     const step = steps.find((s: WizardStep) => s.key === 'main_model')
 
-    expect(step?.prompt).toBe('🤖 Enter main model name (e.g., gpt-4, claude-3-opus):')
+    expect(step?.prompt).toBe('🤖 Enter main model name (e.g., gpt-5.4, claude-sonnet-4-6):')
   })
 
   test('small_model step has correct prompt', () => {
@@ -69,7 +69,7 @@ describe('getWizardSteps', () => {
     const steps = getWizardSteps('kaneo')
     const step = steps.find((s: WizardStep) => s.key === 'embedding_model')
 
-    expect(step?.prompt).toBe("📊 Enter embedding model (or 'skip' to use default):")
+    expect(step?.prompt).toBe('📊 Enter embedding model for semantic search (skip to disable):')
   })
 
   test('kaneo_apikey step has correct prompt', () => {
@@ -148,14 +148,14 @@ describe('validateStep', () => {
     expect(result).toBeNull()
   })
 
-  test('validates llm_baseurl - accepts "default" keyword', async () => {
+  test('validates llm_baseurl - rejects "default" as invalid', async () => {
     const result = await validateStep('llm_baseurl', 'default')
-    expect(result).toBeNull()
+    expect(result).toBe('Please enter a valid URL (http/https)')
   })
 
   test('validates llm_baseurl - rejects invalid URL', async () => {
     const result = await validateStep('llm_baseurl', 'not-a-url')
-    expect(result).toBe('Please enter a valid URL (http/https) or "default"')
+    expect(result).toBe('Please enter a valid URL (http/https)')
   })
 
   test('validates main_model - accepts non-empty string', async () => {

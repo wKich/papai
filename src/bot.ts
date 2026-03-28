@@ -149,6 +149,7 @@ async function handleWizardMessage(
   storageContextId: string,
   text: string,
   reply: ReplyFn,
+  platform: string,
 ): Promise<boolean> {
   if (!hasActiveWizard(userId, storageContextId)) {
     return false
@@ -157,13 +158,24 @@ async function handleWizardMessage(
   const wizardResult = await processWizardMessage(userId, storageContextId, text)
 
   if (wizardResult.handled) {
-    if (wizardResult.buttons !== undefined && wizardResult.buttons.length > 0) {
+    // Only show buttons on Telegram (Mattermost buttons don't work due to missing webhook handler)
+    const buttons = wizardResult.buttons
+    const shouldShowButtons = platform === 'telegram' && buttons !== undefined && buttons.length > 0
+    if (shouldShowButtons && buttons !== undefined) {
       // Send message with buttons
-      const chatButtons: import('./chat/types.js').ChatButton[] = wizardResult.buttons.map((btn) => ({
-        text: btn.text,
-        callbackData: `wizard_${btn.action}`,
-        style: btn.action === 'cancel' ? 'danger' : 'primary',
-      }))
+      const chatButtons: import('./chat/types.js').ChatButton[] = buttons.map((btn) => {
+        let style: 'primary' | 'secondary' | 'danger' = 'primary'
+        if (btn.action === 'cancel') {
+          style = 'danger'
+        } else if (btn.action === 'skip_small_model' || btn.action === 'skip_embedding') {
+          style = 'secondary'
+        }
+        return {
+          text: btn.text,
+          callbackData: `wizard_${btn.action}`,
+          style,
+        }
+      })
       await reply.buttons(wizardResult.response ?? '', { buttons: chatButtons })
     } else if (wizardResult.response !== undefined && wizardResult.response !== '') {
       await reply.text(wizardResult.response)
@@ -204,11 +216,11 @@ async function maybeInterceptWizard(
   auth: AuthorizationResult,
 ): Promise<boolean> {
   const isCommand = msg.text.startsWith('/')
+  const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
 
   // AUTO-START WIZARD FOR NEW USERS
   // Only auto-start for authorized users (to maintain silent drop for unauthorized)
   if (!isCommand && auth.allowed) {
-    const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
     const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
     if (wasWizardAutoStarted) return true
   }
@@ -216,7 +228,7 @@ async function maybeInterceptWizard(
   // Use auth.storageContextId (not msg.contextId) for wizard lookup
   // This ensures DM wizards use userId, group wizards use groupId
   if (!isCommand) {
-    const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply)
+    const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply, platform)
     if (wasWizardHandled) return true
   }
 

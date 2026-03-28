@@ -141,7 +141,7 @@ describe('Wizard Engine', () => {
       expect(step1.prompt).toContain('🌐 Enter base URL')
 
       // Step 2: Base URL
-      const step2 = await advanceStep(userId, storageContextId, 'default')
+      const step2 = await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       expect(step2.success).toBe(true)
       expect(step2.prompt).toContain('🤖 Enter main model name')
 
@@ -183,7 +183,7 @@ describe('Wizard Engine', () => {
 
       // Skip through required steps first
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'same')
 
@@ -202,7 +202,7 @@ describe('Wizard Engine', () => {
       await createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
 
       const result = await advanceStep(userId, storageContextId, 'same')
@@ -219,7 +219,7 @@ describe('Wizard Engine', () => {
       // Step 1: LLM API Key
       await advanceStep(userId, storageContextId, 'sk-test12345')
       // Step 2: Base URL
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       // Step 3: Main Model
       await advanceStep(userId, storageContextId, 'gpt-4')
       // Step 4: Small Model
@@ -244,7 +244,7 @@ describe('Wizard Engine', () => {
 
       // Skip to timezone step
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -282,7 +282,7 @@ describe('Wizard Engine', () => {
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -323,7 +323,7 @@ describe('Wizard Engine', () => {
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -346,7 +346,7 @@ describe('Wizard Engine', () => {
     test('logs configuration saved', async () => {
       await createWizard(userId, storageContextId, 'telegram', 'kaneo')
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -408,7 +408,7 @@ describe('Wizard Engine', () => {
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -426,7 +426,7 @@ describe('Wizard Engine', () => {
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')
@@ -463,7 +463,7 @@ describe('Wizard Engine', () => {
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'default')
+      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
       await advanceStep(userId, storageContextId, 'gpt-4')
       await advanceStep(userId, storageContextId, 'gpt-3.5')
       await advanceStep(userId, storageContextId, 'skip')

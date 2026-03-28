@@ -6,6 +6,8 @@ import { createWizard, cancelWizard } from './engine.js'
 import { getWizardSession, updateWizardSession } from './state.js'
 import { getWizardSteps } from './steps.js'
 
+const TASK_PROVIDER = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
+
 function extractConfigKey(data: string): ConfigKey | null {
   const key = data.replace('config_edit_', '')
   return isConfigKey(key) ? key : null
@@ -17,7 +19,7 @@ function getDisplayValue(storageContextId: string, key: ConfigKey): string {
 }
 
 function findStepIndex(key: ConfigKey): number {
-  const steps = getWizardSteps('kaneo')
+  const steps = getWizardSteps(TASK_PROVIDER)
   return steps.findIndex((s) => s.key === key)
 }
 
@@ -27,14 +29,14 @@ function setupWizardForEditing(userId: string, storageContextId: string, key: Co
     cancelWizard(userId, storageContextId)
   }
 
-  createWizard(userId, storageContextId, 'telegram', 'kaneo')
+  createWizard(userId, storageContextId, 'telegram', TASK_PROVIDER)
 
   updateWizardSession(userId, storageContextId, {
     currentStep: stepIndex,
     data: existingSession?.data ?? {},
   })
 
-  const steps = getWizardSteps('kaneo')
+  const steps = getWizardSteps(TASK_PROVIDER)
   const step = steps[stepIndex]
   return step?.prompt ?? `Enter new value for ${key}:`
 }

@@ -42,7 +42,7 @@ export interface WizardStep {
  */
 export interface WizardButton {
   text: string
-  action: 'save' | 'edit' | 'cancel' | 'retry'
+  action: 'save' | 'edit' | 'cancel' | 'retry' | 'skip_small_model' | 'skip_embedding'
   style?: 'primary' | 'secondary' | 'danger'
 }
 

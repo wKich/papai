@@ -36,10 +36,15 @@ export function getWizardSteps(taskProvider: TaskProvider): WizardStep[] {
 
   return [
     createStep('llm_apikey', 'llm_apikey', '🔑 Enter your LLM API key:'),
-    createStep('llm_baseurl', 'llm_baseurl', "🌐 Enter base URL (or 'default' for OpenAI):"),
-    createStep('main_model', 'main_model', '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):'),
+    createStep('llm_baseurl', 'llm_baseurl', '🌐 Enter base URL (e.g., https://api.openai.com/v1):'),
+    createStep('main_model', 'main_model', '🤖 Enter main model name (e.g., gpt-5.4, claude-sonnet-4-6):'),
     createStep('small_model', 'small_model', "⚡ Enter small model name (or 'same' to use main model):"),
-    createStep('embedding_model', 'embedding_model', "📊 Enter embedding model (or 'skip' to use default):", true),
+    createStep(
+      'embedding_model',
+      'embedding_model',
+      '📊 Enter embedding model for semantic search (skip to disable):',
+      true,
+    ),
     createStep(providerStep.key, providerStep.key, providerStep.prompt),
     createStep('timezone', 'timezone', '🌍 Enter your timezone (e.g., America/New_York, UTC, UTC+5):'),
   ]
@@ -55,17 +60,14 @@ function validateToken(value: string): string | null {
 
 function validateUrl(value: string): string | null {
   const trimmedValue = value.trim()
-  if (trimmedValue === 'default') {
-    return null
-  }
   try {
     const url = new URL(trimmedValue)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return 'Please enter a valid URL (http/https) or "default"'
+      return 'Please enter a valid URL (http/https)'
     }
     return null
   } catch {
-    return 'Please enter a valid URL (http/https) or "default"'
+    return 'Please enter a valid URL (http/https)'
   }
 }
 

@@ -280,27 +280,16 @@ describe('Wizard Integration', () => {
     expect(skipResult.skipped).toBe(true)
   })
 
-  test('should handle default value for base URL', async () => {
+  test('should reject default as invalid base URL', async () => {
     await createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
     // Step 1
     await advanceStep(userId, storageContextId, 'sk-api-key', true)
 
-    // Step 2 with 'default' value
-    const result = await advanceStep(userId, storageContextId, 'default', true)
-    expect(result.success).toBe(true)
-
-    // Should not save empty default value
-    await advanceStep(userId, storageContextId, 'gpt-4', true)
-    await advanceStep(userId, storageContextId, 'same', true)
-    await advanceStep(userId, storageContextId, 'skip', true)
-    await advanceStep(userId, storageContextId, 'kaneo-key', true)
-    await advanceStep(userId, storageContextId, 'UTC', true)
-
-    await validateAndSaveWizardConfig(userId, storageContextId)
-
-    // llm_baseurl should not be in saved config (empty value means it wasn't saved)
-    expect(getConfig(userId, 'llm_baseurl')).toBeNull()
+    // Step 2 with 'default' value - should be rejected
+    const result = await advanceStep(userId, storageContextId, 'default')
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('valid URL')
   })
 
   test('should handle invalid URL validation', async () => {
