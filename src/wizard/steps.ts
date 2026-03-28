@@ -1,6 +1,5 @@
 import { normalizeTimezone } from '../utils/timezone.js'
 import type { WizardStep } from './types.js'
-import { createModelValidator, validateLlmApiKey, validateLlmBaseUrl } from './validation.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
@@ -32,63 +31,14 @@ function createStep(
   }
 }
 
-function getEffectiveBaseUrl(context?: { baseUrl?: string }): string {
-  return context?.baseUrl !== undefined && context.baseUrl !== '' && context.baseUrl !== 'default'
-    ? context.baseUrl
-    : 'https://api.openai.com/v1'
-}
-
-function getModelValidator(
-  context: { apiKey?: string } | undefined,
-  baseUrl: string,
-): WizardStep['liveCheck'] | undefined {
-  return context?.apiKey !== undefined && context.apiKey !== ''
-    ? createModelValidator(context.apiKey, baseUrl)
-    : undefined
-}
-
-function createBaseUrlLiveCheck(): WizardStep['liveCheck'] {
-  return (value: string) => {
-    if (value.trim().toLowerCase() === 'default') {
-      return Promise.resolve({ success: true })
-    }
-    return validateLlmBaseUrl(value)
-  }
-}
-
-export function getWizardSteps(
-  taskProvider: TaskProvider,
-  context?: { apiKey?: string; baseUrl?: string },
-): WizardStep[] {
+export function getWizardSteps(taskProvider: TaskProvider): WizardStep[] {
   const providerStep = PROVIDER_SPECIFIC_STEP[taskProvider]
-  const effectiveBaseUrl = getEffectiveBaseUrl(context)
-  const modelValidator = getModelValidator(context, effectiveBaseUrl)
 
   return [
-    createStep('llm_apikey', 'llm_apikey', '🔑 Enter your LLM API key:', undefined, (value: string) =>
-      validateLlmApiKey(value, effectiveBaseUrl),
-    ),
-    createStep(
-      'llm_baseurl',
-      'llm_baseurl',
-      "🌐 Enter base URL (or 'default' for OpenAI):",
-      undefined,
-      createBaseUrlLiveCheck(),
-    ),
-    createStep(
-      'main_model',
-      'main_model',
-      '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):',
-      undefined,
-      modelValidator,
-    ),
-    createStep(
-      'small_model',
-      'small_model',
-      "⚡ Enter small model name (or 'same' to use main model):",
-      undefined,
-      modelValidator,
-    ),
+    createStep('llm_apikey', 'llm_apikey', '🔑 Enter your LLM API key:'),
+    createStep('llm_baseurl', 'llm_baseurl', "🌐 Enter base URL (or 'default' for OpenAI):"),
+    createStep('main_model', 'main_model', '🤖 Enter main model name (e.g., gpt-4, claude-3-opus):'),
+    createStep('small_model', 'small_model', "⚡ Enter small model name (or 'same' to use main model):"),
     createStep('embedding_model', 'embedding_model', "📊 Enter embedding model (or 'skip' to use default):", true),
     createStep(providerStep.key, providerStep.key, providerStep.prompt),
     createStep('timezone', 'timezone', '🌍 Enter your timezone (e.g., America/New_York, UTC, UTC+5):'),
@@ -153,12 +103,8 @@ export function validateStep(stepId: string, value: string): Promise<string | nu
   return Promise.resolve(result)
 }
 
-export function getStepByIndex(
-  taskProvider: TaskProvider,
-  index: number,
-  context?: { apiKey?: string; baseUrl?: string },
-): WizardStep | undefined {
-  const steps = getWizardSteps(taskProvider, context)
+export function getStepByIndex(taskProvider: TaskProvider, index: number): WizardStep | undefined {
+  const steps = getWizardSteps(taskProvider)
   return steps[index]
 }
 

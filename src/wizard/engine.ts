@@ -8,6 +8,7 @@ import type { ConfigKey } from '../types/config.js'
 import { createWizardSession, getWizardSession, updateWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
 import type { WizardProcessResult } from './types.js'
+import { validateWizardConfig } from './validation.js'
 
 type TaskProvider = 'kaneo' | 'youtrack'
 
@@ -53,18 +54,11 @@ function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<str
   return value.trim()
 }
 
-function getStepContext(data: Readonly<Record<string, string | undefined>>): { apiKey?: string; baseUrl?: string } {
-  return {
-    apiKey: data['llm_apikey'],
-    baseUrl: data['llm_baseurl'],
-  }
-}
-
 function getNextPrompt(userId: string, storageContextId: string): string {
   const session = getWizardSession(userId, storageContextId)
   if (session === null) return 'Error: Wizard session not found'
 
-  const step = getStepByIndex(session.taskProvider, session.currentStep, getStepContext(session.data))
+  const step = getStepByIndex(session.taskProvider, session.currentStep)
   if (step === undefined) return 'Error: Invalid step index'
 
   return step.prompt
@@ -75,7 +69,60 @@ function showSummary(userId: string, storageContextId: string): string {
   if (session === null) return 'Error: Wizard session not found'
 
   const summary = formatSummary(session.data, session.taskProvider)
-  return `${summary}\n\nIs this correct? (yes/confirm to save, or type a value to edit)`
+  return `${summary}\n\nIs this correct? (yes/confirm to save and validate, or type a value to edit)`
+}
+
+function formatValidationErrors(errors: ReadonlyArray<{ field: string; message: string }>): string {
+  const lines = ['❌ Configuration validation failed:', '', 'Please fix these issues before saving:', '']
+
+  for (const error of errors) {
+    lines.push(`  • ${error.field}: ${error.message}`)
+  }
+
+  lines.push('')
+  lines.push('Type the field name to edit it (e.g., "llm_apikey"), or "cancel" to exit.')
+
+  return lines.join('\n')
+}
+
+async function validateAndSaveWizardConfig(userId: string, storageContextId: string): Promise<SaveWizardResult> {
+  const session = getWizardSession(userId, storageContextId)
+  if (session === null) return { success: false, message: 'Error: Wizard session not found' }
+
+  const data = session.data
+
+  // Run validation on all values before saving
+  const validationResult = await validateWizardConfig({
+    apiKey: data['llm_apikey'] ?? '',
+    baseUrl: data['llm_baseurl'] ?? 'https://api.openai.com/v1',
+    mainModel: data['main_model'] ?? '',
+    smallModel: data['small_model'] ?? '',
+  })
+
+  if (!validationResult.isValid) {
+    return {
+      success: false,
+      message: formatValidationErrors(validationResult.errors),
+    }
+  }
+
+  let savedCount = 0
+  for (const [key, value] of Object.entries(session.data)) {
+    if (value !== undefined && value !== '' && isConfigKey(key)) {
+      setConfig(session.storageContextId, key, value)
+      savedCount++
+    }
+  }
+
+  deleteWizardSession(userId, storageContextId)
+  logger.info({ userId, storageContextId, savedCount }, 'Configuration saved')
+
+  return {
+    success: true,
+    message: `✅ Configuration saved successfully! ${savedCount} setting(s) configured.
+
+You can use /config to view your settings or /set to modify them.`,
+  }
 }
 
 function handleSkipCommand(
@@ -120,12 +167,8 @@ async function validateAndStoreValue(
     return `❌ ${validationError}\n\n${currentStep.prompt}\n\nPlease try again:`
   }
 
-  if (currentStep.liveCheck !== undefined) {
-    const liveResult = await currentStep.liveCheck(value)
-    if (!liveResult.success) {
-      return `${liveResult.message}\n\n${currentStep.prompt}\n\nPlease try again:`
-    }
-  }
+  // Live validation is now done at the end when user confirms
+  // This allows users to quickly fill in all values and only validates on save
 
   return null
 }
@@ -193,7 +236,7 @@ export async function advanceStep(
   const session = getWizardSession(userId, storageContextId)
   if (session === null) return { success: false, prompt: 'Error: Wizard session not found' }
 
-  const currentStep = getStepByIndex(session.taskProvider, session.currentStep, getStepContext(session.data))
+  const currentStep = getStepByIndex(session.taskProvider, session.currentStep)
   if (currentStep === undefined) return { success: false, prompt: 'Error: Invalid step configuration' }
 
   const trimmedValue = value.trim().toLowerCase()
@@ -259,8 +302,34 @@ export async function processWizardMessage(
 
   const isComplete = session.currentStep >= session.totalSteps
   if (isComplete && (trimmedText === 'yes' || trimmedText === 'confirm')) {
-    const result = saveWizardConfig(userId, storageContextId, true)
+    // Run validation before saving
+    const result = await validateAndSaveWizardConfig(userId, storageContextId)
     return { handled: true, response: result.message }
+  }
+
+  // Handle editing specific fields after validation failure
+  if (isComplete) {
+    const fieldMap: Record<string, number> = {
+      llm_apikey: 0,
+      llm_baseurl: 1,
+      main_model: 2,
+      small_model: 3,
+      embedding_model: 4,
+      kaneo_apikey: 5,
+      youtrack_token: 5,
+      timezone: 6,
+    }
+
+    const stepIndex = fieldMap[trimmedText]
+    if (stepIndex !== undefined) {
+      updateWizardSession(userId, storageContextId, { currentStep: stepIndex })
+      const step = getStepByIndex(session.taskProvider, stepIndex)
+      return {
+        handled: true,
+        response: `Editing ${trimmedText}:\n\n${step?.prompt ?? 'Enter new value:'}`,
+        requiresInput: true,
+      }
+    }
   }
 
   const result = await advanceStep(userId, storageContextId, text)

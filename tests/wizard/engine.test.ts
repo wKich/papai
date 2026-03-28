@@ -509,7 +509,7 @@ describe('Wizard Engine', () => {
   })
 })
 
-describe('Wizard engine with live validation', () => {
+describe('Wizard engine with end-of-wizard validation', () => {
   const userId = 'test-user-live'
   const storageContextId = 'test-context-live'
 
@@ -517,8 +517,8 @@ describe('Wizard engine with live validation', () => {
     await deleteWizardSession(userId, storageContextId)
   })
 
-  test('should validate API key during step advancement', async () => {
-    // Mock fetch to simulate API key validation
+  test('should allow step advancement without validation', async () => {
+    // Mock fetch to simulate API key validation failure
     const testFetch = globalThis.fetch
     globalThis.fetch = Object.assign(
       () =>
@@ -533,9 +533,10 @@ describe('Wizard engine with live validation', () => {
     try {
       createWizard(userId, storageContextId, 'telegram', 'kaneo')
 
+      // Should advance without validation error
       const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
-      expect(result.success).toBe(false)
-      expect(result.prompt).toContain('Invalid API key')
+      expect(result.success).toBe(true)
+      expect(result.prompt).toContain('🌐 Enter base URL')
     } finally {
       globalThis.fetch = testFetch
     }

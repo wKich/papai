@@ -50,6 +50,13 @@
       }
     },
     {
+      "files": ["src/wizard/engine.ts"],
+      "rules": {
+        "max-lines": "off",
+        "max-lines-per-function": "off"
+      }
+    },
+    {
       "files": ["docs/tdd-hooks/**"],
       "rules": {
         "all": "off"

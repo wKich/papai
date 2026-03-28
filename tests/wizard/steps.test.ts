@@ -345,40 +345,40 @@ describe('formatSummary', () => {
   })
 })
 
-describe('Wizard steps live validation', () => {
-  test('llm_apikey step should have liveCheck function', () => {
+describe('Wizard steps structure', () => {
+  test('llm_apikey step has no liveCheck (validation happens at end)', () => {
     const steps = getWizardSteps('kaneo')
     const apiKeyStep = steps.find((s) => s.key === 'llm_apikey')
 
     expect(apiKeyStep).toBeDefined()
-    expect(apiKeyStep?.liveCheck).toBeDefined()
+    expect(apiKeyStep?.liveCheck).toBeUndefined()
   })
 })
 
-describe('Base URL step live validation', () => {
-  test('llm_baseurl step should have liveCheck function', () => {
+describe('Base URL step structure', () => {
+  test('llm_baseurl step has no liveCheck (validation happens at end)', () => {
     const steps = getWizardSteps('kaneo')
     const baseUrlStep = steps.find((s) => s.key === 'llm_baseurl')
 
     expect(baseUrlStep).toBeDefined()
-    expect(baseUrlStep?.liveCheck).toBeDefined()
+    expect(baseUrlStep?.liveCheck).toBeUndefined()
   })
 })
 
-describe('Model steps live validation', () => {
-  test('main_model step should have liveCheck function when context provided', () => {
-    const steps = getWizardSteps('kaneo', { apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' })
+describe('Model steps configuration', () => {
+  test('main_model step exists without liveCheck', () => {
+    const steps = getWizardSteps('kaneo')
     const modelStep = steps.find((s) => s.key === 'main_model')
 
     expect(modelStep).toBeDefined()
-    expect(modelStep?.liveCheck).toBeDefined()
+    expect(modelStep?.liveCheck).toBeUndefined()
   })
 
-  test('small_model step should have liveCheck function when context provided', () => {
-    const steps = getWizardSteps('kaneo', { apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' })
+  test('small_model step exists without liveCheck', () => {
+    const steps = getWizardSteps('kaneo')
     const modelStep = steps.find((s) => s.key === 'small_model')
 
     expect(modelStep).toBeDefined()
-    expect(modelStep?.liveCheck).toBeDefined()
+    expect(modelStep?.liveCheck).toBeUndefined()
   })
 })
