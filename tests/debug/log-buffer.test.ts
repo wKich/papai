@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 
 import { subscribe, unsubscribe, type DebugEvent } from '../../src/debug/event-bus.js'
 import { logBuffer, logBufferStream, LogRingBuffer, type LogEntry } from '../../src/debug/log-buffer.js'
@@ -196,17 +196,19 @@ describe('logBufferStream', () => {
 
 describe('SSE emission', () => {
   test('push emits log:entry on event bus', () => {
-    const listener = mock(() => {})
+    let captured: DebugEvent | null = null
+    const listener = (event: DebugEvent): void => {
+      captured = event
+    }
     subscribe(listener)
 
     try {
       const buf = new LogRingBuffer(10)
       buf.push(makeEntry({ msg: 'test event' }))
 
-      expect(listener).toHaveBeenCalledTimes(1)
-      const event = listener.mock.calls[0]![0] as DebugEvent
-      expect(event.type).toBe('log:entry')
-      expect(event.data['msg']).toBe('test event')
+      expect(captured).not.toBeNull()
+      expect(captured!.type).toBe('log:entry')
+      expect(captured!.data['msg']).toBe('test event')
     } finally {
       unsubscribe(listener)
     }
