@@ -3,6 +3,9 @@
   "appendPlugins": ["@hughescr/stryker-bun-runner"],
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
+  "bun": {
+    "timeout": 120000
+  },
   "mutate": [
     "src/providers/**/*.ts",
     "!src/providers/**/index.ts",
