@@ -1,5 +1,5 @@
 ---
-applyTo: "tests/e2e/**"
+applyTo: 'tests/e2e/**'
 ---
 
 # E2E Testing Conventions
@@ -26,7 +26,7 @@ describe('Feature', () => {
   test('does something', async () => {
     const project = await testClient.createTestProject()
     const task = await createTask(kaneoConfig, { title: 'Test', projectId: project.id })
-    testClient.trackTask(task.id)  // Track for automatic cleanup
+    testClient.trackTask(task.id) // Track for automatic cleanup
     expect(task.title).toBe('Test')
   })
 })

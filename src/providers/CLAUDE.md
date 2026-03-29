@@ -42,7 +42,11 @@ Every function entry must have `logger.debug()` with all input parameters:
 ```typescript
 const log = logger.child({ scope: 'provider:kaneo:tasks' })
 
-export async function kaneoCreateTask(config: KaneoConfig, workspaceId: string, params: CreateTaskParams): Promise<Task> {
+export async function kaneoCreateTask(
+  config: KaneoConfig,
+  workspaceId: string,
+  params: CreateTaskParams,
+): Promise<Task> {
   log.debug({ workspaceId, title: params.title, projectId: params.projectId }, 'kaneoCreateTask')
   // ...
   log.info({ taskId: result.id, title: params.title }, 'Task created')

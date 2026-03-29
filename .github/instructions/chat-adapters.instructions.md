@@ -1,5 +1,5 @@
 ---
-applyTo: "src/chat/**"
+applyTo: 'src/chat/**'
 ---
 
 # Chat Adapter Conventions

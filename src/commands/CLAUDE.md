@@ -7,7 +7,7 @@ Commands are platform-agnostic handlers registered via `ChatProvider.registerCom
 ```typescript
 export function registerXCommand(chat: ChatProvider): void {
   const handler: CommandHandler = async (msg, reply, auth) => {
-    if (!auth.allowed) return  // Early auth check — always first
+    if (!auth.allowed) return // Early auth check — always first
     // Command logic...
     await reply.text('Response')
   }

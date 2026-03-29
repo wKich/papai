@@ -209,10 +209,10 @@ Quick reference:
 
 Detailed conventions live in subdirectory `CLAUDE.md` files (loaded by Claude Code and opencode) and `.github/instructions/*.instructions.md` files (loaded by GitHub Copilot):
 
-| Path | Covers |
-|------|--------|
+| Path                      | Covers                                                            |
+| ------------------------- | ----------------------------------------------------------------- |
 | `src/providers/CLAUDE.md` | TaskProvider interface, operations, schemas, error classification |
-| `src/tools/CLAUDE.md` | Tool definitions, capability gating, destructive actions |
-| `src/commands/CLAUDE.md` | Command handler pattern, auth checks, ReplyFn |
-| `src/chat/CLAUDE.md` | ChatProvider interface, platform adapters |
-| `tests/CLAUDE.md` | Test helpers, mocking rules, mock pollution, E2E testing |
+| `src/tools/CLAUDE.md`     | Tool definitions, capability gating, destructive actions          |
+| `src/commands/CLAUDE.md`  | Command handler pattern, auth checks, ReplyFn                     |
+| `src/chat/CLAUDE.md`      | ChatProvider interface, platform adapters                         |
+| `tests/CLAUDE.md`         | Test helpers, mocking rules, mock pollution, E2E testing          |

@@ -1,5 +1,5 @@
 ---
-applyTo: "tests/**"
+applyTo: 'tests/**'
 ---
 
 # Testing Conventions
@@ -8,27 +8,27 @@ Runtime: **Bun** test runner (`bun:test`). No Jest, no Vitest.
 
 ## Test Helpers (use these, don't reinvent)
 
-| Helper | Location | Purpose |
-|--------|----------|---------|
-| `mockLogger()` | `tests/utils/test-helpers.ts` | Stubs pino logger globally |
-| `mockDrizzle()` | `tests/utils/test-helpers.ts` | Stubs `getDrizzleDb` for in-memory SQLite |
-| `setupTestDb()` | `tests/utils/test-helpers.ts` | Creates in-memory SQLite with all migrations |
-| `createMockReply()` | `tests/utils/test-helpers.ts` | Captures `reply.text()` calls for assertions |
-| `createDmMessage()` | `tests/utils/test-helpers.ts` | Factory for DM `IncomingMessage` |
-| `createGroupMessage()` | `tests/utils/test-helpers.ts` | Factory for group `IncomingMessage` |
-| `createAuth()` | `tests/utils/test-helpers.ts` | Factory for `AuthorizationResult` |
-| `createMockChat()` | `tests/utils/test-helpers.ts` | Mock `ChatProvider` capturing command registrations |
-| `mockMessageCache()` | `tests/utils/test-helpers.ts` | Test-local message cache (isolated from production) |
-| `createMockProvider()` | `tests/tools/mock-provider.ts` | Fully-stubbed `TaskProvider` with overridable methods |
-| `createMockTask()` | `tests/test-helpers.ts` | Factory for `Task` with `Partial<Task>` overrides |
-| `createMockProject()` | `tests/test-helpers.ts` | Factory for `Project` with overrides |
-| `createMockLabel()` | `tests/test-helpers.ts` | Factory for `Label` with overrides |
-| `createMockColumn()` | `tests/test-helpers.ts` | Factory for status column with overrides |
-| `schemaValidates()` | `tests/test-helpers.ts` | Tests tool input schemas accept/reject given data |
-| `getToolExecutor()` | `tests/test-helpers.ts` | Extracts tool `execute` function |
-| `setMockFetch()` | `tests/test-helpers.ts` | Global fetch mock for provider API tests |
-| `restoreFetch()` | `tests/test-helpers.ts` | Restores original `globalThis.fetch` |
-| `expectAppError()` | `tests/utils/test-helpers.ts` | Asserts error is `AppError` with expected user message |
+| Helper                 | Location                       | Purpose                                                |
+| ---------------------- | ------------------------------ | ------------------------------------------------------ |
+| `mockLogger()`         | `tests/utils/test-helpers.ts`  | Stubs pino logger globally                             |
+| `mockDrizzle()`        | `tests/utils/test-helpers.ts`  | Stubs `getDrizzleDb` for in-memory SQLite              |
+| `setupTestDb()`        | `tests/utils/test-helpers.ts`  | Creates in-memory SQLite with all migrations           |
+| `createMockReply()`    | `tests/utils/test-helpers.ts`  | Captures `reply.text()` calls for assertions           |
+| `createDmMessage()`    | `tests/utils/test-helpers.ts`  | Factory for DM `IncomingMessage`                       |
+| `createGroupMessage()` | `tests/utils/test-helpers.ts`  | Factory for group `IncomingMessage`                    |
+| `createAuth()`         | `tests/utils/test-helpers.ts`  | Factory for `AuthorizationResult`                      |
+| `createMockChat()`     | `tests/utils/test-helpers.ts`  | Mock `ChatProvider` capturing command registrations    |
+| `mockMessageCache()`   | `tests/utils/test-helpers.ts`  | Test-local message cache (isolated from production)    |
+| `createMockProvider()` | `tests/tools/mock-provider.ts` | Fully-stubbed `TaskProvider` with overridable methods  |
+| `createMockTask()`     | `tests/test-helpers.ts`        | Factory for `Task` with `Partial<Task>` overrides      |
+| `createMockProject()`  | `tests/test-helpers.ts`        | Factory for `Project` with overrides                   |
+| `createMockLabel()`    | `tests/test-helpers.ts`        | Factory for `Label` with overrides                     |
+| `createMockColumn()`   | `tests/test-helpers.ts`        | Factory for status column with overrides               |
+| `schemaValidates()`    | `tests/test-helpers.ts`        | Tests tool input schemas accept/reject given data      |
+| `getToolExecutor()`    | `tests/test-helpers.ts`        | Extracts tool `execute` function                       |
+| `setMockFetch()`       | `tests/test-helpers.ts`        | Global fetch mock for provider API tests               |
+| `restoreFetch()`       | `tests/test-helpers.ts`        | Restores original `globalThis.fetch`                   |
+| `expectAppError()`     | `tests/utils/test-helpers.ts`  | Asserts error is `AppError` with expected user message |
 
 ## Mocking Rules
 
@@ -85,7 +85,7 @@ describe('Feature', () => {
 ## Schema Validation Testing
 
 ```typescript
-expect(schemaValidates(tool, {})).toBe(false)           // missing required fields
+expect(schemaValidates(tool, {})).toBe(false) // missing required fields
 expect(schemaValidates(tool, { taskId: 'x' })).toBe(true) // valid input
 ```
 

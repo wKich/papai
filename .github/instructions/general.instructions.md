@@ -1,5 +1,5 @@
 ---
-applyTo: "src/**"
+applyTo: 'src/**'
 ---
 
 # General Source Conventions
@@ -31,11 +31,11 @@ import { logger } from '../logger.js'
 const log = logger.child({ scope: 'module-name' })
 ```
 
-| Level | Use for |
-|-------|---------|
-| `debug` | Function entry with parameters, internal state, API call initiation |
-| `info` | Successful completion of major operations, service call results |
-| `warn` | Invalid input, missing optional data, failed lookups, unauthorized attempts |
+| Level   | Use for                                                                      |
+| ------- | ---------------------------------------------------------------------------- |
+| `debug` | Function entry with parameters, internal state, API call initiation          |
+| `info`  | Successful completion of major operations, service call results              |
+| `warn`  | Invalid input, missing optional data, failed lookups, unauthorized attempts  |
 | `error` | Caught exceptions, failed API calls — always include error message + context |
 
 - First argument: structured metadata object. Second argument: message string.

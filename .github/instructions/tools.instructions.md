@@ -1,5 +1,5 @@
 ---
-applyTo: "src/tools/**"
+applyTo: 'src/tools/**'
 ---
 
 # Tool Conventions

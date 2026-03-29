@@ -1,6 +1,5 @@
 import type { ToolSet } from 'ai'
 
-import { makeDeferredPromptTools } from '../deferred-prompts/tools.js'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
@@ -8,7 +7,9 @@ import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeArchiveProjectTool } from './archive-project.js'
 import { makeArchiveTaskTool } from './archive-task.js'
+import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { completionHook } from './completion-hook.js'
+import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
@@ -18,8 +19,10 @@ import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
 import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
+import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
+import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListMemosTool } from './list-memos.js'
 import { makeListProjectsTool } from './list-projects.js'
@@ -39,6 +42,7 @@ import { makeSearchMemosTool } from './search-memos.js'
 import { makeSearchTasksTool } from './search-tasks.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import { makeUpdateCommentTool } from './update-comment.js'
+import { makeUpdateDeferredPromptTool } from './update-deferred-prompt.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
 import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
@@ -176,6 +180,15 @@ function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
   tools['delete_recurring_task'] = makeDeleteRecurringTaskTool()
 }
 
+function addDeferredPromptTools(tools: ToolSet, userId: string | undefined): void {
+  if (userId === undefined) return
+  tools['create_deferred_prompt'] = makeCreateDeferredPromptTool(userId)
+  tools['list_deferred_prompts'] = makeListDeferredPromptsTool(userId)
+  tools['get_deferred_prompt'] = makeGetDeferredPromptTool(userId)
+  tools['update_deferred_prompt'] = makeUpdateDeferredPromptTool(userId)
+  tools['cancel_deferred_prompt'] = makeCancelDeferredPromptTool(userId)
+}
+
 export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMode = 'normal'): ToolSet {
   const tools = makeCoreTools(provider, userId)
   maybeAddArchiveTool(tools, provider)
@@ -188,9 +201,8 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   addRecurringTools(tools, userId)
   addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)
-  if (userId !== undefined && mode === 'normal') {
-    const deferredTools = makeDeferredPromptTools(userId)
-    Object.assign(tools, deferredTools)
+  if (mode === 'normal') {
+    addDeferredPromptTools(tools, userId)
   }
   return tools
 }

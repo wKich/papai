@@ -4,15 +4,15 @@
 
 Detailed conventions are in `.github/instructions/*.instructions.md` files, auto-loaded by glob:
 
-| File | Scope | Covers |
-|------|-------|--------|
-| `general.instructions.md` | `src/**` | Runtime, linting, logging, error handling, imports |
-| `providers.instructions.md` | `src/providers/**` | TaskProvider interface, operations, schemas, error classification |
-| `tools.instructions.md` | `src/tools/**` | Tool definitions, capability gating, destructive actions |
-| `commands.instructions.md` | `src/commands/**` | Command handler pattern, auth checks, ReplyFn |
-| `chat-adapters.instructions.md` | `src/chat/**` | ChatProvider interface, platform adapters |
-| `testing.instructions.md` | `tests/**` | Test helpers, mocking rules, mock pollution prevention |
-| `e2e-testing.instructions.md` | `tests/e2e/**` | E2E test structure, KaneoTestClient, Docker-based tests |
+| File                            | Scope              | Covers                                                            |
+| ------------------------------- | ------------------ | ----------------------------------------------------------------- |
+| `general.instructions.md`       | `src/**`           | Runtime, linting, logging, error handling, imports                |
+| `providers.instructions.md`     | `src/providers/**` | TaskProvider interface, operations, schemas, error classification |
+| `tools.instructions.md`         | `src/tools/**`     | Tool definitions, capability gating, destructive actions          |
+| `commands.instructions.md`      | `src/commands/**`  | Command handler pattern, auth checks, ReplyFn                     |
+| `chat-adapters.instructions.md` | `src/chat/**`      | ChatProvider interface, platform adapters                         |
+| `testing.instructions.md`       | `tests/**`         | Test helpers, mocking rules, mock pollution prevention            |
+| `e2e-testing.instructions.md`   | `tests/e2e/**`     | E2E test structure, KaneoTestClient, Docker-based tests           |
 
 ## No lint-disable comments
 

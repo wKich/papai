@@ -6,13 +6,25 @@ mockLogger()
 mockDrizzle()
 
 import { setConfig } from '../../src/config.js'
-import { makeDeferredPromptTools } from '../../src/deferred-prompts/tools.js'
+import { makeCancelDeferredPromptTool } from '../../src/tools/cancel-deferred-prompt.js'
+import { makeCreateDeferredPromptTool } from '../../src/tools/create-deferred-prompt.js'
+import { makeGetDeferredPromptTool } from '../../src/tools/get-deferred-prompt.js'
+import { makeListDeferredPromptsTool } from '../../src/tools/list-deferred-prompts.js'
+import { makeUpdateDeferredPromptTool } from '../../src/tools/update-deferred-prompt.js'
 
 const USER_ID = 'user-1'
 const toolCtx = { toolCallId: 'tc1', messages: [] as never[], abortSignal: new AbortController().signal }
 
-function getTools(): ReturnType<typeof makeDeferredPromptTools> {
-  return makeDeferredPromptTools(USER_ID)
+import type { ToolSet } from 'ai'
+
+function getTools(): ToolSet {
+  return {
+    create_deferred_prompt: makeCreateDeferredPromptTool(USER_ID),
+    list_deferred_prompts: makeListDeferredPromptsTool(USER_ID),
+    get_deferred_prompt: makeGetDeferredPromptTool(USER_ID),
+    update_deferred_prompt: makeUpdateDeferredPromptTool(USER_ID),
+    cancel_deferred_prompt: makeCancelDeferredPromptTool(USER_ID),
+  }
 }
 
 /** Build a fire_at object for 1 hour in the future (UTC, since tests set timezone=UTC). */
