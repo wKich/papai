@@ -122,7 +122,11 @@ else
     fname=$(safe_name "$check")
     (
       exit_code=0
-      bun run "$check" >"$TMPDIR/$fname.out" 2>&1 || exit_code=$?
+      if [ "$check" = "test" ]; then
+        bun run test --only-failures >"$TMPDIR/$fname.out" 2>&1 || exit_code=$?
+      else
+        bun run "$check" >"$TMPDIR/$fname.out" 2>&1 || exit_code=$?
+      fi
       echo "$exit_code" >"$TMPDIR/$fname.exit"
     ) &
     pids+=($!)

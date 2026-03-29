@@ -81,21 +81,42 @@ const DASHBOARD_DIR = new URL('.', import.meta.url).pathname
 const jsCache = new Map<string, string>()
 
 async function transpileDashboard(): Promise<void> {
+  const entrypoints = [
+    new URL('dashboard/dashboard-state.ts', import.meta.url).pathname,
+    new URL('dashboard-ui.ts', import.meta.url).pathname,
+  ]
+
+  // Validate source files exist and have content before building
+  for (const entrypoint of entrypoints) {
+    const file = Bun.file(entrypoint)
+    const size = file.size
+    if (size === 0) {
+      log.error({ entrypoint }, 'Dashboard source file is empty, skipping transpilation')
+      throw new Error(`Dashboard source file is empty: ${entrypoint}`)
+    }
+  }
+
   const buildResult = await Bun.build({
-    entrypoints: [
-      new URL('dashboard-state.ts', import.meta.url).pathname,
-      new URL('dashboard-ui.ts', import.meta.url).pathname,
-    ],
+    entrypoints,
   })
+
+  // Validate build outputs have expected content
   const entries = await Promise.all(
     buildResult.outputs.map(async (output) => {
       const name = output.path.split('/').pop() ?? ''
-      return [name, await output.text()] as const
+      const content = await output.text()
+      if (content.length === 0) {
+        log.error({ name }, 'Build output is empty')
+        throw new Error(`Build output is empty: ${name}`)
+      }
+      return [name, content] as const
     }),
   )
   for (const [name, content] of entries) {
     jsCache.set(name, content)
   }
+
+  log.info({ entrypoints: entrypoints.length, outputs: entries.length }, 'Dashboard transpiled successfully')
 }
 
 function handleDashboardFile(pathname: string): Response {

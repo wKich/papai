@@ -1,5 +1,55 @@
 /// <reference lib="dom" />
 
+// Import all types from schemas to ensure TypeScript interfaces are inferred from Zod schemas
+import type {
+  Session,
+  Wizard,
+  SchedulerInfo,
+  PollersInfo,
+  MessageCacheInfo,
+  TokenInfo,
+  ToolCall,
+  LlmTrace,
+  LogEntry,
+  StateInitEvent,
+  StateStatsEvent,
+  CacheEvent,
+  UserIdEvent,
+  SchedulerTickEvent,
+  PollerEvent,
+  MessageCacheEvent,
+} from './schemas.js'
+
+// Re-export all types
+export type {
+  Session,
+  Wizard,
+  SchedulerInfo,
+  PollersInfo,
+  MessageCacheInfo,
+  TokenInfo,
+  ToolCall,
+  LlmTrace,
+  LogEntry,
+  StateInitEvent,
+  StateStatsEvent,
+  CacheEvent,
+  UserIdEvent,
+  SchedulerTickEvent,
+  PollerEvent,
+  MessageCacheEvent,
+}
+
+/**
+ * Dashboard-specific wizard type that supports "unset" values for partial updates.
+ * Uses '---' to indicate fields that haven't been received from the server yet.
+ */
+export type DashboardWizard = {
+  userId: string
+  currentStep: number | '---'
+  totalSteps: number | '---'
+}
+
 /**
  * Dashboard state object exposed on window for render functions
  */
@@ -12,73 +62,13 @@ export interface DashboardState {
     totalToolCalls: number
   }
   sessions: Map<string, Session>
-  wizards: Map<string, Wizard>
+  wizards: Map<string, DashboardWizard>
   scheduler: SchedulerInfo
   pollers: PollersInfo
   messageCache: MessageCacheInfo
   llmTraces: LlmTrace[]
   logs: LogEntry[]
   logScopes: Set<string>
-}
-
-export interface Session {
-  userId: string
-  lastAccessed: number
-  historyLength: number
-  factsCount: number
-  summary: string | null
-  configKeys: string[]
-  workspaceId: string | null
-}
-
-export interface Wizard {
-  userId: string
-  currentStep: number
-  totalSteps: number
-}
-
-export interface SchedulerInfo {
-  running?: boolean
-  tickCount?: number
-}
-
-export interface PollersInfo {
-  scheduledRunning?: boolean
-  alertsRunning?: boolean
-}
-
-export interface MessageCacheInfo {
-  size?: number
-  pendingWrites?: number
-}
-
-export interface TokenInfo {
-  inputTokens: number
-  outputTokens: number
-}
-
-export interface ToolCall {
-  toolName: string
-  durationMs: number
-  success: boolean
-}
-
-export interface LlmTrace {
-  timestamp: string | number
-  userId: string
-  model: string
-  duration: number
-  steps: number
-  totalTokens: TokenInfo
-  toolCalls?: ToolCall[]
-  error?: string
-}
-
-export interface LogEntry {
-  time: string | number
-  level: number
-  msg: string
-  scope?: string
 }
 
 /**
@@ -88,7 +78,7 @@ export interface DashboardAPI {
   renderConnection(connected: boolean): void
   renderStats(stats: DashboardState['stats']): void
   renderInfra(scheduler: SchedulerInfo, pollers: PollersInfo, messageCache: MessageCacheInfo): void
-  renderSessions(sessions: Map<string, Session>, wizards: Map<string, Wizard>): void
+  renderSessions(sessions: Map<string, Session>, wizards: Map<string, DashboardWizard>): void
   renderTraces(traces: LlmTrace[]): void
   renderLogs(): void
   updateScopeFilter(scopes: Set<string>): void

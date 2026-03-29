@@ -17,18 +17,18 @@ implementation code without tests, and cannot regress existing tests during refa
 
 ### Critical Mismatches Requiring Adaptation
 
-| Area                | Prototype Assumes                | This Project Uses                               | Fix Required                    |
-| ------------------- | -------------------------------- | ----------------------------------------------- | ------------------------------- |
-| Test runner         | Vitest / Jest                    | Bun test                                        | Rewrite runner detection        |
-| Test location       | Colocated (`src/foo.test.ts`)    | Parallel dir (`tests/foo.test.ts`)              | Rewrite file resolution         |
-| Test subdir mapping | None / `__tests__/`              | `tests/providers/`, `tests/tools/`, etc.        | Mirror `src/` → `tests/`        |
-| PreToolUse output   | `decision: "block"` (deprecated) | `hookSpecificOutput.permissionDecision: "deny"` | Fix JSON output format          |
-| Tool name matcher   | `Write\|Edit\|MultiEdit`         | `Write\|Edit` (no MultiEdit in Claude Code)     | Fix matcher                     |
-| Stryker test runner | `vitest`                         | `bun` via `@hughescr/stryker-bun-runner`        | Use project's Stryker config    |
-| Coverage            | `npx vitest --coverage`          | `bun test --coverage` (no coverage-final.json)  | Use Bun coverage or skip        |
-| ESM in hooks        | `import` syntax in `.js`         | Node.js runs hooks (no ESM by default)          | Use `#!/usr/bin/env bun` or CJS |
-| Script path ref     | Hardcoded relative               | `$CLAUDE_PROJECT_DIR` env var                   | Use Claude Code convention      |
-| Code duplication    | `extractSurface()` in 2 files    | —                                               | Extract shared utility          |
+| Area                | Prototype Assumes                | This Project Uses                                   | Fix Required                                   |
+| ------------------- | -------------------------------- | --------------------------------------------------- | ---------------------------------------------- |
+| Test runner         | Vitest / Jest                    | Bun test                                            | Rewrite runner detection                       |
+| Test location       | Colocated (`src/foo.test.ts`)    | Parallel dir (`tests/foo.test.ts`)                  | Rewrite file resolution                        |
+| Test subdir mapping | None / `__tests__/`              | `tests/providers/`, `tests/tools/`, etc.            | Mirror `src/` → `tests/`                       |
+| PreToolUse output   | `decision: "block"` (deprecated) | `hookSpecificOutput.permissionDecision: "deny"`     | Fix JSON output format                         |
+| Tool name matcher   | `Write\|Edit\|MultiEdit`         | `Write\|Edit` (no MultiEdit in Claude Code)         | Fix matcher                                    |
+| Stryker test runner | `vitest`                         | `bun` via `@hughescr/stryker-bun-runner`            | Use project's Stryker config                   |
+| Coverage            | `npx vitest --coverage`          | `bun test --coverage` (no coverage-final.json)      | Use Bun coverage or skip                       |
+| ESM in hooks        | `import` syntax in `.js`         | Shell runs hooks; `node` must be invoked explicitly | Use `.mjs` extension + explicit `node` command |
+| Script path ref     | Hardcoded relative               | `$CLAUDE_PROJECT_DIR` env var                       | Use Claude Code convention                     |
+| Code duplication    | `extractSurface()` in 2 files    | —                                                   | Extract shared utility                         |
 
 ### What Works As-Is
 
@@ -48,7 +48,7 @@ implementation code without tests, and cannot regress existing tests during refa
 1. `enforce-tdd.js` — block impl writes without test (PreToolUse)
 2. `enforce-tdd-tracker.js` — track test files written in session (PostToolUse)
 3. `verify-tests-pass.js` — run tests after impl edit, block on red (PostToolUse)
-4. Settings merge into `.claude/settings.local.json`
+4. Settings merge into `.claude/settings.json` (shared, committed to repo)
 5. System prompt additions to `CLAUDE.md`
 
 **Out of scope (Phase 2):**
@@ -70,12 +70,13 @@ infrastructure adaptation. They can be layered on once the core hooks are proven
 
 ```
 .claude/
-├── settings.local.json          # Hook registration (merge with existing)
+├── settings.json                # NEW: TDD hook registration (shared, committed)
+├── settings.local.json          # Existing: permissions + Stop hook (local only)
 └── hooks/
     ├── check-no-lint-suppression.sh   # Existing Stop hook
-    ├── enforce-tdd.js                 # NEW: PreToolUse — block impl without test
-    ├── enforce-tdd-tracker.js         # NEW: PostToolUse — track test files
-    └── verify-tests-pass.js           # NEW: PostToolUse — run tests, block on red
+    ├── enforce-tdd.mjs                # NEW: PreToolUse — block impl without test
+    ├── enforce-tdd-tracker.mjs        # NEW: PostToolUse — track test files
+    └── verify-tests-pass.mjs          # NEW: PostToolUse — run tests, block on red
 ```
 
 ### Test File Resolution Strategy
@@ -98,13 +99,25 @@ The hooks must:
 
 ### Hook Execution Environment
 
-Claude Code runs hooks via `node`. Since the project uses ESM (`"type": "module"` in package.json),
-Node.js will handle `import` syntax natively. However, to avoid reliance on the project's
-`package.json` type field, use `#!/usr/bin/env node` with explicit `.mjs` extension or use
-`#!/usr/bin/env bun` since Bun is the project's runtime and handles ESM natively.
+Claude Code runs hooks via the **system shell** (bash/zsh), not Node.js directly. Hook commands
+in `settings.json` are shell commands — to run a `.mjs` file, the command must explicitly invoke
+`node`. Since the project uses ESM (`"type": "module"` in package.json), Node.js handles
+`import` syntax natively. The `.mjs` extension forces ESM regardless of `package.json`.
 
-**Decision:** Use `#!/usr/bin/env node` with `.mjs` extension. This avoids requiring Bun on
-the hook execution path and leverages Node's native ESM support via file extension.
+**Decision:** Use `.mjs` extension with `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/<file>.mjs`
+in the settings command. Shebangs are unused (shell invokes `node` explicitly, not the script
+directly), so they are omitted from hook files. `chmod +x` is not needed.
+
+### Available Hook Features (Not Used in Phase 1)
+
+These Claude Code hook features are available but intentionally deferred to keep Phase 1 simple:
+
+- **`if` field** (v2.1.85+) — permission-rule syntax for filtering, e.g. `"if": "Edit(src/*.ts)"`.
+  Could replace the in-script path filtering, but adds coupling to settings schema.
+- **`async: true`** — non-blocking hook execution. The tracker hook could use this since it
+  doesn't need to block, but the overhead is negligible.
+- **Exit code 2** — alternative blocking mechanism where stderr is sent to Claude as feedback.
+  Simpler than JSON output for `verify-tests-pass.mjs`, but less structured.
 
 ---
 
@@ -128,7 +141,6 @@ tool call if no test file found.
 **Implementation outline:**
 
 ```javascript
-#!/usr/bin/env node
 // PreToolUse — enforce TDD: tests must exist before implementation
 
 import fs from 'node:fs'
@@ -239,7 +251,6 @@ if it hasn't been saved to disk in the expected location yet.
 **Implementation outline:**
 
 ```javascript
-#!/usr/bin/env node
 // PostToolUse — record when a test file is written this session
 
 import fs from 'node:fs'
@@ -300,7 +311,6 @@ feedback.
 **Implementation outline:**
 
 ```javascript
-#!/usr/bin/env node
 // PostToolUse — after every file write, run related tests.
 // If tests fail, block the agent so it must fix before proceeding.
 
@@ -398,24 +408,16 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"/Users/ki/Projects/experime
 
 ### Task 4: Merge hook registration into settings
 
-**Files:** Modify `.claude/settings.local.json`
+**Files:** Create or modify `.claude/settings.json` (shared, committed to repo)
 
-**Current content:**
+TDD hooks must go in `.claude/settings.json` (not `settings.local.json`) so they are committed
+to the repo and available to all contributors. The existing `settings.local.json` retains
+permissions and the Stop hook (local-only concerns).
 
-```json
-{
-  "permissions": { ... },
-  "hooks": {
-    "Stop": [{ ... check-no-lint-suppression.sh ... }]
-  }
-}
-```
-
-**Add PreToolUse and PostToolUse sections:**
+**Create `.claude/settings.json` with hook registrations:**
 
 ```json
 {
-  "permissions": { ... },
   "hooks": {
     "PreToolUse": [
       {
@@ -445,32 +447,24 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"/Users/ki/Projects/experime
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/hooks/check-no-lint-suppression.sh\""
-          }
-        ]
-      }
     ]
   }
 }
 ```
 
+Note: The existing Stop hook in `settings.local.json` is unaffected. Claude Code merges
+both files (local takes precedence), so both hook sets will be active.
+
 **Verification:**
 
 ```bash
 # Verify JSON is valid
-node -e "console.log(JSON.parse(require('fs').readFileSync('.claude/settings.local.json','utf8')))"
+node -e "console.log(JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8')))"
 # Check hooks load in Claude Code
 claude --debug  # inspect hook registration output
 ```
 
-**Commit:** `feat: register TDD hooks in settings.local.json`
+**Commit:** `feat: register TDD hooks in settings.json`
 
 ---
 
@@ -514,23 +508,18 @@ blocked before the file write completes.
 ### Disabling TDD Hooks
 
 For non-code edits (docs, config), hooks automatically allow: only `src/**/*.ts`
-files are gated. For exceptional cases, edit `.claude/settings.local.json` and
-set `"disableAllHooks": true` temporarily.
+files are gated. For exceptional cases, temporarily remove the hook entries from
+`.claude/settings.json`.
 ```
 
 **Commit:** `docs: add TDD enforcement protocol to CLAUDE.md`
 
 ---
 
-### Task 6: Make hooks executable and verify end-to-end
+### Task 6: Verify end-to-end
 
-**Steps:**
-
-```bash
-chmod +x .claude/hooks/enforce-tdd.mjs
-chmod +x .claude/hooks/enforce-tdd-tracker.mjs
-chmod +x .claude/hooks/verify-tests-pass.mjs
-```
+**Note:** `chmod +x` is not needed — hooks are invoked via `node <file>` in settings, not
+executed directly by the shell.
 
 **End-to-end test scenarios:**
 
@@ -570,7 +559,7 @@ chmod +x .claude/hooks/verify-tests-pass.mjs
    # Should exit 0 with no output (tests/errors.test.ts passes)
    ```
 
-**Commit:** `chore: make TDD hooks executable and verify`
+**Commit:** `test: verify TDD hooks end-to-end`
 
 ---
 
@@ -600,13 +589,13 @@ versions live in `.claude/hooks/`. Key differences:
 
 ## Risk Assessment Matrix
 
-| Risk                                          | Probability | Impact | Mitigation                                                                                  | Owner |
-| --------------------------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------- | ----- |
-| Hook blocks legitimate edits (false positive) | Medium      | High   | Only gate `src/` files; allow config/docs freely. `disableAllHooks` escape hatch            | Dev   |
-| Test runner timeout slows Claude              | Medium      | Medium | 30s timeout on `bun test` per file; Bun is fast; test only the related file, not full suite | Dev   |
-| Hook crashes on malformed JSON                | Low         | Medium | Wrap stdin parsing in try/catch, exit 0 on error (fail open)                                | Dev   |
-| Session state file races (parallel hooks)     | Low         | Low    | PostToolUse hooks run sequentially per Claude Code docs                                     | Dev   |
-| Node.js ESM resolution fails in hook          | Low         | High   | Use `.mjs` extension which forces ESM regardless of package.json; verify on setup           | Dev   |
+| Risk                                          | Probability | Impact | Mitigation                                                                                   | Owner |
+| --------------------------------------------- | ----------- | ------ | -------------------------------------------------------------------------------------------- | ----- |
+| Hook blocks legitimate edits (false positive) | Medium      | High   | Only gate `src/` files; allow config/docs freely. Remove hooks from settings as escape hatch | Dev   |
+| Test runner timeout slows Claude              | Medium      | Medium | 30s timeout on `bun test` per file; Bun is fast; test only the related file, not full suite  | Dev   |
+| Hook crashes on malformed JSON                | Low         | Medium | Wrap stdin parsing in try/catch, exit 0 on error (fail open)                                 | Dev   |
+| Session state file races (parallel hooks)     | Low         | Low    | PostToolUse hooks run sequentially per Claude Code docs                                      | Dev   |
+| Node.js ESM resolution fails in hook          | Low         | High   | Use `.mjs` extension which forces ESM regardless of package.json; verify on setup            | Dev   |
 
 ---
 
@@ -641,10 +630,9 @@ When Phase 1 is stable, add:
 
 ## Quality Gate Checklist
 
-- [ ] All 3 hooks created in `.claude/hooks/`
-- [ ] Hooks are executable (`chmod +x`)
-- [ ] `.claude/settings.local.json` updated with PreToolUse and PostToolUse registrations
-- [ ] Existing `Stop` hook preserved in settings
+- [ ] All 3 hooks created in `.claude/hooks/` (`.mjs` extension)
+- [ ] `.claude/settings.json` created with PreToolUse and PostToolUse registrations
+- [ ] Existing `Stop` hook in `settings.local.json` preserved (unmodified)
 - [ ] Manual verification: impl write without test → blocked
 - [ ] Manual verification: impl write with test → allowed
 - [ ] Manual verification: test write + then impl write → allowed via session tracking

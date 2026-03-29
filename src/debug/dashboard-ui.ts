@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import './dashboard-types.js'
+import type { LogEntry } from './schemas.js'
 
 // --- DOM elements ---
 const $connStatus = document.getElementById('connection-status')!
@@ -16,9 +17,9 @@ const $traceCount = document.getElementById('trace-count')!
 const $traceList = document.getElementById('trace-list')!
 const $logCount = document.getElementById('log-count')!
 const $logEntries = document.getElementById('log-entries')!
-const $logLevelFilter = document.getElementById('log-level-filter') as HTMLSelectElement
-const $logScopeFilter = document.getElementById('log-scope-filter') as HTMLSelectElement
-const $logSearch = document.getElementById('log-search') as HTMLInputElement
+const $logLevelFilter = document.querySelector<HTMLSelectElement>('#log-level-filter')!
+const $logScopeFilter = document.querySelector<HTMLSelectElement>('#log-scope-filter')!
+const $logSearch = document.querySelector<HTMLInputElement>('#log-search')!
 const $logClear = document.getElementById('log-clear')!
 const $logAutoscroll = document.getElementById('log-autoscroll')!
 
@@ -28,12 +29,12 @@ let autoScroll = true
 $logEntries.addEventListener('scroll', () => {
   const { scrollTop, scrollHeight, clientHeight } = $logEntries
   autoScroll = scrollHeight - scrollTop - clientHeight < 50
-  ;($logAutoscroll as HTMLElement).hidden = autoScroll
+  $logAutoscroll.hidden = autoScroll
 })
 
 $logAutoscroll.addEventListener('click', () => {
   autoScroll = true
-  ;($logAutoscroll as HTMLElement).hidden = true
+  $logAutoscroll.hidden = true
   $logEntries.scrollTop = $logEntries.scrollHeight
 })
 
@@ -53,8 +54,9 @@ $logClear.addEventListener('click', () => {
 
 // --- Trace expand/collapse via event delegation ---
 $traceList.addEventListener('click', (e: Event) => {
-  const target = e.target as HTMLElement
-  const row = target.closest('.trace-row') as HTMLElement | null
+  const target = e.target
+  if (!(target instanceof HTMLElement)) return
+  const row = target.closest('.trace-row')
   if (row === null) return
   const expanded = row.getAttribute('data-expanded') === 'true'
   row.setAttribute('data-expanded', expanded ? 'false' : 'true')
@@ -113,29 +115,31 @@ function escapeHtml(str: string): string {
 
 // --- Render functions exposed on window ---
 
-window.dashboard.renderConnection = (connected: boolean) => {
+window.dashboard.renderConnection = (connected: boolean): void => {
   $connStatus.textContent = connected ? '\u25cf connected' : '\u25cf disconnected'
   $connStatus.className = `status-dot ${connected ? 'connected' : 'disconnected'}`
 }
-window.dashboard.renderStats = (stats) => {
+window.dashboard.renderStats = (stats): void => {
   $uptime.textContent = `uptime ${formatUptime(stats.startedAt)}`
   $statMessages.textContent = `msgs: ${stats.totalMessages}`
   $statLlm.textContent = `llm: ${stats.totalLlmCalls}`
   $statTools.textContent = `tools: ${stats.totalToolCalls}`
 }
-window.dashboard.renderInfra = (scheduler, pollers, messageCache) => {
+window.dashboard.renderInfra = (scheduler, pollers, messageCache): void => {
   const sched = scheduler ?? {}
-  $infraScheduler.textContent = `scheduler: ${sched.running ? 'running' : 'stopped'}${sched.tickCount !== undefined ? ` (tick #${sched.tickCount})` : ''}`
+  const isRunning = sched.running !== undefined && sched.running
+  const tickPart = sched.tickCount === undefined ? '' : ` (tick #${sched.tickCount})`
+  $infraScheduler.textContent = `scheduler: ${isRunning ? 'running' : 'stopped'}${tickPart}`
 
   const poll = pollers ?? {}
-  const sDot = poll.scheduledRunning ? '\u25cf' : '\u25cb'
-  const aDot = poll.alertsRunning ? '\u25cf' : '\u25cb'
+  const sDot = poll.scheduledRunning !== undefined && poll.scheduledRunning ? '\u25cf' : '\u25cb'
+  const aDot = poll.alertsRunning !== undefined && poll.alertsRunning ? '\u25cf' : '\u25cb'
   $infraPollers.textContent = `pollers: scheduled ${sDot}  alerts ${aDot}`
 
   const mc = messageCache ?? {}
   $infraMsgcache.textContent = `msg-cache: ${mc.size ?? 0} entries, ${mc.pendingWrites ?? 0} pending`
 }
-window.dashboard.renderSessions = (sessions, wizards) => {
+window.dashboard.renderSessions = (sessions, wizards): void => {
   $sessionCount.textContent = String(sessions.size)
   let html = ''
   for (const [userId, s] of sessions) {
@@ -143,7 +147,7 @@ window.dashboard.renderSessions = (sessions, wizards) => {
     const isActive = Date.now() - s.lastAccessed < 300000
     html += `<div class="session-card ${isActive ? 'active' : ''}">`
     html += `<div class="user-id">${escapeHtml(userId)}</div>`
-    html += `<div class="session-detail">history: ${s.historyLength} &middot; facts: ${s.factsCount} &middot; summary: ${s.summary !== null ? 'yes' : 'no'}</div>`
+    html += `<div class="session-detail">history: ${s.historyLength} &middot; facts: ${s.factsCount} &middot; summary: ${s.summary === null ? 'no' : 'yes'}</div>`
     if (s.configKeys?.length > 0) {
       html += `<div class="session-detail">config: ${s.configKeys.length} keys</div>`
     }
@@ -157,7 +161,7 @@ window.dashboard.renderSessions = (sessions, wizards) => {
   }
   $sessionList.innerHTML = html
 }
-window.dashboard.renderTraces = (traces) => {
+window.dashboard.renderTraces = (traces): void => {
   $traceCount.textContent = String(traces.length)
   let html = ''
   for (const t of traces) {
@@ -184,7 +188,7 @@ window.dashboard.renderTraces = (traces) => {
   }
   $traceList.innerHTML = html
 }
-window.dashboard.renderLogs = () => {
+window.dashboard.renderLogs = (): void => {
   const state = window.dashboard.__state
   if (state === undefined) return
 
@@ -192,7 +196,7 @@ window.dashboard.renderLogs = () => {
   const scope = $logScopeFilter.value
   const query = $logSearch.value.toLowerCase()
 
-  const filtered = state.logs.filter((e: any) => {
+  const filtered = state.logs.filter((e: LogEntry) => {
     if (e.level < minLevel) return false
     if (scope !== '' && e.scope !== scope) return false
     if (query !== '' && !e.msg.toLowerCase().includes(query)) return false
@@ -205,7 +209,7 @@ window.dashboard.renderLogs = () => {
   for (const entry of filtered) {
     const cls = levelClass(entry.level)
     const time = formatTime(entry.time)
-    const scopeStr = entry.scope !== undefined ? ` ${entry.scope}` : ''
+    const scopeStr = entry.scope === undefined ? '' : ` ${entry.scope}`
     html += `<div class="log-entry ${cls}"><span class="log-meta">${time} ${levelName(entry.level)}${scopeStr}</span><span class="log-msg">${escapeHtml(entry.msg)}</span></div>`
   }
   $logEntries.innerHTML = html
@@ -214,7 +218,7 @@ window.dashboard.renderLogs = () => {
     $logEntries.scrollTop = $logEntries.scrollHeight
   }
 }
-window.dashboard.updateScopeFilter = (scopes) => {
+window.dashboard.updateScopeFilter = (scopes): void => {
   const current = $logScopeFilter.value
   let html = '<option value="">all scopes</option>'
   for (const s of [...scopes].sort()) {
