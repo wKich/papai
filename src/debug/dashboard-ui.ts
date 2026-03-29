@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import './dashboard-types.js'
 
 // --- DOM elements ---
 const $connStatus = document.getElementById('connection-status')!
@@ -37,10 +38,18 @@ $logAutoscroll.addEventListener('click', () => {
 })
 
 // --- Filter event listeners ---
-$logLevelFilter.addEventListener('change', () => (window as any).renderLogs())
-$logScopeFilter.addEventListener('change', () => (window as any).renderLogs())
-$logSearch.addEventListener('input', () => (window as any).renderLogs())
-$logClear.addEventListener('click', () => (window as any).clearLogs())
+$logLevelFilter.addEventListener('change', () => {
+  window.dashboard.renderLogs()
+})
+$logScopeFilter.addEventListener('change', () => {
+  window.dashboard.renderLogs()
+})
+$logSearch.addEventListener('input', () => {
+  window.dashboard.renderLogs()
+})
+$logClear.addEventListener('click', () => {
+  window.dashboard.clearLogs()
+})
 
 // --- Trace expand/collapse via event delegation ---
 $traceList.addEventListener('click', (e: Event) => {
@@ -104,17 +113,17 @@ function escapeHtml(str: string): string {
 
 // --- Render functions exposed on window ---
 
-;(window as any).renderConnection = (connected: boolean) => {
+window.dashboard.renderConnection = (connected: boolean) => {
   $connStatus.textContent = connected ? '\u25cf connected' : '\u25cf disconnected'
   $connStatus.className = `status-dot ${connected ? 'connected' : 'disconnected'}`
 }
-;(window as any).renderStats = (stats: any) => {
+window.dashboard.renderStats = (stats) => {
   $uptime.textContent = `uptime ${formatUptime(stats.startedAt)}`
   $statMessages.textContent = `msgs: ${stats.totalMessages}`
   $statLlm.textContent = `llm: ${stats.totalLlmCalls}`
   $statTools.textContent = `tools: ${stats.totalToolCalls}`
 }
-;(window as any).renderInfra = (scheduler: any, pollers: any, messageCache: any) => {
+window.dashboard.renderInfra = (scheduler, pollers, messageCache) => {
   const sched = scheduler ?? {}
   $infraScheduler.textContent = `scheduler: ${sched.running ? 'running' : 'stopped'}${sched.tickCount !== undefined ? ` (tick #${sched.tickCount})` : ''}`
 
@@ -126,7 +135,7 @@ function escapeHtml(str: string): string {
   const mc = messageCache ?? {}
   $infraMsgcache.textContent = `msg-cache: ${mc.size ?? 0} entries, ${mc.pendingWrites ?? 0} pending`
 }
-;(window as any).renderSessions = (sessions: Map<string, any>, wizards: Map<string, any>) => {
+window.dashboard.renderSessions = (sessions, wizards) => {
   $sessionCount.textContent = String(sessions.size)
   let html = ''
   for (const [userId, s] of sessions) {
@@ -148,11 +157,10 @@ function escapeHtml(str: string): string {
   }
   $sessionList.innerHTML = html
 }
-;(window as any).renderTraces = (traces: any[]) => {
+window.dashboard.renderTraces = (traces) => {
   $traceCount.textContent = String(traces.length)
   let html = ''
-  for (let i = 0; i < traces.length; i++) {
-    const t = traces[i]
+  for (const t of traces) {
     const isError = t.error !== undefined && t.error !== ''
     html += `<div class="trace-row ${isError ? 'error' : ''}" data-expanded="false">`
     html += '<div class="trace-summary">'
@@ -163,21 +171,21 @@ function escapeHtml(str: string): string {
     html += `<span>${t.steps} steps &middot; ${formatTokens(t.totalTokens?.inputTokens ?? 0)}\u2193</span>`
     html += '</div>'
     html += '<div class="trace-detail">'
-    if (t.toolCalls?.length > 0) {
+    if (t.toolCalls !== undefined && t.toolCalls.length > 0) {
       for (const tc of t.toolCalls) {
         html += `<div class="trace-tool"><span>${escapeHtml(tc.toolName)}</span><span>${tc.durationMs}ms <span class="${tc.success ? 'tool-success' : 'tool-fail'}">${tc.success ? '\u2713' : '\u2717'}</span></span></div>`
       }
     }
     html += `<div class="trace-tokens">in: ${formatTokens(t.totalTokens?.inputTokens ?? 0)} &middot; out: ${formatTokens(t.totalTokens?.outputTokens ?? 0)}</div>`
-    if (isError) {
+    if (isError && t.error !== undefined) {
       html += `<div class="trace-error-msg">${escapeHtml(t.error)}</div>`
     }
     html += '</div></div>'
   }
   $traceList.innerHTML = html
 }
-;(window as any).renderLogs = () => {
-  const state = (window as any).__state
+window.dashboard.renderLogs = () => {
+  const state = window.dashboard.__state
   if (state === undefined) return
 
   const minLevel = Number($logLevelFilter.value)
@@ -206,7 +214,7 @@ function escapeHtml(str: string): string {
     $logEntries.scrollTop = $logEntries.scrollHeight
   }
 }
-;(window as any).updateScopeFilter = (scopes: Set<string>) => {
+window.dashboard.updateScopeFilter = (scopes) => {
   const current = $logScopeFilter.value
   let html = '<option value="">all scopes</option>'
   for (const s of [...scopes].sort()) {

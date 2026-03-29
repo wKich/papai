@@ -119,7 +119,8 @@ function handleDashboardFile(pathname: string): Response {
   }
 
   // Serve CSS directly from file
-  if (ext === 'css') {
+  const ALLOWED_CSS_FILES = new Set(['dashboard.css'])
+  if (ext === 'css' && ALLOWED_CSS_FILES.has(filename)) {
     const filePath = `${DASHBOARD_DIR}${filename}`
     const file = Bun.file(filePath)
     return new Response(file)

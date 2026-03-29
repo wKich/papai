@@ -64,7 +64,7 @@ export async function youtrackFetch(
     return undefined
   }
 
-  const data = await response.json()
+  const data: unknown = await response.json()
   log.debug({ method, path }, 'YouTrack API response received')
   return data
 }

@@ -1,33 +1,34 @@
 /// <reference lib="dom" />
+import type { DashboardState } from './dashboard-types.js'
 
 const LOG_CAP = 65535
 
-const state = {
+const state: DashboardState = {
   connected: false,
   stats: { startedAt: Date.now(), totalMessages: 0, totalLlmCalls: 0, totalToolCalls: 0 },
-  sessions: new Map<string, any>(),
-  wizards: new Map<string, any>(),
-  scheduler: {} as any,
-  pollers: {} as any,
-  messageCache: {} as any,
-  llmTraces: [] as any[],
-  logs: [] as any[],
-  logScopes: new Set<string>(),
+  sessions: new Map(),
+  wizards: new Map(),
+  scheduler: {},
+  pollers: {},
+  messageCache: {},
+  llmTraces: [],
+  logs: [],
+  logScopes: new Set(),
 }
 
 // Expose state for renderLogs() to access
-;(window as any).__state = state
+window.dashboard.__state = state
 
 // --- Render helpers (call into dashboard-ui.ts via window) ---
 
 function renderAll() {
-  const w = window as any
-  w.renderConnection(state.connected)
-  w.renderStats(state.stats)
-  w.renderInfra(state.scheduler, state.pollers, state.messageCache)
-  w.renderSessions(state.sessions, state.wizards)
-  w.renderTraces(state.llmTraces)
-  w.renderLogs()
+  const dash = window.dashboard
+  dash.renderConnection(state.connected)
+  dash.renderStats(state.stats)
+  dash.renderInfra(state.scheduler, state.pollers, state.messageCache)
+  dash.renderSessions(state.sessions, state.wizards)
+  dash.renderTraces(state.llmTraces)
+  dash.renderLogs()
 }
 
 // --- Event handlers ---
@@ -54,14 +55,14 @@ function handleStateInit(d: any) {
 
 function handleStateStats(d: any) {
   Object.assign(state.stats, d)
-  const w = window as any
-  w.renderStats(state.stats)
+  const dash = window.dashboard
+  dash.renderStats(state.stats)
 }
 
 function handleLlmFull(d: any) {
   state.llmTraces.unshift(d)
   if (state.llmTraces.length > LOG_CAP) state.llmTraces.pop()
-  ;(window as any).renderTraces(state.llmTraces)
+  scheduleTracesRender()
 }
 
 function handleCacheEvent(d: any) {
@@ -81,45 +82,81 @@ function handleCacheEvent(d: any) {
       workspaceId: null,
     })
   }
-  ;(window as any).renderSessions(state.sessions, state.wizards)
+  scheduleSessionsRender()
 }
 
 function handleCacheExpire(d: any) {
   state.sessions.delete(d.userId as string)
   state.wizards.delete(d.userId as string)
-  ;(window as any).renderSessions(state.sessions, state.wizards)
+  scheduleSessionsRender()
 }
 
 function handleWizardCreated(d: any) {
   state.wizards.set(d.userId as string, d)
-  ;(window as any).renderSessions(state.sessions, state.wizards)
+  scheduleSessionsRender()
 }
 
 function handleWizardUpdated(d: any) {
   const existing = state.wizards.get(d.userId as string)
   if (existing !== undefined) Object.assign(existing, d)
   else state.wizards.set(d.userId as string, d)
-  ;(window as any).renderSessions(state.sessions, state.wizards)
+  scheduleSessionsRender()
 }
 
 function handleWizardDeleted(d: any) {
   state.wizards.delete(d.userId as string)
-  ;(window as any).renderSessions(state.sessions, state.wizards)
+  scheduleSessionsRender()
 }
 
 function handleSchedulerTick(d: any) {
   Object.assign(state.scheduler, d)
-  ;(window as any).renderInfra(state.scheduler, state.pollers, state.messageCache)
+  window.dashboard.renderInfra(state.scheduler, state.pollers, state.messageCache)
 }
 
 function handlePollerEvent(d: any) {
   Object.assign(state.pollers, d)
-  ;(window as any).renderInfra(state.scheduler, state.pollers, state.messageCache)
+  window.dashboard.renderInfra(state.scheduler, state.pollers, state.messageCache)
 }
 
 function handleMsgcacheSweep(d: any) {
   Object.assign(state.messageCache, d)
-  ;(window as any).renderInfra(state.scheduler, state.pollers, state.messageCache)
+  window.dashboard.renderInfra(state.scheduler, state.pollers, state.messageCache)
+}
+
+let logRenderPending = false
+
+function scheduleLogRender() {
+  if (!logRenderPending) {
+    logRenderPending = true
+    requestAnimationFrame(() => {
+      logRenderPending = false
+      window.dashboard.renderLogs()
+    })
+  }
+}
+
+let sessionsRenderPending = false
+
+function scheduleSessionsRender() {
+  if (!sessionsRenderPending) {
+    sessionsRenderPending = true
+    requestAnimationFrame(() => {
+      sessionsRenderPending = false
+      window.dashboard.renderSessions(state.sessions, state.wizards)
+    })
+  }
+}
+
+let tracesRenderPending = false
+
+function scheduleTracesRender() {
+  if (!tracesRenderPending) {
+    tracesRenderPending = true
+    requestAnimationFrame(() => {
+      tracesRenderPending = false
+      window.dashboard.renderTraces(state.llmTraces)
+    })
+  }
 }
 
 function handleLogEntry(d: any) {
@@ -128,10 +165,10 @@ function handleLogEntry(d: any) {
 
   if (d.scope !== undefined && !state.logScopes.has(d.scope)) {
     state.logScopes.add(d.scope)
-    ;(window as any).updateScopeFilter(state.logScopes)
+    window.dashboard.updateScopeFilter(state.logScopes)
   }
 
-  ;(window as any).renderLogs()
+  scheduleLogRender()
 }
 
 // --- SSE event type -> handler mapping ---
@@ -155,17 +192,17 @@ const handlers: Record<string, (d: any) => void> = {
 
 // --- Clear logs (called from UI) ---
 
-;(window as any).clearLogs = () => {
+window.dashboard.clearLogs = () => {
   state.logs.length = 0
   state.logScopes.clear()
-  ;(window as any).updateScopeFilter(state.logScopes)
-  ;(window as any).renderLogs()
+  window.dashboard.updateScopeFilter(state.logScopes)
+  window.dashboard.renderLogs()
 }
 
 // --- Uptime ticker ---
 
 setInterval(() => {
-  if (state.connected) (window as any).renderStats(state.stats)
+  if (state.connected) window.dashboard.renderStats(state.stats)
 }, 10000)
 
 // --- Initialize ---
@@ -181,8 +218,8 @@ async function init() {
         for (const entry of logs) {
           if (entry.scope !== undefined) state.logScopes.add(entry.scope)
         }
-        ;(window as any).updateScopeFilter(state.logScopes)
-        ;(window as any).renderLogs()
+        window.dashboard.updateScopeFilter(state.logScopes)
+        window.dashboard.renderLogs()
       }
     }
   } catch {
@@ -194,12 +231,12 @@ async function init() {
 
   evtSource.addEventListener('open', () => {
     state.connected = true
-    ;(window as any).renderConnection(true)
+    window.dashboard.renderConnection(true)
   })
 
   evtSource.addEventListener('error', () => {
     state.connected = false
-    ;(window as any).renderConnection(false)
+    window.dashboard.renderConnection(false)
   })
 
   // Register handler for each event type
