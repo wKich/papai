@@ -164,358 +164,32 @@ Tools are capability-gated: only tools supported by the active provider are expo
 | `delete_status`        | `statuses.delete`   | Delete a status column from a project                                        |
 | `reorder_statuses`     | `statuses.reorder`  | Reorder status columns in a project                                          |
 
-## Logging Requirements (HIGH PRIORITY)
+## Logging
 
-Logging is **mandatory** for debugging and operational visibility. The logger uses pino with structured JSON output. Every significant action, state change, and error must be logged.
+Logging is **mandatory**. Uses pino with structured JSON output. See `src/tools/CLAUDE.md`, `src/providers/CLAUDE.md` for path-specific rules.
 
-### When to Use Each Log Level
+Quick reference:
 
-#### `logger.debug()` — Detailed diagnostics
-
-Use for:
-
-- Function entry points with all input parameters (use `param !== undefined` not `!!param`)
-- Internal state transitions
-- API call initiation and raw responses
-- Authorization checks
-- Tool execution entry
-- Example: `logger.debug({ userId, historyLength }, 'Calling generateText')`
-
-#### `logger.info()` — Significant events
-
-Use for:
-
-- Successful completion of major operations (task created/updated, search completed)
-- External service calls with result summaries
-- User session lifecycle events
-- Example: `logger.info({ taskId, title }, 'Task created')`
-
-#### `logger.warn()` — Unexpected but recoverable
-
-Use for:
-
-- Invalid input that won't crash the app
-- Missing optional data
-- Failed lookups (columns not found)
-- Resource limits reached (history truncation)
-- Unauthorized access attempts
-- API returning incomplete data
-- Example: `logger.warn({ taskId, requestedStatus }, 'Column not found')`
-
-#### `logger.error()` — Failures requiring attention
-
-Use for:
-
-- All caught exceptions
-- Failed external API calls
-- Critical operation failures
-- Always include error message and context
-- Example: `logger.error({ error: error.message, userId }, 'Error generating response')`
-
-### Log Format Rules
-
-1. **Always use structured logging**: Pass metadata as first argument object, message as second
-2. **Include context**: userId, identifiers, counts, booleans for presence checks
-3. **Never log sensitive data**: No API keys, tokens, or personal info in logs
-4. **Use explicit undefined checks**: `field !== undefined` not `!!field` (strict-boolean-expressions)
-5. **Keep messages concise**: One clear action verb phrase
-
-### Required Logging Locations
-
-Every file must import and use the logger. Required log points:
-
-- All function entries in `src/providers/kaneo/`
-- All tool executions in `src/tools/`
-- Message lifecycle in `bot.ts` (receive, process, respond)
-- Authorization checks
-- Error catch blocks
+- `debug`: function entry with parameters, internal state, API calls
+- `info`: successful major operations, service call results
+- `warn`: invalid input, failed lookups, unauthorized attempts
+- `error`: caught exceptions, failed API calls — always include error message + context
+- Format: `logger.debug({ userId, count }, 'Message')` — structured metadata first, message second
+- Use `param !== undefined` not `!!param` (strict-boolean-expressions)
+- Never log API keys, tokens, or personal info
 
 ## Testing
 
-Tests are located in the `tests/` directory:
-
-```
-tests/
-├── *.test.ts         # Unit tests (run with bun run test)
-├── providers/        # Unit tests for src/providers/*
-│   ├── kaneo/
-│   └── youtrack/
-├── tools/            # Unit tests for src/tools/*
-└── e2e/              # E2E tests (run with bun run test:e2e)
-```
-
-For unit tests, use `bun run test`.
-
-### Mocking External Modules
-
-When mocking modules like the Vercel AI SDK, use **module-level mocking** with a mutable function reference instead of `spyOn().mockImplementation()`. This pattern avoids TypeScript type assertion errors and lint violations.
-
-**Pattern (used in `tests/memory.test.ts` and `tests/conversation.test.ts`):**
-
-```typescript
-// Define local type and mutable implementation
-import { mock } from 'bun:test'
-import type { ModelMessage } from 'ai'
-
-type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
-let generateTextImpl = (): Promise<GenerateTextResult> =>
-  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Updated summary text' } })
-
-// Mock the module BEFORE importing code that uses it
-void mock.module('ai', () => ({
-  generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-  Output: { object: ({ schema: s }: { schema: unknown }): { schema: unknown } => ({ schema: s }) },
-}))
-
-// Now import the code under test
-import { runTrimInBackground } from '../src/conversation.js'
-```
-
-**Benefits:**
-
-- No type assertions (`as SomeType`) needed
-- No `typescript-eslint(no-unsafe-type-assertion)` violations
-- Tests control behavior by reassigning `generateTextImpl`
-- Clean TypeScript types without generic complexity
-- Consistent with existing test patterns in the codebase
-
-**Example test with different behaviors:**
-
-```typescript
-test('success case', async () => {
-  // Uses default generateTextImpl
-  await runTrimInBackground('user1', history)
-})
-
-test('error case', async () => {
-  // Override for this test
-  generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API error'))
-  await runTrimInBackground('user1', history)
-})
-
-test('custom response', async () => {
-  generateTextImpl = (): Promise<GenerateTextResult> =>
-    Promise.resolve({ output: { keep_indices: [0], summary: 'Custom' } })
-  await runTrimInBackground('user1', history)
-})
-```
-
-See `tests/memory.test.ts` and `tests/conversation.test.ts` for full examples.
-
-### Mock Pollution Prevention (HIGH PRIORITY)
-
-`mock.module()` in Bun replaces the module **globally for the entire process** — not just for the current test file. When `bun test` runs multiple files in a single process, a mock registered in file A permanently replaces the real module for every subsequent file B, C, D… that imports the same module. This causes tests that pass individually (`bun test tests/foo.test.ts`) to fail when run as part of the full suite (`bun test`).
-
-**This is the #1 source of false test failures in this codebase. Every new test file must follow these rules.**
-
-#### Rule 1: Never mock a module that another test file also imports directly
-
-Before adding `void mock.module('../src/foo.js', ...)` to your test file, check whether other test files import `../src/foo.js` **without** mocking it. If they do, your mock will silently break those tests when the full suite runs.
-
-```bash
-# Check who imports a module you want to mock
-grep -r "from.*src/config.js" tests/ --include="*.test.ts" -l
-```
-
-If the module is already imported directly by other test files, you must either:
-
-- Use dependency injection instead of mocking the module
-- Mock at a lower level (mock the module's dependencies instead)
-- Accept that you need `mock.restore()` cleanup (see Rule 3)
-
-#### Rule 2: Mock the narrowest possible dependency
-
-Don't mock high-level modules (`config.js`, `cache.js`, `history.js`) when you can mock what they depend on (`db/drizzle.js`). High-level module mocks break more consumers.
-
-**Bad** — mocks `config.js`, breaking every other file that imports it:
-
-```typescript
-void mock.module('../src/config.js', () => ({
-  getConfig: () => 'test-value',
-}))
-```
-
-**Good** — mocks only the database layer, letting `config.js` work normally:
-
-```typescript
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: () => testDb,
-}))
-```
-
-#### Rule 3: Always clean up mocks that shadow shared modules
-
-If you must mock a module that other test files also use, register cleanup in `afterAll`:
-
-```typescript
-import { mock, afterAll } from 'bun:test'
-
-void mock.module('../src/config.js', () => ({ getConfig: () => 'test' }))
-
-afterAll(() => {
-  mock.restore()
-})
-```
-
-**Note:** `mock.restore()` restores **all** mocked modules, not just one. Call it in `afterAll` (runs once after all tests in the file), not in `afterEach` (which would break inter-test mock state within the file).
-
-#### Rule 4: Prefer test helpers over ad-hoc mocks
-
-Use the shared helpers that already exist:
-
-| Helper                 | Location                       | Purpose                                                              |
-| ---------------------- | ------------------------------ | -------------------------------------------------------------------- |
-| `mockLogger()`         | `tests/utils/test-helpers.ts`  | Stubs logger — safe because every test file that needs it calls this |
-| `mockDrizzle()`        | `tests/utils/test-helpers.ts`  | Stubs `getDrizzleDb` — the standard way to mock the database         |
-| `setupTestDb()`        | `tests/utils/test-helpers.ts`  | Creates in-memory SQLite with all migrations                         |
-| `createMockProvider()` | `tests/tools/mock-provider.ts` | Creates a mock `TaskProvider` without touching the module registry   |
-
-Before writing a new `void mock.module(...)`, check whether a helper already covers your case.
-
-#### Rule 5: Test files that mock many modules should be self-contained
-
-If a test requires mocking 4+ modules (e.g., `llm-orchestrator-process.test.ts` mocks `config.js`, `cache.js`, `history.js`, `conversation.js`, `memory.js`, `ai`, etc.), that test is high-risk for pollution. Mitigate by:
-
-1. Adding `afterAll(() => { mock.restore() })` at the end of the file
-2. Documenting which modules are mocked in a comment at the top of the file
-3. Verifying the full suite still passes: `bun test` (not just `bun test tests/your-file.test.ts`)
-
-#### Rule 6: Beware transitive mock pollution through source file chains
-
-When test file A mocks `src/db/drizzle.js`, test file B can be affected even if B never imports `drizzle.js` directly — as long as something B imports (e.g. `src/poller.ts`) imports something that imports `drizzle.js`. The `scripts/check-mock-pollution.ts` script detects this automatically (Pattern 3).
-
-To prevent transitive pollution, always add `afterAll(() => { mock.restore() })` to any test that mocks a module imported (directly or indirectly) by source files:
-
-```typescript
-afterAll(() => {
-  mock.restore()
-})
-```
-
-Run `bun run mock-pollution` after adding new mocks to verify the suite is still clean.
-
-#### Quick checklist for new test files
-
-- [ ] Mocks are registered **before** imports of code under test
-- [ ] Only modules that the test directly needs are mocked — no unnecessary overrides
-- [ ] `mock.restore()` is called in `afterAll` if the file mocks modules used by other test files
-- [ ] `bun test` (full suite) passes, not just the individual file
-- [ ] Mutable implementation pattern is used (reassignable `let impl = ...`) instead of inline mock return values that can't be changed per-test
-
-## E2E Testing
-
-E2E tests run against a real Kaneo instance in Docker using the existing `docker-compose.yml` setup. They verify the actual integration between papai's tools and the Kaneo API.
-
-### Prerequisites
-
-Ensure your `.env` file has the required Kaneo environment variables:
-
-- `KANEO_POSTGRES_PASSWORD`
-- `KANEO_AUTH_SECRET`
-- `KANEO_CLIENT_URL`
-
-### Running E2E Tests
-
-```bash
-# Run all e2e tests (Docker containers start/stop automatically)
-bun run test:e2e
-
-# Run in watch mode
-bun run test:e2e:watch
-```
-
-### E2E Test Structure
-
-- `tests/e2e/bun-test-setup.ts` - Global setup (Docker, provisioning) loaded via `--preload`
-- `tests/e2e/global-setup.ts` - Setup logic and config management
-- `tests/e2e/e2e.test.ts` - Orchestrator that imports all test suites
-- `tests/e2e/kaneo-test-client.ts` - Test utilities and resource cleanup
-- `tests/e2e/*.test.ts` - Individual e2e test files (no setup/teardown needed)
-- Uses existing `docker-compose.yml` + `docker-compose.test.yml` (no new compose files needed)
-
-### Writing E2E Tests
-
-Global setup is handled automatically by `bun-test-setup.ts`. Individual test files only need to focus on test logic:
-
-1. Use `KaneoTestClient` for resource management
-2. Call `testClient.trackTask(taskId)` for automatic cleanup
-3. Clean up in `beforeEach` for test isolation
-4. No need for `beforeAll`/`afterAll` - setup is global
-
-Example:
-
-```typescript
-import { beforeEach, describe, expect, test } from 'bun:test'
-import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-
-describe('My Feature', () => {
-  let testClient: KaneoTestClient
-  let kaneoConfig: KaneoConfig
-
-  beforeEach(async () => {
-    testClient = createTestClient()
-    kaneoConfig = testClient.getKaneoConfig()
-    await testClient.cleanup()
-  })
-
-  test('does something', async () => {
-    // Your test here - example:
-    // const task = await createTask(kaneoConfig, { title: 'Test', projectId })
-    // testClient.trackTask(task.id)
-  })
-})
-```
-
-### Environment Variables
-
-Create `tests/e2e/.env.e2e` from `.env.e2e.example`:
-
-- `E2E_KANEO_URL` - URL of the Kaneo instance (defaults to `KANEO_INTERNAL_URL` or `http://localhost:11337`)
-
-### Running E2E Tests in CI
-
-E2E tests run automatically in GitHub Actions on every push and PR. The CI workflow:
-
-1. Sets up Docker using `docker/setup-buildx-action`
-2. Creates required environment variables (`KANEO_POSTGRES_PASSWORD`, `KANEO_AUTH_SECRET`, `KANEO_CLIENT_URL`)
-3. Runs `bun run test:e2e` which automatically manages Docker containers
-
-The CI configuration is in `.github/workflows/ci.yml`.
-
-### E2E Test Coverage
-
-All Kaneo API operations are covered by E2E tests:
-
-#### Task Operations
-
-- `task-lifecycle.test.ts` - Create, read, update tasks
-- `task-comments.test.ts` - Add, get, update, remove comments
-- `task-relations.test.ts` - blocks, blocked_by, duplicate, related, parent relations
-- `task-archive.test.ts` - Archive with labels
-- `task-search.test.ts` - Search by keyword, status, priority, filters
-
-#### Project Operations
-
-- `project-lifecycle.test.ts` - Create, list, update
-- `project-archive.test.ts` - Archive projects
-
-#### Column Operations
-
-- `column-management.test.ts` - Create, update, delete, reorder columns
-
-#### Label Operations
-
-- `label-management.test.ts` - Create, update labels, add/remove from tasks
-- `label-operations.test.ts` - Full label CRUD and task associations
-
-#### Error Handling
-
-- `error-handling.test.ts` - 404, 400, validation errors, edge cases
-
-#### User Workflows
-
-- `user-workflows.test.ts` - Full lifecycle, project setup, dependencies, sprints, bulk ops
+See `tests/CLAUDE.md` for detailed testing conventions, mocking rules, and mock pollution prevention.
+
+Quick reference:
+
+- `bun test` — unit tests (excludes E2E)
+- `bun test:e2e` — E2E tests (requires Docker)
+- Use shared helpers from `tests/utils/test-helpers.ts` and `tests/tools/mock-provider.ts`
+- Use mutable `let impl` pattern for module mocks (not `spyOn().mockImplementation()`)
+- `mock.module()` is global — always add `afterAll(() => { mock.restore() })` for shared modules
+- Run `bun run mock-pollution` after adding new mocks
 
 ## Key Conventions
 
@@ -527,3 +201,18 @@ All Kaneo API operations are covered by E2E tests:
 - Strict TypeScript (`tsconfig.json` has strict mode + all safety flags)
 - Logging: **pino** with structured JSON output
 - Tests: Located in `tests/` directory, mirroring `src/` structure
+- NEVER add lint-disable comments (`eslint-disable`, `@ts-ignore`, `@ts-nocheck`, `oxlint-disable`) — fix the underlying issue
+- Use `.js` extension in import paths (Bun ESM resolution)
+- Error message extraction: `error instanceof Error ? error.message : String(error)`
+
+## Path-Scoped Conventions
+
+Detailed conventions live in subdirectory `CLAUDE.md` files (loaded by Claude Code and opencode) and `.github/instructions/*.instructions.md` files (loaded by GitHub Copilot):
+
+| Path | Covers |
+|------|--------|
+| `src/providers/CLAUDE.md` | TaskProvider interface, operations, schemas, error classification |
+| `src/tools/CLAUDE.md` | Tool definitions, capability gating, destructive actions |
+| `src/commands/CLAUDE.md` | Command handler pattern, auth checks, ReplyFn |
+| `src/chat/CLAUDE.md` | ChatProvider interface, platform adapters |
+| `tests/CLAUDE.md` | Test helpers, mocking rules, mock pollution, E2E testing |
