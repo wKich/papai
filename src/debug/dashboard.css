@@ -1,0 +1,370 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0a0a0a;
+  color: #cccccc;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Header --- */
+
+header {
+  background: #111111;
+  border-bottom: 1px solid #222222;
+  padding: 8px 16px;
+  flex: 0 0 auto;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.header-top h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00ff88;
+}
+
+.header-stat {
+  color: #666666;
+}
+
+.status-dot {
+  font-size: 11px;
+}
+
+.status-dot.connected {
+  color: #00ff88;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-dot.disconnected {
+  color: #ff4444;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.header-infra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #555555;
+  font-size: 11px;
+}
+
+.infra-sep {
+  width: 1px;
+  height: 12px;
+  background: #333333;
+}
+
+/* --- Main grid --- */
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  min-height: 0;
+}
+
+/* --- Left panel --- */
+
+#left-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #222222;
+  min-height: 0;
+}
+
+#sessions {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow-y: auto;
+  border-bottom: 1px solid #222222;
+  padding: 8px;
+}
+
+#llm-trace {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  min-height: 0;
+}
+
+#sessions h2,
+#llm-trace h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666666;
+  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+}
+
+.count-badge {
+  color: #555555;
+  font-weight: 400;
+}
+
+/* --- Session cards --- */
+
+.session-card {
+  border-left: 2px solid #333333;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.session-card.active {
+  border-left-color: #00ff88;
+}
+
+.session-card .user-id {
+  color: #cccccc;
+  font-weight: 600;
+}
+
+.session-card .session-detail {
+  color: #555555;
+}
+
+.session-card .wizard-badge {
+  color: #ffaa00;
+  font-size: 10px;
+}
+
+/* --- LLM trace rows --- */
+
+.trace-row {
+  border-left: 2px solid #333333;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.trace-row:hover {
+  background: #1a1a1a;
+}
+
+.trace-row.error {
+  border-left-color: #ff4444;
+}
+
+.trace-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #888888;
+}
+
+.trace-summary .trace-time {
+  color: #666666;
+}
+
+.trace-summary .trace-user {
+  color: #cccccc;
+}
+
+.trace-summary .trace-model {
+  color: #00ff88;
+}
+
+.trace-summary .trace-duration {
+  color: #ffaa00;
+}
+
+.trace-detail {
+  display: none;
+  margin-top: 6px;
+  padding: 6px;
+  background: #1a1a1a;
+  border-radius: 2px;
+}
+
+.trace-row[data-expanded='true'] .trace-detail {
+  display: block;
+}
+
+.trace-tool {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: #888888;
+}
+
+.trace-tool .tool-success {
+  color: #00ff88;
+}
+
+.trace-tool .tool-fail {
+  color: #ff4444;
+}
+
+.trace-tokens {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #333333;
+  color: #666666;
+}
+
+.trace-error-msg {
+  color: #ff4444;
+  margin-top: 4px;
+}
+
+/* --- Log Explorer --- */
+
+#log-explorer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.log-toolbar {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-bottom: 1px solid #222222;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log-toolbar h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666666;
+  letter-spacing: 0.05em;
+  margin-right: 8px;
+}
+
+.log-filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.log-filters select,
+.log-filters input,
+.log-filters button {
+  background: #1a1a1a;
+  color: #cccccc;
+  border: 1px solid #333333;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  border-radius: 2px;
+}
+
+.log-filters select:focus,
+.log-filters input:focus {
+  border-color: #00ff88;
+  outline: none;
+}
+
+.log-filters button {
+  cursor: pointer;
+}
+
+.log-filters button:hover {
+  background: #222222;
+}
+
+#log-entries {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  min-height: 0;
+}
+
+.log-entry {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.log-entry:nth-child(even) {
+  background: #131313;
+}
+
+.log-entry .log-meta {
+  display: inline;
+}
+
+.log-entry .log-msg {
+  padding-left: 16px;
+  display: block;
+  word-break: break-all;
+}
+
+.log-debug .log-meta {
+  color: #555555;
+}
+.log-debug .log-msg {
+  color: #555555;
+}
+
+.log-info .log-meta {
+  color: #00ff88;
+}
+.log-info .log-msg {
+  color: #cccccc;
+}
+
+.log-warn .log-meta {
+  color: #ffaa00;
+}
+.log-warn .log-msg {
+  color: #cccccc;
+}
+
+.log-error .log-meta {
+  color: #ff4444;
+}
+.log-error .log-msg {
+  color: #cccccc;
+}
+
+#log-autoscroll {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: #1a1a1a;
+  color: #00ff88;
+  border: 1px solid #333333;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+#log-autoscroll:hover {
+  background: #222222;
+}
