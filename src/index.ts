@@ -5,7 +5,7 @@ import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
-import { startMessageCleanupScheduler } from './message-cache/index.js'
+import { initializeMessageCache, startMessageCleanupScheduler } from './message-cache/index.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
@@ -55,6 +55,8 @@ try {
   log.error({ error: error instanceof Error ? error.message : String(error) }, 'Database migration failed')
   process.exit(1)
 }
+
+initializeMessageCache()
 
 const adminUserId = process.env['ADMIN_USER_ID']!
 addUser(adminUserId, adminUserId)

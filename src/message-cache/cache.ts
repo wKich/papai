@@ -1,12 +1,25 @@
 import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
-import { getPendingWritesCount, getIsFlushScheduled, scheduleMessagePersistence } from './persistence.js'
+import {
+  getPendingWritesCount,
+  getIsFlushScheduled,
+  restoreMessagesFromDb,
+  scheduleMessagePersistence,
+} from './persistence.js'
 import type { CachedMessage } from './types.js'
 
 const log = logger.child({ scope: 'message-cache' })
 
 // In-memory cache: "contextId:messageId" -> CachedMessage
 const messageCache = new Map<string, CachedMessage>()
+
+/** Restore message cache from database on startup. */
+export function initializeMessageCache(): void {
+  const count = restoreMessagesFromDb(messageCache)
+  if (count > 0) {
+    log.info({ restoredCount: count, cacheSize: messageCache.size }, 'Message cache restored from database')
+  }
+}
 
 // 1 week in milliseconds
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000

@@ -1,4 +1,4 @@
-import { lte, sql } from 'drizzle-orm'
+import { gt, lte, sql } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { messageMetadata } from '../db/schema.js'
@@ -107,4 +107,33 @@ export function getPendingWritesCount(): number {
 
 export function getIsFlushScheduled(): boolean {
   return isFlushScheduled
+}
+
+/** Load non-expired messages from SQLite into the provided cache Map. */
+export function restoreMessagesFromDb(cache: Map<string, CachedMessage>): number {
+  const db = getDrizzleDb()
+  const now = Date.now()
+
+  try {
+    const rows = db.select().from(messageMetadata).where(gt(messageMetadata.expiresAt, now)).all()
+
+    for (const row of rows) {
+      const msg: CachedMessage = {
+        messageId: row.messageId,
+        contextId: row.contextId,
+        authorId: row.authorId ?? undefined,
+        authorUsername: row.authorUsername ?? undefined,
+        text: row.text ?? undefined,
+        replyToMessageId: row.replyToMessageId ?? undefined,
+        timestamp: row.timestamp,
+      }
+      cache.set(`${msg.contextId}:${msg.messageId}`, msg)
+    }
+
+    log.info({ count: rows.length }, 'Restored messages from database')
+    return rows.length
+  } catch (err) {
+    log.error({ error: err instanceof Error ? err.message : String(err) }, 'Failed to restore messages from database')
+    return 0
+  }
 }
