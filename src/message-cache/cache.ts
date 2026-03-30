@@ -6,7 +6,7 @@ import {
   restoreMessagesFromDb,
   scheduleMessagePersistence,
 } from './persistence.js'
-import type { CachedMessage } from './types.js'
+import { ONE_WEEK_MS, type CachedMessage } from './types.js'
 
 const log = logger.child({ scope: 'message-cache' })
 
@@ -20,9 +20,6 @@ export function initializeMessageCache(): void {
     log.info({ restoredCount: count, cacheSize: messageCache.size }, 'Message cache restored from database')
   }
 }
-
-// 1 week in milliseconds
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Sweep expired entries from the in-memory message cache. */
 export function sweepExpiredMessages(): void {

@@ -18,6 +18,7 @@ import {
   FileUploadSchema,
   type MattermostPost,
   MattermostPostSchema,
+  MattermostPostedDataSchema,
   MattermostWsEventSchema,
   UserMeSchema,
 } from './schema.js'
@@ -26,12 +27,12 @@ export { extractReplyId, MattermostPostSchema } from './schema.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
 
-function cacheIncomingPost(post: MattermostPost, replyToMessageId: string | undefined): void {
+function cacheIncomingPost(post: MattermostPost, replyToMessageId: string | undefined, senderName?: string): void {
   cacheMessage({
     messageId: post.id,
     contextId: post.channel_id,
     authorId: post.user_id,
-    authorUsername: post.user_name,
+    authorUsername: post.user_name ?? senderName,
     text: post.message,
     replyToMessageId,
     timestamp: Date.now(),
@@ -127,15 +128,17 @@ export class MattermostChatProvider implements ChatProvider {
   }
 
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
-    const postJson = data['post']
-    if (typeof postJson !== 'string') return
+    const postedDataResult = MattermostPostedDataSchema.safeParse(data)
+    if (!postedDataResult.success) return
+
+    const { post: postJson, sender_name: senderName } = postedDataResult.data
     const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
     if (!postResult.success) return
     const post = postResult.data
     if (post.user_id === this.botUserId) return
 
     const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
-    cacheIncomingPost(post, replyToMessageId)
+    cacheIncomingPost(post, replyToMessageId, senderName)
 
     const replyContext =
       replyToMessageId === undefined
@@ -147,8 +150,9 @@ export class MattermostChatProvider implements ChatProvider {
     const threadId = post.root_id === undefined || post.root_id === '' ? replyToMessageId : post.root_id
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
+    const username = post.user_name ?? senderName ?? null
     const msg: IncomingMessage = {
-      user: { id: post.user_id, username: post.user_name ?? null, isAdmin },
+      user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
       contextType,
       isMentioned: this.isBotMentioned(post.message),

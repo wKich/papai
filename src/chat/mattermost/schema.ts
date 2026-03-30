@@ -5,6 +5,11 @@ export const MattermostWsEventSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 })
 
+export const MattermostPostedDataSchema = z.object({
+  post: z.string(),
+  sender_name: z.string().optional(),
+})
+
 export const MattermostPostSchema = z.object({
   id: z.string(),
   user_id: z.string(),
