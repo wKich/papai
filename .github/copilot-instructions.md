@@ -13,6 +13,7 @@ Detailed conventions are in `.github/instructions/*.instructions.md` files, auto
 | `chat-adapters.instructions.md` | `src/chat/**`      | ChatProvider interface, platform adapters                         |
 | `testing.instructions.md`       | `tests/**`         | Test helpers, mocking rules, mock pollution prevention            |
 | `e2e-testing.instructions.md`   | `tests/e2e/**`     | E2E test structure, KaneoTestClient, Docker-based tests           |
+| `tdd.instructions.md`           | `src/**`           | TDD workflow: test-first, Red→Green→Refactor                      |
 
 ## No lint-disable comments
 

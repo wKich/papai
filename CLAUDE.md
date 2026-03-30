@@ -48,6 +48,42 @@ bun test:e2e       # or: bun run test:e2e
 
 The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude E2E tests from the default `bun test` command. E2E tests require Docker to spin up a Kaneo instance and must be run separately via `bun test:e2e`.
 
+## TDD Enforcement (Hooks)
+
+Claude Code hooks enforce Red → Green → Refactor at the tool level. Violations are
+blocked before the file write completes.
+
+### Phase Rules
+
+**Red — Write a failing test first:**
+
+- Before touching ANY implementation file in `src/`, write a failing test in `tests/`
+- The test file MUST exist before the implementation file is created or edited
+- Hooks will block impl writes if no test file exists
+
+**Green — Minimum code to pass:**
+
+- Write the simplest implementation that makes the failing test pass
+- Do NOT add logic beyond what the test requires
+- After every file write, tests are run automatically
+- If tests go RED, stop and fix before proceeding
+
+**Refactor — Clean up without changing behavior:**
+
+- Keep all existing tests GREEN throughout
+
+### Hard Rules
+
+1. Never touch an implementation file before its test file exists
+2. Never proceed past a RED test, even temporarily
+3. Test naming: `src/foo/bar.ts` → `tests/foo/bar.test.ts`
+
+### Disabling TDD Hooks
+
+For non-code edits (docs, config), hooks automatically allow: only `src/**/*.ts`
+files are gated. For exceptional cases, temporarily remove the hook entries from
+`.claude/settings.json`.
+
 ## Security
 
 - `bun run security` — run Semgrep security scan locally
