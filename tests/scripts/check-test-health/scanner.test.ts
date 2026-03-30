@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { buildImportGraph } from '../../../scripts/check-mock-pollution/scanner.js'
+import { buildImportGraph } from '../../../scripts/check-test-health/scanner.js'
 
 describe('buildImportGraph', () => {
   test('builds graph from test file importing source file', () => {

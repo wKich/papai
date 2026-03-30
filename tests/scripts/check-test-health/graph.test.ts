@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { findTransitiveImporters } from '../../../scripts/check-mock-pollution/graph.js'
+import { findTransitiveImporters } from '../../../scripts/check-test-health/graph.js'
 
 describe('findTransitiveImporters', () => {
   test('finds direct importers', () => {
