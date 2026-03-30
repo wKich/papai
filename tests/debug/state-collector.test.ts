@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 import { emit } from '../../src/debug/event-bus.js'
 import { addClient, init, removeClient } from '../../src/debug/state-collector.js'
+import { resetStats } from '../utils/test-helpers.js'
 
 type MockController = {
   ctrl: ReadableStreamDefaultController
@@ -52,6 +53,7 @@ describe('state-collector', () => {
   afterEach(() => {
     for (const ctrl of controllers) removeClient(ctrl)
     controllers.length = 0
+    resetStats()
   })
 
   function track(ctrl: ReadableStreamDefaultController): ReadableStreamDefaultController {
@@ -86,6 +88,13 @@ describe('state-collector', () => {
     expect(initData).toHaveProperty('messageCache')
     expect(initData).toHaveProperty('stats')
     expect(initData).toHaveProperty('recentLlm')
+
+    const stats = initData['stats']
+    expect(isRecord(stats)).toBe(true)
+    if (!isRecord(stats)) return
+    expect(stats['totalMessages']).toBe(0)
+    expect(stats['totalLlmCalls']).toBe(0)
+    expect(stats['totalToolCalls']).toBe(0)
   })
 
   test('admin events are broadcast to clients', () => {

@@ -347,6 +347,28 @@ export function createMockChat(): {
 // ERROR ASSERTIONS
 // ============================================================================
 
+// ============================================================================
+// STATE COLLECTOR HELPERS
+// ============================================================================
+
+import { stats, pendingTraces, recentLlm } from '../../src/debug/state-collector.js'
+
+/**
+ * Reset debug stats and traces for testing.
+ */
+export function resetStats(): void {
+  stats.startedAt = Date.now()
+  stats.totalMessages = 0
+  stats.totalLlmCalls = 0
+  stats.totalToolCalls = 0
+  pendingTraces.clear()
+  recentLlm.length = 0
+}
+
+// ============================================================================
+// ERROR ASSERTIONS
+// ============================================================================
+
 /**
  * Test helper to assert that an error is an AppError with expected user message.
  */

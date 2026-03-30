@@ -10,7 +10,7 @@ let adminUserId: string | null = null
 const clients = new Set<ReadableStreamDefaultController>()
 const encoder = new TextEncoder()
 
-const stats = {
+export const stats = {
   startedAt: Date.now(),
   totalMessages: 0,
   totalLlmCalls: 0,
@@ -30,7 +30,7 @@ type LlmTrace = {
   error?: string
 }
 
-const recentLlm: LlmTrace[] = []
+export const recentLlm: LlmTrace[] = []
 
 type PendingLlmTrace = {
   startTimestamp: number
@@ -39,7 +39,7 @@ type PendingLlmTrace = {
   toolCalls: Array<{ toolName: string; durationMs: number; success: boolean }>
 }
 
-const pendingTraces = new Map<string, PendingLlmTrace>()
+export const pendingTraces = new Map<string, PendingLlmTrace>()
 
 function str(value: unknown): string {
   return typeof value === 'string' ? value : ''

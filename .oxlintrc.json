@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "vitest"],
-  "ignorePatterns": ["docs/tdd-hooks/**", ".hooks/**", ".opencode/**"],
+  "ignorePatterns": ["docs/tdd-hooks/**", ".hooks/**", ".opencode/**", ".claude/hooks/**"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
