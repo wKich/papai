@@ -109,3 +109,17 @@ If you encounter a legitimate false positive (e.g. Stryker flakiness):
 ```bash
 TDD_MUTATION=0 claude  # disable for this session
 ```
+
+---
+
+## Status
+
+This directory contains the **prototype** hooks. The production-ready, project-adapted
+versions live in `.hooks/tdd/` (shared core) + `.claude/hooks/` (Claude Code adapters) +
+`.opencode/plugins/` (OpenCode adapter). Key differences:
+
+- Uses Bun test runner instead of Vitest/Jest
+- Resolves test files in `tests/` parallel directory (not colocated)
+- Uses correct Claude Code hook output format (`hookSpecificOutput.permissionDecision`)
+- Scoped to `src/**/*.ts` files only
+- Shared core logic eliminates duplication across platforms
