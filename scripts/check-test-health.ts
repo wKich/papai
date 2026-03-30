@@ -1,18 +1,21 @@
 #!/usr/bin/env bun
 /**
- * Static analyzer for Bun test mock pollution.
- * Uses TypeScript compiler API for precise AST-based analysis.
+ * Test Health Analyzer
  *
- * Detects 3 patterns (in a Bun process where all test files share one module registry):
- *   PATTERN 1 — Barrel mock: mocking a barrel file corrupts sub-module live bindings (HIGH).
- *               Not fixable with afterAll cleanup; must mock at a lower level.
- *   PATTERN 2 — Shared module mocked without cleanup: mock persists to other test files (MEDIUM).
- *               Fix: add afterAll(() => { mock.restore() }).
- *   PATTERN 3 — Transitive mock pollution: test file B imports src/X which imports the mocked
- *               module, so B is affected even though it doesn't import the mock target directly (HIGH).
- *               Fix: add afterAll(() => { mock.restore() }) to the mocker.
+ * Detects patterns that cause test pollution or flakiness:
  *
- * Usage: bun run scripts/check-mock-pollution.ts [--strict]
+ * PATTERN 1 — Barrel mock: mocking a barrel file corrupts sub-module live bindings (HIGH).
+ *             Not fixable with afterAll cleanup; must mock at a lower level.
+ * PATTERN 2 — Shared module mocked without cleanup: mock persists to other test files (MEDIUM).
+ *             Fix: add afterAll(() => { mock.restore() }).
+ * PATTERN 3 — Transitive mock pollution: test file B imports src/X which imports the mocked
+ *             module, so B is affected even though it doesn't import the mock target directly (HIGH).
+ *             Fix: add afterAll(() => { mock.restore() }) to the mocker.
+ * PATTERN 4 — Module-level mutable state not reset between tests (MEDIUM).
+ *             Detects module-level const/let declarations that persist state between tests.
+ *             Fix: export a reset function and call in beforeEach/afterEach.
+ *
+ * Usage: bun run scripts/check-test-health.ts [--strict]
  */
 
 import { existsSync, readFileSync } from 'fs'
@@ -20,8 +23,8 @@ import { dirname, relative, resolve } from 'path'
 
 import ts from 'typescript'
 
-import { findTransitiveImporters } from './check-mock-pollution/graph.js'
-import { buildImportGraph } from './check-mock-pollution/scanner.js'
+import { findTransitiveImporters } from './check-test-health/graph.js'
+import { buildImportGraph } from './check-test-health/scanner.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 

@@ -2,8 +2,9 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { isTestFile } from '../../.hooks/tdd/test-resolver.mjs'
+
 import { FileSessionState } from '../../.hooks/tdd/session-state.mjs'
+import { isTestFile } from '../../.hooks/tdd/test-resolver.mjs'
 
 try {
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))

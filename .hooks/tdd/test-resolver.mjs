@@ -15,7 +15,7 @@ export function isTestFile(filePath) {
 /**
  * @param {string} filePath - File path to check
  * @param {string} projectRoot - Project root directory
- * @returns {boolean} - True if this is a gateable implementation file (src/**/*.ts)
+ * @returns {boolean} - True if this is a gateable implementation file (src/ **\/ *.ts)
  */
 export function isGateableImplFile(filePath, projectRoot) {
   // Must be under src/, match IMPL_PATTERN, and NOT match TEST_PATTERN
