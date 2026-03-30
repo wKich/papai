@@ -5,7 +5,7 @@ import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
-import { initializeMessageCache, startMessageCleanupScheduler } from './message-cache/index.js'
+import { initializeMessageCache } from './message-cache/index.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
@@ -85,8 +85,6 @@ void announceNewVersion(chatProvider)
 startScheduler(chatProvider)
 
 startPollers(chatProvider, (userId) => buildProviderForUser(userId, false))
-
-startMessageCleanupScheduler()
 
 // Start the central scheduler with all cleanup tasks
 scheduler.startAll()

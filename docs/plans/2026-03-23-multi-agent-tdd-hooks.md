@@ -1,8 +1,11 @@
 # Multi-Agent TDD Hooks: Claude Code + OpenCode Compatibility Plan
 
-> **Companion to:** `2026-03-23-tdd-hooks-integration.md` (Claude Code–only plan)
+> **Status:** Superseded — merged into `2026-03-23-tdd-hooks-integration.md`.
+> This file is kept for reference only. The canonical plan is the integration plan.
+
+> **Companion to:** `2026-03-23-tdd-hooks-integration.md` (now the unified plan)
 >
-> **Goal:** Make TDD enforcement hooks work with both Claude Code and OpenCode through
+> **Original goal:** Make TDD enforcement hooks work with both Claude Code and OpenCode through
 > shared core logic and platform-specific thin adapters.
 
 ---

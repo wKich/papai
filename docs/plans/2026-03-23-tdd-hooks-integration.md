@@ -3,13 +3,53 @@
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan
 > task-by-task. Use @test-driven-development skill for all code changes.
 
-**Goal:** Integrate prototype TDD enforcement hooks from `docs/tdd-hooks/` into the project's
-`.claude/` hooks system so that Claude Code is mechanically prevented from writing
-implementation code without tests, and cannot regress existing tests during refactoring.
+**Goal:** Integrate prototype TDD enforcement hooks from `docs/tdd-hooks/` into all three AI
+tools used in this project (Claude Code, opencode, GitHub Copilot) so that AI assistants are
+mechanically prevented from writing implementation code without tests, and cannot regress
+existing tests during refactoring.
 
 **Source:** `docs/tdd-hooks/` (7 hook scripts + README + SYSTEM_PROMPT + settings.json)
 
-**Target:** `.claude/hooks/` (committed to repo, available to all contributors)
+**Target:** `.hooks/tdd/` (shared core) + `.claude/hooks/` + `.opencode/plugins/` +
+`.github/instructions/` (committed to repo)
+
+**Supersedes:** `2026-03-23-multi-agent-tdd-hooks.md` (merged into this plan)
+
+---
+
+## Platform Comparison (Verified March 2026)
+
+| Aspect                   | Claude Code                                              | OpenCode (v1.2.27+)                                             |
+| ------------------------ | -------------------------------------------------------- | --------------------------------------------------------------- |
+| **Hook execution model** | Subprocess (shell command via `node`)                    | In-process function callback                                    |
+| **Input delivery**       | JSON on stdin                                            | Function parameters `(input, output)`                           |
+| **PreToolUse block**     | `{ hookSpecificOutput: { permissionDecision: "deny" } }` | `throw new Error("reason")`                                     |
+| **PostToolUse block**    | `{ decision: "block", reason: "..." }`                   | **NOT POSSIBLE** — deferred blocking workaround required        |
+| **Tool name format**     | PascalCase (`Write`, `Edit`)                             | lowercase (`write`, `edit`, `patch`, `multiedit`)               |
+| **File path field**      | `tool_input.file_path`                                   | `output.args.filePath` (before) / `input.args.filePath` (after) |
+| **Session ID**           | `session_id` (snake_case)                                | `sessionID` (camelCase), available on both hook inputs          |
+| **Project root**         | `cwd` from input JSON                                    | `directory` from plugin context closure (absolute path)         |
+| **Registration**         | `.claude/settings.json` hooks config                     | Auto-load from `.opencode/plugins/`                             |
+| **Tool matchers**        | Regex pattern (`Write\|Edit`)                            | Manual `if (input.tool === ...)` check                          |
+| **Session state**        | File-based (`/tmp/tdd-session-*`)                        | In-memory Map (closure persists across calls)                   |
+| **Hook parallelism**     | All matching hooks run **in parallel**                   | Sequential per plugin                                           |
+| **Crash behavior**       | Exit ≠ 0,2 → fail-open (tool proceeds)                   | Uncaught throw → error logged, tool proceeds                    |
+
+### OpenCode-Specific Limitations
+
+1. **No PostToolUse blocking** — `tool.execute.after` cannot block or inject AI-visible messages (issues [#17412](https://github.com/anomalyco/opencode/issues/17412), [#16626](https://github.com/anomalyco/opencode/issues/16626) — both open)
+2. **Subagent bypass** — plugin hooks do not intercept subagent tool calls ([#5894](https://github.com/anomalyco/opencode/issues/5894) — open)
+3. **First-message bypass** — `tool.execute.before` may not fire on the very first tool call in a new session ([#6862](https://github.com/anomalyco/opencode/issues/6862) — open)
+4. **`patch` tool ungatable** — uses `patchText` string, not `filePath`; file paths are embedded in patch text and require parsing
+
+### OpenCode Tool Argument Shapes
+
+| Tool        | `filePath` field? | Gateable? | Notes                                    |
+| ----------- | ----------------- | --------- | ---------------------------------------- |
+| `write`     | Yes               | Yes       | `args.filePath`                          |
+| `edit`      | Yes               | Yes       | `args.filePath`                          |
+| `multiedit` | Yes               | Yes       | Top-level `args.filePath` is target file |
+| `patch`     | No                | No        | Uses `args.patchText` (freeform string)  |
 
 ---
 
@@ -28,11 +68,11 @@ implementation code without tests, and cannot regress existing tests during refa
 | Coverage            | `npx vitest --coverage`          | `bun test --coverage` (no coverage-final.json)      | Use Bun coverage or skip                       |
 | ESM in hooks        | `import` syntax in `.js`         | Shell runs hooks; `node` must be invoked explicitly | Use `.mjs` extension + explicit `node` command |
 | Script path ref     | Hardcoded relative               | `$CLAUDE_PROJECT_DIR` env var                       | Use Claude Code convention                     |
-| Code duplication    | `extractSurface()` in 2 files    | —                                                   | Extract shared utility                         |
+| Code duplication    | `extractSurface()` in 2 files    | `findTestFile()` needed in 3+ hooks                 | Extract to `.hooks/tdd/test-resolver.mjs`      |
 
 ### What Works As-Is
 
-- Session state files in `/tmp/tdd-session-*` pattern
+- Session state files in `/tmp/tdd-session-*` pattern (Claude Code)
 - Concept of tracking test files written per session
 - Refactor guards (new exports, new params detection)
 - Mutation testing survivor diffing logic
@@ -45,11 +85,15 @@ implementation code without tests, and cannot regress existing tests during refa
 
 **In scope:**
 
-1. `enforce-tdd.js` — block impl writes without test (PreToolUse)
-2. `enforce-tdd-tracker.js` — track test files written in session (PostToolUse)
-3. `verify-tests-pass.js` — run tests after impl edit, block on red (PostToolUse)
+1. Shared core logic in `.hooks/tdd/` (platform-agnostic ES modules)
+2. Claude Code adapter hooks in `.claude/hooks/` (thin wrappers)
+3. OpenCode plugin in `.opencode/plugins/` (with deferred blocking)
 4. Settings merge into `.claude/settings.json` (shared, committed to repo)
-5. System prompt additions to `CLAUDE.md`
+5. TDD instructions for all three AI tools:
+   - `CLAUDE.md` — Claude Code + opencode (native fallback)
+   - `.github/instructions/tdd.instructions.md` — Copilot + opencode (via plugin)
+   - `.github/copilot-instructions.md` — table update
+6. Unit tests for shared core in `tests/hooks/tdd/`
 
 **Out of scope (Phase 2):**
 
@@ -59,25 +103,83 @@ implementation code without tests, and cannot regress existing tests during refa
 
 ### Rationale
 
-The core TDD gate (hooks 1-3) provides 80% of the value: it prevents writing
-implementation without tests and catches regressions immediately. The refactor guards
-and mutation hooks add latency (coverage + Stryker runs) and require more complex
-infrastructure adaptation. They can be layered on once the core hooks are proven stable.
+The core TDD gate provides 80% of the value: it prevents writing implementation without
+tests and catches regressions immediately. The refactor guards and mutation hooks add
+latency (coverage + Stryker runs) and require more complex infrastructure adaptation.
+They can be layered on once the core hooks are proven stable.
 
 ---
 
 ## Architecture
 
 ```
-.claude/
-├── settings.json                # NEW: TDD hook registration (shared, committed)
-├── settings.local.json          # Existing: permissions + Stop hook (local only)
-└── hooks/
-    ├── check-no-lint-suppression.sh   # Existing Stop hook
-    ├── enforce-tdd.mjs                # NEW: PreToolUse — block impl without test
-    ├── enforce-tdd-tracker.mjs        # NEW: PostToolUse — track test files
-    └── verify-tests-pass.mjs          # NEW: PostToolUse — run tests, block on red
+project/
+├── .hooks/                              # Shared platform-agnostic core
+│   └── tdd/
+│       ├── test-resolver.mjs            # Find test file for impl file
+│       ├── session-state.mjs            # Session state (File + Memory backends)
+│       └── test-runner.mjs              # Execute bun test, parse results
+│
+├── .claude/                             # Claude Code adapter layer
+│   ├── settings.json                    # NEW: TDD hook registration (shared, committed)
+│   ├── settings.local.json              # Existing: permissions + Stop hook (local only)
+│   └── hooks/
+│       ├── check-no-lint-suppression.sh # Existing Stop hook
+│       ├── enforce-tdd.mjs              # NEW: PreToolUse — thin adapter
+│       ├── enforce-tdd-tracker.mjs      # NEW: PostToolUse — thin adapter
+│       └── verify-tests-pass.mjs        # NEW: PostToolUse — thin adapter
+│
+├── .opencode/                           # OpenCode adapter layer
+│   ├── package.json                     # NEW: { "dependencies": { "@opencode-ai/plugin": "latest" } }
+│   └── plugins/
+│       └── tdd-enforcement.ts           # NEW: single plugin, all hooks
+│
+├── .github/
+│   ├── copilot-instructions.md          # MODIFY: add tdd.instructions.md to table
+��   └── instructions/
+│       ├── ... (7 existing files)
+│       └── tdd.instructions.md          # NEW: TDD protocol for Copilot + opencode
+│
+├── CLAUDE.md                            # MODIFY: add TDD Enforcement section
+│
+└── tests/
+    └── hooks/                           # NEW: shared core tests
+        └── tdd/
+            ├── test-resolver.test.ts
+            ├── session-state.test.ts
+            └── test-runner.test.ts
 ```
+
+### Multi-Tool Enforcement Strategy
+
+| Tool           | Mechanical enforcement (hooks)                                       | Instruction-level (advisory)                              |
+| -------------- | -------------------------------------------------------------------- | --------------------------------------------------------- |
+| Claude Code    | `.claude/settings.json` → PreToolUse/PostToolUse hooks               | `CLAUDE.md` TDD section                                   |
+| opencode       | `.opencode/plugins/tdd-enforcement.ts` → `tool.execute.before/after` | `CLAUDE.md` (native) + `tdd.instructions.md` (via plugin) |
+| GitHub Copilot | _(none — no confirmed hook execution support)_                       | `tdd.instructions.md` (auto-loaded by glob)               |
+
+#### OpenCode deferred blocking pattern
+
+OpenCode's `tool.execute.after` cannot block or inject AI-visible messages. The workaround:
+
+```
+1. tool.execute.after (edit/write):
+   → Run `bun test` on related test file
+   → If FAIL: store failure info in plugin state
+
+2. tool.execute.before (ANY subsequent tool call):
+   → Check plugin state for pending test failure
+   → If found: throw new Error("Tests FAILED for {file}. Fix before proceeding:\n{output}")
+   → The agent sees the error, fixes the test, and on the next tool call the state is re-checked
+
+3. tool.execute.after (edit/write) again:
+   → Re-run tests
+   → If PASS: clear the pending failure state
+```
+
+**Trade-off:** The first broken edit goes through (tool already executed), but the agent is
+blocked from doing _anything else_ until tests pass. Functionally equivalent to Claude Code's
+behavior since the agent must fix tests before proceeding.
 
 ### Test File Resolution Strategy
 
@@ -97,12 +199,19 @@ The hooks must:
 3. Replace `.ts` with `.test.ts`
 4. Also check for direct colocated patterns (fallback)
 
+This logic lives once in `.hooks/tdd/test-resolver.mjs` and is imported by all adapters.
+
 ### Hook Execution Environment
 
 Claude Code runs hooks via the **system shell** (bash/zsh), not Node.js directly. Hook commands
 in `settings.json` are shell commands — to run a `.mjs` file, the command must explicitly invoke
 `node`. Since the project uses ESM (`"type": "module"` in package.json), Node.js handles
 `import` syntax natively. The `.mjs` extension forces ESM regardless of `package.json`.
+
+**ESM import resolution:** Relative imports in `.mjs` files resolve relative to the importing
+file's location, not the working directory. So `.claude/hooks/enforce-tdd.mjs` importing from
+`../../.hooks/tdd/test-resolver.mjs` resolves correctly regardless of `cwd`. Dotfile directories
+(`.hooks/`, `.claude/`) have no special handling in Node ESM resolution.
 
 **Decision:** Use `.mjs` extension with `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/<file>.mjs`
 in the settings command. Shebangs are unused (shell invokes `node` explicitly, not the script
@@ -123,20 +232,129 @@ These Claude Code hook features are available but intentionally deferred to keep
 
 ## Detailed Task Breakdown
 
-### Task 1: Create `enforce-tdd.mjs` — PreToolUse hook
+### Phase A: Shared Core Modules
+
+#### Task A1: Create `.hooks/tdd/test-resolver.mjs`
+
+**Files:** Create `.hooks/tdd/test-resolver.mjs`
+
+**Extract from:** Prototype `findTestFile()` logic duplicated across hooks.
+
+**Interface:**
+
+```javascript
+/**
+ * @param {string} implAbsPath - Absolute path to implementation file
+ * @param {string} projectRoot - Project root directory
+ * @returns {string|null} - Absolute path to test file, or null
+ */
+export function findTestFile(implAbsPath, projectRoot) { ... }
+
+/**
+ * @param {string} filePath - File path to check
+ * @returns {boolean} - True if this is a test file
+ */
+export function isTestFile(filePath) { ... }
+
+/**
+ * @param {string} filePath - File path to check
+ * @param {string} projectRoot - Project root directory
+ * @returns {boolean} - True if this is a gateable implementation file (src/**/*.ts)
+ */
+export function isGateableImplFile(filePath, projectRoot) { ... }
+
+/**
+ * @param {string} implRelPath - Relative path from projectRoot (e.g. src/foo/bar.ts)
+ * @returns {string} - Suggested test file relative path (e.g. tests/foo/bar.test.ts)
+ */
+export function suggestTestPath(implRelPath) { ... }
+```
+
+**Implementation details:**
+
+- `IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/`
+- `TEST_PATTERN = /\.(?:test|spec)\.(?:ts|js|tsx|jsx)$/`
+- `findTestFile`: `src/foo/bar.ts` → `tests/foo/bar.test.ts` with colocated fallback
+- `isGateableImplFile`: must be under `src/`, match IMPL_PATTERN, not match TEST_PATTERN
+- Pure functions except `findTestFile` (uses `fs.existsSync`)
+
+**Commit:** `feat: add shared TDD test resolver module`
+
+---
+
+#### Task A2: Create `.hooks/tdd/session-state.mjs`
+
+**Files:** Create `.hooks/tdd/session-state.mjs`
+
+**Two backends for different execution models:**
+
+```javascript
+/**
+ * File-based backend (Claude Code — hooks run as subprocesses, no shared memory)
+ */
+export class FileSessionState {
+  constructor(sessionId, stateDir = '/tmp') { ... }
+  getWrittenTests() { ... }         // returns string[]
+  addWrittenTest(path) { ... }      // appends to list
+  getPendingFailure() { ... }       // returns { file, output } | null
+  setPendingFailure(file, output) { ... }
+  clearPendingFailure() { ... }
+}
+
+/**
+ * Memory-based backend (OpenCode — plugin runs in-process, closure persists)
+ */
+export class MemorySessionState {
+  static sessions = new Map()
+  constructor(sessionId) { ... }
+  // Same interface as FileSessionState
+}
+```
+
+**Implementation details:**
+
+- Both backends implement identical interface
+- `FileSessionState` path: `/tmp/tdd-session-{sessionId}.json`
+- `FileSessionState` handles missing/corrupt state files gracefully (returns empty state)
+- `MemorySessionState` keys by `sessionId` in a static Map
+
+**Commit:** `feat: add shared TDD session state module`
+
+---
+
+#### Task A3: Create `.hooks/tdd/test-runner.mjs`
+
+**Files:** Create `.hooks/tdd/test-runner.mjs`
+
+```javascript
+/**
+ * @param {string} testFilePath - Absolute path to test file
+ * @param {string} projectRoot - Project root for cwd
+ * @returns {Promise<{ passed: boolean, output: string }>}
+ */
+export async function runTest(testFilePath, projectRoot) { ... }
+```
+
+**Implementation details:**
+
+- Spawns `bun test <file>` with `execSync`, 30s timeout
+- Captures stdout + stderr
+- Returns `{ passed, output }` (output truncated to 3000 chars)
+- Handles timeout gracefully: `{ passed: false, output: "Test timed out after 30s" }`
+
+**Commit:** `feat: add shared TDD test runner module`
+
+---
+
+### Phase B: Claude Code Adapters
+
+#### Task B1: Create `enforce-tdd.mjs` — PreToolUse adapter
 
 **Files:** Create `.claude/hooks/enforce-tdd.mjs`
 
 **What it does:** Before any `Write` or `Edit` tool call on an implementation file, checks that
 a corresponding test file exists (either on disk or written earlier in the session). Blocks the
 tool call if no test file found.
-
-**Key adaptations from prototype:**
-
-- Fix test file resolution to use `tests/` parallel directory
-- Fix PreToolUse output to use `hookSpecificOutput.permissionDecision: "deny"` format
-- Fix tool input field to use `tool_input.file_path` (not `tool_input.path`)
-- Add project root resolution via `cwd` from input JSON
 
 **Implementation outline:**
 
@@ -145,69 +363,33 @@ tool call if no test file found.
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '../../.hooks/tdd/test-resolver.mjs'
+import { FileSessionState } from '../../.hooks/tdd/session-state.mjs'
 
 const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))
 const { tool_name, tool_input, session_id, cwd } = input
 
-// Only gate Write and Edit tools
 if (tool_name !== 'Write' && tool_name !== 'Edit') process.exit(0)
 
 const filePath = tool_input.file_path
 if (!filePath) process.exit(0)
+if (isTestFile(filePath)) process.exit(0)
+if (!isGateableImplFile(filePath, cwd)) process.exit(0)
 
-const IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/
-const TEST_PATTERN = /\.(?:test|spec)\.(?:ts|js|tsx|jsx)$/
-
-// Allow test file writes unconditionally
-if (TEST_PATTERN.test(filePath)) process.exit(0)
-// Only gate implementation files
-if (!IMPL_PATTERN.test(filePath)) process.exit(0)
-
-// Resolve paths relative to project root
-const projectRoot = cwd
-const relPath = path.relative(projectRoot, filePath)
-
-// Skip files outside src/
-if (!relPath.startsWith('src/')) process.exit(0)
-
-function findTestFile(implAbsPath) {
-  const rel = path.relative(projectRoot, implAbsPath)
-  // src/foo/bar.ts → tests/foo/bar.test.ts
-  const testRel = rel.replace(/^src\//, 'tests/').replace(/\.([tj]sx?)$/, '.test.$1')
-  const testAbs = path.join(projectRoot, testRel)
-  if (fs.existsSync(testAbs)) return testAbs
-
-  // Fallback: colocated test
-  const dir = path.dirname(implAbsPath)
-  const ext = path.extname(implAbsPath)
-  const base = path.basename(implAbsPath, ext)
-  const colocated = path.join(dir, `${base}.test${ext}`)
-  if (fs.existsSync(colocated)) return colocated
-
-  return null
-}
-
-// Check session state for tests written this session
-const STATE_FILE = `/tmp/tdd-session-${session_id}.json`
-function loadSessionState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
-  } catch {
-    return { writtenTests: [] }
-  }
-}
-
-const state = loadSessionState()
 const absPath = path.resolve(filePath)
+
+if (findTestFile(absPath, cwd)) process.exit(0)
+
+const state = new FileSessionState(session_id)
+const writtenTests = state.getWrittenTests()
 const baseName = path.basename(absPath, path.extname(absPath))
-const alreadyTestedThisSession = state.writtenTests.some(
+const alreadyTestedThisSession = writtenTests.some(
   (t) => path.basename(t, path.extname(t)).replace(/\.(test|spec)$/, '') === baseName,
 )
+if (alreadyTestedThisSession) process.exit(0)
 
-if (findTestFile(absPath) || alreadyTestedThisSession) process.exit(0)
-
-// Suggest the expected test file path
-const suggestedTest = relPath.replace(/^src\//, 'tests/').replace(/\.([tj]sx?)$/, '.test.$1')
+const relPath = path.relative(cwd, filePath)
+const suggestedTest = suggestTestPath(relPath)
 
 console.log(
   JSON.stringify({
@@ -225,22 +407,11 @@ console.log(
 process.exit(0)
 ```
 
-**Verification:**
-
-```bash
-# Create a temp test to verify the hook works
-echo '{"tool_name":"Write","tool_input":{"file_path":"/Users/ki/Projects/experiments/papai/src/config.ts","content":"x"},"session_id":"test","cwd":"/Users/ki/Projects/experiments/papai","hook_event_name":"PreToolUse"}' | node .claude/hooks/enforce-tdd.mjs
-# Expected: exit 0 (test exists at tests/config.test.ts)
-
-echo '{"tool_name":"Write","tool_input":{"file_path":"/Users/ki/Projects/experiments/papai/src/nonexistent-module.ts","content":"x"},"session_id":"test","cwd":"/Users/ki/Projects/experiments/papai","hook_event_name":"PreToolUse"}' | node .claude/hooks/enforce-tdd.mjs
-# Expected: JSON with permissionDecision: "deny"
-```
-
 **Commit:** `feat: add enforce-tdd hook for TDD gate`
 
 ---
 
-### Task 2: Create `enforce-tdd-tracker.mjs` — PostToolUse hook
+#### Task B2: Create `enforce-tdd-tracker.mjs` — PostToolUse adapter
 
 **Files:** Create `.claude/hooks/enforce-tdd-tracker.mjs`
 
@@ -255,6 +426,8 @@ if it hasn't been saved to disk in the expected location yet.
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { isTestFile } from '../../.hooks/tdd/test-resolver.mjs'
+import { FileSessionState } from '../../.hooks/tdd/session-state.mjs'
 
 const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))
 const { tool_name, tool_input, session_id } = input
@@ -262,51 +435,26 @@ const { tool_name, tool_input, session_id } = input
 if (tool_name !== 'Write' && tool_name !== 'Edit') process.exit(0)
 
 const filePath = tool_input.file_path
-const TEST_PATTERN = /\.(?:test|spec)\.(?:ts|js|tsx|jsx)$/
-if (!filePath || !TEST_PATTERN.test(filePath)) process.exit(0)
+if (!filePath || !isTestFile(filePath)) process.exit(0)
 
-const STATE_FILE = `/tmp/tdd-session-${session_id}.json`
-let state = { writtenTests: [] }
-try {
-  state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
-} catch {}
-
-const absPath = path.resolve(filePath)
-if (!state.writtenTests.includes(absPath)) {
-  state.writtenTests.push(absPath)
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state))
-}
+const state = new FileSessionState(session_id)
+state.addWrittenTest(path.resolve(filePath))
 
 process.exit(0)
-```
-
-**Verification:**
-
-```bash
-echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/foo.test.ts","content":"x"},"session_id":"test123","cwd":"/tmp","hook_event_name":"PostToolUse","tool_response":{"success":true}}' | node .claude/hooks/enforce-tdd-tracker.mjs
-cat /tmp/tdd-session-test123.json
-# Expected: {"writtenTests":["/tmp/foo.test.ts"]}
-rm -f /tmp/tdd-session-test123.json
 ```
 
 **Commit:** `feat: add enforce-tdd-tracker hook for session state`
 
 ---
 
-### Task 3: Create `verify-tests-pass.mjs` — PostToolUse hook
+#### Task B3: Create `verify-tests-pass.mjs` — PostToolUse adapter
 
 **Files:** Create `.claude/hooks/verify-tests-pass.mjs`
 
-**What it does:** After any impl file write, finds the corresponding test file and runs it with
-`bun test`. If tests fail, outputs a `decision: "block"` response so Claude gets the error
-feedback.
-
-**Key adaptations from prototype:**
-
-- Use Bun test runner instead of Vitest/Jest detection
-- Use `tests/` parallel directory resolution
-- PostToolUse `decision: "block"` format (correct as-is for PostToolUse)
-- Also run for test file edits (catch broken tests immediately)
+**What it does:** After any impl or test file write, finds the corresponding test file and runs
+it with `bun test`. If tests fail, outputs a `decision: "block"` response so Claude gets the
+error feedback. Note: `{ "decision": "block", "reason": "..." }` is the correct format for
+PostToolUse hooks (distinct from PreToolUse which uses `hookSpecificOutput.permissionDecision`).
 
 **Implementation outline:**
 
@@ -314,9 +462,10 @@ feedback.
 // PostToolUse — after every file write, run related tests.
 // If tests fail, block the agent so it must fix before proceeding.
 
-import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { findTestFile, isTestFile } from '../../.hooks/tdd/test-resolver.mjs'
+import { runTest } from '../../.hooks/tdd/test-runner.mjs'
 
 const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))
 const { tool_name, tool_input, cwd } = input
@@ -327,56 +476,16 @@ const filePath = tool_input.file_path
 if (!filePath) process.exit(0)
 
 const IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/
-const TEST_PATTERN = /\.(?:test|spec)\.(?:ts|js|tsx|jsx)$/
-
 if (!IMPL_PATTERN.test(filePath)) process.exit(0)
 
-const projectRoot = cwd
-
-function findTestFile(implAbsPath) {
-  // If the file IS a test file, run it directly
-  if (TEST_PATTERN.test(implAbsPath)) return implAbsPath
-
-  const rel = path.relative(projectRoot, implAbsPath)
-
-  // src/foo/bar.ts → tests/foo/bar.test.ts
-  if (rel.startsWith('src/')) {
-    const testRel = rel.replace(/^src\//, 'tests/').replace(/\.([tj]sx?)$/, '.test.$1')
-    const testAbs = path.join(projectRoot, testRel)
-    if (fs.existsSync(testAbs)) return testAbs
-  }
-
-  // Fallback: colocated
-  const dir = path.dirname(implAbsPath)
-  const ext = path.extname(implAbsPath)
-  const base = path.basename(implAbsPath, ext)
-  const colocated = path.join(dir, `${base}.test${ext}`)
-  if (fs.existsSync(colocated)) return colocated
-
-  return null
-}
-
 const absPath = path.resolve(filePath)
-const testFile = findTestFile(absPath)
+const testFile = isTestFile(filePath) ? absPath : findTestFile(absPath, cwd)
 if (!testFile) process.exit(0)
 
-let output = ''
-let passed = true
+const result = await runTest(testFile, cwd)
 
-try {
-  output = execSync(`bun test ${testFile}`, {
-    encoding: 'utf8',
-    stdio: 'pipe',
-    cwd: projectRoot,
-    timeout: 30_000,
-  })
-} catch (err) {
-  passed = false
-  output = (err.stdout ?? '') + '\n' + (err.stderr ?? '')
-}
-
-if (!passed) {
-  const relFile = path.relative(projectRoot, filePath)
+if (!result.passed) {
+  const relFile = path.relative(cwd, filePath)
   console.log(
     JSON.stringify({
       decision: 'block',
@@ -384,7 +493,7 @@ if (!passed) {
         `Tests are RED after your edit of \`${relFile}\`.\n\n` +
         `You must fix the failing tests before proceeding.\n\n` +
         `── Test output ──────────────────────────────\n` +
-        `${output.slice(0, 3000)}\n` +
+        `${result.output}\n` +
         `─────────────────────────────────────────────\n\n` +
         `Fix the regression, then re-attempt.`,
     }),
@@ -394,25 +503,18 @@ if (!passed) {
 process.exit(0)
 ```
 
-**Verification:**
-
-```bash
-# Test with a file that has passing tests
-echo '{"tool_name":"Edit","tool_input":{"file_path":"/Users/ki/Projects/experiments/papai/src/config.ts","old_string":"x","new_string":"y"},"session_id":"test","cwd":"/Users/ki/Projects/experiments/papai","hook_event_name":"PostToolUse","tool_response":{"success":true}}' | node .claude/hooks/verify-tests-pass.mjs
-# Expected: exit 0 with no output (tests pass)
-```
-
 **Commit:** `feat: add verify-tests-pass hook for test regression gate`
 
 ---
 
-### Task 4: Merge hook registration into settings
+#### Task B4: Merge hook registration into settings
 
-**Files:** Create or modify `.claude/settings.json` (shared, committed to repo)
+**Files:** Create `.claude/settings.json` (shared, committed to repo)
 
-TDD hooks must go in `.claude/settings.json` (not `settings.local.json`) so they are committed
+TDD hooks go in `.claude/settings.json` (not `settings.local.json`) so they are committed
 to the repo and available to all contributors. The existing `settings.local.json` retains
-permissions and the Stop hook (local-only concerns).
+permissions and the Stop hook (local-only concerns). Claude Code merges both files (local
+takes precedence).
 
 **Create `.claude/settings.json` with hook registrations:**
 
@@ -452,25 +554,155 @@ permissions and the Stop hook (local-only concerns).
 }
 ```
 
-Note: The existing Stop hook in `settings.local.json` is unaffected. Claude Code merges
-both files (local takes precedence), so both hook sets will be active.
-
-**Verification:**
-
-```bash
-# Verify JSON is valid
-node -e "console.log(JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8')))"
-# Check hooks load in Claude Code
-claude --debug  # inspect hook registration output
-```
+**Note:** PostToolUse hooks run in parallel. The tracker and test-runner don't share state
+files, so no race condition exists between them.
 
 **Commit:** `feat: register TDD hooks in settings.json`
 
 ---
 
-### Task 5: Add TDD enforcement protocol to CLAUDE.md
+### Phase C: OpenCode Plugin
 
-**Files:** Modify `CLAUDE.md`
+#### Task C1: Create `.opencode/plugins/tdd-enforcement.ts`
+
+**Files:** Create `.opencode/plugins/tdd-enforcement.ts`
+
+**What it does:** Single plugin implementing all three TDD hooks via opencode's plugin API.
+Uses the deferred blocking pattern for test verification (since `tool.execute.after` cannot
+block).
+
+**Key design decisions:**
+
+- Named export async factory function — required by opencode plugin API
+- Uses `directory` from plugin context for project root (absolute path)
+- Uses `input.sessionID` (camelCase) for per-session state tracking
+- Gates `write`, `edit`, and `multiedit` tools (all use `args.filePath`)
+- Does NOT gate `patch` tool (uses `patchText`, not `filePath` — ungatable without parsing)
+- Uses `MemorySessionState` backend (plugin runs in-process, closure persists)
+
+**Implementation outline:**
+
+```typescript
+// .opencode/plugins/tdd-enforcement.ts
+// OpenCode plugin — TDD enforcement: gate + tracker + test runner with deferred blocking
+
+import type { Plugin } from '@opencode-ai/plugin'
+import path from 'node:path'
+import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '../../.hooks/tdd/test-resolver.mjs'
+import { MemorySessionState } from '../../.hooks/tdd/session-state.mjs'
+import { runTest } from '../../.hooks/tdd/test-runner.mjs'
+
+// OpenCode edit tools that use filePath (excludes patch — uses patchText)
+const EDIT_TOOLS = new Set(['write', 'edit', 'multiedit'])
+
+export const TddEnforcement: Plugin = async ({ directory }) => {
+  return {
+    // ─── enforce-tdd + deferred test-failure blocking ───
+    'tool.execute.before': async (input, output) => {
+      const state = new MemorySessionState(input.sessionID)
+
+      // DEFERRED BLOCKING: If previous edit broke tests, block ALL tools until fixed
+      const pending = state.getPendingFailure()
+      if (pending) {
+        throw new Error(
+          `Tests are RED after your edit of \`${pending.file}\`.\n\n` +
+            `You must fix the failing tests before proceeding.\n\n` +
+            `── Test output ──────────────────────────────\n` +
+            `${pending.output}\n` +
+            `─────────────────────────────────────────────\n\n` +
+            `Fix the regression, then re-attempt.`,
+        )
+      }
+
+      // TDD GATE: Block impl writes without test
+      if (!EDIT_TOOLS.has(input.tool)) return
+
+      const filePath = output.args.filePath as string
+      if (!filePath) return
+      if (isTestFile(filePath)) return
+      if (!isGateableImplFile(filePath, directory)) return
+
+      const absPath = path.resolve(directory, filePath)
+      if (findTestFile(absPath, directory)) return
+
+      const writtenTests = state.getWrittenTests()
+      const baseName = path.basename(absPath, path.extname(absPath))
+      const alreadyTestedThisSession = writtenTests.some(
+        (t) => path.basename(t, path.extname(t)).replace(/\.(test|spec)$/, '') === baseName,
+      )
+      if (alreadyTestedThisSession) return
+
+      const relPath = path.relative(directory, filePath)
+      const suggestedTest = suggestTestPath(relPath)
+
+      throw new Error(
+        `TDD violation: No test file found for \`${relPath}\`.\n\n` +
+          `Write a failing test first:\n  → ${suggestedTest}\n\n` +
+          `Then re-attempt writing the implementation.`,
+      )
+    },
+
+    // ─── enforce-tdd-tracker + verify-tests-pass (deferred) ───
+    'tool.execute.after': async (input) => {
+      if (!EDIT_TOOLS.has(input.tool)) return
+
+      const filePath = input.args.filePath as string
+      if (!filePath) return
+
+      const state = new MemorySessionState(input.sessionID)
+
+      // Track test file writes
+      if (isTestFile(filePath)) {
+        state.addWrittenTest(path.resolve(directory, filePath))
+      }
+
+      // Run tests after impl/test edits
+      const absPath = path.resolve(directory, filePath)
+      const testFile = isTestFile(filePath) ? absPath : findTestFile(absPath, directory)
+
+      if (!testFile) return
+
+      const result = await runTest(testFile, directory)
+
+      if (!result.passed) {
+        // Store failure — will block next tool.execute.before
+        const relPath = path.relative(directory, filePath)
+        state.setPendingFailure(relPath, result.output)
+      } else {
+        // Tests pass — clear any pending failure
+        state.clearPendingFailure()
+      }
+    },
+  }
+}
+```
+
+**Prerequisite:** The `@opencode-ai/plugin` types package is declared in `.opencode/package.json`
+and auto-installed by opencode at startup via `bun install`.
+
+**Commit:** `feat: add opencode TDD enforcement plugin`
+
+---
+
+#### Task C2: Create `.opencode/package.json`
+
+**Files:** Create `.opencode/package.json`
+
+```json
+{
+  "dependencies": {
+    "@opencode-ai/plugin": "latest"
+  }
+}
+```
+
+**Commit:** `chore: add opencode plugin dependencies`
+
+---
+
+### Phase D: TDD Instructions
+
+#### Task D1: Modify `CLAUDE.md`
 
 Add after the existing "## Testing" section:
 
@@ -512,11 +744,73 @@ files are gated. For exceptional cases, temporarily remove the hook entries from
 `.claude/settings.json`.
 ```
 
-**Commit:** `docs: add TDD enforcement protocol to CLAUDE.md`
+---
+
+#### Task D2: Create `.github/instructions/tdd.instructions.md`
+
+This gives Copilot and opencode (via plugin) the same TDD protocol, scoped to `src/**`.
+
+```markdown
+---
+applyTo: 'src/**'
+---
+
+# TDD Workflow — Red → Green → Refactor
+
+Every implementation change in `src/` MUST follow the TDD cycle. This is enforced
+by hooks in Claude Code but applies as a mandatory workflow for all AI tools.
+
+## Before editing any file in `src/`
+
+1. Check that a corresponding test file exists: `src/foo/bar.ts` → `tests/foo/bar.test.ts`
+2. If no test file exists, create one FIRST with a failing test
+3. Only then proceed to edit the implementation file
+
+## After editing any file in `src/`
+
+1. Run the related test: `bun test tests/foo/bar.test.ts`
+2. If tests fail, fix the implementation before proceeding
+3. Do NOT move on with failing tests
+
+## Hard Rules
+
+1. Never touch an implementation file before its test file exists
+2. Never proceed past a RED test, even temporarily
+3. Test naming convention: `src/foo/bar.ts` → `tests/foo/bar.test.ts`
+4. Write the minimum implementation to make tests pass — no speculative code
+```
 
 ---
 
-### Task 6: Verify end-to-end
+#### Task D3: Update `.github/copilot-instructions.md` table
+
+Add the new instruction file to the path-scoped guidelines table:
+
+```markdown
+| `tdd.instructions.md` | `src/**` | TDD workflow: test-first, Red→Green→Refactor |
+```
+
+**Commit:** `docs: add TDD enforcement protocol to CLAUDE.md, Copilot, and opencode`
+
+---
+
+### Phase E: Tests and Verification
+
+#### Task E1: Unit tests for shared core
+
+**Files:** Create `tests/hooks/tdd/test-resolver.test.ts`, `tests/hooks/tdd/session-state.test.ts`, `tests/hooks/tdd/test-runner.test.ts`
+
+Test coverage:
+
+- `test-resolver`: all resolution paths (parallel dir, colocated fallback, non-src skip, non-ts skip)
+- `session-state`: both `FileSessionState` and `MemorySessionState` backends (read/write/clear, corrupt file handling)
+- `test-runner`: passing test, failing test, timeout handling
+
+**Commit:** `test: add unit tests for shared TDD core modules`
+
+---
+
+#### Task E2: End-to-end verification (Claude Code)
 
 **Note:** `chmod +x` is not needed — hooks are invoked via `node <file>` in settings, not
 executed directly by the shell.
@@ -554,18 +848,27 @@ executed directly by the shell.
 
 5. **Test runner catches failures:**
    ```bash
-   # Create a deliberately failing test, verify hook catches it
    echo '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/src/errors.ts","content":"x"},"session_id":"e2e","cwd":"'$PWD'","hook_event_name":"PostToolUse","tool_response":{"success":true}}' | node .claude/hooks/verify-tests-pass.mjs
    # Should exit 0 with no output (tests/errors.test.ts passes)
    ```
+
+---
+
+#### Task E3: Integration test for deferred blocking (OpenCode)
+
+Verify the deferred-blocking pattern works end-to-end:
+
+1. Simulate `tool.execute.after` setting failure state
+2. Verify `tool.execute.before` throws on next call
+3. Verify clearing after tests pass
 
 **Commit:** `test: verify TDD hooks end-to-end`
 
 ---
 
-### Task 7: Clean up prototype docs
+### Phase F: Cleanup
 
-**Files:** No file changes — just document the relationship.
+#### Task F1: Clean up prototype docs
 
 Add a note to `docs/tdd-hooks/README.md`:
 
@@ -575,27 +878,70 @@ Add a note to `docs/tdd-hooks/README.md`:
 ## Status
 
 This directory contains the **prototype** hooks. The production-ready, project-adapted
-versions live in `.claude/hooks/`. Key differences:
+versions live in `.hooks/tdd/` (shared core) + `.claude/hooks/` (Claude Code adapters) +
+`.opencode/plugins/` (OpenCode adapter). Key differences:
 
 - Uses Bun test runner instead of Vitest/Jest
 - Resolves test files in `tests/` parallel directory (not colocated)
 - Uses correct Claude Code hook output format (`hookSpecificOutput.permissionDecision`)
 - Scoped to `src/**/*.ts` files only
+- Shared core logic eliminates duplication across platforms
+```
+
+#### Task F2: Mark multi-agent plan as superseded
+
+Add a note to `docs/plans/2026-03-23-multi-agent-tdd-hooks.md`:
+
+```markdown
+> **Status:** Superseded — merged into `2026-03-23-tdd-hooks-integration.md`.
 ```
 
 **Commit:** `docs: note prototype vs production hook locations`
 
 ---
 
+## Implementation Order
+
+```
+Phase A (shared core):
+  Task A1 (test-resolver) ──┐
+  Task A2 (session-state) ──┼──→ Phase B (Claude Code adapters):
+  Task A3 (test-runner)   ──┘      Task B1 (enforce-tdd)     ──┐
+                                    Task B2 (tracker)          ──┼──→ Phase E (tests):
+                                    Task B3 (verify-tests)     ──┤      Task E1 (unit tests)
+                                    Task B4 (settings.json)    ──┤      Task E2 (Claude e2e)
+                                                                 │      Task E3 (OpenCode e2e)
+                                  Phase C (OpenCode plugin):     │
+                                    Task C1 (plugin)           ──┤
+                                    Task C2 (package.json)     ──┘
+                                                                       Phase F (cleanup):
+                                  Phase D (instructions):                Task F1 + F2
+                                    Task D1 (CLAUDE.md)        ──→
+                                    Task D2 (tdd.instructions)
+                                    Task D3 (copilot table)
+```
+
+**Critical path:** A → B+C (parallel) → E → F. Phase D is independent.
+
+---
+
 ## Risk Assessment Matrix
 
-| Risk                                          | Probability | Impact | Mitigation                                                                                   | Owner |
-| --------------------------------------------- | ----------- | ------ | -------------------------------------------------------------------------------------------- | ----- |
-| Hook blocks legitimate edits (false positive) | Medium      | High   | Only gate `src/` files; allow config/docs freely. Remove hooks from settings as escape hatch | Dev   |
-| Test runner timeout slows Claude              | Medium      | Medium | 30s timeout on `bun test` per file; Bun is fast; test only the related file, not full suite  | Dev   |
-| Hook crashes on malformed JSON                | Low         | Medium | Wrap stdin parsing in try/catch, exit 0 on error (fail open)                                 | Dev   |
-| Session state file races (parallel hooks)     | Low         | Low    | PostToolUse hooks run sequentially per Claude Code docs                                      | Dev   |
-| Node.js ESM resolution fails in hook          | Low         | High   | Use `.mjs` extension which forces ESM regardless of package.json; verify on setup            | Dev   |
+| Risk                                                   | Probability | Impact | Mitigation                                                                                        | Owner |
+| ------------------------------------------------------ | ----------- | ------ | ------------------------------------------------------------------------------------------------- | ----- |
+| Hook blocks legitimate edits (false positive)          | Medium      | High   | Only gate `src/` files; allow config/docs freely. Remove hooks from settings as escape hatch      | Dev   |
+| Test runner timeout slows Claude                       | Medium      | Medium | 30s timeout on `bun test` per file; Bun is fast; test only the related file, not full suite       | Dev   |
+| Hook crashes on malformed JSON                         | Low         | Medium | Wrap stdin parsing in try/catch, exit 0 on error (fail open)                                      | Dev   |
+| Session state file races (parallel hooks)              | Low         | Low    | Hooks run in parallel, but tracker and test-runner don't share state files; no actual race        | Dev   |
+| Node.js ESM resolution fails in hook                   | Low         | High   | `.mjs` forces ESM; relative imports resolve from file location (verified); verify on setup        | Dev   |
+| OpenCode plugin bypassed via subagent                  | Medium      | Medium | Known issue (#5894); instructions provide fallback enforcement; direct + MCP calls work           | Dev   |
+| OpenCode first-message bypass                          | Medium      | Low    | Known issue (#6862); first tool call in session may bypass gate; instructions provide fallback    | Dev   |
+| OpenCode `patch` tool bypasses TDD gate                | Medium      | Low    | `patch` uses `patchText` not `filePath`; ungatable without parsing; instructions provide fallback | Dev   |
+| OpenCode plugin API changes                            | Low         | Medium | Plugin is simple; pin `@opencode-ai/plugin` version if needed; monitor changelog                  | Dev   |
+| Import paths break between `.hooks/` and adapters      | Low         | High   | Relative ESM imports resolve from file location; tested with dotfile dirs; CI validates both      | Dev   |
+| Deferred blocking feels laggy (1 tool call delay)      | Medium      | Low    | First broken edit goes through, but agent is fully blocked thereafter; functionally equivalent    | Dev   |
+| OpenCode adds native PostToolUse blocking (#17412)     | High        | Low    | Positive risk — simplifies code; add TODO to adopt when available                                 | Dev   |
+| `multiedit`/`patch` have different arg shape than edit | Medium      | Medium | `multiedit` confirmed to use `filePath`; `patch` excluded; audit before implementation            | Dev   |
 
 ---
 
@@ -612,7 +958,7 @@ When Phase 1 is stable, add:
 
 - Replace Vitest coverage with `bun test --coverage` (Bun outputs lcov, not istanbul JSON)
 - Parse Bun's coverage output format for statement coverage
-- Extract shared `extractSurface()` to `.claude/hooks/lib/surface.mjs`
+- Extract shared `extractSurface()` to `.hooks/tdd/surface.mjs`
 
 ### Mutation Testing Hooks
 
@@ -628,15 +974,56 @@ When Phase 1 is stable, add:
 
 ---
 
+## Migration Path: When OpenCode Adds Missing Features
+
+### If #17412 lands (AI-visible message injection from hooks)
+
+- Remove deferred blocking pattern from `tool.execute.before`
+- `tool.execute.after` directly injects test failure feedback
+- Simplify to same logical flow as Claude Code adapters
+
+### If #16626 lands (`session.stopping` hook)
+
+- Add test-pass verification to the stop hook as final safety net
+
+---
+
 ## Quality Gate Checklist
+
+### Shared Core
+
+- [ ] `.hooks/tdd/test-resolver.mjs` — all resolution tests pass
+- [ ] `.hooks/tdd/session-state.mjs` — both File and Memory backends work
+- [ ] `.hooks/tdd/test-runner.mjs` — runs bun test, handles timeout
+
+### Claude Code Adapters
 
 - [ ] All 3 hooks created in `.claude/hooks/` (`.mjs` extension)
 - [ ] `.claude/settings.json` created with PreToolUse and PostToolUse registrations
 - [ ] Existing `Stop` hook in `settings.local.json` preserved (unmodified)
+- [ ] Adapters import from `.hooks/tdd/` — no duplicated logic
 - [ ] Manual verification: impl write without test → blocked
 - [ ] Manual verification: impl write with test → allowed
 - [ ] Manual verification: test write + then impl write → allowed via session tracking
 - [ ] Manual verification: edit that breaks test → blocked with test output
+
+### OpenCode Plugin
+
+- [ ] `.opencode/plugins/tdd-enforcement.ts` loads in opencode without errors
+- [ ] TDD gate: impl write without test → `tool.execute.before` throws Error
+- [ ] Tracker: test file write → recorded in session state
+- [ ] Test runner: impl edit with failing test → pending failure stored
+- [ ] Deferred blocking: pending failure → next `tool.execute.before` throws Error
+- [ ] Clear on pass: passing test run → pending failure cleared
+- [ ] `@opencode-ai/plugin` types — no TypeScript errors
+
+### Cross-Platform
+
+- [ ] Both platforms use identical test resolution logic (from shared core)
+- [ ] Both platforms give identical TDD violation messages
+- [ ] Session state isolation: Claude sessions don't interfere with OpenCode sessions
 - [ ] `CLAUDE.md` updated with TDD protocol
+- [ ] `.github/instructions/tdd.instructions.md` created
+- [ ] `.github/copilot-instructions.md` table updated
 - [ ] No lint-disable or ts-ignore comments in hook files
 - [ ] `bun check` passes (hooks are `.mjs`, not linted by oxlint TypeScript rules)

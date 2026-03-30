@@ -4,15 +4,25 @@ import { InlineKeyboard } from 'grammy'
 import type { ButtonReplyOptions, ReplyOptions } from '../types.js'
 import { formatLlmOutput } from './format.js'
 
-export type ReplyParamsBuilder = (options?: ReplyOptions) => { message_id: number } | undefined
+export type ReplyParamsBuilder = (
+  options?: ReplyOptions,
+) => { message_id: number; message_thread_id?: number } | undefined
 
 export function createReplyParamsBuilder(ctx: Context): ReplyParamsBuilder {
   const messageId = ctx.message?.message_id
-  return (options?: ReplyOptions): { message_id: number } | undefined => {
-    if (options?.replyToMessageId !== undefined) {
-      return { message_id: parseInt(options.replyToMessageId, 10) }
+  const threadId = ctx.message?.message_thread_id
+
+  return (options?: ReplyOptions): { message_id: number; message_thread_id?: number } | undefined => {
+    const targetMessageId = options?.replyToMessageId === undefined ? messageId : parseInt(options.replyToMessageId, 10)
+
+    if (targetMessageId === undefined) return undefined
+
+    const targetThreadId = options?.threadId === undefined ? threadId : parseInt(options.threadId, 10)
+
+    return {
+      message_id: targetMessageId,
+      ...(targetThreadId !== undefined && { message_thread_id: targetThreadId }),
     }
-    return messageId === undefined ? undefined : { message_id: messageId }
   }
 }
 

@@ -1,5 +1,5 @@
 export { cacheMessage, getCachedMessage, initializeMessageCache } from './cache.js'
 export { buildReplyChain } from './chain.js'
-export { restoreMessagesFromDb, startMessageCleanupScheduler } from './persistence.js'
+export { restoreMessagesFromDb } from './persistence.js'
 export type { CachedMessage } from './types.js'
 export type { ReplyChainResult } from './chain.js'
