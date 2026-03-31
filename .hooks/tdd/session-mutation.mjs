@@ -140,6 +140,7 @@ export function captureSessionMutationBaseline(ctx) {
  * @returns {null}
  */
 export function verifySessionMutationBaseline(ctx) {
+  const lines = []
   try {
     if (process.env.TDD_MUTATION === '0') return null
 
@@ -199,7 +200,7 @@ export function verifySessionMutationBaseline(ctx) {
     if (totalNewSurvivors === 0) return null
 
     // Build and output report
-    const lines = [`Mutation testing detected ${totalNewSurvivors} new untested code path(s):`, '']
+    lines = [`Mutation testing detected ${totalNewSurvivors} new untested code path(s):`, '']
 
     for (const [filePath, survivors] of Object.entries(newSurvivorsByFile)) {
       const relPath = path.relative(cwd, filePath)
@@ -220,5 +221,10 @@ export function verifySessionMutationBaseline(ctx) {
   } catch {
     // Fail open
   }
+  if (lines.length > 0) {
+    // Block session stop - throw error with report details
+    throw new Error(lines.join('\n'))
+  }
+
   return null
 }
