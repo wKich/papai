@@ -292,13 +292,13 @@ export const TddEnforcement: Plugin = async ({ directory }) => {
 
   return {
     // PRE-WRITE HOOK (runs before Write/Edit/MultiEdit)
-    'tool.execute.before': async (input, output) => {
+    'tool.execute.before': async (input) => {
       const state = new SessionState(input.sessionID, sessionsDir)
 
       // Only process edit tools
       if (!EDIT_TOOLS.has(input.tool)) return
 
-      const filePath = output.args.filePath as string
+      const filePath = (input as unknown as { args: { filePath: string } }).args.filePath
       if (!filePath) return
 
       // Skip test files and non-gateable files for TDD gate

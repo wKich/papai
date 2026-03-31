@@ -45,7 +45,7 @@ export function verifyNoNewSurface(ctx) {
     if (isTestFile(filePath)) return null
     if (!isGateableImplFile(filePath, cwd)) return null
 
-    const absPath = path.resolve(filePath)
+    const absPath = path.resolve(cwd, filePath)
     const snapshotFile = path.join(getSessionsDir(cwd), `tdd-snapshot-${session_id}-${getFileKey(absPath)}.json`)
 
     if (!fs.existsSync(snapshotFile)) return null

@@ -37,7 +37,7 @@ export function verifyNoNewMutants(ctx) {
     if (isTestFile(filePath)) return null
     if (!isGateableImplFile(filePath, cwd)) return null
 
-    const absPath = path.resolve(filePath)
+    const absPath = path.resolve(cwd, filePath)
     const sessionsDir = getSessionsDir(cwd)
     const snapshotFile = path.join(sessionsDir, `tdd-mutation-${session_id}-${getFileKey(absPath)}.json`)
 

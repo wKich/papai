@@ -20,7 +20,7 @@ export function snapshotSurface(ctx) {
     if (isTestFile(filePath)) return null
     if (!isGateableImplFile(filePath, cwd)) return null
 
-    const absPath = path.resolve(filePath)
+    const absPath = path.resolve(cwd, filePath)
     if (!fs.existsSync(absPath)) return null
 
     const sessionsDir = getSessionsDir(cwd)

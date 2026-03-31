@@ -17,7 +17,7 @@ export function trackTestWrite(ctx) {
     if (!filePath || !isTestFile(filePath)) return null
 
     const state = new SessionState(session_id, getSessionsDir(cwd))
-    state.addWrittenTest(path.resolve(filePath))
+    state.addWrittenTest(path.resolve(cwd, filePath))
   } catch {
     // Fail open
   }
