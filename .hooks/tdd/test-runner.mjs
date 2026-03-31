@@ -17,7 +17,7 @@ const MAX_OUTPUT_LENGTH = 3000
  */
 export async function runTest(testFilePath, projectRoot) {
   try {
-    const output = execSync(`bun test ${testFilePath}`, {
+    const output = execSync(`bun test ${testFilePath} --only-failures`, {
       cwd: projectRoot,
       encoding: 'utf8',
       stdio: 'pipe',

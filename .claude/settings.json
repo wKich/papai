@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-tool-use.mjs",
+            "command": "node .claude/hooks/pre-tool-use.mjs",
             "timeout": 200,
             "statusMessage": "TDD checks (pre-edit)..."
           }
@@ -19,9 +19,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-tool-use.mjs",
+            "command": "node .claude/hooks/post-tool-use.mjs",
             "timeout": 200,
             "statusMessage": "TDD checks (post-edit)..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/session-stop.mjs",
+            "timeout": 600,
+            "statusMessage": "Running session-level mutation tests..."
           }
         ]
       }

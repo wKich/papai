@@ -16,7 +16,7 @@ const IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/
  */
 
 /**
- * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
+ * @param {{ tool_input: { file_path?: string }, session_id: string, cwd: string }} ctx
  * @returns {Promise<BlockResult | null>}
  */
 export async function verifyTestsPass(ctx) {

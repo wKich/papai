@@ -13,7 +13,7 @@ import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '.
  */
 
 /**
- * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
+ * @param {{ tool_input: { file_path?: string }, session_id: string, cwd: string }} ctx
  * @returns {BlockResult | null}
  */
 export function enforceTdd(ctx) {

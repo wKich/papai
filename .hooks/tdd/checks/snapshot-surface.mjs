@@ -9,7 +9,7 @@ import { extractSurface } from '../surface-extractor.mjs'
 import { findTestFile, isTestFile, isGateableImplFile } from '../test-resolver.mjs'
 
 /**
- * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
+ * @param {{ tool_input: { file_path?: string }, session_id: string, cwd: string }} ctx
  * @returns {null}
  */
 export function snapshotSurface(ctx) {

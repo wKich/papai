@@ -81,7 +81,7 @@ describe('trackTestWrite', () => {
       expect(result).toBeNull()
       const state = sessionStateInstances.get(sessionId)
       expect(state).toBeDefined()
-      expect(state!.writtenTests).toContain(path.resolve(filePath))
+      expect(state!.writtenTests).toContain(path.resolve(tempDir, filePath))
     })
 
     test('records .spec.ts file in session state', async () => {
@@ -96,7 +96,7 @@ describe('trackTestWrite', () => {
       })
 
       const state = sessionStateInstances.get(sessionId)
-      expect(state!.writtenTests).toContain(path.resolve(filePath))
+      expect(state!.writtenTests).toContain(path.resolve(tempDir, filePath))
     })
 
     test('records multiple test files for same session', async () => {
@@ -117,8 +117,8 @@ describe('trackTestWrite', () => {
 
       const state = sessionStateInstances.get(sessionId)
       expect(state!.writtenTests).toHaveLength(2)
-      expect(state!.writtenTests).toContain(path.resolve('tests/a.test.ts'))
-      expect(state!.writtenTests).toContain(path.resolve('tests/b.spec.ts'))
+      expect(state!.writtenTests).toContain(path.resolve(tempDir, 'tests/a.test.ts'))
+      expect(state!.writtenTests).toContain(path.resolve(tempDir, 'tests/b.spec.ts'))
     })
 
     test('isolates test files by session ID', async () => {
@@ -139,8 +139,8 @@ describe('trackTestWrite', () => {
       const stateA = sessionStateInstances.get('session-a')
       const stateB = sessionStateInstances.get('session-b')
 
-      expect(stateA!.writtenTests).toEqual([path.resolve('tests/session-a.test.ts')])
-      expect(stateB!.writtenTests).toEqual([path.resolve('tests/session-b.test.ts')])
+      expect(stateA!.writtenTests).toEqual([path.resolve(tempDir, 'tests/session-a.test.ts')])
+      expect(stateB!.writtenTests).toEqual([path.resolve(tempDir, 'tests/session-b.test.ts')])
     })
   })
 
@@ -240,7 +240,7 @@ describe('trackTestWrite', () => {
       const storedPath = state!.writtenTests[0]
 
       expect(path.isAbsolute(storedPath)).toBe(true)
-      expect(storedPath).toBe(path.resolve(relativePath))
+      expect(storedPath).toBe(path.resolve(tempDir, relativePath))
     })
 
     test('preserves already absolute paths', async () => {
@@ -368,7 +368,7 @@ describe('trackTestWrite', () => {
         expect(result).toBeNull()
         const state = sessionStateInstances.get(sessionId)
         expect(state!.writtenTests).toHaveLength(1)
-        expect(state!.writtenTests[0]).toBe(path.resolve(pattern))
+        expect(state!.writtenTests[0]).toBe(path.resolve(tempDir, pattern))
       })
     }
   })

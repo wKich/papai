@@ -3,7 +3,6 @@
 import fs from 'node:fs'
 
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
-import { verifyNoNewMutants } from '../../.hooks/tdd/checks/verify-no-new-mutants.mjs'
 import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
 import { verifyTestsPass } from '../../.hooks/tdd/checks/verify-tests-pass.mjs'
 
@@ -13,26 +12,19 @@ try {
   // 1. Record test file writes (side-effect only, always runs)
   trackTestWrite(ctx)
 
-  // 2. Run tests — if RED, skip surface and mutation checks
+  // 2. Run tests — if RED, skip surface check
   const testResult = await verifyTestsPass(ctx)
   if (testResult) {
     console.log(JSON.stringify(testResult))
     process.exit(0)
   }
 
-  // 3. Verify no new functionality (surface + mutants)
+  // 3. Verify no new functionality (surface only)
+  // Note: Mutation testing now runs at session start/end, not per-file
   const surfaceResult = verifyNoNewSurface(ctx)
-  const mutantResult = verifyNoNewMutants(ctx)
 
-  if (surfaceResult && mutantResult) {
-    console.log(
-      JSON.stringify({
-        decision: 'block',
-        reason: surfaceResult.reason + '\n\n---\n\n' + mutantResult.reason,
-      }),
-    )
-  } else if (surfaceResult || mutantResult) {
-    console.log(JSON.stringify(surfaceResult || mutantResult))
+  if (surfaceResult) {
+    console.log(JSON.stringify(surfaceResult))
   }
 } catch (err) {
   console.error(

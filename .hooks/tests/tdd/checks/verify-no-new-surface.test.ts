@@ -137,7 +137,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(implFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo() {}\nexport function bar() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -171,7 +171,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(implFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo(a, b, c) {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -207,7 +207,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(testFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -243,7 +243,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(testFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo(a, b) {}\nexport function bar() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -283,7 +283,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(implFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function fetchData() {}\nexport function updateCache() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'providers', 'kaneo', 'client.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'providers', 'kaneo', 'client.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -358,7 +358,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(testFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -390,7 +390,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(testFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,
@@ -423,7 +423,7 @@ describe('verifyNoNewSurface', () => {
     fs.mkdirSync(path.dirname(testFile), { recursive: true })
     fs.writeFileSync(implFile, 'export function foo() {}')
 
-    const absPath = fs.realpathSync(path.join(tempDir, 'src', 'module.ts'))
+    const absPath = path.resolve(tempDir, 'src', 'module.ts')
     const snapshotPath = path.join(sessionsDir, `tdd-snapshot-test-session-${getFileKey(absPath)}.json`)
     fs.writeFileSync(
       snapshotPath,

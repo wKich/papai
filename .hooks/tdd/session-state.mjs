@@ -48,6 +48,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 1 week
  * @property {PendingFailure | null} pendingFailure
  * @property {Map<string, SurfaceSnapshot>} surfaceSnapshots
  * @property {Map<string, MutationSnapshot>} mutationSnapshots
+ * @property {Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>> | null} sessionMutationBaseline
  */
 
 /**
@@ -97,6 +98,7 @@ export class SessionState {
       pendingFailure: null,
       surfaceSnapshots: new Map(),
       mutationSnapshots: new Map(),
+      sessionMutationBaseline: null,
     }
   }
 
@@ -203,5 +205,25 @@ export class SessionState {
     this.#ensureLoaded()
     this.#state.mutationSnapshots.set(fileKey, data)
     this.#persist()
+  }
+
+  // Session-level mutation baseline (all src files)
+
+  /**
+   * @param {Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>>} baseline
+   * @returns {void}
+   */
+  setSessionMutationBaseline(baseline) {
+    this.#ensureLoaded()
+    this.#state.sessionMutationBaseline = baseline
+    this.#persist()
+  }
+
+  /**
+   * @returns {Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>> | null}
+   */
+  getSessionMutationBaseline() {
+    this.#ensureLoaded()
+    return this.#state.sessionMutationBaseline ?? null
   }
 }

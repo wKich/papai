@@ -34,7 +34,7 @@ import { findTestFile, isTestFile, isGateableImplFile } from '../test-resolver.m
  */
 
 /**
- * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
+ * @param {{ tool_input: { file_path?: string }, session_id: string, cwd: string }} ctx
  * @returns {BlockResult | null}
  */
 export function verifyNoNewSurface(ctx) {
