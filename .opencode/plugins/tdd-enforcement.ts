@@ -12,6 +12,7 @@ import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
 import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
 import { verifyTestsPass } from '../../.hooks/tdd/checks/verify-tests-pass.mjs'
+import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
 import { getSessionsDir } from '../../.hooks/tdd/paths.mjs'
 import { captureSessionMutationBaseline, verifySessionMutationBaseline } from '../../.hooks/tdd/session-mutation.mjs'
 
@@ -35,8 +36,12 @@ export const TddEnforcement: Plugin = async ({ directory }) => {
       const filePath = output.args.filePath as string
       if (!filePath) return
 
+      // Capture coverage baseline BEFORE any edits to ensure it reflects the
+      // pre-edit state, not the state after the first edit (fixes lazy capture bug)
+      getSessionBaseline(input.sessionID, directory)
+
       // Capture mutation baseline on first tool use (lazy, mirrors Claude hooks)
-      const baselineFile = path.join(sessionsDir, `tdd-session-mutation-baseline-${input.sessionID}.json`)
+      const baselineFile = path.join(sessionsDir, 'tdd-session-mutation-baseline-' + input.sessionID + '.json')
       if (!fs.existsSync(baselineFile)) {
         captureSessionMutationBaseline({ session_id: input.sessionID, cwd: directory })
       }

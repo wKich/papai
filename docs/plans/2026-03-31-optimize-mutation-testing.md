@@ -4,7 +4,8 @@
 
 **Goal:** Move mutation testing (Stryker) from running on every file edit (60-240s overhead per edit) to running once at session start and once at session end, drastically improving iteration speed while maintaining mutation coverage enforcement.
 
-**Architecture:** 
+**Architecture:**
+
 - Remove per-file mutation snapshots from pre/post-write hooks
 - Add session-level mutation baseline capture at start using `session.start` hook
 - Add session-level mutation verification at end using `session.stop` hook
@@ -18,6 +19,7 @@
 ## Current Behavior Analysis
 
 Mutation testing currently runs:
+
 1. **Before each file edit** (Check [3] snapshotMutants) - ~30-120s
 2. **After each file edit** (Check [7] verifyNoNewMutants) - ~30-120s
 
@@ -26,6 +28,7 @@ Mutation testing currently runs:
 ## Proposed New Behavior
 
 Mutation testing will run:
+
 1. **At session start** - capture baseline for all src/ files once
 2. **At session end** - capture final state and compare against baseline
 
@@ -36,6 +39,7 @@ Mutation testing will run:
 ## Task 1: Add Session Start Hook for Mutation Baseline
 
 **Files:**
+
 - Modify: `.opencode/plugins/tdd-enforcement.ts`
 
 **Step 1: Add session start mutation capture function**
@@ -47,10 +51,7 @@ Add this function after `getFileKey()`:
  * Run mutation testing on all src/ files at session start
  * Captures baseline mutation survivors for later comparison
  */
-async function captureSessionMutationBaseline(
-  state: SessionState,
-  directory: string,
-): Promise<void> {
+async function captureSessionMutationBaseline(state: SessionState, directory: string): Promise<void> {
   if (process.env['TDD_MUTATION'] === '0') return
 
   const srcDir = path.join(directory, 'src')
@@ -111,10 +112,22 @@ async function captureSessionMutationBaseline(
 
     if (fs.existsSync(reportFile)) {
       const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'))
-      const allSurvivors: Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>> = {}
-      
+      const allSurvivors: Record<
+        string,
+        Array<{ mutator: string; replacement: string; line?: number; description: string }>
+      > = {}
+
       for (const [filePath, fileData] of Object.entries(report.files ?? {})) {
-        const survivors = Object.values((fileData as { mutants: Record<string, { status: string; mutatorName: string; replacement: string; location?: { start?: { line?: number } } }> }).mutants ?? {})
+        const survivors = Object.values(
+          (
+            fileData as {
+              mutants: Record<
+                string,
+                { status: string; mutatorName: string; replacement: string; location?: { start?: { line?: number } } }
+              >
+            }
+          ).mutants ?? {},
+        )
           .filter((m) => m.status === 'Survived')
           .map((m) => ({
             mutator: m.mutatorName,
@@ -126,7 +139,7 @@ async function captureSessionMutationBaseline(
           allSurvivors[path.resolve(filePath)] = survivors
         }
       }
-      
+
       state.setSessionMutationBaseline(allSurvivors)
     }
   } catch {
@@ -149,6 +162,7 @@ In the plugin return object, add:
 **Step 3: Remove per-file mutation testing**
 
 Remove Check [3] snapshotMutants from `runPreWriteChecks()` (lines 62-93):
+
 - Remove the entire `if (process.env['TDD_MUTATION'] !== '0' && fs.existsSync(absPath))` block
 
 Remove Check [7] verifyNoNewMutants - entire function and its call in post-write hook.
@@ -160,6 +174,7 @@ Remove the `verifyNoNewMutants` call from the post-write hook (lines 379-390).
 ## Task 2: Add Session Stop Hook for Mutation Verification
 
 **Files:**
+
 - Modify: `.opencode/plugins/tdd-enforcement.ts`
 - Modify: `.hooks/tdd/session-state.mjs` (add new method)
 
@@ -192,11 +207,13 @@ getSessionMutationBaseline() {
 **Step 2: Update type definitions in session-state.mjs**
 
 Add to `SessionStateData` typedef:
+
 ```javascript
  * @property {Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>> | null} sessionMutationBaseline
 ```
 
 Update `#createEmptyState()`:
+
 ```javascript
 return {
   writtenTests: [],
@@ -291,10 +308,22 @@ async function verifySessionMutationBaseline(
     }
 
     const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'))
-    const finalSurvivors: Record<string, Array<{ mutator: string; replacement: string; line?: number; description: string }>> = {}
-    
+    const finalSurvivors: Record<
+      string,
+      Array<{ mutator: string; replacement: string; line?: number; description: string }>
+    > = {}
+
     for (const [filePath, fileData] of Object.entries(report.files ?? {})) {
-      const survivors = Object.values((fileData as { mutants: Record<string, { status: string; mutatorName: string; replacement: string; location?: { start?: { line?: number } } }> }).mutants ?? {})
+      const survivors = Object.values(
+        (
+          fileData as {
+            mutants: Record<
+              string,
+              { status: string; mutatorName: string; replacement: string; location?: { start?: { line?: number } } }
+            >
+          }
+        ).mutants ?? {},
+      )
         .filter((m) => m.status === 'Survived')
         .map((m) => ({
           mutator: m.mutatorName,
@@ -308,13 +337,13 @@ async function verifySessionMutationBaseline(
     }
 
     // Compare final against baseline to find NEW survivors
-    const newSurvivorsByFile: Record<string, typeof finalSurvivors[string]> = {}
+    const newSurvivorsByFile: Record<string, (typeof finalSurvivors)[string]> = {}
     let totalNewSurvivors = 0
 
     for (const [filePath, finalList] of Object.entries(finalSurvivors)) {
       const baselineList = baseline[filePath] ?? []
       const baselineDescriptions = new Set(baselineList.map((m) => m.description))
-      
+
       const newInFile = finalList.filter((m) => !baselineDescriptions.has(m.description))
       if (newInFile.length > 0) {
         newSurvivorsByFile[filePath] = newInFile
@@ -327,10 +356,7 @@ async function verifySessionMutationBaseline(
     }
 
     // Build report
-    const lines: string[] = [
-      `Mutation testing detected ${totalNewSurvivors} new untested code path(s):`,
-      '',
-    ]
+    const lines: string[] = [`Mutation testing detected ${totalNewSurvivors} new untested code path(s):`, '']
 
     for (const [filePath, survivors] of Object.entries(newSurvivorsByFile)) {
       const relPath = path.relative(directory, filePath)
@@ -359,7 +385,7 @@ In the plugin return object, add:
 'session.stop': async (input) => {
   const state = new SessionState(input.sessionID, sessionsDir)
   const result = await verifySessionMutationBaseline(state, directory)
-  
+
   if (result.hasNewSurvivors) {
     // Log the mutation report for the user to see
     console.error('\n=== MUTATION TESTING REPORT ===\n')
@@ -374,11 +400,13 @@ In the plugin return object, add:
 ## Task 3: Clean Up Unused Code
 
 **Files:**
+
 - Modify: `.opencode/plugins/tdd-enforcement.ts`
 
 **Step 1: Remove per-file mutation functions**
 
 Remove these imports:
+
 - `extractSurvivors` from `'../../.hooks/tdd/mutation.mjs'`
 - `buildStrykerConfig` from `'../../.hooks/tdd/mutation.mjs'` (unless still needed)
 
@@ -401,9 +429,11 @@ Remove unused imports and update the file header comment:
 ## Task 4: Verify Surface Snapshots Still Work
 
 **Files:**
+
 - Verify: `.opencode/plugins/tdd-enforcement.ts`
 
 Ensure that surface snapshot functionality (Check [2] and [6]) still works:
+
 - `runPreWriteChecks` should still capture surface snapshots (lines 49-60)
 - `verifyNoNewSurface` should still work as before
 
@@ -418,6 +448,7 @@ The `getFileKey` function is still needed for surface snapshots.
 ```bash
 bun typecheck
 ```
+
 Expected: No TypeScript errors
 
 **Step 2: Run linting**
@@ -425,6 +456,7 @@ Expected: No TypeScript errors
 ```bash
 bun lint
 ```
+
 Expected: No lint errors
 
 **Step 3: Test that plugin loads**
@@ -436,6 +468,7 @@ The plugin should load without errors when opencode starts.
 ## Task 6: Update Documentation
 
 **Files:**
+
 - Modify: `/Users/ki/Projects/experiments/papai/CLAUDE.md` (TDD Enforcement section)
 
 **Step 1: Update CLAUDE.md**
@@ -452,6 +485,7 @@ Mutation testing runs **once per session** (not per-file edit):
 3. **If new survivors detected** - A report is shown with the new untested code paths
 
 **Environment variable:**
+
 - `TDD_MUTATION=0` - Disables mutation testing entirely
 - Default (unset) - Mutation testing runs at session start/end
 

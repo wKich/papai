@@ -6,8 +6,8 @@ import path from 'node:path'
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
-import { captureSessionMutationBaseline } from '../../.hooks/tdd/session-mutation.mjs'
 import { getSessionsDir } from '../../.hooks/tdd/paths.mjs'
+import { captureSessionMutationBaseline } from '../../.hooks/tdd/session-mutation.mjs'
 
 try {
   const ctx = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))

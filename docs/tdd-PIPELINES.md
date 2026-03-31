@@ -7,22 +7,28 @@ broken down by scenario.
 
 ## Architecture
 
-Claude Code registers **one hook per event**. Each hook is a thin orchestrator
-(`.claude/hooks/pre-tool-use.mjs`, `.claude/hooks/post-tool-use.mjs`) that
-imports check functions from `.hooks/tdd/checks/` and runs them **sequentially**
-with short-circuit logic.
+Claude Code and OpenCode register **one hook per event**. Each hook is a thin orchestrator
+(`.claude/hooks/pre-tool-use.mjs`, `.claude/hooks/post-tool-use.mjs` for Claude;
+`.opencode/plugins/tdd-enforcement.ts` for OpenCode) that imports check functions
+from `.hooks/tdd/checks/` and runs them **sequentially** with short-circuit logic.
 
 ```
-settings.json
-  PreToolUse  → pre-tool-use.mjs  ─┬─ [1] enforceTdd()
-               (reads stdin once)  ├─ [2] snapshotSurface()     ← skipped if [1] blocks
-                                   └─ [3] snapshotMutants()     ← skipped if [1] blocks
+settings.json (Claude) / OpenCode Plugin
+  PreToolUse/tool.execute.before  ─┬─ [1] enforceTdd()
+                                 ├─ [2] snapshotSurface()     ← skipped if [1] blocks
+                                 └─ capture session baseline    ← coverage + mutation
 
-  PostToolUse → post-tool-use.mjs ─┬─ [4] trackTestWrite()
-               (reads stdin once)  ├─ [5] verifyTestsPass()
-                                   ├─ [6] verifyNoNewSurface()  ← skipped if [5] blocks
-                                   └─ [7] verifyNoNewMutants()  ← skipped if [5] blocks
+  PostToolUse/tool.execute.after ─┬─ [4] trackTestWrite()
+                                  ├─ [5] verifyTestsPass()
+                                  └─ [6] verifyNoNewSurface()  ← skipped if [5] blocks
+
+  SessionStop                    ── Session-level mutation verification
 ```
+
+**Note:** Mutation testing ([3] `snapshotMutants` and [7] `verifyNoNewMutants`) has been
+moved from **per-file** to **session-level**. Mutations are captured once at session start
+and verified once at session stop, rather than on every edit. This significantly improves
+performance (from ~180s per edit to ~600s once per session).
 
 Every check function has a uniform contract:
 
@@ -31,18 +37,17 @@ Input:   ctx = { tool_name, tool_input, session_id, cwd }   (from stdin JSON)
 Output:  { decision: 'block', reason: '...' } | null
 ```
 
-Returning `null` means "pass". Side-effect-only checks ([2], [3], [4]) always return `null`.
+Returning `null` means "pass". Side-effect-only checks ([2] and [4]) always return `null`.
 
 ### Short-circuit rules
 
 **PreToolUse:** `[1]` runs first. If it returns a block, the orchestrator emits it
-and exits immediately — `[2]` and `[3]` never execute. This avoids wasting a
-180-second Stryker run on a write that will be rejected.
+and exits immediately — `[2]` never executes. This avoids unnecessary work on writes
+that will be rejected.
 
 **PostToolUse:** `[4]` always runs (side-effect). `[5]` runs next. If it returns a
 block (tests RED or coverage dropped), the orchestrator emits it and exits — `[6]`
-and `[7]` never execute. If `[5]` passes, `[6]` and `[7]` both run. If both block,
-their reasons are combined into a single block response separated by `---`.
+never executes. If `[5]` passes, `[6]` runs to verify no new API surface was added.
 
 ### Fail-open guarantee
 
@@ -52,7 +57,7 @@ Double-layered: a crash in any check never blocks work.
 
 ### Gate condition
 
-Checks [1]–[3] and [5]–[7] only activate for **gateable implementation files**
+Checks [1], [2], [5], and [6] only activate for **gateable implementation files**
 (`isGateableImplFile` in `test-resolver.mjs`):
 
 - Path starts with `src/` (relative to `cwd`)
@@ -65,6 +70,9 @@ coverage regression for gateable impl files.
 
 Check [4] activates only for test files (`*.test.*` / `*.spec.*`).
 
+Session-level mutation testing runs independently and covers all `src/**/*.ts`
+files (excluding `*.test.ts`).
+
 ### Notation
 
 ```
@@ -73,6 +81,7 @@ Check [4] activates only for test files (`*.test.*` / `*.spec.*`).
 ⊘  skip    check returns null early (guard: wrong file type, file doesn't exist, etc.)
 —  n/a     check never called (short-circuited by orchestrator)
 snap       check writes a state snapshot to .hooks/sessions/ (always returns null)
+base       session-level baseline captured (coverage, mutation)
 ```
 
 ---
@@ -87,7 +96,6 @@ Tool: Write → CHANGELOG.md  (or bunfig.toml, .claude/hooks/foo.mjs, etc.)
 PreToolUse:
   [1] enforceTdd        ⊘  isGateableImplFile → false
   [2] snapshotSurface   ⊘  isGateableImplFile → false
-  [3] snapshotMutants   ⊘  isGateableImplFile → false
 
   File is written.
 
@@ -96,7 +104,6 @@ PostToolUse:
   [5] verifyTestsPass   ⊘  IMPL_PATTERN → false (for .md/.toml)
                             or findTestFile → null (for .mjs outside src/)
   [6] verifyNoNewSurface  ⊘  isGateableImplFile → false
-  [7] verifyNoNewMutants  ⊘  isGateableImplFile → false
 ```
 
 All checks exit early. No work done.
@@ -116,7 +123,6 @@ PreToolUse:
         → "No test file exists for `src/foo/bar.ts`.
            Write a failing test first: → tests/foo/bar.test.ts"
   [2]                   —  skipped (orchestrator short-circuits on [1] block)
-  [3]                   —  skipped
 
   File is NOT written.
 
@@ -134,7 +140,6 @@ Tool: Write → tests/foo/bar.test.ts  (new test, impl does not exist yet)
 PreToolUse:
   [1] enforceTdd        ⊘  isTestFile → true
   [2] snapshotSurface   ⊘  isTestFile → true
-  [3] snapshotMutants   ⊘  isTestFile → true
 
   File is written.
 
@@ -148,7 +153,6 @@ PostToolUse:
         → "Tests fail after writing `tests/foo/bar.test.ts`.
            Write the implementation to make this test pass."
   [6]                   —  skipped (orchestrator short-circuits on [5] block)
-  [7]                   —  skipped
 ```
 
 **Key design point:** The orchestrator runs `[4]` before `[5]`. So the test path is
@@ -166,7 +170,6 @@ Tool: Write → src/foo/bar.ts  (new file, test written in Scenario 3)
 PreToolUse:
   [1] enforceTdd        →  findTestFile → tests/foo/bar.test.ts (exists on disk) → pass
   [2] snapshotSurface   ⊘  fs.existsSync(src/foo/bar.ts) → false (new file, nothing to snapshot)
-  [3] snapshotMutants   ⊘  fs.existsSync → false
 
   File is written.
 
@@ -177,7 +180,6 @@ PostToolUse:
                             coverage check: baselineCov[src/foo/bar.ts] → undefined
                             (file is new, not in session baseline) → skip → pass
   [6] verifyNoNewSurface  ⊘  no snapshot file (new file, [2] wrote nothing) → pass
-  [7] verifyNoNewMutants  ⊘  no snapshot file ([3] wrote nothing) → pass
 ```
 
 **Session state fallback in `[1]`:** If `findTestFile` returns null (timing edge case
@@ -197,30 +199,22 @@ PreToolUse:
         extractSurface(src/foo/bar.ts) → { exports: [...], signatures: {...} }
         getCoverage(testFile, implFile) → { covered: N, total: M }
         writes .hooks/sessions/tdd-snapshot-<id>-<key>.json
-  [3] snapshotMutants   snap
-        buildStrykerConfig → writes stryker-config-<id>-before.json
-        execSync: stryker run → extracts Survived mutants
-        writes .hooks/sessions/tdd-mutation-<id>-<key>.json
 
   File is written.
 
 PostToolUse:
   [4] trackTestWrite    ⊘  not a test file
   [5] verifyTestsPass   →  bun test tests/foo/bar.test.ts → PASS
-                            getSessionBaseline → cached or first-run (full suite, 120s)
-                            getCoverage → currentPct >= baselinePct → pass
+                             getSessionBaseline → cached or first-run (full suite, 120s)
+                             getCoverage → currentPct >= baselinePct → pass
   [6] verifyNoNewSurface  →  loads tdd-snapshot-<id>-<key>.json
-                              extractSurface on modified file
-                              ① no new exports → pass
-                              ② no signature expansions → pass
-                              ③ uncoveredAfter <= uncoveredBefore → pass
-  [7] verifyNoNewMutants  →  runs Stryker again (after state)
-                              extractSurvivors on after report
-                              diffs: newSurvivors = after \ before (by "mutator:replacement")
-                              newSurvivors.length === 0 → pass
+                               extractSurface on modified file
+                               ① no new exports → pass
+                               ② no signature expansions → pass
+                               ③ uncoveredAfter <= uncoveredBefore → pass
 ```
 
-This is the happy path: all 7 checks run, all pass.
+This is the happy path: all checks run, all pass.
 
 ---
 
@@ -241,10 +235,9 @@ PostToolUse:
            ─────────────────────────────────────────────
            Fix the code to make the tests pass."
   [6]                   —  skipped (orchestrator short-circuits on RED)
-  [7]                   —  skipped
 ```
 
-Surface and mutation checks are skipped — no point analyzing a broken state.
+Surface check is skipped — no point analyzing a broken state.
 
 ---
 
@@ -259,8 +252,8 @@ PreToolUse:  snapshots taken (surface before = { exports: ["existingFn"] })
 PostToolUse:
   [4] ⊘
   [5] verifyTestsPass   →  tests pass (existing tests unaffected)
-                            coverage may or may not drop vs session baseline
-                            (see branching below)
+                             coverage may or may not drop vs session baseline
+                             (see branching below)
 ```
 
 **Branch A — `[5]` passes (coverage unchanged or no baseline):**
@@ -271,12 +264,6 @@ PostToolUse:
         newExports = ["newHelper"]
         → "New untested API surface in `src/foo/bar.ts`:
            1. New exports: `newHelper`. ..."
-  [7] verifyNoNewMutants  ✗  BLOCK
-        newHelper body produces new surviving mutants
-        → "N new surviving mutant(s) in `src/foo/bar.ts`: ..."
-
-  Orchestrator combines both into a single block response:
-    surfaceResult.reason + "\n\n---\n\n" + mutantResult.reason
 ```
 
 **Branch B — `[5]` blocks on coverage drop:**
@@ -285,7 +272,6 @@ PostToolUse:
   [5] verifyTestsPass   ✗  BLOCK (coverage)
         → "Line coverage dropped for `src/foo/bar.ts`. ..."
   [6]                    —  skipped
-  [7]                    —  skipped
 ```
 
 ---
@@ -306,11 +292,9 @@ PostToolUse:
         → "New untested API surface in `src/foo/bar.ts`:
            1. `process`: parameter count increased (1 → 2).
               Write tests for the new parameter(s)."
-  [7] verifyNoNewMutants  →  no new surviving mutants (signature change alone,
-                              no new logic paths) → pass
 ```
 
-Only `[6]` blocks. The orchestrator emits `surfaceResult` only.
+Only `[6]` blocks. The orchestrator emits `surfaceResult`.
 
 ---
 
@@ -333,7 +317,6 @@ PostToolUse:
            After:  81.8% (45/55 lines), −8.2pp
            Add tests to cover the new code paths."
   [6]                     —  skipped (orchestrator short-circuits)
-  [7]                     —  skipped
 ```
 
 **Two distinct coverage checks exist:**
@@ -357,17 +340,18 @@ Tool: Edit → src/foo/bar.ts
 PreToolUse:
   [1] enforceTdd        →  pass (test exists)
   [2] snapshotSurface   snap  (surface + coverage — unaffected by TDD_MUTATION)
-  [3] snapshotMutants   ⊘  TDD_MUTATION === '0' → return null immediately
 
 PostToolUse:
   [4] trackTestWrite    ⊘
   [5] verifyTestsPass   →  runs normally
   [6] verifyNoNewSurface  →  runs normally (surface + coverage diff still active)
-  [7] verifyNoNewMutants  ⊘  TDD_MUTATION === '0' → return null immediately
+
+SessionStop:
+  (mutation verification skipped when TDD_MUTATION=0)
 ```
 
-Only the Stryker pair (`[3]` and `[7]`) is bypassed. The surface + coverage checks
-(`[2]` and `[6]`) still enforce refactor purity.
+When `TDD_MUTATION=0`, session-level mutation testing is bypassed entirely. The surface +
+coverage checks (`[2]` and `[6]`) still enforce refactor purity.
 
 ---
 
@@ -379,7 +363,6 @@ Tool: Edit → tests/foo/bar.test.ts
 PreToolUse:
   [1] enforceTdd        ⊘  isTestFile → true
   [2] snapshotSurface   ⊘  isTestFile → true
-  [3] snapshotMutants   ⊘  isTestFile → true
 
   File is written.
 
@@ -390,30 +373,63 @@ PostToolUse:
                             bun test tests/foo/bar.test.ts
                             PASS → pass  /  FAIL → BLOCK
   [6] verifyNoNewSurface  ⊘  isTestFile → true (if [5] passed)
-  [7] verifyNoNewMutants  ⊘  isTestFile → true (if [5] passed)
 ```
 
-If the test fails after the edit, `[5]` blocks and `[6]`/`[7]` are skipped (though
-they would have returned null anyway since test files bypass their guards).
+If the test fails after the edit, `[5]` blocks and `[6]` is skipped (though
+it would have returned null anyway since test files bypass its guard).
+
+---
+
+## Scenario 12 — Session Stop: Mutation verification
+
+At the end of the session, mutation testing runs on the entire `src/` directory
+to detect any untested code paths introduced during the session.
+
+```
+Session: End of session
+
+SessionStop:
+  captureSessionMutationBaseline (runs on first PreToolUse)
+    → Runs Stryker on all src/**/*.ts files
+    → Writes baseline: tdd-session-mutation-baseline-<id>.json
+    → Stores all surviving mutants at session start
+
+  verifySessionMutationBaseline (runs on SessionStop)
+    → Runs Stryker on all src/**/*.ts files again
+    → Compares final survivors against baseline
+    → New survivors = code paths added without tests
+    → If newSurvivors.length > 0: reports violations to stderr
+```
+
+**Performance characteristics:**
+
+- Session start: ~10 minutes for full src/ mutation testing
+- Session end: ~10 minutes for verification
+- Per-edit overhead: 0 (mutation testing runs only at session boundaries)
+
+The session-level approach runs mutation testing once per session, rather than on every
+edit, providing significant performance improvements for sessions with multiple edits.
 
 ---
 
 ## Summary Table
 
-| Scenario                            | [1] | [2]  | [3]  | [4]     | [5]    | [6]   | [7]   |
-| ----------------------------------- | --- | ---- | ---- | ------- | ------ | ----- | ----- |
-| Non-gated file                      | ⊘   | ⊘    | ⊘    | ⊘       | ⊘      | ⊘     | ⊘     |
-| New impl, no test                   | ✗   | —    | —    | —       | —      | —     | —     |
-| Write test (Red)                    | ⊘   | ⊘    | ⊘    | → saves | ✗ RED  | —     | —     |
-| Write impl (Green)                  | →   | ⊘    | ⊘    | ⊘       | →      | ⊘     | ⊘     |
-| Edit impl, clean                    | →   | snap | snap | ⊘       | →      | →     | →     |
-| Edit impl, breaks tests             | →   | snap | snap | ⊘       | ✗ RED  | —     | —     |
-| Edit impl, new export (no cov drop) | →   | snap | snap | ⊘       | →      | ✗ API | ✗ mut |
-| Edit impl, new export (cov drop)    | →   | snap | snap | ⊘       | ✗ cov  | —     | —     |
-| Edit impl, sig expansion            | →   | snap | snap | ⊘       | →      | ✗ sig | →     |
-| Edit impl, coverage drop            | →   | snap | snap | ⊘       | ✗ cov  | —     | —     |
-| `TDD_MUTATION=0`                    | →   | snap | ⊘    | ⊘       | →      | →     | ⊘     |
-| Edit test file                      | ⊘   | ⊘    | ⊘    | → saves | → or ✗ | ⊘     | ⊘     |
+| Scenario                            | [1] | [2]  | [4]     | [5]    | [6]   |
+| ----------------------------------- | --- | ---- | ------- | ------ | ----- |
+| Non-gated file                      | ⊘   | ⊘    | ⊘       | ⊘      | ⊘     |
+| New impl, no test                   | ✗   | —    | —       | —      | —     |
+| Write test (Red)                    | ⊘   | ⊘    | → saves | ✗ RED  | —     |
+| Write impl (Green)                  | →   | ⊘    | ⊘       | →      | ⊘     |
+| Edit impl, clean                    | →   | snap | ⊘       | →      | →     |
+| Edit impl, breaks tests             | →   | snap | ⊘       | ✗ RED  | —     |
+| Edit impl, new export (no cov drop) | →   | snap | ⊘       | →      | ✗ API |
+| Edit impl, new export (cov drop)    | →   | snap | ⊘       | ✗ cov  | —     |
+| Edit impl, sig expansion            | →   | snap | ⊘       | →      | ✗ sig |
+| Edit impl, coverage drop            | →   | snap | ⊘       | ✗ cov  | —     |
+| `TDD_MUTATION=0`                    | →   | snap | ⊘       | →      | →     |
+| Edit test file                      | ⊘   | ⊘    | → saves | → or ✗ | ⊘     |
+
+**Note:** Mutation testing runs at **session-level** (Session Stop). See Scenario 12.
 
 ---
 
@@ -423,31 +439,34 @@ they would have returned null anyway since test files bypass their guards).
 .claude/hooks/
   pre-tool-use.mjs           ← PreToolUse orchestrator (registered in settings.json)
   post-tool-use.mjs          ← PostToolUse orchestrator (registered in settings.json)
+  session-stop.mjs           ← SessionStop orchestrator (runs mutation verification)
+
+.opencode/plugins/
+  tdd-enforcement.ts         ← OpenCode plugin implementing same checks
 
 .hooks/tdd/
   checks/
     enforce-tdd.mjs           [1] enforceTdd()
     snapshot-surface.mjs       [2] snapshotSurface()
-    snapshot-mutants.mjs       [3] snapshotMutants()
     track-test-write.mjs       [4] trackTestWrite()
     verify-tests-pass.mjs      [5] verifyTestsPass()
     verify-no-new-surface.mjs  [6] verifyNoNewSurface()
-    verify-no-new-mutants.mjs  [7] verifyNoNewMutants()
   mutation.mjs                shared Stryker utilities (extractSurvivors, buildStrykerConfig)
   test-resolver.mjs           isTestFile, isGateableImplFile, findTestFile, suggestTestPath
   session-state.mjs           FileSessionState, MemorySessionState
+  session-mutation.mjs        Session-level mutation testing (captureSessionMutationBaseline, verifySessionMutationBaseline)
   test-runner.mjs             runTest()
   surface-extractor.mjs       extractSurface()
   coverage.mjs                getCoverage()
   coverage-session.mjs        getSessionBaseline()
 
 .hooks/sessions/              ← gitignored, created on demand
-  tdd-session-<id>.json
-  tdd-snapshot-<id>-<key>.json
-  tdd-coverage-baseline-<id>.json
-  tdd-mutation-<id>-<key>.json
-  stryker-config-<id>-{before,after}.json
-  stryker-report-<id>-{before,after}.json
+  tdd-session-<id>.json                    Session state (written tests)
+  tdd-snapshot-<id>-<key>.json             Per-file surface+coverage snapshots
+  tdd-coverage-baseline-<id>.json          Session-level coverage baseline (24h TTL)
+  tdd-session-mutation-baseline-<id>.json  Session-level mutation baseline
+  stryker-session-<id>-{baseline,final}.json  Session mutation reports
+  stryker-config-<id>-*.json               Temporary Stryker configs
 ```
 
 ---
@@ -458,14 +477,62 @@ All session files are stored in `.hooks/sessions/` (gitignored) and keyed by `se
 supplied by Claude Code in the hook stdin payload. Created on demand via
 `fs.mkdirSync(sessionsDir, { recursive: true })`.
 
-| File                                      | Written by                    | Read by                  | TTL      |
-| ----------------------------------------- | ----------------------------- | ------------------------ | -------- |
-| `tdd-session-<id>.json`                   | `[4]` trackTestWrite          | `[1]` enforceTdd         | 1 week   |
-| `tdd-snapshot-<id>-<key>.json`            | `[2]` snapshotSurface         | `[6]` verifyNoNewSurface | session  |
-| `tdd-coverage-baseline-<id>.json`         | `[5]` verifyTestsPass (lazy)  | `[5]` verifyTestsPass    | 24 hours |
-| `tdd-mutation-<id>-<key>.json`            | `[3]` snapshotMutants         | `[7]` verifyNoNewMutants | session  |
-| `stryker-config-<id>-{before,after}.json` | `[3]`/`[7]`                   | Stryker CLI              | session  |
-| `stryker-report-<id>-{before,after}.json` | Stryker CLI (via `[3]`/`[7]`) | `[3]`/`[7]`              | session  |
+| File                                         | Written by                       | Read by                         | TTL      |
+| -------------------------------------------- | -------------------------------- | ------------------------------- | -------- |
+| `tdd-session-<id>.json`                      | `[4]` trackTestWrite             | `[1]` enforceTdd                | 1 week   |
+| `tdd-snapshot-<id>-<key>.json`               | `[2]` snapshotSurface            | `[6]` verifyNoNewSurface        | session  |
+| `tdd-coverage-baseline-<id>.json`            | `getSessionBaseline` (lazy)      | `[5]` verifyTestsPass           | 24 hours |
+| `tdd-session-mutation-baseline-<id>.json`    | `captureSessionMutationBaseline` | `verifySessionMutationBaseline` | session  |
+| `stryker-session-<id>-{baseline,final}.json` | Stryker CLI                      | `session-mutation.mjs`          | session  |
+| `stryker-config-<id>-*.json`                 | `session-mutation.mjs`           | Stryker CLI                     | session  |
 
 The `<key>` suffix is derived from the absolute file path with `/` and `.` replaced by `_`,
 making it deterministic and collision-free per file per session.
+
+---
+
+## OpenCode Plugin
+
+The same TDD enforcement pipeline is available for OpenCode via `.opencode/plugins/tdd-enforcement.ts`.
+
+### Differences from Claude Hooks
+
+| Aspect                | Claude Code                                    | OpenCode                              |
+| --------------------- | ---------------------------------------------- | ------------------------------------- |
+| **Hook mechanism**    | `settings.json` → `.mjs` scripts               | TypeScript plugin with event handlers |
+| **Pre-tool hook**     | `PreToolUse` event                             | `tool.execute.before` event           |
+| **Post-tool hook**    | `PostToolUse` event                            | `tool.execute.after` event            |
+| **Session stop**      | `Stop` event                                   | `session.stop` event                  |
+| **Context shape**     | `{ tool_name, tool_input, session_id, cwd }`   | `{ tool, args, sessionID }`           |
+| **Error handling**    | `process.exit(0)` on pass, JSON block response | Throws `Error` with reason message    |
+| **Coverage baseline** | ✅ Captured in PreToolUse                      | ✅ Captured in tool.execute.before    |
+
+### OpenCode Plugin Structure
+
+```typescript
+// .opencode/plugins/tdd-enforcement.ts
+export const TddEnforcement: Plugin = async ({ directory }) => {
+  return {
+    'session.stop': (input) => {
+      verifySessionMutationBaseline({ session_id: input.sessionID, cwd: directory })
+    },
+
+    'tool.execute.before': async (input, output) => {
+      // Capture baselines before first edit
+      getSessionBaseline(input.sessionID, directory)
+      captureSessionMutationBaseline({ session_id: input.sessionID, cwd: directory })
+
+      // [1] enforceTdd and [2] snapshotSurface
+    },
+
+    'tool.execute.after': async (input) => {
+      // [4] trackTestWrite, [5] verifyTestsPass, [6] verifyNoNewSurface
+    },
+  }
+}
+```
+
+### Known OpenCode Differences
+
+1. **No stdin/stdout**: OpenCode plugins receive context directly rather than via stdin,
+   making the check functions' contract slightly different.

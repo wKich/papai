@@ -86,5 +86,3 @@ describe('SessionState (Claude backend)', () => {
     })
   })
 })
-
-
