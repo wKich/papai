@@ -30,6 +30,8 @@ services:
     environment:
       DB_PATH: /data/papai.db
       KANEO_INTERNAL_URL: ${KANEO_INTERNAL_URL:-http://kaneo-api:1337}
+    expose:
+      - "9100"
     volumes:
       - papai-data:/data
     depends_on:

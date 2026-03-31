@@ -92,6 +92,10 @@ jobs:
           KANEO_POSTGRES_PASSWORD: ${{ secrets.KANEO_POSTGRES_PASSWORD }}
           KANEO_AUTH_SECRET: ${{ secrets.KANEO_AUTH_SECRET }}
           KANEO_CLIENT_URL: ${{ vars.KANEO_CLIENT_URL }}
+          DEBUG_SERVER: ${{ vars.DEBUG_SERVER || 'false' }}
+          DEBUG_TOKEN: ${{ secrets.DEBUG_TOKEN }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
+          CADDY_ADDITIONAL_CONFIG: ${{ vars.CADDY_ADDITIONAL_CONFIG }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -114,8 +118,17 @@ jobs:
             printf 'KANEO_POSTGRES_PASSWORD=%s\n' "${KANEO_POSTGRES_PASSWORD}"
             printf 'KANEO_AUTH_SECRET=%s\n' "${KANEO_AUTH_SECRET}"
             [ -n "${KANEO_CLIENT_URL}" ] && printf 'KANEO_CLIENT_URL=%s\n' "${KANEO_CLIENT_URL}"
+            printf 'DEBUG_SERVER=%s\n' "${DEBUG_SERVER}"
+            [ "${DEBUG_SERVER}" = "true" ] && printf 'DEBUG_HOSTNAME=0.0.0.0\n'
+            [ -n "${DEBUG_TOKEN}" ] && printf 'DEBUG_TOKEN=%s\n' "${DEBUG_TOKEN}"
+            printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL}"
           } > .env
           chmod 600 .env
+
+          # Append additional Caddy config if set
+          if [ -n "${CADDY_ADDITIONAL_CONFIG}" ]; then
+            printf '\n%s\n' "${CADDY_ADDITIONAL_CONFIG}" >> Caddyfile
+          fi
 
           # Backup database before deployment
           echo "Creating database backup..."
