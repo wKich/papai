@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { getCoverage } from '../coverage.mjs'
-import { getSessionsDir, getSnapshotKey } from '../paths.mjs'
+import { getSessionsDir, getFileKey } from '../paths.mjs'
 import { extractSurface } from '../surface-extractor.mjs'
 import { findTestFile, isTestFile, isGateableImplFile } from '../test-resolver.mjs'
 
@@ -24,7 +24,7 @@ export function snapshotSurface(ctx) {
     if (!fs.existsSync(absPath)) return null
 
     const sessionsDir = getSessionsDir(cwd)
-    const snapshotFile = path.join(sessionsDir, `tdd-snapshot-${session_id}-${getSnapshotKey(absPath)}.json`)
+    const snapshotFile = path.join(sessionsDir, `tdd-snapshot-${session_id}-${getFileKey(absPath)}.json`)
 
     const testFile = findTestFile(absPath, cwd)
     const coverage = testFile ? getCoverage(testFile, absPath, cwd) : null

@@ -2,30 +2,33 @@
 // OpenCode plugin — TDD enforcement following PIPELINES.md specification
 // Implements all 7 checks with sequential short-circuit logic
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import type { Plugin } from '@opencode-ai/plugin'
 
-import { MemorySessionState } from '../../.hooks/tdd/session-state.mjs'
+import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
+import { getCoverage } from '../../.hooks/tdd/coverage.mjs'
+import { extractSurvivors, buildStrykerConfig } from '../../.hooks/tdd/mutation.mjs'
+import { getSessionsDir } from '../../.hooks/tdd/paths.mjs'
+import { SessionState } from '../../.hooks/tdd/session-state.mjs'
+import { extractSurface } from '../../.hooks/tdd/surface-extractor.mjs'
 import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '../../.hooks/tdd/test-resolver.mjs'
 import { runTest } from '../../.hooks/tdd/test-runner.mjs'
-import { extractSurface } from '../../.hooks/tdd/surface-extractor.mjs'
-import { getCoverage } from '../../.hooks/tdd/coverage.mjs'
-import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
-import { extractSurvivors, buildStrykerConfig } from '../../.hooks/tdd/mutation.mjs'
 
 // OpenCode edit tools that use filePath
 const EDIT_TOOLS = new Set(['write', 'edit', 'multiedit'])
 
 /**
  * Generate a file key from absolute path for snapshot storage.
- * Format: tdd-{type}-${session_id}-${sanitized_path} (per PIPELINES.md)
- * Note: For MemorySessionState, session_id is handled by the session isolation.
+ * Uses SHA-256 hash truncated to 16 characters for uniqueness.
+ * Format: tdd-{type}-${session_id}-${hash} (per PIPELINES.md)
+ * Note: For SessionState, session_id is handled by the session isolation.
  */
 function getFileKey(absPath: string): string {
-  return absPath.replace(/[/.]/g, '_')
+  return createHash('sha256').update(absPath).digest('hex').slice(0, 16)
 }
 
 /**
@@ -33,7 +36,7 @@ function getFileKey(absPath: string): string {
  * Run before file write - captures pre-edit state
  */
 async function runPreWriteChecks(
-  state: MemorySessionState,
+  state: SessionState,
   filePath: string,
   absPath: string,
   directory: string,
@@ -69,7 +72,7 @@ async function runPreWriteChecks(
       fs.writeFileSync(configFile, JSON.stringify(tempConfig))
 
       try {
-        execSync(`node_modules/.bin/stryker run ${configFile}`, {
+        execFileSync('node_modules/.bin/stryker', ['run', configFile], {
           cwd: directory,
           encoding: 'utf8',
           stdio: 'pipe',
@@ -104,26 +107,26 @@ async function verifyTestsPass(
 
   const result = await runTest(testFile, directory)
 
-    if (!result.passed) {
-      const relPath = path.relative(directory, filePath)
-      const isTest = isTestFile(filePath)
-      const reason = [
-        `Tests failed after ${isTest ? 'writing' : 'editing'} \`${relPath}\`.`,
-        '',
-        '── Test output ──────────────────────────────',
-        result.output,
-        '─────────────────────────────────────────────',
-        '',
-        isTest
-          ? 'Next step: Write the implementation to make this test pass.'
-          : 'Next step: Fix the code to make all tests pass.',
-      ].join('\n')
-      return { decision: 'block', reason }
-    }
+  if (!result.passed) {
+    const relPath = path.relative(directory, filePath)
+    const isTest = isTestFile(filePath)
+    const reason = [
+      `Tests failed after ${isTest ? 'writing' : 'editing'} \`${relPath}\`.`,
+      '',
+      '── Test output ──────────────────────────────',
+      result.output,
+      '─────────────────────────────────────────────',
+      '',
+      isTest
+        ? 'Next step: Write the implementation to make this test pass.'
+        : 'Next step: Fix the code to make all tests pass.',
+    ].join('\n')
+    return { decision: 'block', reason }
+  }
 
   // Coverage enforcement - only for impl files in src/
   if (!isTestFile(filePath) && isGateableImplFile(filePath, directory)) {
-    // Get session baseline (file-based with 24h TTL, per PIPELINES.md)
+    // Get session baseline (captured at session start by PreToolUse hook)
     const baseline = getSessionBaseline(sessionId, directory)
 
     const baselineCov = baseline?.[absPath]
@@ -156,7 +159,7 @@ async function verifyTestsPass(
  * Check [6] verifyNoNewSurface - Diff API surface against snapshot
  */
 function verifyNoNewSurface(
-  state: MemorySessionState,
+  state: SessionState,
   filePath: string,
   absPath: string,
   directory: string,
@@ -182,9 +185,7 @@ function verifyNoNewSurface(
   for (const [fn, newCount] of Object.entries(after.signatures)) {
     const oldCount = before.signatures[fn]
     if (oldCount !== undefined && newCount > oldCount) {
-      violations.push(
-        `Function \`${fn}\` has ${newCount - oldCount} new parameter(s) (${oldCount} → ${newCount})`,
-      )
+      violations.push(`Function \`${fn}\` has ${newCount - oldCount} new parameter(s) (${oldCount} → ${newCount})`)
     }
   }
 
@@ -204,9 +205,11 @@ function verifyNoNewSurface(
   if (violations.length > 0) {
     const relPath = path.relative(directory, filePath)
     const reason = [
-      `New untested API surface in \`${relPath}\`:`,
+      `You added new functionality to \`${relPath}\` that has no tests.`,
       '',
       ...violations.map((v, i) => `${i + 1}. ${v}`),
+      '',
+      'Next step: Add tests for this new functionality.',
     ].join('\n')
     return { decision: 'block', reason }
   }
@@ -218,7 +221,7 @@ function verifyNoNewSurface(
  * Check [7] verifyNoNewMutants - Diff mutants against snapshot
  */
 function verifyNoNewMutants(
-  state: MemorySessionState,
+  state: SessionState,
   filePath: string,
   absPath: string,
   directory: string,
@@ -242,7 +245,7 @@ function verifyNoNewMutants(
     fs.writeFileSync(configFile, JSON.stringify(tempConfig))
 
     try {
-      execSync(`node_modules/.bin/stryker run ${configFile}`, {
+      execFileSync('node_modules/.bin/stryker', ['run', configFile], {
         cwd: directory,
         encoding: 'utf8',
         stdio: 'pipe',
@@ -263,8 +266,10 @@ function verifyNoNewMutants(
     if (newSurvivors.length === 0) return null
 
     const relPath = path.relative(directory, filePath)
-    const lines = newSurvivors.map((m: { line?: number; mutator: string; replacement: string }) =>
-      `  Line ${m.line ?? '?'}: [${m.mutator}] → \`${m.replacement}\``)
+    const lines = newSurvivors.map(
+      (m: { line?: number; mutator: string; replacement: string }) =>
+        `  Line ${m.line ?? '?'}: [${m.mutator}] → \`${m.replacement}\``,
+    )
 
     const reason = [
       `${newSurvivors.length} new untested code paths found in \`${relPath}\`:`,
@@ -283,16 +288,12 @@ function verifyNoNewMutants(
 }
 
 export const TddEnforcement: Plugin = async ({ directory }) => {
+  const sessionsDir = getSessionsDir(directory)
+
   return {
     // PRE-WRITE HOOK (runs before Write/Edit/MultiEdit)
     'tool.execute.before': async (input, output) => {
-      const state = new MemorySessionState(input.sessionID)
-
-      // DEFERRED BLOCKING: If previous edit broke tests, block ALL tools
-      const pending = state.getPendingFailure()
-      if (pending) {
-        throw new Error(pending.output)
-      }
+      const state = new SessionState(input.sessionID, sessionsDir)
 
       // Only process edit tools
       if (!EDIT_TOOLS.has(input.tool)) return
@@ -353,7 +354,7 @@ export const TddEnforcement: Plugin = async ({ directory }) => {
       const filePath = input.args.filePath as string
       if (!filePath) return
 
-      const state = new MemorySessionState(input.sessionID)
+      const state = new SessionState(input.sessionID, sessionsDir)
       const absPath = path.resolve(directory, filePath)
 
       // [4] trackTestWrite - Record test files written this session
@@ -372,14 +373,8 @@ export const TddEnforcement: Plugin = async ({ directory }) => {
       const testResult = await verifyTestsPass(input.sessionID, filePath, absPath, directory)
 
       if (testResult) {
-        // Store failure for deferred blocking
-        const relPath = path.relative(directory, filePath)
-        state.setPendingFailure(relPath, testResult.reason)
         throw new Error(testResult.reason)
       }
-
-      // Tests passed - clear any pending failure
-      state.clearPendingFailure()
 
       // [6] verifyNoNewSurface + [7] verifyNoNewMutants
       // Only run these for gateable impl files (not test files)
@@ -388,13 +383,7 @@ export const TddEnforcement: Plugin = async ({ directory }) => {
         const mutantResult = verifyNoNewMutants(state, filePath, absPath, directory)
 
         if (surfaceResult && mutantResult) {
-          const combinedReason = [
-            surfaceResult.reason,
-            '',
-            '---',
-            '',
-            mutantResult.reason,
-          ].join('\n')
+          const combinedReason = [surfaceResult.reason, '', '---', '', mutantResult.reason].join('\n')
           throw new Error(combinedReason)
         } else if (surfaceResult || mutantResult) {
           throw new Error((surfaceResult || mutantResult)!.reason)

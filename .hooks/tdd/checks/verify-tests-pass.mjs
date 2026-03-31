@@ -10,8 +10,14 @@ import { runTest } from '../test-runner.mjs'
 const IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/
 
 /**
+ * @typedef {Object} BlockResult
+ * @property {'block'} decision
+ * @property {string} reason
+ */
+
+/**
  * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
- * @returns {Promise<{ decision: 'block', reason: string } | null>}
+ * @returns {Promise<BlockResult | null>}
  */
 export async function verifyTestsPass(ctx) {
   try {
@@ -20,14 +26,14 @@ export async function verifyTestsPass(ctx) {
     if (!filePath) return null
     if (!IMPL_PATTERN.test(filePath)) return null
 
-    const absPath = path.resolve(filePath)
+    const absPath = path.resolve(cwd, filePath)
     const testFile = isTestFile(filePath) ? absPath : findTestFile(absPath, cwd)
     if (!testFile) return null
 
     const result = await runTest(testFile, cwd)
 
     if (!result.passed) {
-      const relFile = path.relative(cwd, filePath)
+      const relFile = path.relative(cwd, absPath)
       const isTest = isTestFile(filePath)
       return {
         decision: 'block',
@@ -44,6 +50,7 @@ export async function verifyTestsPass(ctx) {
 
     // Coverage enforcement — only for impl files in src/
     if (!isTestFile(filePath) && isGateableImplFile(filePath, cwd)) {
+      // Get session-level baseline (captured at session start by PreToolUse hook)
       const baseline = getSessionBaseline(session_id, cwd)
       const baselineCov = baseline?.[absPath]
 
@@ -53,7 +60,7 @@ export async function verifyTestsPass(ctx) {
           const baselinePct = baselineCov.covered / baselineCov.total
           const currentPct = cov.covered / cov.total
           if (currentPct < baselinePct) {
-            const relFile = path.relative(cwd, filePath)
+            const relFile = path.relative(cwd, absPath)
             const drop = ((baselinePct - currentPct) * 100).toFixed(1)
             return {
               decision: 'block',

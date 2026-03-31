@@ -4,130 +4,204 @@ import path from 'node:path'
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 1 week
 
 /**
- * File-based backend (Claude Code — hooks run as subprocesses, no shared memory)
+ * @typedef {Object} PendingFailure
+ * @property {string} file
+ * @property {string} output
  */
-export class FileSessionState {
-  #filePath
 
+/**
+ * @typedef {Object} CoverageStats
+ * @property {number} covered
+ * @property {number} total
+ */
+
+/**
+ * @typedef {Object} Surface
+ * @property {string[]} exports
+ * @property {Record<string, number>} signatures
+ */
+
+/**
+ * @typedef {Object} SurfaceSnapshot
+ * @property {Surface} surface
+ * @property {CoverageStats | null} coverage
+ * @property {string} filePath
+ */
+
+/**
+ * @typedef {Object} Survivor
+ * @property {string} mutator
+ * @property {string} replacement
+ * @property {number | undefined} line
+ * @property {string} description
+ */
+
+/**
+ * @typedef {Object} MutationSnapshot
+ * @property {Survivor[]} survivors
+ * @property {string} filePath
+ */
+
+/**
+ * @typedef {Object} SessionStateData
+ * @property {string[]} writtenTests
+ * @property {PendingFailure | null} pendingFailure
+ * @property {Map<string, SurfaceSnapshot>} surfaceSnapshots
+ * @property {Map<string, MutationSnapshot>} mutationSnapshots
+ */
+
+/**
+ * File-based session state for TDD enforcement
+ * Persists session data across process restarts
+ */
+export class SessionState {
+  /** @type {string} */
+  #filePath
+  /** @type {SessionStateData | null} */
+  #state
+
+  /**
+   * @param {string} sessionId
+   * @param {string} stateDir
+   */
   constructor(sessionId, stateDir) {
     this.#filePath = path.join(stateDir, `tdd-session-${sessionId}.json`)
+    this.#state = null
   }
 
-  #read() {
+  #ensureLoaded() {
+    if (this.#state !== null) return
+
     try {
       const stat = fs.statSync(this.#filePath)
       if (Date.now() - stat.mtimeMs > SESSION_TTL_MS) {
         fs.unlinkSync(this.#filePath)
-        return { writtenTests: [], pendingFailure: null }
+        this.#state = this.#createEmptyState()
+      } else {
+        this.#state = JSON.parse(fs.readFileSync(this.#filePath, 'utf8'))
+        // Restore Maps from plain objects
+        this.#state.surfaceSnapshots = new Map(Object.entries(this.#state.surfaceSnapshots || {}))
+        this.#state.mutationSnapshots = new Map(Object.entries(this.#state.mutationSnapshots || {}))
       }
-      return JSON.parse(fs.readFileSync(this.#filePath, 'utf8'))
     } catch {
-      return { writtenTests: [], pendingFailure: null }
+      this.#state = this.#createEmptyState()
     }
   }
 
-  #write(state) {
+  /**
+   * @returns {SessionStateData}
+   */
+  #createEmptyState() {
+    return {
+      writtenTests: [],
+      pendingFailure: null,
+      surfaceSnapshots: new Map(),
+      mutationSnapshots: new Map(),
+    }
+  }
+
+  #persist() {
+    const stateForFile = {
+      ...this.#state,
+      surfaceSnapshots: Object.fromEntries(this.#state.surfaceSnapshots),
+      mutationSnapshots: Object.fromEntries(this.#state.mutationSnapshots),
+    }
+
     fs.mkdirSync(path.dirname(this.#filePath), { recursive: true })
-    fs.writeFileSync(this.#filePath, JSON.stringify(state))
+    const tmp = `${this.#filePath}.tmp.${process.pid}`
+    fs.writeFileSync(tmp, JSON.stringify(stateForFile))
+    fs.renameSync(tmp, this.#filePath)
   }
 
+  // Core session state
+
+  /**
+   * @returns {string[]}
+   */
   getWrittenTests() {
-    return this.#read().writtenTests
-  }
-
-  addWrittenTest(testPath) {
-    const state = this.#read()
-    state.writtenTests.push(testPath)
-    this.#write(state)
-  }
-
-  getPendingFailure() {
-    return this.#read().pendingFailure
-  }
-
-  setPendingFailure(file, output) {
-    const state = this.#read()
-    state.pendingFailure = { file, output }
-    this.#write(state)
-  }
-
-  clearPendingFailure() {
-    const state = this.#read()
-    state.pendingFailure = null
-    this.#write(state)
-  }
-}
-
-/**
- * Memory-based backend (OpenCode — plugin runs in-process, closure persists)
- */
-export class MemorySessionState {
-  static #sessions = new Map()
-
-  #state
-
-  constructor(sessionId) {
-    if (!MemorySessionState.#sessions.has(sessionId)) {
-      MemorySessionState.#sessions.set(sessionId, {
-        writtenTests: [],
-        pendingFailure: null,
-        surfaceSnapshots: new Map(),
-        mutationSnapshots: new Map(),
-        coverageBaseline: null,
-      })
-    }
-    this.#state = MemorySessionState.#sessions.get(sessionId)
-  }
-
-  getWrittenTests() {
+    this.#ensureLoaded()
     return this.#state.writtenTests
   }
 
+  /**
+   * @param {string} testPath
+   * @returns {void}
+   */
   addWrittenTest(testPath) {
+    this.#ensureLoaded()
     this.#state.writtenTests.push(testPath)
+    this.#persist()
   }
 
+  /**
+   * @returns {PendingFailure | null}
+   */
   getPendingFailure() {
+    this.#ensureLoaded()
     return this.#state.pendingFailure
   }
 
+  /**
+   * @param {string} file
+   * @param {string} output
+   * @returns {void}
+   */
   setPendingFailure(file, output) {
+    this.#ensureLoaded()
     this.#state.pendingFailure = { file, output }
+    this.#persist()
   }
 
+  /**
+   * @returns {void}
+   */
   clearPendingFailure() {
+    this.#ensureLoaded()
     this.#state.pendingFailure = null
+    this.#persist()
   }
 
   // Surface snapshots (check [2] and [6])
+
+  /**
+   * @param {string} fileKey
+   * @returns {SurfaceSnapshot | null}
+   */
   getSurfaceSnapshot(fileKey) {
+    this.#ensureLoaded()
     return this.#state.surfaceSnapshots.get(fileKey) ?? null
   }
 
+  /**
+   * @param {string} fileKey
+   * @param {SurfaceSnapshot} data
+   * @returns {void}
+   */
   setSurfaceSnapshot(fileKey, data) {
+    this.#ensureLoaded()
     this.#state.surfaceSnapshots.set(fileKey, data)
+    this.#persist()
   }
 
   // Mutation snapshots (check [3] and [7])
+
+  /**
+   * @param {string} fileKey
+   * @returns {MutationSnapshot | null}
+   */
   getMutationSnapshot(fileKey) {
+    this.#ensureLoaded()
     return this.#state.mutationSnapshots.get(fileKey) ?? null
   }
 
+  /**
+   * @param {string} fileKey
+   * @param {MutationSnapshot} data
+   * @returns {void}
+   */
   setMutationSnapshot(fileKey, data) {
+    this.#ensureLoaded()
     this.#state.mutationSnapshots.set(fileKey, data)
-  }
-
-  // Session coverage baseline (check [5])
-  getCoverageBaseline() {
-    return this.#state.coverageBaseline
-  }
-
-  setCoverageBaseline(baseline) {
-    this.#state.coverageBaseline = baseline
-  }
-
-  /** Reset all sessions (for testing) */
-  static reset() {
-    MemorySessionState.#sessions.clear()
+    this.#persist()
   }
 }

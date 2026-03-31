@@ -4,10 +4,16 @@ const DEFAULT_TIMEOUT = 30_000
 const MAX_OUTPUT_LENGTH = 3000
 
 /**
+ * @typedef {Object} TestResult
+ * @property {boolean} passed
+ * @property {string} output
+ */
+
+/**
  * Run a single test file with bun test
  * @param {string} testFilePath - Absolute path to test file
  * @param {string} projectRoot - Project root for cwd
- * @returns {Promise<{ passed: boolean, output: string }>}
+ * @returns {Promise<TestResult>}
  */
 export async function runTest(testFilePath, projectRoot) {
   try {

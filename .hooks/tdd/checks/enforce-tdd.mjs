@@ -3,12 +3,18 @@
 import path from 'node:path'
 
 import { getSessionsDir } from '../paths.mjs'
-import { FileSessionState } from '../session-state.mjs'
+import { SessionState } from '../session-state.mjs'
 import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '../test-resolver.mjs'
 
 /**
+ * @typedef {Object} BlockResult
+ * @property {'block'} decision
+ * @property {string} reason
+ */
+
+/**
  * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
- * @returns {{ decision: 'block', reason: string } | null}
+ * @returns {BlockResult | null}
  */
 export function enforceTdd(ctx) {
   try {
@@ -18,11 +24,13 @@ export function enforceTdd(ctx) {
     if (isTestFile(filePath)) return null
     if (!isGateableImplFile(filePath, cwd)) return null
 
-    const absPath = path.resolve(filePath)
+    const absPath = path.resolve(cwd, filePath)
 
-    if (findTestFile(absPath, cwd)) return null
+    if (findTestFile(absPath, cwd)) {
+      return null
+    }
 
-    const state = new FileSessionState(session_id, getSessionsDir(cwd))
+    const state = new SessionState(session_id, getSessionsDir(cwd))
     const writtenTests = state.getWrittenTests()
     const alreadyTestedThisSession = writtenTests.some((testAbsPath) => {
       const testRel = path.relative(cwd, testAbsPath)
@@ -36,7 +44,7 @@ export function enforceTdd(ctx) {
     })
     if (alreadyTestedThisSession) return null
 
-    const relPath = path.relative(cwd, filePath)
+    const relPath = path.relative(cwd, absPath)
     const suggestedTest = suggestTestPath(relPath)
 
     return {

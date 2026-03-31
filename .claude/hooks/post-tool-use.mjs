@@ -34,7 +34,14 @@ try {
   } else if (surfaceResult || mutantResult) {
     console.log(JSON.stringify(surfaceResult || mutantResult))
   }
-} catch {
+} catch (err) {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      msg: 'Hook execution failed',
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  )
   // Fail open
 }
 

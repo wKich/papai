@@ -47,12 +47,6 @@
         "typescript/no-confusing-void-expression": "off",
         "typescript/await-thenable": "off"
       }
-    },
-    {
-      "files": ["docs/tdd-hooks/**"],
-      "rules": {
-        "all": "off"
-      }
     }
   ]
 }

@@ -1,17 +1,31 @@
 // Re-run Stryker, diff surviving mutants against pre-edit snapshot, block on new survivors
 // Skipped when TDD_MUTATION=0
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import { extractSurvivors, buildStrykerConfig } from '../mutation.mjs'
-import { getSessionsDir, getSnapshotKey } from '../paths.mjs'
+import { getSessionsDir, getFileKey } from '../paths.mjs'
 import { isTestFile, isGateableImplFile } from '../test-resolver.mjs'
 
 /**
+ * @typedef {Object} Survivor
+ * @property {string} mutator
+ * @property {string} replacement
+ * @property {number | undefined} line
+ * @property {string} description
+ */
+
+/**
+ * @typedef {Object} BlockResult
+ * @property {'block'} decision
+ * @property {string} reason
+ */
+
+/**
  * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
- * @returns {{ decision: 'block', reason: string } | null}
+ * @returns {BlockResult | null}
  */
 export function verifyNoNewMutants(ctx) {
   try {
@@ -25,14 +39,15 @@ export function verifyNoNewMutants(ctx) {
 
     const absPath = path.resolve(filePath)
     const sessionsDir = getSessionsDir(cwd)
-    const snapshotFile = path.join(sessionsDir, `tdd-mutation-${session_id}-${getSnapshotKey(absPath)}.json`)
+    const snapshotFile = path.join(sessionsDir, `tdd-mutation-${session_id}-${getFileKey(absPath)}.json`)
 
     if (!fs.existsSync(snapshotFile)) return null
 
     const { survivors: before } = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'))
 
-    const reportFile = path.join(sessionsDir, `stryker-report-${session_id}-after.json`)
-    const configFile = path.join(sessionsDir, `stryker-config-${session_id}-after.json`)
+    const fileKey = getFileKey(absPath)
+    const reportFile = path.join(sessionsDir, `stryker-report-${session_id}-${fileKey}-after.json`)
+    const configFile = path.join(sessionsDir, `stryker-config-${session_id}-${fileKey}-after.json`)
 
     const tempConfig = buildStrykerConfig(absPath, cwd, reportFile)
 
@@ -40,7 +55,7 @@ export function verifyNoNewMutants(ctx) {
     fs.writeFileSync(configFile, JSON.stringify(tempConfig))
 
     try {
-      execSync(`node_modules/.bin/stryker run ${configFile}`, {
+      execFileSync('node_modules/.bin/stryker', ['run', configFile], {
         cwd,
         encoding: 'utf8',
         stdio: 'pipe',
@@ -66,7 +81,7 @@ export function verifyNoNewMutants(ctx) {
     return {
       decision: 'block',
       reason:
-        `${newSurvivors.length} new untested code paths found in \`${relPath}\`:\n${lines.join('\n')}\n\n` +
+        `${newSurvivors.length} new untested code paths found in \`${relPath}\`:${lines.join('\n')}\n\n` +
         `These code paths were not caught by any test. ` +
         `Next step: Write tests that exercise these code paths.`,
     }

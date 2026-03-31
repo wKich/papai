@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { runTest } from '../../../.hooks/tdd/test-runner.mjs'
+import { runTest } from '../../tdd/test-runner.mjs'
 
 describe('runTest', () => {
   let tempDir: string

@@ -1,12 +1,12 @@
 // Run Stryker and snapshot surviving mutants before an impl file is edited (side-effect only)
 // Skipped when TDD_MUTATION=0
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import { extractSurvivors, buildStrykerConfig } from '../mutation.mjs'
-import { getSessionsDir, getSnapshotKey } from '../paths.mjs'
+import { getSessionsDir, getFileKey } from '../paths.mjs'
 import { isTestFile, isGateableImplFile } from '../test-resolver.mjs'
 
 /**
@@ -27,9 +27,10 @@ export function snapshotMutants(ctx) {
     if (!fs.existsSync(absPath)) return null
 
     const sessionsDir = getSessionsDir(cwd)
-    const snapshotFile = path.join(sessionsDir, `tdd-mutation-${session_id}-${getSnapshotKey(absPath)}.json`)
-    const reportFile = path.join(sessionsDir, `stryker-report-${session_id}-before.json`)
-    const configFile = path.join(sessionsDir, `stryker-config-${session_id}-before.json`)
+    const fileKey = getFileKey(absPath)
+    const snapshotFile = path.join(sessionsDir, `tdd-mutation-${session_id}-${fileKey}.json`)
+    const reportFile = path.join(sessionsDir, `stryker-report-${session_id}-${fileKey}-before.json`)
+    const configFile = path.join(sessionsDir, `stryker-config-${session_id}-${fileKey}-before.json`)
 
     const tempConfig = buildStrykerConfig(absPath, cwd, reportFile)
 
@@ -37,7 +38,7 @@ export function snapshotMutants(ctx) {
     fs.writeFileSync(configFile, JSON.stringify(tempConfig))
 
     try {
-      execSync(`node_modules/.bin/stryker run ${configFile}`, {
+      execFileSync('node_modules/.bin/stryker', ['run', configFile], {
         cwd,
         encoding: 'utf8',
         stdio: 'pipe',

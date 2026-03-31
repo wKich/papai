@@ -5,17 +5,19 @@ const IMPL_PATTERN = /\.(?:ts|js|tsx|jsx)$/
 const TEST_PATTERN = /\.(?:test|spec)\.(?:ts|js|tsx|jsx)$/
 
 /**
+ * Check if a file is a test file
  * @param {string} filePath - File path to check
- * @returns {boolean} - True if this is a test file
+ * @returns {boolean} True if this is a test file
  */
 export function isTestFile(filePath) {
   return TEST_PATTERN.test(filePath)
 }
 
 /**
+ * Check if a file is a gateable implementation file (src/)
  * @param {string} filePath - File path to check
  * @param {string} projectRoot - Project root directory
- * @returns {boolean} - True if this is a gateable implementation file (src/ **\/ *.ts)
+ * @returns {boolean} True if this is a gateable implementation file
  */
 export function isGateableImplFile(filePath, projectRoot) {
   // Must be under src/, match IMPL_PATTERN, and NOT match TEST_PATTERN
@@ -27,8 +29,9 @@ export function isGateableImplFile(filePath, projectRoot) {
 }
 
 /**
+ * Suggest a test file path for an implementation file
  * @param {string} implRelPath - Relative path from projectRoot (e.g. src/foo/bar.ts)
- * @returns {string} - Suggested test file relative path (e.g. tests/foo/bar.test.ts)
+ * @returns {string} Suggested test file relative path (e.g. tests/foo/bar.test.ts)
  */
 export function suggestTestPath(implRelPath) {
   // src/foo/bar.ts → tests/foo/bar.test.ts
@@ -39,9 +42,10 @@ export function suggestTestPath(implRelPath) {
 }
 
 /**
+ * Find the corresponding test file for an implementation file
  * @param {string} implAbsPath - Absolute path to implementation file
  * @param {string} projectRoot - Project root directory
- * @returns {string|null} - Absolute path to test file, or null
+ * @returns {string | null} Absolute path to test file, or null
  */
 export function findTestFile(implAbsPath, projectRoot) {
   const rel = path.relative(projectRoot, implAbsPath)

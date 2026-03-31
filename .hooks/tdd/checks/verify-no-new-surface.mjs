@@ -4,13 +4,38 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { getCoverage } from '../coverage.mjs'
-import { getSessionsDir, getSnapshotKey } from '../paths.mjs'
+import { getSessionsDir, getFileKey } from '../paths.mjs'
 import { extractSurface } from '../surface-extractor.mjs'
 import { findTestFile, isTestFile, isGateableImplFile } from '../test-resolver.mjs'
 
 /**
+ * @typedef {Object} Surface
+ * @property {string[]} exports
+ * @property {Record<string, number>} signatures
+ */
+
+/**
+ * @typedef {Object} CoverageStats
+ * @property {number} covered
+ * @property {number} total
+ */
+
+/**
+ * @typedef {Object} SurfaceSnapshot
+ * @property {Surface} surface
+ * @property {CoverageStats | null} coverage
+ * @property {string} filePath
+ */
+
+/**
+ * @typedef {Object} BlockResult
+ * @property {'block'} decision
+ * @property {string} reason
+ */
+
+/**
  * @param {{ tool_input: { file_path: string }, session_id: string, cwd: string }} ctx
- * @returns {{ decision: 'block', reason: string } | null}
+ * @returns {BlockResult | null}
  */
 export function verifyNoNewSurface(ctx) {
   try {
@@ -21,7 +46,7 @@ export function verifyNoNewSurface(ctx) {
     if (!isGateableImplFile(filePath, cwd)) return null
 
     const absPath = path.resolve(filePath)
-    const snapshotFile = path.join(getSessionsDir(cwd), `tdd-snapshot-${session_id}-${getSnapshotKey(absPath)}.json`)
+    const snapshotFile = path.join(getSessionsDir(cwd), `tdd-snapshot-${session_id}-${getFileKey(absPath)}.json`)
 
     if (!fs.existsSync(snapshotFile)) return null
 

@@ -7,10 +7,16 @@ const SINGLE_FILE_TIMEOUT = 30_000
 const FULL_SUITE_TIMEOUT = 120_000
 
 /**
+ * @typedef {Object} CoverageStats
+ * @property {number} covered
+ * @property {number} total
+ */
+
+/**
  * Parse an LCOV file and return line coverage for a specific file.
  * @param {string} lcovPath
  * @param {string} implAbsPath
- * @returns {{ covered: number, total: number } | null}
+ * @returns {CoverageStats | null}
  */
 function parseLcov(lcovPath, implAbsPath) {
   const content = fs.readFileSync(lcovPath, 'utf8')
@@ -29,7 +35,7 @@ function parseLcov(lcovPath, implAbsPath) {
 /**
  * Parse an LCOV file and return line coverage for ALL files.
  * @param {string} lcovPath
- * @returns {Record<string, { covered: number, total: number }>} keyed by absolute path
+ * @returns {Record<string, CoverageStats>}
  */
 function parseAllLcov(lcovPath) {
   const content = fs.readFileSync(lcovPath, 'utf8')
@@ -52,7 +58,7 @@ function parseAllLcov(lcovPath) {
  * Run the full test suite with coverage and return per-file line coverage for all files.
  * Returns null if coverage is unavailable (fail-open).
  * @param {string} projectRoot
- * @returns {Record<string, { covered: number, total: number }> | null}
+ * @returns {Record<string, CoverageStats> | null}
  */
 export function getFullCoverage(projectRoot) {
   try {
@@ -77,7 +83,7 @@ export function getFullCoverage(projectRoot) {
  * @param {string} testFile - Absolute path to test file
  * @param {string} implAbsPath - Absolute path to impl file
  * @param {string} projectRoot
- * @returns {{ covered: number, total: number } | null}
+ * @returns {CoverageStats | null}
  */
 export function getCoverage(testFile, implAbsPath, projectRoot) {
   try {

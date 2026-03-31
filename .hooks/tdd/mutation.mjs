@@ -3,10 +3,18 @@
 import path from 'node:path'
 
 /**
+ * @typedef {Object} Survivor
+ * @property {string} mutator
+ * @property {string} replacement
+ * @property {number | undefined} line
+ * @property {string} description
+ */
+
+/**
  * Extract surviving mutants from a Stryker JSON report for a specific file.
- * @param {object} report - Stryker JSON report
+ * @param {unknown} report - Stryker JSON report
  * @param {string} targetAbsPath - Absolute path to the impl file
- * @returns {Array<{ mutator: string, replacement: string, line: number|undefined, description: string }>}
+ * @returns {Survivor[]}
  */
 export function extractSurvivors(report, targetAbsPath) {
   const entry = Object.entries(report.files ?? {}).find(([f]) => path.resolve(f) === targetAbsPath)
@@ -28,7 +36,7 @@ export function extractSurvivors(report, targetAbsPath) {
  * @param {string} absPath - Absolute path to the file to mutate
  * @param {string} cwd - Project root
  * @param {string} reportFile - Path to write the JSON report
- * @returns {object}
+ * @returns {Record<string, unknown>}
  */
 export function buildStrykerConfig(absPath, cwd, reportFile) {
   return {

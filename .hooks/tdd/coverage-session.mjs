@@ -7,6 +7,12 @@ import { getSessionsDir } from './paths.mjs'
 const BASELINE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
+ * @typedef {Object} CoverageStats
+ * @property {number} covered
+ * @property {number} total
+ */
+
+/**
  * Return the session-level coverage baseline for all files, creating it on first call.
  *
  * The baseline is built by running the full test suite once per session.
@@ -14,7 +20,7 @@ const BASELINE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
  *
  * @param {string} sessionId
  * @param {string} projectRoot
- * @returns {Record<string, { covered: number, total: number }> | null}
+ * @returns {Record<string, CoverageStats> | null}
  */
 export function getSessionBaseline(sessionId, projectRoot) {
   const sessionsDir = getSessionsDir(projectRoot)

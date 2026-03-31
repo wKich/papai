@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { isTestFile, isGateableImplFile, suggestTestPath, findTestFile } from '../../../.hooks/tdd/test-resolver.mjs'
+import { isTestFile, isGateableImplFile, suggestTestPath, findTestFile } from '../../tdd/test-resolver.mjs'
 
 describe('test-resolver', () => {
   describe('isTestFile', () => {
