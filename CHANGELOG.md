@@ -5,6 +5,132 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-03-31
+
+### Added
+
+- **debug:** Add event bus with zero-overhead guard
+- **debug:** Add state collector with lazy bus subscription
+- **debug:** Add Bun.serve() debug server with SSE and dashboard
+- **debug:** Wire debug server into startup and shutdown
+- **wizard:** Add validation service skeleton
+- **wizard:** Implement API key validation
+- **wizard:** Add base URL validation
+- **wizard:** Add model existence validation
+- **wizard:** Update WizardStep type for async live validation
+- **wizard:** Export validation service from index
+- **wizard:** Add live validation to API key step
+- **wizard:** Add live validation to base URL step
+- **wizard:** Add live validation to model steps
+- **wizard:** Integrate live validation into engine
+- **wizard:** Add interactive button support for validation errors
+- Interactive config editing with buttons and pre-filled values
+- Auto-start setup wizard for new users on first interaction
+- Add /start command with welcome message
+- **debug:** Add log ring buffer with search and stream adapter
+- **debug:** Add /logs and /logs/stats routes with ring buffer wiring
+- **scheduler:** Add type definitions
+- **scheduler:** Implement core scheduler with retries
+- **scheduler:** Add cron expression support via Bun.cron
+- **scheduler:** Add central scheduler instance with cleanup tasks
+- **debug:** Add persistence accessors and getMessageCacheSnapshot facade
+- **debug:** Add getSchedulerSnapshot and getPollerSnapshot facades
+- **debug:** Add getWizardSnapshots and getSessionSnapshots facades
+- **debug:** Rewrite state-collector with admin filtering and wire adminUserId
+- **debug:** Instrument bot.ts and llm-orchestrator.ts with lifecycle events
+- **debug:** Instrument cache, conversation, and wizard with lifecycle events
+- **debug:** Instrument scheduler, poller, and message-cache with lifecycle events
+- **debug:** Serve dashboard static files with Bun.build() transpilation
+- **debug:** Complete dashboard HTML with live debug panels
+- Add shared TDD core modules (test-resolver, session-state, test-runner)
+- Add Claude Code TDD adapter hooks and settings
+- Add OpenCode TDD enforcement plugin
+- Add Pattern 4 detection for module-level mutable state
+- Implement TDD enforcement hooks with pre/post tool validation
+- **deploy:** Add debug and logging env vars, expose metrics port
+
+### Changed
+
+- **plan:** Derive WizardData from ConfigKey for single source of truth
+- **plan:** Simplify validation logic for small_model and embedding_model steps
+- **plan:** Convert wizard state to sync and remove unused files
+- **wizard:** Validate at end instead of each step
+- **wizard:** Improve UX and split into modules
+- Extract large functions into modules without disabling lint rules
+- Update YouTrack tests to use centralized mock helpers
+- **debug:** Switch logger to pino.multistream for dynamic stream attachment
+- **scheduler:** Fix lint violations and add unregister
+- **message-cache:** Extract cleanup functions for scheduler
+- **scheduler:** Migrate recurring task scheduler to use central scheduler
+- **deferred-prompts:** Migrate to centralized scheduler
+- **scheduler:** Extract methods to fix max-lines-per-function
+- **scheduler:** Remove lint overrides and fix max-lines-per-function
+- Rename mock-pollution to test-health script
+- **debug:** Export stats/state objects, move resetStats to test helpers
+- **tdd:** Fix code style in tdd-enforcement plugin and update SessionState instantiation
+- **tdd:** Update surface extractor and related tests
+- **tdd:** Complete session-level mutation testing optimization
+- **tdd:** Fix mutation testing integration and session stop blocking
+- Migrate mutation testing from per-file to session-level
+
+### Documentation
+
+- Add debug tracing tool design
+- Add bot configuration UX design document
+- Add bot configuration UX implementation plan
+- Revise implementation plan with correct platform-agnostic architecture
+- Add Session 1 event bus + server skeleton design
+- Add Session 1 implementation plan
+- **debug:** Align design doc with Session 1/2 implementation decisions
+- Add file attachments research with caveats analysis
+- Add scheduler utility design document
+- Add scheduler utility implementation plan
+- **debug:** Add Session 3 instrument source modules design
+- **debug:** Add Session 3 implementation plan
+- **debug:** Update design for client-side state management in Session 4
+- **debug:** Add Session 4 dashboard HTML design
+- **debug:** Add Session 4 dashboard HTML implementation plan
+- Add LLM guidance research for large codebases
+- Update .github/instructions and fix documentation formatting
+- Add plugin system design document
+- Add plugin system implementation plan
+- Update TDD hooks integration plans and enhance Telegram reply context
+- Add TDD enforcement protocol to CLAUDE.md, Copilot, and opencode
+
+### Fixed
+
+- **plan:** Store taskProvider in WizardSession instead of inferring from data
+- **plan:** Don't intercept commands during active wizard
+- **plan:** Use existing normalizeTimezone utility for timezone validation
+- **plan:** Use storageContextId instead of contextId throughout wizard
+- **plan:** Use text-based flow for Mattermost wizard instead of Interactive Dialogs
+- **plan:** Use auth.storageContextId in bot.ts wizard integration
+- **plan:** Remove async/await from sync wizard functions and use type guard
+- **config:** Allow isConfigKey to validate all provider keys
+- **wizard:** Save config under storageContextId and handle llm_baseurl default
+- Remove typescript/no-unsafe-type-assertion override and fix tests
+- **debug:** Make server log route tests resilient to logger mock pollution
+- **debug:** Validate parseIntParam to ignore NaN query values
+- **scheduler:** Use calculateBackoff helper to fix unused export
+- **wizard:** Use TASK_PROVIDER env var instead of hardcoded 'kaneo'
+- Increase Stryker timeout and reduce concurrency for CI
+- Increase stryker bun runner timeout for CI
+- Restore message cache from SQLite on startup
+- Extract sender_name from Mattermost WebSocket events and deduplicate ONE_WEEK_MS constant
+- Resolve lint errors in test-health script
+- **tdd:** Correct input.args access and cwd-relative path resolution
+
+### Miscellaneous
+
+- Update readme
+- **scheduler:** Final verification and cleanup
+
+### Testing
+
+- **plan:** Add fetch mocking to validation tests
+- **debug:** Add log buffer unit tests (red)
+- **debug:** Add log route integration tests (red)
+- **scheduler:** Add integration tests for central scheduler
 ## [4.6.0] - 2026-03-27
 
 ### Added
