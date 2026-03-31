@@ -2,29 +2,26 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-tdd.mjs",
-            "statusMessage": "Checking TDD compliance..."
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-tool-use.mjs",
+            "timeout": 200,
+            "statusMessage": "TDD checks (pre-edit)..."
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-tdd-tracker.mjs"
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-tests-pass.mjs",
-            "timeout": 60,
-            "statusMessage": "Running tests..."
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-tool-use.mjs",
+            "timeout": 200,
+            "statusMessage": "TDD checks (post-edit)..."
           }
         ]
       }

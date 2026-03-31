@@ -40,3 +40,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # mutation testing
 .stryker-tmp/
 reports/
+
+# TDD hook session state
+.hooks/sessions/

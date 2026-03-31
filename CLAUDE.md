@@ -50,39 +50,92 @@ The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude E2E tests f
 
 ## TDD Enforcement (Hooks)
 
-Claude Code hooks enforce Red → Green → Refactor at the tool level. Violations are
-blocked before the file write completes.
+Every `Write`, `Edit`, and `MultiEdit` on a file in `src/` triggers an automated
+hook pipeline. The pipeline enforces Red → Green → Refactor by running checks
+sequentially and blocking when a check fails.
 
-### Phase Rules
+### Scope
 
-**Red — Write a failing test first:**
+Only **implementation files in `src/`** are checked:
 
-- Before touching ANY implementation file in `src/`, write a failing test in `tests/`
-- The test file MUST exist before the implementation file is created or edited
-- Hooks will block impl writes if no test file exists
+- Path starts with `src/`
+- Extension: `.ts`, `.js`, `.tsx`, `.jsx`
+- Not a test file (`*.test.*` / `*.spec.*`)
 
-**Green — Minimum code to pass:**
+Everything else (docs, config, test files, files outside `src/`) passes through
+without checks. Test file edits only verify that the test itself still passes.
 
-- Write the simplest implementation that makes the failing test pass
-- Do NOT add logic beyond what the test requires
-- After every file write, tests are run automatically
-- If tests go RED, stop and fix before proceeding
+### Pipeline
 
-**Refactor — Clean up without changing behavior:**
+Two orchestrator hooks run sequentially with short-circuit logic:
 
-- Keep all existing tests GREEN throughout
+**Before the file is written (PreToolUse):**
 
-### Hard Rules
+1. **Test-first gate** — a test file must exist for the implementation file
+   being written. Checked on disk first, then in session state (for tests written
+   earlier this session). If no test exists → **blocked**, remaining checks skipped.
+2. **API surface snapshot** — captures the file's exported names, function
+   parameter counts, and line coverage before the edit.
+3. **Mutation snapshot** — runs Stryker and records surviving mutants before the
+   edit. Skipped when `TDD_MUTATION=0`.
 
-1. Never touch an implementation file before its test file exists
-2. Never proceed past a RED test, even temporarily
-3. Test naming: `src/foo/bar.ts` → `tests/foo/bar.test.ts`
+**After the file is written (PostToolUse):**
 
-### Disabling TDD Hooks
+4. **Test tracker** — if the written file is a test, records its path in session
+   state so the test gate allows the corresponding impl write.
+5. **Test runner** — runs `bun test` on the corresponding test file. If tests
+   fail → **blocked**, remaining checks skipped. If tests pass, compares line
+   coverage against the session baseline (captured once per session). If coverage
+   dropped → **blocked**, remaining checks skipped.
+6. **API surface diff** — compares exports, parameter counts, and uncovered
+   lines against the pre-edit snapshot. Blocks if any of these expanded (new
+   exports, more parameters, more uncovered lines).
+7. **Mutation diff** — re-runs Stryker and compares surviving mutants against
+   the pre-edit snapshot. Blocks if new mutants survived (code changes that no
+   test catches). Skipped when `TDD_MUTATION=0`.
 
-For non-code edits (docs, config), hooks automatically allow: only `src/**/*.ts`
-files are gated. For exceptional cases, temporarily remove the hook entries from
-`.claude/settings.json`.
+If both checks 6 and 7 block, their messages are combined into a single response.
+
+### Workflow
+
+**Adding new behavior to a new file:**
+
+1. Write the test file (`tests/foo/bar.test.ts`) — the test will fail (impl
+   missing). Check 5 blocks because the test fails. This is expected.
+2. Write the impl file (`src/foo/bar.ts`) — test gate passes (test exists).
+   No snapshots taken (new file). Check 5 runs the test — must pass.
+
+**Adding new behavior to an existing file:**
+
+1. Write/update the test in `tests/` for the new behavior — check 5 blocks
+   because the test fails (the impl doesn't have the new behavior yet).
+2. Edit the impl in `src/` to make the test pass — snapshots are taken before
+   the edit. After the edit, check 5 must pass. Check 6 may report new
+   exports or parameters — if it blocks, write tests that cover the new
+   surface before continuing. Check 7 passes if your tests catch all new
+   code paths.
+
+**Refactoring (no behavior change):**
+
+1. Edit the impl directly — test gate passes (test exists). Snapshots taken.
+2. After the edit: tests must stay green, coverage must not drop, no new exports
+   or parameters, no new surviving mutants.
+
+**Removing a feature:**
+
+1. Remove or reduce the tests first — passes through (test files are trusted).
+2. Remove the impl code — remaining tests must still pass. Checks 6 and 7 see
+   fewer exports and fewer mutants (contraction passes).
+
+### Test naming convention
+
+`src/foo/bar.ts` → `tests/foo/bar.test.ts`
+
+### Mutation testing speed
+
+Mutation testing adds 30–120 seconds per impl file edit (runs Stryker before
+and after). Set `TDD_MUTATION=0` to disable during rapid iteration. Checks 2, 5,
+and 6 (surface and coverage) still enforce refactor purity without Stryker.
 
 ## Security
 

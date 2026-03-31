@@ -1,18 +1,25 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 1 week
+
 /**
  * File-based backend (Claude Code — hooks run as subprocesses, no shared memory)
  */
 export class FileSessionState {
   #filePath
 
-  constructor(sessionId, stateDir = '/tmp') {
+  constructor(sessionId, stateDir) {
     this.#filePath = path.join(stateDir, `tdd-session-${sessionId}.json`)
   }
 
   #read() {
     try {
+      const stat = fs.statSync(this.#filePath)
+      if (Date.now() - stat.mtimeMs > SESSION_TTL_MS) {
+        fs.unlinkSync(this.#filePath)
+        return { writtenTests: [], pendingFailure: null }
+      }
       return JSON.parse(fs.readFileSync(this.#filePath, 'utf8'))
     } catch {
       return { writtenTests: [], pendingFailure: null }
@@ -20,6 +27,7 @@ export class FileSessionState {
   }
 
   #write(state) {
+    fs.mkdirSync(path.dirname(this.#filePath), { recursive: true })
     fs.writeFileSync(this.#filePath, JSON.stringify(state))
   }
 
@@ -60,7 +68,13 @@ export class MemorySessionState {
 
   constructor(sessionId) {
     if (!MemorySessionState.#sessions.has(sessionId)) {
-      MemorySessionState.#sessions.set(sessionId, { writtenTests: [], pendingFailure: null })
+      MemorySessionState.#sessions.set(sessionId, {
+        writtenTests: [],
+        pendingFailure: null,
+        surfaceSnapshots: new Map(),
+        mutationSnapshots: new Map(),
+        coverageBaseline: null,
+      })
     }
     this.#state = MemorySessionState.#sessions.get(sessionId)
   }
@@ -83,6 +97,33 @@ export class MemorySessionState {
 
   clearPendingFailure() {
     this.#state.pendingFailure = null
+  }
+
+  // Surface snapshots (check [2] and [6])
+  getSurfaceSnapshot(fileKey) {
+    return this.#state.surfaceSnapshots.get(fileKey) ?? null
+  }
+
+  setSurfaceSnapshot(fileKey, data) {
+    this.#state.surfaceSnapshots.set(fileKey, data)
+  }
+
+  // Mutation snapshots (check [3] and [7])
+  getMutationSnapshot(fileKey) {
+    return this.#state.mutationSnapshots.get(fileKey) ?? null
+  }
+
+  setMutationSnapshot(fileKey, data) {
+    this.#state.mutationSnapshots.set(fileKey, data)
+  }
+
+  // Session coverage baseline (check [5])
+  getCoverageBaseline() {
+    return this.#state.coverageBaseline
+  }
+
+  setCoverageBaseline(baseline) {
+    this.#state.coverageBaseline = baseline
   }
 
   /** Reset all sessions (for testing) */
