@@ -37,13 +37,27 @@ export function extractSurface(filePath) {
   // export { name1, name2 as alias }
   const namedPattern = /^export\s*\{([^}]+)\}/gm
   while ((m = namedPattern.exec(src)) !== null)
-    m[1].split(',').forEach((n) => exports.push(n.trim().split(/\s+as\s+/).pop()))
+    m[1].split(',').forEach((n) =>
+      exports.push(
+        n
+          .trim()
+          .split(/\s+as\s+/)
+          .pop(),
+      ),
+    )
 
   // export { name1, name2 } from './module'
   // export { default as name } from './module'
   const reExportPattern = /^export\s*\{([^}]+)\}\s+from\s/gm
   while ((m = reExportPattern.exec(src)) !== null)
-    m[1].split(',').forEach((n) => exports.push(n.trim().split(/\s+as\s+/).pop()))
+    m[1].split(',').forEach((n) =>
+      exports.push(
+        n
+          .trim()
+          .split(/\s+as\s+/)
+          .pop(),
+      ),
+    )
 
   // export * from './module' (marks as having re-exports)
   const starReExportPattern = /^export\s+\*\s+from\s/gm
@@ -52,18 +66,15 @@ export function extractSurface(filePath) {
   // parameter counts for named functions (including async)
   const fnPattern = /^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/gm
   const signatures = {}
-  while ((m = fnPattern.exec(src)) !== null)
-    signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
+  while ((m = fnPattern.exec(src)) !== null) signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
 
   // export default function name(params) - parameter count
   const defaultFnPattern = /^export\s+default\s+(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/gm
-  while ((m = defaultFnPattern.exec(src)) !== null)
-    signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
+  while ((m = defaultFnPattern.exec(src)) !== null) signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
 
   // export const/let name = (params) => ... - arrow function parameter count
   const arrowFnPattern = /^export\s+(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/gm
-  while ((m = arrowFnPattern.exec(src)) !== null)
-    signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
+  while ((m = arrowFnPattern.exec(src)) !== null) signatures[m[1]] = m[2].trim() === '' ? 0 : m[2].split(',').length
 
   return { exports: [...new Set(exports)].sort(), signatures }
 }

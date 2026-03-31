@@ -57,18 +57,14 @@ export function verifyNoNewSurface(ctx) {
     // Check 1: New exports
     const newExports = after.exports.filter((e) => !before.exports.includes(e))
     if (newExports.length > 0) {
-      violations.push(
-        `New exports: ${newExports.map((e) => `\`${e}\``).join(', ')}`,
-      )
+      violations.push(`New exports: ${newExports.map((e) => `\`${e}\``).join(', ')}`)
     }
 
     // Check 2: New parameters on existing functions
     for (const [fn, newCount] of Object.entries(after.signatures)) {
       const oldCount = before.signatures[fn]
       if (oldCount !== undefined && newCount > oldCount) {
-        violations.push(
-          `Function \`${fn}\` has ${newCount - oldCount} new parameter(s) (${oldCount} → ${newCount})`,
-        )
+        violations.push(`Function \`${fn}\` has ${newCount - oldCount} new parameter(s) (${oldCount} → ${newCount})`)
       }
     }
 
@@ -80,9 +76,7 @@ export function verifyNoNewSurface(ctx) {
         const uncoveredBefore = beforeCov.total - beforeCov.covered
         const uncoveredAfter = afterCov.total - afterCov.covered
         if (uncoveredAfter > uncoveredBefore) {
-          violations.push(
-            `${uncoveredAfter - uncoveredBefore} new line(s) without test coverage`,
-          )
+          violations.push(`${uncoveredAfter - uncoveredBefore} new line(s) without test coverage`)
         }
       }
     }

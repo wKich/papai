@@ -81,10 +81,7 @@ describe('verifyTestsPass', () => {
       const result = await verifyTestsPass(ctx)
 
       expect(result).toBeNull()
-      expect(mockFindTestFile).toHaveBeenCalledWith(
-        path.resolve('/project/src/utils.ts'),
-        '/project',
-      )
+      expect(mockFindTestFile).toHaveBeenCalledWith(path.resolve('/project/src/utils.ts'), '/project')
       expect(mockRunTest).not.toHaveBeenCalled()
     })
   })
