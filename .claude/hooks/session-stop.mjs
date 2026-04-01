@@ -27,7 +27,7 @@ try {
     '',
     errorMessage,
     '',
-    'Fix: Write tests to kill the new surviving mutants.'
+    'Fix: Write tests to kill the new surviving mutants.',
   ].join('\n')
 
   // Use JSON Decision Control to block session stop and continue conversation
