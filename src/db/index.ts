@@ -1,6 +1,9 @@
 import { Database } from 'bun:sqlite'
 
 import { logger } from '../logger.js'
+
+const log = logger.child({ scope: 'db:index' })
+
 import { runMigrations } from './migrate.js'
 import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
@@ -33,7 +36,7 @@ const getMigrationDb = (): Database => {
     // WAL is active immediately on first connection, before any migrations run.
     migrationDbInstance.run('PRAGMA journal_mode=WAL')
     migrationDbInstance.run('PRAGMA foreign_keys=ON')
-    logger.info({ dbPath: DB_PATH }, 'Database connection created for migrations')
+    log.info({ dbPath: DB_PATH }, 'Database connection created for migrations')
   }
   return migrationDbInstance
 }
@@ -42,7 +45,7 @@ const closeMigrationDb = (): void => {
   if (migrationDbInstance !== undefined) {
     migrationDbInstance.close()
     migrationDbInstance = undefined
-    logger.info({ dbPath: DB_PATH }, 'Migration database connection closed')
+    log.info({ dbPath: DB_PATH }, 'Migration database connection closed')
   }
 }
 

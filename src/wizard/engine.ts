@@ -5,6 +5,8 @@
 import { getAllConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
+
+const log = logger.child({ scope: 'wizard:engine' })
 import { validateAndSaveWizardConfig } from './save.js'
 import { createWizardSession, getWizardSession, updateWizardSession, deleteWizardSession } from './state.js'
 import { getWizardSteps, getStepByIndex, formatSummary } from './steps.js'
@@ -101,7 +103,7 @@ function handleSkipCommand(
     skippedSteps: [session.currentStep],
   })
 
-  logger.info({ userId, storageContextId, stepIndex: session.currentStep }, 'Step skipped')
+  log.info({ userId, storageContextId, stepIndex: session.currentStep }, 'Step skipped')
 
   const nextSession = getWizardSession(userId, storageContextId)
   if (nextSession === null) return { success: false, prompt: 'Error: Session lost' }
@@ -149,7 +151,7 @@ function completeStep(
     data: dataUpdate,
   })
 
-  logger.info({ userId, storageContextId, stepIndex: session.currentStep, key: currentStep.key }, 'Step completed')
+  log.info({ userId, storageContextId, stepIndex: session.currentStep, key: currentStep.key }, 'Step completed')
 
   const updatedSession = getWizardSession(userId, storageContextId)
   if (updatedSession === null) return { success: false, prompt: 'Error: Session lost' }
@@ -189,7 +191,7 @@ export function createWizard(
     initialData,
   })
 
-  logger.info({ userId, storageContextId, platform, taskProvider }, 'Wizard created with existing config')
+  log.info({ userId, storageContextId, platform, taskProvider }, 'Wizard created with existing config')
 
   const firstStep = steps[0]
   if (firstStep === undefined) return { success: false, prompt: 'Error: No wizard steps configured' }
@@ -235,7 +237,7 @@ export async function advanceStep(
 
 export function cancelWizard(userId: string, storageContextId: string): void {
   deleteWizardSession(userId, storageContextId)
-  logger.info({ userId, storageContextId }, 'Wizard cancelled')
+  log.info({ userId, storageContextId }, 'Wizard cancelled')
 }
 
 export async function processWizardMessage(

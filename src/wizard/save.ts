@@ -7,6 +7,8 @@ import { logger } from '../logger.js'
 import { deleteWizardSession, getWizardSession } from './state.js'
 import { validateWizardConfig, type ValidationSummary } from './validation.js'
 
+const log = logger.child({ scope: 'wizard:save' })
+
 interface ValidationErrorDetail {
   field: string
   message: string
@@ -75,7 +77,7 @@ function saveValidatedConfig(
   }
 
   deleteWizardSession(userId, storageContextId)
-  logger.info({ userId, storageContextId, savedCount }, 'Configuration saved')
+  log.info({ userId, storageContextId, savedCount }, 'Configuration saved')
 
   return {
     success: true,
@@ -92,7 +94,7 @@ export async function validateAndSaveWizardConfig(userId: string, storageContext
   const data = session.data
   const input: ConfigValidationInput = {
     apiKey: data['llm_apikey'] ?? '',
-    baseUrl: data['llm_baseurl'] ?? 'https://api.openai.com/v1',
+    baseUrl: data['llm_baseurl'] ?? '',
     mainModel: data['main_model'] ?? '',
     smallModel: data['small_model'] ?? '',
   }

@@ -7,6 +7,8 @@ import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
 import type { WizardSession, WizardData } from './types.js'
 
+const log = logger.child({ scope: 'wizard:state' })
+
 /**
  * Parameters required to create a new wizard session
  */
@@ -46,7 +48,7 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
 
   const existingSession = activeSessions.get(key)
   if (existingSession !== undefined) {
-    logger.warn({ userId, storageContextId }, 'Wizard session already exists, returning existing')
+    log.warn({ userId, storageContextId }, 'Wizard session already exists, returning existing')
     return existingSession
   }
 
@@ -65,7 +67,7 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
   activeSessions.set(key, session)
   emit('wizard:created', { userId, storageContextId, totalSteps, platform, taskProvider })
 
-  logger.info(
+  log.info(
     { userId, storageContextId, totalSteps, platform, taskProvider, hasInitialData: initialData !== undefined },
     'Wizard session created',
   )
@@ -81,7 +83,7 @@ export const getWizardSession = (userId: string, storageContextId: string): Wiza
   const key = createSessionKey(userId, storageContextId)
   const session = activeSessions.get(key)
 
-  logger.debug({ userId, storageContextId, hasSession: session !== undefined }, 'Getting wizard session')
+  log.debug({ userId, storageContextId, hasSession: session !== undefined }, 'Getting wizard session')
 
   return session ?? null
 }
@@ -93,7 +95,7 @@ export const hasActiveWizard = (userId: string, storageContextId: string): boole
   const key = createSessionKey(userId, storageContextId)
   const hasSession = activeSessions.has(key)
 
-  logger.debug({ userId, storageContextId, hasSession }, 'Checking active wizard')
+  log.debug({ userId, storageContextId, hasSession }, 'Checking active wizard')
 
   return hasSession
 }
@@ -107,7 +109,7 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
   const session = activeSessions.get(key)
 
   if (session === undefined) {
-    logger.error({ userId, storageContextId }, 'Attempted to update non-existent wizard session')
+    log.error({ userId, storageContextId }, 'Attempted to update non-existent wizard session')
     throw new Error('Session not found')
   }
 
@@ -127,7 +129,7 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
 
   emit('wizard:updated', { userId, storageContextId, currentStep: session.currentStep })
 
-  logger.info(
+  log.info(
     { userId, storageContextId, currentStep, hasData: data !== undefined, hasSkipped: skippedSteps !== undefined },
     'Wizard session updated',
   )
@@ -142,14 +144,14 @@ export const resetWizardSession = (userId: string, storageContextId: string): bo
   const session = activeSessions.get(key)
 
   if (session === undefined) {
-    logger.warn({ userId, storageContextId }, 'Attempted to reset non-existent wizard session')
+    log.warn({ userId, storageContextId }, 'Attempted to reset non-existent wizard session')
     return false
   }
 
   session.currentStep = 0
   session.skippedSteps = []
   emit('wizard:updated', { userId, storageContextId, currentStep: 0 })
-  logger.info(
+  log.info(
     { userId, storageContextId, preservedKeys: Object.keys(session.data).length },
     'Wizard session reset to step 0',
   )
@@ -168,9 +170,9 @@ export const deleteWizardSession = (userId: string, storageContextId: string): b
   if (existed) {
     activeSessions.delete(key)
     emit('wizard:deleted', { userId, storageContextId })
-    logger.info({ userId, storageContextId }, 'Wizard session deleted')
+    log.info({ userId, storageContextId }, 'Wizard session deleted')
   } else {
-    logger.warn({ userId, storageContextId }, 'Attempted to delete non-existent wizard session')
+    log.warn({ userId, storageContextId }, 'Attempted to delete non-existent wizard session')
   }
 
   return existed
@@ -226,10 +228,10 @@ export function cleanupExpiredWizardSessions(): void {
 
   for (const key of expired) {
     activeSessions.delete(key)
-    logger.debug({ sessionKey: key }, 'Expired wizard session removed')
+    log.debug({ sessionKey: key }, 'Expired wizard session removed')
   }
 
   if (expired.length > 0) {
-    logger.info({ expiredCount: expired.length }, 'Cleaned up expired wizard sessions')
+    log.info({ expiredCount: expired.length }, 'Cleaned up expired wizard sessions')
   }
 }

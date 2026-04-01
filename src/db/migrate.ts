@@ -2,6 +2,8 @@ import type { Database } from 'bun:sqlite'
 
 import { logger } from '../logger.js'
 
+const log = logger.child({ scope: 'db:migrate' })
+
 export interface Migration {
   readonly id: string
   up(db: Database): void
@@ -45,7 +47,7 @@ const validatePairwiseOrder = (current: Migration, previous: Migration): void =>
   }
 
   if (currentNum === previousNum) {
-    logger.error(
+    log.error(
       { current: current.id, previous: previous.id },
       'Migration ID prefix conflict: duplicate numeric prefix detected',
     )
@@ -53,7 +55,7 @@ const validatePairwiseOrder = (current: Migration, previous: Migration): void =>
   }
 
   if (currentNum < previousNum) {
-    logger.error(
+    log.error(
       { current: current.id, previous: previous.id },
       'Migration order violation: migrations must be in ascending order',
     )
@@ -101,7 +103,7 @@ const getAppliedIds = (db: Database): Set<string> =>
   )
 
 const applyMigration = (db: Database, migration: Migration): void => {
-  logger.debug({ migrationId: migration.id }, 'Applying migration')
+  log.debug({ migrationId: migration.id }, 'Applying migration')
 
   try {
     // NOTE: PRAGMAs cannot run inside transactions and will be silently ignored.
@@ -114,16 +116,16 @@ const applyMigration = (db: Database, migration: Migration): void => {
       db.run(`INSERT INTO migrations (id, applied_at) VALUES (?, ?)`, [migration.id, appliedAt])
     })()
 
-    logger.debug({ migrationId: migration.id }, 'Migration applied successfully')
+    log.debug({ migrationId: migration.id }, 'Migration applied successfully')
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error({ migrationId: migration.id, error: errorMessage }, 'Migration failed')
+    log.error({ migrationId: migration.id, error: errorMessage }, 'Migration failed')
     throw error
   }
 }
 
 export const runMigrations = (db: Database, migrations: readonly Migration[]): void => {
-  logger.debug({ migrationCount: migrations.length }, 'Starting migrations')
+  log.debug({ migrationCount: migrations.length }, 'Starting migrations')
 
   validateOrder(migrations)
   createMigrationsTable(db)
@@ -132,7 +134,7 @@ export const runMigrations = (db: Database, migrations: readonly Migration[]): v
   const pendingMigrations = migrations.filter((m) => !appliedIds.has(m.id))
 
   if (pendingMigrations.length === 0) {
-    logger.info({ pending: 0, alreadyApplied: appliedIds.size }, 'No pending migrations')
+    log.info({ pending: 0, alreadyApplied: appliedIds.size }, 'No pending migrations')
     return
   }
 
@@ -140,5 +142,5 @@ export const runMigrations = (db: Database, migrations: readonly Migration[]): v
     applyMigration(db, migration)
   }
 
-  logger.info({ appliedCount: pendingMigrations.length }, 'Migrations complete')
+  log.info({ appliedCount: pendingMigrations.length }, 'Migrations complete')
 }

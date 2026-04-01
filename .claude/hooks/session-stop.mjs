@@ -13,16 +13,31 @@ try {
   // This compares final state against baseline captured at session start
   verifySessionMutationBaseline(ctx)
 
-  // Success - no new mutants
+  // Success - no new mutants, allow session to stop
   process.exit(0)
 } catch (err) {
-  console.error(
+  const errorMessage = err instanceof Error ? err.message : String(err)
+
+  // Explain the regression: survived mutants increased since baseline
+  const reason = [
+    '🧬 Survived Mutants Regression',
+    '',
+    'Survived mutants after changes exceed the baseline.',
+    'Current code has more untested paths than at session start.',
+    '',
+    errorMessage,
+    '',
+    'Fix: Write tests to kill the new surviving mutants.'
+  ].join('\n')
+
+  // Use JSON Decision Control to block session stop and continue conversation
+  // Exit 0 with decision: "block" - Claude Code will prevent stop and show reason
+  console.log(
     JSON.stringify({
-      level: 'error',
-      msg: 'Session stop blocked: mutation testing violations detected',
-      error: err instanceof Error ? err.message : String(err),
+      decision: 'block',
+      reason: reason,
     }),
   )
-  // Block session stop - exit with error code
-  process.exit(1)
+
+  process.exit(0)
 }

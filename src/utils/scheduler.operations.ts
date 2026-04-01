@@ -8,6 +8,8 @@ import { type Emitters, type EventEmitter, type Task, mergeTaskOptions } from '.
 import { executeTask, scheduleTask } from './scheduler.internal.js'
 import type { SchedulerOptions, TaskConfig, TaskState } from './scheduler.types.js'
 
+const log = logger.child({ scope: 'scheduler:operations' })
+
 /**
  * Operation context shared between scheduler operations.
  */
@@ -71,7 +73,7 @@ export const registerTask = (
 
   tasks.set(name, task)
 
-  logger.info({ taskName: name, interval: task.interval, cron: task.cron, options: mergedOptions }, 'Task registered')
+  log.info({ taskName: name, interval: task.interval, cron: task.cron, options: mergedOptions }, 'Task registered')
 
   if (mergedOptions.immediate) {
     startFn(name)
@@ -90,7 +92,7 @@ export const startTask = (context: SchedulerContext, name: string, stopFn: (name
   }
 
   if (task.running) {
-    logger.debug({ taskName: name }, 'Task already running, skipping start')
+    log.debug({ taskName: name }, 'Task already running, skipping start')
     return
   }
 
@@ -110,7 +112,7 @@ export const startTask = (context: SchedulerContext, name: string, stopFn: (name
     scheduleTask(task, schedulerOptions, emitters, stopFn)
   }
 
-  logger.info({ taskName: name }, 'Task started')
+  log.info({ taskName: name }, 'Task started')
 }
 
 /**
@@ -125,7 +127,7 @@ export const stopTask = (context: SchedulerContext, name: string): void => {
   }
 
   if (!task.running) {
-    logger.debug({ taskName: name }, 'Task already stopped, skipping stop')
+    log.debug({ taskName: name }, 'Task already stopped, skipping stop')
     return
   }
 
@@ -151,7 +153,7 @@ export const stopTask = (context: SchedulerContext, name: string): void => {
 
   task.nextRun = null
 
-  logger.info({ taskName: name }, 'Task stopped')
+  log.info({ taskName: name }, 'Task stopped')
 }
 
 /**
@@ -172,7 +174,7 @@ export const unregisterTask = (context: SchedulerContext, name: string, stopFn: 
 
   tasks.delete(name)
 
-  logger.info({ taskName: name }, 'Task unregistered')
+  log.info({ taskName: name }, 'Task unregistered')
 }
 
 /**
@@ -181,13 +183,13 @@ export const unregisterTask = (context: SchedulerContext, name: string, stopFn: 
 export const startAllTasks = (context: SchedulerContext, startFn: (name: string) => void): void => {
   const { tasks } = context
 
-  logger.info({ taskCount: tasks.size }, 'Starting all tasks')
+  log.info({ taskCount: tasks.size }, 'Starting all tasks')
   tasks.forEach((_, name) => {
     try {
       startFn(name)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ taskName: name, error: msg }, 'Failed to start task')
+      log.error({ taskName: name, error: msg }, 'Failed to start task')
     }
   })
 }
@@ -198,13 +200,13 @@ export const startAllTasks = (context: SchedulerContext, startFn: (name: string)
 export const stopAllTasks = (context: SchedulerContext, stopFn: (name: string) => void): void => {
   const { tasks } = context
 
-  logger.info({ taskCount: tasks.size }, 'Stopping all tasks')
+  log.info({ taskCount: tasks.size }, 'Stopping all tasks')
   tasks.forEach((_, name) => {
     try {
       stopFn(name)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ taskName: name, error: msg }, 'Failed to stop task')
+      log.error({ taskName: name, error: msg }, 'Failed to stop task')
     }
   })
 }

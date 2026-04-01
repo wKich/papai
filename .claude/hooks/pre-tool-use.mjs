@@ -6,8 +6,6 @@ import path from 'node:path'
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
-import { getSessionsDir } from '../../.hooks/tdd/paths.mjs'
-import { captureSessionMutationBaseline } from '../../.hooks/tdd/session-mutation.mjs'
 
 try {
   const ctx = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'))
@@ -16,13 +14,8 @@ try {
   // pre-edit state, not the state after the first edit (fixes lazy capture bug)
   getSessionBaseline(ctx.session_id, ctx.cwd)
 
-  // Capture mutation baseline on first tool use (Claude has no SessionStart hook)
-  // We check if baseline file exists to avoid re-running
-  const sessionsDir = getSessionsDir(ctx.cwd)
-  const baselineFile = path.join(sessionsDir, `tdd-session-mutation-baseline-${ctx.session_id}.json`)
-  if (!fs.existsSync(baselineFile)) {
-    captureSessionMutationBaseline(ctx)
-  }
+  // Note: Mutation baseline is now captured at SessionStart, not here
+  // See .claude/hooks/session-start.mjs
 
   // 1. TDD gate — if blocked, skip snapshotting (the write won't proceed)
   const gate = enforceTdd(ctx)

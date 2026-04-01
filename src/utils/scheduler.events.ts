@@ -6,6 +6,8 @@ import { logger } from '../logger.js'
 import { type Emitters, type EventEmitter } from './scheduler.helpers.js'
 import type { ErrorEvent, FatalErrorEvent, RetryEvent, TickEvent } from './scheduler.types.js'
 
+const log = logger.child({ scope: 'scheduler:events' })
+
 /**
  * Emit tick event to all handlers.
  */
@@ -15,7 +17,7 @@ const emitTickEvent = (events: EventEmitter, event: TickEvent): void => {
       handler(event)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ error: msg, event: 'tick' }, 'Event handler threw error')
+      log.error({ error: msg, event: 'tick' }, 'Event handler threw error')
     }
   })
 }
@@ -29,7 +31,7 @@ const emitErrorEvent = (events: EventEmitter, event: ErrorEvent): void => {
       handler(event)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ error: msg, event: 'error' }, 'Event handler threw error')
+      log.error({ error: msg, event: 'error' }, 'Event handler threw error')
     }
   })
 }
@@ -43,7 +45,7 @@ const emitRetryEvent = (events: EventEmitter, event: RetryEvent): void => {
       handler(event)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ error: msg, event: 'retry' }, 'Event handler threw error')
+      log.error({ error: msg, event: 'retry' }, 'Event handler threw error')
     }
   })
 }
@@ -57,7 +59,7 @@ const emitFatalErrorEvent = (events: EventEmitter, event: FatalErrorEvent): void
       handler(event)
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logger.error({ error: msg, event: 'fatalError' }, 'Event handler threw error')
+      log.error({ error: msg, event: 'fatalError' }, 'Event handler threw error')
     }
   })
 }

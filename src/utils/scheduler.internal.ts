@@ -11,6 +11,8 @@ import { FatalError, RetryableError, SchedulerError } from './scheduler.errors.j
 import { calculateBackoff, getErrorMessage, getErrorObject, type Emitters, type Task } from './scheduler.helpers.js'
 import type { SchedulerOptions } from './scheduler.types.js'
 
+const log = logger.child({ scope: 'scheduler:internal' })
+
 /**
  * Handle successful task execution.
  */
@@ -26,7 +28,7 @@ const handleTaskSuccess = (task: Task, startTime: number, emitters: Emitters): v
     timestamp,
   })
 
-  logger.info({ taskName: task.name, duration }, 'Task executed successfully')
+  log.info({ taskName: task.name, duration }, 'Task executed successfully')
 }
 
 /**
@@ -42,7 +44,7 @@ const scheduleRetry = (
   const maxRetryDelay = schedulerOptions.maxRetryDelay
   const delay = calculateBackoff(task.retryAttempt, maxRetryDelay)
 
-  logger.warn(
+  log.warn(
     {
       taskName: task.name,
       attempt: task.retryAttempt,
@@ -85,7 +87,7 @@ const handleFatalError = (
   const errorMessage = getErrorMessage(error)
   const errorObj = getErrorObject(error)
 
-  logger.error({ taskName: task.name, error: errorMessage }, reason)
+  log.error({ taskName: task.name, error: errorMessage }, reason)
 
   stopTask(task.name)
 
@@ -103,7 +105,7 @@ const logTaskError = (task: Task, error: unknown): Error => {
   const errorMessage = getErrorMessage(error)
   const errorObj = getErrorObject(error)
 
-  logger.error(
+  log.error(
     {
       taskName: task.name,
       error: errorMessage,
@@ -162,7 +164,7 @@ export const executeTask = async (
   const startTime = Date.now()
   const timestamp = new Date(startTime)
 
-  logger.debug({ taskName: task.name }, 'Executing task')
+  log.debug({ taskName: task.name }, 'Executing task')
 
   try {
     await task.handler()
@@ -217,7 +219,7 @@ const scheduleCronTask = (
     task.timeoutId.unref()
   }
 
-  logger.debug({ taskName: task.name, cron: task.cron, delay }, 'Cron task scheduled')
+  log.debug({ taskName: task.name, cron: task.cron, delay }, 'Cron task scheduled')
 }
 
 /**
@@ -251,5 +253,5 @@ export const scheduleTask = (
     task.intervalId.unref()
   }
 
-  logger.debug({ taskName: task.name, interval: task.interval }, 'Task scheduled')
+  log.debug({ taskName: task.name, interval: task.interval }, 'Task scheduled')
 }
