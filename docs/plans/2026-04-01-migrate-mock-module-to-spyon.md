@@ -30,6 +30,53 @@ Replace `mock.module()` with `spyOn()` by:
 - 53 total `mock.module()` calls
 - Categories: Database (~14), External libs (~7), Internal modules (~8)
 
+### Progress Update (2026-04-01)
+
+#### Completed Tasks ✅
+
+| Task                                                   | Status      | Commit    |
+| ------------------------------------------------------ | ----------- | --------- |
+| Task 1: Add test-only setters to db/index.ts           | ✅ Complete | `9a37983` |
+| Task 2: Update test helper mockDrizzle() documentation | ✅ Complete | `fec9f56` |
+| Task 3: Add mockLoggerSpy() helper using spyOn         | ✅ Complete | `831b062` |
+| Task 4: Create ai-wrapper.ts                           | ✅ Complete | `4c12665` |
+| Task 5: Create ai-sdk-wrapper.ts                       | ✅ Complete | `4c12665` |
+| Task 6: Update conversation.ts to use ai-wrapper       | ✅ Complete | `4c12665` |
+| Task 7: Update llm-orchestrator.ts to use wrappers     | ✅ Complete | `4c12665` |
+| Task 8: Update memory.test.ts to use spyOn             | ✅ Complete | `4c12665` |
+| Task 9: Update conversation.test.ts to use spyOn       | ✅ Complete | `4c12665` |
+
+#### Test Results
+
+- **1798 tests passing**
+- **10 tests failing** (pre-existing wizard engine issues unrelated to migration)
+- **12 wrapper tests passing** (8 ai-wrapper + 4 ai-sdk-wrapper)
+
+#### Files Changed
+
+- `src/db/index.ts` - Added `_setMigrationDb` and `_resetMigrationDb`
+- `src/lib/ai-wrapper.ts` - New wrapper for 'ai' library
+- `src/lib/ai-sdk-wrapper.ts` - New wrapper for '@ai-sdk/openai-compatible'
+- `src/conversation.ts` - Updated imports to use wrappers
+- `src/llm-orchestrator.ts` - Updated imports to use wrappers
+- `src/memory.ts` - Updated imports to use wrappers
+- `tests/utils/test-helpers.ts` - Added spyOn documentation and mockLoggerSpy helper
+- `tests/CLAUDE.md` - Updated mocking documentation
+- `tests/memory.test.ts` - Migrated from mock.module to spyOn
+- `tests/conversation.test.ts` - Migrated from mock.module to spyOn
+- `tests/lib/ai-wrapper.test.ts` - New tests for ai-wrapper
+- `tests/lib/ai-sdk-wrapper.test.ts` - New tests for ai-sdk-wrapper
+
+#### Remaining Tasks
+
+| Task                                                                   | Priority | Status  |
+| ---------------------------------------------------------------------- | -------- | ------- |
+| Task 10-12: Refactor internal modules (recurring, scheduler, registry) | Medium   | Pending |
+| Task 13: Batch update remaining test files                             | Low      | Pending |
+| Task 14: Deprecate mock.module() helpers                               | Low      | Pending |
+| Task 15: Update find-mock-modules.ts script                            | Low      | Pending |
+| Task 16: Final verification                                            | High     | Pending |
+
 ---
 
 ## Module Categories
@@ -77,17 +124,27 @@ Check that `src/db/drizzle.ts` already has:
 
 **Expected:** Already exists (confirmed in analysis)
 
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `9a37983`
+
 **Step 1: Verify existing implementation**
 
 ```bash
 grep -n "_setDrizzleDb\|_resetDrizzleDb" src/db/drizzle.ts
 ```
 
-Expected output should show both functions exist.
+Result: Functions already exist in `src/db/drizzle.ts` (confirmed).
 
 ---
 
 ### Task 2: Add test-only setters to db/index.ts
+
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `9a37983`
 
 **Files:**
 
@@ -187,6 +244,11 @@ git commit -m "feat(db): add test-only setters for migration db to enable spyOn 
 ---
 
 ### Task 3: Update test helper mockDrizzle() to use spyOn
+
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `fec9f56`
 
 **Files:**
 
@@ -299,9 +361,17 @@ git commit -m "test(helpers): add spyOn pattern documentation for database mocks
 
 ### Task 4: Refactor logger.ts to support spyOn
 
+**Status:** ✅ COMPLETED (No changes needed to logger.ts)
+
+**Implementation Date:** 2026-04-01
+**Commit:** `831b062`
+
+**Note:** The logger module (`src/logger.ts`) was already exporting the logger as an object, making it naturally spyable. The task focused on creating a `mockLoggerSpy()` helper in `tests/utils/test-helpers.ts` that uses `spyOn()` instead of `mock.module()`.
+
 **Files:**
 
-- Modify: `src/logger.ts:1-22`
+- Modify: `tests/utils/test-helpers.ts` (add mockLoggerSpy function)
+- Create: `tests/logger-spy.test.ts`
 
 **Step 1: Write failing test**
 
@@ -430,6 +500,11 @@ git commit -m "test(logger): add spyOn-based mockLoggerSpy helper"
 ## Phase 3: External Libraries (Category C)
 
 ### Task 5: Create wrapper module for 'ai' library
+
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 6-9)
 
 **Files:**
 
@@ -573,6 +648,11 @@ git commit -m "feat(lib): create ai-wrapper for spyOn-based testing of ai librar
 
 ### Task 6: Create wrapper module for '@ai-sdk/openai-compatible'
 
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 5, 7-9)
+
 **Files:**
 
 - Create: `src/lib/ai-sdk-wrapper.ts`
@@ -663,6 +743,11 @@ git commit -m "feat(lib): create ai-sdk-wrapper for spyOn-based testing"
 
 ### Task 7: Update conversation.ts to use ai-wrapper
 
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 5-6, 8-9)
+
 **Files:**
 
 - Modify: `src/conversation.ts` (find imports)
@@ -706,6 +791,11 @@ git commit -m "refactor(conversation): use ai-wrapper for spyOn compatibility"
 
 ### Task 8: Update llm-orchestrator.ts to use wrappers
 
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 5-7, 9)
+
 **Files:**
 
 - Modify: `src/llm-orchestrator.ts`
@@ -740,6 +830,11 @@ git commit -m "refactor(llm): use wrapper modules for spyOn compatibility"
 ## Phase 5: Update Tests to Use spyOn
 
 ### Task 9: Update memory.test.ts to use spyOn
+
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 5-8)
 
 **Files:**
 
@@ -813,6 +908,11 @@ git commit -m "test(memory): migrate from mock.module to spyOn"
 
 ### Task 10: Update conversation.test.ts to use spyOn
 
+**Status:** ✅ COMPLETED
+
+**Implementation Date:** 2026-04-01
+**Commit:** `4c12665` (combined with Tasks 5-9)
+
 **Files:**
 
 - Modify: `tests/conversation.test.ts`
@@ -850,7 +950,9 @@ git commit -m "test(conversation): migrate from mock.module to spyOn"
 
 ---
 
-## Phase 6: Internal Business Logic (Category D)
+## Phase 6: Internal Business Logic (Category D) — PENDING
+
+**Status:** ⏳ NOT STARTED
 
 ### Task 11: Create registry pattern for providers
 
@@ -915,7 +1017,9 @@ git commit -m "refactor(providers): enable spyOn pattern for registry"
 
 ---
 
-## Phase 7: Recurring Tasks Module
+## Phase 7: Recurring Tasks Module — PENDING
+
+**Status:** ⏳ NOT STARTED
 
 ### Task 12: Export recurring module as object
 
@@ -984,7 +1088,9 @@ git commit -m "refactor(recurring): export as object for spyOn compatibility"
 
 ---
 
-## Phase 8: Scheduler Module
+## Phase 8: Scheduler Module — PENDING
+
+**Status:** ⏳ NOT STARTED
 
 ### Task 13: Export scheduler module as object
 
@@ -996,7 +1102,9 @@ Follow same pattern as Task 12.
 
 ---
 
-## Phase 9: Remaining Test Files
+## Phase 9: Remaining Test Files — PENDING
+
+**Status:** ⏳ NOT STARTED
 
 ### Task 14: Update remaining test files
 
@@ -1037,7 +1145,9 @@ git commit -m "test(batch): migrate test files from mock.module to spyOn"
 
 ---
 
-## Phase 10: Cleanup and Documentation
+## Phase 10: Cleanup and Documentation — PENDING
+
+**Status:** ⏳ NOT STARTED
 
 ### Task 15: Remove mock.module() from test helpers
 
@@ -1081,6 +1191,14 @@ git commit -m "chore(tests): deprecate mock.module helpers in favor of spyOn"
 ---
 
 ### Task 16: Update scripts/find-mock-modules.ts
+
+**Status:** ⏳ NOT STARTED
+
+**Note:** The find-mock-modules.ts script was created but still reports mock.module() usage. After completing the migration, update the script to:
+
+1. Add detection for spyOn-based patterns
+2. Update recommendations section with spyOn patterns
+3. Report "migration complete" when no mock.module() calls remain
 
 **Files:**
 
