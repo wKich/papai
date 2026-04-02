@@ -45,6 +45,26 @@ export function getAllConfig(userId: string): Partial<Record<ConfigKey, string>>
   return result
 }
 
+const LLM_COPY_KEYS: readonly ConfigKey[] = [
+  'llm_apikey',
+  'llm_baseurl',
+  'main_model',
+  'small_model',
+  'embedding_model',
+]
+
+export function copyAdminLlmConfig(targetUserId: string, adminUserId: string): void {
+  log.debug({ targetUserId, adminUserId }, 'copyAdminLlmConfig called')
+  for (const key of LLM_COPY_KEYS) {
+    const existingValue = getCachedConfig(targetUserId, key)
+    if (existingValue !== null) continue
+    const adminValue = getCachedConfig(adminUserId, key)
+    if (adminValue === null) continue
+    setCachedConfig(targetUserId, key, adminValue)
+  }
+  log.info({ targetUserId }, 'LLM config copied from admin')
+}
+
 export function maskValue(key: ConfigKey, value: string): string {
   if (SENSITIVE_KEYS.has(key)) {
     const last4 = value.slice(-4)

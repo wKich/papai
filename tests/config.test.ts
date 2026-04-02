@@ -15,7 +15,7 @@ void mock.module('../src/db/drizzle.js', () => ({
   _setDrizzleDb: (): void => {},
 }))
 
-import { getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import { copyAdminLlmConfig, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 
@@ -132,6 +132,62 @@ describe('maskValue', () => {
   test('handles short values for sensitive keys', () => {
     expect(maskValue('kaneo_apikey', 'ab')).toBe('****ab')
     expect(maskValue('kaneo_apikey', '')).toBe('****')
+  })
+})
+
+describe('copyAdminLlmConfig', () => {
+  const ADMIN_ID = 'admin-001'
+  const TARGET_ID = 'target-002'
+
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+    clearUserCache(ADMIN_ID)
+    clearUserCache(TARGET_ID)
+  })
+
+  test('copies LLM config keys from admin to target user', () => {
+    setConfig(ADMIN_ID, 'llm_apikey', 'sk-admin-key')
+    setConfig(ADMIN_ID, 'llm_baseurl', 'https://api.example.com/v1')
+    setConfig(ADMIN_ID, 'main_model', 'gpt-4o')
+    setConfig(ADMIN_ID, 'small_model', 'gpt-4o-mini')
+    setConfig(ADMIN_ID, 'embedding_model', 'text-embedding-3-small')
+
+    copyAdminLlmConfig(TARGET_ID, ADMIN_ID)
+
+    expect(getConfig(TARGET_ID, 'llm_apikey')).toBe('sk-admin-key')
+    expect(getConfig(TARGET_ID, 'llm_baseurl')).toBe('https://api.example.com/v1')
+    expect(getConfig(TARGET_ID, 'main_model')).toBe('gpt-4o')
+    expect(getConfig(TARGET_ID, 'small_model')).toBe('gpt-4o-mini')
+    expect(getConfig(TARGET_ID, 'embedding_model')).toBe('text-embedding-3-small')
+  })
+
+  test('skips keys the admin has not set', () => {
+    setConfig(ADMIN_ID, 'llm_apikey', 'sk-key')
+    setConfig(ADMIN_ID, 'llm_baseurl', 'https://api.example.com/v1')
+    setConfig(ADMIN_ID, 'main_model', 'gpt-4o')
+
+    copyAdminLlmConfig(TARGET_ID, ADMIN_ID)
+
+    expect(getConfig(TARGET_ID, 'llm_apikey')).toBe('sk-key')
+    expect(getConfig(TARGET_ID, 'small_model')).toBeNull()
+  })
+
+  test('is a no-op when admin has no config', () => {
+    copyAdminLlmConfig(TARGET_ID, ADMIN_ID)
+
+    expect(getConfig(TARGET_ID, 'llm_apikey')).toBeNull()
+    expect(getConfig(TARGET_ID, 'llm_baseurl')).toBeNull()
+  })
+
+  test('does not overwrite existing target config', () => {
+    setConfig(ADMIN_ID, 'llm_apikey', 'admin-key')
+    setConfig(ADMIN_ID, 'main_model', 'gpt-4o')
+    setConfig(TARGET_ID, 'llm_apikey', 'existing-target-key')
+
+    copyAdminLlmConfig(TARGET_ID, ADMIN_ID)
+
+    expect(getConfig(TARGET_ID, 'llm_apikey')).toBe('existing-target-key')
+    expect(getConfig(TARGET_ID, 'main_model')).toBe('gpt-4o')
   })
 })
 
