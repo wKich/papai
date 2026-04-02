@@ -4,7 +4,7 @@
 
 **Goal:** When `DEMO_MODE=true`, automatically add, Kaneo-provision, and pre-fill LLM config for any unknown user who messages or `/start`s the bot.
 
-**Architecture:** Intercept in `checkAuthorizationExtended()` in `src/bot.ts` to auto-add unknown DM users. Reuse existing `provisionAndConfigure()` for Kaneo account creation. New `copyAdminLlmConfig()` copies the admin's LLM settings to new users. Config copy happens inside `maybeProvisionKaneo()` after successful provisioning.
+**Architecture:** Intercept in `checkAuthorizationExtended()` in `src/bot.ts` to auto-add unknown DM users, returning non-admin auth (`isBotAdmin: false`). New `isDemoUser()` in `src/users.ts` ensures demo users stay non-admin on subsequent messages. The `/start` command handler also auto-adds demo users (commands bypass `checkAuthorizationExtended`). Reuse existing `provisionAndConfigure()` for Kaneo account creation. New `copyAdminLlmConfig()` copies the admin's LLM settings to new users. Config copy happens inside `maybeProvisionKaneo()` after successful provisioning, guarded by `DEMO_MODE`.
 
 **Tech Stack:** Bun, TypeScript, SQLite (Drizzle), existing test helpers.
 
@@ -37,6 +37,7 @@ describe('copyAdminLlmConfig', () => {
     setConfig(ADMIN_ID, 'llm_baseurl', 'https://api.example.com/v1')
     setConfig(ADMIN_ID, 'main_model', 'gpt-4o')
     setConfig(ADMIN_ID, 'small_model', 'gpt-4o-mini')
+    setConfig(ADMIN_ID, 'embedding_model', 'text-embedding-3-small')
 
     copyAdminLlmConfig(TARGET_ID, ADMIN_ID)
 
@@ -44,6 +45,7 @@ describe('copyAdminLlmConfig', () => {
     expect(getConfig(TARGET_ID, 'llm_baseurl')).toBe('https://api.example.com/v1')
     expect(getConfig(TARGET_ID, 'main_model')).toBe('gpt-4o')
     expect(getConfig(TARGET_ID, 'small_model')).toBe('gpt-4o-mini')
+    expect(getConfig(TARGET_ID, 'embedding_model')).toBe('text-embedding-3-small')
   })
 
   test('skips keys the admin has not set', () => {
@@ -89,7 +91,13 @@ Expected: FAIL — `copyAdminLlmConfig` is not exported from `src/config.js`
 Add to `src/config.ts`:
 
 ```typescript
-const LLM_COPY_KEYS: readonly ConfigKey[] = ['llm_apikey', 'llm_baseurl', 'main_model', 'small_model']
+const LLM_COPY_KEYS: readonly ConfigKey[] = [
+  'llm_apikey',
+  'llm_baseurl',
+  'main_model',
+  'small_model',
+  'embedding_model',
+]
 
 export function copyAdminLlmConfig(targetUserId: string, adminUserId: string): void {
   log.debug({ targetUserId, adminUserId }, 'copyAdminLlmConfig called')
@@ -118,14 +126,20 @@ git commit -m "feat: add copyAdminLlmConfig for demo mode"
 
 ---
 
-### Task 2: Add demo mode auto-add to `checkAuthorizationExtended()`
+### Task 2: Add demo mode auto-add to `checkAuthorizationExtended()` and `/start`
 
 **Files:**
 
-- Modify: `src/bot.ts`
+- Modify: `src/bot.ts`, `src/users.ts`, `src/commands/start.ts`
 - Test: `tests/bot-auth.test.ts`
 
 **Step 1: Write the failing tests**
+
+Add `isAuthorized` to the existing import from `../src/users.js`:
+
+```typescript
+import { addUser, isAuthorized } from '../src/users.js'
+```
 
 Add a new describe block to `tests/bot-auth.test.ts`:
 
@@ -138,36 +152,58 @@ describe('Demo Mode Auto-Provision', () => {
     testDb = await setupTestDb()
   })
 
-  test('demo mode: unknown DM user is auto-added and authorized', () => {
+  afterEach(() => {
+    delete process.env['DEMO_MODE']
+  })
+
+  test('demo mode: unknown DM user is auto-added with non-admin auth', () => {
     process.env['DEMO_MODE'] = 'true'
     const result = checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
     expect(result).toEqual({
       allowed: true,
-      isBotAdmin: true,
+      isBotAdmin: false,
       isGroupAdmin: false,
       storageContextId: DEMO_USER_ID,
     })
     expect(isAuthorized(DEMO_USER_ID)).toBe(true)
-    delete process.env['DEMO_MODE']
+  })
+
+  test('demo mode: demo user stays non-admin on subsequent messages', () => {
+    process.env['DEMO_MODE'] = 'true'
+    // First message — auto-add
+    checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
+    // Second message — user already authorized
+    const result = checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
+    expect(result).toEqual({
+      allowed: true,
+      isBotAdmin: false,
+      isGroupAdmin: false,
+      storageContextId: DEMO_USER_ID,
+    })
   })
 
   test('demo mode: unknown DM user without username is auto-added', () => {
     process.env['DEMO_MODE'] = 'true'
     const result = checkAuthorizationExtended(DEMO_USER_ID, null, DEMO_USER_ID, 'dm', false)
     expect(result.allowed).toBe(true)
+    expect(result.isBotAdmin).toBe(false)
     expect(isAuthorized(DEMO_USER_ID)).toBe(true)
-    delete process.env['DEMO_MODE']
+  })
+
+  test('demo mode: manually-added user retains bot admin auth', () => {
+    process.env['DEMO_MODE'] = 'true'
+    addUser('manual-user', 'admin', 'manualuser')
+    const result = checkAuthorizationExtended('manual-user', 'manualuser', 'manual-user', 'dm', false)
+    expect(result.isBotAdmin).toBe(true)
   })
 
   test('demo mode: group messages from unknown users are NOT auto-added', () => {
     process.env['DEMO_MODE'] = 'true'
     const result = checkAuthorizationExtended('stranger-1', null, 'group-1', 'group', false)
     expect(result.allowed).toBe(false)
-    delete process.env['DEMO_MODE']
   })
 
   test('demo mode off: unknown DM user is NOT auto-added', () => {
-    delete process.env['DEMO_MODE']
     const result = checkAuthorizationExtended('stranger-1', 'stranger', 'stranger-1', 'dm', false)
     expect(result.allowed).toBe(false)
   })
@@ -181,22 +217,77 @@ Expected: FAIL — demo mode tests fail because unknown users are not auto-added
 
 **Step 3: Write minimal implementation**
 
-In `src/bot.ts`, add the demo mode constant near the top (after the existing `log` line):
+**3a. Add `isDemoUser()` to `src/users.ts`:**
 
 ```typescript
-const DEMO_MODE = process.env['DEMO_MODE'] === 'true'
-```
-
-Then in `checkAuthorizationExtended()`, add this block before the existing `if (isAuthorized(userId))` check:
-
-```typescript
-if (DEMO_MODE && !isAuthorized(userId) && contextType === 'dm') {
-  log.info({ userId, username }, 'Demo mode: auto-adding user')
-  addUser(userId, 'demo-auto', username ?? undefined)
+export function isDemoUser(userId: string): boolean {
+  log.debug({ userId }, 'isDemoUser called')
+  const db = getDrizzleDb()
+  const row = db.select({ addedBy: users.addedBy }).from(users).where(eq(users.platformUserId, userId)).get()
+  return row?.addedBy === 'demo-auto'
 }
 ```
 
-Add `addUser` to the imports from `./users.js` if not already there (it is not — currently only `isAuthorized` and `resolveUserByUsername` are imported).
+**3b. Add demo auth helper and update `checkAuthorizationExtended()` in `src/bot.ts`:**
+
+Add a new helper alongside the existing auth helpers:
+
+```typescript
+const getDemoUserAuth = (userId: string): AuthorizationResult => ({
+  allowed: true,
+  isBotAdmin: false,
+  isGroupAdmin: false,
+  storageContextId: userId,
+})
+```
+
+Add `addUser` and `isDemoUser` to the imports from `./users.js`:
+
+```typescript
+import { addUser, isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
+```
+
+Then in `checkAuthorizationExtended()`, add this block **before** the existing `if (isAuthorized(userId))` check:
+
+```typescript
+if (process.env['DEMO_MODE'] === 'true' && !isAuthorized(userId) && contextType === 'dm') {
+  log.info({ userId, username }, 'Demo mode: auto-adding user')
+  addUser(userId, 'demo-auto', username ?? undefined)
+  return getDemoUserAuth(userId)
+}
+```
+
+> **Why inline `process.env` instead of a module constant?** A module-level `const DEMO_MODE = process.env['DEMO_MODE'] === 'true'` is evaluated once at import time. Tests that set `process.env['DEMO_MODE']` after module load would never see the change.
+
+Then, inside the existing `if (isAuthorized(userId))` block, add the demo user check so that demo users stay non-admin on subsequent messages:
+
+```typescript
+if (isAuthorized(userId)) {
+  if (contextType === 'dm' && isDemoUser(userId)) {
+    return getDemoUserAuth(userId)
+  }
+  return getBotAdminAuth(userId, contextId, contextType, isPlatformAdmin)
+}
+```
+
+**3c. Add demo auto-add to `/start` command handler in `src/commands/start.ts`:**
+
+Commands registered via `ChatProvider.registerCommand()` bypass `checkAuthorizationExtended()` entirely — the Telegram adapter creates its own `AuthorizationResult` with `allowed: true`. So `/start` must also auto-add demo users.
+
+Add imports at top of `src/commands/start.ts`:
+
+```typescript
+import { addUser, isAuthorized } from '../users.js'
+```
+
+Add this block at the top of the handler, before the `auth.allowed` check:
+
+```typescript
+if (process.env['DEMO_MODE'] === 'true' && msg.contextType === 'dm' && !isAuthorized(msg.user.id)) {
+  addUser(msg.user.id, 'demo-auto', msg.user.username ?? undefined)
+  log.info({ userId: msg.user.id }, 'Demo mode: auto-added user via /start')
+}
+```
 
 **Step 4: Run test to verify it passes**
 
@@ -211,7 +302,7 @@ Expected: All tests pass
 **Step 6: Commit**
 
 ```bash
-git add src/bot.ts tests/bot-auth.test.ts
+git add src/bot.ts src/users.ts src/commands/start.ts tests/bot-auth.test.ts
 git commit -m "feat: auto-add unknown DM users in demo mode"
 ```
 
@@ -250,38 +341,48 @@ Expected: FAIL — `copyAdminLlmConfig` is not called
 
 In `src/llm-orchestrator.ts`, modify `maybeProvisionKaneo()`:
 
-Add import at top:
+Add `copyAdminLlmConfig` to the existing `./config.js` import:
 
 ```typescript
-import { copyAdminLlmConfig } from './config.js'
+import { copyAdminLlmConfig, getConfig } from './config.js'
 ```
 
-After the successful provisioning block inside `maybeProvisionKaneo`, add:
+The current early return is:
+
+```typescript
+if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) return
+```
+
+Replace it with a conditional block that handles the already-provisioned-but-missing-LLM-config case:
+
+```typescript
+if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) {
+  // Already provisioned — copy LLM config if still missing (demo mode only)
+  if (process.env['DEMO_MODE'] === 'true') {
+    const adminUserId = process.env['ADMIN_USER_ID']
+    if (adminUserId !== undefined && adminUserId !== '') {
+      copyAdminLlmConfig(contextId, adminUserId)
+    }
+  }
+  return
+}
+```
+
+After the successful provisioning message inside the `outcome.status === 'provisioned'` block, add the config copy (also demo-only):
 
 ```typescript
 if (outcome.status === 'provisioned') {
-  const adminUserId = process.env['ADMIN_USER_ID']
-  if (adminUserId !== undefined && adminUserId !== '') {
-    copyAdminLlmConfig(contextId, adminUserId)
+  if (process.env['DEMO_MODE'] === 'true') {
+    const adminUserId = process.env['ADMIN_USER_ID']
+    if (adminUserId !== undefined && adminUserId !== '') {
+      copyAdminLlmConfig(contextId, adminUserId)
+    }
   }
   await reply.text(...)
 }
 ```
 
-Also add config copy for the case where Kaneo is already provisioned but LLM config is missing. At the top of `maybeProvisionKaneo`, after the early return when both workspace and apikey exist, add:
-
-```typescript
-const missingLlmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
-const needsLlmConfig = missingLlmKeys.some((k) => getConfig(contextId, k) === null)
-if (!needsLlmConfig) return
-
-const adminUserId = process.env['ADMIN_USER_ID']
-if (adminUserId !== undefined && adminUserId !== '') {
-  copyAdminLlmConfig(contextId, adminUserId)
-}
-```
-
-This handles both cases: fresh provisioning and already-provisioned but missing LLM config.
+> **Why guard with `DEMO_MODE`?** Without the guard, all newly-provisioned users would silently inherit the admin's LLM config, even in non-demo deployments. The stated goal is demo-mode-only behavior.
 
 **Step 5: Run test to verify it passes**
 
