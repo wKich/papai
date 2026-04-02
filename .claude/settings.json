@@ -47,7 +47,7 @@
             "type": "command",
             "command": "node .claude/hooks/session-stop.mjs",
             "timeout": 600,
-            "statusMessage": "Running session-level mutation tests..."
+            "statusMessage": "Running pre-stop checks (uncommitted → check:full → mutation)..."
           }
         ]
       }

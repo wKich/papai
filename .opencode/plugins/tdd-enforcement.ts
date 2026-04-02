@@ -4,6 +4,8 @@
 
 import type { Plugin } from '@opencode-ai/plugin'
 
+import { checkFull } from '../../.hooks/tdd/checks/check-full.mjs'
+import { checkUncommitted } from '../../.hooks/tdd/checks/check-uncommitted.mjs'
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
@@ -48,38 +50,43 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       if (event.type === 'session.idle') {
         const sessionId = event.properties.sessionID
 
-        // Only verify if we have a baseline for this session
-        // verifySessionMutationBaseline will return early if no baseline exists
-        try {
-          // Run session-level mutation verification
-          // This compares final state against baseline captured at session start
-          verifySessionMutationBaseline({
-            session_id: sessionId,
-            cwd: directory,
-          })
-          // Success - no new mutants, allow session to stop
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err)
-
-          // Format the same prompt message as Claude's session-stop.mjs
-          const promptMessage = [
-            '🧬 Survived Mutants Regression',
-            '',
-            'Survived mutants after changes exceed the baseline.',
-            'Current code has more untested paths than at session start.',
-            '',
-            errorMessage,
-            '',
-            'Fix: Write tests to kill the new surviving mutants.',
-          ].join('\n')
-
-          // Prompt agent to continue and fix the regression
+        // [1] Check for uncommitted changes
+        const uncommitted = checkUncommitted({ cwd: directory })
+        if (uncommitted) {
           await client.session.prompt({
             path: { id: sessionId },
             body: {
-              parts: [{ type: 'text', text: promptMessage }],
+              parts: [{ type: 'text', text: uncommitted.reason }],
             },
           })
+          return
+        }
+
+        // [2] Run bun check:full
+        const checkResult = checkFull({ cwd: directory })
+        if (checkResult) {
+          await client.session.prompt({
+            path: { id: sessionId },
+            body: {
+              parts: [{ type: 'text', text: checkResult.reason }],
+            },
+          })
+          return
+        }
+
+        // [3] Run session-level mutation verification
+        const mutationResult = verifySessionMutationBaseline({
+          session_id: sessionId,
+          cwd: directory,
+        })
+        if (mutationResult) {
+          await client.session.prompt({
+            path: { id: sessionId },
+            body: {
+              parts: [{ type: 'text', text: mutationResult.reason }],
+            },
+          })
+          return
         }
       }
 

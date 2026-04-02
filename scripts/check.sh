@@ -82,10 +82,13 @@ if [ "$STAGED_MODE" = true ]; then
   wait "$format_pid" || true
 
   # Check results and display failures
+  failed_checks=()
+  passed_checks=()
   for check in "${checks[@]}"; do
     fname=$(safe_name "$check")
     if [ ! -f "$TMPDIR/$fname.exit" ]; then
       failed=$((failed + 1))
+      failed_checks+=("$check")
       echo ""
       echo "✗ $check failed (no exit file found)"
       continue
@@ -93,22 +96,33 @@ if [ "$STAGED_MODE" = true ]; then
     exit_code=$(cat "$TMPDIR/$fname.exit")
     if [ "$exit_code" -ne 0 ]; then
       failed=$((failed + 1))
+      failed_checks+=("$check")
       echo ""
       echo "✗ $check failed (exit code $exit_code):"
       echo "---"
       cat "$TMPDIR/$fname.out"
       echo "---"
+    else
+      passed_checks+=("$check")
     fi
   done
 
   # Print summary
   total=${#checks[@]}
   passed=$((total - failed))
+  echo ""
+  echo "Summary of executed checks:"
+  for check in "${passed_checks[@]+${passed_checks[@]}}"; do
+    echo "✓ $check"
+  done
+  for check in "${failed_checks[@]+${failed_checks[@]}}"; do
+    echo "✗ $check"
+  done
+  echo ""
+  echo "$passed/$total checks passed, $failed failed"
   if [ "$failed" -eq 0 ]; then
-    echo "✓ All $total checks passed"
     exit 0
   else
-    echo "✓ $passed/$total checks passed, $failed failed"
     exit 1
   fi
 else
@@ -138,10 +152,13 @@ else
   done
 
   # Check results and display failures
+  failed_checks=()
+  passed_checks=()
   for check in "${checks[@]}"; do
     fname=$(safe_name "$check")
     if [ ! -f "$TMPDIR/$fname.exit" ]; then
       failed=$((failed + 1))
+      failed_checks+=("$check")
       echo ""
       echo "✗ $check failed (no exit file found)"
       continue
@@ -149,22 +166,33 @@ else
     exit_code=$(cat "$TMPDIR/$fname.exit")
     if [ "$exit_code" -ne 0 ]; then
       failed=$((failed + 1))
+      failed_checks+=("$check")
       echo ""
       echo "✗ $check failed (exit code $exit_code):"
       echo "---"
       cat "$TMPDIR/$fname.out"
       echo "---"
+    else
+      passed_checks+=("$check")
     fi
   done
 
   # Print summary
   total=${#checks[@]}
   passed=$((total - failed))
+  echo ""
+  echo "Summary of executed checks:"
+  for check in "${passed_checks[@]+${passed_checks[@]}}"; do
+    echo "✓ $check"
+  done
+  for check in "${failed_checks[@]+${failed_checks[@]}}"; do
+    echo "✗ $check"
+  done
+  echo ""
+  echo "$passed/$total checks passed, $failed failed"
   if [ "$failed" -eq 0 ]; then
-    echo "✓ All $total checks passed"
     exit 0
   else
-    echo "✓ $passed/$total checks passed, $failed failed"
     exit 1
   fi
 fi

@@ -135,12 +135,17 @@ export function captureSessionMutationBaseline(ctx) {
 }
 
 /**
+ * @typedef {Object} BlockResult
+ * @property {'block'} decision
+ * @property {string} reason
+ */
+
+/**
  * Verify no new mutants at session end
  * @param {{ session_id: string, cwd: string }} ctx
- * @returns {null}
+ * @returns {BlockResult | null}
  */
 export function verifySessionMutationBaseline(ctx) {
-  const lines = []
   try {
     if (process.env.TDD_MUTATION === '0') return null
 
@@ -199,8 +204,8 @@ export function verifySessionMutationBaseline(ctx) {
 
     if (totalNewSurvivors === 0) return null
 
-    // Build and output report
-    lines = [`Mutation testing detected ${totalNewSurvivors} new untested code path(s):`, '']
+    // Build report
+    const lines = [`Mutation testing detected ${totalNewSurvivors} new untested code path(s):`, '']
 
     for (const [filePath, survivors] of Object.entries(newSurvivorsByFile)) {
       const relPath = path.relative(cwd, filePath)
@@ -212,19 +217,18 @@ export function verifySessionMutationBaseline(ctx) {
     }
 
     lines.push('These code paths were not caught by any test.')
-    lines.push('Next step: Write tests that exercise these code paths.')
 
-    // Output to stderr so Claude can see it
-    console.error('\n=== MUTATION TESTING REPORT ===\n')
-    console.error(lines.join('\n'))
-    console.error('\n================================\n')
+    return {
+      decision: 'block',
+      reason:
+        '🧬 Survived Mutants Regression\n\n' +
+        'Survived mutants after changes exceed the baseline.\n' +
+        'Current code has more untested paths than at session start.\n\n' +
+        lines.join('\n') +
+        '\n\nNext step: Write tests that exercise these code paths.',
+    }
   } catch {
     // Fail open
   }
-  if (lines.length > 0) {
-    // Block session stop - throw error with report details
-    throw new Error(lines.join('\n'))
-  }
-
   return null
 }
