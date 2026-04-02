@@ -43,17 +43,16 @@ You can type "cancel" at any time to exit, or "skip" for optional steps.
 
 Let's begin!`
 
-function normalizeValue(key: ConfigKey, value: string, data: Readonly<Record<string, string | undefined>>): string {
+function normalizeValue(
+  key: ConfigKey,
+  value: string,
+  data: Readonly<Record<string, string | undefined>>,
+  existingValue?: string,
+): string {
   const trimmedValue = value.trim().toLowerCase()
-
-  if (trimmedValue === 'same' && key === 'small_model') {
-    return data['main_model'] ?? value
-  }
-
-  if (trimmedValue === 'skip') {
-    return ''
-  }
-
+  if (trimmedValue === 'same' && key === 'small_model') return data['main_model'] ?? value
+  // If there's an existing value, keep it when user types "skip"
+  if (trimmedValue === 'skip') return existingValue !== undefined && existingValue !== '' ? existingValue : ''
   return value.trim()
 }
 
@@ -88,7 +87,11 @@ function handleSkipCommand(
   userId: string,
   storageContextId: string,
 ): AdvanceStepResult {
-  if (currentStep.isOptional !== true) {
+  // Check if there's an existing value - if so, allow skip to keep it
+  const existingValue = session.data[currentStep.key]
+  const hasExistingValue = existingValue !== undefined && existingValue !== ''
+
+  if (currentStep.isOptional !== true && !hasExistingValue) {
     return {
       success: false,
       prompt: `❌ This step is required and cannot be skipped.\n\n${currentStep.prompt}`,
@@ -97,7 +100,7 @@ function handleSkipCommand(
 
   updateWizardSession(userId, storageContextId, {
     currentStep: session.currentStep + 1,
-    skippedSteps: [session.currentStep],
+    skippedSteps: hasExistingValue ? [] : [session.currentStep],
   })
 
   log.info({ userId, storageContextId, stepIndex: session.currentStep }, 'Step skipped')
@@ -137,10 +140,21 @@ function completeStep(
   value: string,
   session: NonNullable<ReturnType<typeof getWizardSession>>,
 ): AdvanceStepResult {
-  const normalizedValue = normalizeValue(currentStep.key, value, session.data)
+  const existingValue = session.data[currentStep.key]
+  const normalizedValue = normalizeValue(currentStep.key, value, session.data, existingValue)
   const dataUpdate: Partial<Record<ConfigKey, string>> = {}
   if (normalizedValue !== '') {
     dataUpdate[currentStep.key] = normalizedValue
+  }
+
+  // Check if this is single-step mode (editing one field from /config)
+  if (session.singleStep === true) {
+    // Save the value and exit immediately
+    updateWizardSession(userId, storageContextId, {
+      data: dataUpdate,
+    })
+    log.info({ userId, storageContextId, key: currentStep.key }, 'Single step edit completed')
+    return { success: true, prompt: showSummary(userId, storageContextId), complete: true }
   }
 
   updateWizardSession(userId, storageContextId, {

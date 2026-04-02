@@ -513,3 +513,94 @@ describe('Wizard engine masking behavior', () => {
     expect(session?.data['main_model']).toBe('gpt-4-turbo')
   })
 })
+
+describe('Wizard engine singleStep mode', () => {
+  const userId = 'singlestep-test-user'
+  const storageContextId = 'singlestep-test-context'
+
+  beforeEach(async () => {
+    await setupTestDb()
+    await deleteWizardSession(userId, storageContextId)
+  })
+
+  test('exits immediately after completing step when singleStep is true', async () => {
+    // Pre-set an existing config value
+    setConfig(storageContextId, 'main_model', 'gpt-4-old')
+
+    // Create wizard and set singleStep mode (simulating /config edit)
+    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+
+    // Import updateWizardSession dynamically
+    const { updateWizardSession } = await import('../../src/wizard/state.js')
+
+    // Simulate editing just the main_model field (step 2)
+    // Step 0: LLM API Key
+    await advanceStep(userId, storageContextId, 'sk-test12345')
+    // Step 1: Base URL
+    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
+
+    // Set singleStep mode to simulate editing from /config
+    // main_model is step 2
+    updateWizardSession(userId, storageContextId, {
+      currentStep: 2,
+      singleStep: true,
+    })
+
+    // Complete this step - should immediately show summary and exit
+    const result = await advanceStep(userId, storageContextId, 'gpt-4-new')
+
+    expect(result.success).toBe(true)
+    expect(result.complete).toBe(true)
+    expect(result.prompt).toContain('Configuration Summary')
+  })
+
+  test('keeps existing value when typing "skip" with existing config', async () => {
+    // Pre-set an existing config value
+    setConfig(storageContextId, 'kaneo_apikey', 'existing-kaneo-key')
+
+    // Create wizard and complete steps to reach kaneo_apikey
+    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    // Step 0: LLM API Key
+    await advanceStep(userId, storageContextId, 'sk-test12345')
+    // Step 1: Base URL
+    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
+    // Step 2: Main Model
+    await advanceStep(userId, storageContextId, 'gpt-4')
+    // Step 3: Small Model
+    await advanceStep(userId, storageContextId, 'gpt-3.5')
+    // Step 4: Embedding (optional)
+    await advanceStep(userId, storageContextId, 'skip')
+
+    // Step 5: Kaneo API key with existing value
+    const result = await advanceStep(userId, storageContextId, 'skip')
+
+    expect(result.success).toBe(true)
+
+    // Check that existing value is preserved
+    const session = getWizardSession(userId, storageContextId)
+    expect(session).not.toBeNull()
+    expect(session?.data['kaneo_apikey']).toBe('existing-kaneo-key')
+  })
+
+  test('clears value when typing "skip" without existing config', async () => {
+    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    // Step 0: LLM API Key
+    await advanceStep(userId, storageContextId, 'sk-test12345')
+    // Step 1: Base URL
+    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
+    // Step 2: Main Model
+    await advanceStep(userId, storageContextId, 'gpt-4')
+    // Step 3: Small Model
+    await advanceStep(userId, storageContextId, 'gpt-3.5')
+
+    // Step 4: Embedding model (optional) - type skip without existing value
+    const result = await advanceStep(userId, storageContextId, 'skip')
+
+    expect(result.success).toBe(true)
+    expect(result.skipped).toBe(true)
+
+    const session = getWizardSession(userId, storageContextId)
+    expect(session).not.toBeNull()
+    expect(session?.data['embedding_model']).toBeUndefined()
+  })
+})

@@ -43,6 +43,8 @@ function setupWizardForEditing(userId: string, storageContextId: string, key: Co
   updateWizardSession(userId, storageContextId, {
     currentStep: stepIndex,
     data: existingSession?.data ?? {},
+    // Exit after editing this one field
+    singleStep: true,
   })
 
   const steps = getWizardSteps(TASK_PROVIDER)
