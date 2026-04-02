@@ -46,8 +46,21 @@ export function registerAdminCommands(chat: ChatProvider, adminUserId: string): 
     await handleUsersCommand(reply, msg.user.id, adminUserId)
   }
 
+  const announceHandler: CommandHandler = async (msg, reply) => {
+    if (msg.contextType === 'group') {
+      await reply.text('This command is only available in direct messages.')
+      return
+    }
+    if (!checkAdmin(msg.user.id)) {
+      await reply.text('Only the admin can send announcements.')
+      return
+    }
+    await handleAnnounce(chat, reply, msg)
+  }
+
   chat.registerCommand('user', userHandler)
   chat.registerCommand('users', usersHandler)
+  chat.registerCommand('announce', announceHandler)
 }
 
 async function handleUserCommand(
@@ -146,4 +159,36 @@ async function handleUserRemove(
   removeUser(parsed.value)
   log.info({ adminId, identifier: parsed.value }, '/user remove command executed')
   await reply.text(`User ${identifier} removed.`)
+}
+
+async function handleAnnounce(chat: ChatProvider, reply: ReplyFn, msg: IncomingMessage): Promise<void> {
+  const message = (msg.commandMatch ?? '').trim()
+  if (message === '') {
+    await reply.text('Usage: /announce <message>')
+    return
+  }
+
+  const users = listUsers()
+  if (users.length === 0) {
+    await reply.text('No authorized users to announce to.')
+    return
+  }
+
+  const results = await Promise.allSettled(
+    users.map(async (user) => {
+      await chat.sendMessage(user.platform_user_id, message)
+      return true
+    }),
+  )
+
+  const successCount = results.filter((r) => r.status === 'fulfilled').length
+  const failCount = results.filter((r) => r.status === 'rejected').length
+
+  log.info({ userId: msg.user.id, successCount, failCount, totalUsers: users.length }, '/announce command executed')
+
+  if (failCount === 0) {
+    await reply.text(`Announcement sent to ${successCount} user(s).`)
+  } else {
+    await reply.text(`Announcement sent to ${successCount} user(s). Failed to deliver to ${failCount} user(s).`)
+  }
 }

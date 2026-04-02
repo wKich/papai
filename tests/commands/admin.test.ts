@@ -6,6 +6,7 @@ import * as schema from '../../src/db/schema.js'
 import { addUser, isAuthorized, listUsers } from '../../src/users.js'
 import {
   createDmMessage,
+  createGroupMessage,
   createMockReply,
   getTestDb,
   mockDrizzle,
@@ -287,6 +288,137 @@ describe('Admin Commands', () => {
         storageContextId: 'other-user',
       })
       expect(getReplies()[0]).toBe('Only the admin can list users.')
+    })
+  })
+
+  describe('/announce', () => {
+    test('sends announcement to all registered users', async () => {
+      addUser('user-a', ADMIN_ID)
+      addUser('user-b', ADMIN_ID)
+      const sentMessages: Array<{ userId: string; markdown: string }> = []
+      const mockChat: ChatProvider = {
+        name: 'mock',
+        registerCommand: (): void => {},
+        onMessage: (): void => {},
+        sendMessage: (userId: string, markdown: string): Promise<void> => {
+          sentMessages.push({ userId, markdown })
+          return Promise.resolve()
+        },
+        start: (): Promise<void> => Promise.resolve(),
+        stop: (): Promise<void> => Promise.resolve(),
+      }
+      // Re-register to capture the announce handler with the sendMessage-tracking mock
+      const handlers = new Map<string, CommandHandler>()
+      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
+        handlers.set(name, handler)
+      }
+      registerAdminCommands(mockChat, ADMIN_ID)
+      const handler = handlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, 'Hello everyone!'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      // Should send to all users (admin + user-a + user-b)
+      expect(sentMessages.length).toBe(3)
+      expect(sentMessages.every((m) => m.markdown.includes('Hello everyone!'))).toBe(true)
+      // Should confirm to admin
+      expect(getReplies()[0]).toContain('3')
+    })
+
+    test('rejects non-admin caller', async () => {
+      addUser('other-user', ADMIN_ID)
+      const handler = commandHandlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage('other-user', 'Hello'), reply, {
+        allowed: true,
+        isBotAdmin: false,
+        isGroupAdmin: false,
+        storageContextId: 'other-user',
+      })
+      expect(getReplies()[0]).toBe('Only the admin can send announcements.')
+    })
+
+    test('rejects in group context', async () => {
+      const handler = commandHandlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createGroupMessage(ADMIN_ID, 'Hello', false, 'group-1'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: 'group-1',
+      })
+      expect(getReplies()[0]).toBe('This command is only available in direct messages.')
+    })
+
+    test('shows usage when message is empty', async () => {
+      const handler = commandHandlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, ''), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      expect(getReplies()[0]).toContain('Usage:')
+    })
+
+    test('handles send failures gracefully', async () => {
+      addUser('user-a', ADMIN_ID)
+      addUser('user-b', ADMIN_ID)
+      const sentMessages: string[] = []
+      const mockChat: ChatProvider = {
+        name: 'mock',
+        registerCommand: (): void => {},
+        onMessage: (): void => {},
+        sendMessage: (userId: string): Promise<void> => {
+          if (userId === 'user-a') {
+            return Promise.reject(new Error('User blocked bot'))
+          }
+          sentMessages.push(userId)
+          return Promise.resolve()
+        },
+        start: (): Promise<void> => Promise.resolve(),
+        stop: (): Promise<void> => Promise.resolve(),
+      }
+      const handlers = new Map<string, CommandHandler>()
+      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
+        handlers.set(name, handler)
+      }
+      registerAdminCommands(mockChat, ADMIN_ID)
+      const handler = handlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, 'Important update'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      // Should report partial success (2 out of 3 sent - admin + user-b, user-a failed)
+      const replyText = getReplies()[0]
+      expect(replyText).toContain('2')
+      expect(replyText).toContain('1')
+    })
+
+    test('reports when no users exist', async () => {
+      getTestDb().delete(schema.users).run()
+      const handler = commandHandlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, 'Hello'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      expect(getReplies()[0]).toContain('No authorized users')
     })
   })
 })
