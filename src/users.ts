@@ -87,6 +87,13 @@ export function listUsers(): UserRecord[] {
     .all()
 }
 
+export function isDemoUser(userId: string): boolean {
+  log.debug({ userId }, 'isDemoUser called')
+  const db = getDrizzleDb()
+  const row = db.select({ addedBy: users.addedBy }).from(users).where(eq(users.platformUserId, userId)).get()
+  return row?.addedBy === 'demo-auto'
+}
+
 export function getKaneoWorkspace(userId: string): string | null {
   log.debug('getKaneoWorkspace called')
   return getCachedWorkspace(userId)

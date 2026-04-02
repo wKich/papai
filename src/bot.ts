@@ -15,7 +15,7 @@ import { isGroupMember } from './groups.js'
 import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
-import { isAuthorized, resolveUserByUsername } from './users.js'
+import { addUser, isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { createWizard, hasActiveWizard, processWizardMessage } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
 
@@ -78,7 +78,16 @@ export const checkAuthorizationExtended = (
 ): AuthorizationResult => {
   log.debug({ userId, contextId, contextType }, 'Checking authorization')
 
+  if (process.env['DEMO_MODE'] === 'true' && !isAuthorized(userId) && contextType === 'dm') {
+    log.info({ userId, username }, 'Demo mode: auto-adding user')
+    addUser(userId, 'demo-auto', username ?? undefined)
+    return getGroupMemberAuth(userId, false)
+  }
+
   if (isAuthorized(userId)) {
+    if (contextType === 'dm' && isDemoUser(userId)) {
+      return getGroupMemberAuth(userId, false)
+    }
     return getBotAdminAuth(userId, contextId, contextType, isPlatformAdmin)
   }
 

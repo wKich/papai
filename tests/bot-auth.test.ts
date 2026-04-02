@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
+import { mock, describe, expect, test, beforeEach, afterAll, afterEach } from 'bun:test'
 
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
@@ -14,7 +14,7 @@ void mock.module('../src/db/drizzle.js', () => ({
 
 import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
-import { addUser } from '../src/users.js'
+import { addUser, isAuthorized } from '../src/users.js'
 
 describe('Authorization Logic', () => {
   beforeEach(async () => {
@@ -132,6 +132,71 @@ describe('Authorization Logic', () => {
         storageContextId: 'group-1',
       })
     })
+  })
+})
+
+describe('Demo Mode Auto-Provision', () => {
+  const DEMO_USER_ID = 'demo-user-1'
+  const DEMO_USERNAME = 'demouser'
+
+  beforeEach(async () => {
+    testDb = await setupTestDb()
+  })
+
+  afterEach(() => {
+    delete process.env['DEMO_MODE']
+  })
+
+  test('demo mode: unknown DM user is auto-added with non-admin auth', () => {
+    process.env['DEMO_MODE'] = 'true'
+    const result = checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
+    expect(result).toEqual({
+      allowed: true,
+      isBotAdmin: false,
+      isGroupAdmin: false,
+      storageContextId: DEMO_USER_ID,
+    })
+    expect(isAuthorized(DEMO_USER_ID)).toBe(true)
+  })
+
+  test('demo mode: demo user stays non-admin on subsequent messages', () => {
+    process.env['DEMO_MODE'] = 'true'
+    // First message — auto-add
+    checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
+    // Second message — user already authorized
+    const result = checkAuthorizationExtended(DEMO_USER_ID, DEMO_USERNAME, DEMO_USER_ID, 'dm', false)
+    expect(result).toEqual({
+      allowed: true,
+      isBotAdmin: false,
+      isGroupAdmin: false,
+      storageContextId: DEMO_USER_ID,
+    })
+  })
+
+  test('demo mode: unknown DM user without username is auto-added', () => {
+    process.env['DEMO_MODE'] = 'true'
+    const result = checkAuthorizationExtended(DEMO_USER_ID, null, DEMO_USER_ID, 'dm', false)
+    expect(result.allowed).toBe(true)
+    expect(result.isBotAdmin).toBe(false)
+    expect(isAuthorized(DEMO_USER_ID)).toBe(true)
+  })
+
+  test('demo mode: manually-added user retains bot admin auth', () => {
+    process.env['DEMO_MODE'] = 'true'
+    addUser('manual-user', 'admin', 'manualuser')
+    const result = checkAuthorizationExtended('manual-user', 'manualuser', 'manual-user', 'dm', false)
+    expect(result.isBotAdmin).toBe(true)
+  })
+
+  test('demo mode: group messages from unknown users are NOT auto-added', () => {
+    process.env['DEMO_MODE'] = 'true'
+    const result = checkAuthorizationExtended('stranger-1', null, 'group-1', 'group', false)
+    expect(result.allowed).toBe(false)
+  })
+
+  test('demo mode off: unknown DM user is NOT auto-added', () => {
+    const result = checkAuthorizationExtended('stranger-1', 'stranger', 'stranger-1', 'dm', false)
+    expect(result.allowed).toBe(false)
   })
 })
 
