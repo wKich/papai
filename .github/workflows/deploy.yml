@@ -95,6 +95,7 @@ jobs:
           DEBUG_SERVER: ${{ vars.DEBUG_SERVER || 'false' }}
           DEBUG_TOKEN: ${{ secrets.DEBUG_TOKEN }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
+          DEMO_MODE: ${{ vars.DEMO_MODE || 'false' }}
           CADDY_ADDITIONAL_CONFIG: ${{ vars.CADDY_ADDITIONAL_CONFIG }}
         run: |
           mkdir -p ~/.ssh
@@ -127,6 +128,7 @@ jobs:
             [ "${DEBUG_SERVER}" = "true" ] && printf 'DEBUG_HOSTNAME=0.0.0.0\n'
             [ -n "${DEBUG_TOKEN}" ] && printf 'DEBUG_TOKEN=%s\n' "${DEBUG_TOKEN}"
             printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL}"
+            [ "${DEMO_MODE}" = "true" ] && printf 'DEMO_MODE=true\n'
           } > .env
           chmod 600 .env
 
