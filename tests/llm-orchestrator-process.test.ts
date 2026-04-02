@@ -74,15 +74,11 @@ void mock.module('@ai-sdk/openai-compatible', () => ({
       'mock-model',
 }))
 
-afterAll(() => {
-  mock.restore()
-})
-
 // ---------------------------------------------------------------------------
 // Real module imports (after mocks are registered)
 // ---------------------------------------------------------------------------
 
-import { setCachedConfig } from '../src/cache.js'
+import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { processMessage } from '../src/llm-orchestrator.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
@@ -103,6 +99,9 @@ const seedConfigForContext = (ctxId: string): void => {
 
 const seedConfig = (): void => seedConfigForContext(CTX_ID)
 
+const originalDemoMode = process.env['DEMO_MODE']
+const originalAdminUserId = process.env['ADMIN_USER_ID']
+
 beforeEach(async () => {
   await setupTestDb()
   const { Database } = await import('bun:sqlite')
@@ -113,6 +112,19 @@ beforeEach(async () => {
 
   generateTextImpl = defaultGenerateTextResult
   seedConfig()
+
+  // Reset demo mode env vars
+  delete process.env['DEMO_MODE']
+  delete process.env['ADMIN_USER_ID']
+})
+
+afterAll(() => {
+  mock.restore()
+  // Restore original env vars
+  if (originalDemoMode === undefined) delete process.env['DEMO_MODE']
+  else process.env['DEMO_MODE'] = originalDemoMode
+  if (originalAdminUserId === undefined) delete process.env['ADMIN_USER_ID']
+  else process.env['ADMIN_USER_ID'] = originalAdminUserId
 })
 
 // ---------------------------------------------------------------------------
@@ -263,5 +275,46 @@ describe('processMessage — success path history', () => {
     expect(history[0]!.content).toBe('hello')
     expect(history[1]!.role).toBe('assistant')
     expect(history[1]!.content).toBe('Hi!')
+  })
+})
+
+describe('processMessage — demo mode LLM config copy', () => {
+  const ADMIN_CTX = 'admin-ctx'
+  const DEMO_CTX = 'demo-ctx'
+
+  test('copies admin LLM config to demo user after Kaneo provisioning', async () => {
+    process.env['DEMO_MODE'] = 'true'
+    process.env['ADMIN_USER_ID'] = ADMIN_CTX
+
+    // Seed admin with full LLM config
+    seedConfigForContext(ADMIN_CTX)
+
+    // Demo user has only kaneo_apikey + workspace (no LLM keys)
+    setCachedConfig(DEMO_CTX, 'kaneo_apikey', 'demo-kaneo-key')
+    setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
+
+    const { reply } = createMockReply()
+    await processMessage(reply, DEMO_CTX, null, 'hello')
+
+    // Verify admin's LLM config was copied
+    expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBe('test-key')
+    expect(getCachedConfig(DEMO_CTX, 'llm_baseurl')).toBe('http://localhost:11434')
+    expect(getCachedConfig(DEMO_CTX, 'main_model')).toBe('test-model')
+  })
+
+  test('does not copy config when DEMO_MODE is off', async () => {
+    // Seed admin with full LLM config
+    seedConfigForContext(ADMIN_CTX)
+    process.env['ADMIN_USER_ID'] = ADMIN_CTX
+
+    // Demo user has only kaneo_apikey + workspace
+    setCachedConfig(DEMO_CTX, 'kaneo_apikey', 'demo-kaneo-key')
+    setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
+
+    const { reply } = createMockReply()
+    await processMessage(reply, DEMO_CTX, null, 'hello')
+
+    // LLM config should NOT be copied
+    expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBeNull()
   })
 })

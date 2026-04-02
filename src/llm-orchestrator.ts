@@ -4,7 +4,7 @@ import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
-import { getConfig } from './config.js'
+import { copyAdminLlmConfig, getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
@@ -48,9 +48,23 @@ const persistFactsFromResults = (
 }
 
 const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: string | null): Promise<void> => {
-  if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) return
+  if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) {
+    if (process.env['DEMO_MODE'] === 'true') {
+      const adminUserId = process.env['ADMIN_USER_ID']
+      if (adminUserId !== undefined && adminUserId !== '') {
+        copyAdminLlmConfig(contextId, adminUserId)
+      }
+    }
+    return
+  }
   const outcome = await provisionAndConfigure(contextId, username)
   if (outcome.status === 'provisioned') {
+    if (process.env['DEMO_MODE'] === 'true') {
+      const adminUserId = process.env['ADMIN_USER_ID']
+      if (adminUserId !== undefined && adminUserId !== '') {
+        copyAdminLlmConfig(contextId, adminUserId)
+      }
+    }
     await reply.text(
       `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
     )
