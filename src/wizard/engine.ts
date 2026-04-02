@@ -2,7 +2,7 @@
  * Wizard engine - core orchestration for interactive configuration setup
  */
 
-import { getAllConfig } from '../config.js'
+import { getAllConfig, maskValue } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 
@@ -67,10 +67,7 @@ export function getNextPrompt(userId: string, storageContextId: string): string 
   // Check if there's an existing value for this step
   const existingValue = session.data[step.key]
   if (existingValue !== undefined && existingValue !== '') {
-    const maskedValue =
-      step.key.includes('apikey') || step.key.includes('token')
-        ? `${existingValue.slice(0, 4)}...${existingValue.slice(-4)}`
-        : existingValue
+    const maskedValue = maskValue(step.key, existingValue)
     return `${step.prompt}\n\n💡 Current value: ${maskedValue} (type new value to change, or "skip" to keep)`
   }
 
@@ -200,10 +197,7 @@ export function createWizard(
   const existingValue = initialData[firstStep.key]
   let prompt = firstStep.prompt
   if (existingValue !== undefined && existingValue !== '') {
-    const maskedValue =
-      firstStep.key.includes('apikey') || firstStep.key.includes('token')
-        ? `${existingValue.slice(0, 4)}...${existingValue.slice(-4)}`
-        : existingValue
+    const maskedValue = maskValue(firstStep.key, existingValue)
     prompt = `${firstStep.prompt}\n\n💡 Current value: ${maskedValue} (type new value to change, or "skip" to keep)`
   }
 

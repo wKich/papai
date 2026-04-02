@@ -5,30 +5,19 @@
 import { describe, expect, test, beforeEach, afterAll } from 'bun:test'
 import { mock } from 'bun:test'
 
-// Mock logger before importing state module
+// Import and setup logger mock before any src/ imports
+import { createTrackedLoggerMock } from '../utils/logger-mock.js'
+
+const { logger, getLogLevel } = createTrackedLoggerMock()
+
 void mock.module('../../src/logger.js', () => ({
-  logger: {
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
+  getLogLevel,
+  logger,
 }))
 
-// Import state module after mocking
-import {
-  createWizardSession,
-  getWizardSession,
-  hasActiveWizard,
-  updateWizardSession,
-  deleteWizardSession,
-} from '../../src/wizard/state.js'
+// Import state module after mocking (dynamic import)
+const { createWizardSession, getWizardSession, hasActiveWizard, updateWizardSession, deleteWizardSession } =
+  await import('../../src/wizard/state.js')
 
 afterAll(() => {
   mock.restore()

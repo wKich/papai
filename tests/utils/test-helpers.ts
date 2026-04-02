@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { mock, type Mock } from 'bun:test'
+import { mock } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
@@ -32,7 +32,6 @@ import { migration018Memos } from '../../src/db/migrations/018_memos.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
-import { getLogLevel } from '../../src/logger.js'
 
 // Static list of all migrations to avoid dynamic imports with type assertions
 const ALL_MIGRATIONS: readonly Migration[] = [
@@ -165,45 +164,14 @@ export function mockDrizzle(): void {
   }))
 }
 
-// ============================================================================
-// LOGGER MOCK
-// ============================================================================
-
-/**
- * Create a complete logger mock with all methods.
- * Use with: void mock.module('../../src/logger.js', () => ({ logger: createLoggerMock() }))
- */
-export function createLoggerMock(): {
-  debug: Mock<() => void>
-  info: Mock<() => void>
-  warn: Mock<() => void>
-  error: Mock<() => void>
-  child: Mock<() => { debug: () => void; info: () => void; warn: () => void; error: () => void }>
-} {
-  return {
-    debug: mock(() => {}),
-    info: mock(() => {}),
-    warn: mock(() => {}),
-    error: mock(() => {}),
-    child: mock((): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    })),
-  }
-}
-
-/**
- * Setup logger mock globally for tests.
- * Call this at the top of test files before importing modules that use logger.
- */
-export function mockLogger(): void {
-  void mock.module('../../src/logger.js', () => ({
-    getLogLevel,
-    logger: createLoggerMock(),
-  }))
-}
+// Re-export logger mocks from dedicated file (no src/ imports to avoid mock timing issues)
+export {
+  createLoggerMock,
+  createTrackedLoggerMock,
+  mockLogger,
+  type LogCall,
+  type TrackedLoggerMock,
+} from './logger-mock.js'
 
 // ============================================================================
 // REPLY MOCK FACTORIES

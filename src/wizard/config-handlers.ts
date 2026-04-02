@@ -1,12 +1,18 @@
-import type { Context } from 'grammy'
-
-import { getConfig, isConfigKey } from '../config.js'
+import { getConfig, isConfigKey, maskValue } from '../config.js'
 import type { ConfigKey } from '../types/config.js'
 import { createWizard, cancelWizard } from './engine.js'
 import { getWizardSession, updateWizardSession } from './state.js'
 import { getWizardSteps } from './steps.js'
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
+
+export interface ConfigCallbackContext {
+  from?: { id?: number | string }
+  chat?: { id?: number | string }
+  callbackQuery?: { data?: string }
+  answerCallbackQuery: () => Promise<unknown>
+  editMessageText: (text: string) => Promise<unknown>
+}
 
 function extractConfigKey(data: string): ConfigKey | null {
   const key = data.replace('config_edit_', '')
@@ -15,7 +21,10 @@ function extractConfigKey(data: string): ConfigKey | null {
 
 function getDisplayValue(storageContextId: string, key: ConfigKey): string {
   const currentValue = getConfig(storageContextId, key)
-  return currentValue ?? '(not set)'
+  if (currentValue === null) {
+    return '(not set)'
+  }
+  return maskValue(key, currentValue)
 }
 
 function findStepIndex(key: ConfigKey): number {
@@ -44,7 +53,7 @@ function setupWizardForEditing(userId: string, storageContextId: string, key: Co
 /**
  * Handle configuration edit callbacks from inline buttons
  */
-export async function handleConfigCallback(ctx: Context): Promise<void> {
+export async function handleConfigCallback(ctx: ConfigCallbackContext): Promise<void> {
   const userId = String(ctx.from?.id ?? '')
   const storageContextId = String(ctx.chat?.id ?? userId)
   const data = ctx.callbackQuery?.data ?? ''

@@ -5,36 +5,25 @@
 import { afterEach, beforeEach, describe, expect, test, afterAll } from 'bun:test'
 import { mock } from 'bun:test'
 
-// Import config to verify values were stored
-import { getConfig } from '../../src/config.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+// Import logger mock from dedicated file (no src/ imports)
+import { mockLogger } from '../utils/logger-mock.js'
+
+// Setup logger mock BEFORE any src/ imports
+mockLogger()
+
+// Import other test helpers
 import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
-// Setup mocks
 mockDrizzle()
 
-// Mock logger implementation with explicit return types
-void mock.module('../../src/logger.js', () => ({
-  logger: {
-    debug: (): void => {},
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    child: (): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    }),
-  },
-}))
+// Import from src/ AFTER logger mock is registered
+import { getConfig } from '../../src/config.js'
+import { restoreFetch, setMockFetch } from '../test-helpers.js'
 
-// Note: Not mocking config.js - using real implementation to avoid test pollution
-
-// Import after mocking
-import { createWizard, advanceStep, processWizardMessage } from '../../src/wizard/engine.js'
-import { validateAndSaveWizardConfig } from '../../src/wizard/save.js'
-import { hasActiveWizard, deleteWizardSession } from '../../src/wizard/state.js'
+// Dynamic imports to ensure mock is applied before module loading
+const { createWizard, advanceStep, processWizardMessage } = await import('../../src/wizard/engine.js')
+const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
+const { hasActiveWizard, deleteWizardSession } = await import('../../src/wizard/state.js')
 
 afterAll(() => {
   mock.restore()
