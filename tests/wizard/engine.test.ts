@@ -554,6 +554,39 @@ describe('Wizard engine singleStep mode', () => {
     expect(result.prompt).toContain('Configuration Summary')
   })
 
+  test('allows yes/confirm after single-step completion', async () => {
+    const { updateWizardSession } = await import('../../src/wizard/state.js')
+
+    // Mock fetch for LLM validation
+    setMockFetch(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: [{ id: 'gpt-4' }, { id: 'gpt-3.5' }] }), { status: 200 })),
+    )
+
+    // Pre-set config so validation passes
+    setConfig(storageContextId, 'llm_apikey', 'sk-test12345')
+    setConfig(storageContextId, 'llm_baseurl', 'https://api.openai.com/v1')
+    setConfig(storageContextId, 'main_model', 'gpt-4')
+    setConfig(storageContextId, 'kaneo_apikey', 'kaneo-key')
+    setConfig(storageContextId, 'timezone', 'UTC')
+
+    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+
+    // Set singleStep mode for small_model (step 3)
+    updateWizardSession(userId, storageContextId, {
+      currentStep: 3,
+      singleStep: true,
+    })
+
+    // Enter value — should show summary
+    const stepResult = await processWizardMessage(userId, storageContextId, 'gpt-3.5')
+    expect(stepResult.response).toContain('Configuration Summary')
+
+    // Now type "yes" — should save config, not treat "yes" as a step value
+    const confirmResult = await processWizardMessage(userId, storageContextId, 'yes')
+    expect(confirmResult.handled).toBe(true)
+    expect(confirmResult.response).toContain('Configuration saved successfully')
+  })
+
   test('keeps existing value when typing "skip" with existing config', async () => {
     // Pre-set an existing config value
     setConfig(storageContextId, 'kaneo_apikey', 'existing-kaneo-key')
