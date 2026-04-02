@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
 import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -142,6 +142,47 @@ describe('Bot Authorization Gate', () => {
       expect(processMessageCallCount).toBe(1)
       expect(textCalls).toHaveLength(0)
     })
+  })
+})
+
+describe('Demo Mode — wizard bypass', () => {
+  let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+
+  beforeEach(async () => {
+    await setupTestDb()
+    processMessageCallCount = 0
+    lastProcessedStorageId = null
+    messageHandler = null
+
+    const mockChat: ChatProvider = {
+      name: 'mock',
+      registerCommand: (): void => {},
+      onMessage: (handler): void => {
+        messageHandler = handler
+      },
+      sendMessage: (): Promise<void> => Promise.resolve(),
+      start: (): Promise<void> => Promise.resolve(),
+      stop: (): Promise<void> => Promise.resolve(),
+    }
+
+    setupBot(mockChat, ADMIN_ID)
+  })
+
+  afterEach(() => {
+    delete process.env['DEMO_MODE']
+  })
+
+  test('demo user message reaches processMessage instead of wizard', async () => {
+    process.env['DEMO_MODE'] = 'true'
+    // Add as demo user (no config — normally triggers wizard)
+    addUser('demo-bypass-1', 'demo-auto', 'demouser')
+
+    const { reply } = createMockReply()
+    await messageHandler!(createDmMessage('demo-bypass-1', 'hello', 'demouser'), reply)
+
+    // Should reach processMessage, not be intercepted by wizard
+    expect(processMessageCallCount).toBe(1)
+    expect(lastProcessedStorageId).toBe('demo-bypass-1')
   })
 })
 

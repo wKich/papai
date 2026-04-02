@@ -134,12 +134,11 @@ async function autoStartWizardIfNeeded(
   platform: 'telegram' | 'mattermost',
   reply: ReplyFn,
 ): Promise<boolean> {
-  // Don't auto-start if wizard is already active
-  if (hasActiveWizard(userId, storageContextId)) {
-    return false
-  }
+  if (hasActiveWizard(userId, storageContextId)) return false
 
-  // Auto-start the wizard
+  // Demo users get config from admin via maybeProvisionKaneo — skip wizard
+  if (process.env['DEMO_MODE'] === 'true' && isDemoUser(userId)) return false
+
   const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
 
   // Don't auto-start if user already has config
