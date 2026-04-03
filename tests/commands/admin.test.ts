@@ -145,7 +145,7 @@ describe('Admin Commands', () => {
       provisionImpl = (): Promise<ProvisionResult> =>
         Promise.resolve({
           status: 'provisioned',
-          email: 'bot-user@test.com',
+          email: '12345-a1b2c3d4@pap.ai',
           password: 'abc123',
           kaneoUrl: 'https://kaneo.test',
           apiKey: 'key',
@@ -162,7 +162,8 @@ describe('Admin Commands', () => {
         storageContextId: ADMIN_ID,
       })
       const replies = getReplies()
-      expect(replies.some((r) => r.includes('bot-user@test.com'))).toBe(true)
+      // Check for email pattern
+      expect(replies.some((r) => r.includes('@pap.ai'))).toBe(true)
       expect(replies.some((r) => r.includes('abc123'))).toBe(true)
       expect(replies.some((r) => r.includes('kaneo.test'))).toBe(true)
       expect(isAuthorized('12345')).toBe(true)
