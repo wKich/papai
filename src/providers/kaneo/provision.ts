@@ -107,7 +107,7 @@ async function doCreateApiKey(baseUrl: string, trustedOrigin: string, sessionCoo
  * signs up, creates a workspace, and generates an API key (falling back to
  * the session token if the API key endpoint is unavailable).
  */
-async function provisionKaneoUser(
+export async function provisionKaneoUser(
   /** Internal API base URL (e.g. http://kaneo-api:1337) */
   baseUrl: string,
   /** Public-facing web client URL — used as the trusted Origin for all auth requests. */
@@ -115,10 +115,11 @@ async function provisionKaneoUser(
   platformUserId: string,
   username: string | null,
 ): Promise<ProvisionResult> {
-  const email = username === null ? `${platformUserId}@pap.ai` : `${username}@pap.ai`
+  const uniqueSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const email = username === null ? `${platformUserId}-${uniqueSuffix}@pap.ai` : `${username}-${uniqueSuffix}@pap.ai`
   const password = generatePassword()
   const name = username === null ? `User ${platformUserId}` : `@${username}`
-  const slug = `papai-${platformUserId}`
+  const slug = `papai-${platformUserId}-${uniqueSuffix}`
 
   log.info({ platformUserId, email }, 'Provisioning Kaneo user account')
   const trustedOrigin = publicUrl === '' ? baseUrl : publicUrl
