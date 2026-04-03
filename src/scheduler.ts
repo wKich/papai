@@ -178,7 +178,7 @@ export const createMissedTasks = async (recurringTaskId: string, missedDates: re
     }
   }
 
-  const results = await missedDates.reduce<Promise<number>>(
+  const results = await missedDates.reduce(
     (chain, dueDate) => chain.then(async (count) => ((await createOne(dueDate)) ? count + 1 : count)),
     Promise.resolve(0),
   )
@@ -207,10 +207,7 @@ export const tick = (): Promise<void> => {
 
       log.info({ count: dueTasks.length, tickCount }, 'Processing due recurring tasks')
 
-      await dueTasks.reduce<Promise<void>>(
-        (chain, task) => chain.then(() => executeRecurringTask(task)),
-        Promise.resolve(),
-      )
+      await dueTasks.reduce((chain, task) => chain.then(() => executeRecurringTask(task)), Promise.resolve())
     } catch (error) {
       log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
     }

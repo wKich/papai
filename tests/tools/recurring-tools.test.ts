@@ -254,7 +254,7 @@ describe('makeCreateRecurringTaskTool', () => {
   })
 
   test('re-throws when createRecurringTask throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('create failed')
     }
     const tool = makeCreateRecurringTaskTool('user-1')
@@ -727,7 +727,7 @@ describe('Tool descriptions', () => {
 
 describe('Error handling — tools re-throw errors', () => {
   test('delete tool re-throws when deleteRecurringTask throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makeDeleteRecurringTaskTool()
@@ -742,7 +742,7 @@ describe('Error handling — tools re-throw errors', () => {
   })
 
   test('update tool re-throws when updateRecurringTask throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makeUpdateRecurringTaskTool()
@@ -757,7 +757,7 @@ describe('Error handling — tools re-throw errors', () => {
   })
 
   test('resume tool re-throws when resumeRecurringTask throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makeResumeRecurringTaskTool()
@@ -772,7 +772,7 @@ describe('Error handling — tools re-throw errors', () => {
   })
 
   test('pause tool re-throws when pauseRecurringTask throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makePauseRecurringTaskTool()
@@ -787,7 +787,7 @@ describe('Error handling — tools re-throw errors', () => {
   })
 
   test('skip tool re-throws when skipNextOccurrence throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makeSkipRecurringTaskTool()
@@ -802,7 +802,7 @@ describe('Error handling — tools re-throw errors', () => {
   })
 
   test('list tool re-throws when listRecurringTasks throws', async () => {
-    onMockCall = () => {
+    onMockCall = (): never => {
       throw new Error('DB failure')
     }
     const tool = makeListRecurringTasksTool('user-1')
