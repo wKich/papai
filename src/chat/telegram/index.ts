@@ -4,7 +4,6 @@ import { Bot, type Context } from 'grammy'
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
 import { buildReplyContextChain } from '../../reply-context.js'
-import { handleConfigCallback } from '../../wizard/config-handlers.js'
 import { handleWizardCallback } from '../../wizard/telegram-handlers.js'
 import type {
   AuthorizationResult,
@@ -16,6 +15,7 @@ import type {
   ReplyFn,
   ReplyOptions,
 } from '../types.js'
+import { handleConfigEditorCallback } from './config-editor-callbacks.js'
 import { formatLlmOutput } from './format.js'
 import {
   createReplyParamsBuilder,
@@ -115,10 +115,10 @@ export class TelegramChatProvider implements ChatProvider {
 
   start(): Promise<void> {
     this.bot.on('callback_query:data', async (ctx) => {
-      // Handle config edit callbacks
-      if (ctx.callbackQuery.data?.startsWith('config_edit_')) {
-        await handleConfigCallback(ctx)
-        return
+      // Handle config editor callbacks (new button-based editor)
+      if (ctx.callbackQuery.data?.startsWith('cfg:')) {
+        const handled = await handleConfigEditorCallback(ctx)
+        if (handled) return
       }
       // Handle wizard callbacks
       await handleWizardCallback(ctx)

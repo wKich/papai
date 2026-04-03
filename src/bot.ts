@@ -1,3 +1,4 @@
+import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
 import type { AuthorizationResult, ChatProvider, ContextType, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
   registerAdminCommands,
@@ -16,7 +17,8 @@ import { processMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
 import { addUser, isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
-import { createWizard, hasActiveWizard, processWizardMessage } from './wizard/index.js'
+import { handleWizardMessage } from './wizard-integration.js'
+import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
 
 const log = logger.child({ scope: 'bot' })
@@ -156,48 +158,6 @@ async function autoStartWizardIfNeeded(
   return false
 }
 
-async function handleWizardMessage(
-  userId: string,
-  storageContextId: string,
-  text: string,
-  reply: ReplyFn,
-  platform: string,
-): Promise<boolean> {
-  if (!hasActiveWizard(userId, storageContextId)) {
-    return false
-  }
-
-  const wizardResult = await processWizardMessage(userId, storageContextId, text)
-
-  if (wizardResult.handled) {
-    // Only show buttons on Telegram (Mattermost buttons don't work due to missing webhook handler)
-    const buttons = wizardResult.buttons
-    const shouldShowButtons = platform === 'telegram' && buttons !== undefined && buttons.length > 0
-    if (shouldShowButtons && buttons !== undefined) {
-      // Send message with buttons
-      const chatButtons: import('./chat/types.js').ChatButton[] = buttons.map((btn) => {
-        let style: 'primary' | 'secondary' | 'danger' = 'primary'
-        if (btn.action === 'cancel') {
-          style = 'danger'
-        } else if (btn.action === 'skip_small_model' || btn.action === 'skip_embedding') {
-          style = 'secondary'
-        }
-        return {
-          text: btn.text,
-          callbackData: `wizard_${btn.action}`,
-          style,
-        }
-      })
-      await reply.buttons(wizardResult.response ?? '', { buttons: chatButtons })
-    } else if (wizardResult.response !== undefined && wizardResult.response !== '') {
-      await reply.text(wizardResult.response)
-    }
-    return true
-  }
-
-  return false
-}
-
 async function handleMessage(msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult): Promise<void> {
   // Check authorization
   if (!auth.allowed) {
@@ -235,6 +195,13 @@ async function maybeInterceptWizard(
   if (!isCommand && auth.allowed) {
     const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
     if (wasWizardAutoStarted) return true
+  }
+
+  // CONFIG EDITOR INTERCEPTION - Check before wizard
+  // If user is editing a config field via button UI, handle their input
+  if (!isCommand) {
+    const wasEditorHandled = await handleConfigEditorMessage(msg.user.id, auth.storageContextId, msg.text, reply)
+    if (wasEditorHandled) return true
   }
 
   // Use auth.storageContextId (not msg.contextId) for wizard lookup

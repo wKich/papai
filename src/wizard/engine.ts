@@ -147,17 +147,6 @@ function completeStep(
     dataUpdate[currentStep.key] = normalizedValue
   }
 
-  // Check if this is single-step mode (editing one field from /config)
-  if (session.singleStep === true) {
-    // Save the value and mark session complete so yes/confirm works
-    updateWizardSession(userId, storageContextId, {
-      currentStep: session.totalSteps,
-      data: dataUpdate,
-    })
-    log.info({ userId, storageContextId, key: currentStep.key }, 'Single step edit completed')
-    return { success: true, prompt: showSummary(userId, storageContextId), complete: true }
-  }
-
   updateWizardSession(userId, storageContextId, {
     currentStep: session.currentStep + 1,
     data: dataUpdate,

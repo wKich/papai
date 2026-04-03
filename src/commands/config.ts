@@ -67,14 +67,14 @@ export function registerConfigCommand(
     // Create buttons for each config field
     const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
       text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
-      callbackData: `config_edit_${key}`,
+      callbackData: `cfg:edit:${key}`,
       style: config[key] === undefined ? 'secondary' : 'primary',
     }))
 
     // Add full setup button at the end
     buttons.push({
       text: '🔄 Full Setup',
-      callbackData: 'wizard_restart',
+      callbackData: 'cfg:setup',
       style: 'primary',
     })
 

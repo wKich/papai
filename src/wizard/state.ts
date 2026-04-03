@@ -28,7 +28,6 @@ export interface WizardSessionUpdate {
   readonly currentStep?: number
   readonly data?: Partial<WizardData>
   readonly skippedSteps?: number[]
-  readonly singleStep?: boolean
 }
 
 // In-memory Map for active sessions
@@ -114,7 +113,7 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
     throw new Error('Session not found')
   }
 
-  const { currentStep, data, skippedSteps, singleStep } = update
+  const { currentStep, data, skippedSteps } = update
 
   if (currentStep !== undefined) {
     session.currentStep = currentStep
@@ -126,10 +125,6 @@ export const updateWizardSession = (userId: string, storageContextId: string, up
 
   if (skippedSteps !== undefined) {
     session.skippedSteps = [...session.skippedSteps, ...skippedSteps]
-  }
-
-  if (singleStep !== undefined) {
-    session.singleStep = singleStep
   }
 
   emit('wizard:updated', { userId, storageContextId, currentStep: session.currentStep })

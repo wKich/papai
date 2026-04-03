@@ -34,3 +34,22 @@ function getConfigKeysForProvider(provider: string): readonly ConfigKey[] {
 
 // Config keys available for the current task provider (user-visible only)
 export const CONFIG_KEYS: readonly ConfigKey[] = getConfigKeysForProvider(TASK_PROVIDER)
+
+// All valid config keys (not filtered by provider)
+const ALL_CONFIG_KEYS: readonly ConfigKey[] = [
+  'llm_apikey',
+  'llm_baseurl',
+  'main_model',
+  'small_model',
+  'embedding_model',
+  'kaneo_apikey',
+  'youtrack_token',
+  'timezone',
+]
+
+/**
+ * Check if a string is a valid ConfigKey
+ */
+export function isConfigKey(key: string): key is ConfigKey {
+  return (ALL_CONFIG_KEYS as readonly string[]).includes(key)
+}

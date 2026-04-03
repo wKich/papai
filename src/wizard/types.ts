@@ -18,11 +18,6 @@ export interface WizardSession {
   skippedSteps: number[]
   platform: 'telegram' | 'mattermost'
   taskProvider: 'kaneo' | 'youtrack'
-  /**
-   * When true, wizard exits after completing the current step.
-   * Used when editing a single field from /config.
-   */
-  singleStep?: boolean
 }
 
 /**
