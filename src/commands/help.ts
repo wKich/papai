@@ -24,6 +24,7 @@ const DM_ADMIN_HELP = [
   '/users — List authorized users',
   "/clear <user_id> — Clear a specific user's history",
   "/clear all — Clear all users' history",
+  '/announce <message> — Send announcement to all users',
 ].join('\n')
 
 function getDmHelpText(isAdmin: boolean): string {
