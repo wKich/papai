@@ -46,7 +46,8 @@ export function registerAdminCommands(chat: ChatProvider, adminUserId: string): 
     await handleUsersCommand(reply, msg.user.id, adminUserId)
   }
 
-  const announceHandler: CommandHandler = async (msg, reply) => {
+  const announceHandler: CommandHandler = async (msg, reply, auth) => {
+    if (!auth.allowed) return
     if (msg.contextType === 'group') {
       await reply.text('This command is only available in direct messages.')
       return
@@ -168,7 +169,7 @@ async function handleAnnounce(chat: ChatProvider, reply: ReplyFn, msg: IncomingM
     return
   }
 
-  const users = listUsers()
+  const users = listUsers().filter((u) => !u.platform_user_id.startsWith('placeholder-'))
   if (users.length === 0) {
     await reply.text('No authorized users to announce to.')
     return

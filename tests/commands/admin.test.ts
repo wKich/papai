@@ -377,7 +377,7 @@ describe('Admin Commands', () => {
         name: 'mock',
         registerCommand: (): void => {},
         onMessage: (): void => {},
-        sendMessage: (userId: string): Promise<void> => {
+        sendMessage: (userId: string, _markdown: string): Promise<void> => {
           if (userId === 'user-a') {
             return Promise.reject(new Error('User blocked bot'))
           }
@@ -419,6 +419,55 @@ describe('Admin Commands', () => {
         storageContextId: ADMIN_ID,
       })
       expect(getReplies()[0]).toContain('No authorized users')
+    })
+
+    test('returns immediately when not allowed', async () => {
+      const handler = commandHandlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage('stranger', 'Hello'), reply, {
+        allowed: false,
+        isBotAdmin: false,
+        isGroupAdmin: false,
+        storageContextId: 'stranger',
+      })
+      expect(getReplies()).toHaveLength(0)
+    })
+
+    test('skips placeholder users when sending announcements', async () => {
+      addUser('user-a', ADMIN_ID)
+      // Add a placeholder (username-only authorization, no real platform ID)
+      addUser(`placeholder-${crypto.randomUUID()}`, ADMIN_ID, 'pending-user')
+      const sentUserIds: string[] = []
+      const mockChat: ChatProvider = {
+        name: 'mock',
+        registerCommand: (): void => {},
+        onMessage: (): void => {},
+        sendMessage: (userId: string, _markdown: string): Promise<void> => {
+          sentUserIds.push(userId)
+          return Promise.resolve()
+        },
+        start: (): Promise<void> => Promise.resolve(),
+        stop: (): Promise<void> => Promise.resolve(),
+      }
+      const handlers = new Map<string, CommandHandler>()
+      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
+        handlers.set(name, handler)
+      }
+      registerAdminCommands(mockChat, ADMIN_ID)
+      const handler = handlers.get('announce')
+      expect(handler).toBeDefined()
+      const { reply } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, 'Hello'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      // Placeholder ID should not be in sent messages
+      expect(sentUserIds.every((id) => !id.startsWith('placeholder-'))).toBe(true)
+      // Only admin + user-a should receive the message
+      expect(sentUserIds.length).toBe(2)
     })
   })
 })
