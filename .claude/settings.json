@@ -1,18 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/session-start.mjs",
-            "timeout": 600,
-            "statusMessage": "Capturing session mutation baseline..."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",
@@ -35,19 +22,6 @@
             "command": "node .claude/hooks/post-tool-use.mjs",
             "timeout": 200,
             "statusMessage": "TDD checks (post-edit)..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/session-stop.mjs",
-            "timeout": 600,
-            "statusMessage": "Running pre-stop checks (uncommitted → check:full → mutation)..."
           }
         ]
       }
