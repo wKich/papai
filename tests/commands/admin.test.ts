@@ -38,6 +38,25 @@ void mock.module('../../src/providers/kaneo/provision.js', () => ({
 
 const ADMIN_ID = 'admin-001'
 
+// Helper to create a mock ChatProvider with custom sendMessage behavior and capture handlers
+function createMockChatWithHandler(sendMessageImpl: (userId: string, markdown: string) => Promise<void>): {
+  mockChat: ChatProvider
+  handlers: Map<string, CommandHandler>
+} {
+  const handlers = new Map<string, CommandHandler>()
+  const mockChat: ChatProvider = {
+    name: 'mock',
+    registerCommand: (name: string, handler: CommandHandler): void => {
+      handlers.set(name, handler)
+    },
+    onMessage: (): void => {},
+    sendMessage: sendMessageImpl,
+    start: (): Promise<void> => Promise.resolve(),
+    stop: (): Promise<void> => Promise.resolve(),
+  }
+  return { mockChat, handlers }
+}
+
 describe('Admin Commands', () => {
   let commandHandlers: Map<string, CommandHandler>
 
@@ -296,22 +315,10 @@ describe('Admin Commands', () => {
       addUser('user-a', ADMIN_ID)
       addUser('user-b', ADMIN_ID)
       const sentMessages: Array<{ userId: string; markdown: string }> = []
-      const mockChat: ChatProvider = {
-        name: 'mock',
-        registerCommand: (): void => {},
-        onMessage: (): void => {},
-        sendMessage: (userId: string, markdown: string): Promise<void> => {
-          sentMessages.push({ userId, markdown })
-          return Promise.resolve()
-        },
-        start: (): Promise<void> => Promise.resolve(),
-        stop: (): Promise<void> => Promise.resolve(),
-      }
-      // Re-register to capture the announce handler with the sendMessage-tracking mock
-      const handlers = new Map<string, CommandHandler>()
-      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
-        handlers.set(name, handler)
-      }
+      const { mockChat, handlers } = createMockChatWithHandler((userId, markdown) => {
+        sentMessages.push({ userId, markdown })
+        return Promise.resolve()
+      })
       registerAdminCommands(mockChat, ADMIN_ID)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()
@@ -373,24 +380,13 @@ describe('Admin Commands', () => {
       addUser('user-a', ADMIN_ID)
       addUser('user-b', ADMIN_ID)
       const sentMessages: string[] = []
-      const mockChat: ChatProvider = {
-        name: 'mock',
-        registerCommand: (): void => {},
-        onMessage: (): void => {},
-        sendMessage: (userId: string, _markdown: string): Promise<void> => {
-          if (userId === 'user-a') {
-            return Promise.reject(new Error('User blocked bot'))
-          }
-          sentMessages.push(userId)
-          return Promise.resolve()
-        },
-        start: (): Promise<void> => Promise.resolve(),
-        stop: (): Promise<void> => Promise.resolve(),
-      }
-      const handlers = new Map<string, CommandHandler>()
-      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
-        handlers.set(name, handler)
-      }
+      const { mockChat, handlers } = createMockChatWithHandler((userId) => {
+        if (userId === 'user-a') {
+          return Promise.reject(new Error('User blocked bot'))
+        }
+        sentMessages.push(userId)
+        return Promise.resolve()
+      })
       registerAdminCommands(mockChat, ADMIN_ID)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()
@@ -421,39 +417,15 @@ describe('Admin Commands', () => {
       expect(getReplies()[0]).toContain('No authorized users')
     })
 
-    test('returns immediately when not allowed', async () => {
-      const handler = commandHandlers.get('announce')
-      expect(handler).toBeDefined()
-      const { reply, getReplies } = createMockReply()
-      await handler!(createDmMessage('stranger', 'Hello'), reply, {
-        allowed: false,
-        isBotAdmin: false,
-        isGroupAdmin: false,
-        storageContextId: 'stranger',
-      })
-      expect(getReplies()).toHaveLength(0)
-    })
-
     test('skips placeholder users when sending announcements', async () => {
       addUser('user-a', ADMIN_ID)
       // Add a placeholder (username-only authorization, no real platform ID)
       addUser(`placeholder-${crypto.randomUUID()}`, ADMIN_ID, 'pending-user')
       const sentUserIds: string[] = []
-      const mockChat: ChatProvider = {
-        name: 'mock',
-        registerCommand: (): void => {},
-        onMessage: (): void => {},
-        sendMessage: (userId: string, _markdown: string): Promise<void> => {
-          sentUserIds.push(userId)
-          return Promise.resolve()
-        },
-        start: (): Promise<void> => Promise.resolve(),
-        stop: (): Promise<void> => Promise.resolve(),
-      }
-      const handlers = new Map<string, CommandHandler>()
-      mockChat.registerCommand = (name: string, handler: CommandHandler): void => {
-        handlers.set(name, handler)
-      }
+      const { mockChat, handlers } = createMockChatWithHandler((userId) => {
+        sentUserIds.push(userId)
+        return Promise.resolve()
+      })
       registerAdminCommands(mockChat, ADMIN_ID)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()

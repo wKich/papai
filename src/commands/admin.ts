@@ -1,7 +1,11 @@
+import pLimit from 'p-limit'
+
 import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../chat/types.js'
 import { logger } from '../logger.js'
 import { provisionAndConfigure } from '../providers/kaneo/provision.js'
 import { addUser, listUsers, removeUser } from '../users.js'
+
+const MAX_CONCURRENT_SENDS = 5
 
 const log = logger.child({ scope: 'admin' })
 
@@ -46,8 +50,7 @@ export function registerAdminCommands(chat: ChatProvider, adminUserId: string): 
     await handleUsersCommand(reply, msg.user.id, adminUserId)
   }
 
-  const announceHandler: CommandHandler = async (msg, reply, auth) => {
-    if (!auth.allowed) return
+  const announceHandler: CommandHandler = async (msg, reply) => {
     if (msg.contextType === 'group') {
       await reply.text('This command is only available in direct messages.')
       return
@@ -175,15 +178,26 @@ async function handleAnnounce(chat: ChatProvider, reply: ReplyFn, msg: IncomingM
     return
   }
 
+  const limit = pLimit(MAX_CONCURRENT_SENDS)
   const results = await Promise.allSettled(
-    users.map(async (user) => {
-      await chat.sendMessage(user.platform_user_id, message)
-      return true
-    }),
+    users.map((user) =>
+      limit(async () => {
+        await chat.sendMessage(user.platform_user_id, message)
+        return user.platform_user_id
+      }),
+    ),
   )
 
   const successCount = results.filter((r) => r.status === 'fulfilled').length
   const failCount = results.filter((r) => r.status === 'rejected').length
+
+  // Log individual failures at warn level
+  results.forEach((result) => {
+    if (result.status === 'rejected') {
+      const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason)
+      log.warn({ userId: msg.user.id, error: errorMsg }, 'Failed to send announcement')
+    }
+  })
 
   log.info({ userId: msg.user.id, successCount, failCount, totalUsers: users.length }, '/announce command executed')
 
