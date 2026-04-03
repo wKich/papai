@@ -160,9 +160,14 @@ async function handleUserRemove(
     return
   }
 
-  removeUser(parsed.value)
-  log.info({ adminId, identifier: parsed.value }, '/user remove command executed')
-  await reply.text(`User ${identifier} removed.`)
+  const removed = removeUser(parsed.value)
+  if (removed) {
+    log.info({ adminId, identifier: parsed.value }, '/user remove command executed')
+    await reply.text(`User ${identifier} removed.`)
+  } else {
+    log.info({ adminId, identifier: parsed.value }, '/user remove command - user not found')
+    await reply.text(`User ${identifier} not found.`)
+  }
 }
 
 async function handleAnnounce(chat: ChatProvider, reply: ReplyFn, msg: IncomingMessage): Promise<void> {

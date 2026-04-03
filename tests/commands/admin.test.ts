@@ -261,6 +261,19 @@ describe('Admin Commands', () => {
       expect(getReplies()[0]).toBe('Only the admin can manage users.')
       expect(isAuthorized('victim')).toBe(true)
     })
+
+    test('returns not found when user does not exist', async () => {
+      const handler = commandHandlers.get('user')
+      expect(handler).toBeDefined()
+      const { reply, getReplies } = createMockReply()
+      await handler!(createDmMessage(ADMIN_ID, 'remove nonexistent-user'), reply, {
+        allowed: true,
+        isBotAdmin: true,
+        isGroupAdmin: false,
+        storageContextId: ADMIN_ID,
+      })
+      expect(getReplies()[0]).toBe('User nonexistent-user not found.')
+    })
   })
 
   describe('/users', () => {

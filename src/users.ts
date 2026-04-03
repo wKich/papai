@@ -33,15 +33,23 @@ export function addUser(userId: string, addedBy: string, username?: string): voi
   log.info({ hasUsername: username !== undefined }, 'User added')
 }
 
-export function removeUser(identifier: string): void {
+export function removeUser(identifier: string): boolean {
   log.debug('removeUser called')
   const db = getDrizzleDb()
 
-  db.delete(users)
+  const deleted = db
+    .delete(users)
     .where(or(eq(users.username, identifier), eq(users.platformUserId, identifier)))
-    .run()
+    .returning({ platformUserId: users.platformUserId })
+    .all()
 
-  log.info('User removed')
+  const removed = deleted.length > 0
+  if (removed) {
+    log.info('User removed')
+  } else {
+    log.info('User not found for removal')
+  }
+  return removed
 }
 
 export function isAuthorized(userId: string): boolean {

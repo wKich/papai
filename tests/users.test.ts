@@ -90,6 +90,25 @@ describe('removeUser', () => {
     const user = testDb.select().from(schema.users).where(eq(schema.users.platformUserId, '111')).get()
     expect(user).toBeUndefined()
   })
+
+  test('returns true when user is removed', () => {
+    addUser('111', '999')
+    const result = removeUser('111')
+    expect(result).toBe(true)
+  })
+
+  test('returns false when user does not exist', () => {
+    const result = removeUser('nonexistent-user')
+    expect(result).toBe(false)
+  })
+
+  test('returns false when removing same user twice', () => {
+    addUser('111', '999')
+    const firstResult = removeUser('111')
+    expect(firstResult).toBe(true)
+    const secondResult = removeUser('111')
+    expect(secondResult).toBe(false)
+  })
 })
 
 describe('isAuthorized', () => {
