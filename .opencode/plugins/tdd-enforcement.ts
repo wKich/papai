@@ -18,6 +18,9 @@ import { captureSessionMutationBaseline, verifySessionMutationBaseline } from '.
 // This is stored in memory per process, so it resets when opencode restarts
 const sessionsWithBaseline = new Set<string>()
 
+// Track sessions that had an error (e.g., user interruption) to skip idle handlers
+const sessionsWithError = new Set<string>()
+
 // Commands that should trigger a fresh baseline capture (equivalent to Claude's `/clear`)
 const CLEAR_COMMANDS = new Set(['clear', 'reset'])
 
@@ -47,8 +50,21 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
         }
       }
 
+      if (event.type === 'session.error') {
+        const sessionId = event.properties.sessionID
+        if (sessionId) {
+          sessionsWithError.add(sessionId)
+        }
+      }
+
       if (event.type === 'session.idle') {
         const sessionId = event.properties.sessionID
+
+        // Skip idle checks if the session was interrupted/aborted by user
+        if (sessionsWithError.has(sessionId)) {
+          sessionsWithError.delete(sessionId)
+          return
+        }
 
         // [1] Check for uncommitted changes
         const uncommitted = checkUncommitted({ cwd: directory })
