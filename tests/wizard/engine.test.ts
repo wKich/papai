@@ -2,28 +2,13 @@
  * Tests for wizard engine - interactive configuration setup
  */
 
-import { afterEach, beforeEach, describe, expect, test, afterAll } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mock } from 'bun:test'
 
-// Step 1: Setup logger mock BEFORE any imports that might use logger
-import { createTrackedLoggerMock } from '../utils/logger-mock.js'
-
-const { getLogLevel, logger } = createTrackedLoggerMock()
-
-// Register the mock immediately
-void mock.module('../../src/logger.js', () => ({
-  getLogLevel,
-  logger,
-}))
-
-// Step 2: Import other test helpers (safe now that logger is mocked)
-import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockDrizzle()
-
 import { getConfig, setConfig } from '../../src/config.js'
-// Step 3: Import from src/ AFTER logger mock is registered
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
+import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizardSteps } =
@@ -31,16 +16,21 @@ const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizard
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
 const { getWizardSession, deleteWizardSession } = await import('../../src/wizard/state.js')
 
-afterAll(() => {
-  mock.restore()
-})
-
 // Global fetch mock for engine tests (returns success by default)
 describe('Wizard Engine', () => {
   const userId = 'user123'
   const storageContextId = 'ctx-456'
 
+  let trackedLogger: TrackedLoggerMock
+
   beforeEach(async () => {
+    trackedLogger = createTrackedLoggerMock()
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: trackedLogger.getLogLevel,
+      logger: trackedLogger.logger,
+    }))
+    mockDrizzle()
+
     // Clean up
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
@@ -435,7 +425,16 @@ describe('Wizard engine with end-of-wizard validation', () => {
   const userId = 'test-user-live'
   const storageContextId = 'test-context-live'
 
+  let trackedLogger: TrackedLoggerMock
+
   beforeEach(async () => {
+    trackedLogger = createTrackedLoggerMock()
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: trackedLogger.getLogLevel,
+      logger: trackedLogger.logger,
+    }))
+    mockDrizzle()
+
     await deleteWizardSession(userId, storageContextId)
   })
 
@@ -463,7 +462,16 @@ describe('Wizard engine masking behavior', () => {
   const userId = 'mask-test-user'
   const storageContextId = 'mask-test-context'
 
+  let trackedLogger: TrackedLoggerMock
+
   beforeEach(async () => {
+    trackedLogger = createTrackedLoggerMock()
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: trackedLogger.getLogLevel,
+      logger: trackedLogger.logger,
+    }))
+    mockDrizzle()
+
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
   })
@@ -518,7 +526,16 @@ describe('Wizard engine skip with existing config', () => {
   const userId = 'singlestep-test-user'
   const storageContextId = 'singlestep-test-context'
 
+  let trackedLogger: TrackedLoggerMock
+
   beforeEach(async () => {
+    trackedLogger = createTrackedLoggerMock()
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: trackedLogger.getLogLevel,
+      logger: trackedLogger.logger,
+    }))
+    mockDrizzle()
+
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
   })
