@@ -1,9 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import {
   advanceScheduledPrompt,
@@ -15,19 +10,18 @@ import {
   listScheduledPrompts,
   updateScheduledPrompt,
 } from '../../src/deferred-prompts/scheduled.js'
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'user-1'
 const OTHER_USER = 'user-2'
 
-beforeEach(async () => {
-  await setupTestDb()
-})
-
-afterAll(() => {
-  mock.restore()
-})
-
 describe('createScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('creates a one-shot prompt', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     const prompt = createScheduledPrompt(USER_ID, 'Remind me to check tasks', { fireAt })
@@ -57,6 +51,12 @@ describe('createScheduledPrompt', () => {
 })
 
 describe('listScheduledPrompts', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('lists prompts for a user and excludes other users', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     createScheduledPrompt(USER_ID, 'User 1 prompt A', { fireAt })
@@ -85,6 +85,12 @@ describe('listScheduledPrompts', () => {
 })
 
 describe('getScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('gets a prompt by id', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Test prompt', { fireAt })
@@ -105,6 +111,12 @@ describe('getScheduledPrompt', () => {
 })
 
 describe('updateScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('updates prompt text', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Old text', { fireAt })
@@ -121,6 +133,12 @@ describe('updateScheduledPrompt', () => {
 })
 
 describe('cancelScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('sets status to cancelled', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Cancel me', { fireAt })
@@ -140,6 +158,12 @@ describe('cancelScheduledPrompt', () => {
 })
 
 describe('getScheduledPromptsDue', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('returns only prompts with fire_at in the past', () => {
     const pastTime = new Date(Date.now() - 60_000).toISOString()
     const futureTime = new Date(Date.now() + 3_600_000).toISOString()
@@ -163,6 +187,12 @@ describe('getScheduledPromptsDue', () => {
 })
 
 describe('advanceScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('updates fire_at and last_executed_at for recurring prompt', () => {
     const fireAt = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Recurring', {
@@ -183,6 +213,12 @@ describe('advanceScheduledPrompt', () => {
 })
 
 describe('completeScheduledPrompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('sets status to completed and last_executed_at', () => {
     const fireAt = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'One-shot', { fireAt })

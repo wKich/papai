@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import { registerAdminCommands } from '../../src/commands/admin.js'
+import { registerClearCommand } from '../../src/commands/clear.js'
+import { registerConfigCommand } from '../../src/commands/config.js'
+import { addUser } from '../../src/users.js'
 import {
   createAuth,
   createDmMessage,
@@ -10,15 +14,6 @@ import {
   mockLogger,
   setupTestDb,
 } from '../utils/test-helpers.js'
-
-// Setup mocks before importing modules
-mockLogger()
-mockDrizzle()
-
-import { registerAdminCommands } from '../../src/commands/admin.js'
-import { registerClearCommand } from '../../src/commands/clear.js'
-import { registerConfigCommand } from '../../src/commands/config.js'
-import { addUser } from '../../src/users.js'
 
 describe('command context restrictions', () => {
   let mockChat: ChatProvider
@@ -31,6 +26,8 @@ describe('command context restrictions', () => {
   }
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     // Setup test database with migrations
     await setupTestDb()
 

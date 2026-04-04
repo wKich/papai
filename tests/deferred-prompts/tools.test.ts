@@ -1,9 +1,6 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import type { ToolSet } from 'ai'
 
 import { setConfig } from '../../src/config.js'
 import { makeCancelDeferredPromptTool } from '../../src/tools/cancel-deferred-prompt.js'
@@ -11,11 +8,10 @@ import { makeCreateDeferredPromptTool } from '../../src/tools/create-deferred-pr
 import { makeGetDeferredPromptTool } from '../../src/tools/get-deferred-prompt.js'
 import { makeListDeferredPromptsTool } from '../../src/tools/list-deferred-prompts.js'
 import { makeUpdateDeferredPromptTool } from '../../src/tools/update-deferred-prompt.js'
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'user-1'
 const toolCtx = { toolCallId: 'tc1', messages: [] as never[], abortSignal: new AbortController().signal }
-
-import type { ToolSet } from 'ai'
 
 function getTools(): ToolSet {
   return {
@@ -53,16 +49,14 @@ function extractPrompts(result: unknown): unknown[] {
   return prompts
 }
 
-beforeEach(async () => {
-  await setupTestDb()
-  setConfig(USER_ID, 'timezone', 'UTC')
-})
-
-afterAll(() => {
-  mock.restore()
-})
-
 describe('makeDeferredPromptTools', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('exposes all 5 tools', () => {
     const names = Object.keys(getTools())
     expect(names).toContain('create_deferred_prompt')
@@ -75,6 +69,13 @@ describe('makeDeferredPromptTools', () => {
 })
 
 describe('create_deferred_prompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('creates with schedule (returns type scheduled)', async () => {
     const t = getTools()['create_deferred_prompt']!
     if (!t.execute) throw new Error('Tool execute is undefined')
@@ -177,6 +178,13 @@ describe('create_deferred_prompt', () => {
 })
 
 describe('list_deferred_prompts', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('returns both types', async () => {
     const tools = getTools()
     const create = tools['create_deferred_prompt']!
@@ -200,6 +208,13 @@ describe('list_deferred_prompts', () => {
 })
 
 describe('get_deferred_prompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('retrieves a prompt by ID', async () => {
     const tools = getTools()
     const create = tools['create_deferred_prompt']!
@@ -222,6 +237,13 @@ describe('get_deferred_prompt', () => {
 })
 
 describe('update_deferred_prompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('changes prompt text', async () => {
     const tools = getTools()
     const create = tools['create_deferred_prompt']!
@@ -300,6 +322,13 @@ describe('update_deferred_prompt', () => {
 })
 
 describe('cancel_deferred_prompt', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('cancels a prompt', async () => {
     const tools = getTools()
     const create = tools['create_deferred_prompt']!
@@ -325,6 +354,13 @@ describe('cancel_deferred_prompt', () => {
 })
 
 describe('execution metadata', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
   test('creates with execution metadata', async () => {
     const t = getTools()['create_deferred_prompt']!
     if (!t.execute) throw new Error('Tool execute is undefined')

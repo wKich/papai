@@ -1,20 +1,18 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb, getTestDb } from './utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { _userCaches } from '../src/cache.js'
 import { getCachedInstructions, addCachedInstruction, deleteCachedInstruction } from '../src/cache.js'
 import { userInstructions } from '../src/db/schema.js'
-
-beforeEach(async () => {
-  _userCaches.clear()
-  await setupTestDb()
-})
+import { mockLogger, mockDrizzle, setupTestDb, getTestDb } from './utils/test-helpers.js'
 
 describe('instructions cache', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    _userCaches.clear()
+    await setupTestDb()
+  })
+
   test('getCachedInstructions returns empty array for new context', () => {
     const result = getCachedInstructions('ctx-1')
     expect(result).toEqual([])
@@ -61,8 +59,4 @@ describe('instructions cache', () => {
     expect(result).toHaveLength(1)
     expect(result[0]?.text).toBe('From DB')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

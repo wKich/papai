@@ -2,32 +2,17 @@
  * Wizard integration tests - full flow testing from creation to completion
  */
 
-import { afterEach, beforeEach, describe, expect, test, afterAll } from 'bun:test'
-import { mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-// Import logger mock from dedicated file (no src/ imports)
-import { mockLogger } from '../utils/logger-mock.js'
-
-// Setup logger mock BEFORE any src/ imports
-mockLogger()
-
-// Import other test helpers
-import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockDrizzle()
-
-// Import from src/ AFTER logger mock is registered
 import { getConfig } from '../../src/config.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { mockLogger } from '../utils/logger-mock.js'
+import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, processWizardMessage } = await import('../../src/wizard/engine.js')
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
 const { hasActiveWizard, deleteWizardSession } = await import('../../src/wizard/state.js')
-
-afterAll(() => {
-  mock.restore()
-})
 
 // Global fetch mock for integration tests (returns success by default)
 describe('Wizard Integration', () => {
@@ -35,6 +20,8 @@ describe('Wizard Integration', () => {
   const storageContextId = 'test-context'
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
     // Reset fetch to return success by default

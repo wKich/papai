@@ -2,30 +2,21 @@
  * Tests for config-editor handlers
  */
 
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
-
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks
-mockLogger()
-mockDrizzle()
-
-afterAll(() => {
-  mock.restore()
-})
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { handleEditorCallback, handleEditorMessage, startEditor } from '../../src/config-editor/handlers.js'
 import { deleteEditorSession } from '../../src/config-editor/state.js'
-// Import after mocking
 import { getConfig, setConfig } from '../../src/config.js'
 import type { ConfigKey } from '../../src/types/config.js'
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('config-editor handlers', () => {
   const userId = 'user123'
   const storageContextId = 'ctx456'
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
     deleteEditorSession(userId, storageContextId)
   })

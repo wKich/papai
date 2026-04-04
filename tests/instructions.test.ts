@@ -1,19 +1,17 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { _userCaches } from '../src/cache.js'
 import { saveInstruction, listInstructions, deleteInstruction } from '../src/instructions.js'
-
-beforeEach(async () => {
-  _userCaches.clear()
-  await setupTestDb()
-})
+import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
 
 describe('saveInstruction', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    _userCaches.clear()
+    await setupTestDb()
+  })
+
   test('stores instruction and returns it', () => {
     const result = saveInstruction('ctx-1', 'Always reply in Spanish')
     expect(result.status).toBe('saved')
@@ -88,6 +86,13 @@ describe('saveInstruction', () => {
 })
 
 describe('listInstructions', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    _userCaches.clear()
+    await setupTestDb()
+  })
+
   test('returns empty array when no instructions', () => {
     expect(listInstructions('ctx-1')).toEqual([])
   })
@@ -101,6 +106,13 @@ describe('listInstructions', () => {
 })
 
 describe('deleteInstruction', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    _userCaches.clear()
+    await setupTestDb()
+  })
+
   test('removes instruction by id', () => {
     const r = saveInstruction('ctx-1', 'Always reply in Spanish')
     if (r.status !== 'saved') throw new Error('expected saved')
@@ -119,8 +131,4 @@ describe('deleteInstruction', () => {
     const result = deleteInstruction('ctx-1', r.instruction.id)
     expect(result.status).toBe('deleted')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

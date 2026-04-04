@@ -1,23 +1,17 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { buildProactiveTrigger } from '../../src/deferred-prompts/proactive-trigger.js'
 import { buildSystemPrompt } from '../../src/system-prompt.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-
-beforeEach(async () => {
-  await setupTestDb()
-})
-
-afterAll(() => {
-  mock.restore()
-})
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('buildProactiveTrigger', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   test('systemContext includes PROACTIVE EXECUTION header', () => {
     const trigger = buildProactiveTrigger('scheduled', 'Test prompt', 'UTC')
     expect(trigger.systemContext).toContain('[PROACTIVE EXECUTION]')
@@ -67,6 +61,12 @@ describe('buildProactiveTrigger', () => {
 })
 
 describe('buildSystemPrompt — deferred prompt sections', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   const provider = createMockProvider()
 
   test('includes PROMPT CONTENT guidance in DEFERRED PROMPTS section', () => {

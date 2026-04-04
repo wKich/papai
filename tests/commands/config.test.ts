@@ -6,12 +6,6 @@ import { setConfig } from '../../src/config.js'
 import { clearUserCache } from '../utils/test-cache.js'
 import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
-// Mock logger at top of file
-mockLogger()
-
-// Mock getDrizzleDb BEFORE importing source modules
-mockDrizzle()
-
 const USER_ID = 'config-test-user'
 
 function createAuth(userId: string, allowed: boolean): AuthorizationResult {
@@ -27,6 +21,8 @@ describe('/config Command', () => {
   let configHandler: CommandHandler | null
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
     clearUserCache(USER_ID)
 

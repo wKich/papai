@@ -1,19 +1,17 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { _userCaches } from '../src/cache.js'
 import { saveInstruction, buildInstructionsBlock } from '../src/instructions.js'
-
-beforeEach(async () => {
-  _userCaches.clear()
-  await setupTestDb()
-})
+import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
 
 describe('buildInstructionsBlock', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    _userCaches.clear()
+    await setupTestDb()
+  })
+
   test('includes custom instructions block when instructions exist', () => {
     saveInstruction('ctx-1', 'Always reply in Spanish')
     saveInstruction('ctx-1', 'Use high priority by default')
@@ -33,8 +31,4 @@ describe('buildInstructionsBlock', () => {
     const block = buildInstructionsBlock('ctx-1')
     expect(block).toStartWith('=== Custom instructions ===\n- Always reply in Spanish')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

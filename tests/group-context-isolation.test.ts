@@ -1,16 +1,14 @@
-import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
-
-import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser } from '../src/users.js'
+import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
 
 describe('group context isolation', () => {
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
   })
 
@@ -55,8 +53,4 @@ describe('group context isolation', () => {
     expect(groupAuth.isBotAdmin).toBe(true)
     expect(groupAuth.storageContextId).toBe('group1')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

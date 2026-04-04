@@ -1,10 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks BEFORE importing code under test
-mockLogger()
-mockDrizzle()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import {
   cancelAlertPrompt,
@@ -19,15 +13,14 @@ import {
 } from '../../src/deferred-prompts/alerts.js'
 import type { AlertCondition } from '../../src/deferred-prompts/types.js'
 import type { Task } from '../../src/providers/types.js'
-
-afterAll(() => {
-  mock.restore()
-})
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // --- CRUD tests ---
 
 describe('alert prompt CRUD', () => {
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
   })
 
@@ -223,6 +216,11 @@ describe('alert prompt CRUD', () => {
 // --- Condition evaluation tests (pure functions, no DB needed) ---
 
 describe('evaluateCondition', () => {
+  beforeEach(() => {
+    mockLogger()
+    mockDrizzle()
+  })
+
   const makeTask = (overrides: Partial<Task> = {}): Task => ({
     id: 'task-1',
     title: 'Test task',
@@ -402,6 +400,11 @@ describe('evaluateCondition', () => {
 // --- describeCondition tests ---
 
 describe('describeCondition', () => {
+  beforeEach(() => {
+    mockLogger()
+    mockDrizzle()
+  })
+
   test('leaf with value', () => {
     const result = describeCondition({ field: 'task.status', op: 'changed_to', value: 'done' })
     expect(result).toBe('task.status changed_to "done"')
