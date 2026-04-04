@@ -57,8 +57,15 @@ export function createLoggerMock(): {
 }
 
 /**
- * Setup logger mock globally for tests.
- * Call this at the top of test files before importing modules that use logger.
+ * Setup logger mock for tests.
+ * Call in describe-level beforeEach (NOT at top level) to avoid mock pollution.
+ *
+ * @example
+ * describe('Feature', () => {
+ *   beforeEach(() => {
+ *     mockLogger()
+ *   })
+ * })
  */
 export function mockLogger(): void {
   void mock.module('../../src/logger.js', () => ({
