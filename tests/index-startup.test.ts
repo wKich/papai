@@ -8,16 +8,6 @@ import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 // Save original environment before any tests
 const ORIGINAL_ENV = { ...process.env }
 
-// Mock logger at top of file
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-  closeDrizzleDb: (): void => {},
-}))
-
 // Import the addUser function after mocking
 type AddUserFn = (userId: string, addedBy: string, username?: string) => void
 let addUser: AddUserFn
@@ -25,12 +15,20 @@ let addUser: AddUserFn
 describe('index.ts startup - admin auto-authorization', () => {
   const ADMIN_USER_ID = '12345'
 
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     // Reset environment
     process.env = { ...ORIGINAL_ENV }
 
+    mockLogger()
+
     // Reset test database
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+      closeDrizzleDb: (): void => {},
+    }))
 
     // Import addUser fresh for each test
     const usersModule = await import('../src/users.js')
@@ -85,5 +83,4 @@ describe('index.ts startup - admin auto-authorization', () => {
 
 afterAll(() => {
   process.env = ORIGINAL_ENV
-  mock.restore()
 })

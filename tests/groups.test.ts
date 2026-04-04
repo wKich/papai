@@ -1,21 +1,17 @@
-import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
-
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-// Setup logger mock at top of file
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { addGroupMember, isGroupMember, listGroupMembers, removeGroupMember } from '../src/groups.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('groups', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('addGroupMember adds member to group', () => {
@@ -65,8 +61,4 @@ describe('groups', () => {
     // Should not throw
     removeGroupMember('group1', 'nonexistent')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

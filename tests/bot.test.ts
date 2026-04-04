@@ -1,24 +1,19 @@
-import { mock, describe, expect, test, beforeEach, afterAll, afterEach } from 'bun:test'
-
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-// Setup logger mock at top of file
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
+import { mock, describe, expect, test, beforeEach, afterEach } from 'bun:test'
 
 import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser, isAuthorized } from '../src/users.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('Authorization Logic', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   describe('Bot Admin Authorization', () => {
@@ -139,8 +134,14 @@ describe('Demo Mode Auto-Provision', () => {
   const DEMO_USER_ID = 'demo-user-1'
   const DEMO_USERNAME = 'demouser'
 
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   afterEach(() => {
@@ -198,8 +199,4 @@ describe('Demo Mode Auto-Provision', () => {
     const result = checkAuthorizationExtended('stranger-1', 'stranger', 'stranger-1', 'dm', false)
     expect(result.allowed).toBe(false)
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

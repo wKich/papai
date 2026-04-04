@@ -1,30 +1,25 @@
-import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
-
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-// Setup logger mock at top of file
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-  closeDrizzleDb: (): void => {},
-  _resetDrizzleDb: (): void => {},
-  _setDrizzleDb: (): void => {},
-}))
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { copyAdminLlmConfig, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 const USER_A = '111'
 const USER_B = '222'
 
 describe('setConfig', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+      closeDrizzleDb: (): void => {},
+      _resetDrizzleDb: (): void => {},
+      _setDrizzleDb: (): void => {},
+    }))
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -61,8 +56,17 @@ describe('setConfig', () => {
 })
 
 describe('getConfig', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+      closeDrizzleDb: (): void => {},
+      _resetDrizzleDb: (): void => {},
+      _setDrizzleDb: (): void => {},
+    }))
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -96,8 +100,17 @@ describe('isConfigKey', () => {
 })
 
 describe('getAllConfig', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+      closeDrizzleDb: (): void => {},
+      _resetDrizzleDb: (): void => {},
+      _setDrizzleDb: (): void => {},
+    }))
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -139,8 +152,17 @@ describe('copyAdminLlmConfig', () => {
   const ADMIN_ID = 'admin-001'
   const TARGET_ID = 'target-002'
 
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+      closeDrizzleDb: (): void => {},
+      _resetDrizzleDb: (): void => {},
+      _setDrizzleDb: (): void => {},
+    }))
     clearUserCache(ADMIN_ID)
     clearUserCache(TARGET_ID)
   })
@@ -207,8 +229,4 @@ describe('CONFIG_KEYS', () => {
     // Internal keys (briefing_time, deadline_nudges, staleness_days) are excluded from CONFIG_KEYS
     expect(CONFIG_KEYS).toHaveLength(7)
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })
