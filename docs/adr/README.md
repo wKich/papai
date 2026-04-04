@@ -40,6 +40,18 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0032](0032-timezone-tool-layer-conversion.md)                 | Timezone Tool-Layer Conversion                                 | 2026-03-24 | Implemented                           |
 | [0033](0033-proactive-delivery-mode-recursive-loop-fix.md)     | Proactive Delivery Mode — Fix Recursive Scheduling Loop        | 2026-03-25 | Approved                              |
 | [0034](0034-deferred-prompt-execution-modes.md)                | Deferred Prompt Execution Modes                                | 2026-03-26 | Approved                              |
+| [0036](0036-centralized-scheduler-utility.md)                  | Centralized Scheduler Utility                                  | 2026-04-04 | Implemented                           |
+| [0037](0037-debug-server-session1.md)                          | Debug Tracing Tool — Session 1: Event Bus + Server Skeleton    | 2026-03-28 | Implemented (with extensions)         |
+| [0038](0038-pino-log-pipeline-session2.md)                     | Debug Tracing Tool — Session 2: Pino Log Pipeline              | 2026-03-28 | Implemented                           |
+| [0039](0039-debug-instrumentation-session3.md)                 | Debug Tracing Tool — Session 3: Instrument Source Modules      | 2026-04-04 | Implemented                           |
+| [0040](0040-debug-dashboard-html-session4.md)                  | Debug Dashboard HTML — Session 4: Live Debug Dashboard UI      | 2026-04-04 | Implemented                           |
+| [0041](0041-unique-kaneo-email-generation.md)                  | Unique Kaneo Email and Slug Generation                         | 2025-04-04 | Implemented                           |
+| [0042](0042-bot-configuration-wizard.md)                       | Bot Configuration Wizard UX                                    | 2026-03-27 | Implemented                           |
+| [0043](0043-tdd-hooks-integration.md)                          | TDD Hooks Integration for Multi-Platform AI Enforcement        | 2026-04-04 | Implemented                           |
+| [0044](0044-rename-mock-pollution-to-test-health.md)           | Rename Mock-Pollution to Test-Health                           | 2026-03-30 | Implemented (with divergence)         |
+| [0045](0045-wizard-validation-approach.md)                     | End-of-Wizard Validation Instead of Per-Step Live Validation   | 2026-03-28 | Implemented                           |
+| [0046](0046-demo-auto-provisioning.md)                         | Demo Mode Auto-Provisioning                                    | 2026-04-04 | Implemented                           |
+| [0047](0047-session-level-mutation-testing.md)                 | Session-Level Mutation Testing via OpenCode Plugin Events      | 2026-04-04 | Rejected (Research Error)             |
 
 ## Skipped / Not Written
 
