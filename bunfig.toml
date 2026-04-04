@@ -8,4 +8,4 @@ pathIgnorePatterns = ["tests/e2e/**", "tests/scripts/**"]
 
 # Preload global setup to suppress console output during tests
 # This keeps test output clean while preserving error messages
-preload = ["./tests/setup.ts"]
+preload = ["./tests/setup.ts", "./tests/mock-reset.ts"]
