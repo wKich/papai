@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
 import { clearCachedTools } from '../../cache.js'
-import { setConfig } from '../../config.js'
+import type { ReplyFn } from '../../chat/types.js'
+import { copyAdminLlmConfig, getConfig, setConfig } from '../../config.js'
 import { logger } from '../../logger.js'
-import { setKaneoWorkspace } from '../../users.js'
+import { getKaneoWorkspace, setKaneoWorkspace } from '../../users.js'
 
 const log = logger.child({ scope: 'kaneo:provision' })
 
@@ -169,5 +170,46 @@ export async function provisionAndConfigure(userId: string, username: string | n
     log.warn({ userId, error: msg }, 'Kaneo provisioning failed')
     if (isRegistrationDisabled) return { status: 'registration_disabled' }
     return { status: 'failed', error: msg }
+  }
+}
+
+const provLog = logger.child({ scope: 'kaneo:auto-provision' })
+
+/**
+ * Auto-provisions a Kaneo account for a user if they don't have one.
+ * Called on /start or first natural language message.
+ */
+export async function maybeProvisionKaneo(reply: ReplyFn, contextId: string, username: string | null): Promise<void> {
+  if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) {
+    if (process.env['DEMO_MODE'] === 'true') {
+      const adminUserId = process.env['ADMIN_USER_ID']
+      if (adminUserId !== undefined && adminUserId !== '') {
+        copyAdminLlmConfig(contextId, adminUserId)
+      }
+    }
+    return
+  }
+
+  provLog.info({ contextId, username }, 'Auto-provisioning Kaneo account')
+  const outcome = await provisionAndConfigure(contextId, username)
+
+  if (outcome.status === 'provisioned') {
+    if (process.env['DEMO_MODE'] === 'true') {
+      const adminUserId = process.env['ADMIN_USER_ID']
+      if (adminUserId !== undefined && adminUserId !== '') {
+        copyAdminLlmConfig(contextId, adminUserId)
+      }
+    }
+    await reply.text(
+      `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
+    )
+    provLog.info({ contextId, workspaceId: outcome.workspaceId }, 'Kaneo account auto-provisioned')
+  } else if (outcome.status === 'registration_disabled') {
+    await reply.text(
+      'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
+    )
+    provLog.warn({ contextId }, 'Kaneo auto-provisioning failed: registration disabled')
+  } else {
+    provLog.error({ contextId, error: outcome.error }, 'Kaneo auto-provisioning failed')
   }
 }

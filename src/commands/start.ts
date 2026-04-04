@@ -1,5 +1,6 @@
 import type { ChatProvider, CommandHandler } from '../chat/types.js'
 import { logger } from '../logger.js'
+import { maybeProvisionKaneo } from '../providers/kaneo/provision.js'
 import { addUser, isAuthorized } from '../users.js'
 
 const log = logger.child({ scope: 'commands:start' })
@@ -9,6 +10,8 @@ export function registerStartCommand(chat: ChatProvider): void {
     if (process.env['DEMO_MODE'] === 'true' && msg.contextType === 'dm' && !isAuthorized(msg.user.id)) {
       addUser(msg.user.id, 'demo-auto', msg.user.username ?? undefined)
       log.info({ userId: msg.user.id }, 'Demo mode: auto-added user via /start')
+      await maybeProvisionKaneo(reply, msg.user.id, msg.user.username)
+      return
     }
 
     if (!auth.allowed) {

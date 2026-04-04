@@ -4,7 +4,7 @@ import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
-import { copyAdminLlmConfig, getConfig } from './config.js'
+import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
@@ -14,12 +14,11 @@ import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
-import { provisionAndConfigure } from './providers/kaneo/provision.js'
+import { maybeProvisionKaneo } from './providers/kaneo/provision.js'
 import type { TaskProvider } from './providers/types.js'
 import { YouTrackClassifiedError } from './providers/youtrack/classify-error.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
-import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
 
@@ -45,34 +44,6 @@ const persistFactsFromResults = (
     { contextId, factsExtracted: newFacts.length, factsUpserted: newFacts.length },
     'Facts extracted and persisted',
   )
-}
-
-const maybeProvisionKaneo = async (reply: ReplyFn, contextId: string, username: string | null): Promise<void> => {
-  if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) {
-    if (process.env['DEMO_MODE'] === 'true') {
-      const adminUserId = process.env['ADMIN_USER_ID']
-      if (adminUserId !== undefined && adminUserId !== '') {
-        copyAdminLlmConfig(contextId, adminUserId)
-      }
-    }
-    return
-  }
-  const outcome = await provisionAndConfigure(contextId, username)
-  if (outcome.status === 'provisioned') {
-    if (process.env['DEMO_MODE'] === 'true') {
-      const adminUserId = process.env['ADMIN_USER_ID']
-      if (adminUserId !== undefined && adminUserId !== '') {
-        copyAdminLlmConfig(contextId, adminUserId)
-      }
-    }
-    await reply.text(
-      `✅ Your Kaneo account has been created!\n🌐 ${outcome.kaneoUrl}\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n\nThe bot is already configured and ready to use.`,
-    )
-  } else if (outcome.status === 'registration_disabled') {
-    await reply.text(
-      'Kaneo account could not be created — registration is currently disabled on this instance.\n\nPlease ask the admin to provision your account.',
-    )
-  }
 }
 
 const buildProvider = (contextId: string): TaskProvider => buildProviderForUser(contextId, true)
