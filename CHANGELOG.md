@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.6] - 2026-04-04
+
+### Added
+
+- **kaneo:** Generate unique email addresses and slugs per registration
+
+### Changed
+
+- **config:** Replace wizard-hijack with standalone config-editor
+- **tdd:** Remove dead code from mutation testing utilities
+- **tdd:** Remove session-level mutation baseline from hooks
+
+### Fixed
+
+- Resolve explicit-function-return-type and no-unnecessary-type-arguments lint errors
+- Prevent TDD hook from sending prompts when user interrupts session
+- /user remove now correctly reports when user doesn't exist
+
+### Testing
+
+- **commands:** Update admin tests for unique email format
 ## [4.7.5] - 2026-04-03
 
 ### Changed
