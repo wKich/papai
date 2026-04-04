@@ -2,9 +2,34 @@
 import type { DashboardAPI } from './dashboard-types.js'
 import type { LogEntry } from './schemas.js'
 
-// Initialize window.dashboard before any operations
+// Build dashboard API object with stub implementations
+// Each method will be replaced with actual implementation below
+const dashboard: DashboardAPI = {
+  renderConnection: () => {},
+  renderStats: () => {},
+  renderInfra: () => {},
+  renderSessions: () => {},
+  renderTraces: () => {},
+  renderLogs: () => {},
+  updateScopeFilter: () => {},
+  clearLogs: () => {},
+  __state: {
+    connected: false,
+    stats: { startedAt: Date.now(), totalMessages: 0, totalLlmCalls: 0, totalToolCalls: 0 },
+    sessions: new Map(),
+    wizards: new Map(),
+    scheduler: {},
+    pollers: {},
+    messageCache: {},
+    llmTraces: [],
+    logs: [],
+    logScopes: new Set(),
+  },
+}
+
+// Assign to window if not already present
 if (typeof window.dashboard === 'undefined') {
-  window.dashboard = {} as unknown as DashboardAPI
+  window.dashboard = dashboard
 }
 
 // --- DOM elements ---

@@ -69,7 +69,7 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       // [5] verifyTestsPass - Run tests and check coverage
       const testResult = await verifyTestsPass(ctx)
       if (testResult) {
-        await client.session.prompt({
+        void client.session.promptAsync({
           path: { id: input.sessionID },
           body: {
             parts: [{ type: 'text', text: testResult.reason }],
@@ -81,7 +81,7 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       // [6] verifyNoNewSurface - Only run for gateable impl files (not test files)
       const surfaceResult = verifyNoNewSurface(ctx)
       if (surfaceResult) {
-        await client.session.prompt({
+        void client.session.promptAsync({
           path: { id: input.sessionID },
           body: {
             parts: [{ type: 'text', text: surfaceResult.reason }],

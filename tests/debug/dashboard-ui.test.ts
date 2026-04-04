@@ -8,7 +8,7 @@ describe('dashboard-ui', () => {
 
     // Should check for and initialize window.dashboard
     expect(content).toContain("typeof window.dashboard === 'undefined'")
-    expect(content).toContain('window.dashboard = {}')
+    expect(content).toContain('const dashboard: DashboardAPI = {')
   })
 
   test('imports DashboardAPI type from dashboard-types', async () => {
