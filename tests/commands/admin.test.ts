@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
 import { registerAdminCommands } from '../../src/commands/admin.js'
@@ -13,28 +13,6 @@ import {
   mockLogger,
   setupTestDb,
 } from '../utils/test-helpers.js'
-
-// Mock logger at top of file
-mockLogger()
-
-// Mock getDrizzleDb BEFORE importing source modules
-mockDrizzle()
-
-// Mock provisionAndConfigure with mutable implementation
-type ProvisionResult = {
-  status: string
-  email?: string
-  password?: string
-  kaneoUrl?: string
-  apiKey?: string
-  workspaceId?: string
-  error?: string
-}
-let provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
-
-void mock.module('../../src/providers/kaneo/provision.js', () => ({
-  provisionAndConfigure: (..._args: unknown[]): Promise<ProvisionResult> => provisionImpl(),
-}))
 
 const ADMIN_ID = 'admin-001'
 
@@ -60,14 +38,34 @@ function createMockChatWithHandler(sendMessageImpl: (userId: string, markdown: s
 describe('Admin Commands', () => {
   let commandHandlers: Map<string, CommandHandler>
 
+  // Mock provisionAndConfigure with mutable implementation
+  type ProvisionResult = {
+    status: string
+    email?: string
+    password?: string
+    kaneoUrl?: string
+    apiKey?: string
+    workspaceId?: string
+    error?: string
+  }
+  let provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
+
   beforeEach(async () => {
+    // Reset mutable state to defaults
+    provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
+
+    // Register mocks
+    mockLogger()
+    mockDrizzle()
+
+    void mock.module('../../src/providers/kaneo/provision.js', () => ({
+      provisionAndConfigure: (..._args: unknown[]): Promise<ProvisionResult> => provisionImpl(),
+    }))
+
     await setupTestDb()
 
     // Add admin user to DB
     addUser(ADMIN_ID, ADMIN_ID)
-
-    // Reset provision mock to default
-    provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
 
     commandHandlers = new Map()
     const mockChat: ChatProvider = {
@@ -456,8 +454,4 @@ describe('Admin Commands', () => {
       expect(sentUserIds.length).toBe(2)
     })
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

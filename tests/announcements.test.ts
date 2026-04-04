@@ -1,27 +1,11 @@
 import { Database } from 'bun:sqlite'
-import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import packageJson from '../package.json' with { type: 'json' }
-import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
-import { mockLogger } from './utils/test-helpers.js'
-
-mockLogger()
-
-// --- Test database setup with Drizzle ---
-let testDb: ReturnType<typeof drizzle>
-let testSqlite: Database
-
-// Mock getDrizzleDb to return our test database
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): ReturnType<typeof drizzle> => testDb,
-  closeDrizzleDb: (): void => {},
-  _resetDrizzleDb: (): void => {},
-  _setDrizzleDb: (): void => {},
-}))
-
 import { announceNewVersion } from '../src/announcements.js'
+import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -32,6 +16,7 @@ import { migration006VersionAnnouncements } from '../src/db/migrations/006_versi
 import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
 import * as schema from '../src/db/schema.js'
 import { extractChangelogSection } from './helpers/extract-changelog-section.js'
+import { mockLogger } from './utils/test-helpers.js'
 
 const MIGRATIONS = [
   migration001Initial,
@@ -44,37 +29,6 @@ const MIGRATIONS = [
 ] as const
 
 const VERSION: string = packageJson.version
-
-// --- Mock ChatProvider for testing ---
-const sentMessages: Array<{ userId: string; text: string }> = []
-let sendMessageImpl = (userId: string, text: string): Promise<void> => {
-  sentMessages.push({ userId, text })
-  return Promise.resolve()
-}
-
-const mockChat: ChatProvider = {
-  name: 'mock',
-  registerCommand: (
-    _name: string,
-    _handler: (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>,
-  ): void => {},
-  onMessage: (_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
-  sendMessage: (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
-  start: (): Promise<void> => Promise.resolve(),
-  stop: (): Promise<void> => Promise.resolve(),
-}
-
-// --- Mock for changelog-reader (controlled per-test via changelogProvider) ---
-let changelogProvider: (() => Promise<string>) | null = null
-
-void mock.module('../src/changelog-reader.js', () => ({
-  readChangelogFile: (): Promise<string> => {
-    if (changelogProvider === null) {
-      return Promise.reject(new Error('CHANGELOG.md not found'))
-    }
-    return changelogProvider()
-  },
-}))
 
 // Canonical CHANGELOG fixture aligned with the actual package version
 const CHANGELOG = `# Changelog
@@ -145,16 +99,62 @@ describe('extractChangelogSection', () => {
 // ---------------------------------------------------------------------------
 
 describe('announceNewVersion', () => {
+  // --- Test database setup with Drizzle ---
+  let testDb: ReturnType<typeof drizzle>
+  let testSqlite: Database
+
+  // --- Mock ChatProvider for testing ---
+  let sentMessages: Array<{ userId: string; text: string }>
+  let sendMessageImpl: (userId: string, text: string) => Promise<void>
+
+  let mockChat: ChatProvider
+
+  // --- Mock for changelog-reader (controlled per-test via changelogProvider) ---
+  let changelogProvider: (() => Promise<string>) | null
+
   beforeEach(() => {
+    // Reset mutable state to defaults
+    sentMessages = []
+    sendMessageImpl = (userId: string, text: string): Promise<void> => {
+      sentMessages.push({ userId, text })
+      return Promise.resolve()
+    }
+    changelogProvider = null
+
+    // Register mocks
+    mockLogger()
+
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): ReturnType<typeof drizzle> => testDb,
+      closeDrizzleDb: (): void => {},
+      _resetDrizzleDb: (): void => {},
+      _setDrizzleDb: (): void => {},
+    }))
+
+    void mock.module('../src/changelog-reader.js', () => ({
+      readChangelogFile: (): Promise<string> => {
+        if (changelogProvider === null) {
+          return Promise.reject(new Error('CHANGELOG.md not found'))
+        }
+        return changelogProvider()
+      },
+    }))
+
+    // Setup test database
     testSqlite = new Database(':memory:')
     testDb = drizzle(testSqlite, { schema })
     runMigrations(testSqlite, MIGRATIONS)
 
-    sentMessages.length = 0
-    changelogProvider = null
-    sendMessageImpl = (userId: string, text: string): Promise<void> => {
-      sentMessages.push({ userId, text })
-      return Promise.resolve()
+    mockChat = {
+      name: 'mock',
+      registerCommand: (
+        _name: string,
+        _handler: (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>,
+      ): void => {},
+      onMessage: (_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
+      sendMessage: (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
+      start: (): Promise<void> => Promise.resolve(),
+      stop: (): Promise<void> => Promise.resolve(),
     }
   })
 
@@ -240,8 +240,4 @@ describe('announceNewVersion', () => {
     expect(sentMessages).toHaveLength(1)
     expect(sentMessages[0]?.userId).toBe('202')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })
