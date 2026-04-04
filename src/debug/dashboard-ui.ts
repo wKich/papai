@@ -1,6 +1,11 @@
 /// <reference lib="dom" />
-import './dashboard-types.js'
+import type { DashboardAPI } from './dashboard-types.js'
 import type { LogEntry } from './schemas.js'
+
+// Initialize window.dashboard before any operations
+if (typeof window.dashboard === 'undefined') {
+  window.dashboard = {} as unknown as DashboardAPI
+}
 
 // --- DOM elements ---
 const $connStatus = document.getElementById('connection-status')!

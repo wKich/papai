@@ -98,6 +98,7 @@ async function transpileDashboard(): Promise<void> {
 
   const buildResult = await Bun.build({
     entrypoints,
+    format: 'iife',
   })
 
   // Validate build outputs have expected content
