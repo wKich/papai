@@ -11,9 +11,6 @@
  * PATTERN 3 — Transitive mock pollution: test file B imports src/X which imports the mocked
  *             module, so B is affected even though it doesn't import the mock target directly (HIGH).
  *             Fix: add afterAll(() => { mock.restore() }) to the mocker.
- * PATTERN 4 — Module-level mutable state not reset between tests (MEDIUM).
- *             Detects module-level const/let declarations that persist state between tests.
- *             Fix: export a reset function and call in beforeEach/afterEach.
  *
  * Usage: bun run scripts/check-test-health.ts [--strict]
  */

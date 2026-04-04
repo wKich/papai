@@ -29,16 +29,16 @@ The plan incorrectly assumed the OpenCode Plugin API provides `session.start` an
 
 The actual `Hooks` interface provides:
 
-| Hook | Purpose |
-|------|---------|
-| `event` | General event handler for all system events |
-| `tool.execute.before` | Before tool execution |
-| `tool.execute.after` | After tool execution |
-| `chat.message` | New message received |
-| `chat.params` | Modify LLM parameters |
-| `command.execute.before` | Before command execution |
-| `shell.env` | Modify shell environment |
-| `experimental.*` | Experimental features |
+| Hook                     | Purpose                                     |
+| ------------------------ | ------------------------------------------- |
+| `event`                  | General event handler for all system events |
+| `tool.execute.before`    | Before tool execution                       |
+| `tool.execute.after`     | After tool execution                        |
+| `chat.message`           | New message received                        |
+| `chat.params`            | Modify LLM parameters                       |
+| `command.execute.before` | Before command execution                    |
+| `shell.env`              | Modify shell environment                    |
+| `experimental.*`         | Experimental features                       |
 
 ### Session Lifecycle Events (via `event` hook)
 
@@ -85,11 +85,13 @@ Keep mutation testing **disabled** in the TDD enforcement pipeline. The infrastr
 The primary goal (reducing mutation testing overhead) is valid, but the implementation path assumed in the plan does not exist. The OpenCode Plugin API uses an event-based model (`event` hook with `Event` types) rather than lifecycle hooks (`session.start`/`session.stop`).
 
 The `event` hook approach has critical limitations:
+
 - Events are fire-and-forget; no blocking capability
 - `session.deleted` timing is uncertain (may fire during cleanup)
 - No mechanism to surface mutation reports to the user synchronously
 
 Attempting to force session-level mutation testing through the `event` hook would result in:
+
 - Reports that may not reach the user (session already closed)
 - Race conditions between mutation testing and session cleanup
 - Unreliable enforcement (no guarantee verification completes)

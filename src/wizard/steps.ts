@@ -16,19 +16,12 @@ const PROVIDER_SPECIFIC_STEP: Record<TaskProvider, { key: 'kaneo_apikey' | 'yout
   },
 }
 
-function createStep(
-  id: string,
-  key: WizardStep['key'],
-  prompt: string,
-  isOptional?: boolean,
-  liveCheck?: WizardStep['liveCheck'],
-): WizardStep {
+function createStep(id: string, key: WizardStep['key'], prompt: string, isOptional?: boolean): WizardStep {
   return {
     id,
     key,
     prompt,
     validate: (value: string) => Promise.resolve(validateStep(key, value)),
-    liveCheck,
     isOptional,
   }
 }

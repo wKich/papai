@@ -51,9 +51,6 @@ describe('Wizard Types', () => {
       validate: (value: string) => {
         return Promise.resolve(value.startsWith('sk-') ? null : 'Invalid API key format')
       },
-      liveCheck: (value: string) => {
-        return Promise.resolve({ success: value.length > 0 })
-      },
       isOptional: false,
     }
 
@@ -77,7 +74,6 @@ describe('Wizard Types', () => {
     }
 
     expect(step.isOptional).toBeUndefined()
-    expect(step.liveCheck).toBeUndefined()
   })
 
   test('WizardProcessResult interface structure', () => {
