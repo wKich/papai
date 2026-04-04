@@ -11,7 +11,6 @@ export function registerStartCommand(chat: ChatProvider): void {
       addUser(msg.user.id, 'demo-auto', msg.user.username ?? undefined)
       log.info({ userId: msg.user.id }, 'Demo mode: auto-added user via /start')
       await maybeProvisionKaneo(reply, msg.user.id, msg.user.username)
-      return
     }
 
     if (!auth.allowed) {
