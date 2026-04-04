@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.7] - 2026-04-04
+
+### Documentation
+
+- Add ADR-0047 for session-level mutation testing rejection
+- Add ADRs for completed features and clean up code
+- Add mock pollution elimination design and implementation plans
+
+### Fixed
+
+- **debug:** Fix dashboard browser errors and add smoke tests
+- **debug:** Improve dashboard initialization and update tests
+- Send welcome message after demo mode auto-provisioning
 ## [4.7.6] - 2026-04-04
 
 ### Added
