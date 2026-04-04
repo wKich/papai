@@ -1,11 +1,8 @@
 import { Database } from 'bun:sqlite'
-import { afterAll, describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
-
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
+import { mockLogger } from '../utils/test-helpers.js'
 
 const getTableNames = (db: Database): string[] =>
   db
@@ -25,6 +22,7 @@ describe('runMigrations - basic behavior', () => {
   let db: Database
 
   beforeEach(() => {
+    mockLogger()
     db = makeDb()
   })
 
@@ -78,6 +76,7 @@ describe('runMigrations - skips already-applied', () => {
   let db: Database
 
   beforeEach(() => {
+    mockLogger()
     db = makeDb()
   })
 
@@ -123,6 +122,7 @@ describe('runMigrations - idempotency', () => {
   let db: Database
 
   beforeEach(() => {
+    mockLogger()
     db = makeDb()
   })
 
@@ -156,6 +156,7 @@ describe('runMigrations - rollback', () => {
   let db: Database
 
   beforeEach(() => {
+    mockLogger()
     db = makeDb()
   })
 
@@ -195,6 +196,7 @@ describe('runMigrations - order validation', () => {
   let db: Database
 
   beforeEach(() => {
+    mockLogger()
     db = makeDb()
   })
 
@@ -238,8 +240,4 @@ describe('runMigrations - order validation', () => {
       runMigrations(db, migrations)
     }).toThrow('Migration 002_foo has duplicate base name: foo')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

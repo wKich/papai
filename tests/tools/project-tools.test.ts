@@ -1,14 +1,11 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 interface Project {
@@ -35,6 +32,7 @@ function isProjectArray(val: unknown): val is Project[] {
 
 describe('Project Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

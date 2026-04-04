@@ -1,15 +1,12 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { makeCreateStatusTool } from '../../src/tools/create-status.js'
 import { makeDeleteStatusTool } from '../../src/tools/delete-status.js'
 import { makeListStatusesTool } from '../../src/tools/list-statuses.js'
 import { makeReorderStatusesTool } from '../../src/tools/reorder-statuses.js'
 import { makeUpdateStatusTool } from '../../src/tools/update-status.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 interface StatusItem {
@@ -36,6 +33,7 @@ function isStatusArray(val: unknown): val is StatusItem[] {
 
 describe('Status Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

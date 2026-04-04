@@ -1,13 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import type { Task, TaskListItem, TaskRelation } from '../../src/providers/types.js'
 import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTaskWithRelations(val: unknown): val is { id: string; title: string; relations: Array<TaskRelation> } {
@@ -35,6 +32,7 @@ interface TaskWithRelations {
 
 describe('Task Scenarios', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

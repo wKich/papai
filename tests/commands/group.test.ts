@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler, IncomingMessage } from '../../src/chat/types.js'
+import { registerGroupCommand } from '../../src/commands/group.js'
 import {
   createAuth,
   createGroupMessage,
@@ -10,18 +11,14 @@ import {
   setupTestDb,
 } from '../utils/test-helpers.js'
 
-// Setup mocks before importing modules
-mockLogger()
-mockDrizzle()
-
-import { registerGroupCommand } from '../../src/commands/group.js'
-
 describe('group commands', () => {
   let mockChat: ChatProvider
   let commandHandlers: Map<string, CommandHandler>
   let lastReply: string | null
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     // Setup test database with migrations
     await setupTestDb()
 
