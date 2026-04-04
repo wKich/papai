@@ -1,12 +1,8 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { setMockFetch, restoreFetch } from '../../test-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
-
-// Setup mocks BEFORE importing code under test
-mockLogger()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { provisionKaneoUser } from '../../../src/providers/kaneo/provision.js'
+import { setMockFetch } from '../../test-helpers.js'
+import { mockLogger } from '../../utils/test-helpers.js'
 
 function parseBody(body: unknown): unknown {
   if (typeof body === 'string') {
@@ -17,6 +13,7 @@ function parseBody(body: unknown): unknown {
 
 describe('provisionKaneoUser - unique email generation', () => {
   beforeEach(() => {
+    mockLogger()
     // Set required environment variable
     process.env['KANEO_CLIENT_URL'] = 'https://kaneo.test'
   })
@@ -141,9 +138,4 @@ describe('provisionKaneoUser - unique email generation', () => {
     expect(result.kaneoKey).toBe('test-api-key')
     expect(result.email).toMatch(/999-[a-z0-9]{8}@pap\.ai$/i)
   })
-})
-
-afterAll(() => {
-  restoreFetch()
-  mock.restore()
 })

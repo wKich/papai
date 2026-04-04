@@ -2,28 +2,19 @@
  * Tests for config-editor chat integration
  */
 
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks
-mockLogger()
-mockDrizzle()
-
-afterAll(() => {
-  mock.restore()
-})
-
-// Import after mocking
 import { handleConfigEditorMessage } from '../../src/chat/config-editor-integration.js'
 import { deleteEditorSession, startEditor } from '../../src/config-editor/index.js'
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('config-editor chat integration', () => {
   const userId = 'user123'
   const storageContextId = 'ctx456'
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
     deleteEditorSession(userId, storageContextId)
   })

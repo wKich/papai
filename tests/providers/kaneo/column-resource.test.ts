@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { mockLogger } from '../../utils/test-helpers.js'
-
-// Mock logger before importing modules that use it
-mockLogger()
-
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
 import { restoreFetch, setMockFetch } from '../../test-helpers.js'
+import { mockLogger } from '../../utils/test-helpers.js'
 import { ColumnResource } from './test-resources.js'
 
 describe('ColumnResource', () => {
@@ -16,6 +12,7 @@ describe('ColumnResource', () => {
   }
 
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

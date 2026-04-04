@@ -2,11 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { mockLogger } from '../../utils/test-helpers.js'
-
-// Mock logger before importing modules that use it
-mockLogger()
-
 import { ColumnCompatSchema as KaneoColumnSchema } from '../../../src/providers/kaneo/schemas/api-compat.js'
 import { CreateLabelResponseSchema as KaneoLabelSchema } from '../../../src/providers/kaneo/schemas/create-label.js'
 import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
@@ -22,6 +17,7 @@ import {
   restoreFetch,
   setMockFetch,
 } from '../../test-helpers.js'
+import { mockLogger } from '../../utils/test-helpers.js'
 
 const KaneoProjectSchema = z.object({
   id: z.string(),
@@ -71,6 +67,7 @@ describe('Schema Validation', () => {
   }
 
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

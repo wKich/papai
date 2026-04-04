@@ -2,11 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
-import { mockLogger } from '../../../utils/test-helpers.js'
-
-mockLogger()
-
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
@@ -17,6 +12,8 @@ import {
   searchYouTrackTasks,
   updateYouTrackTask,
 } from '../../../../src/providers/youtrack/operations/tasks.js'
+import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
+import { mockLogger } from '../../../utils/test-helpers.js'
 
 // --- Fetch mocking infrastructure ---
 
@@ -113,6 +110,7 @@ const makeIssueListResponse = (overrides: Record<string, unknown> = {}): IssueFi
 
 describe('createYouTrackTask', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -243,6 +241,7 @@ describe('createYouTrackTask', () => {
 
 describe('getYouTrackTask', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -324,6 +323,7 @@ describe('getYouTrackTask', () => {
 
 describe('updateYouTrackTask', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -409,6 +409,7 @@ describe('updateYouTrackTask', () => {
 
 describe('listYouTrackTasks', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -469,6 +470,7 @@ describe('listYouTrackTasks', () => {
 
 describe('searchYouTrackTasks', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -558,6 +560,7 @@ describe('searchYouTrackTasks', () => {
 
 describe('deleteYouTrackTask', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
