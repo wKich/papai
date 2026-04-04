@@ -1,33 +1,6 @@
-import { mock, afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { mock, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
-
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks BEFORE importing code under test
-mockLogger()
-mockDrizzle()
-
-// Mock AI module using mutable implementation pattern
-type GenerateTextResult = {
-  text: string
-  toolCalls: unknown[]
-  toolResults: unknown[]
-  response: { messages: ModelMessage[] }
-}
-let generateTextImpl = (): Promise<GenerateTextResult> =>
-  Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
-
-void mock.module('ai', () => ({
-  generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-  tool: (opts: unknown): unknown => opts,
-  stepCountIs: (_n: number): unknown => undefined,
-}))
-
-// Mock @ai-sdk/openai-compatible
-void mock.module('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
-}))
 
 import type { ChatProvider } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
@@ -36,10 +9,7 @@ import { pollAlertsOnce, pollScheduledOnce } from '../../src/deferred-prompts/po
 import { createScheduledPrompt, getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-
-afterAll(() => {
-  mock.restore()
-})
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // --- Helpers ---
 
@@ -68,19 +38,39 @@ function setupUserConfig(userId: string): void {
 
 const USER_ID = 'poller-user-1'
 
+// Mock AI module using mutable implementation pattern
+type GenerateTextResult = {
+  text: string
+  toolCalls: unknown[]
+  toolResults: unknown[]
+  response: { messages: ModelMessage[] }
+}
+
 // --- Tests ---
 
 describe('pollScheduledOnce', () => {
   let chat: ReturnType<typeof createMockChat>
   let provider: TaskProvider
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    void mock.module('ai', () => ({
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+      tool: (opts: unknown): unknown => opts,
+      stepCountIs: (_n: number): unknown => undefined,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
+    }))
     await setupTestDb()
     chat = createMockChat()
     provider = createMockProvider()
     setupUserConfig(USER_ID)
-    generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
   })
 
   test('executes a due one-shot prompt, marks completed, sends message', async () => {
@@ -218,13 +208,25 @@ describe('pollScheduledOnce', () => {
 
 describe('pollScheduledOnce — error handling', () => {
   let chat: ReturnType<typeof createMockChat>
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    void mock.module('ai', () => ({
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+      tool: (opts: unknown): unknown => opts,
+      stepCountIs: (_n: number): unknown => undefined,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
+    }))
     await setupTestDb()
     chat = createMockChat()
     setupUserConfig(USER_ID)
-    generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
   })
 
   test('notifies user when LLM throws', async () => {
@@ -274,13 +276,25 @@ describe('pollScheduledOnce — error handling', () => {
 
 describe('pollAlertsOnce', () => {
   let chat: ReturnType<typeof createMockChat>
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Alert triggered.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    void mock.module('ai', () => ({
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+      tool: (opts: unknown): unknown => opts,
+      stepCountIs: (_n: number): unknown => undefined,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
+    }))
     await setupTestDb()
     chat = createMockChat()
     setupUserConfig(USER_ID)
-    generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ text: 'Alert triggered.', toolCalls: [], toolResults: [], response: { messages: [] } })
   })
 
   test('does not trigger when no alerts exist', async () => {

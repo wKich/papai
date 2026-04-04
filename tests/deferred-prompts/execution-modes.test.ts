@@ -1,15 +1,17 @@
 // tests/deferred-prompts/execution-modes.test.ts
 //
 // Mocked modules: ai, @ai-sdk/openai-compatible, ../src/logger.js, ../src/db/drizzle.js
-// (Uses mockLogger + mockDrizzle helpers; mocks ai + openai-compatible directly)
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+// (Uses mockLogger + mockDrizzle helpers; mocks ai + openai-compatible in beforeEach)
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
+import { setConfig } from '../../src/config.js'
+import { dispatchExecution } from '../../src/deferred-prompts/proactive-llm.js'
+import type { ExecutionMetadata } from '../../src/deferred-prompts/types.js'
+import { appendHistory } from '../../src/history.js'
+import { createMockProvider } from '../tools/mock-provider.js'
 import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
 
 // Track generateText calls
 type GenerateTextResult = {
@@ -19,32 +21,6 @@ type GenerateTextResult = {
   response: { messages: ModelMessage[] }
 }
 type GenerateTextCall = { model: string; system: string; messages: ModelMessage[]; tools: unknown }
-const generateTextCalls: GenerateTextCall[] = []
-
-let generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
-  generateTextCalls.push(args)
-  return Promise.resolve({ text: 'Mock response', toolCalls: [], toolResults: [], response: { messages: [] } })
-}
-
-void mock.module('ai', () => ({
-  generateText: (args: GenerateTextCall): Promise<GenerateTextResult> => generateTextImpl(args),
-  tool: (opts: unknown): unknown => opts,
-  stepCountIs: (_n: number): unknown => undefined,
-}))
-
-void mock.module('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible:
-    (opts: { name: string; apiKey: string; baseURL: string }): ((modelId: string) => string) =>
-    (modelId: string): string =>
-      `${opts.name}:${modelId}`,
-}))
-
-import { setConfig } from '../../src/config.js'
-// Import after mocks
-import { dispatchExecution } from '../../src/deferred-prompts/proactive-llm.js'
-import type { ExecutionMetadata } from '../../src/deferred-prompts/types.js'
-import { appendHistory } from '../../src/history.js'
-import { createMockProvider } from '../tools/mock-provider.js'
 
 const USER_ID = 'exec-mode-user'
 
@@ -58,20 +34,36 @@ function setupUserConfig(opts?: { smallModel?: string }): void {
   }
 }
 
-afterAll(() => {
-  mock.restore()
-})
+describe('dispatchExecution', () => {
+  const generateTextCalls: GenerateTextCall[] = []
 
-beforeEach(async () => {
-  await setupTestDb()
-  generateTextCalls.length = 0
-  generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
+  let generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
     generateTextCalls.push(args)
     return Promise.resolve({ text: 'Mock response', toolCalls: [], toolResults: [], response: { messages: [] } })
   }
-})
 
-describe('dispatchExecution', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    generateTextCalls.length = 0
+    generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
+      generateTextCalls.push(args)
+      return Promise.resolve({ text: 'Mock response', toolCalls: [], toolResults: [], response: { messages: [] } })
+    }
+    void mock.module('ai', () => ({
+      generateText: (args: GenerateTextCall): Promise<GenerateTextResult> => generateTextImpl(args),
+      tool: (opts: unknown): unknown => opts,
+      stepCountIs: (_n: number): unknown => undefined,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible:
+        (opts: { name: string; apiKey: string; baseURL: string }): ((modelId: string) => string) =>
+        (modelId: string): string =>
+          `${opts.name}:${modelId}`,
+    }))
+    await setupTestDb()
+  })
+
   describe('lightweight mode', () => {
     const metadata: ExecutionMetadata = {
       mode: 'lightweight',
