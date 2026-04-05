@@ -171,6 +171,15 @@ export function mockDrizzle(): void {
 }
 
 /**
+ * Inject a custom drizzle instance into the singleton.
+ * Use this when tests create their own in-memory DB with custom schema
+ * (e.g. without full migrations). For full-migration setup, use setupTestDb().
+ */
+export function setTestDrizzleDb(db: ReturnType<typeof drizzle<typeof schema>>): void {
+  _setDrizzleDb(db)
+}
+
+/**
  * Reset the drizzle singleton back to its default (lazy-init) behavior.
  */
 export function restoreDrizzle(): void {

@@ -274,7 +274,7 @@ describe('processMessage', () => {
     const ADMIN_CTX = 'admin-ctx'
     const DEMO_CTX = 'demo-ctx'
 
-    test.skip('copies admin LLM config to demo user after Kaneo provisioning', async () => {
+    test('copies admin LLM config to demo user after Kaneo provisioning', async () => {
       process.env['DEMO_MODE'] = 'true'
       process.env['ADMIN_USER_ID'] = ADMIN_CTX
 

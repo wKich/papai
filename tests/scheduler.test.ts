@@ -4,15 +4,15 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import { setCachedConfig } from '../src/cache.js'
-import { _setDrizzleDb } from '../src/db/drizzle.js'
 import * as schema from '../src/db/schema.js'
 import type { Capability, Task, TaskProvider } from '../src/providers/types.js'
 import { createRecurringTask, getDueRecurringTasks } from '../src/recurring.js'
-import { tick, createMissedTasks, startScheduler, stopScheduler, setSchedulerDeps } from '../src/scheduler.js'
+import type { SchedulerDeps } from '../src/scheduler.js'
+import { tick, createMissedTasks, startScheduler, stopScheduler } from '../src/scheduler.js'
 import { setKaneoWorkspace } from '../src/users.js'
 import { createMockProvider } from './tools/mock-provider.js'
 import { clearUserCache } from './utils/test-cache.js'
-import { mockLogger } from './utils/test-helpers.js'
+import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 process.env['TASK_PROVIDER'] = 'kaneo'
 process.env['KANEO_CLIENT_URL'] = 'http://localhost:11337'
@@ -27,6 +27,7 @@ describe('scheduler', () => {
   let createTaskImpl: (...args: unknown[]) => Promise<MockTask>
   let addTaskLabelImpl: (taskId: string, labelId: string) => Promise<{ taskId: string; labelId: string }>
   let mockCapabilities: Set<Capability>
+  let schedulerDeps: SchedulerDeps
 
   let resolveCreateTask: (() => void) | null
   let createTaskCallCount: number
@@ -119,7 +120,7 @@ describe('scheduler', () => {
    * Call tick() and wait for it to fully complete, including the finally block.
    */
   const awaitTick = async (): Promise<void> => {
-    await tick()
+    await tick(schedulerDeps)
   }
 
   beforeEach(() => {
@@ -136,7 +137,7 @@ describe('scheduler', () => {
     // Register mocks
     mockLogger()
 
-    setSchedulerDeps({
+    schedulerDeps = {
       createProvider: (_name: string, _config: Record<string, string>): TaskProvider =>
         createMockProvider({
           capabilities: mockCapabilities,
@@ -147,7 +148,7 @@ describe('scheduler', () => {
           addTaskLabel: (taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> =>
             addTaskLabelImpl(taskId, labelId),
         }),
-    })
+    }
 
     // Build mockChatProvider (uses mutable sendMessageImpl/sendMessageCalls)
     mockChatProvider = {
@@ -163,7 +164,7 @@ describe('scheduler', () => {
     }
 
     setupDb()
-    _setDrizzleDb(testDb)
+    setTestDrizzleDb(testDb)
     seedUser()
   })
 
@@ -188,8 +189,8 @@ describe('scheduler', () => {
             })
         })
 
-      const firstTick = tick()
-      const secondTick = tick()
+      const firstTick = tick(schedulerDeps)
+      const secondTick = tick(schedulerDeps)
 
       await Promise.resolve()
       await Promise.resolve()
@@ -329,7 +330,7 @@ describe('scheduler', () => {
   describe('tick() — user notification', () => {
     test('tick() notifies user after task creation', async () => {
       createDueTask()
-      startScheduler(mockChatProvider)
+      startScheduler(mockChatProvider, schedulerDeps)
       // startScheduler calls tick() immediately, which processes the due task
       await Bun.sleep(50)
       expect(sendMessageCalls.length).toBeGreaterThanOrEqual(1)
@@ -340,7 +341,7 @@ describe('scheduler', () => {
     test('tick() continues when notifyUser throws', async () => {
       sendMessageImpl = (): Promise<void> => Promise.reject(new Error('notification failed'))
       const taskId = createDueTask()
-      startScheduler(mockChatProvider)
+      startScheduler(mockChatProvider, schedulerDeps)
       await Bun.sleep(50)
       const row = testSqlite
         .query<{ last_run: string | null }, []>(`SELECT last_run FROM recurring_tasks WHERE id = '${taskId}'`)
@@ -365,7 +366,7 @@ describe('scheduler', () => {
   describe('createMissedTasks', () => {
     test('createMissedTasks with 3 missed dates creates 3 tasks', async () => {
       const taskId = createDueTask()
-      const result = await createMissedTasks(taskId, ['2026-03-02', '2026-03-09', '2026-03-16'])
+      const result = await createMissedTasks(taskId, ['2026-03-02', '2026-03-09', '2026-03-16'], schedulerDeps)
       expect(result).toBe(3)
       expect(createTaskCallCount).toBe(3)
       const occurrences = testSqlite.query<{ id: string }, []>('SELECT id FROM recurring_task_occurrences').all()
@@ -387,19 +388,19 @@ describe('scheduler', () => {
           url: `https://test.com/task/new-task-${callIdx}`,
         })
       }
-      const result = await createMissedTasks(taskId, ['2026-03-02', '2026-03-09', '2026-03-16'])
+      const result = await createMissedTasks(taskId, ['2026-03-02', '2026-03-09', '2026-03-16'], schedulerDeps)
       expect(result).toBe(2)
     })
 
     test('createMissedTasks with empty missedDates returns 0', async () => {
       const taskId = createDueTask()
-      const result = await createMissedTasks(taskId, [])
+      const result = await createMissedTasks(taskId, [], schedulerDeps)
       expect(result).toBe(0)
       expect(createTaskCallCount).toBe(0)
     })
 
     test('createMissedTasks with non-existent recurring task ID returns 0', async () => {
-      const result = await createMissedTasks('non-existent-id', ['2026-03-02'])
+      const result = await createMissedTasks('non-existent-id', ['2026-03-02'], schedulerDeps)
       expect(result).toBe(0)
       expect(createTaskCallCount).toBe(0)
     })
@@ -407,12 +408,12 @@ describe('scheduler', () => {
 
   describe('startScheduler / stopScheduler', () => {
     test('startScheduler double-call does not error', () => {
-      startScheduler(mockChatProvider)
-      expect(() => startScheduler(mockChatProvider)).not.toThrow()
+      startScheduler(mockChatProvider, schedulerDeps)
+      expect(() => startScheduler(mockChatProvider, schedulerDeps)).not.toThrow()
     })
 
     test('stopScheduler clears state and disables notifications', async () => {
-      startScheduler(mockChatProvider)
+      startScheduler(mockChatProvider, schedulerDeps)
       stopScheduler()
       createDueTask()
       await awaitTick()

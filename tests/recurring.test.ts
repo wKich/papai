@@ -3,7 +3,6 @@ import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
-import { _setDrizzleDb } from '../src/db/drizzle.js'
 import * as schema from '../src/db/schema.js'
 import {
   createRecurringTask,
@@ -20,7 +19,7 @@ import {
   skipNextOccurrence,
   updateRecurringTask,
 } from '../src/recurring.js'
-import { mockLogger } from './utils/test-helpers.js'
+import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 const USER_ID = 'test-user-1'
 const PROJECT_ID = 'project-1'
@@ -35,7 +34,7 @@ describe('recurring tasks', () => {
     testSqlite.run('PRAGMA journal_mode=WAL')
     testSqlite.run('PRAGMA foreign_keys=ON')
     testDb = drizzle(testSqlite, { schema })
-    _setDrizzleDb(testDb)
+    setTestDrizzleDb(testDb)
 
     // Create the recurring_tasks table
     testSqlite.run(`

@@ -7,7 +7,6 @@ import packageJson from '../package.json' with { type: 'json' }
 import type { AnnouncementsDeps } from '../src/announcements.js'
 import { announceNewVersion } from '../src/announcements.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
-import { _setDrizzleDb } from '../src/db/drizzle.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -18,7 +17,7 @@ import { migration006VersionAnnouncements } from '../src/db/migrations/006_versi
 import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
 import * as schema from '../src/db/schema.js'
 import { extractChangelogSection } from './helpers/extract-changelog-section.js'
-import { mockLogger } from './utils/test-helpers.js'
+import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 const MIGRATIONS = [
   migration001Initial,
@@ -139,7 +138,7 @@ describe('announceNewVersion', () => {
     // Setup test database
     testSqlite = new Database(':memory:')
     testDb = drizzle(testSqlite, { schema })
-    _setDrizzleDb(testDb)
+    setTestDrizzleDb(testDb)
     runMigrations(testSqlite, MIGRATIONS)
 
     mockChat = {
