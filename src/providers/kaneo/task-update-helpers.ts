@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { TaskSchema } from './schemas/create-task.js'
-import { denormalizeStatus } from './task-status.js'
+import { type TaskStatusDeps, denormalizeStatus } from './task-status.js'
 
 // Local schema for task with projectId (for update responses)
 const TaskWithProjectIdSchema = TaskSchema
@@ -57,6 +57,7 @@ export async function performUpdate(
   config: KaneoConfig,
   taskId: string,
   params: TaskUpdateParams,
+  statusDeps?: TaskStatusDeps,
 ): Promise<z.infer<typeof TaskWithProjectIdSchema>> {
   // Use single-field endpoints for each field being updated
   // (The full /task/:id endpoint doesn't actually update fields)
@@ -76,7 +77,7 @@ export async function performUpdate(
   if (result !== undefined) {
     // Denormalize status from column ID to slug
     if (result.projectId !== undefined) {
-      result.status = await denormalizeStatus(config, result.projectId, result.status)
+      result.status = await denormalizeStatus(config, result.projectId, result.status, statusDeps)
     }
     return result
   }
@@ -85,7 +86,7 @@ export async function performUpdate(
   const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
   // Denormalize status from column ID to slug
   if (task.projectId !== undefined) {
-    task.status = await denormalizeStatus(config, task.projectId, task.status)
+    task.status = await denormalizeStatus(config, task.projectId, task.status, statusDeps)
   }
   return task
 }

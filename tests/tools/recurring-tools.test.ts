@@ -2,6 +2,7 @@ import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { setCachedConfig, _userCaches } from '../../src/cache.js'
 import type { ResumeResult } from '../../src/recurring.js'
+import type { CreateRecurringTaskDeps } from '../../src/tools/create-recurring-task.js'
 import { makeCreateRecurringTaskTool } from '../../src/tools/create-recurring-task.js'
 import { makeDeleteRecurringTaskTool } from '../../src/tools/delete-recurring-task.js'
 import { makeListRecurringTasksTool } from '../../src/tools/list-recurring-tasks.js'
@@ -71,6 +72,8 @@ describe('recurring-tools', () => {
   let createMissedTasksResult: number
   let createMissedTasksCalls: Array<{ id: string; dates: readonly string[] }>
 
+  let createRecurringTaskDeps: CreateRecurringTaskDeps
+
   beforeEach(() => {
     // Reset mutable state to defaults
     createRecurringTaskCallCount = 0
@@ -92,6 +95,33 @@ describe('recurring-tools', () => {
 
     // Register mocks
     mockLogger()
+
+    createRecurringTaskDeps = {
+      createRecurringTask: (input: RecurringTaskInput): RecurringTaskRecord => {
+        createRecurringTaskCallCount++
+        if (onMockCall) onMockCall()
+        return {
+          id: 'rec-1',
+          userId: 'user-1',
+          projectId: 'p1',
+          title: 'Test',
+          description: null,
+          priority: null,
+          status: null,
+          assignee: null,
+          labels: [],
+          triggerType: input.triggerType,
+          cronExpression: input.cronExpression ?? null,
+          timezone: 'UTC',
+          enabled: true,
+          catchUp: false,
+          lastRun: null,
+          nextRun: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      },
+    }
 
     void mock.module('../../src/recurring.js', () => ({
       createRecurringTask: (input: RecurringTaskInput): RecurringTaskRecord => {
@@ -168,7 +198,7 @@ describe('recurring-tools', () => {
 
   describe('makeCreateRecurringTaskTool', () => {
     test('allows on_complete triggerType and creates the definition', async () => {
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { title: 'On complete task', projectId: 'p1', triggerType: 'on_complete' },
@@ -180,7 +210,7 @@ describe('recurring-tools', () => {
     })
 
     test('returns error when cron type but no schedule', async () => {
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron' }, toolCtx)
       expect(result).toHaveProperty('error', "schedule is required when triggerType is 'cron'")
@@ -188,7 +218,7 @@ describe('recurring-tools', () => {
     })
 
     test('converts semantic schedule to cron expression', async () => {
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         {
@@ -209,7 +239,7 @@ describe('recurring-tools', () => {
     })
 
     test('returns "after completion" schedule for on_complete triggerType', async () => {
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         { title: 'On complete task', projectId: 'p1', triggerType: 'on_complete' },
@@ -219,11 +249,11 @@ describe('recurring-tools', () => {
     })
 
     test('has a non-empty description', () => {
-      expect(makeCreateRecurringTaskTool('user-1').description).toBeTruthy()
+      expect(makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('on_complete triggerType ignores schedule when both provided', async () => {
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
 
       const result: unknown = await tool.execute(
@@ -244,7 +274,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('create failed')
       }
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -266,7 +296,7 @@ describe('recurring-tools', () => {
     test('returns nextRun converted to user local time', async () => {
       // Override the mock to return a known UTC nextRun with Asia/Karachi timezone
       setCachedConfig('user-1', 'timezone', 'Asia/Karachi')
-      const tool = makeCreateRecurringTaskTool('user-1')
+      const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute(
         {

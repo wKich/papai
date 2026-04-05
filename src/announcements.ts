@@ -1,12 +1,20 @@
 import { eq } from 'drizzle-orm'
 
 import packageJson from '../package.json' with { type: 'json' }
-import { readChangelogFile } from './changelog-reader.js'
+import { readChangelogFile as defaultReadChangelogFile } from './changelog-reader.js'
 import type { ChatProvider } from './chat/types.js'
 import { getDrizzleDb } from './db/drizzle.js'
 import { userConfig, versionAnnouncements } from './db/schema.js'
 import { logger } from './logger.js'
 import { extractChangelogSection } from './utils/changelog.js'
+
+export interface AnnouncementsDeps {
+  readChangelogFile: () => Promise<string>
+}
+
+const defaultAnnouncementsDeps: AnnouncementsDeps = {
+  readChangelogFile: defaultReadChangelogFile,
+}
 
 const log = logger.child({ scope: 'announcements' })
 
@@ -60,10 +68,13 @@ function shouldSkipAnnouncement(users: string[]): boolean {
   return false
 }
 
-export async function announceNewVersion(chat: ChatProvider): Promise<void> {
+export async function announceNewVersion(
+  chat: ChatProvider,
+  deps: AnnouncementsDeps = defaultAnnouncementsDeps,
+): Promise<void> {
   log.debug({ version: VERSION }, 'Checking if version announcement is needed')
 
-  const changelogSection = await loadChangelogSection()
+  const changelogSection = await loadChangelogSection(deps)
   if (changelogSection === null) return
 
   const users = getUsersWithKaneoAccount()
@@ -83,10 +94,10 @@ export async function announceNewVersion(chat: ChatProvider): Promise<void> {
   log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
 }
 
-async function loadChangelogSection(): Promise<string | null> {
+async function loadChangelogSection(deps: AnnouncementsDeps): Promise<string | null> {
   let changelogContent: string
   try {
-    changelogContent = await readChangelogFile()
+    changelogContent = await deps.readChangelogFile()
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not read CHANGELOG.md')
     return null

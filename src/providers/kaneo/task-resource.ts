@@ -9,13 +9,19 @@ import { TaskSchema as KaneoTaskResponseSchema } from './schemas/create-task.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
 import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
-import { denormalizeStatus, validateStatus } from './task-status.js'
+import { type TaskStatusDeps, denormalizeStatus, validateStatus } from './task-status.js'
 import { performUpdate } from './task-update-helpers.js'
 
 export class TaskResource {
   private log = logger.child({ scope: 'kaneo:task-resource' })
+  private statusDeps: TaskStatusDeps | undefined
 
-  constructor(private config: KaneoConfig) {}
+  constructor(
+    private config: KaneoConfig,
+    statusDeps?: TaskStatusDeps,
+  ) {
+    this.statusDeps = statusDeps
+  }
 
   async create(params: {
     projectId: string
@@ -29,7 +35,7 @@ export class TaskResource {
     this.log.debug({ projectId: params.projectId, title: params.title }, 'Creating task')
 
     try {
-      const status = await validateStatus(this.config, params.projectId, params.status ?? 'to-do')
+      const status = await validateStatus(this.config, params.projectId, params.status ?? 'to-do', this.statusDeps)
       const task = await kaneoFetch(
         this.config,
         'POST',
@@ -46,7 +52,7 @@ export class TaskResource {
         KaneoTaskResponseSchema,
       )
       // Denormalize status from column ID to slug
-      task.status = await denormalizeStatus(this.config, params.projectId, task.status)
+      task.status = await denormalizeStatus(this.config, params.projectId, task.status, this.statusDeps)
       this.log.info({ taskId: task.id, number: task.number }, 'Task created')
       return task
     } catch (error) {
@@ -116,7 +122,7 @@ export class TaskResource {
         KaneoTaskResponseSchema,
       )
       // Denormalize status from column ID to slug
-      task.status = await denormalizeStatus(this.config, task.projectId, task.status)
+      task.status = await denormalizeStatus(this.config, task.projectId, task.status, this.statusDeps)
       const { relations } = parseRelationsFromDescription(task.description ?? '')
       this.log.info({ taskId, number: task.number, relationCount: relations.length }, 'Task fetched')
       // Return raw description (with frontmatter) for tests to check relation markers
@@ -156,9 +162,9 @@ export class TaskResource {
       // Validate and normalize status if being updated
       if (params.status !== undefined) {
         const existingTask = await this.get(taskId)
-        params.status = await validateStatus(this.config, existingTask.projectId, params.status)
+        params.status = await validateStatus(this.config, existingTask.projectId, params.status, this.statusDeps)
       }
-      const task = await performUpdate(this.config, taskId, params)
+      const task = await performUpdate(this.config, taskId, params, this.statusDeps)
       this.log.info({ taskId, number: task.number }, 'Task updated')
       return task
     } catch (error) {

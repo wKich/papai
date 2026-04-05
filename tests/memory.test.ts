@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite'
 import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import type { LanguageModel, ModelMessage } from 'ai'
@@ -24,7 +23,6 @@ import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 describe('memory', () => {
   // Mock getDrizzleDb to return our test database
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   type GenerateTextResult = { text: string }
 
@@ -38,19 +36,11 @@ describe('memory', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
-
     void mock.module('ai', () => ({
       generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
     }))
 
     testDb = await setupTestDb()
-    const { Database: SqliteDB } = await import('bun:sqlite')
-    testSqlite = new SqliteDB(':memory:')
   })
 
   describe('loadSummary', () => {

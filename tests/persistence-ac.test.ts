@@ -5,8 +5,7 @@
  * using controlled test doubles to verify the composition of the persistence layer.
  */
 
-import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -19,18 +18,10 @@ import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('Story 2: Surviving restart', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     mockLogger()
     testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
 
     // Clear all caches
     _userCaches.clear()
@@ -87,18 +78,9 @@ describe('Story 2: Surviving restart', () => {
 })
 
 describe('Story 4: Key facts remembered after read', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     mockLogger()
     await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
 
     _userCaches.clear()
   })

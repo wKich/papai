@@ -5,9 +5,17 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
-import { createRecurringTask } from '../recurring.js'
-import type { TriggerType } from '../types/recurring.js'
+import { createRecurringTask as defaultCreateRecurringTask } from '../recurring.js'
+import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from '../types/recurring.js'
 import { semanticScheduleToCron, utcToLocal } from '../utils/datetime.js'
+
+export interface CreateRecurringTaskDeps {
+  createRecurringTask: (input: RecurringTaskInput) => RecurringTaskRecord
+}
+
+const defaultDeps: CreateRecurringTaskDeps = {
+  createRecurringTask: defaultCreateRecurringTask,
+}
 
 const log = logger.child({ scope: 'tool:create-recurring-task' })
 
@@ -39,7 +47,7 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>
 
-function executeCreate(userId: string, input: Input): unknown {
+function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDeps): unknown {
   log.debug({ userId, title: input.title, triggerType: input.triggerType }, 'Creating recurring task')
 
   if (input.triggerType === 'cron' && input.schedule === undefined) {
@@ -51,7 +59,7 @@ function executeCreate(userId: string, input: Input): unknown {
   const cronExpression =
     input.triggerType === 'cron' && input.schedule !== undefined ? semanticScheduleToCron(input.schedule) : undefined
 
-  const record = createRecurringTask({
+  const record = deps.createRecurringTask({
     userId,
     title: input.title,
     projectId: input.projectId,
@@ -84,14 +92,17 @@ function executeCreate(userId: string, input: Input): unknown {
   }
 }
 
-export function makeCreateRecurringTaskTool(userId: string): ToolSet[string] {
+export function makeCreateRecurringTaskTool(
+  userId: string,
+  deps: CreateRecurringTaskDeps = defaultDeps,
+): ToolSet[string] {
   return tool({
     description:
       'Set up a recurring task that is automatically created on a schedule (cron) or after completion. Call list_projects first.',
     inputSchema,
     execute: (input) => {
       try {
-        return executeCreate(userId, input)
+        return executeCreate(userId, input, deps)
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'create_recurring_task' },

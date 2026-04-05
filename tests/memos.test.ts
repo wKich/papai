@@ -1,5 +1,4 @@
-import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { _userCaches } from '../src/cache.js'
 import {
@@ -19,17 +18,9 @@ beforeEach(() => {
 })
 
 describe('saveMemo', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     _userCaches.clear()
     await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('inserts a memo and returns it', () => {
@@ -61,17 +52,9 @@ describe('saveMemo', () => {
 })
 
 describe('listMemos', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     _userCaches.clear()
     await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('returns newest first', async () => {
@@ -123,17 +106,10 @@ describe('listMemos', () => {
 
 describe('keywordSearchMemos (FTS5)', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
     testDb = await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('finds memos by content keyword', () => {
@@ -192,17 +168,9 @@ describe('keywordSearchMemos (FTS5)', () => {
 })
 
 describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     _userCaches.clear()
     await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('stores and retrieves Float32Array correctly', () => {
@@ -233,17 +201,9 @@ describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
 })
 
 describe('archiveMemos', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     _userCaches.clear()
     await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('archives by tag only matching rows', () => {
@@ -281,17 +241,9 @@ describe('archiveMemos', () => {
 })
 
 describe('addMemoLink', () => {
-  let testSqlite: Database
-
   beforeEach(async () => {
     _userCaches.clear()
     await setupTestDb()
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('creates a link between memo and task', () => {
