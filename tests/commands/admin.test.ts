@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import type { AdminCommandsDeps } from '../../src/commands/admin.js'
 import { registerAdminCommands } from '../../src/commands/admin.js'
 import * as schema from '../../src/db/schema.js'
+import type { ProvisionOutcome } from '../../src/providers/kaneo/provision.js'
 import { addUser, isAuthorized, listUsers } from '../../src/users.js'
 import {
   createDmMessage,
@@ -37,33 +39,24 @@ function createMockChatWithHandler(sendMessageImpl: (userId: string, markdown: s
 describe('Admin Commands', () => {
   let commandHandlers: Map<string, CommandHandler>
 
-  // Mock provisionAndConfigure with mutable implementation
-  type ProvisionResult = {
-    status: string
-    email?: string
-    password?: string
-    kaneoUrl?: string
-    apiKey?: string
-    workspaceId?: string
-    error?: string
-  }
-  let provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
+  let provisionImpl: () => Promise<ProvisionOutcome>
+  let adminDeps: AdminCommandsDeps
 
   beforeEach(async () => {
     // Reset mutable state to defaults
-    provisionImpl = (): Promise<ProvisionResult> => Promise.resolve({ status: 'skipped' })
+    provisionImpl = (): Promise<ProvisionOutcome> => Promise.resolve({ status: 'registration_disabled' })
 
     // Register mocks
     mockLogger()
-
-    void mock.module('../../src/providers/kaneo/provision.js', () => ({
-      provisionAndConfigure: (..._args: unknown[]): Promise<ProvisionResult> => provisionImpl(),
-    }))
 
     await setupTestDb()
 
     // Add admin user to DB
     addUser(ADMIN_ID, ADMIN_ID)
+
+    adminDeps = {
+      provisionAndConfigure: (): Promise<ProvisionOutcome> => provisionImpl(),
+    }
 
     commandHandlers = new Map()
     const mockChat: ChatProvider = {
@@ -76,7 +69,7 @@ describe('Admin Commands', () => {
       start: (): Promise<void> => Promise.resolve(),
       stop: (): Promise<void> => Promise.resolve(),
     }
-    registerAdminCommands(mockChat, ADMIN_ID)
+    registerAdminCommands(mockChat, ADMIN_ID, adminDeps)
   })
 
   describe('/user add', () => {
@@ -138,7 +131,7 @@ describe('Admin Commands', () => {
     })
 
     test('provision success replies with email, password, and URL', async () => {
-      provisionImpl = (): Promise<ProvisionResult> =>
+      provisionImpl = (): Promise<ProvisionOutcome> =>
         Promise.resolve({
           status: 'provisioned',
           email: '12345-a1b2c3d4@pap.ai',
@@ -166,7 +159,7 @@ describe('Admin Commands', () => {
     })
 
     test('provision failure replies with failure note', async () => {
-      provisionImpl = (): Promise<ProvisionResult> =>
+      provisionImpl = (): Promise<ProvisionOutcome> =>
         Promise.resolve({ status: 'failed', error: 'KANEO_CLIENT_URL not set' })
 
       const handler = commandHandlers.get('user')
@@ -329,7 +322,7 @@ describe('Admin Commands', () => {
         sentMessages.push({ userId, markdown })
         return Promise.resolve()
       })
-      registerAdminCommands(mockChat, ADMIN_ID)
+      registerAdminCommands(mockChat, ADMIN_ID, adminDeps)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()
       const { reply, getReplies } = createMockReply()
@@ -397,7 +390,7 @@ describe('Admin Commands', () => {
         sentMessages.push(userId)
         return Promise.resolve()
       })
-      registerAdminCommands(mockChat, ADMIN_ID)
+      registerAdminCommands(mockChat, ADMIN_ID, adminDeps)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()
       const { reply, getReplies } = createMockReply()
@@ -436,7 +429,7 @@ describe('Admin Commands', () => {
         sentUserIds.push(userId)
         return Promise.resolve()
       })
-      registerAdminCommands(mockChat, ADMIN_ID)
+      registerAdminCommands(mockChat, ADMIN_ID, adminDeps)
       const handler = handlers.get('announce')
       expect(handler).toBeDefined()
       const { reply } = createMockReply()

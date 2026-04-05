@@ -9,7 +9,7 @@ import type { ChatProvider } from './chat/types.js'
 import { getConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { logger } from './logger.js'
-import { createProvider } from './providers/registry.js'
+import { createProvider as defaultCreateProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
 import type { Task } from './providers/types.js'
 import { recordOccurrence } from './recurring-occurrences.js'
@@ -18,6 +18,20 @@ import { scheduler } from './scheduler-instance.js'
 import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'scheduler' })
+
+export interface SchedulerDeps {
+  createProvider: (name: string, config: Record<string, string>) => TaskProvider
+}
+
+const defaultSchedulerDeps: SchedulerDeps = {
+  createProvider: (...args): TaskProvider => defaultCreateProvider(...args),
+}
+
+let activeDeps: SchedulerDeps = defaultSchedulerDeps
+
+export function setSchedulerDeps(deps: SchedulerDeps): void {
+  activeDeps = deps
+}
 
 /** Scheduler tick interval: 60 seconds */
 const TICK_INTERVAL_MS = 60 * 1000
@@ -57,7 +71,7 @@ const buildProviderForUser = (userId: string): TaskProvider | null => {
       ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
       : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
 
-    return createProvider('kaneo', config)
+    return activeDeps.createProvider('kaneo', config)
   }
 
   if (TASK_PROVIDER === 'youtrack') {
@@ -69,7 +83,7 @@ const buildProviderForUser = (userId: string): TaskProvider | null => {
       return null
     }
 
-    return createProvider('youtrack', { baseUrl, token })
+    return activeDeps.createProvider('youtrack', { baseUrl, token })
   }
 
   log.warn({ userId, providerName: TASK_PROVIDER }, 'Unknown task provider')

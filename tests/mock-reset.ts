@@ -17,12 +17,10 @@ import * as _ai from 'ai'
 import { _resetDrizzleDb } from '../src/db/drizzle.js'
 // Capture real module exports BEFORE any test file loads.
 // Spread into plain objects to snapshot current values.
-import * as _llmOrchestrator from '../src/llm-orchestrator.js'
 import * as _logger from '../src/logger.js'
 import * as _messageCache from '../src/message-cache/cache.js'
 import * as _providersFactory from '../src/providers/factory.js'
 import * as _kaneoProvision from '../src/providers/kaneo/provision.js'
-import * as _providersRegistry from '../src/providers/registry.js'
 import * as _recurring from '../src/recurring.js'
 import * as _scheduler from '../src/scheduler.js'
 
@@ -32,9 +30,7 @@ const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ['../src/providers/kaneo/provision.js', { ..._kaneoProvision }],
   ['../src/recurring.js', { ..._recurring }],
   ['../src/scheduler.js', { ..._scheduler }],
-  ['../src/providers/registry.js', { ..._providersRegistry }],
   ['../src/providers/factory.js', { ..._providersFactory }],
-  ['../src/llm-orchestrator.js', { ..._llmOrchestrator }],
   ['ai', { ..._ai }],
   ['@ai-sdk/openai-compatible', { ..._openaiCompat }],
 ]

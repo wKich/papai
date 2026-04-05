@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { setupBot } from '../../src/bot.js'
+import { setupBot, type BotDeps } from '../../src/bot.js'
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
 import { addUser, isAuthorized, removeUser } from '../../src/users.js'
@@ -34,16 +34,16 @@ describe('Bot Authorization Gate', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../../src/llm-orchestrator.js', () => ({
-      processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
+    // Setup test database with migrations
+    await setupTestDb()
+
+    const botDeps: BotDeps = {
+      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
         processMessageCallCount++
         lastProcessedStorageId = storageContextId
         return Promise.resolve()
       },
-    }))
-
-    // Setup test database with migrations
-    await setupTestDb()
+    }
 
     const mockChat: ChatProvider = {
       name: 'mock',
@@ -56,7 +56,7 @@ describe('Bot Authorization Gate', () => {
       stop: (): Promise<void> => Promise.resolve(),
     }
 
-    setupBot(mockChat, ADMIN_ID)
+    setupBot(mockChat, ADMIN_ID, botDeps)
   })
 
   describe('Unauthorized user — silent drop', () => {
@@ -157,15 +157,15 @@ describe('Demo Mode — wizard bypass', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../../src/llm-orchestrator.js', () => ({
-      processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
+    await setupTestDb()
+
+    const botDeps: BotDeps = {
+      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
         processMessageCallCount++
         lastProcessedStorageId = storageContextId
         return Promise.resolve()
       },
-    }))
-
-    await setupTestDb()
+    }
 
     const mockChat: ChatProvider = {
       name: 'mock',
@@ -178,7 +178,7 @@ describe('Demo Mode — wizard bypass', () => {
       stop: (): Promise<void> => Promise.resolve(),
     }
 
-    setupBot(mockChat, ADMIN_ID)
+    setupBot(mockChat, ADMIN_ID, botDeps)
   })
 
   afterEach(() => {
