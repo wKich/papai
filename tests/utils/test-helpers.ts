@@ -159,9 +159,10 @@ export function getTestDb(): ReturnType<typeof drizzle<typeof schema>> {
 }
 
 /**
- * Set the drizzle singleton to use the test database.
+ * Re-apply the drizzle singleton to use the test database.
  * Since setupTestDb() now calls _setDrizzleDb() automatically,
- * this is only needed if you want to set drizzle before calling setupTestDb().
+ * this is only needed to re-inject after something resets the singleton
+ * (e.g. mock.restore()). Requires setupTestDb() to have been called first.
  */
 export function mockDrizzle(): void {
   if (testDb === null) {

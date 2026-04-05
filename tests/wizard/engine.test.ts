@@ -16,8 +16,6 @@ const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizard
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
 const { getWizardSession, deleteWizardSession } = await import('../../src/wizard/state.js')
 
-beforeEach(() => {})
-
 // Global fetch mock for engine tests (returns success by default)
 describe('Wizard Engine', () => {
   const userId = 'user123'
