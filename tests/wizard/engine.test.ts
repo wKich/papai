@@ -16,6 +16,10 @@ const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizard
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
 const { getWizardSession, deleteWizardSession } = await import('../../src/wizard/state.js')
 
+beforeEach(() => {
+  mockDrizzle()
+})
+
 // Global fetch mock for engine tests (returns success by default)
 describe('Wizard Engine', () => {
   const userId = 'user123'
@@ -29,7 +33,6 @@ describe('Wizard Engine', () => {
       getLogLevel: trackedLogger.getLogLevel,
       logger: trackedLogger.logger,
     }))
-    mockDrizzle()
 
     // Clean up
     await setupTestDb()
@@ -433,7 +436,6 @@ describe('Wizard engine with end-of-wizard validation', () => {
       getLogLevel: trackedLogger.getLogLevel,
       logger: trackedLogger.logger,
     }))
-    mockDrizzle()
 
     await deleteWizardSession(userId, storageContextId)
   })
@@ -470,7 +472,6 @@ describe('Wizard engine masking behavior', () => {
       getLogLevel: trackedLogger.getLogLevel,
       logger: trackedLogger.logger,
     }))
-    mockDrizzle()
 
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
@@ -534,7 +535,6 @@ describe('Wizard engine skip with existing config', () => {
       getLogLevel: trackedLogger.getLogLevel,
       logger: trackedLogger.logger,
     }))
-    mockDrizzle()
 
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)

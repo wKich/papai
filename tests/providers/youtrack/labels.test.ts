@@ -123,9 +123,12 @@ const makeTagResponse = (overrides: Record<string, unknown> = {}): TagFixture =>
 
 // --- Tests ---
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('listYouTrackLabels', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -196,7 +199,6 @@ describe('listYouTrackLabels', () => {
 
 describe('createYouTrackLabel', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -258,7 +260,6 @@ describe('createYouTrackLabel', () => {
 
 describe('updateYouTrackLabel', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -320,7 +321,6 @@ describe('updateYouTrackLabel', () => {
 
 describe('removeYouTrackLabel', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -363,7 +363,6 @@ describe('removeYouTrackLabel', () => {
 
 describe('addYouTrackTaskLabel', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -428,7 +427,6 @@ describe('addYouTrackTaskLabel', () => {
 
 describe('removeYouTrackTaskLabel', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 

@@ -17,10 +17,13 @@ import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 // --- CRUD tests ---
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 describe('alert prompt CRUD', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -216,11 +219,6 @@ describe('alert prompt CRUD', () => {
 // --- Condition evaluation tests (pure functions, no DB needed) ---
 
 describe('evaluateCondition', () => {
-  beforeEach(() => {
-    mockLogger()
-    mockDrizzle()
-  })
-
   const makeTask = (overrides: Partial<Task> = {}): Task => ({
     id: 'task-1',
     title: 'Test task',
@@ -400,11 +398,6 @@ describe('evaluateCondition', () => {
 // --- describeCondition tests ---
 
 describe('describeCondition', () => {
-  beforeEach(() => {
-    mockLogger()
-    mockDrizzle()
-  })
-
   test('leaf with value', () => {
     const result = describeCondition({ field: 'task.status', op: 'changed_to', value: 'done' })
     expect(result).toBe('task.status changed_to "done"')

@@ -18,11 +18,14 @@ const getMigrationIds = (db: Database): string[] =>
 
 const makeDb = (): Database => new Database(':memory:')
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('runMigrations - basic behavior', () => {
   let db: Database
 
   beforeEach(() => {
-    mockLogger()
     db = makeDb()
   })
 
@@ -76,7 +79,6 @@ describe('runMigrations - skips already-applied', () => {
   let db: Database
 
   beforeEach(() => {
-    mockLogger()
     db = makeDb()
   })
 
@@ -122,7 +124,6 @@ describe('runMigrations - idempotency', () => {
   let db: Database
 
   beforeEach(() => {
-    mockLogger()
     db = makeDb()
   })
 
@@ -156,7 +157,6 @@ describe('runMigrations - rollback', () => {
   let db: Database
 
   beforeEach(() => {
-    mockLogger()
     db = makeDb()
   })
 
@@ -196,7 +196,6 @@ describe('runMigrations - order validation', () => {
   let db: Database
 
   beforeEach(() => {
-    mockLogger()
     db = makeDb()
   })
 

@@ -85,9 +85,12 @@ const makeCommentResponse = (overrides: Record<string, unknown> = {}): CommentFi
 
 // --- Tests ---
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('addYouTrackComment', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -156,7 +159,6 @@ describe('addYouTrackComment', () => {
 
 describe('getYouTrackComments', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -206,7 +208,6 @@ describe('getYouTrackComments', () => {
 
 describe('updateYouTrackComment', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -274,7 +275,6 @@ describe('updateYouTrackComment', () => {
 
 describe('removeYouTrackComment', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 

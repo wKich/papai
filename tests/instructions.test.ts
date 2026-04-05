@@ -4,10 +4,13 @@ import { _userCaches } from '../src/cache.js'
 import { saveInstruction, listInstructions, deleteInstruction } from '../src/instructions.js'
 import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 describe('saveInstruction', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -87,8 +90,6 @@ describe('saveInstruction', () => {
 
 describe('listInstructions', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -107,8 +108,6 @@ describe('listInstructions', () => {
 
 describe('deleteInstruction', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })

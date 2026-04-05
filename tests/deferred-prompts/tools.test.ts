@@ -49,10 +49,13 @@ function extractPrompts(result: unknown): unknown[] {
   return prompts
 }
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 describe('makeDeferredPromptTools', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -70,8 +73,6 @@ describe('makeDeferredPromptTools', () => {
 
 describe('create_deferred_prompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -179,8 +180,6 @@ describe('create_deferred_prompt', () => {
 
 describe('list_deferred_prompts', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -209,8 +208,6 @@ describe('list_deferred_prompts', () => {
 
 describe('get_deferred_prompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -238,8 +235,6 @@ describe('get_deferred_prompt', () => {
 
 describe('update_deferred_prompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -323,8 +318,6 @@ describe('update_deferred_prompt', () => {
 
 describe('cancel_deferred_prompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })
@@ -355,8 +348,6 @@ describe('cancel_deferred_prompt', () => {
 
 describe('execution metadata', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
     setConfig(USER_ID, 'timezone', 'UTC')
   })

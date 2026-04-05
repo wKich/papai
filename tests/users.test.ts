@@ -15,11 +15,14 @@ import {
 } from '../src/users.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('addUser', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -72,7 +75,6 @@ describe('removeUser', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -117,7 +119,6 @@ describe('isAuthorized', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -138,7 +139,6 @@ describe('resolveUserByUsername', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -168,7 +168,6 @@ describe('listUsers', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -197,7 +196,6 @@ describe('getKaneoWorkspace / setKaneoWorkspace', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,

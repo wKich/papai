@@ -8,11 +8,14 @@ import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 const USER_A = '111'
 const USER_B = '222'
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('setConfig', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -59,7 +62,6 @@ describe('getConfig', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -103,7 +105,6 @@ describe('getAllConfig', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,
@@ -155,7 +156,6 @@ describe('copyAdminLlmConfig', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     void mock.module('../src/db/drizzle.js', () => ({
       getDrizzleDb: (): typeof testDb => testDb,

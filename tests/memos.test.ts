@@ -14,12 +14,15 @@ import {
 } from '../src/memos.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('saveMemo', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
@@ -66,7 +69,6 @@ describe('listMemos', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
@@ -132,7 +134,6 @@ describe('keywordSearchMemos (FTS5)', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
@@ -206,7 +207,6 @@ describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
@@ -252,7 +252,6 @@ describe('archiveMemos', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
@@ -305,7 +304,6 @@ describe('addMemoLink', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')

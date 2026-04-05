@@ -10,12 +10,15 @@ import { appendHistory, loadHistory, saveHistory, clearHistory } from '../src/hi
 import { flushMicrotasks } from './test-helpers.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('loadHistory', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
@@ -153,7 +156,6 @@ describe('saveHistory', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
@@ -205,7 +207,6 @@ describe('clearHistory', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
@@ -249,7 +250,6 @@ describe('appendHistory', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
@@ -308,7 +308,6 @@ describe('getCachedHistory cold-cache behavior', () => {
   let testSqlite: Database
 
   beforeEach(async () => {
-    mockLogger()
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')

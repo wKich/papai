@@ -108,9 +108,12 @@ const makeIssueListResponse = (overrides: Record<string, unknown> = {}): IssueFi
 
 // --- Tests ---
 
+beforeEach(() => {
+  mockLogger()
+})
+
 describe('createYouTrackTask', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -241,7 +244,6 @@ describe('createYouTrackTask', () => {
 
 describe('getYouTrackTask', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -323,7 +325,6 @@ describe('getYouTrackTask', () => {
 
 describe('updateYouTrackTask', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -409,7 +410,6 @@ describe('updateYouTrackTask', () => {
 
 describe('listYouTrackTasks', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -470,7 +470,6 @@ describe('listYouTrackTasks', () => {
 
 describe('searchYouTrackTasks', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 
@@ -560,7 +559,6 @@ describe('searchYouTrackTasks', () => {
 
 describe('deleteYouTrackTask', () => {
   beforeEach(() => {
-    mockLogger()
     fetchMock = undefined!
   })
 

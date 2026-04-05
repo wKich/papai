@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
 import { mockLogger } from './utils/test-helpers.js'
 
-describe('parseCron', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
+beforeEach(() => {
+  mockLogger()
+})
 
+describe('parseCron', () => {
   test('parses a valid 5-field cron expression', () => {
     const result = parseCron('0 9 * * 1')
     expect(result).not.toBeNull()
@@ -61,10 +61,6 @@ describe('parseCron', () => {
 })
 
 describe('cron matching via nextCronOccurrence', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
-
   test('finds exact match at correct day and time', () => {
     const cron = parseCron('0 9 * * 1')!
     // One minute before Monday 9am — next occurrence should be exactly Monday 9am
@@ -95,10 +91,6 @@ describe('cron matching via nextCronOccurrence', () => {
 })
 
 describe('nextCronOccurrence', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
-
   test('finds next Monday at 9am', () => {
     const cron = parseCron('0 9 * * 1')!
     // Start from Sunday 2026-03-22
@@ -142,10 +134,6 @@ describe('nextCronOccurrence', () => {
 })
 
 describe('timezone-aware cron matching', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
-
   test('nextCronOccurrence returns UTC time matching timezone-local 9am', () => {
     const cron = parseCron('0 9 * * *')!
     // Sunday 2026-03-22 at 15:00 UTC = 11:00 EDT — past 9am local
@@ -186,10 +174,6 @@ describe('timezone-aware cron matching', () => {
 })
 
 describe('describeCron', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
-
   test('describes weekly Monday schedule', () => {
     const desc = describeCron('0 9 * * 1')
     expect(desc).toContain('09:00 UTC')
@@ -213,10 +197,6 @@ describe('describeCron', () => {
 })
 
 describe('allOccurrencesBetween', () => {
-  beforeEach(() => {
-    mockLogger()
-  })
-
   test('returns all occurrences between two dates', () => {
     // Mondays 9am
     const cron = parseCron('0 9 * * 1')!

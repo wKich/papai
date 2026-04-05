@@ -11,6 +11,11 @@ import { makeSearchMemosTool } from '../../src/tools/search-memos.js'
 import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 async function exec(
   toolInstance: ReturnType<typeof makeSaveMemoTool>,
   input: Record<string, unknown>,
@@ -22,8 +27,6 @@ async function exec(
 
 describe('save_memo tool', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -43,8 +46,6 @@ describe('save_memo tool', () => {
 
 describe('search_memos tool', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -75,8 +76,6 @@ describe('search_memos tool', () => {
 
 describe('list_memos tool', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -99,8 +98,6 @@ describe('list_memos tool', () => {
 
 describe('archive_memos tool', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })
@@ -137,8 +134,6 @@ describe('archive_memos tool', () => {
 
 describe('promote_memo tool', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
     setConfig('user1', 'timezone', 'UTC')

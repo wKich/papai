@@ -15,10 +15,13 @@ import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 const USER_ID = 'user-1'
 const OTHER_USER = 'user-2'
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 describe('createScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -52,8 +55,6 @@ describe('createScheduledPrompt', () => {
 
 describe('listScheduledPrompts', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -86,8 +87,6 @@ describe('listScheduledPrompts', () => {
 
 describe('getScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -112,8 +111,6 @@ describe('getScheduledPrompt', () => {
 
 describe('updateScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -134,8 +131,6 @@ describe('updateScheduledPrompt', () => {
 
 describe('cancelScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -159,8 +154,6 @@ describe('cancelScheduledPrompt', () => {
 
 describe('getScheduledPromptsDue', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -188,8 +181,6 @@ describe('getScheduledPromptsDue', () => {
 
 describe('advanceScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -214,8 +205,6 @@ describe('advanceScheduledPrompt', () => {
 
 describe('completeScheduledPrompt', () => {
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 

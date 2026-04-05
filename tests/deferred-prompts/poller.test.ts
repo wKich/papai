@@ -38,6 +38,11 @@ function setupUserConfig(userId: string): void {
 
 const USER_ID = 'poller-user-1'
 
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
+
 // Mock AI module using mutable implementation pattern
 type GenerateTextResult = {
   text: string
@@ -55,8 +60,6 @@ describe('pollScheduledOnce', () => {
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
@@ -212,8 +215,6 @@ describe('pollScheduledOnce — error handling', () => {
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
@@ -280,8 +281,6 @@ describe('pollAlertsOnce', () => {
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    mockLogger()
-    mockDrizzle()
     generateTextImpl = (): Promise<GenerateTextResult> =>
       Promise.resolve({ text: 'Alert triggered.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
