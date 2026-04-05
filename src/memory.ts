@@ -200,12 +200,21 @@ const parseModelResponse = (text: string): z.infer<typeof TrimResultSchema> => {
   return parsed.data
 }
 
+export interface MemoryDeps {
+  generateText: typeof generateText
+}
+
+const defaultMemoryDeps: MemoryDeps = {
+  generateText: (...args) => generateText(...args),
+}
+
 export async function trimWithMemoryModel(
   history: readonly ModelMessage[],
   trimMin: number,
   trimMax: number,
   previousSummary: string | null,
   model: LanguageModel,
+  deps: MemoryDeps = defaultMemoryDeps,
 ): Promise<TrimResult> {
   log.debug(
     { messageCount: history.length, trimMin, trimMax, hasPrevious: previousSummary !== null },
@@ -220,7 +229,7 @@ export async function trimWithMemoryModel(
     .replace('{PREVIOUS_SUMMARY}', previousSummary ?? '(none)')
     .replace('{MESSAGES}', messagesText)
 
-  const result = await generateText({
+  const result = await deps.generateText({
     model,
     prompt,
   })

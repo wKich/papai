@@ -11,6 +11,14 @@ const log = logger.child({ scope: 'conversation' })
 const buildModel = (apiKey: string, baseUrl: string, modelName: string): LanguageModel =>
   createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL: baseUrl })(modelName)
 
+export interface ConversationDeps {
+  buildModel: (apiKey: string, baseUrl: string, modelName: string) => LanguageModel
+}
+
+const defaultConversationDeps: ConversationDeps = {
+  buildModel: (apiKey, baseUrl, modelName) => buildModel(apiKey, baseUrl, modelName),
+}
+
 const WORKING_MEMORY_CAP = 100
 const TRIM_MIN = 50
 const TRIM_MAX = 100
@@ -32,7 +40,11 @@ export const shouldTriggerTrim = (history: readonly ModelMessage[]): boolean => 
   return periodicTrim || hardCapTrim
 }
 
-export const runTrimInBackground = async (userId: string, history: readonly ModelMessage[]): Promise<void> => {
+export const runTrimInBackground = async (
+  userId: string,
+  history: readonly ModelMessage[],
+  deps: ConversationDeps = defaultConversationDeps,
+): Promise<void> => {
   const userMessageCount = history.filter((m) => m.role === 'user').length
   const reason =
     history.length >= WORKING_MEMORY_CAP ? 'hard cap reached' : `periodic (${userMessageCount} user messages)`
@@ -47,7 +59,7 @@ export const runTrimInBackground = async (userId: string, history: readonly Mode
   if (llmApiKey !== null && llmBaseUrl !== null && smallModel !== null) {
     try {
       const existing = loadSummary(userId)
-      const model = buildModel(llmApiKey, llmBaseUrl, smallModel)
+      const model = deps.buildModel(llmApiKey, llmBaseUrl, smallModel)
       const { trimmedMessages, summary } = await trimWithMemoryModel(history, TRIM_MIN, TRIM_MAX, existing, model)
       // Preserve any messages added to history while the async trim was running
       const currentHistory = getCachedHistory(userId)
