@@ -21,15 +21,11 @@ import * as _logger from '../src/logger.js'
 import * as _messageCache from '../src/message-cache/cache.js'
 import * as _providersFactory from '../src/providers/factory.js'
 import * as _kaneoProvision from '../src/providers/kaneo/provision.js'
-import * as _recurring from '../src/recurring.js'
-import * as _scheduler from '../src/scheduler.js'
 
 const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ['../src/logger.js', { ..._logger }],
   ['../src/message-cache/cache.js', { ..._messageCache }],
   ['../src/providers/kaneo/provision.js', { ..._kaneoProvision }],
-  ['../src/recurring.js', { ..._recurring }],
-  ['../src/scheduler.js', { ..._scheduler }],
   ['../src/providers/factory.js', { ..._providersFactory }],
   ['ai', { ..._ai }],
   ['@ai-sdk/openai-compatible', { ..._openaiCompat }],

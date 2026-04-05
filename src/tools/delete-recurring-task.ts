@@ -3,11 +3,19 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { deleteRecurringTask } from '../recurring.js'
+import { deleteRecurringTask as defaultDeleteRecurringTask } from '../recurring.js'
 
 const log = logger.child({ scope: 'tool:delete-recurring-task' })
 
-export function makeDeleteRecurringTaskTool(): ToolSet[string] {
+export interface DeleteRecurringTaskDeps {
+  deleteRecurringTask: (id: string) => boolean
+}
+
+const defaultDeps: DeleteRecurringTaskDeps = {
+  deleteRecurringTask: (...args) => defaultDeleteRecurringTask(...args),
+}
+
+export function makeDeleteRecurringTaskTool(deps: DeleteRecurringTaskDeps = defaultDeps): ToolSet[string] {
   return tool({
     description: 'Permanently cancel/stop a recurring task series. No further occurrences will be created.',
     inputSchema: z.object({
@@ -25,7 +33,7 @@ export function makeDeleteRecurringTaskTool(): ToolSet[string] {
           }
         }
 
-        const deleted = deleteRecurringTask(recurringTaskId)
+        const deleted = deps.deleteRecurringTask(recurringTaskId)
         if (!deleted) {
           log.warn({ recurringTaskId }, 'Recurring task not found for deletion')
           return { error: 'Recurring task not found' }

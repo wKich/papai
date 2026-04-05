@@ -3,11 +3,20 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { pauseRecurringTask } from '../recurring.js'
+import { pauseRecurringTask as defaultPauseRecurringTask } from '../recurring.js'
+import type { RecurringTaskRecord } from '../types/recurring.js'
 
 const log = logger.child({ scope: 'tool:pause-recurring-task' })
 
-export function makePauseRecurringTaskTool(): ToolSet[string] {
+export interface PauseRecurringTaskDeps {
+  pauseRecurringTask: (id: string) => RecurringTaskRecord | null
+}
+
+const defaultDeps: PauseRecurringTaskDeps = {
+  pauseRecurringTask: (...args) => defaultPauseRecurringTask(...args),
+}
+
+export function makePauseRecurringTaskTool(deps: PauseRecurringTaskDeps = defaultDeps): ToolSet[string] {
   return tool({
     description: 'Pause a recurring task series. No further occurrences are created until explicitly resumed.',
     inputSchema: z.object({
@@ -16,7 +25,7 @@ export function makePauseRecurringTaskTool(): ToolSet[string] {
     execute: ({ recurringTaskId }) => {
       try {
         log.debug({ recurringTaskId }, 'Pausing recurring task')
-        const paused = pauseRecurringTask(recurringTaskId)
+        const paused = deps.pauseRecurringTask(recurringTaskId)
 
         if (paused === null) {
           log.warn({ recurringTaskId }, 'Recurring task not found for pause')

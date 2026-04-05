@@ -4,11 +4,22 @@ import { z } from 'zod'
 
 import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
-import { resumeRecurringTask } from '../recurring.js'
-import { createMissedTasks } from '../scheduler.js'
+import { resumeRecurringTask as defaultResumeRecurringTask } from '../recurring.js'
+import type { ResumeResult } from '../recurring.js'
+import { createMissedTasks as defaultCreateMissedTasks } from '../scheduler.js'
 import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:resume-recurring-task' })
+
+export interface ResumeRecurringTaskDeps {
+  resumeRecurringTask: (id: string, createMissed: boolean) => ResumeResult | null
+  createMissedTasks: (recurringTaskId: string, missedDates: readonly string[]) => Promise<number>
+}
+
+const defaultDeps: ResumeRecurringTaskDeps = {
+  resumeRecurringTask: (...args) => defaultResumeRecurringTask(...args),
+  createMissedTasks: (...args) => defaultCreateMissedTasks(...args),
+}
 
 const inputSchema = z.object({
   recurringTaskId: z.string().describe('ID of the recurring task definition to resume'),
@@ -17,10 +28,10 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>
 
-async function executeResume(input: Input): Promise<unknown> {
+async function executeResume(input: Input, deps: ResumeRecurringTaskDeps): Promise<unknown> {
   const { recurringTaskId, createMissed } = input
   log.debug({ recurringTaskId, createMissed }, 'Resuming recurring task')
-  const result = resumeRecurringTask(recurringTaskId, createMissed ?? false)
+  const result = deps.resumeRecurringTask(recurringTaskId, createMissed ?? false)
 
   if (result === null) {
     log.warn({ recurringTaskId }, 'Recurring task not found for resume')
@@ -28,7 +39,7 @@ async function executeResume(input: Input): Promise<unknown> {
   }
 
   const { record, missedDates } = result
-  const createdCount = missedDates.length > 0 ? await createMissedTasks(recurringTaskId, missedDates) : 0
+  const createdCount = missedDates.length > 0 ? await deps.createMissedTasks(recurringTaskId, missedDates) : 0
 
   const schedule =
     record.triggerType === 'cron' && record.cronExpression !== null
@@ -50,13 +61,13 @@ async function executeResume(input: Input): Promise<unknown> {
   }
 }
 
-export function makeResumeRecurringTaskTool(): ToolSet[string] {
+export function makeResumeRecurringTaskTool(deps: ResumeRecurringTaskDeps = defaultDeps): ToolSet[string] {
   return tool({
     description: 'Resume a paused recurring task series. Optionally create missed occurrences retroactively.',
     inputSchema,
     execute: async (input) => {
       try {
-        return await executeResume(input)
+        return await executeResume(input, deps)
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), tool: 'resume_recurring_task' },

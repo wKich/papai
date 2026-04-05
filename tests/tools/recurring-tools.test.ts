@@ -1,14 +1,20 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { setCachedConfig, _userCaches } from '../../src/cache.js'
 import type { ResumeResult } from '../../src/recurring.js'
 import type { CreateRecurringTaskDeps } from '../../src/tools/create-recurring-task.js'
 import { makeCreateRecurringTaskTool } from '../../src/tools/create-recurring-task.js'
+import type { DeleteRecurringTaskDeps } from '../../src/tools/delete-recurring-task.js'
 import { makeDeleteRecurringTaskTool } from '../../src/tools/delete-recurring-task.js'
+import type { ListRecurringTasksDeps } from '../../src/tools/list-recurring-tasks.js'
 import { makeListRecurringTasksTool } from '../../src/tools/list-recurring-tasks.js'
+import type { PauseRecurringTaskDeps } from '../../src/tools/pause-recurring-task.js'
 import { makePauseRecurringTaskTool } from '../../src/tools/pause-recurring-task.js'
+import type { ResumeRecurringTaskDeps } from '../../src/tools/resume-recurring-task.js'
 import { makeResumeRecurringTaskTool } from '../../src/tools/resume-recurring-task.js'
+import type { SkipRecurringTaskDeps } from '../../src/tools/skip-recurring-task.js'
 import { makeSkipRecurringTaskTool } from '../../src/tools/skip-recurring-task.js'
+import type { UpdateRecurringTaskDeps } from '../../src/tools/update-recurring-task.js'
 import { makeUpdateRecurringTaskTool } from '../../src/tools/update-recurring-task.js'
 import type { RecurringTaskInput, RecurringTaskRecord } from '../../src/types/recurring.js'
 import { mockLogger } from '../utils/test-helpers.js'
@@ -73,6 +79,12 @@ describe('recurring-tools', () => {
   let createMissedTasksCalls: Array<{ id: string; dates: readonly string[] }>
 
   let createRecurringTaskDeps: CreateRecurringTaskDeps
+  let deleteRecurringTaskDeps: DeleteRecurringTaskDeps
+  let updateRecurringTaskDeps: UpdateRecurringTaskDeps
+  let resumeRecurringTaskDeps: ResumeRecurringTaskDeps
+  let pauseRecurringTaskDeps: PauseRecurringTaskDeps
+  let skipRecurringTaskDeps: SkipRecurringTaskDeps
+  let listRecurringTasksDeps: ListRecurringTasksDeps
 
   beforeEach(() => {
     // Reset mutable state to defaults
@@ -123,69 +135,57 @@ describe('recurring-tools', () => {
       },
     }
 
-    void mock.module('../../src/recurring.js', () => ({
-      createRecurringTask: (input: RecurringTaskInput): RecurringTaskRecord => {
-        createRecurringTaskCallCount++
-        if (onMockCall) onMockCall()
-        return {
-          id: 'rec-1',
-          userId: 'user-1',
-          projectId: 'p1',
-          title: 'Test',
-          description: null,
-          priority: null,
-          status: null,
-          assignee: null,
-          labels: [],
-          triggerType: input.triggerType,
-          cronExpression: input.cronExpression ?? null,
-          timezone: 'UTC',
-          enabled: true,
-          catchUp: false,
-          lastRun: null,
-          nextRun: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-      },
+    deleteRecurringTaskDeps = {
       deleteRecurringTask: (id: string): boolean => {
         deleteRecurringTaskCalls.push(id)
         if (onMockCall) onMockCall()
         return deleteRecurringTaskResult
       },
+    }
+
+    updateRecurringTaskDeps = {
       updateRecurringTask: (id: string, updates: Record<string, unknown>): RecurringTaskRecord | null => {
         updateRecurringTaskCalls.push({ id, updates })
         if (onMockCall) onMockCall()
         return updateRecurringTaskResult
       },
+    }
+
+    resumeRecurringTaskDeps = {
       resumeRecurringTask: (id: string, createMissed: boolean): ResumeResult | null => {
         resumeRecurringTaskCalls.push({ id, createMissed })
         if (onMockCall) onMockCall()
         return resumeRecurringTaskResult
       },
+      createMissedTasks: (id: string, dates: readonly string[]): Promise<number> => {
+        createMissedTasksCalls.push({ id, dates })
+        return Promise.resolve(createMissedTasksResult)
+      },
+    }
+
+    pauseRecurringTaskDeps = {
       pauseRecurringTask: (id: string): RecurringTaskRecord | null => {
         pauseRecurringTaskCalls.push(id)
         if (onMockCall) onMockCall()
         return pauseRecurringTaskResult
       },
+    }
+
+    skipRecurringTaskDeps = {
       skipNextOccurrence: (id: string): RecurringTaskRecord | null => {
         skipNextOccurrenceCalls.push(id)
         if (onMockCall) onMockCall()
         return skipNextOccurrenceResult
       },
+    }
+
+    listRecurringTasksDeps = {
       listRecurringTasks: (userId: string): RecurringTaskRecord[] => {
         listRecurringTasksCalls.push(userId)
         if (onMockCall) onMockCall()
         return listRecurringTasksResult
       },
-    }))
-
-    void mock.module('../../src/scheduler.js', () => ({
-      createMissedTasks: (id: string, dates: readonly string[]): Promise<number> => {
-        createMissedTasksCalls.push({ id, dates })
-        return Promise.resolve(createMissedTasksResult)
-      },
-    }))
+    }
 
     // Pre-populate timezone in the in-memory cache so create-recurring-task tool
     // can read it without needing a real DB. DB sync fails silently (no table).
@@ -319,7 +319,7 @@ describe('recurring-tools', () => {
 
   describe('makeDeleteRecurringTaskTool', () => {
     test('returns confirmation_required when confidence < 0.85', async () => {
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', confidence: 0.5 }, toolCtx)
       expect(result).toHaveProperty('status', 'confirmation_required')
@@ -329,7 +329,7 @@ describe('recurring-tools', () => {
 
     test('deletes task when confidence >= 0.85 and task exists', async () => {
       deleteRecurringTaskResult = true
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', confidence: 0.9 }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-1')
@@ -340,7 +340,7 @@ describe('recurring-tools', () => {
 
     test('executes at exact confidence boundary 0.85', async () => {
       deleteRecurringTaskResult = true
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', confidence: 0.85 }, toolCtx)
       expect(result).toHaveProperty('status', 'deleted')
@@ -349,7 +349,7 @@ describe('recurring-tools', () => {
 
     test('returns error when task not found', async () => {
       deleteRecurringTaskResult = false
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing', confidence: 1 }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
@@ -357,7 +357,7 @@ describe('recurring-tools', () => {
     })
 
     test('does not call deleteRecurringTask when confidence < 0.85', async () => {
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-1', confidence: 0.3 }, toolCtx)
       expect(deleteRecurringTaskCalls).toHaveLength(0)
@@ -372,7 +372,7 @@ describe('recurring-tools', () => {
     test('returns updated record fields when task exists', async () => {
       const record = makeRecord({ id: 'rec-2', title: 'Updated title', projectId: 'p2', enabled: true })
       updateRecurringTaskResult = record
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-2', title: 'Updated title' }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-2')
@@ -385,7 +385,7 @@ describe('recurring-tools', () => {
 
     test('returns error when task not found', async () => {
       updateRecurringTaskResult = null
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing', title: 'new' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
@@ -393,7 +393,7 @@ describe('recurring-tools', () => {
 
     test('converts semantic schedule to cronExpression when updating', async () => {
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
@@ -407,7 +407,7 @@ describe('recurring-tools', () => {
 
     test('passes updates without cronExpression when no schedule provided', async () => {
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-1', title: 'New title' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-1')
@@ -417,7 +417,7 @@ describe('recurring-tools', () => {
 
     test('calls updateRecurringTask with correct recurringTaskId', async () => {
       updateRecurringTaskResult = makeRecord({ id: 'rec-42' })
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-42', title: 'x' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-42')
@@ -428,7 +428,7 @@ describe('recurring-tools', () => {
         timezone: 'Asia/Karachi',
         nextRun: '2026-03-25T12:00:00.000Z',
       })
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', title: 'Updated' }, toolCtx)
       expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
@@ -442,7 +442,7 @@ describe('recurring-tools', () => {
   describe('makeResumeRecurringTaskTool', () => {
     test('returns error when task not found', async () => {
       resumeRecurringTaskResult = null
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
@@ -451,7 +451,7 @@ describe('recurring-tools', () => {
     test('returns active status with no missed tasks when createMissed is false', async () => {
       const record = makeRecord({ id: 'rec-1', title: 'Standup', enabled: true })
       resumeRecurringTaskResult = { record, missedDates: [] }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', createMissed: false }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-1')
@@ -467,7 +467,7 @@ describe('recurring-tools', () => {
     test('returns cron description as schedule for cron-based tasks', async () => {
       const record = makeRecord({ triggerType: 'cron', cronExpression: '0 9 * * 1', timezone: 'UTC' })
       resumeRecurringTaskResult = { record, missedDates: [] }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
       expect(result).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
@@ -476,7 +476,7 @@ describe('recurring-tools', () => {
     test('returns "after completion" for on_complete tasks', async () => {
       const record = makeRecord({ triggerType: 'on_complete', cronExpression: null })
       resumeRecurringTaskResult = { record, missedDates: [] }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
       expect(result).toHaveProperty('schedule', 'after completion')
@@ -487,7 +487,7 @@ describe('recurring-tools', () => {
       const missedDates = ['2026-03-20T09:00:00.000Z', '2026-03-21T09:00:00.000Z']
       resumeRecurringTaskResult = { record, missedDates }
       createMissedTasksResult = 2
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', createMissed: true }, toolCtx)
       expect(result).toHaveProperty('missedTasksCreated', 2)
@@ -499,7 +499,7 @@ describe('recurring-tools', () => {
     test('does not call createMissedTasks when missedDates is empty', async () => {
       const record = makeRecord()
       resumeRecurringTaskResult = { record, missedDates: [] }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', createMissed: true }, toolCtx)
       expect(result).toHaveProperty('missedTasksCreated', 0)
@@ -512,7 +512,7 @@ describe('recurring-tools', () => {
         nextRun: '2026-03-25T12:00:00.000Z',
       })
       resumeRecurringTaskResult = { record, missedDates: [] }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
       expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
@@ -527,7 +527,7 @@ describe('recurring-tools', () => {
     test('returns paused status when task exists', async () => {
       const record = makeRecord({ id: 'rec-3', title: 'Weekly report', enabled: false })
       pauseRecurringTaskResult = record
-      const tool = makePauseRecurringTaskTool()
+      const tool = makePauseRecurringTaskTool(pauseRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-3' }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-3')
@@ -538,7 +538,7 @@ describe('recurring-tools', () => {
 
     test('returns error when task not found', async () => {
       pauseRecurringTaskResult = null
-      const tool = makePauseRecurringTaskTool()
+      const tool = makePauseRecurringTaskTool(pauseRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
@@ -546,7 +546,7 @@ describe('recurring-tools', () => {
 
     test('calls pauseRecurringTask with correct id', async () => {
       pauseRecurringTaskResult = makeRecord({ id: 'rec-7' })
-      const tool = makePauseRecurringTaskTool()
+      const tool = makePauseRecurringTaskTool(pauseRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-7' }, toolCtx)
       expect(pauseRecurringTaskCalls).toEqual(['rec-7'])
@@ -561,7 +561,7 @@ describe('recurring-tools', () => {
     test('returns skipped status with next run when task exists', async () => {
       const record = makeRecord({ id: 'rec-4', title: 'Standup', nextRun: '2026-03-29T09:00:00.000Z' })
       skipNextOccurrenceResult = record
-      const tool = makeSkipRecurringTaskTool()
+      const tool = makeSkipRecurringTaskTool(skipRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-4' }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-4')
@@ -573,7 +573,7 @@ describe('recurring-tools', () => {
 
     test('returns error when task not found', async () => {
       skipNextOccurrenceResult = null
-      const tool = makeSkipRecurringTaskTool()
+      const tool = makeSkipRecurringTaskTool(skipRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
@@ -581,7 +581,7 @@ describe('recurring-tools', () => {
 
     test('calls skipNextOccurrence with correct id', async () => {
       skipNextOccurrenceResult = makeRecord({ id: 'rec-5' })
-      const tool = makeSkipRecurringTaskTool()
+      const tool = makeSkipRecurringTaskTool(skipRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-5' }, toolCtx)
       expect(skipNextOccurrenceCalls).toEqual(['rec-5'])
@@ -592,7 +592,7 @@ describe('recurring-tools', () => {
         timezone: 'Asia/Karachi',
         nextRun: '2026-03-25T12:00:00.000Z',
       })
-      const tool = makeSkipRecurringTaskTool()
+      const tool = makeSkipRecurringTaskTool(skipRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
       expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
@@ -608,7 +608,7 @@ describe('recurring-tools', () => {
       listRecurringTasksResult = [
         makeRecord({ id: 'rec-10', title: 'Monday standup', cronExpression: '0 9 * * 1', triggerType: 'cron' }),
       ]
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       if (!Array.isArray(result)) throw new Error('Expected array')
@@ -631,7 +631,7 @@ describe('recurring-tools', () => {
 
     test('returns "after completion" for on_complete tasks', async () => {
       listRecurringTasksResult = [makeRecord({ triggerType: 'on_complete', cronExpression: null })]
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       if (!Array.isArray(result)) throw new Error('Expected array')
@@ -640,7 +640,7 @@ describe('recurring-tools', () => {
 
     test('returns "after completion" for cron task with null cronExpression', async () => {
       listRecurringTasksResult = [makeRecord({ triggerType: 'cron', cronExpression: null })]
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       if (!Array.isArray(result)) throw new Error('Expected array')
@@ -649,7 +649,7 @@ describe('recurring-tools', () => {
 
     test('returns empty array when no tasks', async () => {
       listRecurringTasksResult = []
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       expect(result).toEqual([])
@@ -663,7 +663,7 @@ describe('recurring-tools', () => {
           lastRun: '2026-03-24T12:00:00.000Z',
         }),
       ]
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       if (!Array.isArray(result)) throw new Error('Expected array')
@@ -673,7 +673,7 @@ describe('recurring-tools', () => {
 
     test('calls listRecurringTasks with the userId', async () => {
       listRecurringTasksResult = []
-      const tool = makeListRecurringTasksTool('user-42')
+      const tool = makeListRecurringTasksTool('user-42', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({}, toolCtx)
       expect(listRecurringTasksCalls).toEqual(['user-42'])
@@ -693,7 +693,7 @@ describe('recurring-tools', () => {
           catchUp: true,
         }),
       ]
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
       if (!Array.isArray(result)) throw new Error('Expected array')
@@ -714,27 +714,27 @@ describe('recurring-tools', () => {
 
   describe('Tool descriptions', () => {
     test('delete tool has a non-empty description', () => {
-      expect(makeDeleteRecurringTaskTool().description).toBeTruthy()
+      expect(makeDeleteRecurringTaskTool(deleteRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('update tool has a non-empty description', () => {
-      expect(makeUpdateRecurringTaskTool().description).toBeTruthy()
+      expect(makeUpdateRecurringTaskTool(updateRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('resume tool has a non-empty description', () => {
-      expect(makeResumeRecurringTaskTool().description).toBeTruthy()
+      expect(makeResumeRecurringTaskTool(resumeRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('pause tool has a non-empty description', () => {
-      expect(makePauseRecurringTaskTool().description).toBeTruthy()
+      expect(makePauseRecurringTaskTool(pauseRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('skip tool has a non-empty description', () => {
-      expect(makeSkipRecurringTaskTool().description).toBeTruthy()
+      expect(makeSkipRecurringTaskTool(skipRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('list tool has a non-empty description', () => {
-      expect(makeListRecurringTasksTool('u1').description).toBeTruthy()
+      expect(makeListRecurringTasksTool('u1', listRecurringTasksDeps).description).toBeTruthy()
     })
   })
 
@@ -747,7 +747,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeDeleteRecurringTaskTool()
+      const tool = makeDeleteRecurringTaskTool(deleteRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -762,7 +762,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeUpdateRecurringTaskTool()
+      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -777,7 +777,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeResumeRecurringTaskTool()
+      const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -792,7 +792,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makePauseRecurringTaskTool()
+      const tool = makePauseRecurringTaskTool(pauseRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -807,7 +807,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeSkipRecurringTaskTool()
+      const tool = makeSkipRecurringTaskTool(skipRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
@@ -822,7 +822,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeListRecurringTasksTool('user-1')
+      const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {
