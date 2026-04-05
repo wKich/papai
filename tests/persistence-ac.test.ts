@@ -26,9 +26,6 @@ describe('Story 2: Surviving restart', () => {
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -90,17 +87,13 @@ describe('Story 2: Surviving restart', () => {
 })
 
 describe('Story 4: Key facts remembered after read', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     mockLogger()
-    testDb = await setupTestDb()
+    await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',

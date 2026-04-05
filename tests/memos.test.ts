@@ -19,16 +19,12 @@ beforeEach(() => {
 })
 
 describe('saveMemo', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
-    testDb = await setupTestDb()
+    await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -65,16 +61,12 @@ describe('saveMemo', () => {
 })
 
 describe('listMemos', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
-    testDb = await setupTestDb()
+    await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -137,9 +129,6 @@ describe('keywordSearchMemos (FTS5)', () => {
     _userCaches.clear()
     testDb = await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -203,16 +192,12 @@ describe('keywordSearchMemos (FTS5)', () => {
 })
 
 describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
-    testDb = await setupTestDb()
+    await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -248,16 +233,12 @@ describe('updateMemoEmbedding and loadEmbeddingsForUser', () => {
 })
 
 describe('archiveMemos', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
-    testDb = await setupTestDb()
+    await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -300,16 +281,12 @@ describe('archiveMemos', () => {
 })
 
 describe('addMemoLink', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
     _userCaches.clear()
-    testDb = await setupTestDb()
+    await setupTestDb()
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',

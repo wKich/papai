@@ -22,9 +22,6 @@ describe('loadHistory', () => {
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -159,9 +156,6 @@ describe('saveHistory', () => {
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -210,9 +204,6 @@ describe('clearHistory', () => {
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -246,16 +237,12 @@ describe('clearHistory', () => {
 })
 
 describe('appendHistory', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let testSqlite: Database
 
   beforeEach(async () => {
-    testDb = await setupTestDb()
+    await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',
@@ -311,9 +298,6 @@ describe('getCachedHistory cold-cache behavior', () => {
     testDb = await setupTestDb()
     const { Database } = await import('bun:sqlite')
     testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',

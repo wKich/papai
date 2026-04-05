@@ -1,8 +1,9 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
+import { _setDrizzleDb } from '../src/db/drizzle.js'
 import * as schema from '../src/db/schema.js'
 import {
   createRecurringTask,
@@ -34,12 +35,7 @@ describe('recurring tasks', () => {
     testSqlite.run('PRAGMA journal_mode=WAL')
     testSqlite.run('PRAGMA foreign_keys=ON')
     testDb = drizzle(testSqlite, { schema })
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
+    _setDrizzleDb(testDb)
 
     // Create the recurring_tasks table
     testSqlite.run(`

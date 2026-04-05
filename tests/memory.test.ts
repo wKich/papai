@@ -38,10 +38,6 @@ describe('memory', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-
     void mock.module('../src/db/index.js', () => ({
       getDb: (): Database => testSqlite,
       DB_PATH: ':memory:',

@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -24,9 +24,6 @@ describe('addUser', () => {
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
   })
 
   test('adds a user by ID', () => {
@@ -76,9 +73,6 @@ describe('removeUser', () => {
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
   })
 
   test('removes a user by ID', () => {
@@ -116,13 +110,8 @@ describe('removeUser', () => {
 })
 
 describe('isAuthorized', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
+    await setupTestDb()
   })
 
   test('returns true for authorized user', () => {
@@ -140,9 +129,6 @@ describe('resolveUserByUsername', () => {
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
   })
 
   test('resolves placeholder ID to real platform user ID', () => {
@@ -165,13 +151,8 @@ describe('resolveUserByUsername', () => {
 })
 
 describe('listUsers', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
+    await setupTestDb()
   })
 
   test('returns all users', () => {
@@ -193,13 +174,8 @@ describe('listUsers', () => {
 })
 
 describe('getKaneoWorkspace / setKaneoWorkspace', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
+    await setupTestDb()
     _userCaches.clear()
   })
 

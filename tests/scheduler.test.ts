@@ -4,6 +4,7 @@ import { mock, describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import { setCachedConfig } from '../src/cache.js'
+import { _setDrizzleDb } from '../src/db/drizzle.js'
 import * as schema from '../src/db/schema.js'
 import { createRecurringTask, getDueRecurringTasks } from '../src/recurring.js'
 import { tick, createMissedTasks, startScheduler, stopScheduler } from '../src/scheduler.js'
@@ -148,13 +149,6 @@ describe('scheduler', () => {
       }),
     }))
 
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
-
     // Build mockChatProvider (uses mutable sendMessageImpl/sendMessageCalls)
     mockChatProvider = {
       name: 'mock',
@@ -169,6 +163,7 @@ describe('scheduler', () => {
     }
 
     setupDb()
+    _setDrizzleDb(testDb)
     seedUser()
   })
 

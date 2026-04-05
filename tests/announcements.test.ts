@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import packageJson from '../package.json' with { type: 'json' }
 import { announceNewVersion } from '../src/announcements.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import { _setDrizzleDb } from '../src/db/drizzle.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -100,7 +101,7 @@ describe('extractChangelogSection', () => {
 
 describe('announceNewVersion', () => {
   // --- Test database setup with Drizzle ---
-  let testDb: ReturnType<typeof drizzle>
+  let testDb: ReturnType<typeof drizzle<typeof schema>>
   let testSqlite: Database
 
   // --- Mock ChatProvider for testing ---
@@ -124,13 +125,6 @@ describe('announceNewVersion', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): ReturnType<typeof drizzle> => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
-
     void mock.module('../src/changelog-reader.js', () => ({
       readChangelogFile: (): Promise<string> => {
         if (changelogProvider === null) {
@@ -143,6 +137,7 @@ describe('announceNewVersion', () => {
     // Setup test database
     testSqlite = new Database(':memory:')
     testDb = drizzle(testSqlite, { schema })
+    _setDrizzleDb(testDb)
     runMigrations(testSqlite, MIGRATIONS)
 
     mockChat = {
