@@ -8,7 +8,7 @@ import { makeCreateDeferredPromptTool } from '../../src/tools/create-deferred-pr
 import { makeGetDeferredPromptTool } from '../../src/tools/get-deferred-prompt.js'
 import { makeListDeferredPromptsTool } from '../../src/tools/list-deferred-prompts.js'
 import { makeUpdateDeferredPromptTool } from '../../src/tools/update-deferred-prompt.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'user-1'
 const toolCtx = { toolCallId: 'tc1', messages: [] as never[], abortSignal: new AbortController().signal }
@@ -51,7 +51,6 @@ function extractPrompts(result: unknown): unknown[] {
 
 beforeEach(() => {
   mockLogger()
-  mockDrizzle()
 })
 
 describe('makeDeferredPromptTools', () => {

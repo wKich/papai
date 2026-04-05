@@ -1,4 +1,4 @@
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { copyAdminLlmConfig, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
@@ -13,16 +13,8 @@ beforeEach(() => {
 })
 
 describe('setConfig', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
+    await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -59,16 +51,8 @@ describe('setConfig', () => {
 })
 
 describe('getConfig', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
+    await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -102,16 +86,8 @@ describe('isConfigKey', () => {
 })
 
 describe('getAllConfig', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
+    await setupTestDb()
     clearUserCache(USER_A)
     clearUserCache(USER_B)
   })
@@ -153,16 +129,8 @@ describe('copyAdminLlmConfig', () => {
   const ADMIN_ID = 'admin-001'
   const TARGET_ID = 'target-002'
 
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
+    await setupTestDb()
     clearUserCache(ADMIN_ID)
     clearUserCache(TARGET_ID)
   })

@@ -2,17 +2,30 @@ import { logger } from '../../logger.js'
 import { providerError } from '../../providers/errors.js'
 import { KaneoClassifiedError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
-import { listColumns } from './list-columns.js'
+import { listColumns as defaultListColumns } from './list-columns.js'
 
 const log = logger.child({ scope: 'kaneo:task-status' })
+
+export interface TaskStatusDeps {
+  listColumns: (opts: { config: KaneoConfig; projectId: string }) => Promise<Array<{ id: string; name: string }>>
+}
+
+const defaultTaskStatusDeps: TaskStatusDeps = {
+  listColumns: (...args) => defaultListColumns(...args),
+}
 
 /**
  * Validate and normalize a status string against project columns.
  * Returns the slugified status that matches a column.
  */
-export async function validateStatus(config: KaneoConfig, projectId: string, status: string): Promise<string> {
+export async function validateStatus(
+  config: KaneoConfig,
+  projectId: string,
+  status: string,
+  deps: TaskStatusDeps = defaultTaskStatusDeps,
+): Promise<string> {
   log.debug({ projectId, status }, 'Validating status')
-  const columns = await listColumns({ config, projectId })
+  const columns = await deps.listColumns({ config, projectId })
 
   // Normalize the input status
   const normalizedStatus = status.toLowerCase().replace(/\s+/g, '-')
@@ -51,9 +64,14 @@ export async function validateStatus(config: KaneoConfig, projectId: string, sta
  * Denormalize a status slug back to the canonical column slug.
  * This handles cases where the stored status might be a column ID.
  */
-export async function denormalizeStatus(config: KaneoConfig, projectId: string, statusSlug: string): Promise<string> {
+export async function denormalizeStatus(
+  config: KaneoConfig,
+  projectId: string,
+  statusSlug: string,
+  deps: TaskStatusDeps = defaultTaskStatusDeps,
+): Promise<string> {
   log.debug({ projectId, statusSlug }, 'Denormalizing status')
-  const columns = await listColumns({ config, projectId })
+  const columns = await deps.listColumns({ config, projectId })
   // Try to find a column whose name slug matches the status
   for (const column of columns) {
     const columnSlug = column.name.toLowerCase().replace(/\s+/g, '-')

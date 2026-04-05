@@ -1,12 +1,35 @@
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
-import { findTemplateByTaskId, isCompletionStatus, recordOccurrence } from '../recurring-occurrences.js'
+import {
+  findTemplateByTaskId as defaultFindTemplateByTaskId,
+  isCompletionStatus as defaultIsCompletionStatus,
+  recordOccurrence as defaultRecordOccurrence,
+} from '../recurring-occurrences.js'
 import type { RecurringTaskRecord } from '../recurring.js'
-import { markExecuted } from '../recurring.js'
+import { markExecuted as defaultMarkExecuted } from '../recurring.js'
 
 const log = logger.child({ scope: 'completion-hook' })
 
-export type CompletionHookFn = (taskId: string, newStatus: string, provider: TaskProvider) => Promise<void>
+export type CompletionHookFn = (
+  taskId: string,
+  newStatus: string,
+  provider: TaskProvider,
+  deps?: CompletionHookDeps,
+) => Promise<void>
+
+export interface CompletionHookDeps {
+  findTemplateByTaskId: (taskId: string) => RecurringTaskRecord | null
+  isCompletionStatus: (status: string) => boolean
+  recordOccurrence: (templateId: string, taskId: string) => void
+  markExecuted: (id: string) => void
+}
+
+const defaultCompletionHookDeps: CompletionHookDeps = {
+  findTemplateByTaskId: defaultFindTemplateByTaskId,
+  isCompletionStatus: defaultIsCompletionStatus,
+  recordOccurrence: defaultRecordOccurrence,
+  markExecuted: defaultMarkExecuted,
+}
 
 const applyLabels = async (provider: TaskProvider, taskId: string, labels: readonly string[]): Promise<void> => {
   if (labels.length === 0) return
@@ -25,6 +48,7 @@ const createNextOccurrence = async (
   template: RecurringTaskRecord,
   taskId: string,
   provider: TaskProvider,
+  deps: CompletionHookDeps,
 ): Promise<void> => {
   try {
     const created = await provider.createTask({
@@ -37,8 +61,8 @@ const createNextOccurrence = async (
     })
 
     await applyLabels(provider, created.id, template.labels)
-    recordOccurrence(template.id, created.id)
-    markExecuted(template.id)
+    deps.recordOccurrence(template.id, created.id)
+    deps.markExecuted(template.id)
 
     log.info(
       { templateId: template.id, createdTaskId: created.id, title: template.title },
@@ -60,12 +84,13 @@ export const completionHook: CompletionHookFn = async (
   taskId: string,
   newStatus: string,
   provider: TaskProvider,
+  deps: CompletionHookDeps = defaultCompletionHookDeps,
 ): Promise<void> => {
-  if (!isCompletionStatus(newStatus)) return
+  if (!deps.isCompletionStatus(newStatus)) return
 
   log.debug({ taskId, newStatus }, 'Completion status detected, checking for recurring template')
 
-  const template = findTemplateByTaskId(taskId)
+  const template = deps.findTemplateByTaskId(taskId)
   if (template === null) {
     log.debug({ taskId }, 'No recurring template found for completed task')
     return
@@ -82,5 +107,5 @@ export const completionHook: CompletionHookFn = async (
   }
 
   log.info({ taskId, templateId: template.id, title: template.title }, 'Firing on_complete recurring task')
-  await createNextOccurrence(template, taskId, provider)
+  await createNextOccurrence(template, taskId, provider, deps)
 }

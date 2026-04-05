@@ -9,7 +9,7 @@ import { pollAlertsOnce, pollScheduledOnce } from '../../src/deferred-prompts/po
 import { createScheduledPrompt, getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 // --- Helpers ---
 
@@ -40,7 +40,6 @@ const USER_ID = 'poller-user-1'
 
 beforeEach(() => {
   mockLogger()
-  mockDrizzle()
 })
 
 // Mock AI module using mutable implementation pattern

@@ -3,10 +3,19 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { updateRecurringTask } from '../recurring.js'
+import { updateRecurringTask as defaultUpdateRecurringTask } from '../recurring.js'
+import type { RecurringTaskRecord } from '../types/recurring.js'
 import { semanticScheduleToCron, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:update-recurring-task' })
+
+export interface UpdateRecurringTaskDeps {
+  updateRecurringTask: (id: string, updates: Record<string, unknown>) => RecurringTaskRecord | null
+}
+
+const defaultDeps: UpdateRecurringTaskDeps = {
+  updateRecurringTask: (...args) => defaultUpdateRecurringTask(...args),
+}
 
 const inputSchema = z.object({
   recurringTaskId: z.string().describe('ID of the recurring task definition to update'),
@@ -33,13 +42,13 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>
 
-function executeUpdate(input: Input): unknown {
+function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
   const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, catchUp } = input
   log.debug({ recurringTaskId }, 'Updating recurring task')
 
   const cronExpression = schedule === undefined ? undefined : semanticScheduleToCron(schedule)
 
-  const updated = updateRecurringTask(recurringTaskId, {
+  const updated = deps.updateRecurringTask(recurringTaskId, {
     title,
     description,
     priority,
@@ -65,14 +74,14 @@ function executeUpdate(input: Input): unknown {
   }
 }
 
-export function makeUpdateRecurringTaskTool(): ToolSet[string] {
+export function makeUpdateRecurringTaskTool(deps: UpdateRecurringTaskDeps = defaultDeps): ToolSet[string] {
   return tool({
     description:
       'Update a recurring task definition (title, description, priority, assignee, labels, schedule, catch-up setting).',
     inputSchema,
     execute: (input) => {
       try {
-        return executeUpdate(input)
+        return executeUpdate(input, deps)
       } catch (error) {
         log.error(
           {

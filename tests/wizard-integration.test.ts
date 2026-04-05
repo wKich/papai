@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { handleWizardMessage } from '../src/wizard-integration.js'
 import { deleteWizardSession } from '../src/wizard/state.js'
-import { mockDrizzle, mockLogger, setupTestDb } from './utils/test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('wizard-integration', () => {
   const userId = 'user123'
@@ -14,7 +14,6 @@ describe('wizard-integration', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
     deleteWizardSession(userId, storageContextId)
   })

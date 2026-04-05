@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
+import type { TaskStatusDeps } from '../../../src/providers/kaneo/task-status.js'
 import { createMockColumn, createMockTask, restoreFetch, setMockFetch } from '../../test-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 import { TaskResource } from './test-resources.js'
@@ -11,18 +12,19 @@ describe('TaskResource', () => {
     baseUrl: 'https://api.test.com',
   }
 
+  let statusDeps: TaskStatusDeps
+
   beforeEach(() => {
     mockLogger()
 
-    void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-      listColumns: mock(() =>
+    statusDeps = {
+      listColumns: (): Promise<Array<{ id: string; name: string }>> =>
         Promise.resolve([
           createMockColumn({ id: 'col-1', name: 'To Do' }),
           createMockColumn({ id: 'col-2', name: 'In Progress' }),
           createMockColumn({ id: 'col-3', name: 'Done', isFinal: true }),
         ]),
-      ),
-    }))
+    }
   })
 
   afterEach(() => {
@@ -48,7 +50,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.create({
         projectId: 'proj-1',
         title: 'Test Task',
@@ -80,7 +82,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -119,7 +121,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -148,7 +150,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -175,7 +177,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -203,7 +205,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -231,7 +233,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.create({
         projectId: 'proj-1',
         title: 'Test',
@@ -260,7 +262,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.get('task-1')
       expect(result.id).toBe('task-1')
       expect(result.description).toBe('Details')
@@ -283,7 +285,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.get('task-1')
       expect(result.relations).toHaveLength(2)
       expect(result.relations[0]!.type).toBe('blocks')
@@ -307,7 +309,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.get('task-1')
       expect(result.relations).toEqual([])
     })
@@ -335,7 +337,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { status: 'done' })
 
         expect(requestUrl).toContain('/task/status/task-1')
@@ -361,7 +363,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { priority: 'high' })
 
         expect(requestUrl).toContain('/task/priority/task-1')
@@ -387,7 +389,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { userId: 'user-123' })
 
         expect(requestUrl).toContain('/task/assignee/task-1')
@@ -413,7 +415,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { dueDate: '2026-12-31' })
 
         expect(requestUrl).toContain('/task/due-date/task-1')
@@ -438,7 +440,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { title: 'Updated Title' })
 
         expect(requestUrl).toContain('/task/title/task-1')
@@ -463,7 +465,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', { description: 'Updated description' })
 
         expect(requestUrl).toContain('/task/description/task-1')
@@ -496,7 +498,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', {
           title: 'New Title',
           status: 'done',
@@ -538,7 +540,7 @@ describe('TaskResource', () => {
           )
         })
 
-        const resource = new TaskResource(mockConfig)
+        const resource = new TaskResource(mockConfig, statusDeps)
         await resource.update('task-1', {
           title: 'New',
           status: 'done',
@@ -559,7 +561,7 @@ describe('TaskResource', () => {
     test('deletes task successfully', async () => {
       setMockFetch(() => Promise.resolve(new Response('{}', { status: 200 })))
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.delete('task-1')
       expect(result.id).toBe('task-1')
       expect(result.success).toBe(true)
@@ -602,7 +604,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.list('proj-1')
       expect(result).toHaveLength(2)
       expect(result[0]!.title).toBe('Task 1')
@@ -624,7 +626,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.list('empty-proj')
       expect(result).toHaveLength(0)
     })
@@ -672,7 +674,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.search({
         query: 'bug',
         workspaceId: 'ws-1',
@@ -689,7 +691,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       await resource.search({
         query: 'test',
         workspaceId: 'ws-1',
@@ -706,7 +708,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.search({
         query: 'nonexistent',
         workspaceId: 'ws-1',
@@ -719,7 +721,7 @@ describe('TaskResource', () => {
     test('throws for 404 (task not found)', async () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })))
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const promise = resource.get('nonexistent-id')
       await expect(promise).rejects.toThrow()
     })
@@ -727,7 +729,7 @@ describe('TaskResource', () => {
     test('throws when projectId does not exist on create', async () => {
       setMockFetch(() => Promise.resolve(new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })))
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const promise = resource.create({ projectId: 'invalid', title: 'Test' })
       await expect(promise).rejects.toThrow()
     })
@@ -737,7 +739,7 @@ describe('TaskResource', () => {
         Promise.resolve(new Response(JSON.stringify({ results: [], totalCount: 0, searchQuery: '' }), { status: 200 })),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.search({ query: '', workspaceId: 'ws-1' })
       expect(result).toEqual([])
     })
@@ -753,7 +755,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.archive('task-1', 'ws-1')
 
       expect(result.id).toBe('task-1')
@@ -793,7 +795,7 @@ describe('TaskResource', () => {
         return Promise.resolve(new Response('{}', { status: 200 }))
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.archive('task-1', 'ws-1')
 
       expect(result.id).toBe('task-1')
@@ -822,7 +824,7 @@ describe('TaskResource', () => {
         return Promise.resolve(new Response('{}', { status: 200 }))
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.archive('task-1', 'ws-1')
 
       expect(result.id).toBe('task-1')
@@ -895,7 +897,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.addRelation('task-1', 'task-2', 'blocks')
 
       expect(result.taskId).toBe('task-1')
@@ -949,7 +951,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.removeRelation('task-1', 'task-2')
 
       expect(result.taskId).toBe('task-1')
@@ -978,7 +980,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const promise = resource.removeRelation('task-1', 'task-2')
       await expect(promise).rejects.toThrow('not found')
     })
@@ -1029,7 +1031,7 @@ describe('TaskResource', () => {
         )
       })
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const result = await resource.updateRelation('task-1', 'task-2', 'duplicate')
 
       expect(result.taskId).toBe('task-1')
@@ -1058,7 +1060,7 @@ describe('TaskResource', () => {
         ),
       )
 
-      const resource = new TaskResource(mockConfig)
+      const resource = new TaskResource(mockConfig, statusDeps)
       const promise = resource.updateRelation('task-1', 'task-2', 'related')
       await expect(promise).rejects.toThrow('not found')
     })

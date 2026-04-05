@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
@@ -25,10 +25,6 @@ describe('index.ts startup - admin auto-authorization', () => {
 
     // Reset test database
     testDb = await setupTestDb()
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-      closeDrizzleDb: (): void => {},
-    }))
 
     // Import addUser fresh for each test
     const usersModule = await import('../src/users.js')

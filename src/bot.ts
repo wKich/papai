@@ -13,13 +13,21 @@ import {
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { isGroupMember } from './groups.js'
-import { processMessage } from './llm-orchestrator.js'
+import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
 import { addUser, isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { handleWizardMessage } from './wizard-integration.js'
 import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
+
+export interface BotDeps {
+  processMessage: (reply: ReplyFn, contextId: string, username: string | null, userText: string) => Promise<void>
+}
+
+const defaultBotDeps: BotDeps = {
+  processMessage: defaultProcessMessage,
+}
 
 const log = logger.child({ scope: 'bot' })
 
@@ -158,7 +166,12 @@ async function autoStartWizardIfNeeded(
   return false
 }
 
-async function handleMessage(msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult): Promise<void> {
+async function handleMessage(
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+  deps: BotDeps,
+): Promise<void> {
   // Check authorization
   if (!auth.allowed) {
     if (msg.isMentioned) {
@@ -178,7 +191,7 @@ async function handleMessage(msg: IncomingMessage, reply: ReplyFn, auth: Authori
 
   reply.typing()
   const prompt = buildPromptWithReplyContext(msg)
-  await processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+  await deps.processMessage(reply, auth.storageContextId, msg.user.username, prompt)
 }
 
 async function maybeInterceptWizard(
@@ -214,7 +227,12 @@ async function maybeInterceptWizard(
   return false
 }
 
-async function onIncomingMessage(chat: ChatProvider, msg: IncomingMessage, reply: ReplyFn): Promise<void> {
+async function onIncomingMessage(
+  chat: ChatProvider,
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  deps: BotDeps,
+): Promise<void> {
   emit('message:received', {
     userId: msg.user.id,
     contextId: msg.contextId,
@@ -246,7 +264,7 @@ async function onIncomingMessage(chat: ChatProvider, msg: IncomingMessage, reply
 
   const start = Date.now()
   try {
-    await handleMessage(msg, reply, auth)
+    await handleMessage(msg, reply, auth, deps)
   } finally {
     emit('message:replied', {
       userId: msg.user.id,
@@ -256,7 +274,7 @@ async function onIncomingMessage(chat: ChatProvider, msg: IncomingMessage, reply
   }
 }
 
-export function setupBot(chat: ChatProvider, adminUserId: string): void {
+export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps = defaultBotDeps): void {
   registerCommands(chat, adminUserId)
-  chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply))
+  chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
 }

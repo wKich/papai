@@ -3,12 +3,21 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
-import { skipNextOccurrence } from '../recurring.js'
+import { skipNextOccurrence as defaultSkipNextOccurrence } from '../recurring.js'
+import type { RecurringTaskRecord } from '../types/recurring.js'
 import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:skip-recurring-task' })
 
-export function makeSkipRecurringTaskTool(): ToolSet[string] {
+export interface SkipRecurringTaskDeps {
+  skipNextOccurrence: (id: string) => RecurringTaskRecord | null
+}
+
+const defaultDeps: SkipRecurringTaskDeps = {
+  skipNextOccurrence: (...args) => defaultSkipNextOccurrence(...args),
+}
+
+export function makeSkipRecurringTaskTool(deps: SkipRecurringTaskDeps = defaultDeps): ToolSet[string] {
   return tool({
     description:
       'Skip the next occurrence of a recurring task series. The series continues normally after the skipped occurrence.',
@@ -18,7 +27,7 @@ export function makeSkipRecurringTaskTool(): ToolSet[string] {
     execute: ({ recurringTaskId }) => {
       try {
         log.debug({ recurringTaskId }, 'Skipping next recurring task occurrence')
-        const result = skipNextOccurrence(recurringTaskId)
+        const result = deps.skipNextOccurrence(recurringTaskId)
 
         if (result === null) {
           log.warn({ recurringTaskId }, 'Recurring task not found for skip')

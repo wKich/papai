@@ -2,15 +2,11 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import { mockLogger, mockDrizzle, createMockReply, setupTestDb } from './utils/test-helpers.js'
+import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 // Capture real modules before mocking (file-level, stays at top)
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 const realAi = await import('ai')
-
-// ---------------------------------------------------------------------------
-// Real module imports (after mocks are registered in beforeEach)
-// ---------------------------------------------------------------------------
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
@@ -30,9 +26,6 @@ describe('processMessage', () => {
   // config.js, cache.js, history.js, conversation.js, memory.js, users.js
   // are left REAL (backed by the test DB) to avoid cross-file mock pollution.
   // ---------------------------------------------------------------------------
-
-  // db/index.js — needed by cache.ts for background sync (sync errors are non-fatal)
-  let testSqlite: import('bun:sqlite').Database
 
   // Provider factory — returns a mock provider to avoid real HTTP calls and env var checks
   const mockProvider = {
@@ -81,13 +74,6 @@ describe('processMessage', () => {
 
     // Register mocks
     mockLogger()
-    mockDrizzle()
-
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): import('bun:sqlite').Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
 
     void mock.module('../src/providers/factory.js', () => ({
       buildProviderForUser: (): typeof mockProvider => mockProvider,
@@ -98,8 +84,8 @@ describe('processMessage', () => {
       maybeProvisionKaneo: realProvisionMod.maybeProvisionKaneo,
     }))
 
-    // Preserve the real `tool` export so makeTools() works with unmocked tool creation.
-    // Only generateText and stepCountIs are replaced for test control.
+    // AI SDK mocks — generateText and stepCountIs replaced for test control.
+    // Preserves the real `tool` export so makeTools() works with unmocked tool creation.
     void mock.module('ai', () => ({
       ...realAi,
       generateText: (args: { messages?: unknown[] }): Promise<GenerateTextResult> => generateTextImpl(args),
@@ -114,8 +100,6 @@ describe('processMessage', () => {
     }))
 
     await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
 
     // Clear caches to ensure clean state
     _userCaches.clear()
@@ -290,7 +274,7 @@ describe('processMessage', () => {
     const ADMIN_CTX = 'admin-ctx'
     const DEMO_CTX = 'demo-ctx'
 
-    test.skip('copies admin LLM config to demo user after Kaneo provisioning', async () => {
+    test('copies admin LLM config to demo user after Kaneo provisioning', async () => {
       process.env['DEMO_MODE'] = 'true'
       process.env['ADMIN_USER_ID'] = ADMIN_CTX
 

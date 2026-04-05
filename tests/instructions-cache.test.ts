@@ -3,12 +3,11 @@ import { describe, test, expect, beforeEach } from 'bun:test'
 import { _userCaches } from '../src/cache.js'
 import { getCachedInstructions, addCachedInstruction, deleteCachedInstruction } from '../src/cache.js'
 import { userInstructions } from '../src/db/schema.js'
-import { mockLogger, mockDrizzle, setupTestDb, getTestDb } from './utils/test-helpers.js'
+import { mockLogger, setupTestDb, getTestDb } from './utils/test-helpers.js'
 
 describe('instructions cache', () => {
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     _userCaches.clear()
     await setupTestDb()
   })

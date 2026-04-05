@@ -15,10 +15,26 @@ function getProvider(apiKey: string, baseUrl: string): OpenAICompatibleProvider 
   return provider
 }
 
-export async function getEmbedding(text: string, apiKey: string, baseUrl: string, model: string): Promise<number[]> {
+export interface EmbeddingsDeps {
+  embed: typeof embed
+  getProvider: (apiKey: string, baseUrl: string) => OpenAICompatibleProvider
+}
+
+const defaultEmbeddingsDeps: EmbeddingsDeps = {
+  embed: (...args) => embed(...args),
+  getProvider,
+}
+
+export async function getEmbedding(
+  text: string,
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  deps: EmbeddingsDeps = defaultEmbeddingsDeps,
+): Promise<number[]> {
   log.debug({ textLength: text.length, model }, 'getEmbedding called')
-  const provider = getProvider(apiKey, baseUrl)
-  const { embedding } = await embed({
+  const provider = deps.getProvider(apiKey, baseUrl)
+  const { embedding } = await deps.embed({
     model: provider.embeddingModel(model),
     value: text,
   })
@@ -31,9 +47,10 @@ export async function tryGetEmbedding(
   apiKey: string,
   baseUrl: string,
   model: string,
+  deps: EmbeddingsDeps = defaultEmbeddingsDeps,
 ): Promise<number[] | null> {
   try {
-    return await getEmbedding(text, apiKey, baseUrl, model)
+    return await getEmbedding(text, apiKey, baseUrl, model, deps)
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error), model }, 'Embedding generation failed')
     return null

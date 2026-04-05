@@ -10,7 +10,6 @@ import {
   createDmMessage,
   createGroupMessage,
   createMockReply,
-  mockDrizzle,
   mockLogger,
   setupTestDb,
 } from '../utils/test-helpers.js'
@@ -27,7 +26,6 @@ describe('command context restrictions', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     // Setup test database with migrations
     await setupTestDb()
 

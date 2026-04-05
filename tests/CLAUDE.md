@@ -28,12 +28,37 @@ Runtime: **Bun** test runner (`bun:test`). No Jest, no Vitest.
 
 ## Mocking Rules
 
+- **Prefer dependency injection over `mock.module()`** — most modules now export a `Deps` interface and accept an optional `deps` parameter with production defaults
 - NEVER mock `globalThis.fetch` directly — use `setMockFetch()` / `restoreFetch()` from `tests/test-helpers.ts`
-- NEVER use `spyOn().mockImplementation()` for module mocks — use mutable `let impl` pattern
+- NEVER use `spyOn().mockImplementation()` for module mocks — use DI or mutable `let impl` pattern
 - Use `mock()` from `bun:test` for spy functions
-- Register mocks BEFORE importing code under test
+- `mock.module()` is still required for: `ai`, `@ai-sdk/openai-compatible`, `logger`, and a few provider modules in `llm-orchestrator.test.ts`
 
-### Mutable Implementation Pattern
+### Dependency Injection Pattern (preferred)
+
+Many source modules export a `Deps` interface and accept an optional `deps` parameter:
+
+```typescript
+// Source module (src/tools/completion-hook.ts)
+export interface CompletionHookDeps {
+  findTemplateByTaskId: (taskId: string) => RecurringTaskRecord | null
+  isCompletionStatus: (status: string) => boolean
+}
+const defaultDeps: CompletionHookDeps = { /* real implementations */ }
+export const completionHook = async (taskId, status, provider, deps = defaultDeps) => { ... }
+```
+
+Tests pass fakes directly — no `mock.module()` needed:
+
+```typescript
+const deps: CompletionHookDeps = {
+  findTemplateByTaskId: (): RecurringTaskRecord | null => template,
+  isCompletionStatus: (s: string): boolean => s === 'done',
+}
+await completionHook('task-1', 'done', provider, deps)
+```
+
+### Mutable Implementation Pattern (legacy, for modules without DI)
 
 ```typescript
 import { mock } from 'bun:test'
@@ -68,27 +93,33 @@ restores real modules before every test via a global `beforeEach`.
 ### Template for new test files
 
 ```typescript
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
-import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
+import { describe, expect, test, beforeEach } from 'bun:test'
+import type { SomeDeps } from '../src/module.js'
 import { functionUnderTest } from '../src/module.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('Module', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+  let deps: SomeDeps
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
-    testDb = await setupTestDb()
+    await setupTestDb()
+
+    deps = {
+      dependency: (): ReturnType => fakeValue,
+    }
   })
 
   test('does something', () => {
-    // ...
+    const result = functionUnderTest(input, deps)
+    expect(result).toBe(expected)
   })
 })
 ```
 
 ### Checklist for new test files
 
+- [ ] Prefer DI (`deps` parameter) over `mock.module()` where available
 - [ ] `mock.module()` and helpers called in `beforeEach` (NOT top-level)
 - [ ] Mutable `let impl` declared inside `describe`
 - [ ] No `afterAll(() => { mock.restore() })` present

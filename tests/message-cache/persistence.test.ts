@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { and, eq, gt } from 'drizzle-orm'
 
@@ -34,9 +34,6 @@ describe('Message Persistence', () => {
   beforeEach(async () => {
     mockLogger()
     testDb = await setupTestDb()
-    void mock.module('../../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
     // Clear table between tests
     testDb.delete(messageMetadata).run()
   })

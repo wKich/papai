@@ -10,14 +10,13 @@ import {
   listScheduledPrompts,
   updateScheduledPrompt,
 } from '../../src/deferred-prompts/scheduled.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'user-1'
 const OTHER_USER = 'user-2'
 
 beforeEach(() => {
   mockLogger()
-  mockDrizzle()
 })
 
 describe('createScheduledPrompt', () => {

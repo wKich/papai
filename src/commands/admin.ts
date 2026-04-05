@@ -2,12 +2,23 @@ import pLimit from 'p-limit'
 
 import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../chat/types.js'
 import { logger } from '../logger.js'
-import { provisionAndConfigure } from '../providers/kaneo/provision.js'
+import {
+  provisionAndConfigure as defaultProvisionAndConfigure,
+  type ProvisionOutcome,
+} from '../providers/kaneo/provision.js'
 import { addUser, listUsers, removeUser } from '../users.js'
 
 const MAX_CONCURRENT_SENDS = 5
 
 const log = logger.child({ scope: 'admin' })
+
+export interface AdminCommandsDeps {
+  provisionAndConfigure: (userId: string, username: string | null) => Promise<ProvisionOutcome>
+}
+
+const defaultAdminDeps: AdminCommandsDeps = {
+  provisionAndConfigure: (...args): Promise<ProvisionOutcome> => defaultProvisionAndConfigure(...args),
+}
 
 const parseUserIdentifier = (
   input: string,
@@ -21,7 +32,11 @@ const parseUserIdentifier = (
   return null
 }
 
-export function registerAdminCommands(chat: ChatProvider, adminUserId: string): void {
+export function registerAdminCommands(
+  chat: ChatProvider,
+  adminUserId: string,
+  deps: AdminCommandsDeps = defaultAdminDeps,
+): void {
   const checkAdmin = (userId: string): boolean => userId === adminUserId
 
   const userHandler: CommandHandler = async (msg, reply) => {
@@ -34,7 +49,7 @@ export function registerAdminCommands(chat: ChatProvider, adminUserId: string): 
       await reply.text('Only the admin can manage users.')
       return
     }
-    await handleUserCommand(msg, reply, msg.user.id, adminUserId)
+    await handleUserCommand(msg, reply, msg.user.id, adminUserId, deps)
   }
 
   const usersHandler: CommandHandler = async (msg, reply) => {
@@ -72,13 +87,14 @@ async function handleUserCommand(
   reply: ReplyFn,
   userId: string,
   adminUserId: string,
+  deps: AdminCommandsDeps,
 ): Promise<void> {
   const matchStr = msg.commandMatch ?? ''
   const args = matchStr.trim().split(/\s+/)
   const subcommand = args[0]
   const identifier = args[1]
   if (subcommand === 'add') {
-    await handleUserAdd(reply, userId, identifier)
+    await handleUserAdd(reply, userId, identifier, deps)
   } else if (subcommand === 'remove') {
     await handleUserRemove(reply, userId, identifier, adminUserId)
   } else {
@@ -101,8 +117,8 @@ async function handleUsersCommand(reply: ReplyFn, userId: string, adminUserId: s
   await reply.text(lines.join('\n'))
 }
 
-async function provisionUserKaneo(reply: ReplyFn, userId: string): Promise<void> {
-  const outcome = await provisionAndConfigure(userId, null)
+async function provisionUserKaneo(reply: ReplyFn, userId: string, deps: AdminCommandsDeps): Promise<void> {
+  const outcome = await deps.provisionAndConfigure(userId, null)
   if (outcome.status === 'provisioned') {
     await reply.text(
       `Kaneo account created.\n📧 Email: ${outcome.email}\n🔑 Password: ${outcome.password}\n🌐 ${outcome.kaneoUrl}`,
@@ -112,7 +128,12 @@ async function provisionUserKaneo(reply: ReplyFn, userId: string): Promise<void>
   }
 }
 
-async function handleUserAdd(reply: ReplyFn, adminId: string, identifier: string | undefined): Promise<void> {
+async function handleUserAdd(
+  reply: ReplyFn,
+  adminId: string,
+  identifier: string | undefined,
+  deps: AdminCommandsDeps,
+): Promise<void> {
   if (identifier === undefined || identifier === '') {
     await reply.text('Usage: /user add <user_id|@username>')
     return
@@ -128,7 +149,7 @@ async function handleUserAdd(reply: ReplyFn, adminId: string, identifier: string
     addUser(parsed.value, adminId)
     log.info({ adminId, newUserId: parsed.value }, '/user add command executed')
     await reply.text(`User ${parsed.value} authorized.`)
-    await provisionUserKaneo(reply, parsed.value)
+    await provisionUserKaneo(reply, parsed.value, deps)
   } else {
     const placeholderId = `placeholder-${crypto.randomUUID()}`
     addUser(placeholderId, adminId, parsed.value)

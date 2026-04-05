@@ -1,9 +1,10 @@
 import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import packageJson from '../package.json' with { type: 'json' }
+import type { AnnouncementsDeps } from '../src/announcements.js'
 import { announceNewVersion } from '../src/announcements.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { runMigrations } from '../src/db/migrate.js'
@@ -16,7 +17,7 @@ import { migration006VersionAnnouncements } from '../src/db/migrations/006_versi
 import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
 import * as schema from '../src/db/schema.js'
 import { extractChangelogSection } from './helpers/extract-changelog-section.js'
-import { mockLogger } from './utils/test-helpers.js'
+import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 const MIGRATIONS = [
   migration001Initial,
@@ -100,7 +101,7 @@ describe('extractChangelogSection', () => {
 
 describe('announceNewVersion', () => {
   // --- Test database setup with Drizzle ---
-  let testDb: ReturnType<typeof drizzle>
+  let testDb: ReturnType<typeof drizzle<typeof schema>>
   let testSqlite: Database
 
   // --- Mock ChatProvider for testing ---
@@ -109,8 +110,9 @@ describe('announceNewVersion', () => {
 
   let mockChat: ChatProvider
 
-  // --- Mock for changelog-reader (controlled per-test via changelogProvider) ---
+  // --- Changelog deps (controlled per-test via changelogProvider) ---
   let changelogProvider: (() => Promise<string>) | null
+  let announcementDeps: AnnouncementsDeps
 
   beforeEach(() => {
     // Reset mutable state to defaults
@@ -124,25 +126,19 @@ describe('announceNewVersion', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): ReturnType<typeof drizzle> => testDb,
-      closeDrizzleDb: (): void => {},
-      _resetDrizzleDb: (): void => {},
-      _setDrizzleDb: (): void => {},
-    }))
-
-    void mock.module('../src/changelog-reader.js', () => ({
+    announcementDeps = {
       readChangelogFile: (): Promise<string> => {
         if (changelogProvider === null) {
           return Promise.reject(new Error('CHANGELOG.md not found'))
         }
         return changelogProvider()
       },
-    }))
+    }
 
     // Setup test database
     testSqlite = new Database(':memory:')
     testDb = drizzle(testSqlite, { schema })
+    setTestDrizzleDb(testDb)
     runMigrations(testSqlite, MIGRATIONS)
 
     mockChat = {
@@ -165,7 +161,7 @@ describe('announceNewVersion', () => {
 
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(sentMessages).toHaveLength(2)
     expect(sentMessages[0]?.userId).toBe('101')
@@ -178,8 +174,8 @@ describe('announceNewVersion', () => {
 
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockChat)
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(sentMessages).toHaveLength(1)
   })
@@ -187,13 +183,13 @@ describe('announceNewVersion', () => {
   test('marks version as announced even when no users have Kaneo accounts', async () => {
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(sentMessages).toHaveLength(0)
     // Verify idempotency - second call should not send messages
     sentMessages.length = 0
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
     expect(sentMessages).toHaveLength(0)
   })
 
@@ -201,7 +197,7 @@ describe('announceNewVersion', () => {
     testDb.insert(schema.userConfig).values({ userId: '101', key: 'kaneo_apikey', value: 'key1' }).run()
     changelogProvider = null
 
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(sentMessages).toHaveLength(0)
   })
@@ -211,7 +207,7 @@ describe('announceNewVersion', () => {
     changelogProvider = (): Promise<string> =>
       Promise.resolve('# Changelog\n\n## [0.0.1] - 2024-01-01\n\n- old stuff\n')
 
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(sentMessages).toHaveLength(0)
   })
@@ -234,7 +230,7 @@ describe('announceNewVersion', () => {
     testDb.insert(schema.userConfig).values({ userId: '202', key: 'kaneo_apikey', value: 'key2' }).run()
     changelogProvider = (): Promise<string> => Promise.resolve(CHANGELOG)
 
-    await announceNewVersion(mockChat)
+    await announceNewVersion(mockChat, announcementDeps)
 
     expect(failedIds).toHaveLength(1)
     expect(sentMessages).toHaveLength(1)

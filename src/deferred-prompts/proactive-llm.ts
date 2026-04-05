@@ -15,6 +15,21 @@ import type { ExecutionMetadata } from './types.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
 
+export interface ProactiveLlmDeps {
+  generateText: typeof generateText
+  stepCountIs: typeof stepCountIs
+  buildModel: (
+    config: { apiKey: string; baseURL: string },
+    modelId: string,
+  ) => ReturnType<ReturnType<typeof createOpenAICompatible>>
+}
+
+const defaultProactiveLlmDeps: ProactiveLlmDeps = {
+  generateText: (...args) => generateText(...args),
+  stepCountIs: (...args) => stepCountIs(...args),
+  buildModel: (config, modelId) => createOpenAICompatible({ name: 'openai-compatible', ...config })(modelId),
+}
+
 export type BuildProviderFn = (userId: string) => TaskProvider | null
 
 type LlmConfig = { apiKey: string; baseURL: string; mainModel: string }
@@ -83,6 +98,7 @@ async function invokeLightweight(
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
+  deps: ProactiveLlmDeps,
 ): Promise<string> {
   log.debug({ userId, mode: 'lightweight' }, 'invokeLightweight called')
   const config = getLlmConfig(userId)
@@ -90,12 +106,12 @@ async function invokeLightweight(
 
   const smallModel = getConfig(userId, 'small_model')
   const modelId = smallModel ?? config.mainModel
-  const model = createOpenAICompatible({ name: 'openai-compatible', ...config })(modelId)
+  const model = deps.buildModel(config, modelId)
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]
 
   log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling generateText')
-  const result = await generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
+  const result = await deps.generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -113,12 +129,13 @@ async function invokeWithContext(
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
+  deps: ProactiveLlmDeps,
 ): Promise<string> {
   log.debug({ userId, mode: 'context' }, 'invokeWithContext called')
   const config = getLlmConfig(userId)
   if (typeof config === 'string') return config
 
-  const model = createOpenAICompatible({ name: 'openai-compatible', ...config })(config.mainModel)
+  const model = deps.buildModel(config, config.mainModel)
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const history = getCachedHistory(userId)
   const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
@@ -129,7 +146,7 @@ async function invokeWithContext(
   ]
 
   log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' }, 'generateText')
-  const result = await generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
+  const result = await deps.generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -146,7 +163,8 @@ async function invokeFull(
   prompt: string,
   metadata: ExecutionMetadata,
   buildProviderFn: BuildProviderFn,
-  matchedTasksSummary?: string,
+  matchedTasksSummary: string | undefined,
+  deps: ProactiveLlmDeps,
 ): Promise<string> {
   log.debug({ userId, mode: 'full' }, 'invokeFull called')
   const config = getLlmConfig(userId)
@@ -158,7 +176,7 @@ async function invokeFull(
     return 'Deferred prompt skipped: task provider not configured.'
   }
 
-  const model = createOpenAICompatible({ name: 'openai-compatible', ...config })(config.mainModel)
+  const model = deps.buildModel(config, config.mainModel)
   const tools = makeTools(provider, userId, 'proactive')
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const systemPrompt = buildSystemPrompt(provider, timezone, userId)
@@ -173,12 +191,12 @@ async function invokeFull(
   ]
 
   log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'full' }, 'generateText')
-  const result = await generateText({
+  const result = await deps.generateText({
     model,
     system: systemPrompt,
     messages: finalMessages,
     tools,
-    stopWhen: stepCountIs(25),
+    stopWhen: deps.stepCountIs(25),
   })
   persistProactiveResults(userId, result, history)
   return result.text ?? 'Done.'
@@ -193,14 +211,15 @@ export function dispatchExecution(
   metadata: ExecutionMetadata,
   buildProviderFn: BuildProviderFn,
   matchedTasksSummary?: string,
+  deps: ProactiveLlmDeps = defaultProactiveLlmDeps,
 ): Promise<string> {
   log.debug({ userId, mode: metadata.mode }, 'dispatchExecution called')
   switch (metadata.mode) {
     case 'lightweight':
-      return invokeLightweight(userId, type, prompt, metadata)
+      return invokeLightweight(userId, type, prompt, metadata, deps)
     case 'context':
-      return invokeWithContext(userId, type, prompt, metadata)
+      return invokeWithContext(userId, type, prompt, metadata, deps)
     case 'full':
-      return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary)
+      return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
   }
 }

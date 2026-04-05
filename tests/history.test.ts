@@ -1,5 +1,4 @@
-import { Database } from 'bun:sqlite'
-import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 import { eq } from 'drizzle-orm'
@@ -16,20 +15,9 @@ beforeEach(() => {
 
 describe('loadHistory', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('returns empty array when no row exists', () => {
@@ -153,20 +141,9 @@ describe('loadHistory', () => {
 
 describe('saveHistory', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('persists messages as JSON', async () => {
@@ -204,20 +181,9 @@ describe('saveHistory', () => {
 
 describe('clearHistory', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
   })
 
   test('removes entry from store', () => {
@@ -246,21 +212,8 @@ describe('clearHistory', () => {
 })
 
 describe('appendHistory', () => {
-  let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
-
   beforeEach(async () => {
-    testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
+    await setupTestDb()
     _userCaches.clear()
   })
 
@@ -305,20 +258,9 @@ describe('appendHistory', () => {
 
 describe('getCachedHistory cold-cache behavior', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
-  let testSqlite: Database
 
   beforeEach(async () => {
     testDb = await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
-    void mock.module('../src/db/drizzle.js', () => ({
-      getDrizzleDb: (): typeof testDb => testDb,
-    }))
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
     // Clear all caches to ensure cold state
     _userCaches.clear()
   })

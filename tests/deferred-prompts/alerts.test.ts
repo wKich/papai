@@ -13,13 +13,12 @@ import {
 } from '../../src/deferred-prompts/alerts.js'
 import type { AlertCondition } from '../../src/deferred-prompts/types.js'
 import type { Task } from '../../src/providers/types.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 // --- CRUD tests ---
 
 beforeEach(() => {
   mockLogger()
-  mockDrizzle()
 })
 
 describe('alert prompt CRUD', () => {

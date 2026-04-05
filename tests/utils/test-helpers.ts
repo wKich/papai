@@ -10,6 +10,7 @@ import type {
   IncomingMessage,
   ReplyFn,
 } from '../../src/chat/types.js'
+import { _resetDrizzleDb, _setDrizzleDb } from '../../src/db/drizzle.js'
 import type { Migration } from '../../src/db/migrate.js'
 import { migration001Initial } from '../../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../../src/db/migrations/002_conversation_history.js'
@@ -142,6 +143,7 @@ export async function setupTestDb(): Promise<ReturnType<typeof drizzle<typeof sc
   testDb = drizzle(testSqlite, { schema })
 
   runMigrations(testSqlite, [...ALL_MIGRATIONS])
+  _setDrizzleDb(testDb)
   return testDb
 }
 
@@ -157,25 +159,32 @@ export function getTestDb(): ReturnType<typeof drizzle<typeof schema>> {
 }
 
 /**
- * Mock the drizzle module to use test database.
- * Call in describe-level beforeEach (NOT at top level) to avoid mock pollution.
- *
- * @example
- * describe('Feature', () => {
- *   beforeEach(() => {
- *     mockDrizzle()
- *   })
- * })
+ * Re-apply the drizzle singleton to use the test database.
+ * Since setupTestDb() now calls _setDrizzleDb() automatically,
+ * this is only needed to re-inject after something resets the singleton
+ * (e.g. mock.restore()). Requires setupTestDb() to have been called first.
  */
 export function mockDrizzle(): void {
-  void mock.module('../../src/db/drizzle.js', () => ({
-    getDrizzleDb: (): ReturnType<typeof drizzle<typeof schema>> => {
-      if (testDb === null) {
-        throw new Error('Test database not initialized. Call setupTestDb() first.')
-      }
-      return testDb
-    },
-  }))
+  if (testDb === null) {
+    throw new Error('Test database not initialized. Call setupTestDb() first.')
+  }
+  _setDrizzleDb(testDb)
+}
+
+/**
+ * Inject a custom drizzle instance into the singleton.
+ * Use this when tests create their own in-memory DB with custom schema
+ * (e.g. without full migrations). For full-migration setup, use setupTestDb().
+ */
+export function setTestDrizzleDb(db: ReturnType<typeof drizzle<typeof schema>>): void {
+  _setDrizzleDb(db)
+}
+
+/**
+ * Reset the drizzle singleton back to its default (lazy-init) behavior.
+ */
+export function restoreDrizzle(): void {
+  _resetDrizzleDb()
 }
 
 // Re-export logger mocks from dedicated file (no src/ imports to avoid mock timing issues)
