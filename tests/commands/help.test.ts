@@ -1,12 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
-import { createDmMessage, createGroupMessage, mockLogger } from '../utils/test-helpers.js'
-
-// Setup logger mock before importing modules
-mockLogger()
-
 import { registerHelpCommand } from '../../src/commands/help.js'
+import { createDmMessage, createGroupMessage, mockLogger } from '../utils/test-helpers.js'
 
 describe('help command', () => {
   let capturedText: string | null = null
@@ -35,6 +31,7 @@ describe('help command', () => {
   }
 
   beforeEach(() => {
+    mockLogger()
     capturedText = null
     lastHandler = null
   })

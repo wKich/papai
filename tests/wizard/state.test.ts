@@ -2,32 +2,28 @@
  * Tests for wizard state management
  */
 
-import { describe, expect, test, beforeEach, afterAll } from 'bun:test'
+import { describe, expect, test, beforeEach } from 'bun:test'
 import { mock } from 'bun:test'
 
-// Import and setup logger mock before any src/ imports
-import { createTrackedLoggerMock } from '../utils/logger-mock.js'
-
-const { logger, getLogLevel } = createTrackedLoggerMock()
-
-void mock.module('../../src/logger.js', () => ({
-  getLogLevel,
-  logger,
-}))
+import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
 
 // Import state module after mocking (dynamic import)
 const { createWizardSession, getWizardSession, hasActiveWizard, updateWizardSession, deleteWizardSession } =
   await import('../../src/wizard/state.js')
 
-afterAll(() => {
-  mock.restore()
-})
-
 describe('Wizard State Management', () => {
   const userId = 'user123'
   const storageContextId = 'ctx-456'
 
+  let trackedLogger: TrackedLoggerMock
+
   beforeEach(() => {
+    trackedLogger = createTrackedLoggerMock()
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: trackedLogger.getLogLevel,
+      logger: trackedLogger.logger,
+    }))
+
     // Clean up any existing sessions before each test
     deleteWizardSession(userId, storageContextId)
   })

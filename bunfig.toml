@@ -4,8 +4,8 @@
 [test]
 # Exclude E2E tests from default test discovery
 # E2E tests require Docker setup and should be run with: bun run test:e2e
-pathIgnorePatterns = ["tests/e2e/**", "tests/scripts/**"]
+pathIgnorePatterns = ["tests/e2e/**"]
 
 # Preload global setup to suppress console output during tests
 # This keeps test output clean while preserving error messages
-preload = ["./tests/setup.ts"]
+preload = ["./tests/setup.ts", "./tests/mock-reset.ts"]

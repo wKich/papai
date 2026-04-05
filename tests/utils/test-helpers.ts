@@ -71,7 +71,14 @@ function messageCacheKey(contextId: string, messageId: string): string {
 
 /**
  * Mock the message cache module with a test-local implementation.
- * Call this BEFORE importing modules that use the cache.
+ * Call in describe-level beforeEach (NOT at top level) to avoid mock pollution.
+ *
+ * @example
+ * describe('Feature', () => {
+ *   beforeEach(() => {
+ *     mockMessageCache()
+ *   })
+ * })
  */
 export function mockMessageCache(): void {
   void mock.module('../../src/message-cache/cache.js', () => ({
@@ -151,7 +158,14 @@ export function getTestDb(): ReturnType<typeof drizzle<typeof schema>> {
 
 /**
  * Mock the drizzle module to use test database.
- * Call this BEFORE importing any modules that use getDrizzleDb.
+ * Call in describe-level beforeEach (NOT at top level) to avoid mock pollution.
+ *
+ * @example
+ * describe('Feature', () => {
+ *   beforeEach(() => {
+ *     mockDrizzle()
+ *   })
+ * })
  */
 export function mockDrizzle(): void {
   void mock.module('../../src/db/drizzle.js', () => ({

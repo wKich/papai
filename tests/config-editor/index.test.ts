@@ -2,19 +2,8 @@
  * Tests for config-editor public API
  */
 
-import { afterAll, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-// Setup mocks
-mockLogger()
-
-afterAll(() => {
-  mock.restore()
-})
-
-// Import from public API
 import {
   createEditorSession,
   deleteEditorSession,
@@ -25,8 +14,15 @@ import {
   parseCallbackData,
   startEditor,
 } from '../../src/config-editor/index.js'
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('config-editor public API', () => {
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    await setupTestDb()
+  })
+
   const userId = 'user123'
   const storageContextId = 'ctx456'
 

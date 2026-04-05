@@ -2,22 +2,16 @@
  * Tests for config-editor validation
  */
 
-import { afterAll, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
+import { validateConfigValue } from '../../src/config-editor/validation.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
-// Setup mocks
-mockLogger()
-
-afterAll(() => {
-  mock.restore()
-})
-
-// Import after mocking
-import { validateConfigValue } from '../../src/config-editor/validation.js'
-
 describe('config-editor validation', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
   describe('validateConfigValue', () => {
     test('validates llm_apikey - required and non-empty', () => {
       const result = validateConfigValue('llm_apikey', '')

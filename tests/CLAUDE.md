@@ -52,27 +52,49 @@ import { functionUnderTest } from '../src/module.js'
 
 Override per-test by reassigning `generateTextImpl`.
 
-## Mock Pollution Prevention (HIGH PRIORITY)
+## Mock Pollution Prevention
 
-`mock.module()` is global and permanent for the Bun process. This is the #1 source of false test failures.
+`mock.module()` is global and permanent in Bun. The preload `tests/mock-reset.ts`
+restores real modules before every test via a global `beforeEach`.
 
 ### Rules
 
-1. **Check before mocking:** `grep -r "from.*src/foo.js" tests/ --include="*.test.ts" -l` — if other files import it unmocked, your mock will break them
-2. **Mock the narrowest dependency:** Prefer mocking `db/drizzle.js` over `config.js` or `cache.js`
-3. **Always clean up:** Add `afterAll(() => { mock.restore() })` if mocking modules used by other test files. `mock.restore()` restores **all** mocked modules — call in `afterAll`, not `afterEach`
-4. **Prefer test helpers:** Check `tests/utils/test-helpers.ts` and `tests/tools/mock-provider.ts` before writing new `mock.module()` calls
-5. **Self-contained heavy mockers:** Files mocking 4+ modules must add `afterAll(() => { mock.restore() })` and document mocked modules at top of file
-6. **Beware transitive pollution:** Mocking `src/db/drizzle.js` affects any file that transitively imports it. Run `bun run mock-pollution` after adding new mocks
-7. **Verify full suite:** Run `bun test` (not just `bun test tests/your-file.test.ts`)
+1. **Never call `mock.module()` at file top-level** — always inside `describe`-level `beforeEach`
+2. **Never call `mockLogger()` / `mockDrizzle()` / `mockMessageCache()` at file top-level** — same rule
+3. **No `afterAll(() => { mock.restore() })` needed** — global `afterEach` handles it
+4. **Adding a new mocked module?** Add it to `tests/mock-reset.ts` originals list
+5. **Mutable `let impl` pattern** — declare inside `describe`, reset in `beforeEach`
+
+### Template for new test files
+
+```typescript
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mockLogger, mockDrizzle, setupTestDb } from './utils/test-helpers.js'
+import { functionUnderTest } from '../src/module.js'
+
+describe('Module', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
+  beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
+    testDb = await setupTestDb()
+  })
+
+  test('does something', () => {
+    // ...
+  })
+})
+```
 
 ### Checklist for new test files
 
-- [ ] Mocks registered **before** imports of code under test
-- [ ] Only directly needed modules are mocked
-- [ ] `mock.restore()` in `afterAll` if mocking shared modules
+- [ ] `mock.module()` and helpers called in `beforeEach` (NOT top-level)
+- [ ] Mutable `let impl` declared inside `describe`
+- [ ] No `afterAll(() => { mock.restore() })` present
+- [ ] If mocking a NEW module not in `mock-reset.ts`, add it there
 - [ ] `bun test` (full suite) passes
-- [ ] Mutable `let impl` pattern used (not inline return values)
+- [ ] `bun test --randomize` passes
 
 ## Test Structure
 

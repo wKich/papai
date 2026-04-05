@@ -1,11 +1,8 @@
 import { Database } from 'bun:sqlite'
-import { afterAll, describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
-
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 
 import { runMigrations, type Migration } from '../../src/db/migrate.js'
+import { mockLogger } from '../utils/test-helpers.js'
 
 const getTableNames = (db: Database): string[] =>
   db
@@ -20,6 +17,10 @@ const getMigrationIds = (db: Database): string[] =>
     .map((row) => row.id)
 
 const makeDb = (): Database => new Database(':memory:')
+
+beforeEach(() => {
+  mockLogger()
+})
 
 describe('runMigrations - basic behavior', () => {
   let db: Database
@@ -238,8 +239,4 @@ describe('runMigrations - order validation', () => {
       runMigrations(db, migrations)
     }).toThrow('Migration 002_foo has duplicate base name: foo')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

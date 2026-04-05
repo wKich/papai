@@ -1,20 +1,12 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
-void mock.module('../../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
 import { registerStartCommand } from '../../src/commands/start.js'
 import { addUser, isAuthorized } from '../../src/users.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('start command — demo mode auto-add', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
   let lastHandler: CommandHandler | null = null
   let capturedText: string | null = null
 
@@ -41,7 +33,11 @@ describe('start command — demo mode auto-add', () => {
   }
 
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
     capturedText = null
     lastHandler = null
     registerStartCommand(mockChat)
@@ -118,8 +114,4 @@ describe('start command — demo mode auto-add', () => {
     expect(isAuthorized('existing-1')).toBe(true)
     expect(capturedText).toContain('Welcome')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

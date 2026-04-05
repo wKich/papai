@@ -1,20 +1,9 @@
-import { afterAll, mock, describe, expect, test, beforeEach } from 'bun:test'
+import { mock, describe, expect, test, beforeEach } from 'bun:test'
 
 import { eq } from 'drizzle-orm'
 
-import * as schema from '../src/db/schema.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-// Setup logger mock at top of file
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-void mock.module('../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
-
 import { _userCaches } from '../src/cache.js'
+import * as schema from '../src/db/schema.js'
 import {
   addUser,
   removeUser,
@@ -24,10 +13,20 @@ import {
   getKaneoWorkspace,
   setKaneoWorkspace,
 } from '../src/users.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+
+beforeEach(() => {
+  mockLogger()
+})
 
 describe('addUser', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('adds a user by ID', () => {
@@ -73,8 +72,13 @@ describe('addUser', () => {
 })
 
 describe('removeUser', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('removes a user by ID', () => {
@@ -112,8 +116,13 @@ describe('removeUser', () => {
 })
 
 describe('isAuthorized', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('returns true for authorized user', () => {
@@ -127,8 +136,13 @@ describe('isAuthorized', () => {
 })
 
 describe('resolveUserByUsername', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('resolves placeholder ID to real platform user ID', () => {
@@ -151,8 +165,13 @@ describe('resolveUserByUsername', () => {
 })
 
 describe('listUsers', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
   })
 
   test('returns all users', () => {
@@ -174,8 +193,13 @@ describe('listUsers', () => {
 })
 
 describe('getKaneoWorkspace / setKaneoWorkspace', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
   beforeEach(async () => {
     testDb = await setupTestDb()
+    void mock.module('../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
     _userCaches.clear()
   })
 
@@ -200,8 +224,4 @@ describe('getKaneoWorkspace / setKaneoWorkspace', () => {
     expect(getKaneoWorkspace('ws-user-4')).toBe('ws-A')
     expect(getKaneoWorkspace('ws-user-5')).toBe('ws-B')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

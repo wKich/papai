@@ -1,14 +1,11 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { makeAddCommentTool } from '../../src/tools/add-comment.js'
 import { makeGetCommentsTool } from '../../src/tools/get-comments.js'
 import { makeRemoveCommentTool } from '../../src/tools/remove-comment.js'
 import { makeUpdateCommentTool } from '../../src/tools/update-comment.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isAddResult(val: unknown): val is { id: string; body: string; createdAt: string } {
@@ -30,6 +27,7 @@ function isSuccessResult(val: unknown): val is { id: string } {
 
 describe('Comment Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

@@ -1,22 +1,15 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-// Mock logger and DB before importing modules that use them
-mockLogger()
-mockDrizzle()
-
-afterAll(() => {
-  mock.restore()
-})
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { cacheMessage, getCachedMessage } from '../../src/message-cache/cache.js'
+import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const ONE_MINUTE_MS = 60 * 1000
 
 describe('Message Cache', () => {
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
   })
 

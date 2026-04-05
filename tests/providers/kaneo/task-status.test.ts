@@ -1,14 +1,10 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger } from '../../utils/test-helpers.js'
-
-// Mock logger before importing modules that use it
-mockLogger()
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { getUserMessage } from '../../../src/errors.js'
 import { KaneoClassifiedError } from '../../../src/providers/kaneo/classify-error.js'
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
 import { restoreFetch } from '../../test-helpers.js'
+import { mockLogger } from '../../utils/test-helpers.js'
 
 type ColumnEntry = { id: string; name: string; order: number }
 
@@ -18,22 +14,22 @@ const defaultColumns: ColumnEntry[] = [
   { id: 'col-3', name: 'Done', order: 2 },
 ]
 
-let listColumnsImpl: (opts: { config: KaneoConfig; projectId: string }) => Promise<ColumnEntry[]>
-
-void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
-  listColumns: (opts: { config: KaneoConfig; projectId: string }): Promise<ColumnEntry[]> => listColumnsImpl(opts),
-}))
-
-import { validateStatus } from '../../../src/providers/kaneo/task-status.js'
-
 describe('validateStatus', () => {
   const mockConfig: KaneoConfig = {
     apiKey: 'test-key',
     baseUrl: 'https://test.kaneo.app',
   }
 
+  let listColumnsImpl: (opts: { config: KaneoConfig; projectId: string }) => Promise<ColumnEntry[]>
+
   beforeEach(() => {
+    mockLogger()
+
     listColumnsImpl = (): Promise<ColumnEntry[]> => Promise.resolve(defaultColumns)
+
+    void mock.module('../../../src/providers/kaneo/list-columns.js', () => ({
+      listColumns: (opts: { config: KaneoConfig; projectId: string }): Promise<ColumnEntry[]> => listColumnsImpl(opts),
+    }))
   })
 
   afterEach(() => {
@@ -42,16 +38,19 @@ describe('validateStatus', () => {
 
   describe('with valid status names', () => {
     test('resolves with slug for exact column name match', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       const result = await validateStatus(mockConfig, 'proj-1', 'To Do')
       expect(result).toBe('to-do')
     })
 
     test('resolves with slug for case-insensitive match', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       const result = await validateStatus(mockConfig, 'proj-1', 'to do')
       expect(result).toBe('to-do')
     })
 
     test('resolves with slug for hyphenated input', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       const result = await validateStatus(mockConfig, 'proj-1', 'in-progress')
       expect(result).toBe('in-progress')
     })
@@ -59,6 +58,7 @@ describe('validateStatus', () => {
 
   describe('with invalid status names', () => {
     test('throws KaneoClassifiedError with status-not-found code', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       let thrownError: unknown
       try {
         await validateStatus(mockConfig, 'proj-1', 'Review')
@@ -72,6 +72,7 @@ describe('validateStatus', () => {
     })
 
     test('error includes invalid status name', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       let thrownError: unknown
       try {
         await validateStatus(mockConfig, 'proj-1', 'InvalidStatus')
@@ -85,6 +86,7 @@ describe('validateStatus', () => {
     })
 
     test('error includes available statuses in payload', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       let thrownError: unknown
       try {
         await validateStatus(mockConfig, 'proj-1', 'NonExistent')
@@ -112,6 +114,7 @@ describe('validateStatus', () => {
           { id: 'col-x', name: 'Backlog', order: 0 },
           { id: 'col-y', name: 'Shipped', order: 1 },
         ])
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       const result = await validateStatus(mockConfig, 'proj-1', 'Backlog')
       expect(result).toBe('backlog')
     })
@@ -119,6 +122,7 @@ describe('validateStatus', () => {
 
   describe('error message format', () => {
     test('provides user-friendly message via getUserMessage', async () => {
+      const { validateStatus } = await import('../../../src/providers/kaneo/task-status.js')
       let thrownError: unknown
       try {
         await validateStatus(mockConfig, 'proj-1', 'Review')
@@ -135,8 +139,4 @@ describe('validateStatus', () => {
       }
     })
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

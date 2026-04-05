@@ -1,12 +1,9 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { makeAddTaskLabelTool } from '../../src/tools/add-task-label.js'
 import { makeRemoveTaskLabelTool } from '../../src/tools/remove-task-label.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTaskLabel(val: unknown): val is { taskId: string; labelId: string } {
@@ -22,6 +19,7 @@ function isTaskLabel(val: unknown): val is { taskId: string; labelId: string } {
 
 describe('Task Label Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

@@ -1,9 +1,4 @@
-import { afterAll, describe, test, expect, beforeEach, mock } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 import { _userCaches } from '../../src/cache.js'
 import { saveInstruction } from '../../src/instructions.js'
@@ -12,8 +7,11 @@ import {
   makeListInstructionsTool,
   makeDeleteInstructionTool,
 } from '../../src/tools/instructions.js'
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 beforeEach(async () => {
+  mockLogger()
+  mockDrizzle()
   _userCaches.clear()
   await setupTestDb()
 })
@@ -80,8 +78,4 @@ describe('delete_instruction tool', () => {
     const result = await exec(tool, { id: 'unknown' })
     expect(result).toHaveProperty('status', 'not_found')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

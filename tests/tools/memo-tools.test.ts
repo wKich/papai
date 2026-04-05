@@ -1,10 +1,5 @@
 import { describe, test, expect, beforeEach } from 'bun:test'
 
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-mockLogger()
-mockDrizzle()
-
 import { _userCaches } from '../../src/cache.js'
 import { setConfig } from '../../src/config.js'
 import { saveMemo } from '../../src/memos.js'
@@ -13,7 +8,13 @@ import { makeListMemosTool } from '../../src/tools/list-memos.js'
 import { makePromoteMemoTool } from '../../src/tools/promote-memo.js'
 import { makeSaveMemoTool } from '../../src/tools/save-memo.js'
 import { makeSearchMemosTool } from '../../src/tools/search-memos.js'
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
+
+beforeEach(() => {
+  mockLogger()
+  mockDrizzle()
+})
 
 async function exec(
   toolInstance: ReturnType<typeof makeSaveMemoTool>,

@@ -1,12 +1,13 @@
-import { describe, expect, test } from 'bun:test'
-
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { checkConfidence, confidenceField } from '../../src/tools/confirmation-gate.js'
+import { mockLogger } from '../utils/test-helpers.js'
 
 describe('Confirmation Gate', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
   describe('checkConfidence', () => {
     test('returns null when confidence equals threshold (0.85)', () => {
       const result = checkConfidence(0.85, 'Delete task')

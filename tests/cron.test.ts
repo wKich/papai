@@ -1,10 +1,11 @@
-import { afterAll, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger } from './utils/test-helpers.js'
-
-mockLogger()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
+import { mockLogger } from './utils/test-helpers.js'
+
+beforeEach(() => {
+  mockLogger()
+})
 
 describe('parseCron', () => {
   test('parses a valid 5-field cron expression', () => {
@@ -257,8 +258,4 @@ describe('allOccurrencesBetween', () => {
     const results = allOccurrencesBetween(cron, point, point)
     expect(results).toEqual([])
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

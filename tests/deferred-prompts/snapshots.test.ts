@@ -1,17 +1,8 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks BEFORE importing code under test
-mockLogger()
-mockDrizzle()
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { getSnapshotsForUser, updateSnapshots } from '../../src/deferred-prompts/snapshots.js'
 import type { Task } from '../../src/providers/types.js'
-
-afterAll(() => {
-  mock.restore()
-})
+import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
 
 const makeTask = (overrides: Partial<Task> & { id: string }): Task => ({
   title: 'Test task',
@@ -21,6 +12,8 @@ const makeTask = (overrides: Partial<Task> & { id: string }): Task => ({
 
 describe('snapshots', () => {
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
   })
 

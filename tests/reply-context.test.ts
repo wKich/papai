@@ -1,17 +1,9 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { IncomingMessage } from '../src/chat/types.js'
-import { clearMessageCache, mockLogger, mockMessageCache } from './utils/test-helpers.js'
-
-mockLogger()
-mockMessageCache()
-
-afterAll(() => {
-  mock.restore()
-})
-
 import { cacheMessage } from '../src/message-cache/cache.js'
 import { buildPromptWithReplyContext, buildReplyContextChain } from '../src/reply-context.js'
+import { clearMessageCache, mockLogger, mockMessageCache } from './utils/test-helpers.js'
 
 function makeDmMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
   return {
@@ -25,6 +17,11 @@ function makeDmMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessag
 }
 
 describe('buildPromptWithReplyContext', () => {
+  beforeEach(() => {
+    mockLogger()
+    mockMessageCache()
+  })
+
   test('returns plain text when no reply context', () => {
     const msg = makeDmMessage({ text: 'Hello world' })
     expect(buildPromptWithReplyContext(msg)).toBe('Hello world')
@@ -96,6 +93,8 @@ describe('buildPromptWithReplyContext', () => {
 
 describe('buildReplyContextChain', () => {
   beforeEach(() => {
+    mockLogger()
+    mockMessageCache()
     clearMessageCache()
   })
 

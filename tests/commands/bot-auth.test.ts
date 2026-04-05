@@ -1,28 +1,10 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
-import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-// Setup mocks before importing modules
-mockLogger()
-mockDrizzle()
-
-// Track processMessage calls
-let processMessageCallCount = 0
-let lastProcessedStorageId: string | null = null
-
-// Mock processMessage to avoid LLM/config dependencies
-void mock.module('../../src/llm-orchestrator.js', () => ({
-  processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
-    processMessageCallCount++
-    lastProcessedStorageId = storageContextId
-    return Promise.resolve()
-  },
-}))
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { setupBot } from '../../src/bot.js'
+import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
 import { addUser, isAuthorized, removeUser } from '../../src/users.js'
+import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const ADMIN_ID = 'admin-bot-auth'
 
@@ -39,14 +21,30 @@ function setupUserConfig(userId: string): void {
 describe('Bot Authorization Gate', () => {
   let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
 
-  beforeEach(async () => {
-    // Setup test database with migrations
-    await setupTestDb()
+  // Track processMessage calls
+  let processMessageCallCount = 0
+  let lastProcessedStorageId: string | null = null
 
-    // Reset call tracking
+  beforeEach(async () => {
+    // Reset mutable state to defaults
     processMessageCallCount = 0
     lastProcessedStorageId = null
     messageHandler = null
+
+    // Register mocks
+    mockLogger()
+    mockDrizzle()
+
+    void mock.module('../../src/llm-orchestrator.js', () => ({
+      processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
+        processMessageCallCount++
+        lastProcessedStorageId = storageContextId
+        return Promise.resolve()
+      },
+    }))
+
+    // Setup test database with migrations
+    await setupTestDb()
 
     const mockChat: ChatProvider = {
       name: 'mock',
@@ -148,11 +146,28 @@ describe('Bot Authorization Gate', () => {
 describe('Demo Mode — wizard bypass', () => {
   let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
 
+  let processMessageCallCount = 0
+  let lastProcessedStorageId: string | null = null
+
   beforeEach(async () => {
-    await setupTestDb()
+    // Reset mutable state to defaults
     processMessageCallCount = 0
     lastProcessedStorageId = null
     messageHandler = null
+
+    // Register mocks
+    mockLogger()
+    mockDrizzle()
+
+    void mock.module('../../src/llm-orchestrator.js', () => ({
+      processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
+        processMessageCallCount++
+        lastProcessedStorageId = storageContextId
+        return Promise.resolve()
+      },
+    }))
+
+    await setupTestDb()
 
     const mockChat: ChatProvider = {
       name: 'mock',
@@ -184,8 +199,4 @@ describe('Demo Mode — wizard bypass', () => {
     expect(processMessageCallCount).toBe(1)
     expect(lastProcessedStorageId).toBe('demo-bypass-1')
   })
-})
-
-afterAll(() => {
-  mock.restore()
 })

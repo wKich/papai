@@ -2,7 +2,7 @@
  * Tests for the core scheduler implementation.
  */
 
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import {
   FatalError,
@@ -30,17 +30,11 @@ let loggerImpl: MockLogger = {
   child: (): MockLogger => loggerImpl,
 }
 
-// Mock logger before importing scheduler
-void mock.module('../../src/logger.js', () => ({
-  logger: loggerImpl,
-}))
-
 // Import after mocking
 const { createScheduler } = await import('../../src/utils/scheduler.js')
 
 describe('createScheduler', () => {
   beforeEach(() => {
-    // Reset logger implementation
     loggerImpl = {
       debug: (): void => {},
       info: (): void => {},
@@ -48,10 +42,11 @@ describe('createScheduler', () => {
       error: (): void => {},
       child: (): MockLogger => loggerImpl,
     }
-  })
 
-  afterAll(() => {
-    mock.restore()
+    // Mock logger before importing scheduler
+    void mock.module('../../src/logger.js', () => ({
+      logger: loggerImpl,
+    }))
   })
 
   describe('registration', () => {

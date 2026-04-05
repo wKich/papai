@@ -1,14 +1,11 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { makeCreateLabelTool } from '../../src/tools/create-label.js'
 import { makeListLabelsTool } from '../../src/tools/list-labels.js'
 import { makeRemoveLabelTool } from '../../src/tools/remove-label.js'
 import { makeUpdateLabelTool } from '../../src/tools/update-label.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 interface Label {
@@ -34,6 +31,7 @@ function isLabelArray(val: unknown): val is Label[] {
 
 describe('Label Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
   })
 

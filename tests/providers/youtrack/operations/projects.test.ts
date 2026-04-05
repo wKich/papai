@@ -2,11 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
-import { mockLogger } from '../../../utils/test-helpers.js'
-
-mockLogger()
-
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
@@ -16,6 +11,8 @@ import {
   listYouTrackProjects,
   updateYouTrackProject,
 } from '../../../../src/providers/youtrack/operations/projects.js'
+import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
+import { mockLogger } from '../../../utils/test-helpers.js'
 
 // --- Fetch mocking infrastructure ---
 
@@ -87,6 +84,7 @@ const makeProjectResponse = (overrides: Record<string, unknown> = {}): ProjectFi
 
 describe('getYouTrackProject', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -165,6 +163,7 @@ describe('getYouTrackProject', () => {
 
 describe('listYouTrackProjects', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -243,6 +242,7 @@ describe('listYouTrackProjects', () => {
 
 describe('createYouTrackProject', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -307,6 +307,7 @@ describe('createYouTrackProject', () => {
 
 describe('updateYouTrackProject', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 
@@ -370,6 +371,7 @@ describe('updateYouTrackProject', () => {
 
 describe('archiveYouTrackProject', () => {
   beforeEach(() => {
+    mockLogger()
     fetchMock = undefined!
   })
 

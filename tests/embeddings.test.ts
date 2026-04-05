@@ -1,30 +1,27 @@
-import { afterAll, mock, describe, expect, test } from 'bun:test'
-
-import { mockLogger } from './utils/test-helpers.js'
-
-mockLogger()
-
-type EmbedResult = { embedding: number[] }
-let embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.1, 0.2, 0.3] })
-
-void mock.module('ai', () => ({
-  embed: (..._args: unknown[]): Promise<EmbedResult> => embedImpl(),
-}))
-
-type MockProvider = { embeddingModel: (name: string) => string }
-void mock.module('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible: (): MockProvider => ({
-    embeddingModel: (name: string): string => name,
-  }),
-}))
+import { mock, beforeEach, describe, expect, test } from 'bun:test'
 
 import { getEmbedding, tryGetEmbedding } from '../src/embeddings.js'
+import { mockLogger } from './utils/test-helpers.js'
 
-afterAll(() => {
-  mock.restore()
-})
+type EmbedResult = { embedding: number[] }
+type MockProvider = { embeddingModel: (name: string) => string }
 
 describe('getEmbedding', () => {
+  let embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.1, 0.2, 0.3] })
+
+  beforeEach(() => {
+    mockLogger()
+    embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.1, 0.2, 0.3] })
+    void mock.module('ai', () => ({
+      embed: (..._args: unknown[]): Promise<EmbedResult> => embedImpl(),
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): MockProvider => ({
+        embeddingModel: (name: string): string => name,
+      }),
+    }))
+  })
+
   test('returns embedding array from embed()', async () => {
     embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.5, 0.6, 0.7] })
     const result = await getEmbedding('test text', 'key', 'http://localhost', 'model')
@@ -38,6 +35,21 @@ describe('getEmbedding', () => {
 })
 
 describe('tryGetEmbedding', () => {
+  let embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.1, 0.2, 0.3] })
+
+  beforeEach(() => {
+    mockLogger()
+    embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [0.1, 0.2, 0.3] })
+    void mock.module('ai', () => ({
+      embed: (..._args: unknown[]): Promise<EmbedResult> => embedImpl(),
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): MockProvider => ({
+        embeddingModel: (name: string): string => name,
+      }),
+    }))
+  })
+
   test('returns embedding on success', async () => {
     embedImpl = (): Promise<EmbedResult> => Promise.resolve({ embedding: [1, 2, 3] })
     const result = await tryGetEmbedding('test', 'key', 'http://localhost', 'model')

@@ -1,19 +1,13 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { clearMessageCache, mockLogger, mockMessageCache } from '../utils/test-helpers.js'
-
-mockLogger()
-mockMessageCache()
-
-afterAll(() => {
-  mock.restore()
-})
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { cacheMessage } from '../../src/message-cache/cache.js'
 import { buildReplyChain } from '../../src/message-cache/chain.js'
+import { clearMessageCache, mockLogger, mockMessageCache } from '../utils/test-helpers.js'
 
 describe('Reply Chain Builder', () => {
   beforeEach(() => {
+    mockLogger()
+    mockMessageCache()
     clearMessageCache()
   })
 

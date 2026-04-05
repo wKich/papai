@@ -1,51 +1,42 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { and, eq, gt } from 'drizzle-orm'
 
 import { messageMetadata } from '../../src/db/schema.js'
+import { scheduleMessagePersistence, cleanupExpiredMessages } from '../../src/message-cache/persistence.js'
 import type { CachedMessage } from '../../src/message-cache/types.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
-// Mock logger before importing modules that use it
-mockLogger()
-
-// Mock getDrizzleDb to return our test database
-let testDb: Awaited<ReturnType<typeof setupTestDb>>
-
-void mock.module('../../src/db/drizzle.js', () => ({
-  getDrizzleDb: (): typeof testDb => testDb,
-}))
-
-afterAll(() => {
-  mock.restore()
-})
-
-import { scheduleMessagePersistence, cleanupExpiredMessages } from '../../src/message-cache/persistence.js'
-
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
-function loadMessages(contextId: string): CachedMessage[] {
-  const now = Date.now()
-  const rows = testDb
-    .select()
-    .from(messageMetadata)
-    .where(and(eq(messageMetadata.contextId, contextId), gt(messageMetadata.expiresAt, now)))
-    .all()
-
-  return rows.map((row) => ({
-    messageId: row.messageId,
-    contextId: row.contextId,
-    authorId: row.authorId ?? undefined,
-    authorUsername: row.authorUsername ?? undefined,
-    text: row.text ?? undefined,
-    replyToMessageId: row.replyToMessageId ?? undefined,
-    timestamp: row.timestamp,
-  }))
-}
-
 describe('Message Persistence', () => {
+  let testDb: Awaited<ReturnType<typeof setupTestDb>>
+
+  function loadMessages(contextId: string): CachedMessage[] {
+    const now = Date.now()
+    const rows = testDb
+      .select()
+      .from(messageMetadata)
+      .where(and(eq(messageMetadata.contextId, contextId), gt(messageMetadata.expiresAt, now)))
+      .all()
+
+    return rows.map((row) => ({
+      messageId: row.messageId,
+      contextId: row.contextId,
+      authorId: row.authorId ?? undefined,
+      authorUsername: row.authorUsername ?? undefined,
+      text: row.text ?? undefined,
+      replyToMessageId: row.replyToMessageId ?? undefined,
+      timestamp: row.timestamp,
+    }))
+  }
+
   beforeEach(async () => {
+    mockLogger()
     testDb = await setupTestDb()
+    void mock.module('../../src/db/drizzle.js', () => ({
+      getDrizzleDb: (): typeof testDb => testDb,
+    }))
     // Clear table between tests
     testDb.delete(messageMetadata).run()
   })

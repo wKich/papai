@@ -1,9 +1,5 @@
 import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-mockLogger()
-
 import { setCachedConfig, _userCaches } from '../../src/cache.js'
 import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
@@ -13,6 +9,7 @@ import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
+import { mockLogger } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTask(val: unknown): val is { id: string; title: string; status: string } {
@@ -49,6 +46,7 @@ function isTaskArray(val: unknown): val is Array<{ title: string }> {
 
 describe('Task Tools', () => {
   beforeEach(() => {
+    mockLogger()
     mock.restore()
     // Pre-populate timezone in cache so getConfig() doesn't hit DB
     setCachedConfig('user-1', 'timezone', 'Asia/Karachi')

@@ -2,19 +2,8 @@
  * Tests for config-editor state management
  */
 
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { mockLogger } from '../utils/test-helpers.js'
-
-// Setup mocks
-mockLogger()
-
-afterAll(() => {
-  mock.restore()
-})
-
-// Import after mocking
 import {
   createEditorSession,
   deleteEditorSession,
@@ -22,12 +11,14 @@ import {
   hasActiveEditor,
   updateEditorSession,
 } from '../../src/config-editor/state.js'
+import { mockLogger } from '../utils/test-helpers.js'
 
 describe('config-editor state', () => {
   const userId = 'user123'
   const storageContextId = 'ctx456'
 
   beforeEach(() => {
+    mockLogger()
     // Clean up any existing sessions
     deleteEditorSession(userId, storageContextId)
   })

@@ -1,15 +1,8 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-
-import { cacheMessage } from '../../../src/message-cache/index.js'
-import { clearMessageCache, mockMessageCache } from '../../utils/test-helpers.js'
-
-mockMessageCache()
-
-afterAll(() => {
-  mock.restore()
-})
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { extractReplyContext } from '../../../src/chat/telegram/index.js'
+import { cacheMessage } from '../../../src/message-cache/index.js'
+import { clearMessageCache, mockMessageCache } from '../../utils/test-helpers.js'
 
 // Minimal interface for testing - matches the ExtractReplyContextInput interface
 interface MockContext {
@@ -28,6 +21,7 @@ interface MockContext {
 
 describe('extractReplyContext', () => {
   beforeEach(() => {
+    mockMessageCache()
     clearMessageCache()
   })
 

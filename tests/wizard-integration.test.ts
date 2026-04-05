@@ -2,27 +2,19 @@
  * Tests for wizard-integration module
  */
 
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
-
-import { mockDrizzle, mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-// Setup mocks
-mockLogger()
-mockDrizzle()
-
-afterAll(() => {
-  mock.restore()
-})
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { handleWizardMessage } from '../src/wizard-integration.js'
 import { deleteWizardSession } from '../src/wizard/state.js'
+import { mockDrizzle, mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('wizard-integration', () => {
   const userId = 'user123'
   const storageContextId = 'ctx456'
 
   beforeEach(async () => {
+    mockLogger()
+    mockDrizzle()
     await setupTestDb()
     deleteWizardSession(userId, storageContextId)
   })
