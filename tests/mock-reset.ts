@@ -15,9 +15,9 @@ import * as _openaiCompat from '@ai-sdk/openai-compatible'
 import * as _ai from 'ai'
 
 import * as _changelogReader from '../src/changelog-reader.js'
+import { _resetDrizzleDb } from '../src/db/drizzle.js'
 // Capture real module exports BEFORE any test file loads.
 // Spread into plain objects to snapshot current values.
-import * as _drizzle from '../src/db/drizzle.js'
 import * as _dbIndex from '../src/db/index.js'
 import * as _llmOrchestrator from '../src/llm-orchestrator.js'
 import * as _logger from '../src/logger.js'
@@ -30,7 +30,6 @@ import * as _recurring from '../src/recurring.js'
 import * as _scheduler from '../src/scheduler.js'
 
 const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
-  ['../src/db/drizzle.js', { ..._drizzle }],
   ['../src/db/index.js', { ..._dbIndex }],
   ['../src/logger.js', { ..._logger }],
   ['../src/message-cache/cache.js', { ..._messageCache }],
@@ -47,6 +46,7 @@ const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
 ]
 
 beforeEach(() => {
+  _resetDrizzleDb()
   for (const [path, exports] of originals) {
     void mock.module(path, () => ({ ...exports }))
   }

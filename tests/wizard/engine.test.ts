@@ -435,6 +435,7 @@ describe('Wizard engine with end-of-wizard validation', () => {
       logger: trackedLogger.logger,
     }))
 
+    await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
   })
 
