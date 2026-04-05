@@ -8,10 +8,6 @@ import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.j
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 const realAi = await import('ai')
 
-// ---------------------------------------------------------------------------
-// Real module imports (after mocks are registered in beforeEach)
-// ---------------------------------------------------------------------------
-
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { processMessage } from '../src/llm-orchestrator.js'
@@ -88,8 +84,8 @@ describe('processMessage', () => {
       maybeProvisionKaneo: realProvisionMod.maybeProvisionKaneo,
     }))
 
-    // Preserve the real `tool` export so makeTools() works with unmocked tool creation.
-    // Only generateText and stepCountIs are replaced for test control.
+    // AI SDK mocks — generateText and stepCountIs replaced for test control.
+    // Preserves the real `tool` export so makeTools() works with unmocked tool creation.
     void mock.module('ai', () => ({
       ...realAi,
       generateText: (args: { messages?: unknown[] }): Promise<GenerateTextResult> => generateTextImpl(args),

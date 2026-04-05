@@ -22,8 +22,19 @@ import { makeTools } from './tools/index.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
 
-const buildOpenAI = (apiKey: string, baseURL: string): ReturnType<typeof createOpenAICompatible> =>
-  createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL })
+export interface LlmOrchestratorDeps {
+  generateText: typeof generateText
+  stepCountIs: typeof stepCountIs
+  buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
+}
+
+const defaultDeps: LlmOrchestratorDeps = {
+  generateText: (...args) => generateText(...args),
+  stepCountIs: (...args) => stepCountIs(...args),
+  buildOpenAI: (apiKey: string, baseURL: string) =>
+    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL }),
+}
+
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
 
 const checkRequiredConfig = (contextId: string): string[] => {
@@ -75,28 +86,32 @@ const sendLlmResponse = async (
   )
 }
 
-const invokeModel = async (
-  contextId: string,
-  mainModel: string,
-  model: ReturnType<ReturnType<typeof buildOpenAI>>,
-  provider: TaskProvider,
-  tools: ToolSet,
-  timezone: string,
-  messagesWithMemory: ModelMessage[],
-): Promise<Awaited<ReturnType<typeof generateText>>> => {
+type InvokeModelArgs = {
+  contextId: string
+  mainModel: string
+  model: ReturnType<ReturnType<typeof createOpenAICompatible>>
+  provider: TaskProvider
+  tools: ToolSet
+  timezone: string
+  messages: ModelMessage[]
+  deps: LlmOrchestratorDeps
+}
+
+const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<typeof generateText>>> => {
+  const { contextId, mainModel, model, provider, tools, timezone, messages, deps } = args
   const start = Date.now()
   emit('llm:start', {
     userId: contextId,
     model: mainModel,
-    messageCount: messagesWithMemory.length,
+    messageCount: messages.length,
     toolCount: Object.keys(tools).length,
   })
-  const result = await generateText({
+  const result = await deps.generateText({
     model,
     system: buildSystemPrompt(provider, timezone, contextId),
-    messages: messagesWithMemory,
+    messages,
     tools,
-    stopWhen: stepCountIs(25),
+    stopWhen: deps.stepCountIs(25),
     experimental_onToolCallStart(event) {
       emit('llm:tool_call', {
         userId: contextId,
@@ -131,6 +146,7 @@ const callLlm = async (
   contextId: string,
   username: string | null,
   history: readonly ModelMessage[],
+  deps: LlmOrchestratorDeps,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
   await maybeProvisionKaneo(reply, contextId, username)
   const missing = checkRequiredConfig(contextId)
@@ -142,7 +158,7 @@ const callLlm = async (
   const llmApiKey = getConfig(contextId, 'llm_apikey')!
   const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
   const mainModel = getConfig(contextId, 'main_model')!
-  const model = buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
+  const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = buildProvider(contextId)
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
@@ -151,7 +167,16 @@ const callLlm = async (
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
   )
-  const result = await invokeModel(contextId, mainModel, model, provider, tools, timezone, messagesWithMemory)
+  const result = await invokeModel({
+    contextId,
+    mainModel,
+    model,
+    provider,
+    tools,
+    timezone,
+    messages: messagesWithMemory,
+    deps,
+  })
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
@@ -200,6 +225,7 @@ export const processMessage = async (
   contextId: string,
   username: string | null,
   userText: string,
+  deps: LlmOrchestratorDeps = defaultDeps,
 ): Promise<void> => {
   log.debug({ contextId, userText }, 'processMessage called')
   log.info({ contextId, messageLength: userText.length }, 'Message received from user')
@@ -209,7 +235,7 @@ export const processMessage = async (
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, username, history)
+    const result = await callLlm(reply, contextId, username, history, deps)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)
