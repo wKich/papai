@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.8] - 2026-04-05
+
+### Added
+
+- **tdd:** Add import verification to prevent test bypass
+
+### Changed
+
+- **llm:** Add deps parameter to processMessage for DI testing
+- Add deps parameters to conversation, memory, embeddings, proactive-llm
+- Add DI to completion-hook, create-recurring-task, announcements, task-status; remove db/index and changelog-reader from mock-reset
+- Add DI to bot, admin commands, and scheduler; remove registry and llm-orchestrator from mock-reset
+- Add DI to remaining recurring tool factories (delete, update, pause, skip, list, resume)
+- Remove test-only exports from source modules
+
+### Documentation
+
+- **test-helpers:** Document beforeEach usage pattern for mock helpers
+- **tests:** Update CLAUDE.md for global mock reset pattern
+- Update testing conventions with DI pattern documentation
+
+### Fixed
+
+- Mark setSchedulerDeps as @public for knip unused-export check
+- Update mockDrizzle docstring and remove empty beforeEach
+
+### Miscellaneous
+
+- Remove test-health check (superseded by global mock reset)
+- Remove superseded spyOn migration plan document
+
+### Testing
+
+- Add global mock reset preload to eliminate mock pollution
+- Move mock helpers to beforeEach in tools/db/commands tests
+- Move mock helpers to beforeEach in providers/message-cache/chat tests
+- Move mock helpers to beforeEach in remaining helper-only files
+- Move drizzle mock.module to beforeEach in simple inline mock files
+- Move AI SDK mock.module to beforeEach
+- Move complex multi-mock files to beforeEach pattern
+- Move remaining inline mock.module calls to beforeEach
+- Extract duplicated mock setup to file-level beforeEach
+- **helpers:** Replace mockDrizzle mock.module with _setDrizzleDb setter
+- Remove mockDrizzle calls (setupTestDb auto-sets drizzle)
+- Replace drizzle mock.module with _setDrizzleDb in all test files
+- Remove drizzle from mock-reset (DI migration complete for drizzle)
+- Remove vestigial db/index mock.module (exports don't exist)
 ## [4.7.7] - 2026-04-04
 
 ### Documentation
