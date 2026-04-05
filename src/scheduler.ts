@@ -29,6 +29,7 @@ const defaultSchedulerDeps: SchedulerDeps = {
 
 let activeDeps: SchedulerDeps = defaultSchedulerDeps
 
+/** @public -- used by tests to inject mock deps (timer-driven, can't pass via params) */
 export function setSchedulerDeps(deps: SchedulerDeps): void {
   activeDeps = deps
 }
