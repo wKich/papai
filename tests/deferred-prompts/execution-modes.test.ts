@@ -11,7 +11,7 @@ import { dispatchExecution } from '../../src/deferred-prompts/proactive-llm.js'
 import type { ExecutionMetadata } from '../../src/deferred-prompts/types.js'
 import { appendHistory } from '../../src/history.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 // Track generateText calls
 type GenerateTextResult = {
@@ -44,7 +44,6 @@ describe('dispatchExecution', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     generateTextCalls.length = 0
     generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
       generateTextCalls.push(args)

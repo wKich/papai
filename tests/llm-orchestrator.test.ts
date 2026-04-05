@@ -2,7 +2,7 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
-import { mockLogger, mockDrizzle, createMockReply, setupTestDb } from './utils/test-helpers.js'
+import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 // Capture real modules before mocking (file-level, stays at top)
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
@@ -81,7 +81,6 @@ describe('processMessage', () => {
 
     // Register mocks
     mockLogger()
-    mockDrizzle()
 
     void mock.module('../src/db/index.js', () => ({
       getDb: (): import('bun:sqlite').Database => testSqlite,

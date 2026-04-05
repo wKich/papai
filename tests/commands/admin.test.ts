@@ -9,7 +9,6 @@ import {
   createGroupMessage,
   createMockReply,
   getTestDb,
-  mockDrizzle,
   mockLogger,
   setupTestDb,
 } from '../utils/test-helpers.js'
@@ -56,7 +55,6 @@ describe('Admin Commands', () => {
 
     // Register mocks
     mockLogger()
-    mockDrizzle()
 
     void mock.module('../../src/providers/kaneo/provision.js', () => ({
       provisionAndConfigure: (..._args: unknown[]): Promise<ProvisionResult> => provisionImpl(),

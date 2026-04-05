@@ -7,11 +7,10 @@ import {
   makeListInstructionsTool,
   makeDeleteInstructionTool,
 } from '../../src/tools/instructions.js'
-import { mockLogger, mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 beforeEach(async () => {
   mockLogger()
-  mockDrizzle()
   _userCaches.clear()
   await setupTestDb()
 })

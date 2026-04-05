@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { handleConfigEditorMessage } from '../../src/chat/config-editor-integration.js'
 import { deleteEditorSession, startEditor } from '../../src/config-editor/index.js'
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('config-editor chat integration', () => {
   const userId = 'user123'
@@ -14,7 +14,6 @@ describe('config-editor chat integration', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
     deleteEditorSession(userId, storageContextId)
   })

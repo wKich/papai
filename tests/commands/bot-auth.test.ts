@@ -4,7 +4,7 @@ import { setupBot } from '../../src/bot.js'
 import type { ChatProvider, IncomingMessage, ReplyFn } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
 import { addUser, isAuthorized, removeUser } from '../../src/users.js'
-import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { createDmMessage, createMockReply, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const ADMIN_ID = 'admin-bot-auth'
 
@@ -33,7 +33,6 @@ describe('Bot Authorization Gate', () => {
 
     // Register mocks
     mockLogger()
-    mockDrizzle()
 
     void mock.module('../../src/llm-orchestrator.js', () => ({
       processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {
@@ -157,7 +156,6 @@ describe('Demo Mode — wizard bypass', () => {
 
     // Register mocks
     mockLogger()
-    mockDrizzle()
 
     void mock.module('../../src/llm-orchestrator.js', () => ({
       processMessage: (_reply: unknown, storageContextId: string): Promise<void> => {

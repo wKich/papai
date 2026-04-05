@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { getConfig } from '../../src/config.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { mockLogger } from '../utils/logger-mock.js'
-import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, processWizardMessage } = await import('../../src/wizard/engine.js')
@@ -21,7 +21,6 @@ describe('Wizard Integration', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
     // Reset fetch to return success by default

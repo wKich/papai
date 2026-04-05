@@ -14,12 +14,11 @@ import {
   parseCallbackData,
   startEditor,
 } from '../../src/config-editor/index.js'
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('config-editor public API', () => {
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 

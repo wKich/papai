@@ -3,12 +3,11 @@ import { describe, expect, test, beforeEach } from 'bun:test'
 import { checkAuthorizationExtended } from '../src/bot.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser } from '../src/users.js'
-import { mockLogger, setupTestDb, mockDrizzle } from './utils/test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('group context isolation', () => {
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 

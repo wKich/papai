@@ -3,12 +3,11 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { buildProactiveTrigger } from '../../src/deferred-prompts/proactive-trigger.js'
 import { buildSystemPrompt } from '../../src/system-prompt.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-import { mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('buildProactiveTrigger', () => {
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 
@@ -63,7 +62,6 @@ describe('buildProactiveTrigger', () => {
 describe('buildSystemPrompt — deferred prompt sections', () => {
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
   })
 

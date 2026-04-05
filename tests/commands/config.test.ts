@@ -4,7 +4,7 @@ import type { AuthorizationResult, ChatProvider, CommandHandler } from '../../sr
 import { registerConfigCommand } from '../../src/commands/config.js'
 import { setConfig } from '../../src/config.js'
 import { clearUserCache } from '../utils/test-cache.js'
-import { createDmMessage, createMockReply, mockDrizzle, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { createDmMessage, createMockReply, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'config-test-user'
 
@@ -22,7 +22,6 @@ describe('/config Command', () => {
 
   beforeEach(async () => {
     mockLogger()
-    mockDrizzle()
     await setupTestDb()
     clearUserCache(USER_ID)
 

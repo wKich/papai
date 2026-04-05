@@ -8,7 +8,7 @@ import { mock } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
-import { mockDrizzle, setupTestDb } from '../utils/test-helpers.js'
+import { setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizardSteps } =
@@ -16,9 +16,7 @@ const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizard
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
 const { getWizardSession, deleteWizardSession } = await import('../../src/wizard/state.js')
 
-beforeEach(() => {
-  mockDrizzle()
-})
+beforeEach(() => {})
 
 // Global fetch mock for engine tests (returns success by default)
 describe('Wizard Engine', () => {
