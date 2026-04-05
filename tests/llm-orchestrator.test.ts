@@ -31,9 +31,6 @@ describe('processMessage', () => {
   // are left REAL (backed by the test DB) to avoid cross-file mock pollution.
   // ---------------------------------------------------------------------------
 
-  // db/index.js — needed by cache.ts for background sync (sync errors are non-fatal)
-  let testSqlite: import('bun:sqlite').Database
-
   // Provider factory — returns a mock provider to avoid real HTTP calls and env var checks
   const mockProvider = {
     name: 'mock',
@@ -82,12 +79,6 @@ describe('processMessage', () => {
     // Register mocks
     mockLogger()
 
-    void mock.module('../src/db/index.js', () => ({
-      getDb: (): import('bun:sqlite').Database => testSqlite,
-      DB_PATH: ':memory:',
-      initDb: (): void => {},
-    }))
-
     void mock.module('../src/providers/factory.js', () => ({
       buildProviderForUser: (): typeof mockProvider => mockProvider,
     }))
@@ -113,8 +104,6 @@ describe('processMessage', () => {
     }))
 
     await setupTestDb()
-    const { Database } = await import('bun:sqlite')
-    testSqlite = new Database(':memory:')
 
     // Clear caches to ensure clean state
     _userCaches.clear()
