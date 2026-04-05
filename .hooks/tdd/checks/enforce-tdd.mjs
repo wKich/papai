@@ -4,7 +4,13 @@ import path from 'node:path'
 
 import { getSessionsDir } from '../paths.mjs'
 import { SessionState } from '../session-state.mjs'
-import { findTestFile, isTestFile, isGateableImplFile, suggestTestPath } from '../test-resolver.mjs'
+import {
+  findTestFile,
+  isTestFile,
+  isGateableImplFile,
+  suggestTestPath,
+  testFileImportsImpl,
+} from '../test-resolver.mjs'
 
 /**
  * @typedef {Object} BlockResult
@@ -26,7 +32,25 @@ export function enforceTdd(ctx) {
 
     const absPath = path.resolve(cwd, filePath)
 
-    if (findTestFile(absPath, cwd)) {
+    const testOnDisk = findTestFile(absPath, cwd)
+    if (testOnDisk) {
+      // Test file exists — verify it actually imports the implementation module
+      if (!testFileImportsImpl(testOnDisk, absPath)) {
+        const relImpl = path.relative(cwd, absPath)
+        const relTest = path.relative(cwd, testOnDisk)
+        const testDir = path.dirname(testOnDisk)
+        const expectedImport = path
+          .relative(testDir, absPath)
+          .replace(/\\/g, '/')
+          .replace(/\.(ts|tsx)$/, '.js')
+        return {
+          decision: 'block',
+          reason:
+            `Cannot write \`${relImpl}\` because the test file \`${relTest}\` does not import the implementation module.\n\n` +
+            `The test must contain an import from \`${expectedImport}\`.\n\n` +
+            `Fix the test to import and test \`${relImpl}\` before writing the implementation.`,
+        }
+      }
       return null
     }
 

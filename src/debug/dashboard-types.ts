@@ -2,6 +2,8 @@
 
 // Import all types from schemas to ensure TypeScript interfaces are inferred from Zod schemas
 import type {
+  Fact,
+  Instruction,
   Session,
   Wizard,
   SchedulerInfo,
@@ -22,6 +24,8 @@ import type {
 
 // Re-export all types
 export type {
+  Fact,
+  Instruction,
   Session,
   Wizard,
   SchedulerInfo,

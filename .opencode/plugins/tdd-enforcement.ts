@@ -8,6 +8,7 @@ import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
 import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
+import { verifyTestImport } from '../../.hooks/tdd/checks/verify-test-import.mjs'
 import { verifyTestsPass } from '../../.hooks/tdd/checks/verify-tests-pass.mjs'
 import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
 
@@ -66,7 +67,19 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       // [4] trackTestWrite - Record test files written this session
       trackTestWrite(ctx)
 
-      // [5] verifyTestsPass - Run tests and check coverage
+      // [5] verifyTestImport - Verify test files import their implementation module
+      const importResult = verifyTestImport(ctx)
+      if (importResult) {
+        void client.session.promptAsync({
+          path: { id: input.sessionID },
+          body: {
+            parts: [{ type: 'text', text: importResult.reason }],
+          },
+        })
+        return
+      }
+
+      // [6] verifyTestsPass - Run tests and check coverage
       const testResult = await verifyTestsPass(ctx)
       if (testResult) {
         void client.session.promptAsync({
@@ -78,7 +91,7 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
         return
       }
 
-      // [6] verifyNoNewSurface - Only run for gateable impl files (not test files)
+      // [7] verifyNoNewSurface - Only run for gateable impl files (not test files)
       const surfaceResult = verifyNoNewSurface(ctx)
       if (surfaceResult) {
         void client.session.promptAsync({

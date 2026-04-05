@@ -1,5 +1,20 @@
 import { z } from 'zod'
 
+// Fact schema - represents a memory fact
+export const FactSchema = z.object({
+  identifier: z.string(),
+  title: z.string(),
+  url: z.string(),
+  lastSeen: z.string(),
+})
+
+// Instruction schema
+export const InstructionSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  createdAt: z.string(),
+})
+
 // Base schemas
 export const SessionSchema = z.object({
   userId: z.string(),
@@ -9,6 +24,12 @@ export const SessionSchema = z.object({
   summary: z.string().nullable(),
   configKeys: z.array(z.string()),
   workspaceId: z.string().nullable(),
+  // Full data fields
+  facts: z.array(FactSchema).optional(),
+  config: z.record(z.string(), z.string().nullable()).optional(),
+  hasTools: z.boolean().optional(),
+  instructionsCount: z.number().optional(),
+  instructions: z.array(InstructionSchema).optional(),
 })
 
 export const WizardSchema = z.object({
@@ -54,12 +75,16 @@ export const LlmTraceSchema = z.object({
   error: z.string().optional(),
 })
 
-export const LogEntrySchema = z.object({
-  time: z.union([z.string(), z.number()]),
-  level: z.number(),
-  msg: z.string(),
-  scope: z.string().optional(),
-})
+// Log entry with additional properties
+export const LogEntrySchema = z
+  .object({
+    time: z.union([z.string(), z.number()]),
+    level: z.number(),
+    msg: z.string(),
+    scope: z.string().optional(),
+    // Allow any additional properties for structured logging
+  })
+  .catchall(z.unknown())
 
 // SSE Event schemas
 export const StateInitEventSchema = z.object({
@@ -111,6 +136,8 @@ export const MessageCacheEventSchema = z.object({
 })
 
 // Inferred types
+export type Fact = z.infer<typeof FactSchema>
+export type Instruction = z.infer<typeof InstructionSchema>
 export type Session = z.infer<typeof SessionSchema>
 export type Wizard = z.infer<typeof WizardSchema>
 export type SchedulerInfo = z.infer<typeof SchedulerInfoSchema>

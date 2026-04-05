@@ -83,7 +83,7 @@ const jsCache = new Map<string, string>()
 async function transpileDashboard(): Promise<void> {
   const entrypoints = [
     new URL('dashboard/dashboard-state.ts', import.meta.url).pathname,
-    new URL('dashboard-ui.ts', import.meta.url).pathname,
+    new URL('dashboard-ui/index.ts', import.meta.url).pathname,
   ]
 
   // Validate source files exist and have content before building
@@ -102,14 +102,17 @@ async function transpileDashboard(): Promise<void> {
   })
 
   // Validate build outputs have expected content
+  // Map output filenames to their expected URLs
   const entries = await Promise.all(
     buildResult.outputs.map(async (output) => {
-      const name = output.path.split('/').pop() ?? ''
+      const basename = output.path.split('/').pop() ?? ''
       const content = await output.text()
       if (content.length === 0) {
-        log.error({ name }, 'Build output is empty')
-        throw new Error(`Build output is empty: ${name}`)
+        log.error({ name: basename }, 'Build output is empty')
+        throw new Error(`Build output is empty: ${basename}`)
       }
+      // Map index.js to dashboard-ui.js for the dashboard-ui entrypoint
+      const name = basename === 'index.js' ? 'dashboard-ui.js' : basename
       return [name, content] as const
     }),
   )

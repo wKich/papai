@@ -4,6 +4,7 @@ import fs from 'node:fs'
 
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
 import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
+import { verifyTestImport } from '../../.hooks/tdd/checks/verify-test-import.mjs'
 import { verifyTestsPass } from '../../.hooks/tdd/checks/verify-tests-pass.mjs'
 
 try {
@@ -12,14 +13,21 @@ try {
   // 1. Record test file writes (side-effect only, always runs)
   trackTestWrite(ctx)
 
-  // 2. Run tests — if RED, skip surface check
+  // 2. Verify test files import their implementation module
+  const importResult = verifyTestImport(ctx)
+  if (importResult) {
+    console.log(JSON.stringify(importResult))
+    process.exit(0)
+  }
+
+  // 3. Run tests — if RED, skip surface check
   const testResult = await verifyTestsPass(ctx)
   if (testResult) {
     console.log(JSON.stringify(testResult))
     process.exit(0)
   }
 
-  // 3. Verify no new functionality (surface only)
+  // 4. Verify no new functionality (surface only)
   // Note: Mutation testing now runs at session start/end, not per-file
   const surfaceResult = verifyNoNewSurface(ctx)
 

@@ -74,3 +74,40 @@ export function findTestFile(implAbsPath, projectRoot) {
 
   return null
 }
+
+/**
+ * Resolve the implementation file path from a test file path
+ * @param {string} testRelPath - Relative path from projectRoot (e.g. tests/foo/bar.test.ts)
+ * @returns {string} Implementation file relative path (e.g. src/foo/bar.ts)
+ */
+export function resolveImplPath(testRelPath) {
+  const ext = path.extname(testRelPath)
+  const base = path.basename(testRelPath, ext).replace(/\.(test|spec)$/, '')
+
+  if (testRelPath.startsWith('tests/') || testRelPath.startsWith('tests\\')) {
+    const dir = path.dirname(testRelPath).replace(/^tests[/\\]?/, '')
+    return path.join('src', dir, `${base}${ext}`)
+  }
+
+  // Colocated test: same directory
+  return path.join(path.dirname(testRelPath), `${base}${ext}`)
+}
+
+/**
+ * Check if a test file imports its corresponding implementation module
+ * @param {string} testAbsPath - Absolute path to the test file
+ * @param {string} implAbsPath - Absolute path to the implementation file
+ * @returns {boolean} True if the test file references the implementation module
+ */
+export function testFileImportsImpl(testAbsPath, implAbsPath) {
+  const content = fs.readFileSync(testAbsPath, 'utf8')
+  const testDir = path.dirname(testAbsPath)
+
+  // Calculate relative path from test dir to impl file
+  const relToImpl = path.relative(testDir, implAbsPath).replace(/\\/g, '/')
+  const noExt = relToImpl.replace(/\.(ts|tsx|js|jsx)$/, '')
+  const withJs = noExt + '.js'
+
+  // Check for the impl path as a string literal (covers import, require, mock.module, dynamic import)
+  return content.includes(withJs) || content.includes(noExt + "'") || content.includes(noExt + '"')
+}

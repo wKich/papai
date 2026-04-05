@@ -165,7 +165,7 @@ describe('getSessionSnapshots', () => {
     expect(snaps[0]!.instructionsCount).toBe(1)
   })
 
-  test('does not expose config values', () => {
+  test('exposes config values for debug dashboard', () => {
     _userCaches.set('admin-1', {
       history: [],
       summary: null,
@@ -180,7 +180,8 @@ describe('getSessionSnapshots', () => {
     const snaps = getSessionSnapshots('admin-1')
     const snap = snaps[0]!
     expect(snap.configKeys).toContain('llm_apikey')
-    expect(snap).not.toHaveProperty('config')
+    expect(snap).toHaveProperty('config')
+    expect(snap.config).toEqual({ llm_apikey: 'sk-secret-key' })
   })
 
   test('filters out internal _loaded flags from configKeys', () => {

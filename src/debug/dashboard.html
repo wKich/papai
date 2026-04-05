@@ -61,7 +61,44 @@
       </section>
     </main>
 
+    <!-- Session Detail Modal -->
+    <div id="session-modal" class="modal" hidden>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="session-modal-title">Session Details</h3>
+          <button id="session-modal-close" class="modal-close">&times;</button>
+        </div>
+        <div id="session-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Log Detail Modal -->
+    <div id="log-modal" class="modal" hidden>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="log-modal-title">Log Entry Details</h3>
+          <button id="log-modal-close" class="modal-close">&times;</button>
+        </div>
+        <div id="log-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.3.0/dist/fuse.basic.min.js"></script>
     <script src="/dashboard-ui.js" defer></script>
     <script src="/dashboard-state.js" defer></script>
+    <script>
+      // Tree view toggle functionality
+      document.addEventListener('click', function (e) {
+        if (e.target.classList.contains('tree-toggle')) {
+          const targetId = e.target.getAttribute('data-target')
+          const children = document.getElementById(targetId)
+          if (children) {
+            children.classList.toggle('collapsed')
+            e.target.classList.toggle('collapsed')
+            e.target.textContent = children.classList.contains('collapsed') ? '▶' : '▼'
+          }
+        }
+      })
+    </script>
   </body>
 </html>
