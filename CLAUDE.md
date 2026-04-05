@@ -26,7 +26,7 @@ All scripts can be run with `bun <script>` (no `run` keyword needed):
 - `bun test:e2e:watch` — run E2E tests in watch mode
 - `bun check` — run lint/typecheck/format on staged files only (fast, used by pre-commit hook)
 - `bun check:full` — run all checks, suppressing success output
-- `bun check:verbose` — run all checks with verbose output (lint, typecheck, format:check, knip, test, duplicates, mock-pollution)
+- `bun check:verbose` — run all checks with verbose output (lint, typecheck, format:check, knip, test, duplicates)
 - `bun fix` — auto-fix lint and format issues
 - `bun install` — install dependencies
 
@@ -278,7 +278,6 @@ Quick reference:
 - Use shared helpers from `tests/utils/test-helpers.ts` and `tests/tools/mock-provider.ts`
 - Use mutable `let impl` pattern for module mocks (not `spyOn().mockImplementation()`)
 - `mock.module()` is global — always add `afterAll(() => { mock.restore() })` for shared modules
-- Run `bun run mock-pollution` after adding new mocks
 
 ## Key Conventions
 
