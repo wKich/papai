@@ -2,12 +2,15 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
+import type { DebugEvent } from '../src/debug/event-bus.js'
 import { processMessage } from '../src/llm-orchestrator.js'
 import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 // Capture real modules before mocking (file-level, stays at top)
 const realAi = await import('ai')
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
@@ -244,6 +247,109 @@ describe('processMessage', () => {
       const history = getCachedHistory(rollbackCtx)
       expect(history).toHaveLength(1)
       expect(history[0]!.content).toBe('new message')
+    })
+  })
+
+  describe('stepsDetail SSE payload', () => {
+    test('llm:end broadcasts text, finishReason, and inline tool results/errors', async () => {
+      seedConfigForContext('steps-detail-ctx')
+      const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
+
+      generateTextImpl = (): Promise<GenerateTextResult> =>
+        Promise.resolve({
+          text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
+          steps: [
+            {
+              text: 'Calling search now.',
+              finishReason: 'tool-calls',
+              toolCalls: [
+                { toolName: 'search', toolCallId: 'call-1', input: { q: 'foo' } },
+                { toolName: 'create', toolCallId: 'call-2', input: { title: 'x' } },
+              ],
+              toolResults: [{ toolCallId: 'call-1', output: { hits: 3 } }],
+              content: [{ type: 'tool-error', toolCallId: 'call-2', error: new Error('permission denied') }],
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
+          ],
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
+          usage: {},
+        })
+
+      let capturedStepsDetail: unknown = null
+      const listener = (event: DebugEvent): void => {
+        if (event.type === 'llm:end') capturedStepsDetail = event.data['stepsDetail']
+      }
+      subscribe(listener)
+      try {
+        const { reply } = createMockReply()
+        await processMessage(reply, 'steps-detail-ctx', null, 'hello')
+      } finally {
+        unsubscribe(listener)
+      }
+
+      expect(Array.isArray(capturedStepsDetail)).toBe(true)
+      if (!Array.isArray(capturedStepsDetail)) return
+      const stepValue: unknown = capturedStepsDetail[0]
+      if (!isRecord(stepValue)) throw new Error('expected step record')
+      expect(stepValue['stepNumber']).toBe(1)
+      expect(stepValue['text']).toBe('Calling search now.')
+      expect(stepValue['finishReason']).toBe('tool-calls')
+
+      const toolCalls: unknown = stepValue['toolCalls']
+      expect(Array.isArray(toolCalls)).toBe(true)
+      if (!Array.isArray(toolCalls)) return
+      const tc0: unknown = toolCalls[0]
+      const tc1: unknown = toolCalls[1]
+      if (!isRecord(tc0) || !isRecord(tc1)) throw new Error('expected tool call records')
+      expect(tc0['toolName']).toBe('search')
+      expect(tc0['result']).toEqual({ hits: 3 })
+      expect(tc0['error']).toBeUndefined()
+      expect(tc1['toolName']).toBe('create')
+      expect(tc1['result']).toBeUndefined()
+      expect(tc1['error']).toBe('permission denied')
+    })
+
+    test('llm:end omits text and finishReason when the step has neither', async () => {
+      seedConfigForContext('steps-detail-empty-ctx')
+      const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
+
+      generateTextImpl = (): Promise<GenerateTextResult> =>
+        Promise.resolve({
+          text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
+          steps: [
+            {
+              text: '',
+              toolCalls: [{ toolName: 'search', toolCallId: 'call-1', input: {} }],
+              toolResults: [],
+              content: [],
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
+          ],
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
+          usage: {},
+        })
+
+      let capturedStepsDetail: unknown = null
+      const listener = (event: DebugEvent): void => {
+        if (event.type === 'llm:end') capturedStepsDetail = event.data['stepsDetail']
+      }
+      subscribe(listener)
+      try {
+        const { reply } = createMockReply()
+        await processMessage(reply, 'steps-detail-empty-ctx', null, 'hello')
+      } finally {
+        unsubscribe(listener)
+      }
+
+      if (!Array.isArray(capturedStepsDetail)) throw new Error('expected stepsDetail array')
+      const step: unknown = capturedStepsDetail[0]
+      if (!isRecord(step)) throw new Error('expected step record')
+      expect(step['text']).toBeUndefined()
+      expect(step['finishReason']).toBeUndefined()
     })
   })
 

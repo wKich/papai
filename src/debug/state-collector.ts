@@ -4,7 +4,7 @@ import { getMessageCacheSnapshot } from '../message-cache/cache.js'
 import { getSchedulerSnapshot } from '../scheduler.js'
 import { getWizardSnapshots } from '../wizard/state.js'
 import { subscribe, unsubscribe, type DebugEvent } from './event-bus.js'
-import { str, num, bool, tokenUsage } from './state-collector-utils.js'
+import { str, num, bool, tokenUsage, parseStepsDetail } from './state-collector-utils.js'
 
 let adminUserId: string | null = null
 
@@ -46,12 +46,15 @@ type LlmTrace = {
   generatedText?: string
   stepsDetail?: Array<{
     stepNumber: number
+    text?: string
+    finishReason?: string
     toolCalls?: Array<{
       toolName: string
       toolCallId: string
       args: unknown
+      result?: unknown
+      error?: string
     }>
-    response?: unknown
     usage?: { inputTokens: number; outputTokens: number }
   }>
 }
@@ -161,42 +164,6 @@ function handleLlmToolResult(event: DebugEvent, userId: string): void {
   }
   stats.totalToolCalls++
   scheduleStatsBroadcast()
-}
-
-type StepsDetail = {
-  stepNumber: number
-  toolCalls?: Array<{ toolName: string; toolCallId: string; args: unknown }>
-  response?: unknown
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-function isRecordLike(obj: unknown): obj is Record<string, unknown> {
-  return typeof obj === 'object' && obj !== null
-}
-
-function getRecordValue(obj: unknown, key: string): unknown {
-  return isRecordLike(obj) ? obj[key] : undefined
-}
-
-function parseToolCall(tc: unknown): { toolName: string; toolCallId: string; args: unknown } {
-  return {
-    toolName: str(getRecordValue(tc, 'toolName')),
-    toolCallId: str(getRecordValue(tc, 'toolCallId')),
-    args: getRecordValue(tc, 'args'),
-  }
-}
-
-function parseStepsDetail(rawStepsDetail: unknown): StepsDetail[] | undefined {
-  if (!Array.isArray(rawStepsDetail)) return undefined
-  return rawStepsDetail.map((s: unknown) => {
-    const toolCallsValue = getRecordValue(s, 'toolCalls')
-    return {
-      stepNumber: num(getRecordValue(s, 'stepNumber')),
-      toolCalls: Array.isArray(toolCallsValue) ? toolCallsValue.map(parseToolCall) : undefined,
-      response: getRecordValue(s, 'response'),
-      usage: tokenUsage(getRecordValue(s, 'usage')),
-    }
-  })
 }
 
 function handleLlmEnd(event: DebugEvent, userId: string): void {

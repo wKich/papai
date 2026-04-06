@@ -1,5 +1,26 @@
 import { escapeHtml, formatTime } from './helpers.js'
+import { renderTreeView } from './tree-view.js'
 import type { SessionDetail } from './types.js'
+
+function tryParseStructured(content: string): unknown {
+  const trimmed = content.trim()
+  if (trimmed === '') return undefined
+  const first = trimmed[0]
+  if (first !== '{' && first !== '[') return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+function renderHistoryContent(content: string): string {
+  const parsed = tryParseStructured(content)
+  if (parsed !== undefined) {
+    return `<div class="history-content json"><pre class="tree-container">${renderTreeView(parsed)}</pre></div>`
+  }
+  return `<div class="history-content">${escapeHtml(content)}</div>`
+}
 
 type SessionModalElements = {
   $sessionModal: HTMLElement
@@ -98,7 +119,7 @@ function renderHistorySection(history: SessionDetail['history']): string {
         : `<div class="history-meta">Tool call ID: ${escapeHtml(msg.tool_call_id)}</div>`
     items += `<div class="history-item ${escapeHtml(role)}">
       <div class="history-role">${escapeHtml(role)}</div>
-      <div class="history-content">${escapeHtml(msg.content)}</div>
+      ${renderHistoryContent(msg.content)}
       ${toolCallMeta}
     </div>`
   }

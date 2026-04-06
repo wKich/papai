@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'bun:test'
 
-import { str, num, bool, isTokenRecord, tokenUsage } from '../../src/debug/state-collector-utils.js'
+import {
+  str,
+  num,
+  bool,
+  isTokenRecord,
+  tokenUsage,
+  parseStepsDetail,
+  type StepDetail,
+  type StepToolCallDetail,
+} from '../../src/debug/state-collector-utils.js'
 
 describe('state-collector-utils', () => {
   describe('str', () => {
@@ -62,6 +71,69 @@ describe('state-collector-utils', () => {
     it('should return zeros for invalid input', () => {
       expect(tokenUsage(null)).toEqual({ inputTokens: 0, outputTokens: 0 })
       expect(tokenUsage({})).toEqual({ inputTokens: 0, outputTokens: 0 })
+    })
+  })
+
+  describe('parseStepsDetail', () => {
+    it('returns undefined for non-array input', () => {
+      expect(parseStepsDetail(undefined)).toBeUndefined()
+      expect(parseStepsDetail(null)).toBeUndefined()
+      expect(parseStepsDetail('not an array')).toBeUndefined()
+    })
+
+    it('parses step number, text and finishReason', () => {
+      const result = parseStepsDetail([{ stepNumber: 1, text: 'hi', finishReason: 'stop' }])
+      expect(result).toHaveLength(1)
+      expect(result?.[0]?.stepNumber).toBe(1)
+      expect(result?.[0]?.text).toBe('hi')
+      expect(result?.[0]?.finishReason).toBe('stop')
+    })
+
+    it('omits empty text and finishReason', () => {
+      const result = parseStepsDetail([{ stepNumber: 2, text: '', finishReason: '' }])
+      expect(result?.[0]?.text).toBeUndefined()
+      expect(result?.[0]?.finishReason).toBeUndefined()
+    })
+
+    it('parses tool calls with result and error', () => {
+      const result = parseStepsDetail([
+        {
+          stepNumber: 1,
+          toolCalls: [
+            { toolName: 'search', toolCallId: 'c-1', args: { q: 'x' }, result: { hits: 2 } },
+            { toolName: 'create', toolCallId: 'c-2', args: {}, error: 'denied' },
+          ],
+        },
+      ])
+      const calls = result?.[0]?.toolCalls
+      expect(calls).toHaveLength(2)
+      expect(calls?.[0]?.result).toEqual({ hits: 2 })
+      expect(calls?.[0]?.error).toBeUndefined()
+      expect(calls?.[1]?.result).toBeUndefined()
+      expect(calls?.[1]?.error).toBe('denied')
+    })
+
+    it('omits tool calls when input toolCalls is not an array', () => {
+      const result = parseStepsDetail([{ stepNumber: 1 }])
+      expect(result?.[0]?.toolCalls).toBeUndefined()
+    })
+
+    it('StepDetail and StepToolCallDetail types structurally accept parsed values', () => {
+      const call: StepToolCallDetail = {
+        toolName: 'search',
+        toolCallId: 'c-1',
+        args: { q: 'hello' },
+        result: { hits: 1 },
+      }
+      const step: StepDetail = {
+        stepNumber: 1,
+        text: 'hi',
+        finishReason: 'stop',
+        toolCalls: [call],
+        usage: { inputTokens: 1, outputTokens: 2 },
+      }
+      expect(step.stepNumber).toBe(1)
+      expect(step.toolCalls?.[0]?.toolName).toBe('search')
     })
   })
 })

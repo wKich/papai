@@ -27,14 +27,24 @@ export type InvokeModelArgs = {
 }
 
 export type StepInput = {
+  text?: string
+  finishReason?: string
   toolCalls?: Array<{ toolName: string; toolCallId: string; input: unknown }>
-  response?: unknown
+  toolResults?: ReadonlyArray<{ toolCallId: string; output: unknown }>
+  content?: ReadonlyArray<unknown>
   usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
 }
 
 export type StepOutput = {
   stepNumber: number
-  toolCalls?: Array<{ toolName: string; toolCallId: string; args: unknown }>
-  response?: unknown
+  text?: string
+  finishReason?: string
+  toolCalls?: Array<{
+    toolName: string
+    toolCallId: string
+    args: unknown
+    result?: unknown
+    error?: string
+  }>
   usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
 }

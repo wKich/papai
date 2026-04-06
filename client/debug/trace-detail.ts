@@ -86,24 +86,48 @@ function renderToolCalls(trace: LlmTrace): string {
   </div>`
 }
 
+function renderStepToolCall(
+  tc: NonNullable<NonNullable<LlmTrace['stepsDetail']>[number]['toolCalls']>[number],
+): string {
+  const hasError = tc.error !== undefined && tc.error !== ''
+  let html = `<div class="step-tool-call ${hasError ? 'step-tool-error' : ''}">
+    <div class="step-tool-call-header">
+      <span class="tool-name">${escapeHtml(tc.toolName)}</span>
+      <span class="tool-id">${escapeHtml(tc.toolCallId)}</span>
+    </div>`
+
+  if (tc.args !== undefined) {
+    html += `<div class="tool-section"><div class="label">Arguments</div><pre class="tool-json">${escapeHtml(JSON.stringify(tc.args, null, 2))}</pre></div>`
+  }
+
+  if (tc.result !== undefined) {
+    html += `<div class="tool-section"><div class="label">Result</div><pre class="tool-json">${escapeHtml(JSON.stringify(tc.result, null, 2))}</pre></div>`
+  }
+
+  if (hasError) {
+    html += `<div class="tool-section"><div class="label">Error</div><pre class="tool-json error">${escapeHtml(tc.error!)}</pre></div>`
+  }
+
+  html += '</div>'
+  return html
+}
+
 function renderStepsDetail(trace: LlmTrace): string {
   if (trace.stepsDetail === undefined || trace.stepsDetail.length === 0) return ''
 
   let items = ''
   for (const step of trace.stepsDetail) {
     let stepHtml = `<div class="step-item">
-      <div class="step-header">Step ${step.stepNumber}</div>`
+      <div class="step-header">Step ${step.stepNumber}${step.finishReason === undefined || step.finishReason === '' ? '' : ` <span class="step-finish-reason">(${escapeHtml(step.finishReason)})</span>`}</div>`
+
+    if (step.text !== undefined && step.text !== '') {
+      stepHtml += `<div class="step-section"><div class="label">Generated Text</div><pre class="step-text">${escapeHtml(step.text)}</pre></div>`
+    }
 
     if (step.toolCalls !== undefined && step.toolCalls.length > 0) {
       stepHtml += '<div class="step-tool-calls">'
       for (const tc of step.toolCalls) {
-        stepHtml += `<div class="step-tool-call">
-          <span class="tool-name">${escapeHtml(tc.toolName)}</span>
-          <span class="tool-id">${escapeHtml(tc.toolCallId)}</span>
-        </div>`
-        if (tc.args !== undefined) {
-          stepHtml += `<pre class="tool-json">${escapeHtml(JSON.stringify(tc.args, null, 2))}</pre>`
-        }
+        stepHtml += renderStepToolCall(tc)
       }
       stepHtml += '</div>'
     }

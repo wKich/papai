@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { logger, logMultistream } from '../logger.js'
+import { getLogLevel, logger, logMultistream } from '../logger.js'
 import { logBuffer, logBufferStream } from './log-buffer.js'
 import { addClient, init, removeClient } from './state-collector.js'
 
@@ -101,7 +101,7 @@ function handleDashboardFile(pathname: string): Response {
 
 export function startDebugServer(adminUserId: string): void {
   init(adminUserId)
-  logMultistream.add({ stream: logBufferStream })
+  logMultistream.add({ stream: logBufferStream, level: getLogLevel() })
 
   const port = getPort()
   const hostname = getHostname()

@@ -266,6 +266,59 @@ describe('schemas', () => {
         expect(result.data.stepNumber).toBe(2)
       }
     })
+
+    test('parses step with text and finishReason', () => {
+      const step = {
+        stepNumber: 1,
+        text: 'I will search for matching tasks.',
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      }
+      const result = StepDetailSchema.safeParse(step)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.text).toBe('I will search for matching tasks.')
+        expect(result.data.finishReason).toBe('tool-calls')
+      }
+    })
+
+    test('parses step with inline tool result', () => {
+      const step = {
+        stepNumber: 1,
+        toolCalls: [
+          {
+            toolName: 'create_task',
+            toolCallId: 'call-1',
+            args: { title: 'Task 1' },
+            result: { id: 'task-abc' },
+          },
+        ],
+      }
+      const result = StepDetailSchema.safeParse(step)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.toolCalls?.[0]?.result).toEqual({ id: 'task-abc' })
+      }
+    })
+
+    test('parses step with inline tool error', () => {
+      const step = {
+        stepNumber: 1,
+        toolCalls: [
+          {
+            toolName: 'create_task',
+            toolCallId: 'call-1',
+            args: { title: 'Task 1' },
+            error: 'permission denied',
+          },
+        ],
+      }
+      const result = StepDetailSchema.safeParse(step)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.toolCalls?.[0]?.error).toBe('permission denied')
+      }
+    })
   })
 
   describe('safeParseLlmTrace with full data', () => {

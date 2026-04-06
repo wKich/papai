@@ -85,16 +85,19 @@ export const ToolCallDetailSchema = z.object({
 
 export const StepDetailSchema = z.object({
   stepNumber: z.number(),
+  text: z.string().optional(),
+  finishReason: z.string().optional(),
   toolCalls: z
     .array(
       z.object({
         toolName: z.string(),
         toolCallId: z.string(),
         args: z.unknown(),
+        result: z.unknown().optional(),
+        error: z.string().optional(),
       }),
     )
     .optional(),
-  response: z.unknown().optional(),
   usage: TokenInfoSchema.optional(),
 })
 

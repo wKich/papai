@@ -298,5 +298,101 @@ describe('state-collector', () => {
       expect(isRecord(stepsDetail[0]) ? stepsDetail[0]['stepNumber'] : undefined).toBe(1)
       expect(isRecord(stepsDetail[1]) ? stepsDetail[1]['stepNumber'] : undefined).toBe(2)
     })
+
+    test('llm:error broadcasts an error trace with captured message', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:start', { userId: 'admin-1', model: 'gpt-4' })
+      emit('llm:error', { userId: 'admin-1', model: 'gpt-4', error: 'boom' })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFullEvents = events.filter((e) => e.event === 'llm:full')
+      const llmFull = llmFullEvents[llmFullEvents.length - 1]
+      if (!isRecord(llmFull?.data)) throw new Error('expected llm:full')
+      const eventData = llmFull.data['data']
+      if (!isRecord(eventData)) throw new Error('expected trace data')
+      expect(eventData['error']).toBe('boom')
+      expect(eventData['model']).toBe('gpt-4')
+      expect(eventData['steps']).toBe(0)
+    })
+
+    test('llm:error without prior llm:start still emits trace with zero duration', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:error', { userId: 'admin-1', model: 'gpt-4', error: 'crash' })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFull = events.filter((e) => e.event === 'llm:full').pop()
+      if (!isRecord(llmFull?.data)) throw new Error('expected llm:full')
+      const eventData = llmFull.data['data']
+      if (!isRecord(eventData)) throw new Error('expected trace data')
+      expect(eventData['error']).toBe('crash')
+      expect(eventData['duration']).toBe(0)
+    })
+
+    test('llm:end passes through text, finishReason, and inline tool result/error', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:start', { userId: 'admin-1', model: 'gpt-4' })
+      emit('llm:end', {
+        userId: 'admin-1',
+        model: 'gpt-4',
+        steps: 1,
+        totalDuration: 500,
+        tokenUsage: { inputTokens: 50, outputTokens: 20 },
+        stepsDetail: [
+          {
+            stepNumber: 1,
+            text: 'Calling the search tool now.',
+            finishReason: 'tool-calls',
+            toolCalls: [
+              {
+                toolName: 'search',
+                toolCallId: 'call-1',
+                args: { query: 'foo' },
+                result: { hits: 3 },
+              },
+              {
+                toolName: 'create',
+                toolCallId: 'call-2',
+                args: { title: 'x' },
+                error: 'permission denied',
+              },
+            ],
+          },
+        ],
+      })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFullEvents = events.filter((e) => e.event === 'llm:full')
+      const llmFull = llmFullEvents[llmFullEvents.length - 1]
+
+      if (!isRecord(llmFull?.data)) return
+      const eventData = llmFull.data['data']
+      if (!isRecord(eventData)) return
+
+      const stepsDetail: unknown = eventData['stepsDetail']
+      if (!Array.isArray(stepsDetail)) return
+      const first: unknown = stepsDetail[0]
+      if (!isRecord(first)) return
+
+      expect(first['text']).toBe('Calling the search tool now.')
+      expect(first['finishReason']).toBe('tool-calls')
+
+      const toolCalls: unknown = first['toolCalls']
+      if (!Array.isArray(toolCalls)) return
+      expect(toolCalls).toHaveLength(2)
+
+      const tc0: unknown = toolCalls[0]
+      const tc1: unknown = toolCalls[1]
+      expect(isRecord(tc0) ? tc0['result'] : undefined).toEqual({ hits: 3 })
+      expect(isRecord(tc1) ? tc1['error'] : undefined).toBe('permission denied')
+    })
   })
 })

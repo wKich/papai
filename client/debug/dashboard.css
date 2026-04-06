@@ -393,7 +393,7 @@ main {
   border: 1px solid #333333;
   border-radius: 4px;
   width: 90vw;
-  max-width: 800px;
+  max-width: 1200px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -963,26 +963,74 @@ main {
   border-bottom: 1px solid #333;
 }
 
-.step-tool-calls {
+.step-finish-reason {
+  font-weight: normal;
+  color: #888;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.step-section {
   margin: 8px 0;
 }
 
-.step-tool-call {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 8px;
-  background: #131313;
+.step-section .label {
+  color: #666;
+  font-size: 11px;
+  text-transform: uppercase;
   margin-bottom: 4px;
 }
 
-.step-tool-call .tool-name {
-  color: #00ff88;
+.step-text {
+  background: #131313;
+  padding: 8px;
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ccc;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.step-tool-call .tool-id {
+.step-tool-calls {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-tool-call {
+  padding: 8px;
+  background: #131313;
+  border-left: 2px solid #333;
+  border-radius: 2px;
+}
+
+.step-tool-call.step-tool-error {
+  border-left-color: #ff4444;
+}
+
+.step-tool-call-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.step-tool-call-header .tool-name {
+  color: #00ff88;
+  font-weight: 600;
+}
+
+.step-tool-call-header .tool-id {
   color: #666;
-  font-size: 11px;
+  font-size: 10px;
+}
+
+.step-tool-call .tool-section {
+  margin-top: 6px;
 }
 
 .step-usage {

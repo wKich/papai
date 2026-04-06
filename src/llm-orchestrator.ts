@@ -9,6 +9,7 @@ import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from 
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
+import { buildStepsDetail } from './llm-orchestrator-steps.js'
 import type { LlmOrchestratorDeps } from './llm-orchestrator-types.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
@@ -82,20 +83,7 @@ const sendLlmResponse = async (
   )
 }
 
-import type { InvokeModelArgs, StepInput, StepOutput } from './llm-orchestrator-types.js'
-
-function buildStepsDetail(steps: StepInput[]): StepOutput[] {
-  return steps.map((step, index) => ({
-    stepNumber: index + 1,
-    toolCalls: step.toolCalls?.map((tc) => ({
-      toolName: tc.toolName,
-      toolCallId: tc.toolCallId,
-      args: tc.input,
-    })),
-    response: step.response,
-    usage: step.usage,
-  }))
-}
+import type { InvokeModelArgs } from './llm-orchestrator-types.js'
 
 function emitLlmStart(contextId: string, mainModel: string, messages: ModelMessage[], tools: ToolSet): void {
   emit('llm:start', {

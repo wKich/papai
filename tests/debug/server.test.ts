@@ -2,9 +2,20 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { logBuffer } from '../../src/debug/log-buffer.js'
+import { logBuffer, logBufferStream } from '../../src/debug/log-buffer.js'
 import { startDebugServer, stopDebugServer } from '../../src/debug/server.js'
+import { getLogLevel, logMultistream } from '../../src/logger.js'
 import { restoreFetch } from '../test-helpers.js'
+
+const PINO_LEVEL_VALUES: Record<string, number> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: Infinity,
+}
 
 const TEST_PORT = 19100
 const PUBLIC_DIR = path.resolve(import.meta.dir, '../../public')
@@ -178,6 +189,23 @@ describe('debug-server', () => {
     expect(body).toHaveProperty('capacity', 65535)
     expect(body).toHaveProperty('oldest')
     expect(body).toHaveProperty('newest')
+  })
+
+  test('buffer stream is registered with level matching LOG_LEVEL', () => {
+    const streams: unknown = Reflect.get(logMultistream, 'streams')
+    if (!Array.isArray(streams)) throw new Error('expected logMultistream.streams to be an array')
+    let foundLevel: unknown
+    for (const entry of streams) {
+      if (typeof entry !== 'object' || entry === null) continue
+      if (Reflect.get(entry, 'stream') === logBufferStream) {
+        foundLevel = Reflect.get(entry, 'level')
+        break
+      }
+    }
+    expect(foundLevel).toBeDefined()
+    const expectedLevel = PINO_LEVEL_VALUES[getLogLevel()]
+    expect(expectedLevel).toBeDefined()
+    expect(foundLevel).toBe(expectedLevel!)
   })
 
   test('SSE client receives state:init on connect', async () => {
