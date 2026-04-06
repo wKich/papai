@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-import type { DashboardAPI } from '../dashboard-types.js'
-import type { LogEntry, LlmTrace } from '../schemas.js'
+import type { LogEntry, LlmTrace } from '../../src/debug/schemas.js'
+import type { DashboardAPI } from './dashboard-types.js'
 import { escapeHtml, formatTime, formatTokens, formatUptime } from './helpers.js'
 import { renderLogDetailHTML, renderLogDetailTitle } from './log-detail.js'
 import { filterLogs, getLogFilterElements, getLogModalElements, renderLogEntry, updateFuseIndex } from './logs.js'

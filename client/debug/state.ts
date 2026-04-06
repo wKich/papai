@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import type { DashboardState } from '../dashboard-types.js'
+import type { DashboardState } from './dashboard-types.js'
 
 export const LOG_CAP = 65535
 

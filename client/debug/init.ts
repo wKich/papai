@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { bootstrapLogs } from './logs.js'
+import { bootstrapLogs } from './logs-bootstrap.js'
 import { setupEventSource } from './sse.js'
 
 async function init(): Promise<void> {

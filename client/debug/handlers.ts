@@ -1,5 +1,4 @@
 /// <reference lib="dom" />
-import type { DashboardWizard } from '../dashboard-types.js'
 import {
   type Wizard,
   type LlmTrace,
@@ -24,7 +23,8 @@ import {
   parsePollerEvent,
   parseMessageCacheEvent,
   parseLogEntry,
-} from '../schemas.js'
+} from '../../src/debug/schemas.js'
+import type { DashboardWizard } from './dashboard-types.js'
 import { state, LOG_CAP, renderAll } from './state.js'
 
 // Render scheduling flags

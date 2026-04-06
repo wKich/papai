@@ -1,22 +1,8 @@
-import type { LogEntry } from '../schemas.js'
+import Fuse from 'fuse.js'
+
+import type { LogEntry } from '../../src/debug/schemas.js'
 import { escapeHtml, formatTime, levelClass, levelName } from './helpers.js'
 import type { FuseResult, SearchableLogEntry } from './types.js'
-
-// Fuse.js is loaded from CDN as global
-declare const Fuse: {
-  new <T>(
-    list: readonly T[],
-    options?: {
-      keys?: Array<{ name: string; weight?: number } | string>
-      threshold?: number
-      includeScore?: boolean
-      ignoreLocation?: boolean
-      minMatchCharLength?: number
-    },
-  ): {
-    search(query: string): Array<{ item: T }>
-  }
-}
 
 type LogModalElements = {
   $logModal: HTMLElement

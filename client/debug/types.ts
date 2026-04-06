@@ -1,4 +1,4 @@
-import type { LogEntry } from '../schemas.js'
+import type { LogEntry } from '../../src/debug/schemas.js'
 
 export type SessionDetail = {
   userId: string

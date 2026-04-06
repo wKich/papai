@@ -1,6 +1,6 @@
-import { renderPropertiesTree } from '../dashboard/tree-view.js'
-import type { LogEntry } from '../schemas.js'
+import type { LogEntry } from '../../src/debug/schemas.js'
 import { escapeHtml, formatTime, levelClass, levelName } from './helpers.js'
+import { renderPropertiesTree } from './tree-view.js'
 
 export function renderLogDetailHTML(entry: LogEntry, _index: number): string {
   let html = '<div class="log-detail-meta">'

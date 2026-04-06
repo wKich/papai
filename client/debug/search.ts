@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import Fuse from 'fuse.js'
 
-import type { LogEntry } from '../schemas.js'
+import type { LogEntry } from '../../src/debug/schemas.js'
 
 type SearchableLogEntry = LogEntry & { _searchText: string }
 

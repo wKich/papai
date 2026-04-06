@@ -1,4 +1,4 @@
-import type { LlmTrace } from '../schemas.js'
+import type { LlmTrace } from '../../src/debug/schemas.js'
 import { escapeHtml, formatTime, formatTokens } from './helpers.js'
 
 type TraceModalElements = {

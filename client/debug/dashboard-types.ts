@@ -20,7 +20,7 @@ import type {
   SchedulerTickEvent,
   PollerEvent,
   MessageCacheEvent,
-} from './schemas.js'
+} from '../../src/debug/schemas.js'
 
 // Re-export all types
 export type {

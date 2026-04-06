@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-import type { LogEntry } from '../schemas.js'
-import { parseLogEntry } from '../schemas.js'
+import type { LogEntry } from '../../src/debug/schemas.js'
+import { parseLogEntry } from '../../src/debug/schemas.js'
 import { state } from './state.js'
 
 export function processLogsForScopes(logs: LogEntry[]): void {
