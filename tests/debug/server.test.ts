@@ -1,10 +1,28 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import fs from 'node:fs'
+import path from 'node:path'
 
 import { logBuffer } from '../../src/debug/log-buffer.js'
 import { startDebugServer, stopDebugServer } from '../../src/debug/server.js'
 import { restoreFetch } from '../test-helpers.js'
 
 const TEST_PORT = 19100
+const PUBLIC_DIR = path.resolve(import.meta.dir, '../../public')
+
+function ensurePublicBuilt(): void {
+  const required = ['dashboard.js', 'dashboard.html', 'dashboard.css']
+  const missing = required.some((f) => !fs.existsSync(path.join(PUBLIC_DIR, f)))
+  if (!missing) return
+
+  const proc = Bun.spawnSync(['bun', 'scripts/build-client.ts'], {
+    cwd: path.resolve(import.meta.dir, '../..'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  if (proc.exitCode !== 0) {
+    throw new Error(`Build failed: ${proc.stderr.toString()}`)
+  }
+}
 
 /**
  * Seed the log buffer with known entries so route tests are self-sufficient
@@ -17,10 +35,11 @@ function seedLogBuffer(): void {
 }
 
 describe('debug-server', () => {
-  beforeAll(async () => {
+  beforeAll(() => {
+    ensurePublicBuilt()
     restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
-    await startDebugServer('test-admin')
+    startDebugServer('test-admin')
     seedLogBuffer()
   })
 
@@ -49,22 +68,25 @@ describe('debug-server', () => {
     expect(body).toContain('#log-explorer')
   })
 
-  test('GET /dashboard-state.js returns JavaScript', async () => {
-    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard-state.js`)
+  test('GET /dashboard.js returns JavaScript bundle from public/', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard.js`)
     expect(res.status).toBe(200)
     const ct = res.headers.get('content-type')
     expect(ct).toContain('javascript')
     const body = await res.text()
-    expect(body).toContain('EventSource')
+    expect(body.length).toBeGreaterThan(0)
   })
 
-  test('GET /dashboard-ui.js returns JavaScript', async () => {
+  test('GET /dashboard-state.js returns 404 (legacy route removed)', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/dashboard-state.js`)
+    expect(res.status).toBe(404)
+    await res.body?.cancel()
+  })
+
+  test('GET /dashboard-ui.js returns 404 (legacy route removed)', async () => {
     const res = await fetch(`http://localhost:${TEST_PORT}/dashboard-ui.js`)
-    expect(res.status).toBe(200)
-    const ct = res.headers.get('content-type')
-    expect(ct).toContain('javascript')
-    const body = await res.text()
-    expect(body).toContain('getElementById')
+    expect(res.status).toBe(404)
+    await res.body?.cancel()
   })
 
   test('GET /dashboard.xyz returns 404', async () => {

@@ -1,8 +1,12 @@
+import path from 'node:path'
+
 import { logger, logMultistream } from '../logger.js'
 import { logBuffer, logBufferStream } from './log-buffer.js'
 import { addClient, init, removeClient } from './state-collector.js'
 
 const log = logger.child({ scope: 'debug-server' })
+
+const PUBLIC_DIR = path.resolve(import.meta.dir, '../../public')
 
 const DEFAULT_PORT = 9100
 const DEFAULT_HOSTNAME = '127.0.0.1'
@@ -77,87 +81,27 @@ function handleLogs(url: URL): Response {
 
 let server: ReturnType<typeof Bun.serve> | null = null
 
-const DASHBOARD_DIR = new URL('.', import.meta.url).pathname
-const jsCache = new Map<string, string>()
-
-async function transpileDashboard(): Promise<void> {
-  const entrypoints = [
-    new URL('dashboard/dashboard-state.ts', import.meta.url).pathname,
-    new URL('dashboard-ui/index.ts', import.meta.url).pathname,
-  ]
-
-  // Validate source files exist and have content before building
-  for (const entrypoint of entrypoints) {
-    const file = Bun.file(entrypoint)
-    const size = file.size
-    if (size === 0) {
-      log.error({ entrypoint }, 'Dashboard source file is empty, skipping transpilation')
-      throw new Error(`Dashboard source file is empty: ${entrypoint}`)
-    }
-  }
-
-  const buildResult = await Bun.build({
-    entrypoints,
-    format: 'iife',
-  })
-
-  // Validate build outputs have expected content
-  // Map output filenames to their expected URLs
-  const entries = await Promise.all(
-    buildResult.outputs.map(async (output) => {
-      const basename = output.path.split('/').pop() ?? ''
-      const content = await output.text()
-      if (content.length === 0) {
-        log.error({ name: basename }, 'Build output is empty')
-        throw new Error(`Build output is empty: ${basename}`)
-      }
-      // Map index.js to dashboard-ui.js for the dashboard-ui entrypoint
-      const name = basename === 'index.js' ? 'dashboard-ui.js' : basename
-      return [name, content] as const
-    }),
-  )
-  for (const [name, content] of entries) {
-    jsCache.set(name, content)
-  }
-
-  log.info({ entrypoints: entrypoints.length, outputs: entries.length }, 'Dashboard transpiled successfully')
-}
-
 function handleDashboardFile(pathname: string): Response {
   if (pathname === '/dashboard') {
-    return new Response(Bun.file(`${DASHBOARD_DIR}dashboard.html`))
+    return new Response(Bun.file(path.join(PUBLIC_DIR, 'dashboard.html')))
   }
 
-  // Remove leading slash to get filename
-  const filename = pathname.slice(1)
-  const ext = filename.split('.').pop()
-
-  // Serve transpiled JS from cache
-  if (ext === 'js') {
-    const content = jsCache.get(filename)
-    if (content !== undefined) {
-      return new Response(content, {
-        headers: { 'Content-Type': 'text/javascript' },
-      })
-    }
-    return new Response('Not found', { status: 404 })
+  if (pathname === '/dashboard.js') {
+    return new Response(Bun.file(path.join(PUBLIC_DIR, 'dashboard.js')), {
+      headers: { 'Content-Type': 'text/javascript' },
+    })
   }
 
-  // Serve CSS directly from file
-  const ALLOWED_CSS_FILES = new Set(['dashboard.css'])
-  if (ext === 'css' && ALLOWED_CSS_FILES.has(filename)) {
-    const filePath = `${DASHBOARD_DIR}${filename}`
-    const file = Bun.file(filePath)
-    return new Response(file)
+  if (pathname === '/dashboard.css') {
+    return new Response(Bun.file(path.join(PUBLIC_DIR, 'dashboard.css')))
   }
 
   return new Response('Not found', { status: 404 })
 }
 
-export async function startDebugServer(adminUserId: string): Promise<void> {
+export function startDebugServer(adminUserId: string): void {
   init(adminUserId)
   logMultistream.add({ stream: logBufferStream })
-  await transpileDashboard()
 
   const port = getPort()
   const hostname = getHostname()
