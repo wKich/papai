@@ -22,6 +22,7 @@
       "devDependencies": {
         "@gramio/types": "^9.6.0",
         "@grammyjs/types": "^3.26.0",
+        "@happy-dom/global-registrator": "^20.8.9",
         "@hughescr/stryker-bun-runner": "^1.1.3",
         "@stryker-mutator/core": "^9.6.0",
         "@stryker-mutator/typescript-checker": "^9.6.0",
@@ -185,6 +186,8 @@
     "@gramio/types": ["@gramio/types@9.6.0", "", {}, "sha512-LEyG05rOVHaxaCpagyPXaMj8X5NUYtTp8/UiOJasVuo86FCbnQmlNx3iJ5zGR/syRTMaa5qDd+qo4fOxrP2hmQ=="],
 
     "@grammyjs/types": ["@grammyjs/types@3.26.0", "", {}, "sha512-jlnyfxfev/2o68HlvAGRocAXgdPPX5QabG7jZlbqC2r9DZyWBfzTlg+nu3O3Fy4EhgLWu28hZ/8wr7DsNamP9A=="],
+
+    "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.8.9", "", { "dependencies": { "@types/node": ">=20.0.0", "happy-dom": "^20.8.9" } }, "sha512-DtZeRRHY9A/bisTJziUBBPrdnPui7+R185G/hzi6/Boymhqh7/wi53AY+IvQHS1+7OPaqfO/1XNpngNwthLz+A=="],
 
     "@hughescr/stryker-bun-runner": ["@hughescr/stryker-bun-runner@1.1.3", "", { "dependencies": { "@stryker-mutator/api": "9.5.1", "ws": "8.19.0" }, "peerDependencies": { "@stryker-mutator/core": "^9.0.0" } }, "sha512-F6G1WAedQ6R6byB9XZnUkH8W8xwKpo/K2MtCTDl4SKOxBuTTdGTKvVQI+GTYK/65CgmS7fPVr5xiIYNgxkhBiQ=="],
 
