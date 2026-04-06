@@ -54,7 +54,7 @@ const LLM_COPY_KEYS: readonly ConfigKey[] = [
 ]
 
 export function copyAdminLlmConfig(targetUserId: string, adminUserId: string): void {
-  log.debug({ targetUserId, adminUserId }, 'copyAdminLlmConfig called')
+  log.debug({ targetUserId }, 'copyAdminLlmConfig called')
   for (const key of LLM_COPY_KEYS) {
     const existingValue = getCachedConfig(targetUserId, key)
     if (existingValue !== null) continue
