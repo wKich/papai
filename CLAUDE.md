@@ -10,7 +10,8 @@ papai is a chat bot that manages tasks via LLM tool-calling. A user sends natura
 
 All scripts can be run with `bun <script>` (no `run` keyword needed):
 
-- `bun start` — run the bot
+- `bun start` — build the dashboard client and run the bot
+- `bun build:client` — bundle the debug dashboard UI from `client/debug/` to `public/`
 - `bun lint` — lint with oxlint
 - `bun lint:fix` — lint with auto-fix
 - `bun format` — format with oxfmt
@@ -19,7 +20,8 @@ All scripts can be run with `bun <script>` (no `run` keyword needed):
 - `bun typecheck` — TypeScript type checking
 - `bun security` — run Semgrep security scan locally
 - `bun security:ci` — run security scan with JSON/SARIF output for CI
-- `bun test` — run unit tests (excludes E2E)
+- `bun test` — run unit tests (excludes E2E and client tests)
+- `bun test:client` — run client (dashboard UI) tests with happy-dom
 - `bun test:watch` — run unit tests in watch mode
 - `bun test:coverage` — run unit tests with coverage
 - `bun test:e2e` — run E2E tests (requires Docker)
@@ -30,7 +32,7 @@ All scripts can be run with `bun <script>` (no `run` keyword needed):
 - `bun fix` — auto-fix lint and format issues
 - `bun install` — install dependencies
 
-No build step; Bun runs TypeScript directly.
+The server is run by Bun directly with no build step. The debug dashboard UI in `client/debug/` is bundled to `public/` via `bun build:client` (run automatically by `bun start`).
 
 ## Testing
 
@@ -40,30 +42,40 @@ No build step; Bun runs TypeScript directly.
 bun test           # or: bun run test
 ```
 
+**Client tests** (dashboard UI, requires happy-dom):
+
+```bash
+bun test:client    # or: bun run test:client
+```
+
 **E2E tests** (requires Docker):
 
 ```bash
 bun test:e2e       # or: bun run test:e2e
 ```
 
-The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude E2E tests from the default `bun test` command. E2E tests require Docker to spin up a Kaneo instance and must be run separately via `bun test:e2e`.
+The `bunfig.toml` is configured with `pathIgnorePatterns` to exclude both E2E tests and client tests from the default `bun test` command. Client tests live under `tests/client/` and run against `client/debug/` modules with happy-dom providing browser globals — they must be run separately via `bun test:client`. E2E tests require Docker to spin up a Kaneo instance and must be run separately via `bun test:e2e`.
 
 ## TDD Enforcement (Hooks)
 
-Every `Write`, `Edit`, and `MultiEdit` on a file in `src/` triggers an automated
-hook pipeline. The pipeline enforces Red → Green → Refactor by running checks
-sequentially and blocking when a check fails.
+Every `Write`, `Edit`, and `MultiEdit` on a file in `src/` or `client/` triggers
+an automated hook pipeline. The pipeline enforces Red → Green → Refactor by
+running checks sequentially and blocking when a check fails.
 
 ### Scope
 
-Only **implementation files in `src/`** are checked:
+Only **implementation files in `src/` or `client/`** are checked:
 
-- Path starts with `src/`
+- Path starts with `src/` or `client/`
 - Extension: `.ts`, `.js`, `.tsx`, `.jsx`
 - Not a test file (`*.test.*` / `*.spec.*`)
 
-Everything else (docs, config, test files, files outside `src/`) passes through
-without checks. Test file edits only verify that the test itself still passes.
+Everything else (docs, config, test files, files outside `src/`/`client/`)
+passes through without checks. Test file edits only verify that the test itself
+still passes.
+
+The `client/` tree mirrors `src/` for path resolution: `client/debug/foo.ts` is
+expected to have a test at `tests/client/debug/foo.test.ts`.
 
 ### Pipeline
 
@@ -224,6 +236,8 @@ User (Telegram/Mattermost) ─→ ChatProvider (chat/registry.ts) ─→ bot.ts 
 - **`src/history.ts`** — Persistent conversation history storage (SQLite-backed per-user).
 - **`src/memory.ts`** — Fact extraction and persistence from tool results for long-term context.
 - **`src/logger.ts`** — pino logger instance shared across all modules.
+- **`src/debug/`** — server-side debug instrumentation: SSE event bus, log buffer, state collector, and the HTTP server that serves the dashboard from `public/`. The dashboard UI itself lives in `client/debug/`.
+- **`client/debug/`** — debug dashboard browser code (TypeScript + HTML + CSS). Bundled to `public/dashboard.js` via `bun build:client` (using `Bun.build()` IIFE format). The single entry point `client/debug/index.ts` imports the API setup, state, tree-view click handler, and bootstrap modules in order. Tests live at `tests/client/debug/` and run with happy-dom via `bun test:client`.
 
 ### Available tools
 
