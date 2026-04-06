@@ -59,7 +59,7 @@ export async function announceNewVersion(
     return
   }
 
-  log.info({ version: VERSION, target: 'admin' }, 'Sending version announcement to admin')
+  log.info({ version: VERSION }, 'Sending version announcement to admin')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
   const success = await sendAnnouncementToAdmin(adminUserId, message, chat)
