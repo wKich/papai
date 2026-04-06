@@ -32,11 +32,11 @@ function markVersionAnnounced(version: string): boolean {
 async function sendAnnouncementToAdmin(adminUserId: string, markdown: string, chat: ChatProvider): Promise<boolean> {
   try {
     await chat.sendMessage(adminUserId, markdown)
-    log.debug({ userId: adminUserId, version: VERSION }, 'Announcement sent to admin')
+    log.debug({ target: 'admin', version: VERSION }, 'Announcement sent to admin')
     return true
   } catch (error) {
     log.warn(
-      { userId: adminUserId, version: VERSION, error: error instanceof Error ? error.message : String(error) },
+      { target: 'admin', version: VERSION, error: error instanceof Error ? error.message : String(error) },
       'Failed to send announcement to admin',
     )
     return false
@@ -59,7 +59,7 @@ export async function announceNewVersion(
     return
   }
 
-  log.info({ version: VERSION, adminUserId }, 'Sending version announcement to admin')
+  log.info({ version: VERSION, target: 'admin' }, 'Sending version announcement to admin')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
   const success = await sendAnnouncementToAdmin(adminUserId, message, chat)
