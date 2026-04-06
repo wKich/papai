@@ -179,7 +179,7 @@ export function upsertCachedFact(userId: string, fact: { identifier: string; tit
 export function getCachedConfig(userId: string, key: string): string | null {
   const cache = getOrCreateCache(userId)
   if (!cache.config.has(key)) {
-    log.debug({ userId, key }, 'Loading config from DB into cache')
+    log.debug('Loading config from DB into cache')
     const row = getDrizzleDb()
       .select({ value: userConfig.value })
       .from(userConfig)
