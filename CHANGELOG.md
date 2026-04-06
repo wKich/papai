@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-04-06
+
+### Added
+
+- **debug:** Add LLM trace detail modal and enhance dashboard UI
+- Add client build script and test
+- Extend TDD hooks to recognize client/ and scripts/ source roots
+- Create single entry point and update HTML
+- Add happy-dom test setup preload
+- Add build:client and test:client scripts
+- Remove archive tools, add delete-project tool
+
+### Changed
+
+- Move client source files to client/debug/
+- Update imports in moved client/debug files
+- Use @happy-dom/global-registrator for canonical DOM setup
+- Move client tests to tests/client/debug/
+- Serve dashboard from pre-built public/ directory
+
+### Documentation
+
+- Add client build pipeline design
+- Add client build pipeline implementation plan
+- Update CLAUDE.md for client build pipeline
+
+### Fixed
+
+- Handle flat tests/client/ paths in resolveImplPath
+
+### Miscellaneous
+
+- Add happy-dom and gitignore public/
+- Add test:client to check:full pipeline
+- Add client build stage to Dockerfile
+- Extend knip scope to client/ and remove dead search module
+
+### Testing
+
+- Adapt smoke tests for single-bundle serving
+
+### Ci
+
+- Add build job for client assets
+- Drop unused build artifact dependency from e2e and mutation jobs
 ## [4.7.8] - 2026-04-05
 
 ### Added
