@@ -32,11 +32,11 @@ function markVersionAnnounced(version: string): boolean {
 async function sendAnnouncementToAdmin(adminUserId: string, markdown: string, chat: ChatProvider): Promise<boolean> {
   try {
     await chat.sendMessage(adminUserId, markdown)
-    log.debug({ target: 'admin', version: VERSION }, 'Announcement sent to admin')
+    log.debug({ version: VERSION }, 'Announcement sent to admin')
     return true
   } catch (error) {
     log.warn(
-      { target: 'admin', version: VERSION, error: error instanceof Error ? error.message : String(error) },
+      { version: VERSION, error: error instanceof Error ? error.message : String(error) },
       'Failed to send announcement to admin',
     )
     return false
