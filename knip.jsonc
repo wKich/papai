@@ -2,10 +2,10 @@
   "$schema": "./node_modules/knip/schema.json",
 
   // Standalone scripts not auto-detected from package.json
-  "entry": ["src/scripts/*.ts!"],
+  "entry": ["src/scripts/*.ts!", "scripts/build-client.ts!", "client/debug/index.ts!"],
 
   // All source files (production only)
-  "project": ["src/**/*.ts!"],
+  "project": ["src/**/*.ts!", "client/**/*.ts!"],
 
   // All issue types treated as hard errors
   "rules": {
