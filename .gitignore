@@ -43,3 +43,6 @@ reports/
 
 # TDD hook session state
 .hooks/sessions/
+
+# Client build output
+public/
