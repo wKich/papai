@@ -5,7 +5,16 @@ FROM base AS deps
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
+COPY client ./client
+COPY scripts ./scripts
+COPY src ./src
+COPY package.json tsconfig.json ./
+RUN bun scripts/build-client.ts
+
 FROM base AS final
+COPY --from=build /app/public ./public
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY package.json tsconfig.json CHANGELOG.md ./
