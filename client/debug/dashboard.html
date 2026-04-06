@@ -94,22 +94,6 @@
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.3.0/dist/fuse.basic.min.js"></script>
-    <script src="/dashboard-ui.js" defer></script>
-    <script src="/dashboard-state.js" defer></script>
-    <script>
-      // Tree view toggle functionality
-      document.addEventListener('click', function (e) {
-        if (e.target.classList.contains('tree-toggle')) {
-          const targetId = e.target.getAttribute('data-target')
-          const children = document.getElementById(targetId)
-          if (children) {
-            children.classList.toggle('collapsed')
-            e.target.classList.toggle('collapsed')
-            e.target.textContent = children.classList.contains('collapsed') ? '▶' : '▼'
-          }
-        }
-      })
-    </script>
+    <script src="/dashboard.js" defer></script>
   </body>
 </html>
