@@ -7,7 +7,7 @@ import {
   getSearchIndex,
   searchLogs,
   updateSearchIndex,
-} from '../../../src/debug/dashboard/search.js'
+} from '../../../client/debug/search.js'
 import type { LogEntry } from '../../../src/debug/schemas.js'
 
 describe('fuse search', () => {

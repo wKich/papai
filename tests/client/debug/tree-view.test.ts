@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { renderTreeView, renderPropertiesTree } from '../../../src/debug/dashboard/tree-view.js'
+import { renderTreeView, renderPropertiesTree } from '../../../client/debug/tree-view.js'
 
 describe('tree-view', () => {
   describe('renderTreeView', () => {

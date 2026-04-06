@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { renderLogDetailHTML, renderLogDetailTitle } from '../../../src/debug/dashboard-ui/log-detail.js'
+import { renderLogDetailHTML, renderLogDetailTitle } from '../../../client/debug/log-detail.js'
 import type { LogEntry } from '../../../src/debug/schemas.js'
 
 describe('renderLogDetailHTML', () => {

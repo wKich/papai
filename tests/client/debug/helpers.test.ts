@@ -7,7 +7,7 @@ import {
   formatUptime,
   levelClass,
   levelName,
-} from '../../../src/debug/dashboard-ui/helpers.js'
+} from '../../../client/debug/helpers.js'
 
 describe('dashboard-ui helpers', () => {
   describe('escapeHtml', () => {

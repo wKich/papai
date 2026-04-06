@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { SessionDetail } from '../../../src/debug/dashboard-ui/types.js'
+import type { SessionDetail } from '../../../client/debug/types.js'
 
 describe('session-detail', () => {
   test('SessionDetail type is properly exported', () => {

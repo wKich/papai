@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
-import { buildSessionCard } from '../../../src/debug/dashboard-ui/session-card.js'
-import type { SessionDetail } from '../../../src/debug/dashboard-ui/types.js'
+import { buildSessionCard } from '../../../client/debug/session-card.js'
+import type { SessionDetail } from '../../../client/debug/types.js'
 
 describe('buildSessionCard', () => {
   it('should build session card HTML', () => {

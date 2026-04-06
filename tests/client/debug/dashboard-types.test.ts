@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { Fact, Instruction, Session } from '../../src/debug/dashboard-types.js'
+import type { Fact, Instruction, Session } from '../../../client/debug/dashboard-types.js'
 
 describe('dashboard-types', () => {
   test('Fact type is usable', () => {
