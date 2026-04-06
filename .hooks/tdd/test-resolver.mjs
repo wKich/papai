@@ -20,9 +20,11 @@ export function isTestFile(filePath) {
  * @returns {boolean} True if this is a gateable implementation file
  */
 export function isGateableImplFile(filePath, projectRoot) {
-  // Must be under src/, match IMPL_PATTERN, and NOT match TEST_PATTERN
+  // Must be under src/ or client/, match IMPL_PATTERN, and NOT match TEST_PATTERN
   const rel = path.relative(projectRoot, path.resolve(projectRoot, filePath))
-  if (!rel.startsWith('src/') && !rel.startsWith('src\\')) return false
+  const isSrc = rel.startsWith('src/') || rel.startsWith('src\\')
+  const isClient = rel.startsWith('client/') || rel.startsWith('client\\')
+  if (!isSrc && !isClient) return false
   if (!IMPL_PATTERN.test(rel)) return false
   if (TEST_PATTERN.test(rel)) return false
   return true
@@ -34,7 +36,13 @@ export function isGateableImplFile(filePath, projectRoot) {
  * @returns {string} Suggested test file relative path (e.g. tests/foo/bar.test.ts)
  */
 export function suggestTestPath(implRelPath) {
-  // src/foo/bar.ts → tests/foo/bar.test.ts
+  // client/debug/helpers.ts → tests/client/debug/helpers.test.ts (keep client/ prefix)
+  if (implRelPath.startsWith('client/') || implRelPath.startsWith('client\\')) {
+    const ext = path.extname(implRelPath)
+    const base = implRelPath.slice(0, -ext.length)
+    return path.join('tests', `${base}.test${ext}`)
+  }
+  // src/foo/bar.ts → tests/foo/bar.test.ts (strip src/ prefix)
   const withoutSrc = implRelPath.replace(/^src[/\\]/, '')
   const ext = path.extname(withoutSrc)
   const base = withoutSrc.slice(0, -ext.length)
@@ -49,6 +57,17 @@ export function suggestTestPath(implRelPath) {
  */
 export function findTestFile(implAbsPath, projectRoot) {
   const rel = path.relative(projectRoot, implAbsPath)
+
+  // Client files: client/debug/helpers.ts → tests/client/debug/helpers.test.ts
+  if (rel.startsWith('client/') || rel.startsWith('client\\')) {
+    const ext = path.extname(rel)
+    const base = rel.slice(0, -ext.length)
+
+    for (const suffix of ['.test', '.spec']) {
+      const candidate = path.join(projectRoot, 'tests', `${base}${suffix}${ext}`)
+      if (fs.existsSync(candidate)) return candidate
+    }
+  }
 
   // Primary: parallel tests/ directory (src/foo/bar.ts → tests/foo/bar.test.ts)
   if (rel.startsWith('src/') || rel.startsWith('src\\')) {
@@ -86,6 +105,15 @@ export function resolveImplPath(testRelPath) {
 
   if (testRelPath.startsWith('tests/') || testRelPath.startsWith('tests\\')) {
     const dir = path.dirname(testRelPath).replace(/^tests[/\\]?/, '')
+    // tests/client/debug/helpers.test.ts → client/debug/helpers.ts (client/ stays)
+    if (dir.startsWith('client/') || dir.startsWith('client\\')) {
+      return path.join(dir, `${base}${ext}`)
+    }
+    // tests/scripts/foo.test.ts → scripts/foo.ts (scripts/ stays at root)
+    if (dir.startsWith('scripts/') || dir.startsWith('scripts\\') || dir === 'scripts') {
+      return path.join(dir, `${base}${ext}`)
+    }
+    // tests/foo/bar.test.ts → src/foo/bar.ts (prepend src/)
     return path.join('src', dir, `${base}${ext}`)
   }
 
