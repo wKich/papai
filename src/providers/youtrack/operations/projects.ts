@@ -111,18 +111,3 @@ export async function updateYouTrackProject(
     throw classifyYouTrackError(error, { projectId })
   }
 }
-
-export async function archiveYouTrackProject(config: YouTrackConfig, projectId: string): Promise<{ id: string }> {
-  log.debug({ projectId }, 'archiveProject')
-  try {
-    await youtrackFetch(config, 'POST', `/api/admin/projects/${projectId}`, {
-      body: { archived: true },
-      query: { fields: 'id' },
-    })
-    log.info({ projectId }, 'Project archived')
-    return { id: projectId }
-  } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'Failed to archive project')
-    throw classifyYouTrackError(error, { projectId })
-  }
-}

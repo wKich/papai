@@ -1,7 +1,6 @@
 import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
 import { setCachedConfig, _userCaches } from '../../src/cache.js'
-import { makeArchiveTaskTool } from '../../src/tools/archive-task.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
 import { makeDeleteTaskTool } from '../../src/tools/delete-task.js'
 import { makeGetTaskTool } from '../../src/tools/get-task.js'
@@ -709,120 +708,6 @@ describe('Task Tools', () => {
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
       expect(result).toEqual([])
-    })
-  })
-
-  describe('makeArchiveTaskTool', () => {
-    test('returns tool with correct structure', () => {
-      const provider = createMockProvider()
-      const tool = makeArchiveTaskTool(provider)
-      expect(tool.description).toContain('Archive a task')
-    })
-
-    test('archives task successfully with high confidence', async () => {
-      const provider = createMockProvider({
-        archiveTask: mock(() =>
-          Promise.resolve({
-            id: 'task-1',
-          }),
-        ),
-      })
-
-      const tool = makeArchiveTaskTool(provider)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute(
-        { taskId: 'task-1', confidence: 0.9 },
-        { toolCallId: '1', messages: [] },
-      )
-
-      expect(result).toMatchObject({ id: 'task-1' })
-    })
-
-    test('returns confirmation_required when confidence is below threshold', async () => {
-      const provider = createMockProvider()
-      const tool = makeArchiveTaskTool(provider)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute(
-        { taskId: 'task-1', label: 'Fix login bug', confidence: 0.6 },
-        { toolCallId: '1', messages: [] },
-      )
-
-      expect(result).toMatchObject({ status: 'confirmation_required' })
-      if (typeof result === 'object' && result !== null && 'message' in result) {
-        const message = (result as Record<string, unknown>)['message']
-        expect(typeof message === 'string' && message.includes('Fix login bug')).toBe(true)
-        expect(typeof message === 'string' && !message.includes('0.6')).toBe(true)
-        expect(typeof message === 'string' && !message.includes('0.85')).toBe(true)
-      } else {
-        throw new Error('Expected result to have a message string')
-      }
-    })
-
-    test('executes when confidence exactly meets threshold (0.85)', async () => {
-      const provider = createMockProvider({
-        archiveTask: mock(() => Promise.resolve({ id: 'task-1' })),
-      })
-
-      const tool = makeArchiveTaskTool(provider)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute(
-        { taskId: 'task-1', confidence: 0.85 },
-        { toolCallId: '1', messages: [] },
-      )
-
-      expect(result).toMatchObject({ id: 'task-1' })
-    })
-
-    test('calls provider archiveTask with taskId', async () => {
-      const archiveTask = mock(() => Promise.resolve({ id: 'task-1' }))
-      const provider = createMockProvider({ archiveTask })
-
-      const tool = makeArchiveTaskTool(provider)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      await tool.execute({ taskId: 'task-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-
-      expect(archiveTask).toHaveBeenCalledTimes(1)
-      expect(archiveTask).toHaveBeenCalledWith('task-1')
-    })
-
-    test('handles already archived task', async () => {
-      const provider = createMockProvider({
-        archiveTask: mock(() =>
-          Promise.resolve({
-            id: 'task-1',
-          }),
-        ),
-      })
-
-      const tool = makeArchiveTaskTool(provider)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute(
-        { taskId: 'task-1', confidence: 0.9 },
-        { toolCallId: '1', messages: [] },
-      )
-
-      expect(result).toMatchObject({ id: 'task-1' })
-    })
-
-    test('propagates task not found error', async () => {
-      const provider = createMockProvider({
-        archiveTask: mock(() => Promise.reject(new Error('Task not found'))),
-      })
-
-      const tool = makeArchiveTaskTool(provider)
-      const promise = getToolExecutor(tool)({ taskId: 'invalid', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-      await expect(promise).rejects.toThrow('Task not found')
-      try {
-        await promise
-      } catch {
-        // ignore
-      }
-    })
-
-    test('validates taskId is required', () => {
-      const provider = createMockProvider()
-      const tool = makeArchiveTaskTool(provider)
-      expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
     })
   })
 

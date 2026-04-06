@@ -19,14 +19,10 @@ import { _resetDrizzleDb } from '../src/db/drizzle.js'
 // Spread into plain objects to snapshot current values.
 import * as _logger from '../src/logger.js'
 import * as _messageCache from '../src/message-cache/cache.js'
-import * as _providersFactory from '../src/providers/factory.js'
-import * as _kaneoProvision from '../src/providers/kaneo/provision.js'
 
 const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ['../src/logger.js', { ..._logger }],
   ['../src/message-cache/cache.js', { ..._messageCache }],
-  ['../src/providers/kaneo/provision.js', { ..._kaneoProvision }],
-  ['../src/providers/factory.js', { ..._providersFactory }],
   ['ai', { ..._ai }],
   ['@ai-sdk/openai-compatible', { ..._openaiCompat }],
 ]

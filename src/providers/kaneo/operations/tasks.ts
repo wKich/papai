@@ -1,5 +1,4 @@
 import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
-import { archiveTask } from '../archive-task.js'
 import type { KaneoConfig } from '../client.js'
 import { createTask } from '../create-task.js'
 import { deleteTask } from '../delete-task.js'
@@ -93,15 +92,6 @@ export async function kaneoSearchTasks(
     limit: params.limit,
   })
   return results.map((t) => mapTaskSearchResult(t, buildTaskUrl(config.baseUrl, workspaceId, t.projectId ?? '', t.id)))
-}
-
-export async function kaneoArchiveTask(
-  config: KaneoConfig,
-  workspaceId: string,
-  taskId: string,
-): Promise<{ id: string }> {
-  const result = await archiveTask({ config, taskId, workspaceId })
-  return { id: result.id }
 }
 
 export async function kaneoDeleteTask(config: KaneoConfig, taskId: string): Promise<{ id: string }> {

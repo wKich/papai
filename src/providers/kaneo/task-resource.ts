@@ -7,7 +7,6 @@ import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { TaskSchema as KaneoTaskResponseSchema } from './schemas/create-task.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
-import { addArchiveLabel, getOrCreateArchiveLabel, isTaskArchived } from './task-archive.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
 import { type TaskStatusDeps, denormalizeStatus, validateStatus } from './task-status.js'
 import { performUpdate } from './task-update-helpers.js'
@@ -225,21 +224,6 @@ export class TaskResource {
     }
   }
 
-  async archive(taskId: string, workspaceId: string): Promise<{ id: string; archivedAt: string }> {
-    this.log.debug({ taskId, workspaceId }, 'Archiving task')
-    try {
-      const archiveLabel = await getOrCreateArchiveLabel(this.config, workspaceId)
-      const alreadyArchived = await isTaskArchived(this.config, taskId, archiveLabel.id)
-      if (!alreadyArchived) {
-        await addArchiveLabel(this.config, workspaceId, taskId)
-      }
-      this.log.info({ taskId, labelId: archiveLabel.id }, 'Task archived')
-      return { id: taskId, archivedAt: new Date().toISOString() }
-    } catch (error) {
-      this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to archive task')
-      throw classifyKaneoError(error)
-    }
-  }
   async addRelation(
     taskId: string,
     relatedTaskId: string,

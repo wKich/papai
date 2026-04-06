@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
-  archiveYouTrackProject,
   createYouTrackProject,
   getYouTrackProject,
   listYouTrackProjects,
@@ -359,58 +358,6 @@ describe('updateYouTrackProject', () => {
 
     try {
       await updateYouTrackProject(config, 'nonexistent', { name: 'X' })
-      expect.unreachable('Should have thrown')
-    } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('project-not-found')
-      }
-    }
-  })
-})
-
-describe('archiveYouTrackProject', () => {
-  beforeEach(() => {
-    mockLogger()
-    fetchMock = undefined!
-  })
-
-  afterEach(() => {
-    restoreFetch()
-  })
-
-  test('archives project and returns id', async () => {
-    mockFetchResponse({ id: 'proj-1' })
-
-    const result = await archiveYouTrackProject(config, 'proj-1')
-
-    expect(result).toEqual({ id: 'proj-1' })
-  })
-
-  test('sends archived: true in request body', async () => {
-    mockFetchResponse({ id: 'proj-1' })
-
-    await archiveYouTrackProject(config, 'proj-1')
-
-    const body = getLastFetchBody()
-    expect(body['archived']).toBe(true)
-  })
-
-  test('uses POST method with project id in path', async () => {
-    mockFetchResponse({ id: 'proj-1' })
-
-    await archiveYouTrackProject(config, 'proj-1')
-
-    const url = getLastFetchUrl()
-    expect(url.pathname).toBe('/api/admin/projects/proj-1')
-    expect(getLastFetchMethod()).toBe('POST')
-  })
-
-  test('throws classified error on failure', async () => {
-    mockFetchError(404, { error: 'Project not found /projects/' })
-
-    try {
-      await archiveYouTrackProject(config, 'nonexistent')
       expect.unreachable('Should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)

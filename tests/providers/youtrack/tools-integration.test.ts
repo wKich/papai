@@ -8,10 +8,10 @@ describe('YouTrack provider tools integration', () => {
   test('makeTools generates correct tool set for YouTrack capabilities', () => {
     // YouTrack supports full granular capabilities:
     // - tasks: delete, relations
-    // - projects: read, list, create, update, archive (full CRUD)
+    // - projects: read, list, create, update (full CRUD)
     // - comments: read, create, update, delete (full CRUD)
     // - labels: list, create, update, delete, assign (full)
-    // YouTrack does NOT support: tasks.archive, statuses.*
+    // YouTrack does NOT support: statuses.*
     const youtrackCapabilities = new Set<Capability>([
       // Tasks
       'tasks.delete',
@@ -21,7 +21,6 @@ describe('YouTrack provider tools integration', () => {
       'projects.list',
       'projects.create',
       'projects.update',
-      'projects.archive',
       // Comments (full CRUD)
       'comments.read',
       'comments.create',
@@ -54,7 +53,6 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('list_projects')
     expect(toolNames).toContain('create_project')
     expect(toolNames).toContain('update_project')
-    expect(toolNames).toContain('archive_project')
 
     // YouTrack-supported comment tools (full CRUD)
     expect(toolNames).toContain('add_comment')
@@ -81,8 +79,5 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).not.toContain('update_status')
     expect(toolNames).not.toContain('delete_status')
     expect(toolNames).not.toContain('reorder_statuses')
-
-    // Archive tool should NOT be present (YouTrack doesn't support tasks.archive)
-    expect(toolNames).not.toContain('archive_task')
   })
 })

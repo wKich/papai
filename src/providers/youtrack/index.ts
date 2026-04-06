@@ -19,7 +19,6 @@ import {
   updateYouTrackComment,
 } from './operations/comments.js'
 import {
-  archiveYouTrackProject,
   createYouTrackProject,
   getYouTrackProject,
   listYouTrackProjects,
@@ -103,10 +102,6 @@ export class YouTrackProvider implements TaskProvider {
 
   updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
     return updateYouTrackProject(this.config, projectId, params)
-  }
-
-  archiveProject(projectId: string): Promise<{ id: string }> {
-    return archiveYouTrackProject(this.config, projectId)
   }
 
   addComment(taskId: string, body: string): Promise<Comment> {

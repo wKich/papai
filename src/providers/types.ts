@@ -7,15 +7,14 @@ import type { AppError } from '../errors.js'
  * Core task operations are always required; everything else is optional.
  *
  * Each domain has granular capabilities for specific operations:
- * - projects: read, list, create, update, archive
+ * - projects: read, list, create, update, delete
  * - comments: read, create, update, delete
  * - labels: list, create, update, delete, assign
  * - statuses: list, create, update, delete, reorder
- * - tasks: archive, delete, relations
+ * - tasks: delete, relations
  */
 export type Capability =
   // Tasks
-  | 'tasks.archive'
   | 'tasks.delete'
   | 'tasks.relations'
   // Projects
@@ -23,7 +22,7 @@ export type Capability =
   | 'projects.list'
   | 'projects.create'
   | 'projects.update'
-  | 'projects.archive'
+  | 'projects.delete'
   // Comments
   | 'comments.read'
   | 'comments.create'
@@ -179,10 +178,6 @@ export interface TaskProvider {
 
   searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]>
 
-  // --- Optional: tasks.archive ---
-
-  archiveTask?(taskId: string): Promise<{ id: string }>
-
   // --- Optional: tasks.delete ---
 
   deleteTask?(taskId: string): Promise<{ id: string }>
@@ -197,7 +192,7 @@ export interface TaskProvider {
 
   updateProject?(projectId: string, params: { name?: string; description?: string }): Promise<Project>
 
-  archiveProject?(projectId: string): Promise<{ id: string }>
+  deleteProject?(projectId: string): Promise<{ id: string }>
 
   // --- Optional: comments.* ---
 

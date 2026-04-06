@@ -159,19 +159,6 @@ export function getTestDb(): ReturnType<typeof drizzle<typeof schema>> {
 }
 
 /**
- * Re-apply the drizzle singleton to use the test database.
- * Since setupTestDb() now calls _setDrizzleDb() automatically,
- * this is only needed to re-inject after something resets the singleton
- * (e.g. mock.restore()). Requires setupTestDb() to have been called first.
- */
-export function mockDrizzle(): void {
-  if (testDb === null) {
-    throw new Error('Test database not initialized. Call setupTestDb() first.')
-  }
-  _setDrizzleDb(testDb)
-}
-
-/**
  * Inject a custom drizzle instance into the singleton.
  * Use this when tests create their own in-memory DB with custom schema
  * (e.g. without full migrations). For full-migration setup, use setupTestDb().

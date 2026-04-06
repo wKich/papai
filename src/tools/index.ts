@@ -5,8 +5,6 @@ import { makeAddCommentTool } from './add-comment.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
-import { makeArchiveProjectTool } from './archive-project.js'
-import { makeArchiveTaskTool } from './archive-task.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { completionHook } from './completion-hook.js'
 import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
@@ -15,6 +13,7 @@ import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
 import { makeCreateStatusTool } from './create-status.js'
 import { makeCreateTaskTool } from './create-task.js'
+import { makeDeleteProjectTool } from './delete-project.js'
 import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
 import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
@@ -62,12 +61,6 @@ function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
   }
 }
 
-function maybeAddArchiveTool(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('tasks.archive')) {
-    tools['archive_task'] = makeArchiveTaskTool(provider)
-  }
-}
-
 function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   // Check each project capability individually
   if (provider.capabilities.has('projects.list')) {
@@ -79,8 +72,8 @@ function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('projects.update')) {
     tools['update_project'] = makeUpdateProjectTool(provider)
   }
-  if (provider.capabilities.has('projects.archive')) {
-    tools['archive_project'] = makeArchiveProjectTool(provider)
+  if (provider.capabilities.has('projects.delete')) {
+    tools['delete_project'] = makeDeleteProjectTool(provider)
   }
 }
 
@@ -191,7 +184,6 @@ function addDeferredPromptTools(tools: ToolSet, userId: string | undefined): voi
 
 export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMode = 'normal'): ToolSet {
   const tools = makeCoreTools(provider, userId)
-  maybeAddArchiveTool(tools, provider)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)
   maybeAddLabelTools(tools, provider)

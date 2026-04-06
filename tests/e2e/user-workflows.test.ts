@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 setDefaultTimeout(10000)
 
 import { addTaskRelation } from '../../src/providers/kaneo/add-task-relation.js'
-import { archiveTask } from '../../src/providers/kaneo/archive-task.js'
 import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { createColumn } from '../../src/providers/kaneo/create-column.js'
 import { createTask } from '../../src/providers/kaneo/create-task.js'
@@ -66,7 +65,6 @@ describe('E2E: User Workflows', () => {
     testClient.trackTask(task.id)
 
     await updateTask({ config: kaneoConfig, taskId: task.id, title: 'Updated task title', status: 'in-progress' })
-    await archiveTask({ config: kaneoConfig, taskId: task.id, workspaceId: testClient.getWorkspaceId() })
 
     const finalTask = await getTask({ config: kaneoConfig, taskId: task.id })
     expect(finalTask.title).toBe('Updated task title')

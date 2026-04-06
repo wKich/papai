@@ -595,13 +595,9 @@ describe('memory', () => {
       expect(facts[0]!.url).toBe('https://example.com')
     })
 
-    test('extracts fact from archive_project result', () => {
-      const facts = extractFactsFromSdkResults(
-        [],
-        [{ toolName: 'archive_project', output: { id: 'proj-3', name: 'Legacy' } }],
-      )
-      expect(facts).toHaveLength(1)
-      expect(facts[0]!.identifier).toBe('proj:proj-3')
+    test('does not extract fact from delete_project result', () => {
+      const facts = extractFactsFromSdkResults([], [{ toolName: 'delete_project', output: { id: 'proj-3' } }])
+      expect(facts).toHaveLength(0)
     })
 
     test('extracts facts from list_projects result capped at 10', () => {

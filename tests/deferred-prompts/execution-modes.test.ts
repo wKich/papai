@@ -1,7 +1,7 @@
 // tests/deferred-prompts/execution-modes.test.ts
 //
-// Mocked modules: ai, @ai-sdk/openai-compatible, ../src/logger.js, ../src/db/drizzle.js
-// (Uses mockLogger + mockDrizzle helpers; mocks ai + openai-compatible in beforeEach)
+// Mocked modules: ai, @ai-sdk/openai-compatible, ../src/logger.js
+// (Uses mockLogger + setupTestDb helpers; mocks ai + openai-compatible in beforeEach)
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ModelMessage } from 'ai'

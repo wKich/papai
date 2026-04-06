@@ -2,15 +2,15 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
 import type { ModelMessage } from 'ai'
 
+import { processMessage } from '../src/llm-orchestrator.js'
 import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 // Capture real modules before mocking (file-level, stays at top)
-const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 const realAi = await import('ai')
+const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
-import { processMessage } from '../src/llm-orchestrator.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
 import { setKaneoWorkspace } from '../src/users.js'
@@ -68,6 +68,8 @@ describe('processMessage', () => {
 
   const seedConfig = (): void => seedConfigForContext(CTX_ID)
 
+  // Partial DI for modules that are easy to mock
+  // Complex modules (ai SDK) still use mock.module
   beforeEach(async () => {
     // Reset mutable state to defaults
     generateTextImpl = defaultGenerateTextResult

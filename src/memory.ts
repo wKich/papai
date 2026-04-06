@@ -117,7 +117,7 @@ export function extractFactsFromSdkResults(
     }
 
     // Project facts from mutation operations (single project)
-    if (['create_project', 'update_project', 'archive_project'].includes(result.toolName)) {
+    if (['create_project', 'update_project'].includes(result.toolName)) {
       const parsed = ProjectResultSchema.safeParse(result.output)
       if (parsed.success) {
         facts.push({

@@ -28,6 +28,8 @@ const defaultDeps: LlmOrchestratorDeps = {
   stepCountIs: (...args) => stepCountIs(...args),
   buildOpenAI: (apiKey: string, baseURL: string) =>
     createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL }),
+  buildProviderForUser,
+  maybeProvisionKaneo,
 }
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
@@ -52,7 +54,6 @@ const persistFactsFromResults = (
   )
 }
 
-const buildProvider = (contextId: string): TaskProvider => buildProviderForUser(contextId, true)
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
@@ -169,7 +170,7 @@ const callLlm = async (
   history: readonly ModelMessage[],
   deps: LlmOrchestratorDeps,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
-  await maybeProvisionKaneo(reply, contextId, username)
+  await deps.maybeProvisionKaneo(reply, contextId, username)
   const missing = checkRequiredConfig(contextId)
   if (missing.length > 0) {
     log.warn({ contextId, missing }, 'Missing required config keys')
@@ -180,7 +181,7 @@ const callLlm = async (
   const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
   const mainModel = getConfig(contextId, 'main_model')!
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const provider = buildProvider(contextId)
+  const provider = deps.buildProviderForUser(contextId, true)
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)

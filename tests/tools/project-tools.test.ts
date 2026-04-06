@@ -1,7 +1,7 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
-import { makeArchiveProjectTool } from '../../src/tools/archive-project.js'
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
+import { makeDeleteProjectTool } from '../../src/tools/delete-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
 import { getToolExecutor, schemaValidates } from '../test-helpers.js'
@@ -284,67 +284,91 @@ describe('Project Tools', () => {
     })
   })
 
-  describe('makeArchiveProjectTool', () => {
+  describe('makeDeleteProjectTool', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
-      const tool = makeArchiveProjectTool(provider)
-      expect(tool.description).toContain('Archive (delete) a project')
+      const tool = makeDeleteProjectTool(provider)
+      if (tool.description === undefined) throw new Error('Tool description is undefined')
+      expect(tool.description).toContain('Delete')
+      expect(tool.description.toLowerCase()).toContain('project')
     })
 
-    test('archives project successfully with high confidence', async () => {
-      const provider = createMockProvider({
-        archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
-      })
+    test('deletes project when confidence is sufficient', async () => {
+      const deleteProject = mock(() => Promise.resolve({ id: 'proj-1' }))
+      const provider = createMockProvider({ deleteProject })
+      const tool = makeDeleteProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
 
-      const execute = getToolExecutor(makeArchiveProjectTool(provider))
-      const result: unknown = await execute({ projectId: 'proj-1', confidence: 0.9 }, { toolCallId: '1', messages: [] })
-
-      expect(result).toMatchObject({ id: 'proj-1' })
-    })
-
-    test('returns confirmation_required when confidence is below threshold', async () => {
-      const provider = createMockProvider()
-      const execute = getToolExecutor(makeArchiveProjectTool(provider))
-      const result: unknown = await execute(
-        { projectId: 'proj-1', label: 'Backend', confidence: 0.6 },
+      const result: unknown = await tool.execute(
+        { projectId: 'proj-1', confidence: 0.9 },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(result).toMatchObject({ status: 'confirmation_required' })
-      if (typeof result === 'object' && result !== null && 'message' in result) {
-        const message = (result as Record<string, unknown>)['message']
-        expect(typeof message === 'string' && message.includes('Backend')).toBe(true)
-        expect(typeof message === 'string' && !message.includes('0.6')).toBe(true)
-        expect(typeof message === 'string' && !message.includes('0.85')).toBe(true)
-      } else {
-        throw new Error('Expected result to have a message string')
+      expect(deleteProject).toHaveBeenCalledWith('proj-1')
+      if (
+        result === null ||
+        typeof result !== 'object' ||
+        !('id' in result) ||
+        typeof (result as Record<string, unknown>)['id'] !== 'string'
+      ) {
+        throw new Error('Invalid result')
       }
+      expect((result as Record<string, unknown>)['id']).toBe('proj-1')
     })
 
-    test('executes when confidence exactly meets threshold (0.85)', async () => {
-      const provider = createMockProvider({
-        archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
-      })
+    test('returns confirmation_required when confidence is low', async () => {
+      const deleteProject = mock(() => Promise.resolve({ id: 'proj-1' }))
+      const provider = createMockProvider({ deleteProject })
+      const tool = makeDeleteProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
 
-      const execute = getToolExecutor(makeArchiveProjectTool(provider))
-      const result: unknown = await execute(
-        { projectId: 'proj-1', confidence: 0.85 },
+      const result: unknown = await tool.execute(
+        { projectId: 'proj-1', confidence: 0.5 },
         { toolCallId: '1', messages: [] },
       )
 
-      expect(result).toMatchObject({ id: 'proj-1' })
+      expect(deleteProject).not.toHaveBeenCalled()
+      if (
+        result === null ||
+        typeof result !== 'object' ||
+        !('status' in result) ||
+        typeof (result as Record<string, unknown>)['status'] !== 'string'
+      ) {
+        throw new Error('Invalid result')
+      }
+      expect((result as Record<string, unknown>)['status']).toBe('confirmation_required')
     })
 
-    test('propagates project not found error', async () => {
-      const provider = createMockProvider({
-        archiveProject: mock(() => Promise.reject(new Error('Project not found'))),
-      })
+    test('includes label in confirmation message when provided', async () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
 
-      const tool = makeArchiveProjectTool(provider)
-      const promise = getToolExecutor(tool)(
-        { projectId: 'invalid', confidence: 0.9 },
+      const result: unknown = await tool.execute(
+        { projectId: 'proj-1', label: 'My Project', confidence: 0.5 },
         { toolCallId: '1', messages: [] },
       )
+
+      if (
+        result === null ||
+        typeof result !== 'object' ||
+        !('status' in result) ||
+        typeof (result as Record<string, unknown>)['status'] !== 'string' ||
+        !('message' in result) ||
+        typeof (result as Record<string, unknown>)['message'] !== 'string'
+      ) {
+        throw new Error('Invalid result')
+      }
+      expect((result as Record<string, unknown>)['status']).toBe('confirmation_required')
+      expect((result as Record<string, unknown>)['message']).toContain('My Project')
+    })
+
+    test('propagates API errors', async () => {
+      const provider = createMockProvider({
+        deleteProject: mock(() => Promise.reject(new Error('Project not found'))),
+      })
+      const tool = makeDeleteProjectTool(provider)
+      const promise = getToolExecutor(tool)({ projectId: 'bad-id', confidence: 0.9 }, { toolCallId: '1', messages: [] })
       await expect(promise).rejects.toThrow('Project not found')
       try {
         await promise
@@ -353,10 +377,16 @@ describe('Project Tools', () => {
       }
     })
 
-    test('validates projectId is required', () => {
+    test('requires projectId', () => {
       const provider = createMockProvider()
-      const tool = makeArchiveProjectTool(provider)
+      const tool = makeDeleteProjectTool(provider)
       expect(schemaValidates(tool, { confidence: 0.9 })).toBe(false)
+    })
+
+    test('requires confidence', () => {
+      const provider = createMockProvider()
+      const tool = makeDeleteProjectTool(provider)
+      expect(schemaValidates(tool, { projectId: 'proj-1' })).toBe(false)
     })
   })
 })

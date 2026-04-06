@@ -4,7 +4,6 @@ import type { Capability, TaskProvider } from '../../src/providers/types.js'
 
 const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
-  'tasks.archive',
   'tasks.delete',
   'tasks.relations',
   // Projects (full CRUD)
@@ -12,7 +11,7 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'projects.list',
   'projects.create',
   'projects.update',
-  'projects.archive',
+  'projects.delete',
   // Comments (full CRUD)
   'comments.read',
   'comments.create',
@@ -49,13 +48,12 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     ),
     listTasks: mock(() => Promise.resolve([])),
     searchTasks: mock(() => Promise.resolve([])),
-    archiveTask: mock(() => Promise.resolve({ id: 'task-1' })),
     deleteTask: mock(() => Promise.resolve({ id: 'task-1' })),
     getProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
     listProjects: mock(() => Promise.resolve([])),
     createProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
     updateProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
-    archiveProject: mock(() => Promise.resolve({ id: 'proj-1' })),
+    deleteProject: mock(() => Promise.resolve({ id: 'proj-1' })),
     getComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     addComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     getComments: mock(() => Promise.resolve([])),

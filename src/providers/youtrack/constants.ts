@@ -37,7 +37,6 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   'projects.list',
   'projects.create',
   'projects.update',
-  'projects.archive',
   // Comments (full CRUD)
   'comments.read',
   'comments.create',

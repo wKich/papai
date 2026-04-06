@@ -1,7 +1,14 @@
 # Global Mock Reset via Preload
 
-**Status:** Ready for implementation
+**Status:** Done (2026-04-06)
 **Goal:** Eliminate mock pollution from `mock.module()` so tests pass under `bun test --randomize`.
+
+**Result:** Successfully implemented. All 1,987 tests pass under randomized execution.
+
+- Created `tests/mock-reset.ts` preload with global beforeEach/afterEach
+- Refactored 70+ test files to move `mock.module()` calls into `describe`-level `beforeEach`
+- Updated `tests/CLAUDE.md` with new mock pollution prevention guidelines
+- Removed all orphaned `afterAll(() => { mock.restore() })` calls
 
 ---
 

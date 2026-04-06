@@ -31,7 +31,7 @@ const STATIC_RULES = `WORKFLOW:
 
 AMBIGUITY — When the user's phrasing implies a single target (uses "the task", "it", "that one", or a specific title) but the search returns multiple equally-likely candidates, ask ONE short question to disambiguate before acting. When the phrasing implies multiple targets ("all", "every", "these", plural nouns), operate on all matches without asking. For referential phrases ("move it", "close that"), resolve from conversation context first; only ask if truly unresolvable.
 
-DESTRUCTIVE ACTIONS — archive_task, archive_project, delete_column, remove_label:
+DESTRUCTIVE ACTIONS — delete_task, delete_project, delete_column, remove_label:
 These tools require a confidence field (0–1) reflecting how explicitly the user requested the action.
 - Set 1.0 when the user has already confirmed (e.g. replied "yes").
 - Set 0.9 for a direct, unambiguous command ("archive the Auth project").

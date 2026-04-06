@@ -37,7 +37,7 @@ export async function kaneoUpdateProject(
   return mapProject(result, buildProjectUrl(config.baseUrl, workspaceId, result.id))
 }
 
-export async function kaneoArchiveProject(config: KaneoConfig, projectId: string): Promise<{ id: string }> {
+export async function kaneoDeleteProject(config: KaneoConfig, projectId: string): Promise<{ id: string }> {
   const result = await deleteProject({ config, projectId })
   return { id: result.id }
 }

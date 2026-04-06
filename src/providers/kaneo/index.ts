@@ -23,12 +23,7 @@ import {
   kaneoRemoveTaskLabel,
   kaneoUpdateLabel,
 } from './operations/labels.js'
-import {
-  kaneoArchiveProject,
-  kaneoCreateProject,
-  kaneoListProjects,
-  kaneoUpdateProject,
-} from './operations/projects.js'
+import { kaneoCreateProject, kaneoDeleteProject, kaneoListProjects, kaneoUpdateProject } from './operations/projects.js'
 import { kaneoAddRelation, kaneoRemoveRelation, kaneoUpdateRelation } from './operations/relations.js'
 import {
   kaneoDeleteStatus,
@@ -38,7 +33,6 @@ import {
   kaneoUpdateStatus,
 } from './operations/statuses.js'
 import {
-  kaneoArchiveTask,
   kaneoCreateTask,
   kaneoDeleteTask,
   kaneoGetTask,
@@ -102,10 +96,6 @@ export class KaneoProvider implements TaskProvider {
     return kaneoSearchTasks(this.config, this.workspaceId, params)
   }
 
-  archiveTask(taskId: string): Promise<{ id: string }> {
-    return kaneoArchiveTask(this.config, this.workspaceId, taskId)
-  }
-
   deleteTask(taskId: string): Promise<{ id: string }> {
     return kaneoDeleteTask(this.config, taskId)
   }
@@ -122,8 +112,8 @@ export class KaneoProvider implements TaskProvider {
     return kaneoUpdateProject(this.config, this.workspaceId, projectId, params)
   }
 
-  archiveProject(projectId: string): Promise<{ id: string }> {
-    return kaneoArchiveProject(this.config, projectId)
+  deleteProject(projectId: string): Promise<{ id: string }> {
+    return kaneoDeleteProject(this.config, projectId)
   }
 
   addComment(taskId: string, body: string): Promise<Comment> {

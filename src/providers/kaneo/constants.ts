@@ -2,7 +2,6 @@ import type { Capability, ProviderConfigRequirement } from '../types.js'
 
 export const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
-  'tasks.archive',
   'tasks.delete',
   'tasks.relations',
   // Projects (full CRUD)
@@ -10,7 +9,7 @@ export const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'projects.list',
   'projects.create',
   'projects.update',
-  'projects.archive',
+  'projects.delete',
   // Comments (full CRUD)
   'comments.read',
   'comments.create',
