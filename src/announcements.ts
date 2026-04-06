@@ -1,10 +1,8 @@
-import { eq } from 'drizzle-orm'
-
 import packageJson from '../package.json' with { type: 'json' }
 import { readChangelogFile as defaultReadChangelogFile } from './changelog-reader.js'
 import type { ChatProvider } from './chat/types.js'
 import { getDrizzleDb } from './db/drizzle.js'
-import { userConfig, versionAnnouncements } from './db/schema.js'
+import { versionAnnouncements } from './db/schema.js'
 import { logger } from './logger.js'
 import { extractChangelogSection } from './utils/changelog.js'
 
@@ -31,45 +29,23 @@ function markVersionAnnounced(version: string): boolean {
   }
 }
 
-function getUsersWithKaneoAccount(): string[] {
-  return getDrizzleDb()
-    .select({ userId: userConfig.userId })
-    .from(userConfig)
-    .where(eq(userConfig.key, 'kaneo_apikey'))
-    .all()
-    .map((row: { userId: string }) => row.userId)
-}
-
-async function sendAnnouncementsToUsers(userIds: string[], markdown: string, chat: ChatProvider): Promise<number> {
-  const results = await Promise.allSettled(
-    userIds.map(async (userId) => {
-      try {
-        await chat.sendMessage(userId, markdown)
-        log.debug({ userId, version: VERSION }, 'Announcement sent to user')
-        return true
-      } catch (error) {
-        log.warn(
-          { userId, version: VERSION, error: error instanceof Error ? error.message : String(error) },
-          'Failed to send announcement to user',
-        )
-        return false
-      }
-    }),
-  )
-  return results.filter((r) => r.status === 'fulfilled' && r.value).length
-}
-
-function shouldSkipAnnouncement(users: string[]): boolean {
-  if (users.length === 0) {
-    log.info({ version: VERSION }, 'No users with Kaneo account, skipping announcement')
-    markVersionAnnounced(VERSION)
+async function sendAnnouncementToAdmin(adminUserId: string, markdown: string, chat: ChatProvider): Promise<boolean> {
+  try {
+    await chat.sendMessage(adminUserId, markdown)
+    log.debug({ userId: adminUserId, version: VERSION }, 'Announcement sent to admin')
     return true
+  } catch (error) {
+    log.warn(
+      { userId: adminUserId, version: VERSION, error: error instanceof Error ? error.message : String(error) },
+      'Failed to send announcement to admin',
+    )
+    return false
   }
-  return false
 }
 
 export async function announceNewVersion(
   chat: ChatProvider,
+  adminUserId: string,
   deps: AnnouncementsDeps = defaultAnnouncementsDeps,
 ): Promise<void> {
   log.debug({ version: VERSION }, 'Checking if version announcement is needed')
@@ -77,21 +53,18 @@ export async function announceNewVersion(
   const changelogSection = await loadChangelogSection(deps)
   if (changelogSection === null) return
 
-  const users = getUsersWithKaneoAccount()
-  if (shouldSkipAnnouncement(users)) return
-
   const claimed = markVersionAnnounced(VERSION)
   if (!claimed) {
     log.debug({ version: VERSION }, 'Version already announced, skipping')
     return
   }
 
-  log.info({ version: VERSION, userCount: users.length }, 'Sending version announcement to users')
+  log.info({ version: VERSION, adminUserId }, 'Sending version announcement to admin')
 
   const message = `🆕 papai v${VERSION} has been released!\n\n${changelogSection}`
-  const successCount = await sendAnnouncementsToUsers(users, message, chat)
+  const success = await sendAnnouncementToAdmin(adminUserId, message, chat)
 
-  log.info({ version: VERSION, successCount, totalUsers: users.length }, 'Version announcement complete')
+  log.info({ version: VERSION, success }, 'Version announcement complete')
 }
 
 async function loadChangelogSection(deps: AnnouncementsDeps): Promise<string | null> {

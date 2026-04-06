@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { flattenLogEntry } from '../../../src/debug/dashboard-ui/logs.js'
+import { flattenLogEntry, updateFuseIndex } from '../../../src/debug/dashboard-ui/logs.js'
 import type { LogEntry } from '../../../src/debug/schemas.js'
 
 describe('logs', () => {
@@ -35,6 +35,15 @@ describe('logs', () => {
       expect(result).toContain('Test message')
       expect(result).toContain('userId')
       expect(result).toContain('user-123')
+    })
+  })
+
+  describe('updateFuseIndex', () => {
+    test('returns null when Fuse is not defined', () => {
+      const logs: LogEntry[] = [{ time: Date.now(), level: 30, msg: 'Test message' }]
+      const result = updateFuseIndex(logs)
+      // In test environment, Fuse is not loaded from CDN
+      expect(result).toBeNull()
     })
   })
 })

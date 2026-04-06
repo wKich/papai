@@ -43,12 +43,28 @@ export function getLogModalElements(): LogModalElements {
 }
 
 export function getLogFilterElements(): LogFilterElements {
+  const $logLevelFilter = document.querySelector<HTMLSelectElement>('#log-level-filter')
+  const $logScopeFilter = document.querySelector<HTMLSelectElement>('#log-scope-filter')
+  const $logSearch = document.querySelector<HTMLInputElement>('#log-search')
+  const $logClear = document.getElementById('log-clear')
+  const $logAutoscroll = document.getElementById('log-autoscroll')
+
+  if (
+    $logLevelFilter === null ||
+    $logScopeFilter === null ||
+    $logSearch === null ||
+    $logClear === null ||
+    $logAutoscroll === null
+  ) {
+    throw new Error('Log filter elements not found in DOM')
+  }
+
   return {
-    $logLevelFilter: document.querySelector<HTMLSelectElement>('#log-level-filter')!,
-    $logScopeFilter: document.querySelector<HTMLSelectElement>('#log-scope-filter')!,
-    $logSearch: document.querySelector<HTMLInputElement>('#log-search')!,
-    $logClear: document.getElementById('log-clear')!,
-    $logAutoscroll: document.getElementById('log-autoscroll')!,
+    $logLevelFilter,
+    $logScopeFilter,
+    $logSearch,
+    $logClear,
+    $logAutoscroll,
   }
 }
 
@@ -84,6 +100,11 @@ export function flattenLogEntry(entry: LogEntry): string {
 export function updateFuseIndex(
   logs: LogEntry[],
 ): { search: (query: string) => Array<{ item: SearchableLogEntry }> } | null {
+  // Check if Fuse is loaded (from CDN)
+  if (typeof Fuse === 'undefined') {
+    return null
+  }
+
   const searchableLogs = logs.map((log) => ({
     ...log,
     _searchText: flattenLogEntry(log),

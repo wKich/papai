@@ -160,4 +160,143 @@ describe('state-collector', () => {
 
     expect(goodEnqueue).toHaveBeenCalledTimes(3)
   })
+
+  describe('llm trace accumulation', () => {
+    test('llm:end captures full trace data', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:start', { userId: 'admin-1', model: 'gpt-4', messageCount: 5, toolCount: 10 })
+      emit('llm:tool_result', {
+        userId: 'admin-1',
+        toolName: 'create_task',
+        toolCallId: 'call-1',
+        durationMs: 500,
+        success: true,
+        args: { title: 'Test' },
+        result: { id: 'task-1' },
+      })
+      emit('llm:end', {
+        userId: 'admin-1',
+        model: 'gpt-4',
+        steps: 2,
+        totalDuration: 2500,
+        tokenUsage: { inputTokens: 100, outputTokens: 50 },
+        responseId: 'resp-123',
+        actualModel: 'gpt-4-0125-preview',
+        finishReason: 'stop',
+        messageCount: 5,
+        toolCount: 10,
+        generatedText: 'Task created successfully.',
+      })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFullEvents = events.filter((e) => e.event === 'llm:full')
+      expect(llmFullEvents.length).toBeGreaterThanOrEqual(1)
+
+      const llmFull = llmFullEvents[llmFullEvents.length - 1]
+      expect(isRecord(llmFull?.data)).toBe(true)
+      if (!isRecord(llmFull?.data)) return
+
+      // The data field contains the event object, trace data is in data.data
+      const eventData = llmFull.data['data']
+      expect(isRecord(eventData)).toBe(true)
+      if (!isRecord(eventData)) return
+
+      expect(eventData['responseId']).toBe('resp-123')
+      expect(eventData['actualModel']).toBe('gpt-4-0125-preview')
+      expect(eventData['finishReason']).toBe('stop')
+      expect(eventData['messageCount']).toBe(5)
+      expect(eventData['toolCount']).toBe(10)
+      expect(eventData['generatedText']).toBe('Task created successfully.')
+
+      const toolCalls = eventData['toolCalls']
+      expect(Array.isArray(toolCalls)).toBe(true)
+      if (!Array.isArray(toolCalls)) return
+      expect(toolCalls).toHaveLength(1)
+      expect(isRecord(toolCalls[0]) ? toolCalls[0]['toolCallId'] : undefined).toBe('call-1')
+      expect(isRecord(toolCalls[0]) ? toolCalls[0]['args'] : undefined).toEqual({ title: 'Test' })
+      expect(isRecord(toolCalls[0]) ? toolCalls[0]['result'] : undefined).toEqual({ id: 'task-1' })
+    })
+
+    test('llm:tool_result captures error details', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:start', { userId: 'admin-1', model: 'gpt-4' })
+      emit('llm:tool_result', {
+        userId: 'admin-1',
+        toolName: 'search_tasks',
+        toolCallId: 'call-2',
+        durationMs: 300,
+        success: false,
+        args: { query: 'invalid' },
+        error: 'API error: 500',
+      })
+      emit('llm:end', {
+        userId: 'admin-1',
+        model: 'gpt-4',
+        steps: 1,
+        totalDuration: 1000,
+        tokenUsage: { inputTokens: 50, outputTokens: 30 },
+      })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFullEvents = events.filter((e) => e.event === 'llm:full')
+      const llmFull = llmFullEvents[llmFullEvents.length - 1]
+
+      if (!isRecord(llmFull?.data)) return
+      const toolCalls = llmFull.data['toolCalls']
+      if (!Array.isArray(toolCalls) || toolCalls.length === 0) return
+
+      expect(isRecord(toolCalls[0]) ? toolCalls[0]['success'] : undefined).toBe(false)
+      expect(isRecord(toolCalls[0]) ? toolCalls[0]['error'] : undefined).toBe('API error: 500')
+    })
+
+    test('llm:end broadcasts stepsDetail with per-step info', () => {
+      init('admin-1')
+      const { ctrl, enqueueMock } = createMockController()
+      addClient(track(ctrl))
+
+      emit('llm:start', { userId: 'admin-1', model: 'gpt-4' })
+      emit('llm:end', {
+        userId: 'admin-1',
+        model: 'gpt-4',
+        steps: 2,
+        totalDuration: 2000,
+        tokenUsage: { inputTokens: 200, outputTokens: 100 },
+        stepsDetail: [
+          {
+            stepNumber: 1,
+            toolCalls: [{ toolName: 'search', toolCallId: 'call-1', args: {} }],
+            usage: { inputTokens: 100, outputTokens: 50 },
+          },
+          {
+            stepNumber: 2,
+            toolCalls: [{ toolName: 'create', toolCallId: 'call-2', args: {} }],
+            usage: { inputTokens: 100, outputTokens: 50 },
+          },
+        ],
+      })
+
+      const events = getAllSseEvents(enqueueMock)
+      const llmFullEvents = events.filter((e) => e.event === 'llm:full')
+      const llmFull = llmFullEvents[llmFullEvents.length - 1]
+
+      if (!isRecord(llmFull?.data)) return
+      // The data field contains the event object, trace data is in data.data
+      const eventData = llmFull.data['data']
+      if (!isRecord(eventData)) return
+
+      const stepsDetail = eventData['stepsDetail']
+      expect(Array.isArray(stepsDetail)).toBe(true)
+      if (!Array.isArray(stepsDetail)) return
+
+      expect(stepsDetail).toHaveLength(2)
+      expect(isRecord(stepsDetail[0]) ? stepsDetail[0]['stepNumber'] : undefined).toBe(1)
+      expect(isRecord(stepsDetail[1]) ? stepsDetail[1]['stepNumber'] : undefined).toBe(2)
+    })
+  })
 })

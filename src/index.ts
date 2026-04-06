@@ -80,7 +80,7 @@ if (hasSetCommands(chatProvider)) {
   void chatProvider.setCommands(adminUserId)
 }
 
-void announceNewVersion(chatProvider)
+void announceNewVersion(chatProvider, adminUserId)
 
 startScheduler(chatProvider)
 

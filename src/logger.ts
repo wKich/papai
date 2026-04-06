@@ -9,12 +9,14 @@ export const getLogLevel = (): string => {
   return 'info'
 }
 
+const logLevel = getLogLevel()
+
 /** @public -- debug server calls .add() to attach the log buffer stream */
-export const logMultistream = pino.multistream([{ stream: process.stdout }])
+export const logMultistream = pino.multistream([{ level: logLevel, stream: process.stdout }])
 
 export const logger = pino(
   {
-    level: getLogLevel(),
+    level: logLevel,
     timestamp: pino.stdTimeFunctions.isoTime,
     base: undefined,
   },

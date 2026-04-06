@@ -4,6 +4,7 @@ import { getMessageCacheSnapshot } from '../message-cache/cache.js'
 import { getSchedulerSnapshot } from '../scheduler.js'
 import { getWizardSnapshots } from '../wizard/state.js'
 import { subscribe, unsubscribe, type DebugEvent } from './event-bus.js'
+import { str, num, bool, tokenUsage } from './state-collector-utils.js'
 
 let adminUserId: string | null = null
 
@@ -26,8 +27,33 @@ type LlmTrace = {
   steps: number
   totalTokens: { inputTokens: number; outputTokens: number }
   duration: number
-  toolCalls: Array<{ toolName: string; durationMs: number; success: boolean }>
+  toolCalls: Array<{
+    toolName: string
+    durationMs: number
+    success: boolean
+    toolCallId?: string
+    args?: unknown
+    result?: unknown
+    error?: string
+  }>
   error?: string
+  // Additional fields
+  responseId?: string
+  actualModel?: string
+  finishReason?: string
+  messageCount?: number
+  toolCount?: number
+  generatedText?: string
+  stepsDetail?: Array<{
+    stepNumber: number
+    toolCalls?: Array<{
+      toolName: string
+      toolCallId: string
+      args: unknown
+    }>
+    response?: unknown
+    usage?: { inputTokens: number; outputTokens: number }
+  }>
 }
 
 export const recentLlm: LlmTrace[] = []
@@ -36,33 +62,18 @@ type PendingLlmTrace = {
   startTimestamp: number
   userId: string
   model: string
-  toolCalls: Array<{ toolName: string; durationMs: number; success: boolean }>
+  toolCalls: Array<{
+    toolName: string
+    durationMs: number
+    success: boolean
+    toolCallId?: string
+    args?: unknown
+    result?: unknown
+    error?: string
+  }>
 }
 
 export const pendingTraces = new Map<string, PendingLlmTrace>()
-
-function str(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function num(value: unknown): number {
-  return typeof value === 'number' ? value : 0
-}
-
-function bool(value: unknown): boolean {
-  return typeof value === 'boolean' ? value : false
-}
-
-function isTokenRecord(v: unknown): v is { inputTokens: unknown; outputTokens: unknown } {
-  return typeof v === 'object' && v !== null && 'inputTokens' in v && 'outputTokens' in v
-}
-
-function tokenUsage(value: unknown): { inputTokens: number; outputTokens: number } {
-  if (isTokenRecord(value)) {
-    return { inputTokens: num(value.inputTokens), outputTokens: num(value.outputTokens) }
-  }
-  return { inputTokens: 0, outputTokens: 0 }
-}
 
 export function init(adminId: string): void {
   adminUserId = adminId
@@ -142,15 +153,56 @@ function handleLlmToolResult(event: DebugEvent, userId: string): void {
       toolName: str(event.data['toolName']),
       durationMs: num(event.data['durationMs']),
       success: bool(event.data['success']),
+      toolCallId: str(event.data['toolCallId']),
+      args: event.data['args'],
+      result: event.data['result'],
+      error: str(event.data['error']),
     })
   }
   stats.totalToolCalls++
   scheduleStatsBroadcast()
 }
 
+type StepsDetail = {
+  stepNumber: number
+  toolCalls?: Array<{ toolName: string; toolCallId: string; args: unknown }>
+  response?: unknown
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+function isRecordLike(obj: unknown): obj is Record<string, unknown> {
+  return typeof obj === 'object' && obj !== null
+}
+
+function getRecordValue(obj: unknown, key: string): unknown {
+  return isRecordLike(obj) ? obj[key] : undefined
+}
+
+function parseToolCall(tc: unknown): { toolName: string; toolCallId: string; args: unknown } {
+  return {
+    toolName: str(getRecordValue(tc, 'toolName')),
+    toolCallId: str(getRecordValue(tc, 'toolCallId')),
+    args: getRecordValue(tc, 'args'),
+  }
+}
+
+function parseStepsDetail(rawStepsDetail: unknown): StepsDetail[] | undefined {
+  if (!Array.isArray(rawStepsDetail)) return undefined
+  return rawStepsDetail.map((s: unknown) => {
+    const toolCallsValue = getRecordValue(s, 'toolCalls')
+    return {
+      stepNumber: num(getRecordValue(s, 'stepNumber')),
+      toolCalls: Array.isArray(toolCallsValue) ? toolCallsValue.map(parseToolCall) : undefined,
+      response: getRecordValue(s, 'response'),
+      usage: tokenUsage(getRecordValue(s, 'usage')),
+    }
+  })
+}
+
 function handleLlmEnd(event: DebugEvent, userId: string): void {
   const pending = pendingTraces.get(userId)
   pendingTraces.delete(userId)
+
   const trace: LlmTrace = {
     timestamp: event.timestamp,
     userId,
@@ -159,7 +211,15 @@ function handleLlmEnd(event: DebugEvent, userId: string): void {
     totalTokens: tokenUsage(event.data['tokenUsage']),
     duration: num(event.data['totalDuration']),
     toolCalls: pending?.toolCalls ?? [],
+    responseId: str(event.data['responseId']),
+    actualModel: str(event.data['actualModel']),
+    finishReason: str(event.data['finishReason']),
+    messageCount: num(event.data['messageCount']),
+    toolCount: num(event.data['toolCount']),
+    generatedText: str(event.data['generatedText']),
+    stepsDetail: parseStepsDetail(event.data['stepsDetail']),
   }
+
   pushTrace(trace)
   stats.totalLlmCalls++
   scheduleStatsBroadcast()

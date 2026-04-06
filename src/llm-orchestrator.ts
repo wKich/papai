@@ -9,6 +9,7 @@ import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from 
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
+import type { LlmOrchestratorDeps } from './llm-orchestrator-types.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
@@ -21,12 +22,6 @@ import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
-
-export interface LlmOrchestratorDeps {
-  generateText: typeof generateText
-  stepCountIs: typeof stepCountIs
-  buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
-}
 
 const defaultDeps: LlmOrchestratorDeps = {
   generateText: (...args) => generateText(...args),
@@ -86,26 +81,58 @@ const sendLlmResponse = async (
   )
 }
 
-type InvokeModelArgs = {
-  contextId: string
-  mainModel: string
-  model: ReturnType<ReturnType<typeof createOpenAICompatible>>
-  provider: TaskProvider
-  tools: ToolSet
-  timezone: string
-  messages: ModelMessage[]
-  deps: LlmOrchestratorDeps
+import type { InvokeModelArgs, StepInput, StepOutput } from './llm-orchestrator-types.js'
+
+function buildStepsDetail(steps: StepInput[]): StepOutput[] {
+  return steps.map((step, index) => ({
+    stepNumber: index + 1,
+    toolCalls: step.toolCalls?.map((tc) => ({
+      toolName: tc.toolName,
+      toolCallId: tc.toolCallId,
+      args: tc.input,
+    })),
+    response: step.response,
+    usage: step.usage,
+  }))
 }
 
-const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<typeof generateText>>> => {
-  const { contextId, mainModel, model, provider, tools, timezone, messages, deps } = args
-  const start = Date.now()
+function emitLlmStart(contextId: string, mainModel: string, messages: ModelMessage[], tools: ToolSet): void {
   emit('llm:start', {
     userId: contextId,
     model: mainModel,
     messageCount: messages.length,
     toolCount: Object.keys(tools).length,
   })
+}
+
+function emitLlmEnd(
+  contextId: string,
+  mainModel: string,
+  result: Awaited<ReturnType<typeof generateText>>,
+  startTime: number,
+  messages: ModelMessage[],
+  tools: ToolSet,
+): void {
+  emit('llm:end', {
+    userId: contextId,
+    model: mainModel,
+    steps: result.steps.length,
+    totalDuration: Date.now() - startTime,
+    tokenUsage: result.usage,
+    responseId: result.response?.id,
+    actualModel: result.response?.modelId,
+    finishReason: result.finishReason,
+    messageCount: messages.length,
+    toolCount: Object.keys(tools).length,
+    generatedText: result.text,
+    stepsDetail: buildStepsDetail(result.steps),
+  })
+}
+
+const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<typeof generateText>>> => {
+  const { contextId, mainModel, model, provider, tools, timezone, messages, deps } = args
+  const start = Date.now()
+  emitLlmStart(contextId, mainModel, messages, tools)
   const result = await deps.generateText({
     model,
     system: buildSystemPrompt(provider, timezone, contextId),
@@ -131,13 +158,7 @@ const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<ty
       })
     },
   })
-  emit('llm:end', {
-    userId: contextId,
-    model: mainModel,
-    steps: result.steps.length,
-    totalDuration: Date.now() - start,
-    tokenUsage: result.usage,
-  })
+  emitLlmEnd(contextId, mainModel, result, start, messages, tools)
   return result
 }
 

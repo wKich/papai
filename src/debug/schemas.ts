@@ -15,6 +15,14 @@ export const InstructionSchema = z.object({
   createdAt: z.string(),
 })
 
+// History message schema
+export const HistoryMessageSchema = z.object({
+  role: z.string(),
+  content: z.string(),
+  tool_calls: z.unknown().optional(),
+  tool_call_id: z.string().optional(),
+})
+
 // Base schemas
 export const SessionSchema = z.object({
   userId: z.string(),
@@ -30,6 +38,7 @@ export const SessionSchema = z.object({
   hasTools: z.boolean().optional(),
   instructionsCount: z.number().optional(),
   instructions: z.array(InstructionSchema).optional(),
+  history: z.array(HistoryMessageSchema).optional(),
 })
 
 export const WizardSchema = z.object({
@@ -64,6 +73,31 @@ export const ToolCallSchema = z.object({
   success: z.boolean(),
 })
 
+export const ToolCallDetailSchema = z.object({
+  toolName: z.string(),
+  durationMs: z.number(),
+  success: z.boolean(),
+  toolCallId: z.string().optional(),
+  args: z.unknown().optional(),
+  result: z.unknown().optional(),
+  error: z.string().optional(),
+})
+
+export const StepDetailSchema = z.object({
+  stepNumber: z.number(),
+  toolCalls: z
+    .array(
+      z.object({
+        toolName: z.string(),
+        toolCallId: z.string(),
+        args: z.unknown(),
+      }),
+    )
+    .optional(),
+  response: z.unknown().optional(),
+  usage: TokenInfoSchema.optional(),
+})
+
 export const LlmTraceSchema = z.object({
   timestamp: z.union([z.string(), z.number()]),
   userId: z.string(),
@@ -71,8 +105,15 @@ export const LlmTraceSchema = z.object({
   duration: z.number(),
   steps: z.number(),
   totalTokens: TokenInfoSchema,
-  toolCalls: z.array(ToolCallSchema).optional(),
+  toolCalls: z.array(ToolCallDetailSchema).optional(),
   error: z.string().optional(),
+  responseId: z.string().optional(),
+  actualModel: z.string().optional(),
+  finishReason: z.string().optional(),
+  messageCount: z.number().optional(),
+  toolCount: z.number().optional(),
+  generatedText: z.string().optional(),
+  stepsDetail: z.array(StepDetailSchema).optional(),
 })
 
 // Log entry with additional properties
