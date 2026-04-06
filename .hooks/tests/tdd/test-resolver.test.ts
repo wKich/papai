@@ -3,7 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { isTestFile, isGateableImplFile, suggestTestPath, findTestFile } from '../../tdd/test-resolver.mjs'
+import {
+  isTestFile,
+  isGateableImplFile,
+  suggestTestPath,
+  findTestFile,
+  resolveImplPath,
+} from '../../tdd/test-resolver.mjs'
 
 describe('test-resolver', () => {
   describe('isTestFile', () => {
@@ -74,6 +80,18 @@ describe('test-resolver', () => {
     test('returns false for CSS files in src', () => {
       expect(isGateableImplFile('src/style.css', projectRoot)).toBe(false)
     })
+
+    test('returns true for client/debug/helpers.ts', () => {
+      expect(isGateableImplFile('client/debug/helpers.ts', projectRoot)).toBe(true)
+    })
+
+    test('returns false for client test files', () => {
+      expect(isGateableImplFile('client/debug/helpers.test.ts', projectRoot)).toBe(false)
+    })
+
+    test('returns false for scripts/foo.ts (scripts/ is not a gateable source root)', () => {
+      expect(isGateableImplFile('scripts/foo.ts', projectRoot)).toBe(false)
+    })
   })
 
   describe('suggestTestPath', () => {
@@ -87,6 +105,14 @@ describe('test-resolver', () => {
 
     test('src/utils/format.tsx -> tests/utils/format.test.tsx', () => {
       expect(suggestTestPath('src/utils/format.tsx')).toBe('tests/utils/format.test.tsx')
+    })
+
+    test('client/debug/helpers.ts -> tests/client/debug/helpers.test.ts', () => {
+      expect(suggestTestPath('client/debug/helpers.ts')).toBe('tests/client/debug/helpers.test.ts')
+    })
+
+    test('client/index.ts -> tests/client/index.test.ts (flat)', () => {
+      expect(suggestTestPath('client/index.ts')).toBe('tests/client/index.test.ts')
     })
   })
 
@@ -152,6 +178,53 @@ describe('test-resolver', () => {
       const result = findTestFile(implFile, tmpDir)
 
       expect(result).toBeNull()
+    })
+
+    test('finds parallel test for client/foo.ts at tests/client/foo.test.ts', () => {
+      const testsDir = path.join(tmpDir, 'tests', 'client')
+      fs.mkdirSync(testsDir, { recursive: true })
+      const testFile = path.join(testsDir, 'foo.test.ts')
+      fs.writeFileSync(testFile, '')
+
+      const implFile = path.join(tmpDir, 'client', 'foo.ts')
+      const result = findTestFile(implFile, tmpDir)
+
+      expect(result).toBe(testFile)
+    })
+
+    test('falls back to colocated test for client/foo.ts when no parallel test exists', () => {
+      const clientDir = path.join(tmpDir, 'client')
+      fs.mkdirSync(clientDir, { recursive: true })
+      fs.writeFileSync(path.join(clientDir, 'foo.ts'), '')
+      const colocatedTest = path.join(clientDir, 'foo.test.ts')
+      fs.writeFileSync(colocatedTest, '')
+
+      const implFile = path.join(tmpDir, 'client', 'foo.ts')
+      const result = findTestFile(implFile, tmpDir)
+
+      expect(result).toBe(colocatedTest)
+    })
+  })
+
+  describe('resolveImplPath', () => {
+    test('tests/foo/bar.test.ts -> src/foo/bar.ts (src/ fallback)', () => {
+      expect(resolveImplPath('tests/foo/bar.test.ts')).toBe(path.join('src', 'foo', 'bar.ts'))
+    })
+
+    test('tests/client/debug/helpers.test.ts -> client/debug/helpers.ts (nested)', () => {
+      expect(resolveImplPath('tests/client/debug/helpers.test.ts')).toBe(path.join('client', 'debug', 'helpers.ts'))
+    })
+
+    test('tests/client/foo.test.ts -> client/foo.ts (flat — regression test for critical bug)', () => {
+      expect(resolveImplPath('tests/client/foo.test.ts')).toBe(path.join('client', 'foo.ts'))
+    })
+
+    test('tests/scripts/build-client.test.ts -> scripts/build-client.ts (flat)', () => {
+      expect(resolveImplPath('tests/scripts/build-client.test.ts')).toBe(path.join('scripts', 'build-client.ts'))
+    })
+
+    test('tests/scripts/deep/a.test.ts -> scripts/deep/a.ts (nested)', () => {
+      expect(resolveImplPath('tests/scripts/deep/a.test.ts')).toBe(path.join('scripts', 'deep', 'a.ts'))
     })
   })
 })

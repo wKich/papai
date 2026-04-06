@@ -106,10 +106,10 @@ export function resolveImplPath(testRelPath) {
   if (testRelPath.startsWith('tests/') || testRelPath.startsWith('tests\\')) {
     const dir = path.dirname(testRelPath).replace(/^tests[/\\]?/, '')
     // tests/client/debug/helpers.test.ts → client/debug/helpers.ts (client/ stays)
-    if (dir.startsWith('client/') || dir.startsWith('client\\')) {
+    if (dir.startsWith('client/') || dir.startsWith('client\\') || dir === 'client') {
       return path.join(dir, `${base}${ext}`)
     }
-    // tests/scripts/foo.test.ts → scripts/foo.ts (scripts/ stays at root)
+    // tests/scripts/foo.test.ts → scripts/foo.ts (scripts/ at root — bug fix for old src/scripts/* mapping; scripts/ is NOT a gateable source root)
     if (dir.startsWith('scripts/') || dir.startsWith('scripts\\') || dir === 'scripts') {
       return path.join(dir, `${base}${ext}`)
     }
