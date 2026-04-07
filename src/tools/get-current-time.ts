@@ -7,9 +7,29 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool:get-current-time' })
 
-const getLocalDateString = (timezone: string): string => {
+const getLocalIsoString = (date: Date, timezone: string): string => {
   try {
-    return new Date().toLocaleDateString('en-US', {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(date)
+    const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '00'
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`
+  } catch {
+    return date.toISOString()
+  }
+}
+
+const getLocalFormattedString = (date: Date, timezone: string): string => {
+  try {
+    return date.toLocaleString('en-US', {
       timeZone: timezone,
       weekday: 'long',
       year: 'numeric',
@@ -20,7 +40,7 @@ const getLocalDateString = (timezone: string): string => {
       hour12: false,
     })
   } catch {
-    return new Date().toLocaleDateString('en-US', {
+    return date.toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -37,14 +57,15 @@ export function makeGetCurrentTimeTool(userId?: string): ToolSet[string] {
     execute: () => {
       const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
       const now = new Date()
-      const localFormatted = getLocalDateString(timezone)
+      const datetime = getLocalIsoString(now, timezone)
+      const formatted = getLocalFormattedString(now, timezone)
 
-      log.info({ timezone }, 'Current time fetched')
+      log.info({ timezone, datetime }, 'Current time fetched')
 
       return Promise.resolve({
-        datetime: now.toISOString(),
+        datetime,
         timezone,
-        localFormatted,
+        formatted,
       })
     },
   })

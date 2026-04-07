@@ -1,0 +1,95 @@
+import { beforeEach, describe, expect, test } from 'bun:test'
+
+import { emitLlmStart, emitLlmEnd, type ResolvedStreamTextResult } from '../src/llm-orchestrator-events.js'
+import { makeTools } from '../src/tools/index.js'
+import { createMockProvider } from './tools/mock-provider.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+describe('llm-orchestrator-events', () => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  describe('emitLlmStart', () => {
+    test('emits llm:start event with correct payload', async () => {
+      const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
+
+      let capturedEvent: unknown = null
+      const listener = (event: { type: string; data: unknown }): void => {
+        if (event.type === 'llm:start') capturedEvent = event.data
+      }
+      subscribe(listener)
+
+      try {
+        const provider = createMockProvider()
+        const tools = makeTools(provider, 'ctx-1')
+        emitLlmStart('ctx-1', 'gpt-4', [{ role: 'user', content: 'hi' }], tools)
+
+        expect(capturedEvent).toEqual({
+          userId: 'ctx-1',
+          model: 'gpt-4',
+          messageCount: 1,
+          toolCount: Object.keys(tools).length,
+        })
+      } finally {
+        unsubscribe(listener)
+      }
+    })
+  })
+
+  describe('emitLlmEnd', () => {
+    test('emits llm:end event with steps detail', async () => {
+      const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
+
+      let capturedEvent: unknown = null
+      const listener = (event: { type: string; data: unknown }): void => {
+        if (event.type === 'llm:end') capturedEvent = event.data
+      }
+      subscribe(listener)
+
+      try {
+        const result: ResolvedStreamTextResult = {
+          text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
+          steps: [
+            {
+              text: 'Step 1',
+              finishReason: 'stop',
+              toolCalls: [],
+              toolResults: [],
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
+          ],
+          response: { messages: [{ role: 'assistant', content: 'Done!' }], id: 'resp-1', modelId: 'gpt-4' },
+          usage: { inputTokens: 10, outputTokens: 5 },
+          finishReason: 'stop',
+        }
+        const provider = createMockProvider()
+        const tools = makeTools(provider, 'ctx-1')
+        const startTime = Date.now() - 1000
+
+        emitLlmEnd('ctx-1', 'gpt-4', result, startTime, [{ role: 'user', content: 'hi' }], tools)
+
+        expect(isRecord(capturedEvent)).toBe(true)
+        if (!isRecord(capturedEvent)) return
+        expect(capturedEvent['userId']).toBe('ctx-1')
+        expect(capturedEvent['model']).toBe('gpt-4')
+        expect(capturedEvent['steps']).toBe(1)
+        expect(capturedEvent['finishReason']).toBe('stop')
+        expect(capturedEvent['messageCount']).toBe(1)
+        expect(capturedEvent['toolCount']).toBe(Object.keys(tools).length)
+        expect(capturedEvent['generatedText']).toBe('Done!')
+        expect(Array.isArray(capturedEvent['stepsDetail'])).toBe(true)
+        expect(typeof capturedEvent['totalDuration']).toBe('number')
+      } finally {
+        unsubscribe(listener)
+      }
+    })
+  })
+})

@@ -46,7 +46,6 @@ describe('pollScheduledOnce', () => {
       Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
       generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-      tool: (opts: unknown): unknown => opts,
       stepCountIs: (_n: number): unknown => undefined,
     }))
     void mock.module('@ai-sdk/openai-compatible', () => ({
@@ -204,7 +203,6 @@ describe('pollScheduledOnce — error handling', () => {
       Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
       generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-      tool: (opts: unknown): unknown => opts,
       stepCountIs: (_n: number): unknown => undefined,
     }))
     void mock.module('@ai-sdk/openai-compatible', () => ({

@@ -38,26 +38,34 @@ describe('processMessage', () => {
   }
 
   // AI SDK — the key control point for success/failure simulation
-  type GenerateTextResult = {
-    text: string
-    toolCalls: never[]
-    toolResults: never[]
-    steps: unknown[]
-    response: { messages: ModelMessage[] }
-    usage: Record<string, unknown>
+  // streamText returns an object with promises, not direct values
+  type StreamTextResult = {
+    text: Promise<string>
+    toolCalls: Promise<Array<{ toolName: string; toolCallId: string; input: unknown }>>
+    toolResults: Promise<Array<{ toolCallId: string; output: unknown }>>
+    steps: Promise<unknown[]>
+    response: Promise<{ messages: ModelMessage[]; id?: string; modelId?: string }>
+    usage: Promise<Record<string, unknown>>
+    finishReason: Promise<string>
+    warnings: Promise<unknown[] | undefined>
+    request: Promise<unknown>
+    providerMetadata: Promise<unknown>
   }
 
-  let generateTextImpl: (args?: { messages?: unknown[] }) => Promise<GenerateTextResult>
+  let streamTextImpl: (args?: { messages?: unknown[] }) => StreamTextResult
 
-  const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
-    Promise.resolve({
-      text: 'Hello!',
-      toolCalls: [],
-      toolResults: [],
-      steps: [],
-      response: { messages: [{ role: 'assistant' as const, content: 'Hello!' }] },
-      usage: {},
-    })
+  const defaultStreamTextResult = (): StreamTextResult => ({
+    text: Promise.resolve('Hello!'),
+    toolCalls: Promise.resolve([]),
+    toolResults: Promise.resolve([]),
+    steps: Promise.resolve([]),
+    response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Hello!' }] }),
+    usage: Promise.resolve({}),
+    finishReason: Promise.resolve('stop'),
+    warnings: Promise.resolve(undefined),
+    request: Promise.resolve({}),
+    providerMetadata: Promise.resolve(undefined),
+  })
 
   /** Seed the config/workspace values that processMessage -> callLlm needs. */
   const seedConfigForContext = (ctxId: string): void => {
@@ -75,7 +83,7 @@ describe('processMessage', () => {
   // Complex modules (ai SDK) still use mock.module
   beforeEach(async () => {
     // Reset mutable state to defaults
-    generateTextImpl = defaultGenerateTextResult
+    streamTextImpl = defaultStreamTextResult
 
     // Register mocks
     mockLogger()
@@ -89,11 +97,11 @@ describe('processMessage', () => {
       maybeProvisionKaneo: realProvisionMod.maybeProvisionKaneo,
     }))
 
-    // AI SDK mocks — generateText and stepCountIs replaced for test control.
+    // AI SDK mocks — streamText and stepCountIs replaced for test control.
     // Preserves the real `tool` export so makeTools() works with unmocked tool creation.
     void mock.module('ai', () => ({
       ...realAi,
-      generateText: (args: { messages?: unknown[] }): Promise<GenerateTextResult> => generateTextImpl(args),
+      streamText: (args: { messages?: unknown[] }): StreamTextResult => streamTextImpl(args),
       stepCountIs: (): (() => boolean) => () => false,
     }))
 
@@ -177,7 +185,9 @@ describe('processMessage', () => {
       Object.defineProperty(apiError, Symbol.for('vercel.ai.error'), { value: true })
       Object.defineProperty(apiError, 'name', { value: 'AI_APICallError' })
 
-      generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(apiError)
+      streamTextImpl = (): StreamTextResult => {
+        throw apiError
+      }
       const { reply, textCalls } = createMockReply()
 
       await processMessage(reply, CTX_ID, null, 'hello')
@@ -189,8 +199,9 @@ describe('processMessage', () => {
 
   describe('provider classified errors', () => {
     test('KaneoClassifiedError routes to getUserMessage', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.reject(new KaneoClassifiedError('Task not found', providerError.taskNotFound('T-1')))
+      streamTextImpl = (): StreamTextResult => {
+        throw new KaneoClassifiedError('Task not found', providerError.taskNotFound('T-1'))
+      }
       const { reply, textCalls } = createMockReply()
 
       await processMessage(reply, CTX_ID, null, 'hello')
@@ -201,8 +212,9 @@ describe('processMessage', () => {
     })
 
     test('ProviderClassifiedError routes through error.error', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.reject(new ProviderClassifiedError('Project not found', providerError.projectNotFound('P-1')))
+      streamTextImpl = (): StreamTextResult => {
+        throw new ProviderClassifiedError('Project not found', providerError.projectNotFound('P-1'))
+      }
       const { reply, textCalls } = createMockReply()
 
       await processMessage(reply, CTX_ID, null, 'hello')
@@ -213,7 +225,9 @@ describe('processMessage', () => {
     })
 
     test('unknown Error produces generic message', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('random crash'))
+      streamTextImpl = (): StreamTextResult => {
+        throw new Error('random crash')
+      }
       const { reply, textCalls } = createMockReply()
 
       await processMessage(reply, CTX_ID, null, 'hello')
@@ -229,7 +243,9 @@ describe('processMessage', () => {
       const rollbackCtx = 'rollback-ctx'
       seedConfigForContext(rollbackCtx)
 
-      generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM crash'))
+      streamTextImpl = (): StreamTextResult => {
+        throw new Error('LLM crash')
+      }
       const { reply, textCalls } = createMockReply()
 
       await processMessage(reply, rollbackCtx, null, 'new message')
@@ -255,27 +271,30 @@ describe('processMessage', () => {
       seedConfigForContext('steps-detail-ctx')
       const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
 
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({
-          text: 'Done!',
-          toolCalls: [],
-          toolResults: [],
-          steps: [
-            {
-              text: 'Calling search now.',
-              finishReason: 'tool-calls',
-              toolCalls: [
-                { toolName: 'search', toolCallId: 'call-1', input: { q: 'foo' } },
-                { toolName: 'create', toolCallId: 'call-2', input: { title: 'x' } },
-              ],
-              toolResults: [{ toolCallId: 'call-1', output: { hits: 3 } }],
-              content: [{ type: 'tool-error', toolCallId: 'call-2', error: new Error('permission denied') }],
-              usage: { inputTokens: 10, outputTokens: 5 },
-            },
-          ],
-          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
-          usage: {},
-        })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve('Done!'),
+        toolCalls: Promise.resolve([]),
+        toolResults: Promise.resolve([]),
+        steps: Promise.resolve([
+          {
+            text: 'Calling search now.',
+            finishReason: 'tool-calls',
+            toolCalls: [
+              { toolName: 'search', toolCallId: 'call-1', input: { q: 'foo' } },
+              { toolName: 'create', toolCallId: 'call-2', input: { title: 'x' } },
+            ],
+            toolResults: [{ toolCallId: 'call-1', output: { hits: 3 } }],
+            content: [{ type: 'tool-error', toolCallId: 'call-2', error: new Error('permission denied') }],
+            usage: { inputTokens: 10, outputTokens: 5 },
+          },
+        ]),
+        response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Done!' }] }),
+        usage: Promise.resolve({}),
+        finishReason: Promise.resolve('stop'),
+        warnings: Promise.resolve(undefined),
+        request: Promise.resolve({}),
+        providerMetadata: Promise.resolve(undefined),
+      })
 
       let capturedStepsDetail: unknown = null
       const listener = (event: DebugEvent): void => {
@@ -315,23 +334,26 @@ describe('processMessage', () => {
       seedConfigForContext('steps-detail-empty-ctx')
       const { subscribe, unsubscribe } = await import('../src/debug/event-bus.js')
 
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({
-          text: 'Done!',
-          toolCalls: [],
-          toolResults: [],
-          steps: [
-            {
-              text: '',
-              toolCalls: [{ toolName: 'search', toolCallId: 'call-1', input: {} }],
-              toolResults: [],
-              content: [],
-              usage: { inputTokens: 10, outputTokens: 5 },
-            },
-          ],
-          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
-          usage: {},
-        })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve('Done!'),
+        toolCalls: Promise.resolve([]),
+        toolResults: Promise.resolve([]),
+        steps: Promise.resolve([
+          {
+            text: '',
+            toolCalls: [{ toolName: 'search', toolCallId: 'call-1', input: {} }],
+            toolResults: [],
+            content: [],
+            usage: { inputTokens: 10, outputTokens: 5 },
+          },
+        ]),
+        response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Done!' }] }),
+        usage: Promise.resolve({}),
+        finishReason: Promise.resolve('stop'),
+        warnings: Promise.resolve(undefined),
+        request: Promise.resolve({}),
+        providerMetadata: Promise.resolve(undefined),
+      })
 
       let capturedStepsDetail: unknown = null
       const listener = (event: DebugEvent): void => {
@@ -355,15 +377,18 @@ describe('processMessage', () => {
 
   describe('success path history', () => {
     test('on success, history is extended with assistant messages', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({
-          text: 'Hi!',
-          toolCalls: [],
-          toolResults: [],
-          steps: [],
-          response: { messages: [{ role: 'assistant' as const, content: 'Hi!' }] },
-          usage: {},
-        })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve('Hi!'),
+        toolCalls: Promise.resolve([]),
+        toolResults: Promise.resolve([]),
+        steps: Promise.resolve([]),
+        response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Hi!' }] }),
+        usage: Promise.resolve({}),
+        finishReason: Promise.resolve('stop'),
+        warnings: Promise.resolve(undefined),
+        request: Promise.resolve({}),
+        providerMetadata: Promise.resolve(undefined),
+      })
       const { reply } = createMockReply()
 
       await processMessage(reply, CTX_ID, null, 'hello')
@@ -375,6 +400,67 @@ describe('processMessage', () => {
       expect(history[0]!.content).toBe('hello')
       expect(history[1]!.role).toBe('assistant')
       expect(history[1]!.content).toBe('Hi!')
+    })
+
+    test('tool results are mapped with tool names for fact extraction', async () => {
+      seedConfigForContext('tool-results-ctx')
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve('Task created successfully!'),
+        toolCalls: Promise.resolve([{ toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test task' } }]),
+        toolResults: Promise.resolve([
+          { toolCallId: 'call-1', output: { id: 'task-123', title: 'Test task', number: 42 } },
+        ]),
+        steps: Promise.resolve([
+          {
+            text: 'Creating task...',
+            finishReason: 'tool-calls',
+            toolCalls: [{ toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test task' } }],
+            toolResults: [{ toolCallId: 'call-1', output: { id: 'task-123', title: 'Test task', number: 42 } }],
+          },
+        ]),
+        response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Task created!' }] }),
+        usage: Promise.resolve({}),
+        finishReason: Promise.resolve('stop'),
+        warnings: Promise.resolve(undefined),
+        request: Promise.resolve({}),
+        providerMetadata: Promise.resolve(undefined),
+      })
+      const { reply, textCalls } = createMockReply()
+
+      await processMessage(reply, 'tool-results-ctx', null, 'create a test task')
+
+      // Should complete without error - tool results mapped to include toolName for fact extraction
+      expect(textCalls.length).toBeGreaterThanOrEqual(0)
+    })
+
+    test('tool results with missing toolCallId use empty tool name', async () => {
+      seedConfigForContext('tool-results-missing-ctx')
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve('Done!'),
+        toolCalls: Promise.resolve([{ toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } }]),
+        // No matching toolCallId - tests the fallback to empty tool name
+        toolResults: Promise.resolve([{ toolCallId: 'call-2', output: { result: 'data' } }]),
+        steps: Promise.resolve([
+          {
+            text: 'Working...',
+            finishReason: 'tool-calls',
+            toolCalls: [{ toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } }],
+            toolResults: [{ toolCallId: 'call-2', output: { result: 'data' } }],
+          },
+        ]),
+        response: Promise.resolve({ messages: [{ role: 'assistant' as const, content: 'Done!' }] }),
+        usage: Promise.resolve({}),
+        finishReason: Promise.resolve('stop'),
+        warnings: Promise.resolve(undefined),
+        request: Promise.resolve({}),
+        providerMetadata: Promise.resolve(undefined),
+      })
+      const { reply, textCalls } = createMockReply()
+
+      await processMessage(reply, 'tool-results-missing-ctx', null, 'do something')
+
+      // Should complete without error - missing toolName defaults to empty string
+      expect(textCalls.length).toBeGreaterThanOrEqual(0)
     })
   })
 

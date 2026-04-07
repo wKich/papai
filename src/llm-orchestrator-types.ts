@@ -1,11 +1,11 @@
 import type { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { generateText, stepCountIs, ModelMessage, ToolSet } from 'ai'
+import type { streamText, stepCountIs, ModelMessage, ToolSet } from 'ai'
 
 import type { ReplyFn } from './chat/types.js'
 import type { TaskProvider } from './providers/types.js'
 
 export interface LlmOrchestratorDeps {
-  generateText: typeof generateText
+  streamText: typeof streamText
   stepCountIs: typeof stepCountIs
   buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
   buildProviderForUser: {

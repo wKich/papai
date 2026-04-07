@@ -23,20 +23,21 @@ describe('memory', () => {
   // Mock getDrizzleDb to return our test database
   let testDb: Awaited<ReturnType<typeof setupTestDb>>
 
-  type GenerateTextResult = { text: string }
+  type StreamTextResult = { text: Promise<string> }
 
-  let generateTextImpl: () => Promise<GenerateTextResult>
+  let streamTextImpl: () => StreamTextResult
 
   beforeEach(async () => {
     // Reset mutable state to defaults
-    generateTextImpl = (): Promise<GenerateTextResult> =>
-      Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
+    streamTextImpl = (): StreamTextResult => ({
+      text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' })),
+    })
 
     // Register mocks
     mockLogger()
 
     void mock.module('ai', () => ({
-      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
+      streamText: (..._args: unknown[]): StreamTextResult => streamTextImpl(),
     }))
 
     testDb = await setupTestDb()
@@ -367,8 +368,9 @@ describe('memory', () => {
 
     test('returns trimmed messages and summary', async () => {
       const history = makeMessages(5)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 2, 4], summary: 'Test summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 2, 4], summary: 'Test summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 2, 10, null, mockModel)
 
@@ -381,8 +383,9 @@ describe('memory', () => {
 
     test('filters out-of-range indices', async () => {
       const history = makeMessages(3)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 99], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1, 99], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
@@ -392,8 +395,9 @@ describe('memory', () => {
 
     test('deduplicates indices', async () => {
       const history = makeMessages(5)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [1, 1, 2], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [1, 1, 2], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
@@ -404,8 +408,9 @@ describe('memory', () => {
 
     test('pads to trimMin when model returns too few indices', async () => {
       const history = makeMessages(10)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
 
@@ -414,10 +419,9 @@ describe('memory', () => {
 
     test('caps at trimMax when model returns too many indices', async () => {
       const history = makeMessages(10)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({
-          text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' }),
-        })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -426,8 +430,9 @@ describe('memory', () => {
 
     test('does not trim when indices equal trimMax', async () => {
       const history = makeMessages(5)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1, 2], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -437,8 +442,9 @@ describe('memory', () => {
 
     test('does not pad when indices equal trimMin', async () => {
       const history = makeMessages(10)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1, 2, 3, 4], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 5, 10, null, mockModel)
 
@@ -447,8 +453,9 @@ describe('memory', () => {
 
     test('padded indices are sorted in ascending order', async () => {
       const history = makeMessages(10)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
 
@@ -463,8 +470,9 @@ describe('memory', () => {
 
     test('slices most recent indices when capping at trimMax', async () => {
       const history = makeMessages(10)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1, 2, 3, 4, 5], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 3, null, mockModel)
 
@@ -477,8 +485,9 @@ describe('memory', () => {
 
     test('padding fills from highest indices first', async () => {
       const history = makeMessages(6)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [0], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 4, 10, null, mockModel)
 
@@ -495,8 +504,9 @@ describe('memory', () => {
 
     test('negative indices are filtered out', async () => {
       const history = makeMessages(5)
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [-1, 0, 2], summary: 'Summary' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [-1, 0, 2], summary: 'Summary' })),
+      })
 
       const result = await trimWithMemoryModel(history, 1, 10, null, mockModel)
 
@@ -506,8 +516,9 @@ describe('memory', () => {
     })
 
     test('trimWithMemoryModel with empty history returns empty', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> =>
-        Promise.resolve({ text: JSON.stringify({ keep_indices: [], summary: 'Empty conversation' }) })
+      streamTextImpl = (): StreamTextResult => ({
+        text: Promise.resolve(JSON.stringify({ keep_indices: [], summary: 'Empty conversation' })),
+      })
 
       const result = await trimWithMemoryModel([], 0, 10, null, mockModel)
       expect(result.trimmedMessages).toEqual([])
@@ -515,7 +526,7 @@ describe('memory', () => {
     })
 
     test('trimWithMemoryModel throws when generateText fails', async () => {
-      generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API failure'))
+      streamTextImpl = (): StreamTextResult => ({ text: Promise.reject(new Error('LLM API failure')) })
 
       const history: ModelMessage[] = [
         { role: 'user', content: 'Hello' },

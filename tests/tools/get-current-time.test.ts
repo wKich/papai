@@ -7,7 +7,7 @@ import { mockLogger } from '../utils/test-helpers.js'
 interface TimeResult {
   datetime: string
   timezone: string
-  localFormatted: string
+  formatted: string
 }
 
 function isTimeResult(val: unknown): val is TimeResult {
@@ -18,8 +18,8 @@ function isTimeResult(val: unknown): val is TimeResult {
     typeof (val as Record<string, unknown>)['datetime'] === 'string' &&
     'timezone' in val &&
     typeof (val as Record<string, unknown>)['timezone'] === 'string' &&
-    'localFormatted' in val &&
-    typeof (val as Record<string, unknown>)['localFormatted'] === 'string'
+    'formatted' in val &&
+    typeof (val as Record<string, unknown>)['formatted'] === 'string'
   )
 }
 
@@ -75,6 +75,6 @@ describe('makeGetCurrentTimeTool', () => {
     const result: unknown = await tool.execute({}, { toolCallId: '1', messages: [] })
 
     if (!isTimeResult(result)) throw new Error('Invalid result')
-    expect(result).toHaveProperty('localFormatted')
+    expect(result).toHaveProperty('formatted')
   })
 })
