@@ -97,34 +97,36 @@ jobs:
         env:
           E2E_KANEO_URL: http://localhost:11337
 
-  mutation-testing:
-    name: Mutation Testing
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Restore Stryker incremental cache
-        uses: actions/cache@v4
-        with:
-          path: reports/stryker-incremental.json
-          key: stryker-incremental-${{ github.base_ref }}-${{ github.sha }}
-          restore-keys: |
-            stryker-incremental-${{ github.base_ref }}-
-            stryker-incremental-master-
-
-      - name: Run mutation testing
-        run: bun run test:mutate:changed
-
-      - name: Upload mutation report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mutation-report
-          path: reports/mutation.html
-          retention-days: 14
+  # Mutation testing disabled in CI for now - too slow for regular runs
+  # Run locally with: bun run test:mutate:changed
+  # mutation-testing:
+  #   name: Mutation Testing
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: oven-sh/setup-bun@v2
+  #       with:
+  #         bun-version: 1.3.11
+  #     - name: Install dependencies
+  #       run: bun install --frozen-lockfile
+  #
+  #     - name: Restore Stryker incremental cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: reports/stryker-incremental.json
+  #         key: stryker-incremental-${{ github.base_ref }}-${{ github.sha }}
+  #         restore-keys: |
+  #           stryker-incremental-${{ github.base_ref }}-
+  #           stryker-incremental-master-
+  #
+  #     - name: Run mutation testing
+  #       run: bun run test:mutate:changed
+  #
+  #     - name: Upload mutation report
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: mutation-report
+  #         path: reports/mutation.html
+  #         retention-days: 14
