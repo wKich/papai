@@ -1,15 +1,9 @@
-import { z } from 'zod'
-
+import { logger } from '../../logger.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
-import { TaskSchema } from './schemas/create-task.js'
-import { type TaskStatusDeps, denormalizeStatus } from './task-status.js'
+import { TaskSchema, type CreateTaskResponse } from './schemas/create-task.js'
+import { type TaskStatusDeps, denormalizeStatus, validateStatus } from './task-status.js'
 
-// Local schema for task with projectId (for update responses)
-const TaskWithProjectIdSchema = TaskSchema
-
-const FullTaskSchema = TaskWithProjectIdSchema.extend({
-  position: z.number(),
-})
+const log = logger.child({ scope: 'kaneo:task-update-helpers' })
 
 type TaskUpdateParams = {
   title?: string
@@ -21,72 +15,84 @@ type TaskUpdateParams = {
   userId?: string
 }
 
-/**
- * Single field update for a task
- */
-function singleFieldUpdate(
-  config: KaneoConfig,
-  taskId: string,
-  field: string,
-  value: unknown,
-): Promise<z.infer<typeof TaskWithProjectIdSchema>> {
-  const endpoints: Record<string, { path: string; key: string }> = {
-    status: { path: '/task/status/', key: 'status' },
-    priority: { path: '/task/priority/', key: 'priority' },
-    userId: { path: '/task/assignee/', key: 'userId' },
-    dueDate: { path: '/task/due-date/', key: 'dueDate' },
-    title: { path: '/task/title/', key: 'title' },
-    description: { path: '/task/description/', key: 'description' },
-  }
-  const endpoint = endpoints[field]
-  if (endpoint === undefined) throw new Error(`Unknown field: ${field}`)
-  return kaneoFetch(
-    config,
-    'PUT',
-    `${endpoint.path}${taskId}`,
-    { [endpoint.key]: value },
-    undefined,
-    TaskWithProjectIdSchema,
-  )
+type FullUpdateBody = {
+  title: string
+  description: string
+  status: string
+  priority: string
+  projectId: string
+  position: number
+  dueDate?: string
+  userId?: string
 }
 
 /**
- * Perform updates on a task, handling multiple field updates sequentially
+ * Build the JSON body for `PUT /task/:id` from an existing task plus a patch.
+ * Mirrors the official @kaneo/mcp `buildFullTaskUpdateBody` helper:
+ * the Kaneo API requires the full task payload on update, so we merge
+ * unchanged fields from the existing task.
+ */
+function requireString(value: string | undefined | null, field: string): string {
+  if (value === undefined || value === null || value === '') {
+    throw new Error(`Cannot update task: missing ${field}.`)
+  }
+  return value
+}
+
+function buildFullTaskUpdateBody(existing: CreateTaskResponse, patch: TaskUpdateParams): FullUpdateBody {
+  const position = existing.position
+  if (position === null || !Number.isFinite(position)) {
+    throw new Error('Cannot update task: missing numeric `position` on existing task.')
+  }
+
+  const body: FullUpdateBody = {
+    title: requireString(patch.title ?? existing.title, 'title'),
+    description: patch.description ?? existing.description ?? '',
+    status: requireString(patch.status ?? existing.status, 'status'),
+    priority: requireString(patch.priority ?? existing.priority, 'priority'),
+    projectId: requireString(patch.projectId ?? existing.projectId, 'projectId'),
+    position,
+  }
+
+  const existingDueDate = typeof existing.dueDate === 'string' ? existing.dueDate : undefined
+  const dueDate = patch.dueDate ?? existingDueDate
+  if (dueDate !== undefined) {
+    body.dueDate = dueDate
+  }
+
+  const userId = patch.userId ?? existing.userId ?? undefined
+  if (userId !== undefined) {
+    body.userId = userId
+  }
+
+  return body
+}
+
+/**
+ * Fetch the existing task, merge the patch, and PUT the full body to `/task/:id`.
+ *
+ * This matches the upstream @kaneo/mcp flow — the Kaneo API does not accept
+ * partial updates on the main task endpoint, it requires the full payload.
  */
 export async function performUpdate(
   config: KaneoConfig,
   taskId: string,
   params: TaskUpdateParams,
   statusDeps?: TaskStatusDeps,
-): Promise<z.infer<typeof TaskWithProjectIdSchema>> {
-  // Use single-field endpoints for each field being updated
-  // (The full /task/:id endpoint doesn't actually update fields)
-  const setFields = Object.entries(params).filter(([, v]) => v !== undefined)
+): Promise<CreateTaskResponse> {
+  log.debug({ taskId, fields: Object.keys(params) }, 'performUpdate called')
 
-  // Apply updates sequentially using reduce to chain promises
-  // This avoids await-in-loop while maintaining sequential execution
-  const result = await setFields.reduce<Promise<z.infer<typeof TaskWithProjectIdSchema> | undefined>>(
-    async (previousPromise, [field, value]) => {
-      await previousPromise
-      return singleFieldUpdate(config, taskId, field, value)
-    },
-    Promise.resolve(undefined),
-  )
+  const existing = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, TaskSchema)
 
-  // Return the result, or fetch current if no updates
-  if (result !== undefined) {
-    // Denormalize status from column ID to slug
-    if (result.projectId !== undefined) {
-      result.status = await denormalizeStatus(config, result.projectId, result.status, statusDeps)
-    }
-    return result
+  const patch: TaskUpdateParams = { ...params }
+  if (patch.status !== undefined) {
+    patch.status = await validateStatus(config, existing.projectId, patch.status, statusDeps)
   }
 
-  // If no fields to update, just return current task
-  const task = await kaneoFetch(config, 'GET', `/task/${taskId}`, undefined, undefined, FullTaskSchema)
-  // Denormalize status from column ID to slug
-  if (task.projectId !== undefined) {
-    task.status = await denormalizeStatus(config, task.projectId, task.status, statusDeps)
-  }
-  return task
+  const body = buildFullTaskUpdateBody(existing, patch)
+  const updated = await kaneoFetch(config, 'PUT', `/task/${taskId}`, body, undefined, TaskSchema)
+
+  updated.status = await denormalizeStatus(config, updated.projectId, updated.status, statusDeps)
+  log.info({ taskId, number: updated.number }, 'Task updated')
+  return updated
 }

@@ -158,11 +158,6 @@ export class TaskResource {
     this.log.debug({ taskId, ...params }, 'Updating task')
 
     try {
-      // Validate and normalize status if being updated
-      if (params.status !== undefined) {
-        const existingTask = await this.get(taskId)
-        params.status = await validateStatus(this.config, existingTask.projectId, params.status, this.statusDeps)
-      }
       const task = await performUpdate(this.config, taskId, params, this.statusDeps)
       this.log.info({ taskId, number: task.number }, 'Task updated')
       return task
