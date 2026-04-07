@@ -59,6 +59,23 @@ export type Task = {
   relations?: TaskRelation[]
 }
 
+/**
+ * Optional filters for `listTasks`. Mirrors the query params accepted by the
+ * upstream @kaneo/mcp `list_tasks` tool. Providers that don't support a given
+ * filter may ignore it.
+ */
+export type ListTasksParams = {
+  status?: string
+  priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
+  assigneeId?: string
+  page?: number
+  limit?: number
+  sortBy?: 'createdAt' | 'priority' | 'dueDate' | 'position' | 'title' | 'number'
+  sortOrder?: 'asc' | 'desc'
+  dueBefore?: string
+  dueAfter?: string
+}
+
 /** Minimal task representation for list results. */
 export type TaskListItem = {
   id: string
@@ -174,7 +191,7 @@ export interface TaskProvider {
     },
   ): Promise<Task>
 
-  listTasks(projectId: string): Promise<TaskListItem[]>
+  listTasks(projectId: string, params?: ListTasksParams): Promise<TaskListItem[]>
 
   searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]>
 

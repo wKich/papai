@@ -534,7 +534,7 @@ describe('Task Tools', () => {
     test('returns tool with correct structure', () => {
       const provider = createMockProvider()
       const tool = makeListTasksTool(provider)
-      expect(tool.description).toContain('List all tasks')
+      expect(tool.description).toContain('List tasks')
     })
 
     test('lists tasks for project', async () => {
