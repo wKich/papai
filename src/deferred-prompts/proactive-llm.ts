@@ -111,7 +111,12 @@ async function invokeLightweight(
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]
 
   log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling generateText')
-  const result = await deps.generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
+  const result = await deps.generateText({
+    model,
+    system: buildMinimalSystemPrompt(type, timezone),
+    messages,
+    timeout: 1_200_000,
+  })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -150,7 +155,7 @@ async function invokeWithContext(
     model,
     system: buildMinimalSystemPrompt(type, timezone),
     messages,
-    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
+    timeout: 1_200_000,
   })
 
   const assistantMessages = result.response.messages
@@ -202,7 +207,7 @@ async function invokeFull(
     messages: finalMessages,
     tools,
     stopWhen: deps.stepCountIs(25),
-    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
+    timeout: 1_200_000,
   })
   persistProactiveResults(userId, result, history)
   return result.text ?? 'Done.'

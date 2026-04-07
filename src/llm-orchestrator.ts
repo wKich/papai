@@ -127,7 +127,7 @@ const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<ty
     system: buildSystemPrompt(provider, timezone, contextId),
     messages,
     tools,
-    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
+    timeout: 1_200_000,
     stopWhen: deps.stepCountIs(25),
     experimental_onToolCallStart(event) {
       emit('llm:tool_call', {

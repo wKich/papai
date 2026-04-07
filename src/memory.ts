@@ -232,7 +232,7 @@ export async function trimWithMemoryModel(
   const result = await deps.generateText({
     model,
     prompt,
-    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
+    timeout: 1_200_000,
   })
 
   const data = parseModelResponse(result.text)
