@@ -315,243 +315,98 @@ describe('TaskResource', () => {
   })
 
   describe('update', () => {
-    describe('single field updates', () => {
-      test('uses status endpoint for status update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Test',
-                  number: 1,
-                  status: 'done',
-                  description: '',
-                }),
-              ),
-              { status: 200 },
+    function mockGetThenPut(responseOverrides: Parameters<typeof createMockTask>[0] = {}): Array<{
+      url: string
+      method: string
+      body?: unknown
+    }> {
+      const requests: Array<{ url: string; method: string; body?: unknown }> = []
+      setMockFetch((url: string, options: RequestInit) => {
+        const parsedBody: unknown = typeof options.body === 'string' ? (JSON.parse(options.body) as unknown) : undefined
+        requests.push({ url, method: options.method ?? 'GET', body: parsedBody })
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              createMockTask({
+                id: 'task-1',
+                projectId: 'proj-1',
+                position: 3,
+                number: 1,
+                title: 'Test',
+                description: '',
+                status: 'col-1',
+                priority: 'no-priority',
+                ...responseOverrides,
+              }),
             ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { status: 'done' })
-
-        expect(requestUrl).toContain('/task/status/task-1')
+            { status: 200 },
+          ),
+        )
       })
+      return requests
+    }
 
-      test('uses priority endpoint for priority update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Test',
-                  number: 1,
-                  priority: 'high',
-                  description: '',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
+    test('PUTs full merged body to /task/:id (single field)', async () => {
+      const requests = mockGetThenPut({ status: 'done' })
 
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { priority: 'high' })
+      const resource = new TaskResource(mockConfig, statusDeps)
+      await resource.update('task-1', { status: 'done' })
 
-        expect(requestUrl).toContain('/task/priority/task-1')
-      })
-
-      test('uses assign endpoint for userId update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Test',
-                  number: 1,
-                  description: '',
-                  userId: 'user-123',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { userId: 'user-123' })
-
-        expect(requestUrl).toContain('/task/assignee/task-1')
-      })
-
-      test('uses dueDate endpoint for dueDate update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Test',
-                  number: 1,
-                  description: '',
-                  dueDate: '2026-12-31',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { dueDate: '2026-12-31' })
-
-        expect(requestUrl).toContain('/task/due-date/task-1')
-      })
-
-      test('uses title endpoint for title update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Updated Title',
-                  number: 1,
-                  description: '',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { title: 'Updated Title' })
-
-        expect(requestUrl).toContain('/task/title/task-1')
-      })
-
-      test('uses description endpoint for description update', async () => {
-        let requestUrl = ''
-        setMockFetch((url: string, _options: RequestInit) => {
-          requestUrl = url
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'Test',
-                  number: 1,
-                  description: 'Updated description',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', { description: 'Updated description' })
-
-        expect(requestUrl).toContain('/task/description/task-1')
+      expect(requests).toHaveLength(2)
+      expect(requests[0]?.method).toBe('GET')
+      expect(requests[0]?.url).toContain('/task/task-1')
+      expect(requests[1]?.method).toBe('PUT')
+      expect(requests[1]?.url).toContain('/task/task-1')
+      expect(requests[1]?.body).toMatchObject({
+        title: 'Test',
+        description: '',
+        status: 'done',
+        priority: 'no-priority',
+        projectId: 'proj-1',
+        position: 3,
       })
     })
 
-    describe('multi-field updates', () => {
-      test('calls single-field endpoints for each field', async () => {
-        const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    test('PUTs full merged body to /task/:id (multiple fields)', async () => {
+      const requests = mockGetThenPut({ title: 'New Title', priority: 'high', description: 'New desc' })
 
-        setMockFetch((url: string, options: RequestInit) => {
-          const parsedBody: unknown = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          requests.push({ url, method: options.method ?? 'GET', body: parsedBody })
-
-          // Return success for any single-field endpoint
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'New Title',
-                  number: 1,
-                  status: 'done',
-                  priority: 'high',
-                  description: 'New desc',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
-
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', {
-          title: 'New Title',
-          status: 'done',
-          priority: 'high',
-          description: 'New desc',
-        })
-
-        // Should make 5 requests - one GET for validation + one for each field
-        expect(requests.length).toBe(5)
-        // GET request for projectId lookup
-        expect(requests[0]?.url).toContain('/task/task-1')
-        expect(requests[1]?.url).toContain('/task/title/task-1')
-        expect(requests[2]?.url).toContain('/task/status/task-1')
-        expect(requests[3]?.url).toContain('/task/priority/task-1')
-        expect(requests[4]?.url).toContain('/task/description/task-1')
+      const resource = new TaskResource(mockConfig, statusDeps)
+      await resource.update('task-1', {
+        title: 'New Title',
+        priority: 'high',
+        description: 'New desc',
       })
 
-      test('uses correct endpoints for each field type', async () => {
-        const requests: Array<{ url: string; body?: unknown }> = []
+      expect(requests).toHaveLength(2)
+      expect(requests[0]?.method).toBe('GET')
+      expect(requests[1]?.method).toBe('PUT')
+      expect(requests[1]?.body).toMatchObject({
+        title: 'New Title',
+        description: 'New desc',
+        priority: 'high',
+        projectId: 'proj-1',
+        position: 3,
+      })
+    })
 
-        setMockFetch((url: string, options: RequestInit) => {
-          const parsedBody: unknown = typeof options.body === 'string' ? JSON.parse(options.body) : undefined
-          requests.push({ url, body: parsedBody })
+    test('preserves unchanged fields from the existing task', async () => {
+      const requests = mockGetThenPut({
+        title: 'Existing',
+        description: 'Existing desc',
+        priority: 'medium',
+        status: 'col-2',
+      })
 
-          return Promise.resolve(
-            new Response(
-              JSON.stringify(
-                createMockTask({
-                  id: 'task-1',
-                  title: 'New',
-                  number: 1,
-                  status: 'done',
-                  priority: 'high',
-                  description: 'New',
-                }),
-              ),
-              { status: 200 },
-            ),
-          )
-        })
+      const resource = new TaskResource(mockConfig, statusDeps)
+      await resource.update('task-1', { title: 'Only title changed' })
 
-        const resource = new TaskResource(mockConfig, statusDeps)
-        await resource.update('task-1', {
-          title: 'New',
-          status: 'done',
-        })
-
-        expect(requests.length).toBe(3)
-        // GET request for projectId lookup
-        expect(requests[0]?.url).toContain('/task/task-1')
-        expect(requests[1]?.url).toContain('/task/title/task-1')
-        expect(requests[1]?.body).toMatchObject({ title: 'New' })
-        expect(requests[2]?.url).toContain('/task/status/task-1')
-        expect(requests[2]?.body).toMatchObject({ status: 'done' })
+      expect(requests[1]?.body).toMatchObject({
+        title: 'Only title changed',
+        description: 'Existing desc',
+        priority: 'medium',
+        status: 'col-2',
+        projectId: 'proj-1',
+        position: 3,
       })
     })
   })
