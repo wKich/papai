@@ -8,10 +8,7 @@ export interface LlmOrchestratorDeps {
   streamText: typeof streamText
   stepCountIs: typeof stepCountIs
   buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
-  buildProviderForUser: {
-    (userId: string, strict: false): TaskProvider | null
-    (userId: string, strict: true): TaskProvider
-  }
+  buildProviderForUser: (userId: string) => TaskProvider
   maybeProvisionKaneo: (reply: ReplyFn, contextId: string, username: string | null) => Promise<void>
 }
 

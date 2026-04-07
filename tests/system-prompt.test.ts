@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, test, mock } from 'bun:test'
 
 import { buildSystemPrompt } from '../src/system-prompt.js'
 import { createMockProvider } from './tools/mock-provider.js'
-import { mockLogger } from './utils/test-helpers.js'
+import { mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('buildSystemPrompt', () => {
   const provider = createMockProvider()
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLogger()
     mock.restore()
+    await setupTestDb()
   })
 
   test('does not include current date and time in prompt (to preserve KV cache)', () => {
