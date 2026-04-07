@@ -28,7 +28,7 @@ const defaultDeps: LlmOrchestratorDeps = {
   streamText: (...args) => streamText(...args),
   stepCountIs: (...args) => stepCountIs(...args),
   buildOpenAI: (apiKey: string, baseURL: string) =>
-    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL }),
+    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL, fetch: fetchWithoutTimeout }),
   buildProviderForUser,
   maybeProvisionKaneo,
 }
@@ -84,9 +84,10 @@ const sendLlmResponse = async (
 }
 
 import type { InvokeModelArgs } from './llm-orchestrator-types.js'
+import { fetchWithoutTimeout } from './utils/fetch.js'
 
 // Await all promises from streamText result and return resolved result
-const awaitStreamResult = async (r: ReturnType<typeof streamText>): Promise<ResolvedStreamTextResult> => ({
+export const awaitStreamResult = async (r: ReturnType<typeof streamText>): Promise<ResolvedStreamTextResult> => ({
   text: await r.text,
   toolCalls: await r.toolCalls,
   toolResults: await r.toolResults,
@@ -162,10 +163,7 @@ const callLlm = async (
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
-  log.debug(
-    { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
-    'Calling generateText',
-  )
+  log.debug({ contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone }, 'Calling streamText')
   const result = await invokeModel({
     contextId,
     mainModel,

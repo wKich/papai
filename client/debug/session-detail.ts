@@ -42,7 +42,6 @@ export function getSessionModalElements(): SessionModalElements {
 function renderBasicInfo(userId: string, session: SessionDetail): string {
   const hasTools = session.hasTools !== undefined && session.hasTools
   const workspaceValue = session.workspaceId === null ? 'none' : escapeHtml(String(session.workspaceId))
-  const summaryValue = session.summary === null ? 'none' : escapeHtml(session.summary)
 
   return `<div class="session-detail-section">
     <h4>Basic Info</h4>
@@ -50,10 +49,18 @@ function renderBasicInfo(userId: string, session: SessionDetail): string {
       <div class="session-detail-item"><div class="label">User ID</div><div class="value">${escapeHtml(userId)}</div></div>
       <div class="session-detail-item"><div class="label">Last Accessed</div><div class="value">${formatTime(session.lastAccessed)}</div></div>
       <div class="session-detail-item"><div class="label">History Length</div><div class="value">${session.historyLength} messages</div></div>
-      <div class="session-detail-item"><div class="label">Summary</div><div class="value ${session.summary === null ? 'null' : ''}">${summaryValue}</div></div>
       <div class="session-detail-item"><div class="label">Workspace</div><div class="value ${session.workspaceId === null ? 'null' : ''}">${workspaceValue}</div></div>
       <div class="session-detail-item"><div class="label">Has Tools</div><div class="value">${hasTools ? 'yes' : 'no'}</div></div>
     </div>
+  </div>`
+}
+
+function renderSummarySection(summary: string | null): string {
+  if (summary === null || summary === '') return ''
+
+  return `<div class="session-detail-section">
+    <h4>Summary</h4>
+    <pre class="generated-text">${escapeHtml(summary)}</pre>
   </div>`
 }
 
@@ -77,16 +84,19 @@ function renderFactsSection(facts: SessionDetail['facts']): string {
 
   let items = ''
   for (const fact of facts) {
-    items += `<div class="fact-item">
-      <div class="fact-title">${escapeHtml(fact.title)}</div>
-      <div class="fact-url">${escapeHtml(fact.url)}</div>
-      <div class="fact-meta">ID: ${escapeHtml(fact.identifier)} · Last seen: ${formatTime(fact.lastSeen)}</div>
+    items += `<div class="tool-call-item">
+      <div class="tool-call-summary">
+        <span class="tool-name">${escapeHtml(fact.title)}</span>
+        <span class="tool-id">${escapeHtml(fact.identifier)}</span>
+      </div>
+      <div class="tool-call-id">${escapeHtml(fact.url)}</div>
+      <div class="tool-section"><div class="label">Last seen</div><div class="value">${formatTime(fact.lastSeen)}</div></div>
     </div>`
   }
 
   return `<div class="session-detail-section">
     <h4>Facts (${facts.length})</h4>
-    <div class="facts-list">${items}</div>
+    <div class="tool-calls-list">${items}</div>
   </div>`
 }
 
@@ -141,6 +151,7 @@ export function renderSessionDetail(
 
   let html = ''
   html += renderBasicInfo(userId, session)
+  html += renderSummarySection(session.summary)
   html += renderConfigSection(session.config)
   html += renderFactsSection(session.facts)
   html += renderInstructionsSection(session.instructions)

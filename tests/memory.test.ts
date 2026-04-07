@@ -525,7 +525,7 @@ describe('memory', () => {
       expect(result.summary).toBe('Empty conversation')
     })
 
-    test('trimWithMemoryModel throws when generateText fails', async () => {
+    test('trimWithMemoryModel throws when streamText fails', async () => {
       streamTextImpl = (): StreamTextResult => ({ text: Promise.reject(new Error('LLM API failure')) })
 
       const history: ModelMessage[] = [

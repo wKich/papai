@@ -95,23 +95,23 @@ describe('search', () => {
 
   test('filters by text (case-insensitive substring)', () => {
     const buf = new LogRingBuffer(10)
-    buf.push(makeEntry({ msg: 'Calling generateText' }))
+    buf.push(makeEntry({ msg: 'Calling streamText' }))
     buf.push(makeEntry({ msg: 'Task created' }))
 
-    const results = buf.search({ q: 'generatetext' })
+    const results = buf.search({ q: 'streamtext' })
     expect(results).toHaveLength(1)
-    expect(results[0]!.msg).toBe('Calling generateText')
+    expect(results[0]!.msg).toBe('Calling streamText')
   })
 
   test('combines filters with AND', () => {
     const buf = new LogRingBuffer(10)
     buf.push(makeEntry({ level: 30, scope: 'bot', msg: 'received message' }))
-    buf.push(makeEntry({ level: 30, scope: 'llm-orch', msg: 'calling generateText' }))
-    buf.push(makeEntry({ level: 50, scope: 'llm-orch', msg: 'error in generateText' }))
+    buf.push(makeEntry({ level: 30, scope: 'llm-orch', msg: 'calling streamText' }))
+    buf.push(makeEntry({ level: 50, scope: 'llm-orch', msg: 'error in streamText' }))
 
     const results = buf.search({ level: 40, scope: 'llm-orch' })
     expect(results).toHaveLength(1)
-    expect(results[0]!.msg).toBe('error in generateText')
+    expect(results[0]!.msg).toBe('error in streamText')
   })
 
   test('respects limit (returns last N)', () => {
