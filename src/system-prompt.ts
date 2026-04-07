@@ -1,28 +1,6 @@
 import { buildInstructionsBlock } from './instructions.js'
 import type { TaskProvider } from './providers/types.js'
 
-const getLocalDateString = (timezone: string): string => {
-  try {
-    return new Date().toLocaleDateString('en-US', {
-      timeZone: timezone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-  } catch {
-    return new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
-}
-
 const STATIC_RULES = `WORKFLOW:
 1. Understand the user's intent from natural language.
 2. Gather context if needed (e.g. call list_projects to resolve a project name, call list_columns before setting a task status).
@@ -56,11 +34,11 @@ OUTPUT RULES:
 - Keep replies short and friendly. Don't use tables.
 - When the user expresses a persistent preference ("always", "never", "from now on"), call save_instruction. To list them, call list_instructions. To remove one, call list_instructions first, then delete_instruction.`
 
-const buildBasePrompt = (localDateStr: string): string => {
-  return `You are papai, a personal assistant that helps the user manage their tasks.
-Current date and time: ${localDateStr}.
+const BASE_PROMPT = `You are papai, a personal assistant that helps the user manage their tasks.
 
 When the user asks you to do something, figure out which tool(s) to call and execute them autonomously — fetch any missing context (projects, columns, task details) with additional tool calls before acting, without asking the user.
+
+TIME — For any date or time queries, use the get_current_time tool to get the current date and time before performing calculations.
 
 DUE DATES — When the user mentions a due date or time:
 - Express dates as { date: "YYYY-MM-DD" } and times as { time: "HH:MM" } in 24-hour local time — the tool handles UTC conversion.
@@ -100,11 +78,8 @@ DEFERRED PROMPTS — The user can set up automated tasks and alerts:
 PROACTIVE MODE — When you receive a [PROACTIVE EXECUTION] system message at the end of the conversation, a deferred prompt has fired. You are delivering a previously scheduled result to the user. The user message marked with ===DEFERRED_TASK=== is the stored prompt — fulfill it directly. For reminders, deliver the message conversationally. For actions, execute them with tools and report the result. Never create new deferred prompts during proactive execution. Never mention triggers, cron jobs, or scheduling internals. Be warm and concise.
 
 ${STATIC_RULES}`
-}
 
-export const buildSystemPrompt = (provider: TaskProvider, timezone: string, contextId: string): string => {
-  const localDateStr = getLocalDateString(timezone)
-  const base = buildBasePrompt(localDateStr)
+export const buildSystemPrompt = (provider: TaskProvider, contextId: string): string => {
   const addendum = provider.getPromptAddendum()
-  return `${buildInstructionsBlock(contextId)}${addendum === '' ? base : `${base}\n\n${addendum}`}`
+  return `${buildInstructionsBlock(contextId)}${addendum === '' ? BASE_PROMPT : `${BASE_PROMPT}\n\n${addendum}`}`
 }

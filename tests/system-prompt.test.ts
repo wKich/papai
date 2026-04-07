@@ -1,0 +1,30 @@
+import { beforeEach, describe, expect, test, mock } from 'bun:test'
+
+import { buildSystemPrompt } from '../src/system-prompt.js'
+import { createMockProvider } from './tools/mock-provider.js'
+import { mockLogger } from './utils/test-helpers.js'
+
+describe('buildSystemPrompt', () => {
+  const provider = createMockProvider()
+
+  beforeEach(() => {
+    mockLogger()
+    mock.restore()
+  })
+
+  test('does not include current date and time in prompt (to preserve KV cache)', () => {
+    const prompt = buildSystemPrompt(provider, 'user-1')
+    expect(prompt).not.toContain('Current date and time:')
+  })
+
+  test('is static between calls (no dynamic content)', () => {
+    const prompt1 = buildSystemPrompt(provider, 'user-1')
+    // Small delay to ensure any dynamic content would differ
+    const start = Date.now()
+    while (Date.now() - start < 10) {
+      // Busy wait for 10ms
+    }
+    const prompt2 = buildSystemPrompt(provider, 'user-1')
+    expect(prompt1).toBe(prompt2)
+  })
+})

@@ -9,11 +9,19 @@ import { logger } from '../logger.js'
 import { extractFactsFromSdkResults, upsertFact } from '../memory.js'
 import type { TaskProvider } from '../providers/types.js'
 import { buildSystemPrompt } from '../system-prompt.js'
+import { makeGetCurrentTimeTool } from '../tools/get-current-time.js'
 import { makeTools } from '../tools/index.js'
-import { buildProactiveTrigger, formatLocalTime } from './proactive-trigger.js'
+import { buildProactiveTrigger } from './proactive-trigger.js'
 import type { ExecutionMetadata } from './types.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
+
+// Minimal toolset for lightweight/context modes - just get_current_time
+function makeMinimalTools(userId: string): { get_current_time: ReturnType<typeof makeGetCurrentTimeTool> } {
+  return {
+    get_current_time: makeGetCurrentTimeTool(userId),
+  }
+}
 
 export interface ProactiveLlmDeps {
   generateText: typeof generateText
@@ -67,11 +75,9 @@ function persistProactiveResults(userId: string, result: LlmResult, history: rea
 
 // --- Minimal system prompt (shared by lightweight and context modes) ---
 
-function buildMinimalSystemPrompt(type: 'scheduled' | 'alert', timezone: string): string {
-  const { currentTime, displayTimezone } = formatLocalTime(timezone)
+function buildMinimalSystemPrompt(type: 'scheduled' | 'alert'): string {
   return [
     '[PROACTIVE EXECUTION]',
-    `Current time: ${currentTime} (${displayTimezone})`,
     `Trigger type: ${type}`,
     '',
     'A deferred prompt has fired. Deliver the result warmly and conversationally.',
@@ -107,14 +113,14 @@ async function invokeLightweight(
   const smallModel = getConfig(userId, 'small_model')
   const modelId = smallModel ?? config.mainModel
   const model = deps.buildModel(config, modelId)
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]
 
   log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling generateText')
   const result = await deps.generateText({
     model,
-    system: buildMinimalSystemPrompt(type, timezone),
+    system: buildMinimalSystemPrompt(type),
     messages,
+    tools: makeMinimalTools(userId),
     timeout: 1_200_000,
   })
 
@@ -141,7 +147,6 @@ async function invokeWithContext(
   if (typeof config === 'string') return config
 
   const model = deps.buildModel(config, config.mainModel)
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const history = getCachedHistory(userId)
   const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
   const messages: ModelMessage[] = [
@@ -153,8 +158,9 @@ async function invokeWithContext(
   log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' }, 'generateText')
   const result = await deps.generateText({
     model,
-    system: buildMinimalSystemPrompt(type, timezone),
+    system: buildMinimalSystemPrompt(type),
     messages,
+    tools: makeMinimalTools(userId),
     timeout: 1_200_000,
   })
 
@@ -189,7 +195,7 @@ async function invokeFull(
   const model = deps.buildModel(config, config.mainModel)
   const tools = makeTools(provider, userId, 'proactive')
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const systemPrompt = buildSystemPrompt(provider, timezone, userId)
+  const systemPrompt = buildSystemPrompt(provider, userId)
   const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
   const history = getCachedHistory(userId)
   const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)

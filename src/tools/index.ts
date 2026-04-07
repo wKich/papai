@@ -18,6 +18,7 @@ import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
 import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeGetCommentsTool } from './get-comments.js'
+import { makeGetCurrentTimeTool } from './get-current-time.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
@@ -58,6 +59,7 @@ function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
     search_tasks: makeSearchTasksTool(provider),
     list_tasks: makeListTasksTool(provider, userId),
     get_task: makeGetTaskTool(provider, userId),
+    get_current_time: makeGetCurrentTimeTool(userId),
   }
 }
 

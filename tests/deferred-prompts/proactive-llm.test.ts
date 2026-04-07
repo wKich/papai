@@ -84,10 +84,13 @@ describe('dispatchExecution', () => {
       expect(generateTextCalls[0]!.model).toContain('main-model')
     })
 
-    test('does not include tools', async () => {
+    test('includes get_current_time tool only', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
-      expect(generateTextCalls[0]!.tools).toBeUndefined()
+      expect(generateTextCalls[0]!.tools).toBeDefined()
+      expect(generateTextCalls[0]!.tools).toHaveProperty('get_current_time')
+      // Should not have task-related tools in lightweight mode
+      expect(generateTextCalls[0]!.tools).not.toHaveProperty('create_task')
     })
 
     test('uses minimal system prompt', async () => {
@@ -172,10 +175,13 @@ describe('dispatchExecution', () => {
       expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('history message'))).toBe(true)
     })
 
-    test('does not include tools', async () => {
+    test('includes get_current_time tool only', async () => {
       setupUserConfig()
       await dispatchExecution(USER_ID, 'scheduled', 'standup reminder', metadata, () => null)
-      expect(generateTextCalls[0]!.tools).toBeUndefined()
+      expect(generateTextCalls[0]!.tools).toBeDefined()
+      expect(generateTextCalls[0]!.tools).toHaveProperty('get_current_time')
+      // Should not have task-related tools in context mode
+      expect(generateTextCalls[0]!.tools).not.toHaveProperty('create_task')
     })
 
     test('uses minimal system prompt', async () => {

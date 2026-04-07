@@ -68,18 +68,18 @@ describe('buildSystemPrompt — deferred prompt sections', () => {
   const provider = createMockProvider()
 
   test('includes PROMPT CONTENT guidance in DEFERRED PROMPTS section', () => {
-    const prompt = buildSystemPrompt(provider, 'UTC', 'user-1')
+    const prompt = buildSystemPrompt(provider, 'user-1')
     expect(prompt).toContain('PROMPT CONTENT')
     expect(prompt).toContain('deliverable action, not the scheduling')
   })
 
   test('PROACTIVE MODE references spotlighting delimiters', () => {
-    const prompt = buildSystemPrompt(provider, 'UTC', 'user-1')
+    const prompt = buildSystemPrompt(provider, 'user-1')
     expect(prompt).toContain('===DEFERRED_TASK===')
   })
 
   test('PROACTIVE MODE includes anti-recursion rule', () => {
-    const prompt = buildSystemPrompt(provider, 'UTC', 'user-1')
+    const prompt = buildSystemPrompt(provider, 'user-1')
     expect(prompt).toContain('Never create new deferred prompts during proactive execution')
   })
 })

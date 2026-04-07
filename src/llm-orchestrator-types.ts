@@ -21,7 +21,6 @@ export type InvokeModelArgs = {
   model: ReturnType<ReturnType<typeof createOpenAICompatible>>
   provider: TaskProvider
   tools: ToolSet
-  timezone: string
   messages: ModelMessage[]
   deps: LlmOrchestratorDeps
 }

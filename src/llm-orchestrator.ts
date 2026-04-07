@@ -119,12 +119,12 @@ function emitLlmEnd(
 }
 
 const invokeModel = async (args: InvokeModelArgs): Promise<Awaited<ReturnType<typeof generateText>>> => {
-  const { contextId, mainModel, model, provider, tools, timezone, messages, deps } = args
+  const { contextId, mainModel, model, provider, tools, messages, deps } = args
   const start = Date.now()
   emitLlmStart(contextId, mainModel, messages, tools)
   const result = await deps.generateText({
     model,
-    system: buildSystemPrompt(provider, timezone, contextId),
+    system: buildSystemPrompt(provider, contextId),
     messages,
     tools,
     timeout: 1_200_000,
@@ -184,7 +184,6 @@ const callLlm = async (
     model,
     provider,
     tools,
-    timezone,
     messages: messagesWithMemory,
     deps,
   })
