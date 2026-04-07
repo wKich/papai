@@ -1,4 +1,5 @@
 import { logger } from '../../logger.js'
+import type { ListTasksParams } from '../types.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
@@ -18,15 +19,17 @@ export interface KaneoTaskListItem {
 export async function listTasks({
   config,
   projectId,
+  params,
 }: {
   config: KaneoConfig
   projectId: string
+  params?: ListTasksParams
 }): Promise<KaneoTaskListItem[]> {
-  log.debug({ projectId }, 'listTasks called')
+  log.debug({ projectId, params }, 'listTasks called')
 
   try {
     const client = new KaneoClient(config)
-    const tasks = await client.tasks.list(projectId)
+    const tasks = await client.tasks.list(projectId, params)
     log.info({ projectId, taskCount: tasks.length }, 'Tasks listed')
     return tasks
   } catch (error) {

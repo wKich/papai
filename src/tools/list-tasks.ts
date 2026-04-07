@@ -4,21 +4,35 @@ import { z } from 'zod'
 
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
-import type { TaskProvider } from '../providers/types.js'
+import type { ListTasksParams, TaskProvider } from '../providers/types.js'
 import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:list-tasks' })
 
 export function makeListTasksTool(provider: TaskProvider, userId?: string): ToolSet[string] {
   return tool({
-    description: 'List all tasks in a project. Use this to see all tasks in a specific project.',
+    description:
+      'List tasks in a project. Optional filters match the upstream @kaneo/mcp list_tasks tool (status, priority, assignee, pagination, sort, due-date range).',
     inputSchema: z.object({
       projectId: z.string().describe('Project ID to list tasks from'),
+      status: z.string().optional().describe('Filter by status column slug'),
+      priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('Filter by priority'),
+      assigneeId: z.string().optional().describe('Filter by assignee user ID'),
+      page: z.number().int().positive().optional().describe('Page number (1-based)'),
+      limit: z.number().int().positive().optional().describe('Max tasks per page'),
+      sortBy: z
+        .enum(['createdAt', 'priority', 'dueDate', 'position', 'title', 'number'])
+        .optional()
+        .describe('Field to sort by'),
+      sortOrder: z.enum(['asc', 'desc']).optional().describe('Sort direction'),
+      dueBefore: z.iso.datetime({ offset: true }).optional().describe('Only tasks due before this ISO date'),
+      dueAfter: z.iso.datetime({ offset: true }).optional().describe('Only tasks due after this ISO date'),
     }),
-    execute: async ({ projectId }) => {
+    execute: async ({ projectId, ...rest }) => {
+      const params: ListTasksParams = rest
       try {
-        const tasks = await provider.listTasks(projectId)
-        log.info({ projectId, taskCount: tasks.length }, 'Tasks listed via tool')
+        const tasks = await provider.listTasks(projectId, params)
+        log.info({ projectId, taskCount: tasks.length, filters: rest }, 'Tasks listed via tool')
         const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
         return tasks.map((task) => ({ ...task, dueDate: utcToLocal(task.dueDate, timezone) }))
       } catch (error) {
