@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { AuthorizationResult, ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import type { AuthorizationResult, CommandHandler } from '../../src/chat/types.js'
 import { registerConfigCommand } from '../../src/commands/config.js'
 import { setConfig } from '../../src/config.js'
 import { clearUserCache } from '../utils/test-cache.js'
-import { createDmMessage, createMockReply, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import {
+  createDmMessage,
+  createMockChatWithCommandHandlers,
+  createMockReply,
+  mockLogger,
+  setupTestDb,
+} from '../utils/test-helpers.js'
 
 const USER_ID = 'config-test-user'
 
@@ -25,18 +31,9 @@ describe('/config Command', () => {
     await setupTestDb()
     clearUserCache(USER_ID)
 
-    configHandler = null
-    const mockChat: ChatProvider = {
-      name: 'mock',
-      registerCommand: (_name: string, handler: CommandHandler): void => {
-        configHandler = handler
-      },
-      onMessage: (): void => {},
-      sendMessage: (): Promise<void> => Promise.resolve(),
-      start: (): Promise<void> => Promise.resolve(),
-      stop: (): Promise<void> => Promise.resolve(),
-    }
+    const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
     registerConfigCommand(mockChat, (_userId: string) => true)
+    configHandler = commandHandlers.get('config') ?? null
   })
 
   test('shows all config keys with values and masked secrets', async () => {

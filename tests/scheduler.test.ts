@@ -4,6 +4,7 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import { setCachedConfig } from '../src/cache.js'
+import type { ChatProvider } from '../src/chat/types.js'
 import * as schema from '../src/db/schema.js'
 import type { Capability, Task, TaskProvider } from '../src/providers/types.js'
 import { createRecurringTask, getDueRecurringTasks } from '../src/recurring.js'
@@ -12,7 +13,7 @@ import { tick, createMissedTasks, startScheduler, stopScheduler } from '../src/s
 import { setKaneoWorkspace } from '../src/users.js'
 import { createMockProvider } from './tools/mock-provider.js'
 import { clearUserCache } from './utils/test-cache.js'
-import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
+import { createMockChatWithHandler, mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 process.env['TASK_PROVIDER'] = 'kaneo'
 process.env['KANEO_CLIENT_URL'] = 'http://localhost:11337'
@@ -37,14 +38,7 @@ describe('scheduler', () => {
   let sendMessageCalls: Array<{ userId: string; text: string }>
   let sendMessageImpl: (userId: string, text: string) => Promise<void>
 
-  let mockChatProvider: {
-    name: string
-    registerCommand: () => void
-    onMessage: () => void
-    sendMessage: (userId: string, text: string) => Promise<void>
-    start: () => Promise<void>
-    stop: () => Promise<void>
-  }
+  let mockChatProvider: ChatProvider
 
   // ---- In-memory test database ----
 
@@ -151,17 +145,11 @@ describe('scheduler', () => {
     }
 
     // Build mockChatProvider (uses mutable sendMessageImpl/sendMessageCalls)
-    mockChatProvider = {
-      name: 'mock',
-      registerCommand: (): void => {},
-      onMessage: (): void => {},
-      sendMessage: (userId: string, text: string): Promise<void> => {
-        sendMessageCalls.push({ userId, text })
-        return sendMessageImpl(userId, text)
-      },
-      start: (): Promise<void> => Promise.resolve(),
-      stop: (): Promise<void> => Promise.resolve(),
-    }
+    const { mockChat } = createMockChatWithHandler((userId: string, text: string): Promise<void> => {
+      sendMessageCalls.push({ userId, text })
+      return sendMessageImpl(userId, text)
+    })
+    mockChatProvider = mockChat
 
     setupDb()
     setTestDrizzleDb(testDb)

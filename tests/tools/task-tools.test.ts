@@ -7,8 +7,7 @@ import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
-import { getToolExecutor, schemaValidates } from '../test-helpers.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTask(val: unknown): val is { id: string; title: string; status: string } {

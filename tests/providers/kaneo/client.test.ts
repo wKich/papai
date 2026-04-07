@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { kaneoFetch } from '../../../src/providers/kaneo/client.js'
 import { KaneoApiError, KaneoValidationError } from '../../../src/providers/kaneo/errors.js'
 import { TaskSchema as KaneoTaskResponseSchema } from '../../../src/providers/kaneo/schemas/create-task.js'
-import { restoreFetch, setMockFetch, createMockTask } from '../../test-helpers.js'
+import { restoreFetch, setMockFetch, createMockTask } from '../../utils/test-helpers.js'
 import { EmptyResponseSchema } from './test-resources.js'
 
 describe('kaneoFetch', () => {

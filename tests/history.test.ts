@@ -6,8 +6,7 @@ import { eq } from 'drizzle-orm'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
 import * as schema from '../src/db/schema.js'
 import { appendHistory, loadHistory, saveHistory, clearHistory } from '../src/history.js'
-import { flushMicrotasks } from './test-helpers.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+import { flushMicrotasks, mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 beforeEach(() => {
   mockLogger()

@@ -5,9 +5,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { getConfig } from '../../src/config.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
-import { mockLogger } from '../utils/logger-mock.js'
-import { setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, restoreFetch, setMockFetch, setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, processWizardMessage } = await import('../../src/wizard/engine.js')

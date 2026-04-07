@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { logBuffer } from '../../src/debug/log-buffer.js'
 import { startDebugServer, stopDebugServer } from '../../src/debug/server.js'
-import { restoreFetch } from '../test-helpers.js'
+import { restoreFetch } from '../utils/test-helpers.js'
 
 const TEST_PORT = 19101
 const PUBLIC_DIR = path.resolve(import.meta.dir, '../../public')

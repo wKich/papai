@@ -14,10 +14,10 @@ import {
   createMockLabel,
   createMockProject,
   createMockTask,
+  mockLogger,
   restoreFetch,
   setMockFetch,
-} from '../../test-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
+} from '../../utils/test-helpers.js'
 
 const KaneoProjectSchema = z.object({
   id: z.string(),

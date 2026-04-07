@@ -1,24 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import type { CommandHandler } from '../../src/chat/types.js'
 import { registerStartCommand } from '../../src/commands/start.js'
 import { addUser, isAuthorized } from '../../src/users.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { createMockChatWithCommandHandlers, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('start command — demo mode auto-add', () => {
   let lastHandler: CommandHandler | null = null
   let capturedText: string | null = null
 
-  const mockChat: ChatProvider = {
-    name: 'mock',
-    registerCommand: (_name: string, handler: CommandHandler): void => {
-      lastHandler = handler
-    },
-    onMessage: (): void => {},
-    sendMessage: (): Promise<void> => Promise.resolve(),
-    start: (): Promise<void> => Promise.resolve(),
-    stop: (): Promise<void> => Promise.resolve(),
-  }
+  const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
 
   const mockReply = {
     text: (content: string): Promise<void> => {
@@ -37,6 +28,7 @@ describe('start command — demo mode auto-add', () => {
     capturedText = null
     lastHandler = null
     registerStartCommand(mockChat)
+    lastHandler = commandHandlers.get('start') ?? null
   })
 
   afterEach(() => {

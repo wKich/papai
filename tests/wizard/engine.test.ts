@@ -6,9 +6,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mock } from 'bun:test'
 
 import { getConfig, setConfig } from '../../src/config.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
 import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
-import { setupTestDb } from '../utils/test-helpers.js'
+import { restoreFetch, setMockFetch, setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
 const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizardSteps } =

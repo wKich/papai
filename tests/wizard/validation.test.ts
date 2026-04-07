@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { validateLlmApiKey, validateLlmBaseUrl, validateModelExists } from '../../src/wizard/validation.js'
-import { restoreFetch, setMockFetch } from '../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../utils/test-helpers.js'
 
 describe('validateLlmApiKey', () => {
   beforeEach(() => {

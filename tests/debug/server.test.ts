@@ -5,7 +5,7 @@ import path from 'node:path'
 import { logBuffer, logBufferStream } from '../../src/debug/log-buffer.js'
 import { startDebugServer, stopDebugServer } from '../../src/debug/server.js'
 import { getLogLevel, logMultistream } from '../../src/logger.js'
-import { restoreFetch } from '../test-helpers.js'
+import { restoreFetch } from '../utils/test-helpers.js'
 
 const PINO_LEVEL_VALUES: Record<string, number> = {
   trace: 10,

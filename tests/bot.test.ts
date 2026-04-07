@@ -1,9 +1,17 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 
-import { checkAuthorizationExtended } from '../src/bot.js'
+import { checkAuthorizationExtended, setupBot, type BotDeps } from '../src/bot.js'
+import type { IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import { setConfig } from '../src/config.js'
 import { addGroupMember } from '../src/groups.js'
-import { addUser, isAuthorized } from '../src/users.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+import { addUser, isAuthorized, removeUser } from '../src/users.js'
+import {
+  createDmMessage,
+  createMockChatForBot,
+  createMockReply,
+  mockLogger,
+  setupTestDb,
+} from './utils/test-helpers.js'
 
 describe('Authorization Logic', () => {
   beforeEach(async () => {
@@ -188,5 +196,187 @@ describe('Demo Mode Auto-Provision', () => {
   test('demo mode off: unknown DM user is NOT auto-added', () => {
     const result = checkAuthorizationExtended('stranger-1', 'stranger', 'stranger-1', 'dm', false)
     expect(result.allowed).toBe(false)
+  })
+})
+
+// Setup user config to bypass wizard auto-start
+function setupUserConfig(userId: string): void {
+  setConfig(userId, 'llm_apikey', 'sk-test1234')
+  setConfig(userId, 'llm_baseurl', 'https://api.test.com')
+  setConfig(userId, 'main_model', 'gpt-4')
+  setConfig(userId, 'small_model', 'gpt-4')
+  setConfig(userId, 'kaneo_apikey', 'test-kaneo-key')
+  setConfig(userId, 'timezone', 'UTC')
+}
+
+const ADMIN_ID = 'admin-bot-auth'
+
+describe('Bot Authorization Gate (setupBot)', () => {
+  // Track processMessage calls
+  let processMessageCallCount = 0
+  let lastProcessedStorageId: string | null = null
+
+  let getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+
+  beforeEach(async () => {
+    // Reset mutable state to defaults
+    processMessageCallCount = 0
+    lastProcessedStorageId = null
+
+    // Register mocks
+    mockLogger()
+
+    // Setup test database with migrations
+    await setupTestDb()
+
+    const botDeps: BotDeps = {
+      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+        processMessageCallCount++
+        lastProcessedStorageId = storageContextId
+        return Promise.resolve()
+      },
+    }
+
+    const { provider: mockChat, getMessageHandler: getHandler } = createMockChatForBot()
+    getMessageHandler = getHandler
+
+    setupBot(mockChat, ADMIN_ID, botDeps)
+  })
+
+  describe('Unauthorized user — silent drop', () => {
+    test('does not call processMessage for unauthorized user', async () => {
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+      const { reply } = createMockReply()
+      await messageHandler!(createDmMessage('unknown-user', 'hello'), reply)
+      expect(processMessageCallCount).toBe(0)
+    })
+
+    test('does not call reply.text for unauthorized user', async () => {
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await messageHandler!(createDmMessage('unknown-user', 'hello'), reply)
+      expect(textCalls).toHaveLength(0)
+    })
+  })
+
+  describe('Authorized user — message processed', () => {
+    test('calls processMessage for authorized user', async () => {
+      addUser('auth-user', ADMIN_ID)
+      setupUserConfig('auth-user')
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+      const { reply } = createMockReply()
+      await messageHandler!(createDmMessage('auth-user', 'hello'), reply)
+      expect(processMessageCallCount).toBe(1)
+      expect(lastProcessedStorageId).toBe('auth-user')
+    })
+  })
+
+  describe('Username resolution on first message', () => {
+    test('resolves username to real ID on first message', async () => {
+      // Add user by username (placeholder ID, like /user add @newuser)
+      addUser('placeholder-uuid', ADMIN_ID, 'newuser')
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+      const { reply } = createMockReply()
+      // First message from real user ID with that username
+      const msg = createDmMessage('real-555', 'hello', 'newuser')
+      setupUserConfig('real-555')
+      await messageHandler!(msg, reply)
+      expect(processMessageCallCount).toBe(1)
+      expect(isAuthorized('real-555')).toBe(true)
+    })
+
+    test('subsequent messages from resolved user pass authorization', async () => {
+      addUser('placeholder-uuid-2', ADMIN_ID, 'resolveduser')
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+      const { reply: reply1 } = createMockReply()
+      // First message - resolves username
+      const msg1 = createDmMessage('real-666', 'hello', 'resolveduser')
+      setupUserConfig('real-666')
+      await messageHandler!(msg1, reply1)
+      expect(processMessageCallCount).toBe(1)
+
+      // Second message - should use real ID directly
+      const { reply: reply2 } = createMockReply()
+      const msg2 = createDmMessage('real-666', 'hello', 'resolveduser')
+      await messageHandler!(msg2, reply2)
+      expect(processMessageCallCount).toBe(2)
+    })
+  })
+
+  describe('Access revoked during session', () => {
+    test('drops message after user is removed', async () => {
+      addUser('removable-user', ADMIN_ID)
+      setupUserConfig('removable-user')
+      const messageHandler = getMessageHandler()
+      expect(messageHandler).not.toBeNull()
+
+      // First message — authorized
+      const { reply: reply1 } = createMockReply()
+      await messageHandler!(createDmMessage('removable-user', 'hello'), reply1)
+      expect(processMessageCallCount).toBe(1)
+
+      // Remove user
+      removeUser('removable-user')
+
+      // Second message — should be dropped
+      const { reply: reply2, textCalls } = createMockReply()
+      await messageHandler!(createDmMessage('removable-user', 'hello'), reply2)
+      expect(processMessageCallCount).toBe(1)
+      expect(textCalls).toHaveLength(0)
+    })
+  })
+})
+
+describe('Demo Mode — wizard bypass (setupBot)', () => {
+  let processMessageCallCount = 0
+  let lastProcessedStorageId: string | null = null
+
+  let getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+
+  beforeEach(async () => {
+    // Reset mutable state to defaults
+    processMessageCallCount = 0
+    lastProcessedStorageId = null
+
+    // Register mocks
+    mockLogger()
+
+    await setupTestDb()
+
+    const botDeps: BotDeps = {
+      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+        processMessageCallCount++
+        lastProcessedStorageId = storageContextId
+        return Promise.resolve()
+      },
+    }
+
+    const { provider: mockChat, getMessageHandler: getHandler } = createMockChatForBot()
+    getMessageHandler = getHandler
+
+    setupBot(mockChat, ADMIN_ID, botDeps)
+  })
+
+  afterEach(() => {
+    delete process.env['DEMO_MODE']
+  })
+
+  test('demo user message reaches processMessage instead of wizard', async () => {
+    process.env['DEMO_MODE'] = 'true'
+    // Add as demo user (no config — normally triggers wizard)
+    addUser('demo-bypass-1', 'demo-auto', 'demouser')
+
+    const messageHandler = getMessageHandler()
+    const { reply } = createMockReply()
+    await messageHandler!(createDmMessage('demo-bypass-1', 'hello', 'demouser'), reply)
+
+    // Should reach processMessage, not be intercepted by wizard
+    expect(processMessageCallCount).toBe(1)
+    expect(lastProcessedStorageId).toBe('demo-bypass-1')
   })
 })

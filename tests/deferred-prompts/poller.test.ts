@@ -9,25 +9,7 @@ import { pollAlertsOnce, pollScheduledOnce } from '../../src/deferred-prompts/po
 import { createScheduledPrompt, getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { createMockProvider } from '../tools/mock-provider.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-
-// --- Helpers ---
-
-function createMockChat(): ChatProvider & { sentMessages: Array<{ userId: string; text: string }> } {
-  const sentMessages: Array<{ userId: string; text: string }> = []
-  return {
-    name: 'mock',
-    sentMessages,
-    registerCommand: (): void => {},
-    onMessage: (): void => {},
-    sendMessage: (userId: string, text: string): Promise<void> => {
-      sentMessages.push({ userId, text })
-      return Promise.resolve()
-    },
-    start: (): Promise<void> => Promise.resolve(),
-    stop: (): Promise<void> => Promise.resolve(),
-  }
-}
+import { createMockChatWithSentMessages, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 function setupUserConfig(userId: string): void {
   setConfig(userId, 'llm_apikey', 'test-key')
@@ -53,7 +35,8 @@ type GenerateTextResult = {
 // --- Tests ---
 
 describe('pollScheduledOnce', () => {
-  let chat: ReturnType<typeof createMockChat>
+  let sentMessages: Array<{ userId: string; text: string }>
+  let chat: ChatProvider
   let provider: TaskProvider
   let generateTextImpl = (): Promise<GenerateTextResult> =>
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
@@ -70,7 +53,9 @@ describe('pollScheduledOnce', () => {
       createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
     }))
     await setupTestDb()
-    chat = createMockChat()
+    const result = createMockChatWithSentMessages()
+    chat = result.provider
+    sentMessages = result.sentMessages
     provider = createMockProvider()
     setupUserConfig(USER_ID)
   })
@@ -82,9 +67,9 @@ describe('pollScheduledOnce', () => {
     await pollScheduledOnce(chat, () => provider)
 
     // Should have sent a message
-    expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.userId).toBe(USER_ID)
-    expect(chat.sentMessages[0]!.text).toBe('Task completed.')
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.userId).toBe(USER_ID)
+    expect(sentMessages[0]!.text).toBe('Task completed.')
 
     // Should be marked as completed
     const updated = getScheduledPrompt(created.id, USER_ID)
@@ -99,7 +84,7 @@ describe('pollScheduledOnce', () => {
 
     await pollScheduledOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(0)
+    expect(sentMessages).toHaveLength(0)
   })
 
   test('advances recurring prompt to next cron occurrence', async () => {
@@ -112,7 +97,7 @@ describe('pollScheduledOnce', () => {
     await pollScheduledOnce(chat, () => provider)
 
     // Should have sent a message
-    expect(chat.sentMessages).toHaveLength(1)
+    expect(sentMessages).toHaveLength(1)
 
     // Should still be active with updated fireAt
     const updated = getScheduledPrompt(created.id, USER_ID)
@@ -145,8 +130,8 @@ describe('pollScheduledOnce', () => {
     // Single LLM call for all three prompts
     expect(callCount).toBe(1)
     // Single message sent to user
-    expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.text).toBe('All tasks handled.')
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.text).toBe('All tasks handled.')
 
     // All three should be completed
     expect(getScheduledPrompt(p1.id, USER_ID)!.status).toBe('completed')
@@ -164,7 +149,7 @@ describe('pollScheduledOnce', () => {
 
     await pollScheduledOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(1)
+    expect(sentMessages).toHaveLength(1)
     expect(getScheduledPrompt(oneShot.id, USER_ID)!.status).toBe('completed')
     const updatedRecurring = getScheduledPrompt(recurring.id, USER_ID)!
     expect(updatedRecurring.status).toBe('active')
@@ -191,7 +176,7 @@ describe('pollScheduledOnce', () => {
     // Two LLM calls: one per user
     expect(callCount).toBe(2)
     // Two messages: one per user
-    expect(chat.sentMessages).toHaveLength(2)
+    expect(sentMessages).toHaveLength(2)
   })
 
   test('skips prompt when LLM config is missing', async () => {
@@ -203,13 +188,14 @@ describe('pollScheduledOnce', () => {
     await pollScheduledOnce(chat, () => provider)
 
     // Should still send the fallback message
-    expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.text).toContain('missing LLM configuration')
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.text).toContain('missing LLM configuration')
   })
 })
 
 describe('pollScheduledOnce — error handling', () => {
-  let chat: ReturnType<typeof createMockChat>
+  let sentMessages: Array<{ userId: string; text: string }>
+  let chat: ChatProvider
   let generateTextImpl = (): Promise<GenerateTextResult> =>
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
@@ -225,7 +211,9 @@ describe('pollScheduledOnce — error handling', () => {
       createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
     }))
     await setupTestDb()
-    chat = createMockChat()
+    const result = createMockChatWithSentMessages()
+    chat = result.provider
+    sentMessages = result.sentMessages
     setupUserConfig(USER_ID)
   })
 
@@ -238,7 +226,7 @@ describe('pollScheduledOnce — error handling', () => {
 
     await pollScheduledOnce(chat, () => createMockProvider())
 
-    expect(chat.sentMessages.some((m) => m.userId === userId)).toBe(true)
+    expect(sentMessages.some((m: { userId: string; text: string }) => m.userId === userId)).toBe(true)
   })
 
   test('completes one-shot prompt even when LLM fails', async () => {
@@ -275,7 +263,8 @@ describe('pollScheduledOnce — error handling', () => {
 })
 
 describe('pollAlertsOnce', () => {
-  let chat: ReturnType<typeof createMockChat>
+  let sentMessages: Array<{ userId: string; text: string }>
+  let chat: ChatProvider
   let generateTextImpl = (): Promise<GenerateTextResult> =>
     Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
@@ -291,7 +280,9 @@ describe('pollAlertsOnce', () => {
       createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
     }))
     await setupTestDb()
-    chat = createMockChat()
+    const result = createMockChatWithSentMessages()
+    chat = result.provider
+    sentMessages = result.sentMessages
     setupUserConfig(USER_ID)
   })
 
@@ -300,7 +291,7 @@ describe('pollAlertsOnce', () => {
 
     await pollAlertsOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(0)
+    expect(sentMessages).toHaveLength(0)
   })
 
   test('does not trigger when no tasks match condition', async () => {
@@ -315,7 +306,7 @@ describe('pollAlertsOnce', () => {
 
     await pollAlertsOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(0)
+    expect(sentMessages).toHaveLength(0)
   })
 
   test('triggers alert when task matches condition', async () => {
@@ -330,9 +321,9 @@ describe('pollAlertsOnce', () => {
 
     await pollAlertsOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.userId).toBe(USER_ID)
-    expect(chat.sentMessages[0]!.text).toBe('Alert triggered.')
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.userId).toBe(USER_ID)
+    expect(sentMessages[0]!.text).toBe('Alert triggered.')
   })
 
   test('enriches tasks via getTask when condition references assignee', async () => {
@@ -360,7 +351,7 @@ describe('pollAlertsOnce', () => {
 
     await pollAlertsOnce(chat, () => provider)
 
-    expect(chat.sentMessages).toHaveLength(1)
-    expect(chat.sentMessages[0]!.text).toBe('Alert triggered.')
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.text).toBe('Alert triggered.')
   })
 })

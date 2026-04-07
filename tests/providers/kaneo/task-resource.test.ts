@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
 import type { TaskStatusDeps } from '../../../src/providers/kaneo/task-status.js'
-import { createMockColumn, createMockTask, restoreFetch, setMockFetch } from '../../test-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
+import { createMockColumn, createMockTask, mockLogger, restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 import { TaskResource } from './test-resources.js'
 
 describe('TaskResource', () => {

@@ -4,8 +4,7 @@ import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeDeleteProjectTool } from '../../src/tools/delete-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
-import { getToolExecutor, schemaValidates } from '../test-helpers.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 interface Project {

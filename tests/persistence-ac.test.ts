@@ -13,8 +13,7 @@ import { _userCaches } from '../src/cache.js'
 import * as schema from '../src/db/schema.js'
 import { loadHistory, saveHistory } from '../src/history.js'
 import { loadSummary, saveSummary, loadFacts, upsertFact, buildMemoryContextMessage } from '../src/memory.js'
-import { flushMicrotasks } from './test-helpers.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+import { flushMicrotasks, mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('Story 2: Surviving restart', () => {
   let testDb: Awaited<ReturnType<typeof setupTestDb>>

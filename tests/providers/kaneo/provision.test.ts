@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { provisionKaneoUser } from '../../../src/providers/kaneo/provision.js'
-import { setMockFetch } from '../../test-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
+import { mockLogger, setMockFetch } from '../../utils/test-helpers.js'
 
 function parseBody(body: unknown): unknown {
   if (typeof body === 'string') {

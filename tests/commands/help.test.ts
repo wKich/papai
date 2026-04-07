@@ -1,23 +1,19 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import type { CommandHandler } from '../../src/chat/types.js'
 import { registerHelpCommand } from '../../src/commands/help.js'
-import { createDmMessage, createGroupMessage, mockLogger } from '../utils/test-helpers.js'
+import {
+  createDmMessage,
+  createGroupMessage,
+  createMockChatWithCommandHandlers,
+  mockLogger,
+} from '../utils/test-helpers.js'
 
 describe('help command', () => {
   let capturedText: string | null = null
   let lastHandler: CommandHandler | null = null
 
-  const mockChat: ChatProvider = {
-    name: 'mock',
-    registerCommand: (_name: string, handler: CommandHandler): void => {
-      lastHandler = handler
-    },
-    onMessage: (): void => {},
-    sendMessage: (): Promise<void> => Promise.resolve(),
-    start: (): Promise<void> => Promise.resolve(),
-    stop: (): Promise<void> => Promise.resolve(),
-  }
+  const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
 
   const mockReply = {
     text: (content: string): Promise<void> => {
@@ -34,11 +30,11 @@ describe('help command', () => {
     mockLogger()
     capturedText = null
     lastHandler = null
+    registerHelpCommand(mockChat)
+    lastHandler = commandHandlers.get('help') ?? null
   })
 
   test('DM help shows user management commands for admin', async () => {
-    registerHelpCommand(mockChat)
-
     const dmMsg = createDmMessage('user1', '/help')
 
     const auth = {
@@ -60,8 +56,6 @@ describe('help command', () => {
   })
 
   test('DM help shows basic commands for non-admin', async () => {
-    registerHelpCommand(mockChat)
-
     const dmMsg = createDmMessage('user1', '/help')
 
     const auth = {
@@ -82,8 +76,6 @@ describe('help command', () => {
   })
 
   test('Group help shows group commands', async () => {
-    registerHelpCommand(mockChat)
-
     const groupMsg = createGroupMessage('user1', '/help', false, 'group1')
 
     const auth = {
@@ -105,8 +97,6 @@ describe('help command', () => {
   })
 
   test('Group admin help includes config commands', async () => {
-    registerHelpCommand(mockChat)
-
     const groupMsg = createGroupMessage('admin1', '/help', true, 'group1')
 
     const auth = {

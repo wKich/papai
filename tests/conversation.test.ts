@@ -5,7 +5,7 @@ import type { ModelMessage } from 'ai'
 import * as cacheModule from '../src/cache.js'
 import { shouldTriggerTrim, buildMessagesWithMemory, runTrimInBackground } from '../src/conversation.js'
 import { logger } from '../src/logger.js'
-import { flushMicrotasks } from './test-helpers.js'
+import { flushMicrotasks } from './utils/test-helpers.js'
 
 // Helper type for spy instances that need cleanup
 type SpyInstance = { mockRestore: () => void }

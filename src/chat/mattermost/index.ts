@@ -257,6 +257,20 @@ export class MattermostChatProvider implements ChatProvider {
     return ChannelSchema.parse(data).id
   }
 
+  async resolveUserId(username: string): Promise<string | null> {
+    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
+    try {
+      const data = await this.apiFetch('GET', `/api/v4/users/username/${encodeURIComponent(cleanUsername)}`, undefined)
+      const parsed = UserMeSchema.safeParse(data)
+      if (parsed.success) {
+        return parsed.data.id
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
   private wsSend(data: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data))

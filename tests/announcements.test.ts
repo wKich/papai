@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import packageJson from '../package.json' with { type: 'json' }
 import type { AnnouncementsDeps } from '../src/announcements.js'
 import { announceNewVersion } from '../src/announcements.js'
-import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { ChatProvider } from '../src/chat/types.js'
 import { runMigrations } from '../src/db/migrate.js'
 import { migration001Initial } from '../src/db/migrations/001_initial.js'
 import { migration002ConversationHistory } from '../src/db/migrations/002_conversation_history.js'
@@ -17,7 +17,7 @@ import { migration006VersionAnnouncements } from '../src/db/migrations/006_versi
 import { migration007PlatformUserId } from '../src/db/migrations/007_platform_user_id.js'
 import * as schema from '../src/db/schema.js'
 import { extractChangelogSection } from './helpers/extract-changelog-section.js'
-import { mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
+import { createMockChatWithHandler, mockLogger, setTestDrizzleDb } from './utils/test-helpers.js'
 
 const ADMIN_USER_ID = 'admin123'
 
@@ -146,17 +146,10 @@ describe('announceNewVersion', () => {
     // Add admin user to the database
     testDb.insert(schema.users).values({ platformUserId: ADMIN_USER_ID, addedBy: ADMIN_USER_ID }).run()
 
-    mockChat = {
-      name: 'mock',
-      registerCommand: (
-        _name: string,
-        _handler: (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>,
-      ): void => {},
-      onMessage: (_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void => {},
-      sendMessage: (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
-      start: (): Promise<void> => Promise.resolve(),
-      stop: (): Promise<void> => Promise.resolve(),
-    }
+    const { mockChat: chat } = createMockChatWithHandler(
+      (userId: string, text: string): Promise<void> => sendMessageImpl(userId, text),
+    )
+    mockChat = chat
   })
 
   test('sends announcement only to admin user', async () => {

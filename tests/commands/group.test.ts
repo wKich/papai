@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ChatProvider, CommandHandler, IncomingMessage } from '../../src/chat/types.js'
 import { registerGroupCommand } from '../../src/commands/group.js'
-import { createAuth, createGroupMessage, createMockReply, mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import {
+  createAuth,
+  createGroupMessage,
+  createMockChat,
+  createMockReply,
+  mockLogger,
+  setupTestDb,
+} from '../utils/test-helpers.js'
 
 describe('group commands', () => {
   let mockChat: ChatProvider
@@ -14,18 +21,18 @@ describe('group commands', () => {
     // Setup test database with migrations
     await setupTestDb()
 
-    // Setup mock chat provider
+    // Setup mock chat provider with custom resolveUserId
     commandHandlers = new Map()
-    mockChat = {
-      name: 'mock',
-      registerCommand: (name: string, handler: CommandHandler): void => {
-        commandHandlers.set(name, handler)
+    mockChat = createMockChat({
+      commandHandlers,
+      resolveUserId: (username: string): Promise<string | null> => {
+        const clean = username.startsWith('@') ? username.slice(1) : username
+        if (clean === 'user1') return Promise.resolve('user1_id')
+        if (clean === 'user2') return Promise.resolve('user2_id')
+        if (/^\d+$/.test(clean)) return Promise.resolve(clean)
+        return Promise.resolve(null)
       },
-      onMessage: (): void => {},
-      sendMessage: async (): Promise<void> => {},
-      start: async (): Promise<void> => {},
-      stop: async (): Promise<void> => {},
-    }
+    })
 
     // Register the group command
     registerGroupCommand(mockChat)
@@ -110,7 +117,47 @@ describe('group commands', () => {
 
       const { listGroupMembers } = await import('../../src/groups.js')
       const members = listGroupMembers('group1')
-      expect(members.some((m) => m.user_id === 'user1')).toBe(true)
+      // Should store the resolved ID, not the username
+      expect(members.some((m) => m.user_id === 'user1_id')).toBe(true)
+    })
+
+    test('resolves username to user ID before storing', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser @user2', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      const { listGroupMembers } = await import('../../src/groups.js')
+      const members = listGroupMembers('group1')
+      // Should store the resolved ID, not the username
+      expect(members.some((m) => m.user_id === 'user2_id')).toBe(true)
+      expect(members.some((m) => m.user_id === 'user2')).toBe(false)
+    })
+
+    test('handles unresolved username gracefully', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser @unknown_user', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      // Should still add with the raw value (input.slice(1)) when resolver returns null
+      lastReply = textCalls[0] ?? null
+      expect(lastReply).toBe('User @unknown_user added to this group.')
+
+      // Verify the null-fallback path: stored ID must be the sliced username, not '@unknown_user'
+      const { listGroupMembers } = await import('../../src/groups.js')
+      const members = listGroupMembers('group1')
+      expect(members.some((m) => m.user_id === 'unknown_user')).toBe(true)
     })
   })
 

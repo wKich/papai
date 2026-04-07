@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { makeAddTaskRelationTool } from '../../src/tools/add-task-relation.js'
 import { makeRemoveTaskRelationTool } from '../../src/tools/remove-task-relation.js'
 import { makeUpdateTaskRelationTool } from '../../src/tools/update-task-relation.js'
-import { getToolExecutor, schemaValidates } from '../test-helpers.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTaskRelation(val: unknown): val is { taskId: string; relatedTaskId: string; type: string } {

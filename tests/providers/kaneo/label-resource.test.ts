@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { KaneoConfig } from '../../../src/providers/kaneo/client.js'
-import { restoreFetch, setMockFetch } from '../../test-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
+import { mockLogger, restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 import { LabelResource } from './test-resources.js'
 
 describe('LabelResource', () => {

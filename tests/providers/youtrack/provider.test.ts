@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
-import { restoreFetch, setMockFetch } from '../../test-helpers.js'
+import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 
 // Store reference to current fetch mock for call inspection
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>> | undefined

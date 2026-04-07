@@ -10,8 +10,7 @@ import {
   removeYouTrackComment,
   updateYouTrackComment,
 } from '../../../../src/providers/youtrack/operations/comments.js'
-import { restoreFetch, setMockFetch } from '../../../test-helpers.js'
-import { mockLogger } from '../../../utils/test-helpers.js'
+import { mockLogger, restoreFetch, setMockFetch } from '../../../utils/test-helpers.js'
 
 // --- Fetch mocking infrastructure ---
 

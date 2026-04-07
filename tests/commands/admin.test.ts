@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler } from '../../src/chat/types.js'
+import type { CommandHandler } from '../../src/chat/types.js'
 import type { AdminCommandsDeps } from '../../src/commands/admin.js'
 import { registerAdminCommands } from '../../src/commands/admin.js'
 import * as schema from '../../src/db/schema.js'
@@ -9,6 +9,8 @@ import { addUser, isAuthorized, listUsers } from '../../src/users.js'
 import {
   createDmMessage,
   createGroupMessage,
+  createMockChatWithCommandHandlers,
+  createMockChatWithHandler,
   createMockReply,
   getTestDb,
   mockLogger,
@@ -16,25 +18,6 @@ import {
 } from '../utils/test-helpers.js'
 
 const ADMIN_ID = 'admin-001'
-
-// Helper to create a mock ChatProvider with custom sendMessage behavior and capture handlers
-function createMockChatWithHandler(sendMessageImpl: (userId: string, markdown: string) => Promise<void>): {
-  mockChat: ChatProvider
-  handlers: Map<string, CommandHandler>
-} {
-  const handlers = new Map<string, CommandHandler>()
-  const mockChat: ChatProvider = {
-    name: 'mock',
-    registerCommand: (name: string, handler: CommandHandler): void => {
-      handlers.set(name, handler)
-    },
-    onMessage: (): void => {},
-    sendMessage: sendMessageImpl,
-    start: (): Promise<void> => Promise.resolve(),
-    stop: (): Promise<void> => Promise.resolve(),
-  }
-  return { mockChat, handlers }
-}
 
 describe('Admin Commands', () => {
   let commandHandlers: Map<string, CommandHandler>
@@ -58,17 +41,8 @@ describe('Admin Commands', () => {
       provisionAndConfigure: (): Promise<ProvisionOutcome> => provisionImpl(),
     }
 
-    commandHandlers = new Map()
-    const mockChat: ChatProvider = {
-      name: 'mock',
-      registerCommand: (name: string, handler: CommandHandler): void => {
-        commandHandlers.set(name, handler)
-      },
-      onMessage: (): void => {},
-      sendMessage: (): Promise<void> => Promise.resolve(),
-      start: (): Promise<void> => Promise.resolve(),
-      stop: (): Promise<void> => Promise.resolve(),
-    }
+    const { provider: mockChat, commandHandlers: handlers } = createMockChatWithCommandHandlers()
+    commandHandlers = handlers
     registerAdminCommands(mockChat, ADMIN_ID, adminDeps)
   })
 

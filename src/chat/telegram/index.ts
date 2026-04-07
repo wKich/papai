@@ -145,6 +145,16 @@ export class TelegramChatProvider implements ChatProvider {
     await this.bot.stop()
   }
 
+  resolveUserId(username: string): Promise<string | null> {
+    // Telegram Bot API cannot resolve usernames to user IDs
+    // Only numeric IDs can be used directly
+    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
+    if (/^\d+$/.test(cleanUsername)) {
+      return Promise.resolve(cleanUsername)
+    }
+    return Promise.resolve(null)
+  }
+
   async setCommands(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },

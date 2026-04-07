@@ -9,6 +9,7 @@ import {
   createAuth,
   createDmMessage,
   createGroupMessage,
+  createMockChatWithCommandHandlers,
   createMockReply,
   mockLogger,
   setupTestDb,
@@ -33,17 +34,9 @@ describe('command context restrictions', () => {
     addUser(adminUserId, adminUserId)
 
     // Setup mock chat provider
-    commandHandlers = new Map()
-    mockChat = {
-      name: 'mock',
-      registerCommand: (name: string, handler: CommandHandler): void => {
-        commandHandlers.set(name, handler)
-      },
-      onMessage: (): void => {},
-      sendMessage: async (): Promise<void> => {},
-      start: async (): Promise<void> => {},
-      stop: async (): Promise<void> => {},
-    }
+    const { provider, commandHandlers: handlers } = createMockChatWithCommandHandlers()
+    mockChat = provider
+    commandHandlers = handlers
 
     // Register commands
     registerClearCommand(mockChat, checkAuthorization, adminUserId)

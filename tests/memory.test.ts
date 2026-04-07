@@ -16,9 +16,8 @@ import {
   trimWithMemoryModel,
 } from '../src/memory.js'
 import { extractFacts } from './helpers/extract-facts.js'
-import { flushMicrotasks } from './test-helpers.js'
 import { clearUserCache } from './utils/test-cache.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
+import { flushMicrotasks, mockLogger, setupTestDb } from './utils/test-helpers.js'
 
 describe('memory', () => {
   // Mock getDrizzleDb to return our test database

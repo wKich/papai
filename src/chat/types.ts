@@ -107,6 +107,9 @@ export interface ChatProvider {
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
 
+  /** Resolve a username to a user ID. Returns null if not found. */
+  resolveUserId(username: string): Promise<string | null>
+
   /** Start the bot event loop. */
   start(): Promise<void>
 

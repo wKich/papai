@@ -22,10 +22,10 @@ export function registerGroupCommand(chat: ChatProvider): void {
 
     switch (subcommand) {
       case 'adduser':
-        await handleAddUser(msg, reply, targetUser)
+        await handleAddUser(chat, msg, reply, targetUser)
         break
       case 'deluser':
-        await handleDelUser(msg, reply, targetUser)
+        await handleDelUser(chat, msg, reply, targetUser)
         break
       case 'users':
         await handleListUsers(msg, reply)
@@ -42,7 +42,12 @@ export function registerGroupCommand(chat: ChatProvider): void {
   })
 }
 
-async function handleAddUser(msg: IncomingMessage, reply: ReplyFn, targetUser: string | undefined): Promise<void> {
+async function handleAddUser(
+  chat: ChatProvider,
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  targetUser: string | undefined,
+): Promise<void> {
   if (!msg.user.isAdmin) {
     await reply.text('Only group admins can add users.')
     return
@@ -53,7 +58,7 @@ async function handleAddUser(msg: IncomingMessage, reply: ReplyFn, targetUser: s
     return
   }
 
-  const userId = extractUserId(targetUser)
+  const userId = await extractUserId(chat, targetUser)
   if (userId === null) {
     await reply.text('Please provide a valid user mention or ID.')
     return
@@ -64,7 +69,12 @@ async function handleAddUser(msg: IncomingMessage, reply: ReplyFn, targetUser: s
   log.info({ groupId: msg.contextId, userId }, 'Group member added')
 }
 
-async function handleDelUser(msg: IncomingMessage, reply: ReplyFn, targetUser: string | undefined): Promise<void> {
+async function handleDelUser(
+  chat: ChatProvider,
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  targetUser: string | undefined,
+): Promise<void> {
   if (!msg.user.isAdmin) {
     await reply.text('Only group admins can remove users.')
     return
@@ -75,7 +85,7 @@ async function handleDelUser(msg: IncomingMessage, reply: ReplyFn, targetUser: s
     return
   }
 
-  const userId = extractUserId(targetUser)
+  const userId = await extractUserId(chat, targetUser)
   if (userId === null) {
     await reply.text('Please provide a valid user mention or ID.')
     return
@@ -98,9 +108,12 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
   await reply.text(`Group members:\n${memberList}`)
 }
 
-function extractUserId(input: string): string | null {
+async function extractUserId(chat: ChatProvider, input: string): Promise<string | null> {
   if (input.startsWith('@')) {
-    return input.slice(1)
+    // Try to resolve username to user ID via chat provider
+    const resolved = await chat.resolveUserId(input)
+    // If resolution fails, fall back to using the raw username (for backward compatibility)
+    return resolved ?? input.slice(1)
   }
   if (/^\d+$/.test(input) || /^[a-zA-Z0-9_-]+$/.test(input)) {
     return input
