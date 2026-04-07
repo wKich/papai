@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, mock } from 'bun:test'
 
 import { setCachedConfig } from '../../src/cache.js'
 import { makeGetCurrentTimeTool } from '../../src/tools/get-current-time.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 interface TimeResult {
   datetime: string
@@ -24,9 +24,10 @@ function isTimeResult(val: unknown): val is TimeResult {
 }
 
 describe('makeGetCurrentTimeTool', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLogger()
     mock.restore()
+    await setupTestDb()
     setCachedConfig('user-1', 'timezone', 'Asia/Karachi')
   })
 
