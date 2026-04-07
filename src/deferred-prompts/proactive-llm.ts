@@ -146,7 +146,12 @@ async function invokeWithContext(
   ]
 
   log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' }, 'generateText')
-  const result = await deps.generateText({ model, system: buildMinimalSystemPrompt(type, timezone), messages })
+  const result = await deps.generateText({
+    model,
+    system: buildMinimalSystemPrompt(type, timezone),
+    messages,
+    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
+  })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -197,6 +202,7 @@ async function invokeFull(
     messages: finalMessages,
     tools,
     stopWhen: deps.stepCountIs(25),
+    timeout: { totalMs: 1_200_000, stepMs: 600_000 },
   })
   persistProactiveResults(userId, result, history)
   return result.text ?? 'Done.'
