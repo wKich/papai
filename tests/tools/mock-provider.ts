@@ -6,17 +6,22 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
   'tasks.delete',
   'tasks.relations',
+  'tasks.watchers',
+  'tasks.votes',
+  'tasks.visibility',
   // Projects (full CRUD)
   'projects.read',
   'projects.list',
   'projects.create',
   'projects.update',
   'projects.delete',
+  'projects.team',
   // Comments (full CRUD)
   'comments.read',
   'comments.create',
   'comments.update',
   'comments.delete',
+  'comments.reactions',
   // Labels (full CRUD + assignment)
   'labels.list',
   'labels.create',
@@ -58,16 +63,27 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     listTasks: mock(() => Promise.resolve([])),
     searchTasks: mock(() => Promise.resolve([])),
     deleteTask: mock(() => Promise.resolve({ id: 'task-1' })),
+    listUsers: mock(() => Promise.resolve([{ id: 'user-1', login: 'alice', name: 'Alice Smith' }])),
+    getCurrentUser: mock(() => Promise.resolve({ id: 'user-1', login: 'alice', name: 'Alice Smith' })),
     getProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
     listProjects: mock(() => Promise.resolve([])),
     createProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
     updateProject: mock(() => Promise.resolve({ id: 'proj-1', name: 'Test', url: 'https://test.com/project/1' })),
     deleteProject: mock(() => Promise.resolve({ id: 'proj-1' })),
+    listProjectTeam: mock(() => Promise.resolve([{ id: 'user-1', login: 'alice', name: 'Alice Smith' }])),
+    addProjectMember: mock((projectId: string, userId: string) => Promise.resolve({ projectId, userId })),
+    removeProjectMember: mock((projectId: string, userId: string) => Promise.resolve({ projectId, userId })),
     getComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     addComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     getComments: mock(() => Promise.resolve([])),
     updateComment: mock(() => Promise.resolve({ id: 'comment-1', body: 'test' })),
     removeComment: mock(() => Promise.resolve({ id: 'comment-1' })),
+    addCommentReaction: mock((_taskId: string, _commentId: string, reaction: string) =>
+      Promise.resolve({ id: 'reaction-1', reaction, author: { id: 'user-1', login: 'alice' } }),
+    ),
+    removeCommentReaction: mock((taskId: string, commentId: string, reactionId: string) =>
+      Promise.resolve({ id: reactionId, taskId, commentId }),
+    ),
     listLabels: mock(() => Promise.resolve([])),
     createLabel: mock(() => Promise.resolve({ id: 'label-1', name: 'test' })),
     updateLabel: mock(() => Promise.resolve({ id: 'label-1', name: 'test' })),
@@ -77,6 +93,25 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     addRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' })),
     updateRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' })),
     removeRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2' })),
+    listWatchers: mock(() => Promise.resolve([{ id: 'user-1', login: 'alice', name: 'Alice Smith' }])),
+    addWatcher: mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId })),
+    removeWatcher: mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId })),
+    addVote: mock((taskId: string) => Promise.resolve({ taskId })),
+    removeVote: mock((taskId: string) => Promise.resolve({ taskId })),
+    setVisibility: mock(
+      (taskId: string, visibility: { kind: 'public' | 'restricted'; userIds?: string[]; groupIds?: string[] }) =>
+        Promise.resolve({
+          taskId,
+          visibility:
+            visibility.kind === 'public'
+              ? { kind: 'public' as const }
+              : {
+                  kind: 'restricted' as const,
+                  users: visibility.userIds?.map((id) => ({ id })),
+                  groups: visibility.groupIds?.map((id) => ({ name: id })),
+                },
+        }),
+    ),
     listStatuses: mock(() => Promise.resolve([])),
     createStatus: mock((_projectId: string, params: { name: string }) =>
       Promise.resolve({ id: 'status-1', name: params.name }),

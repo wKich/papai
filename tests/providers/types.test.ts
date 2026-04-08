@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { Attachment, Task, TaskListItem } from '../../src/providers/types.js'
+import type {
+  Attachment,
+  Capability,
+  Comment,
+  CommentReaction,
+  SetTaskVisibilityParams,
+  Task,
+  TaskListItem,
+  TaskProvider,
+  TaskVisibility,
+  UserRef,
+} from '../../src/providers/types.js'
+import { createMockProvider } from '../tools/mock-provider.js'
 
 describe('Attachment type', () => {
   test('Attachment accepts all fields', () => {
@@ -41,13 +53,20 @@ describe('Task type', () => {
       commentsCount: 3,
       resolved: '2024-01-01T00:00:00.000Z',
       attachments: [{ id: 'a-1', name: 'file.pdf', url: 'https://example.com/file.pdf' }],
-      visibility: { $type: 'LimitedVisibility' },
+      watchers: [{ id: 'u-3', login: 'watcher' }],
+      visibility: {
+        kind: 'restricted',
+        users: [{ id: 'u-1', login: 'alice', name: 'Alice Smith' }],
+        groups: [{ id: 'g-1', name: 'Maintainers' }],
+      },
       parent: { id: '100', idReadable: 'PROJ-0', title: 'Parent' },
       subtasks: [{ id: '200', idReadable: 'PROJ-2', title: 'Subtask', status: undefined }],
     }
     expect(task.number).toBe(42)
     expect(task.reporter?.name).toBe('Alice Smith')
     expect(task.votes).toBe(5)
+    expect(task.watchers?.[0]?.login).toBe('watcher')
+    expect(task.visibility?.kind).toBe('restricted')
   })
 })
 
@@ -62,5 +81,67 @@ describe('TaskListItem type', () => {
     }
     expect(item.number).toBe(42)
     expect(item.resolved).toBe('2024-01-01T00:00:00.000Z')
+  })
+})
+
+describe('collaboration domain types', () => {
+  test('UserRef and TaskVisibility accept structured collaboration data', () => {
+    const user: UserRef = {
+      id: 'u-1',
+      login: 'alice',
+      name: 'Alice Smith',
+    }
+    const visibility: TaskVisibility = {
+      kind: 'restricted',
+      users: [user],
+      groups: [{ id: 'g-1', name: 'Maintainers' }],
+    }
+    const params: SetTaskVisibilityParams = {
+      kind: 'restricted',
+      userIds: ['u-1'],
+      groupIds: ['g-1'],
+    }
+
+    expect(visibility.users?.[0]?.name).toBe('Alice Smith')
+    expect(params.groupIds).toEqual(['g-1'])
+  })
+
+  test('Comment accepts normalized reactions with removable ids', () => {
+    const reaction: CommentReaction = {
+      id: 'reaction-1',
+      reaction: 'thumbs_up',
+      author: { id: 'u-1', login: 'alice' },
+      createdAt: '2024-01-01T00:00:00.000Z',
+    }
+    const comment: Comment = {
+      id: 'comment-1',
+      body: 'Looks good',
+      reactions: [reaction],
+    }
+
+    expect(comment.reactions?.[0]?.id).toBe('reaction-1')
+    expect(comment.reactions?.[0]?.reaction).toBe('thumbs_up')
+  })
+})
+
+describe('TaskProvider collaboration methods', () => {
+  test('TaskProvider accepts optional collaboration methods and capabilities', async () => {
+    const capabilities: Capability[] = [
+      'tasks.watchers',
+      'tasks.votes',
+      'tasks.visibility',
+      'comments.reactions',
+      'projects.team',
+    ]
+
+    const provider: TaskProvider = createMockProvider()
+    const currentUser = await provider.getCurrentUser?.()
+    const visibility = await provider.setVisibility?.('PROJ-1', { kind: 'public' })
+    const team = await provider.listProjectTeam?.('PROJ')
+
+    expect(capabilities).toHaveLength(5)
+    expect(currentUser?.id).toBe('user-1')
+    expect(visibility).toEqual({ taskId: 'PROJ-1', visibility: { kind: 'public' } })
+    expect(team?.[0]?.id).toBe('user-1')
   })
 })

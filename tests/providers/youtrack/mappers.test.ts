@@ -131,7 +131,33 @@ describe('mapIssueToTask', () => {
         },
         { id: 'a-2', name: 'image.png', url: 'https://example.com/image.png' },
       ],
-      visibility: { $type: 'LimitedVisibility', permittedGroups: [{ name: 'team-a' }] },
+      watchers: {
+        hasStar: true,
+        issueWatchers: [
+          {
+            isStarred: true,
+            user: {
+              id: 'user-1',
+              login: 'alice',
+              fullName: 'Alice Example',
+              email: 'alice@example.com',
+            },
+          },
+          {
+            isStarred: false,
+            user: {
+              id: 'user-2',
+              login: 'bob',
+              fullName: 'Bob Example',
+            },
+          },
+        ],
+      },
+      visibility: {
+        $type: 'LimitedVisibility',
+        permittedGroups: [{ id: 'group-1', name: 'team-a' }],
+        permittedUsers: [{ id: 'user-1', login: 'alice', fullName: 'Alice Example' }],
+      },
     }
 
     const result = mapIssueToTask(
@@ -160,7 +186,15 @@ describe('mapIssueToTask', () => {
       author: undefined,
       createdAt: undefined,
     })
-    expect(result.visibility).toEqual({ $type: 'LimitedVisibility', permittedGroups: [{ name: 'team-a' }] })
+    expect(result.watchers).toEqual([
+      { id: 'user-1', login: 'alice', name: 'Alice Example' },
+      { id: 'user-2', login: 'bob', name: 'Bob Example' },
+    ])
+    expect(result.visibility).toEqual({
+      kind: 'restricted',
+      groups: [{ id: 'group-1', name: 'team-a' }],
+      users: [{ id: 'user-1', login: 'alice', name: 'Alice Example' }],
+    })
   })
 
   test('maps links to relations', () => {
@@ -487,6 +521,40 @@ describe('mapComment', () => {
 
     expect(result.author).toBe('bob')
     expect(result.createdAt).toBe('2024-01-02T00:00:00.000Z')
+  })
+
+  test('maps reactions with ids', () => {
+    const comment = {
+      id: 'c-1',
+      text: 'With reactions',
+      author: { login: 'bob' },
+      created: 1704153600000,
+      reactions: [
+        {
+          id: 'reaction-1',
+          reaction: 'thumbs_up',
+          author: {
+            id: 'user-1',
+            login: 'alice',
+            fullName: 'Alice Example',
+            email: 'alice@example.com',
+          },
+        },
+      ],
+    }
+
+    const result = mapComment(
+      comment as unknown as z.infer<typeof import('../../../src/providers/youtrack/schemas/comment.js').CommentSchema>,
+    )
+
+    expect(result.reactions).toEqual([
+      {
+        id: 'reaction-1',
+        reaction: 'thumbs_up',
+        author: { id: 'user-1', login: 'alice', name: 'Alice Example' },
+        createdAt: undefined,
+      },
+    ])
   })
 
   test('returns empty array when no fields', () => {

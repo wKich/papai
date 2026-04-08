@@ -79,15 +79,37 @@ describe('Comment schemas', () => {
       updated: 1700000000001,
       deleted: false,
       pinned: true,
+      reactions: [
+        {
+          id: 'reaction-1',
+          reaction: 'thumbs_up',
+          author: {
+            id: 'user-1',
+            login: 'john.doe',
+            fullName: 'John Doe',
+            email: 'john@example.com',
+          },
+        },
+      ],
     }
     const result = CommentSchema.parse(full)
     expect(result.textPreview).toBe('preview')
     expect(result.deleted).toBe(false)
     expect(result.pinned).toBe(true)
+    expect(result.reactions).toHaveLength(1)
   })
 
   test('empty text accepts (no .min(1))', () => {
     const result = CommentSchema.parse({ ...validComment, text: '' })
     expect(result.text).toBe('')
+  })
+
+  test('rejects invalid reaction payload', () => {
+    expect(() =>
+      CommentSchema.parse({
+        ...validComment,
+        reactions: [{ id: 'reaction-1', reaction: 'thumbs_up', author: { id: 'user-1', login: 'john.doe' } }],
+      }),
+    ).toThrow()
   })
 })

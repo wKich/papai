@@ -55,7 +55,13 @@ const mockFetchSequence = (responses: Array<{ data: unknown; status?: number }>)
 }
 
 /** Schema for a mock fetch call tuple: [url, init] */
-const FetchCallSchema = z.tuple([z.string(), z.looseObject({ body: z.string().optional() })])
+const FetchCallSchema = z.tuple([
+  z.string(),
+  z.looseObject({
+    method: z.string().optional(),
+    body: z.string().optional(),
+  }),
+])
 
 /** Schema for request body with custom fields */
 const RequestBodySchema = z.object({
@@ -81,6 +87,34 @@ const getLastFetchUrl = (): URL => {
   if (!parsed.success) return new URL('')
   const [url] = parsed.data
   return new URL(url)
+}
+
+const getFetchUrlAt = (index: number): URL => {
+  if (fetchMock === undefined) return new URL('')
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return new URL('')
+  const [url] = parsed.data
+  return new URL(url)
+}
+
+const getFetchMethodAt = (index: number): string => {
+  if (fetchMock === undefined) return ''
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return ''
+  const [, init] = parsed.data
+  return init.method ?? ''
+}
+
+const getFetchBodyAt = (index: number): unknown => {
+  if (fetchMock === undefined) return undefined
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return undefined
+  const [, init] = parsed.data
+  if (init.body === undefined) return undefined
+  return JSON.parse(init.body) as unknown
 }
 
 /** Parse and validate request body has customFields. */
@@ -119,17 +153,22 @@ describe('YouTrackProvider', () => {
       // Tasks (full support)
       expect(provider.capabilities.has('tasks.delete')).toBe(true)
       expect(provider.capabilities.has('tasks.relations')).toBe(true)
+      expect(provider.capabilities.has('tasks.watchers')).toBe(true)
+      expect(provider.capabilities.has('tasks.votes')).toBe(true)
+      expect(provider.capabilities.has('tasks.visibility')).toBe(true)
       // Projects (full CRUD support)
       expect(provider.capabilities.has('projects.read')).toBe(true)
       expect(provider.capabilities.has('projects.list')).toBe(true)
       expect(provider.capabilities.has('projects.create')).toBe(true)
       expect(provider.capabilities.has('projects.update')).toBe(true)
       expect(provider.capabilities.has('projects.delete')).toBe(true)
+      expect(provider.capabilities.has('projects.team')).toBe(true)
       // Comments (full CRUD support)
       expect(provider.capabilities.has('comments.read')).toBe(true)
       expect(provider.capabilities.has('comments.create')).toBe(true)
       expect(provider.capabilities.has('comments.update')).toBe(true)
       expect(provider.capabilities.has('comments.delete')).toBe(true)
+      expect(provider.capabilities.has('comments.reactions')).toBe(true)
       // Labels (full CRUD + assignment)
       expect(provider.capabilities.has('labels.list')).toBe(true)
       expect(provider.capabilities.has('labels.create')).toBe(true)
@@ -154,6 +193,22 @@ describe('YouTrackProvider', () => {
       const addendum = provider.getPromptAddendum()
       expect(addendum).toContain('YouTrack')
       expect(addendum).toContain('State')
+    })
+
+    test('exposes phase 4 methods', () => {
+      expect(typeof provider.listUsers).toBe('function')
+      expect(typeof provider.getCurrentUser).toBe('function')
+      expect(typeof provider.listProjectTeam).toBe('function')
+      expect(typeof provider.addProjectMember).toBe('function')
+      expect(typeof provider.removeProjectMember).toBe('function')
+      expect(typeof provider.listWatchers).toBe('function')
+      expect(typeof provider.addWatcher).toBe('function')
+      expect(typeof provider.removeWatcher).toBe('function')
+      expect(typeof provider.addVote).toBe('function')
+      expect(typeof provider.removeVote).toBe('function')
+      expect(typeof provider.setVisibility).toBe('function')
+      expect(typeof provider.addCommentReaction).toBe('function')
+      expect(typeof provider.removeCommentReaction).toBe('function')
     })
   })
 
@@ -465,6 +520,215 @@ describe('YouTrackProvider', () => {
       mockFetchNoContent()
       const result = await provider.removeLabel('tag-1')
       expect(result.id).toBe('tag-1')
+    })
+  })
+
+  describe('phase 4 collaboration wiring', () => {
+    test('listUsers delegates to the users endpoint and maps results', async () => {
+      mockFetchResponse([
+        { id: 'user-1', login: 'alice', name: 'Alice Example', fullName: 'Alice Example', email: 'alice@example.com' },
+        { id: 'user-2', login: 'bob', name: 'Bob Example', fullName: 'Bob Example', email: 'bob@example.com' },
+      ])
+
+      const users = await provider.listUsers?.('ali', 5)
+
+      expect(users).toEqual([{ id: 'user-1', login: 'alice', name: 'Alice Example' }])
+      const url = getFetchUrlAt(0)
+      expect(url.pathname).toBe('/api/users')
+      expect(url.searchParams.get('fields')).toBe('id,login,fullName,name,email,ringId')
+      expect(getFetchMethodAt(0)).toBe('GET')
+    })
+
+    test('getCurrentUser delegates to the me endpoint', async () => {
+      mockFetchResponse({
+        id: 'me-1',
+        login: 'current-user',
+        name: 'Current User',
+        fullName: 'Current User',
+        email: 'current@example.com',
+      })
+
+      const user = await provider.getCurrentUser?.()
+
+      expect(user).toEqual({ id: 'me-1', login: 'current-user', name: 'Current User' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/users/me')
+      expect(getFetchUrlAt(0).searchParams.get('fields')).toBe('id,login,fullName,name,email,ringId')
+      expect(getFetchMethodAt(0)).toBe('GET')
+    })
+
+    test('project team methods delegate to team endpoints', async () => {
+      mockFetchSequence([
+        { data: { id: 'proj-1', ringId: 'project-ring-1', shortName: 'PROJ', name: 'Project One' } },
+        { data: [{ id: 'ring-user-1', login: 'alice', name: 'Alice Example', type: 'user' }] },
+      ])
+
+      const team = await provider.listProjectTeam?.('proj-1')
+
+      expect(team).toEqual([{ id: 'ring-user-1', login: 'alice', name: 'Alice Example' }])
+      expect(getFetchUrlAt(0).pathname).toBe('/api/admin/projects/proj-1')
+      expect(getFetchUrlAt(0).searchParams.get('fields')).toBe('id,ringId,shortName,name')
+      expect(getFetchMethodAt(0)).toBe('GET')
+      expect(getFetchUrlAt(1).pathname).toBe('/hub/api/rest/projects/project-ring-1/team/users')
+      expect(getFetchUrlAt(1).searchParams.get('fields')).toBe('id,login,name')
+      expect(getFetchMethodAt(1)).toBe('GET')
+
+      mockFetchSequence([
+        { data: { id: 'proj-1', ringId: 'project-ring-1', shortName: 'PROJ', name: 'Project One' } },
+        {
+          data: {
+            id: 'user-7',
+            login: 'user7',
+            name: 'User 7',
+            fullName: 'User 7',
+            email: 'user7@example.com',
+            ringId: 'ring-user-7',
+          },
+        },
+        { data: null, status: 204 },
+      ])
+      const addedMember = await provider.addProjectMember?.('proj-1', 'user-7')
+      expect(addedMember).toEqual({ projectId: 'proj-1', userId: 'user-7' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/admin/projects/proj-1')
+      expect(getFetchUrlAt(1).pathname).toBe('/api/users/user-7')
+      expect(getFetchUrlAt(2).pathname).toBe('/hub/api/rest/projects/project-ring-1/team/users')
+      expect(getFetchMethodAt(2)).toBe('POST')
+      expect(getFetchBodyAt(2)).toEqual({ id: 'ring-user-7' })
+
+      mockFetchSequence([
+        { data: { id: 'proj-1', ringId: 'project-ring-1', shortName: 'PROJ', name: 'Project One' } },
+        {
+          data: {
+            id: 'user-7',
+            login: 'user7',
+            name: 'User 7',
+            fullName: 'User 7',
+            email: 'user7@example.com',
+            ringId: 'ring-user-7',
+          },
+        },
+        { data: null, status: 204 },
+      ])
+      const removedMember = await provider.removeProjectMember?.('proj-1', 'user-7')
+      expect(removedMember).toEqual({ projectId: 'proj-1', userId: 'user-7' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/admin/projects/proj-1')
+      expect(getFetchUrlAt(1).pathname).toBe('/api/users/user-7')
+      expect(getFetchUrlAt(2).pathname).toBe('/hub/api/rest/projects/project-ring-1/team/users/ring-user-7')
+      expect(getFetchMethodAt(2)).toBe('DELETE')
+    })
+
+    test('watcher methods delegate to issue watcher endpoints', async () => {
+      mockFetchResponse({
+        id: 'issue-1',
+        watchers: {
+          hasStar: true,
+          issueWatchers: [
+            {
+              isStarred: true,
+              user: { id: 'user-1', login: 'alice', fullName: 'Alice Example', email: 'alice@example.com' },
+            },
+          ],
+        },
+      })
+
+      const watchers = await provider.listWatchers?.('TEST-1')
+
+      expect(watchers).toEqual([{ id: 'user-1', login: 'alice', name: 'Alice Example' }])
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1')
+      expect(getFetchMethodAt(0)).toBe('GET')
+
+      mockFetchNoContent()
+      const addedWatcher = await provider.addWatcher?.('TEST-1', 'user-1')
+      expect(addedWatcher).toEqual({ taskId: 'TEST-1', userId: 'user-1' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/watchers/issueWatchers')
+      expect(getFetchMethodAt(0)).toBe('POST')
+      expect(getFetchBodyAt(0)).toEqual({ user: { id: 'user-1' }, isStarred: true })
+
+      mockFetchNoContent()
+      const removedWatcher = await provider.removeWatcher?.('TEST-1', 'user-1')
+      expect(removedWatcher).toEqual({ taskId: 'TEST-1', userId: 'user-1' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/watchers/issueWatchers/user-1')
+      expect(getFetchMethodAt(0)).toBe('DELETE')
+    })
+
+    test('vote methods delegate to command endpoint', async () => {
+      mockFetchNoContent()
+
+      const addVoteResult = await provider.addVote?.('TEST-1')
+
+      expect(addVoteResult).toEqual({ taskId: 'TEST-1' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/commands')
+      expect(getFetchMethodAt(0)).toBe('POST')
+      expect(getFetchBodyAt(0)).toEqual({ query: 'vote', issues: [{ idReadable: 'TEST-1' }] })
+
+      mockFetchNoContent()
+      const removeVoteResult = await provider.removeVote?.('TEST-1')
+
+      expect(removeVoteResult).toEqual({ taskId: 'TEST-1' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/commands')
+      expect(getFetchMethodAt(0)).toBe('POST')
+      expect(getFetchBodyAt(0)).toEqual({ query: 'unvote', issues: [{ idReadable: 'TEST-1' }] })
+    })
+
+    test('setVisibility delegates with normalized response', async () => {
+      mockFetchResponse({
+        id: 'issue-1',
+        visibility: {
+          $type: 'LimitedVisibility',
+          permittedUsers: [{ id: 'user-1', login: 'alice', fullName: 'Alice Example' }],
+          permittedGroups: [{ id: 'group-1', name: 'Team Alpha' }],
+        },
+      })
+
+      const result = await provider.setVisibility?.('TEST-1', {
+        kind: 'restricted',
+        userIds: ['user-1'],
+        groupIds: ['group-1'],
+      })
+
+      expect(result).toEqual({
+        taskId: 'TEST-1',
+        visibility: {
+          kind: 'restricted',
+          users: [{ id: 'user-1', login: 'alice', name: 'Alice Example' }],
+          groups: [{ id: 'group-1', name: 'Team Alpha' }],
+        },
+      })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1')
+      expect(getFetchMethodAt(0)).toBe('POST')
+      expect(getFetchBodyAt(0)).toEqual({
+        visibility: {
+          $type: 'LimitedVisibility',
+          permittedUsers: [{ id: 'user-1' }],
+          permittedGroups: [{ id: 'group-1' }],
+        },
+      })
+    })
+
+    test('comment reaction methods delegate to comment reaction endpoints', async () => {
+      mockFetchResponse({
+        id: 'reaction-1',
+        reaction: 'thumbs_up',
+        author: { id: 'user-1', login: 'alice', fullName: 'Alice Example', email: 'alice@example.com' },
+      })
+
+      const reaction = await provider.addCommentReaction?.('TEST-1', 'comment-1', 'thumbs_up')
+
+      expect(reaction).toEqual({
+        id: 'reaction-1',
+        reaction: 'thumbs_up',
+        author: { id: 'user-1', login: 'alice', name: 'Alice Example' },
+        createdAt: undefined,
+      })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/comments/comment-1/reactions')
+      expect(getFetchMethodAt(0)).toBe('POST')
+      expect(getFetchBodyAt(0)).toEqual({ reaction: 'thumbs_up' })
+
+      mockFetchNoContent()
+      const removedReaction = await provider.removeCommentReaction?.('TEST-1', 'comment-1', 'reaction-1')
+
+      expect(removedReaction).toEqual({ id: 'reaction-1', taskId: 'TEST-1', commentId: 'comment-1' })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/comments/comment-1/reactions/reaction-1')
+      expect(getFetchMethodAt(0)).toBe('DELETE')
     })
   })
 

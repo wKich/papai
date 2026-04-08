@@ -9,6 +9,49 @@ export type Attachment = {
   createdAt?: string
 }
 
+export type UserRef = {
+  id: string
+  login?: string
+  name?: string
+}
+
+export type VisibilityGroupRef = {
+  id?: string
+  name: string
+}
+
+export type TaskVisibility =
+  | {
+      kind: 'public'
+    }
+  | {
+      kind: 'restricted'
+      users?: UserRef[]
+      groups?: VisibilityGroupRef[]
+    }
+
+export type SetTaskVisibilityParams =
+  | {
+      kind: 'public'
+    }
+  | {
+      kind: 'restricted'
+      userIds: [string, ...string[]]
+      groupIds?: string[]
+    }
+  | {
+      kind: 'restricted'
+      userIds?: string[]
+      groupIds: [string, ...string[]]
+    }
+
+export type CommentReaction = {
+  id: string
+  reaction: string
+  author?: UserRef
+  createdAt?: string
+}
+
 /** Normalized task returned by all providers. */
 export type Task = {
   id: string
@@ -24,13 +67,14 @@ export type Task = {
   labels?: TaskLabel[]
   relations?: TaskRelation[]
   number?: number
-  reporter?: { id: string; login?: string; name?: string }
-  updater?: { id: string; login?: string; name?: string }
+  reporter?: UserRef
+  updater?: UserRef
   votes?: number
+  watchers?: UserRef[]
   commentsCount?: number
   resolved?: string
   attachments?: Attachment[]
-  visibility?: unknown
+  visibility?: TaskVisibility
   parent?: { id: string; idReadable?: string; title: string }
   subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>
 }
@@ -82,6 +126,7 @@ export type Comment = {
   body: string
   author?: string
   createdAt?: string
+  reactions?: CommentReaction[]
 }
 
 export type Label = {

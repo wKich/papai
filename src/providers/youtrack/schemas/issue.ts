@@ -6,6 +6,7 @@ import { CustomFieldValueSchema } from './custom-fields.js'
 import { IssueLinkSchema } from './issue-link.js'
 import { TagSchema } from './tag.js'
 import { UserSchema } from './user.js'
+import { VisibilitySchema } from './visibility.js'
 
 export const IssueSchema = BaseEntitySchema.extend({
   idReadable: z.string(),
@@ -27,7 +28,13 @@ export const IssueSchema = BaseEntitySchema.extend({
   commentsCount: z.number().optional(),
   votes: z.number().optional(),
   attachments: z.array(YouTrackAttachmentSchema).optional(),
-  visibility: z.unknown().optional(),
+  watchers: z
+    .object({
+      issueWatchers: z.array(z.object({ user: z.lazy(() => UserSchema), isStarred: z.boolean() })).optional(),
+      hasStar: z.boolean().optional(),
+    })
+    .optional(),
+  visibility: VisibilitySchema.optional(),
   parent: z
     .object({
       issues: z.array(

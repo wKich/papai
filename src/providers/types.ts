@@ -3,15 +3,19 @@ import type {
   Attachment,
   Column,
   Comment,
+  CommentReaction,
   CreateWorkItemParams,
   Label,
   ListTasksParams,
   Project,
   RelationType,
+  SetTaskVisibilityParams,
   Task,
   TaskListItem,
   TaskSearchResult,
+  TaskVisibility,
   UpdateWorkItemParams,
+  UserRef,
   WorkItem,
 } from './domain-types.js'
 
@@ -19,17 +23,22 @@ export type {
   Attachment,
   Column,
   Comment,
+  CommentReaction,
   CreateWorkItemParams,
   Label,
   ListTasksParams,
   Project,
   RelationType,
+  SetTaskVisibilityParams,
   Task,
   TaskLabel,
   TaskListItem,
   TaskRelation,
   TaskSearchResult,
+  TaskVisibility,
   UpdateWorkItemParams,
+  UserRef,
+  VisibilityGroupRef,
   WorkItem,
 } from './domain-types.js'
 
@@ -37,15 +46,20 @@ export type {
 export type Capability =
   | 'tasks.delete'
   | 'tasks.relations'
+  | 'tasks.watchers'
+  | 'tasks.votes'
+  | 'tasks.visibility'
   | 'projects.read'
   | 'projects.list'
   | 'projects.create'
   | 'projects.update'
   | 'projects.delete'
+  | 'projects.team'
   | 'comments.read'
   | 'comments.create'
   | 'comments.update'
   | 'comments.delete'
+  | 'comments.reactions'
   | 'labels.list'
   | 'labels.create'
   | 'labels.update'
@@ -124,6 +138,12 @@ export interface TaskProvider {
 
   deleteTask?(taskId: string): Promise<{ id: string }>
 
+  // --- Optional: shared user lookup helpers ---
+
+  listUsers?(query?: string, limit?: number): Promise<UserRef[]>
+
+  getCurrentUser?(): Promise<UserRef>
+
   // --- Optional: projects.* ---
 
   getProject?(projectId: string): Promise<Project>
@@ -136,6 +156,14 @@ export interface TaskProvider {
 
   deleteProject?(projectId: string): Promise<{ id: string }>
 
+  // --- Optional: projects.team ---
+
+  listProjectTeam?(projectId: string): Promise<UserRef[]>
+
+  addProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
+
+  removeProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
+
   // --- Optional: comments.* ---
 
   getComment?(taskId: string, commentId: string): Promise<Comment>
@@ -147,6 +175,16 @@ export interface TaskProvider {
   updateComment?(params: { taskId: string; commentId: string; body: string }): Promise<Comment>
 
   removeComment?(params: { taskId: string; commentId: string }): Promise<{ id: string }>
+
+  // --- Optional: comments.reactions ---
+
+  addCommentReaction?(taskId: string, commentId: string, reaction: string): Promise<CommentReaction>
+
+  removeCommentReaction?(
+    taskId: string,
+    commentId: string,
+    reactionId: string,
+  ): Promise<{ id: string; taskId: string; commentId: string }>
 
   // --- Optional: labels.* ---
 
@@ -177,6 +215,23 @@ export interface TaskProvider {
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }>
 
   removeRelation?(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }>
+
+  // --- Optional: collaboration task surfaces ---
+
+  listWatchers?(taskId: string): Promise<UserRef[]>
+
+  addWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
+
+  removeWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
+
+  addVote?(taskId: string): Promise<{ taskId: string }>
+
+  removeVote?(taskId: string): Promise<{ taskId: string }>
+
+  setVisibility?(
+    taskId: string,
+    params: SetTaskVisibilityParams,
+  ): Promise<{ taskId: string; visibility: TaskVisibility }>
 
   // --- Optional: statuses.* ---
 

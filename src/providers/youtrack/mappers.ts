@@ -1,9 +1,22 @@
 import type { z } from 'zod'
 
-import type { Attachment, Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
+import type {
+  Attachment,
+  Comment,
+  CommentReaction,
+  RelationType,
+  Task,
+  TaskListItem,
+  TaskSearchResult,
+  TaskVisibility,
+  UserRef,
+  VisibilityGroupRef,
+} from '../types.js'
 import type { CommentSchema } from './schemas/comment.js'
 import type { CustomFieldValueSchema } from './schemas/custom-fields.js'
 import type { IssueListSchema, IssueSchema } from './schemas/issue.js'
+import type { ReactionSchema } from './schemas/reaction.js'
+import type { VisibilitySchema } from './schemas/visibility.js'
 
 type AnyCustomField = z.infer<typeof CustomFieldValueSchema>
 
@@ -39,15 +52,16 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
 const toIsoOrUndefined = (timestamp: number | undefined): string | undefined =>
   timestamp === undefined ? undefined : new Date(timestamp).toISOString()
 
-const mapReporter = (
-  reporter: { id: string; login?: string; fullName?: string } | undefined,
-): { id: string; login?: string; name?: string } | undefined =>
-  reporter === undefined ? undefined : { id: reporter.id, login: reporter.login, name: reporter.fullName }
-
-const mapUpdater = (
-  updater: { id: string; login?: string; fullName?: string } | undefined,
-): { id: string; login?: string; name?: string } | undefined =>
-  updater === undefined ? undefined : { id: updater.id, login: updater.login, name: updater.fullName }
+export const mapUserRef = (
+  user: { id: string; login?: string; fullName?: string; name?: string } | undefined,
+): UserRef | undefined =>
+  user === undefined
+    ? undefined
+    : {
+        id: user.id,
+        login: user.login,
+        name: user.fullName ?? user.name,
+      }
 
 const mapParent = (
   parent: { issues: Array<{ id: string; idReadable?: string; summary: string }> } | undefined,
@@ -69,6 +83,45 @@ const mapSubtasks = (
     title: s.summary,
     status: undefined,
   }))
+
+const mapVisibilityGroups = (
+  groups: Array<{ id: string; name: string }> | undefined,
+): VisibilityGroupRef[] | undefined =>
+  groups === undefined || groups.length === 0 ? undefined : groups.map((group) => ({ id: group.id, name: group.name }))
+
+export const mapTaskVisibility = (
+  visibility: z.infer<typeof VisibilitySchema> | undefined,
+): TaskVisibility | undefined => {
+  if (visibility === undefined) return undefined
+  if (visibility.$type === 'UnlimitedVisibility') {
+    return { kind: 'public' }
+  }
+
+  const users = visibility.permittedUsers?.map(mapUserRef).filter((user): user is UserRef => user !== undefined)
+  const groups = mapVisibilityGroups(visibility.permittedGroups)
+  return {
+    kind: 'restricted',
+    users: users === undefined || users.length === 0 ? undefined : users,
+    groups,
+  }
+}
+
+export const mapCommentReaction = (reaction: z.infer<typeof ReactionSchema>): CommentReaction => ({
+  id: reaction.id,
+  reaction: reaction.reaction,
+  author: mapUserRef(reaction.author),
+  createdAt: undefined,
+})
+
+export const mapYouTrackWatchers = (
+  watchers: z.infer<typeof IssueSchema>['watchers'] | undefined,
+): UserRef[] | undefined => {
+  const mapped = watchers?.issueWatchers
+    ?.map((watcher) => mapUserRef(watcher.user))
+    .filter((watcher): watcher is UserRef => watcher !== undefined)
+
+  return mapped === undefined || mapped.length === 0 ? undefined : mapped
+}
 
 export const mapAttachment = (a: {
   id: string
@@ -129,13 +182,14 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
     labels: (issue.tags ?? []).map((t) => ({ id: t.id, name: t.name, color: t.color?.background })),
     relations: relations.length > 0 ? relations : undefined,
     number: issue.numberInProject,
-    reporter: mapReporter(issue.reporter),
-    updater: mapUpdater(issue.updater),
+    reporter: mapUserRef(issue.reporter),
+    updater: mapUserRef(issue.updater),
     votes: issue.votes,
+    watchers: mapYouTrackWatchers(issue.watchers),
     commentsCount: issue.commentsCount,
     resolved: toIsoOrUndefined(issue.resolved),
     attachments: mapAttachments(issue.attachments),
-    visibility: issue.visibility,
+    visibility: mapTaskVisibility(issue.visibility),
     parent: mapParent(issue.parent),
     subtasks: mapSubtasks(issue.subtasks),
   }
@@ -165,6 +219,7 @@ export const mapComment = (c: z.infer<typeof CommentSchema>): Comment => ({
   body: c.text,
   author: c.author.name ?? c.author.login,
   createdAt: toIsoOrUndefined(c.created),
+  reactions: c.reactions?.map(mapCommentReaction),
 })
 
 /** Build custom fields array for create/update requests. */

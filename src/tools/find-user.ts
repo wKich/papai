@@ -1,0 +1,31 @@
+import { tool } from 'ai'
+import type { ToolSet } from 'ai'
+import { z } from 'zod'
+
+import { logger } from '../logger.js'
+import type { TaskProvider } from '../providers/types.js'
+
+const log = logger.child({ scope: 'tool:find-user' })
+
+export function makeFindUserTool(provider: TaskProvider): ToolSet[string] {
+  return tool({
+    description: 'Find users by name, username, or login before assigning watchers, project members, or visibility.',
+    inputSchema: z.object({
+      query: z.string().describe('Search query used to find matching users'),
+      limit: z.number().int().positive().optional().describe('Maximum number of matching users to return'),
+    }),
+    execute: async ({ query, limit }) => {
+      try {
+        const users = await provider.listUsers!(query, limit)
+        log.info({ query, limit, count: users.length }, 'Users found via tool')
+        return users
+      } catch (error) {
+        log.error(
+          { error: error instanceof Error ? error.message : String(error), query, limit, tool: 'find_user' },
+          'Tool execution failed',
+        )
+        throw error
+      }
+    },
+  })
+}

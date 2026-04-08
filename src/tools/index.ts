@@ -1,9 +1,13 @@
 import type { ToolSet } from 'ai'
 
 import type { TaskProvider } from '../providers/types.js'
+import { makeAddCommentReactionTool } from './add-comment-reaction.js'
 import { makeAddCommentTool } from './add-comment.js'
+import { makeAddProjectMemberTool } from './add-project-member.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
+import { makeAddVoteTool } from './add-vote.js'
+import { makeAddWatcherTool } from './add-watcher.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { completionHook } from './completion-hook.js'
@@ -17,6 +21,7 @@ import { makeDeleteProjectTool } from './delete-project.js'
 import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
 import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
+import { makeFindUserTool } from './find-user.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetCurrentTimeTool } from './get-current-time.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
@@ -26,25 +31,32 @@ import { makeListAttachmentsTool } from './list-attachments.js'
 import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListMemosTool } from './list-memos.js'
+import { makeListProjectTeamTool } from './list-project-team.js'
 import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListTasksTool } from './list-tasks.js'
+import { makeListWatchersTool } from './list-watchers.js'
 import { makeListWorkTool } from './list-work.js'
 import { makeLogWorkTool } from './log-work.js'
 import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
 import { makePromoteMemoTool } from './promote-memo.js'
 import { makeRemoveAttachmentTool } from './remove-attachment.js'
+import { makeRemoveCommentReactionTool } from './remove-comment-reaction.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
+import { makeRemoveProjectMemberTool } from './remove-project-member.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
+import { makeRemoveVoteTool } from './remove-vote.js'
+import { makeRemoveWatcherTool } from './remove-watcher.js'
 import { makeRemoveWorkTool } from './remove-work.js'
 import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
 import { makeSaveMemoTool } from './save-memo.js'
 import { makeSearchMemosTool } from './search-memos.js'
 import { makeSearchTasksTool } from './search-tasks.js'
+import { makeSetVisibilityTool } from './set-visibility.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateDeferredPromptTool } from './update-deferred-prompt.js'
@@ -84,6 +96,11 @@ function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('projects.delete')) {
     tools['delete_project'] = makeDeleteProjectTool(provider)
   }
+  if (provider.capabilities.has('projects.team')) {
+    tools['list_project_team'] = makeListProjectTeamTool(provider)
+    tools['add_project_member'] = makeAddProjectMemberTool(provider)
+    tools['remove_project_member'] = makeRemoveProjectMemberTool(provider)
+  }
 }
 
 function maybeAddCommentTools(tools: ToolSet, provider: TaskProvider): void {
@@ -99,6 +116,10 @@ function maybeAddCommentTools(tools: ToolSet, provider: TaskProvider): void {
   }
   if (provider.capabilities.has('comments.delete')) {
     tools['remove_comment'] = makeRemoveCommentTool(provider)
+  }
+  if (provider.capabilities.has('comments.reactions')) {
+    tools['add_comment_reaction'] = makeAddCommentReactionTool(provider)
+    tools['remove_comment_reaction'] = makeRemoveCommentReactionTool(provider)
   }
 }
 
@@ -183,6 +204,24 @@ function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
+function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.listUsers !== undefined) {
+    tools['find_user'] = makeFindUserTool(provider)
+  }
+  if (provider.capabilities.has('tasks.watchers')) {
+    tools['list_watchers'] = makeListWatchersTool(provider)
+    tools['add_watcher'] = makeAddWatcherTool(provider)
+    tools['remove_watcher'] = makeRemoveWatcherTool(provider)
+  }
+  if (provider.capabilities.has('tasks.votes')) {
+    tools['add_vote'] = makeAddVoteTool(provider)
+    tools['remove_vote'] = makeRemoveVoteTool(provider)
+  }
+  if (provider.capabilities.has('tasks.visibility')) {
+    tools['set_visibility'] = makeSetVisibilityTool(provider)
+  }
+}
+
 function addInstructionTools(tools: ToolSet, contextId: string | undefined): void {
   if (contextId === undefined) return
   tools['save_instruction'] = makeSaveInstructionTool(contextId)
@@ -227,6 +266,7 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
+  maybeAddCollaborationTaskTools(tools, provider)
   maybeAddAttachmentTools(tools, provider, userId)
   maybeAddWorkItemTools(tools, provider)
   addRecurringTools(tools, userId)

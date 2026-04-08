@@ -1,4 +1,3 @@
-import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type {
   Attachment,
@@ -15,8 +14,8 @@ import type {
   UpdateWorkItemParams,
   WorkItem,
 } from '../types.js'
-import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig } from './client.js'
+import { YouTrackCollaborationProvider } from './collaboration-provider.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import {
   addYouTrackTaskLabel,
@@ -66,17 +65,17 @@ import {
   listYouTrackWorkItems,
   updateYouTrackWorkItem,
 } from './operations/work-items.js'
-import { YOUTRACK_PROMPT_ADDENDUM } from './prompt-addendum.js'
 import { addYouTrackRelation, removeYouTrackRelation, updateYouTrackRelation } from './relations.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
-export class YouTrackProvider implements TaskProvider {
+export class YouTrackProvider extends YouTrackCollaborationProvider implements TaskProvider {
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
 
-  constructor(private readonly config: YouTrackConfig) {
+  constructor(config: YouTrackConfig) {
+    super(config)
     log.debug('YouTrackProvider created')
   }
 
@@ -124,12 +123,15 @@ export class YouTrackProvider implements TaskProvider {
   deleteTask(taskId: string): Promise<{ id: string }> {
     return deleteYouTrackTask(this.config, taskId)
   }
+
   getProject(projectId: string): Promise<Project> {
     return getYouTrackProject(this.config, projectId)
   }
+
   listProjects(): Promise<Project[]> {
     return listYouTrackProjects(this.config)
   }
+
   createProject(params: { name: string; description?: string }): Promise<Project> {
     return createYouTrackProject(this.config, params)
   }
@@ -278,21 +280,5 @@ export class YouTrackProvider implements TaskProvider {
 
   deleteWorkItem(taskId: string, workItemId: string): Promise<{ id: string }> {
     return deleteYouTrackWorkItem(this.config, taskId, workItemId)
-  }
-
-  buildTaskUrl(taskId: string): string {
-    return `${this.config.baseUrl}/issue/${taskId}`
-  }
-
-  buildProjectUrl(projectId: string): string {
-    return `${this.config.baseUrl}/projects/${projectId}`
-  }
-
-  classifyError(error: unknown): AppError {
-    return classifyYouTrackError(error).appError
-  }
-
-  getPromptAddendum(): string {
-    return YOUTRACK_PROMPT_ADDENDUM
   }
 }

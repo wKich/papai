@@ -1,6 +1,11 @@
 import type { Capability, ProviderConfigRequirement } from '../types.js'
 
 /** Fields parameter for issue requests returning full detail. */
+export const REACTION_FIELDS = 'id,reaction,author(id,login,fullName,email)'
+export const VISIBILITY_FIELDS = '$type,permittedGroups(id,name),permittedUsers(id,login,fullName)'
+export const ISSUE_WATCHER_FIELDS = 'watchers(issueWatchers(user(id,login,fullName,email),isStarred),hasStar)'
+
+/** Fields parameter for issue requests returning full detail. */
 export const ISSUE_FIELDS = [
   'id',
   'idReadable',
@@ -19,7 +24,8 @@ export const ISSUE_FIELDS = [
   'tags(id,name,color(id,background,foreground),owner(login))',
   'links(id,direction,linkType(id,name,sourceToTarget,targetToSource,directed,aggregation),issues(id,idReadable,summary,resolved))',
   'attachments(id,name,mimeType,size,url,thumbnailURL,author(login),created)',
-  'visibility($type,permittedGroups(name),permittedUsers(login))',
+  ISSUE_WATCHER_FIELDS,
+  `visibility(${VISIBILITY_FIELDS})`,
   'parent(issues(id,idReadable,summary))',
   'subtasks(issues(id,idReadable,summary,resolved))',
 ].join(',')
@@ -36,7 +42,7 @@ export const ISSUE_LIST_FIELDS = [
   'customFields($type,name,value($type,name,login))',
 ].join(',')
 
-export const COMMENT_FIELDS = 'id,text,author(id,$type,login,name),created,updated'
+export const COMMENT_FIELDS = `id,text,author(id,$type,login,name),created,updated,reactions(${REACTION_FIELDS})`
 export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
 export const TAG_FIELDS = 'id,name,color(id,background)'
 export const ATTACHMENT_FIELDS = 'id,name,mimeType,size,url,thumbnailURL,author(login),created'
@@ -46,17 +52,22 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   // Tasks
   'tasks.delete',
   'tasks.relations',
+  'tasks.watchers',
+  'tasks.votes',
+  'tasks.visibility',
   // Projects (full CRUD)
   'projects.read',
   'projects.list',
   'projects.create',
   'projects.update',
   'projects.delete',
+  'projects.team',
   // Comments (full CRUD)
   'comments.read',
   'comments.create',
   'comments.update',
   'comments.delete',
+  'comments.reactions',
   // Labels (full CRUD + assignment)
   'labels.list',
   'labels.create',

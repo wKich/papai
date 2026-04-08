@@ -19,9 +19,32 @@ describe('Issue schemas', () => {
 
   describe('IssueSchema', () => {
     test('validates full issue', () => {
-      const result = IssueSchema.parse(validIssue)
+      const result = IssueSchema.parse({
+        ...validIssue,
+        watchers: {
+          hasStar: true,
+          issueWatchers: [
+            {
+              isStarred: true,
+              user: {
+                id: 'user-1',
+                login: 'alice',
+                fullName: 'Alice Example',
+                email: 'alice@example.com',
+              },
+            },
+          ],
+        },
+        visibility: {
+          $type: 'LimitedVisibility',
+          permittedUsers: [{ id: 'user-1', login: 'alice', fullName: 'Alice Example' }],
+          permittedGroups: [{ id: 'group-1', name: 'Team Alpha' }],
+        },
+      })
       expect(result.idReadable).toBe('PROJ-123')
       expect(result.summary).toBe('Test Issue')
+      expect(result.watchers?.issueWatchers?.[0]?.user.login).toBe('alice')
+      expect(result.visibility?.$type).toBe('LimitedVisibility')
     })
 
     test('missing idReadable rejects', () => {
@@ -92,6 +115,15 @@ describe('Issue schemas', () => {
         customFields: [],
       }
       expect(() => IssueSchema.parse(minimal)).not.toThrow()
+    })
+
+    test('accepts unlimited visibility', () => {
+      const result = IssueSchema.parse({
+        ...validIssue,
+        visibility: { $type: 'UnlimitedVisibility' },
+      })
+
+      expect(result.visibility?.$type).toBe('UnlimitedVisibility')
     })
   })
 
