@@ -1,6 +1,14 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { copyAdminLlmConfig, getAllConfig, getConfig, isConfigKey, maskValue, setConfig } from '../src/config.js'
+import {
+  copyAdminLlmConfig,
+  getAllConfig,
+  getConfig,
+  isConfigKey,
+  isMissingLlmConfig,
+  maskValue,
+  setConfig,
+} from '../src/config.js'
 import { CONFIG_KEYS, type ConfigKey } from '../src/types/config.js'
 import { clearUserCache } from './utils/test-cache.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
@@ -196,5 +204,34 @@ describe('CONFIG_KEYS', () => {
     // LLM keys (5) + provider-specific key (1) + preference keys (1) = 7
     // Internal keys (briefing_time, deadline_nudges, staleness_days) are excluded from CONFIG_KEYS
     expect(CONFIG_KEYS).toHaveLength(7)
+  })
+})
+
+describe('isMissingLlmConfig', () => {
+  const USER_ID = 'llm-check-001'
+
+  beforeEach(async () => {
+    await setupTestDb()
+    clearUserCache(USER_ID)
+  })
+
+  test('returns true when no LLM config is set', () => {
+    expect(isMissingLlmConfig(USER_ID)).toBe(true)
+  })
+
+  test('returns true when some LLM keys are missing', () => {
+    setConfig(USER_ID, 'llm_apikey', 'sk-key')
+    setConfig(USER_ID, 'llm_baseurl', 'https://api.example.com')
+    // Missing main_model, small_model, embedding_model
+    expect(isMissingLlmConfig(USER_ID)).toBe(true)
+  })
+
+  test('returns false when all LLM keys are set', () => {
+    setConfig(USER_ID, 'llm_apikey', 'sk-key')
+    setConfig(USER_ID, 'llm_baseurl', 'https://api.example.com')
+    setConfig(USER_ID, 'main_model', 'gpt-4')
+    setConfig(USER_ID, 'small_model', 'gpt-3.5')
+    setConfig(USER_ID, 'embedding_model', 'text-embedding-3')
+    expect(isMissingLlmConfig(USER_ID)).toBe(false)
   })
 })

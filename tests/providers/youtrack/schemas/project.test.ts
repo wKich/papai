@@ -49,8 +49,9 @@ describe('Project schemas', () => {
     expect(() => ProjectSchema.parse({ ...validProject, archived: 'true' })).toThrow()
   })
 
-  test('description as null rejects (optional, not nullable)', () => {
-    expect(() => ProjectSchema.parse({ ...validProject, description: null })).toThrow()
+  test('description as null accepts (nullable)', () => {
+    const result = ProjectSchema.parse({ ...validProject, description: null })
+    expect(result.description).toBeNull()
   })
 
   test('leader with valid user accepts', () => {

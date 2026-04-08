@@ -20,6 +20,7 @@ export const ISSUE_LIST_FIELDS = [
   'id',
   'idReadable',
   'summary',
+  'created',
   'project(id,shortName)',
   'customFields($type,name,value($type,name,login))',
 ].join(',')
