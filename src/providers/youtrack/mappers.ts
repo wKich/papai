@@ -39,6 +39,37 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
 const toIsoOrUndefined = (timestamp: number | undefined): string | undefined =>
   timestamp === undefined ? undefined : new Date(timestamp).toISOString()
 
+const mapReporter = (
+  reporter: { id: string; login?: string; fullName?: string } | undefined,
+): { id: string; login?: string; name?: string } | undefined =>
+  reporter === undefined ? undefined : { id: reporter.id, login: reporter.login, name: reporter.fullName }
+
+const mapUpdater = (
+  updater: { id: string; login?: string; fullName?: string } | undefined,
+): { id: string; login?: string; name?: string } | undefined =>
+  updater === undefined ? undefined : { id: updater.id, login: updater.login, name: updater.fullName }
+
+const mapParent = (
+  parent: { issues: Array<{ id: string; idReadable?: string; summary: string }> } | undefined,
+): { id: string; idReadable?: string; title: string } | undefined =>
+  parent === undefined || parent.issues[0] === undefined
+    ? undefined
+    : {
+        id: parent.issues[0].id,
+        idReadable: parent.issues[0].idReadable,
+        title: parent.issues[0].summary,
+      }
+
+const mapSubtasks = (
+  subtasks: { issues: Array<{ id: string; idReadable?: string; summary: string; resolved?: number }> } | undefined,
+): Array<{ id: string; idReadable?: string; title: string; status?: string }> | undefined =>
+  subtasks?.issues.map((s) => ({
+    id: s.id,
+    idReadable: s.idReadable,
+    title: s.summary,
+    status: undefined,
+  }))
+
 export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: string): Task => {
   const relations = (issue.links ?? []).flatMap((link) => {
     const typeName = link.linkType?.name ?? 'Relate'
@@ -61,14 +92,26 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
     url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
     labels: (issue.tags ?? []).map((t) => ({ id: t.id, name: t.name, color: t.color?.background })),
     relations: relations.length > 0 ? relations : undefined,
+    number: issue.numberInProject,
+    reporter: mapReporter(issue.reporter),
+    updater: mapUpdater(issue.updater),
+    votes: issue.votes,
+    commentsCount: issue.commentsCount,
+    resolved: toIsoOrUndefined(issue.resolved),
+    attachments: issue.attachments,
+    visibility: issue.visibility,
+    parent: mapParent(issue.parent),
+    subtasks: mapSubtasks(issue.subtasks),
   }
 }
 
 export const mapIssueToListItem = (issue: z.infer<typeof IssueListSchema>, baseUrl: string): TaskListItem => ({
   id: issue.idReadable ?? issue.id,
   title: issue.summary,
+  number: issue.numberInProject,
   status: getCustomFieldValue(issue.customFields, 'State'),
   priority: getCustomFieldValue(issue.customFields, 'Priority'),
+  resolved: toIsoOrUndefined(issue.resolved),
   url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
 })
 

@@ -57,6 +57,16 @@ export type Task = {
   url: string
   labels?: TaskLabel[]
   relations?: TaskRelation[]
+  number?: number
+  reporter?: { id: string; login?: string; name?: string }
+  updater?: { id: string; login?: string; name?: string }
+  votes?: number
+  commentsCount?: number
+  resolved?: string
+  attachments?: unknown[]
+  visibility?: unknown
+  parent?: { id: string; idReadable?: string; title: string }
+  subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>
 }
 
 /**
@@ -84,6 +94,7 @@ export type TaskListItem = {
   status?: string
   priority?: string
   dueDate?: string | null
+  resolved?: string
   url: string
 }
 

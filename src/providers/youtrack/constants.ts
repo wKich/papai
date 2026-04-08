@@ -4,15 +4,24 @@ import type { Capability, ProviderConfigRequirement } from '../types.js'
 export const ISSUE_FIELDS = [
   'id',
   'idReadable',
+  'numberInProject',
   'summary',
   'description',
   'created',
   'updated',
   'resolved',
   'project(id,shortName,name)',
-  'customFields($type,name,value($type,name,login))',
-  'tags(id,name,color(id,background))',
-  'links(id,direction,linkType(name,sourceToTarget,targetToSource),issues(id,idReadable,summary))',
+  'reporter(id,login,fullName)',
+  'updater(id,login,fullName)',
+  'votes',
+  'commentsCount',
+  'customFields($type,name,value($type,id,name,login,fullName,localizedName,minutes,presentation,text))',
+  'tags(id,name,color(id,background,foreground),owner(login))',
+  'links(id,direction,linkType(id,name,sourceToTarget,targetToSource,directed,aggregation),issues(id,idReadable,summary,resolved))',
+  'attachments(id,name,mimeType,size,url,thumbnailURL,author(login),created)',
+  'visibility($type,permittedGroups(name),permittedUsers(login))',
+  'parent(issues(id,idReadable,summary))',
+  'subtasks(issues(id,idReadable,summary,resolved))',
 ].join(',')
 
 /** Lighter fields for list/search results. */
