@@ -316,6 +316,18 @@ describe('updateYouTrackLabel', () => {
       }
     }
   })
+
+  test('updateLabel sends color in request body', async () => {
+    mockFetchResponse(
+      makeTagResponse({ id: 'tag-123', name: 'Updated Tag', color: { id: 'color-1', background: '#FF5722' } }),
+    )
+
+    await updateYouTrackLabel(config, 'tag-123', { name: 'Updated Tag', color: '#FF5722' })
+
+    const body = getLastFetchBody()
+    expect(body['name']).toBe('Updated Tag')
+    expect(body['color']).toEqual({ background: '#FF5722' })
+  })
 })
 
 describe('removeYouTrackLabel', () => {

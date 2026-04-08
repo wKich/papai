@@ -58,6 +58,9 @@ export async function updateYouTrackLabel(
   try {
     const body: Record<string, unknown> = {}
     if (params.name !== undefined) body['name'] = params.name
+    if (params.color !== undefined) {
+      body['color'] = { background: params.color }
+    }
     const raw = await youtrackFetch(config, 'POST', `/api/tags/${labelId}`, {
       body,
       query: { fields: TAG_FIELDS },
