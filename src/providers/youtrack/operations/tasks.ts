@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { logger } from '../../../logger.js'
 import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
 import { classifyYouTrackError } from '../classify-error.js'
@@ -101,8 +103,14 @@ export async function updateYouTrackTask(
 export async function listYouTrackTasks(config: YouTrackConfig, projectId: string): Promise<TaskListItem[]> {
   log.debug({ projectId }, 'listTasks')
   try {
+    // Fetch project to get shortName - YouTrack search queries require shortName, not internal ID
+    const projectRaw = await youtrackFetch(config, 'GET', `/api/admin/projects/${projectId}`, {
+      query: { fields: 'shortName' },
+    })
+    const project = z.object({ shortName: z.string() }).parse(projectRaw)
+
     const raw = await youtrackFetch(config, 'GET', '/api/issues', {
-      query: { fields: ISSUE_LIST_FIELDS, query: `project: {${projectId}}`, $top: '100' },
+      query: { fields: ISSUE_LIST_FIELDS, query: `project: {${project.shortName}}`, $top: '100' },
     })
     const issues = IssueListSchema.array().parse(raw)
     log.info({ projectId, count: issues.length }, 'Tasks listed')
@@ -121,7 +129,12 @@ export async function searchYouTrackTasks(
   try {
     let query = params.query
     if (params.projectId !== undefined) {
-      query = `project: {${params.projectId}} ${query}`
+      // Fetch project to get shortName - YouTrack search queries require shortName, not internal ID
+      const projectRaw = await youtrackFetch(config, 'GET', `/api/admin/projects/${params.projectId}`, {
+        query: { fields: 'shortName' },
+      })
+      const project = z.object({ shortName: z.string() }).parse(projectRaw)
+      query = `project: {${project.shortName}} ${query}`
     }
     const raw = await youtrackFetch(config, 'GET', '/api/issues', {
       query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },

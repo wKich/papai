@@ -7,7 +7,7 @@ import { UserSchema } from './user.js'
 export const ProjectSchema = BaseEntitySchema.extend({
   name: z.string(),
   shortName: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   archived: z.boolean().optional(),
   leader: z.lazy(() => UserSchema).optional(),
   createdBy: z.lazy(() => UserSchema).optional(),

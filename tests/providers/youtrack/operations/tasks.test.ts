@@ -417,12 +417,31 @@ describe('listYouTrackTasks', () => {
   })
 
   test('returns mapped list items', async () => {
-    mockFetchResponse([
-      makeIssueListResponse(),
-      makeIssueListResponse({ id: '2-2', idReadable: 'TEST-2', summary: 'Second task' }),
-    ])
+    // First call: get project shortName
+    // Second call: list issues
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'TEST', name: 'Test Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            makeIssueListResponse(),
+            makeIssueListResponse({ id: '2-2', idReadable: 'TEST-2', summary: 'Second task' }),
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
 
-    const items = await listYouTrackTasks(config, 'proj-1')
+    const items = await listYouTrackTasks(config, '39-883')
 
     expect(items).toHaveLength(2)
     expect(items[0]!.id).toBe('TEST-1')
@@ -434,26 +453,59 @@ describe('listYouTrackTasks', () => {
     expect(items[1]!.title).toBe('Second task')
   })
 
-  test('uses project query parameter', async () => {
-    mockFetchResponse([])
+  test('fetches project shortName and uses it in query', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
 
-    await listYouTrackTasks(config, 'MY-PROJECT')
+    await listYouTrackTasks(config, '39-883')
 
-    const url = getLastFetchUrl()
-    expect(url.pathname).toBe('/api/issues')
-    expect(url.searchParams.get('query')).toBe('project: {MY-PROJECT}')
-    expect(url.searchParams.get('$top')).toBe('100')
+    // Get the second call (issues search)
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.pathname).toBe('/api/issues')
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO}')
+    expect(urlObj.searchParams.get('$top')).toBe('100')
   })
 
   test('returns empty array when no issues', async () => {
-    mockFetchResponse([])
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'EMPTY', name: 'Empty Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
 
-    const items = await listYouTrackTasks(config, 'proj-empty')
+    const items = await listYouTrackTasks(config, '39-883')
 
     expect(items).toEqual([])
   })
 
-  test('throws classified error on failure', async () => {
+  test('throws classified error on project fetch failure', async () => {
     mockFetchError(403, { error: 'Forbidden' })
 
     try {
@@ -491,12 +543,31 @@ describe('searchYouTrackTasks', () => {
   })
 
   test('prepends project filter when projectId is provided', async () => {
-    mockFetchResponse([])
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'MY-PROJ', name: 'My Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
 
-    await searchYouTrackTasks(config, { query: 'bug', projectId: 'MY-PROJ' })
+    await searchYouTrackTasks(config, { query: 'bug', projectId: '39-883' })
 
-    const url = getLastFetchUrl()
-    expect(url.searchParams.get('query')).toBe('project: {MY-PROJ} bug')
+    // Get the second call (issues search)
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {MY-PROJ} bug')
   })
 
   test('does not prepend project filter when projectId is absent', async () => {

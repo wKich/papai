@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { clearCachedTools } from '../../cache.js'
 import type { ReplyFn } from '../../chat/types.js'
-import { copyAdminLlmConfig, getConfig, setConfig } from '../../config.js'
+import { copyAdminLlmConfig, getConfig, isMissingLlmConfig, setConfig } from '../../config.js'
 import { logger } from '../../logger.js'
 import { getKaneoWorkspace, setKaneoWorkspace } from '../../users.js'
 
@@ -178,12 +178,18 @@ const provLog = logger.child({ scope: 'kaneo:auto-provision' })
 /**
  * Auto-provisions a Kaneo account for a user if they don't have one.
  * Called on /start or first natural language message.
+ * Skips auto-provisioning if TASK_PROVIDER is not 'kaneo'.
  */
 export async function maybeProvisionKaneo(reply: ReplyFn, contextId: string, username: string | null): Promise<void> {
+  const taskProvider = process.env['TASK_PROVIDER'] ?? 'kaneo'
+  if (taskProvider !== 'kaneo') {
+    return
+  }
+
   if (getKaneoWorkspace(contextId) !== null && getConfig(contextId, 'kaneo_apikey') !== null) {
     if (process.env['DEMO_MODE'] === 'true') {
       const adminUserId = process.env['ADMIN_USER_ID']
-      if (adminUserId !== undefined && adminUserId !== '') {
+      if (adminUserId !== undefined && adminUserId !== '' && isMissingLlmConfig(contextId)) {
         copyAdminLlmConfig(contextId, adminUserId)
       }
     }
@@ -196,7 +202,7 @@ export async function maybeProvisionKaneo(reply: ReplyFn, contextId: string, use
   if (outcome.status === 'provisioned') {
     if (process.env['DEMO_MODE'] === 'true') {
       const adminUserId = process.env['ADMIN_USER_ID']
-      if (adminUserId !== undefined && adminUserId !== '') {
+      if (adminUserId !== undefined && adminUserId !== '' && isMissingLlmConfig(contextId)) {
         copyAdminLlmConfig(contextId, adminUserId)
       }
     }

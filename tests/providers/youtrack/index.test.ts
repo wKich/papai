@@ -245,25 +245,44 @@ describe('YouTrackProvider', () => {
   })
 
   describe('listTasks', () => {
-    test('queries issues by project', async () => {
-      mockFetchResponse([
-        {
-          id: '2-1',
-          idReadable: 'TEST-1',
-          summary: 'First',
-          project: { id: '0-1', shortName: 'TEST' },
-          customFields: [],
-        },
-        {
-          id: '2-2',
-          idReadable: 'TEST-2',
-          summary: 'Second',
-          project: { id: '0-1', shortName: 'TEST' },
-          customFields: [],
-        },
-      ])
+    test('queries issues by project shortName', async () => {
+      // First call: get project to obtain shortName
+      // Second call: list issues using shortName
+      let callCount = 0
+      installFetchMock(() => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: '0-1', shortName: 'TEST', name: 'Test Project' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          )
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: '2-1',
+                idReadable: 'TEST-1',
+                summary: 'First',
+                project: { id: '0-1', shortName: 'TEST' },
+                customFields: [],
+              },
+              {
+                id: '2-2',
+                idReadable: 'TEST-2',
+                summary: 'Second',
+                project: { id: '0-1', shortName: 'TEST' },
+                customFields: [],
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      })
 
-      const tasks = await provider.listTasks('TEST')
+      const tasks = await provider.listTasks('0-1')
 
       expect(tasks).toHaveLength(2)
       expect(tasks[0]!.id).toBe('TEST-1')
@@ -291,13 +310,35 @@ describe('YouTrackProvider', () => {
       expect(url.searchParams.get('query')).toBe('bug')
     })
 
-    test('includes project filter in query', async () => {
-      mockFetchResponse([])
+    test('fetches project shortName and includes in query', async () => {
+      // First call: get project to obtain shortName
+      // Second call: search issues using shortName
+      let callCount = 0
+      installFetchMock(() => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: '0-1', shortName: 'PROJ', name: 'Project' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          )
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      })
 
-      await provider.searchTasks({ query: 'test', projectId: 'PROJ' })
+      await provider.searchTasks({ query: 'test', projectId: '0-1' })
 
-      const url = getLastFetchUrl()
-      expect(url.searchParams.get('query')).toBe('project: {PROJ} test')
+      // Get the second call (issues search)
+      expect(fetchMock).toBeDefined()
+      const parsed = FetchCallSchema.safeParse(fetchMock!.mock.calls[1])
+      expect(parsed.success).toBe(true)
+      if (!parsed.success) return
+      const [url] = parsed.data
+      const urlObj = new URL(url)
+      expect(urlObj.searchParams.get('query')).toBe('project: {PROJ} test')
     })
   })
 

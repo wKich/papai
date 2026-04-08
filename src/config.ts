@@ -53,6 +53,14 @@ const LLM_COPY_KEYS: readonly ConfigKey[] = [
   'embedding_model',
 ]
 
+/**
+ * Returns true if the user is missing any of the LLM config keys that should be
+ * copied from the admin. Used to avoid triggering copyAdminLlmConfig on every message.
+ */
+export function isMissingLlmConfig(userId: string): boolean {
+  return LLM_COPY_KEYS.some((key) => getCachedConfig(userId, key) === null)
+}
+
 export function copyAdminLlmConfig(targetUserId: string, adminUserId: string): void {
   log.debug({ targetUserId }, 'copyAdminLlmConfig called')
   for (const key of LLM_COPY_KEYS) {
