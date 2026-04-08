@@ -38,6 +38,7 @@ YouTrack ≥2024.x exposes the following resource families. Items in **bold**
 are not currently used.
 
 ### 3.1 Issues
+
 - `GET/POST /api/issues`, `GET/POST/DELETE /api/issues/{id}` — used.
 - **`POST /api/issues/{id}/execute`** — command language; today only relations.
   Could power bulk transitions (assign + state + priority in one call).
@@ -52,11 +53,13 @@ are not currently used.
   avoiding the need to model every field as a top-level param.
 
 ### 3.2 Comments
+
 - `GET/POST/DELETE /api/issues/{id}/comments[/{commentId}]` — used.
 - **`/api/issues/{id}/comments/{cid}/reactions`** — emoji reactions.
 - **`/api/issues/{id}/comments/{cid}/attachments`** — comment attachments.
 
 ### 3.3 Projects (admin)
+
 - `GET/POST /api/admin/projects[/{id}]` — used.
 - **`DELETE /api/admin/projects/{id}`** — supported by API, missing here.
 - **`/api/admin/projects/{id}/team/users`** — project team management.
@@ -66,6 +69,7 @@ are not currently used.
 - **`/api/admin/projects/{id}/timeTrackingSettings`**.
 
 ### 3.4 Custom field bundles (admin)
+
 - **`/api/admin/customFieldSettings/bundles/state/{id}/values`** — state list,
   add/remove/reorder. The basis for `statuses.*` capability on YouTrack.
 - **`/api/admin/customFieldSettings/bundles/enum/{id}/values`** — for
@@ -75,26 +79,32 @@ are not currently used.
   Affected/Fix versions.
 
 ### 3.5 Tags
+
 - `/api/tags` — used. Add **owner**, **visibleFor**, **updateableBy** fields.
 
 ### 3.6 Users / groups
+
 - **`/api/users`**, **`/api/users/me`**, **`/api/groups`** — needed to resolve
   assignees by name and to render reporter/updater info.
 
 ### 3.7 Saved queries & search
+
 - **`/api/savedQueries`** — recall named queries; pair with `search_tasks`.
 - **`/api/issuesGetter/count`** — fast count of a query (useful for "how many
   bugs are open in PROJ").
 
 ### 3.8 Agile / Sprints
+
 - **`/api/agiles`**, **`/api/agiles/{id}/sprints`** — list boards, list/create/
   update sprints, move issues into sprints.
 
 ### 3.9 Work items / time tracking
+
 - **`/api/workItems`** + per-issue endpoints — log time, list time,
   durations, types.
 
 ### 3.10 Notifications & VCS
+
 - **`/api/issues/{id}/vcsChanges`** — read-only; useful for "what commits
   reference this issue".
 
@@ -105,7 +115,9 @@ plausibly support the concept. YouTrack-only data should be exposed via a
 provider-scoped extension, not by polluting `Task`.
 
 ### 4.1 `Task`
+
 Add (all optional, present-when-known):
+
 ```ts
 type:           string          // YouTrack Type custom field, Kaneo type
 estimation:     string | null   // ISO-8601 duration, free-form for Kaneo
@@ -123,17 +135,21 @@ parent:         { id: string; idReadable: string; title: string } | null
 subtasks:       Array<{ id; idReadable; title; status?: string }>
 extra:          Record<string, unknown>   // provider-specific escape hatch
 ```
+
 Rules:
+
 - Mappers only set fields when the corresponding custom field exists.
 - `extra` is a typed-anywhere bag for fields no other provider can model
   (e.g. YouTrack `numberInProject`, custom enum cascades). Tools must not
   read from `extra`; it exists for `/get_task` rendering.
 
 ### 4.2 `Comment`
+
 Add: `reactions?: Array<{ emoji: string; count: number; users: string[] }>`,
 `attachments?: Attachment[]`, `editedBy?`, `usesMarkdown?: boolean`.
 
 ### 4.3 Statuses (`Column`)
+
 YouTrack statuses live in **state bundles** attached to a project's State
 custom field. To implement `statuses.*`:
 
@@ -150,7 +166,9 @@ affects all. Document this and require an explicit `confirm: true` for
 mutations on shared bundles.
 
 ### 4.4 Relations
+
 Replace command-API calls with `/api/issues/{id}/links`:
+
 - `GET …?fields=direction,linkType(name,sourceToTarget,targetToSource),issues(id,idReadable)`
 - `POST` to create with `{ linkType: { name }, direction, issues: [{id}] }`.
 - `DELETE` link by id.
@@ -158,42 +176,49 @@ Replace command-API calls with `/api/issues/{id}/links`:
   symmetrically). Keep current aliases.
 
 ### 4.5 Attachments (new domain type)
+
 ```ts
 type Attachment = {
   id: string
   name: string
   mimeType?: string
   size?: number
-  url: string                 // absolute or signed
+  url: string // absolute or signed
   thumbnailUrl?: string
   author?: string
   createdAt?: string
 }
 ```
+
 Capabilities: `attachments.list/upload/delete`.
 
 ### 4.6 Work items (new)
+
 ```ts
 type WorkItem = {
   id: string
   taskId: string
   author: string
-  date: string                // YYYY-MM-DD
-  duration: string            // ISO-8601 PnDTnHnM
+  date: string // YYYY-MM-DD
+  duration: string // ISO-8601 PnDTnHnM
   description?: string
   type?: string
 }
 ```
+
 Capabilities: `workItems.list/create/update/delete`.
 
 ### 4.7 Sprints / agile (new, optional)
+
 ```ts
 type Sprint = { id; name; agileId; start?: string; finish?: string; archived: boolean }
 ```
+
 Capabilities: `sprints.list/create/update`, `sprints.assign` (move issue
 into sprint).
 
 ### 4.8 Activities / history (new)
+
 ```ts
 type Activity = {
   id: string
@@ -205,36 +230,41 @@ type Activity = {
   removed?: unknown
 }
 ```
+
 Read-only. Capability `activities.read`.
 
 ### 4.9 Users
+
 ```ts
 type UserRef = { id: string; login: string; name?: string; email?: string }
 ```
+
 Add provider methods `resolveUser(query)` and `me()`. Used internally by
 mappers and surfaced through a thin `find_user` tool.
 
 ## 5. New & changed tools
 
 ### 5.1 New tools
-| Tool | Capability | Notes |
-| --- | --- | --- |
-| `list_attachments` / `upload_attachment` / `remove_attachment` | `attachments.*` | Upload via multipart; chat-platform file relay. |
-| `log_work` / `list_work` / `update_work` / `remove_work` | `workItems.*` | Duration parsing helper (`2h 30m` → ISO). |
-| `list_sprints` / `assign_to_sprint` / `create_sprint` | `sprints.*` | Hidden when no agile board. |
-| `get_task_history` | `activities.read` | Cursor pagination via `activitiesPage`. |
-| `list_users` / `find_user` | always | Backed by `/api/users` for YouTrack, in-memory for Kaneo. |
-| `add_watcher` / `remove_watcher` | `tasks.watchers` | |
-| `add_vote` / `remove_vote` | `tasks.votes` | |
-| `set_visibility` | `tasks.visibility` | groups + users restrict list. |
-| `count_tasks` | always | Fast counter, leverages `/api/issuesGetter/count`. |
-| `list_saved_queries` / `run_saved_query` | `queries.saved` | |
-| `add_comment_reaction` / `remove_comment_reaction` | `comments.reactions` | |
-| `list_project_team` / `add_project_member` / `remove_project_member` | `projects.team` | Admin only. |
-| `archive_project` | `projects.delete` | Implement now via `DELETE /api/admin/projects/{id}`. |
-| `get_comment` | `comments.read` | Already gated, never implemented. |
+
+| Tool                                                                 | Capability           | Notes                                                     |
+| -------------------------------------------------------------------- | -------------------- | --------------------------------------------------------- |
+| `list_attachments` / `upload_attachment` / `remove_attachment`       | `attachments.*`      | Upload via multipart; chat-platform file relay.           |
+| `log_work` / `list_work` / `update_work` / `remove_work`             | `workItems.*`        | Duration parsing helper (`2h 30m` → ISO).                 |
+| `list_sprints` / `assign_to_sprint` / `create_sprint`                | `sprints.*`          | Hidden when no agile board.                               |
+| `get_task_history`                                                   | `activities.read`    | Cursor pagination via `activitiesPage`.                   |
+| `list_users` / `find_user`                                           | always               | Backed by `/api/users` for YouTrack, in-memory for Kaneo. |
+| `add_watcher` / `remove_watcher`                                     | `tasks.watchers`     |                                                           |
+| `add_vote` / `remove_vote`                                           | `tasks.votes`        |                                                           |
+| `set_visibility`                                                     | `tasks.visibility`   | groups + users restrict list.                             |
+| `count_tasks`                                                        | always               | Fast counter, leverages `/api/issuesGetter/count`.        |
+| `list_saved_queries` / `run_saved_query`                             | `queries.saved`      |                                                           |
+| `add_comment_reaction` / `remove_comment_reaction`                   | `comments.reactions` |                                                           |
+| `list_project_team` / `add_project_member` / `remove_project_member` | `projects.team`      | Admin only.                                               |
+| `archive_project`                                                    | `projects.delete`    | Implement now via `DELETE /api/admin/projects/{id}`.      |
+| `get_comment`                                                        | `comments.read`      | Already gated, never implemented.                         |
 
 ### 5.2 Changed tools
+
 - `create_task` / `update_task`: add optional `type`, `subsystem`,
   `estimation`, `affectedVersions`, `fixVersions`, `sprintId`, `parentId`,
   `visibility`. All passed through `buildCustomFields`, which becomes
@@ -247,6 +277,7 @@ mappers and surfaced through a thin `find_user` tool.
   becomes an actual REST update where possible.
 
 ### 5.3 Tool description changes
+
 LLM descriptions must mention the new optional params and the YouTrack
 interpretation (e.g. "estimation accepts ISO-8601 duration like `PT2H30M`
 or natural `2h30m` which the bot will normalize").
@@ -254,6 +285,7 @@ or natural `2h30m` which the bot will normalize").
 ## 6. Issue fields requested
 
 Extend `ISSUE_FIELDS`:
+
 ```
 id,idReadable,numberInProject,summary,description,
 created,updated,resolved,
@@ -271,6 +303,7 @@ visibility($type,permittedGroups(name),permittedUsers(login)),
 parent(issues(id,idReadable,summary)),
 subtasks(issues(id,idReadable,summary,resolved))
 ```
+
 List/search variants stay lean; add `numberInProject` and `resolved`
 (needed to render strikethrough done items).
 
@@ -294,6 +327,7 @@ Today `buildCustomFields` only knows three names. New strategy:
 ## 8. Error classification
 
 Add YouTrack-specific cases to `classifyYouTrackError`:
+
 - 400 `customField has empty value` → AppError `invalid_input` with the
   offending field name extracted from `error_description`.
 - 400 `Bundle element not found` → AppError `not_found` with "status".
@@ -304,6 +338,7 @@ Add YouTrack-specific cases to `classifyYouTrackError`:
 
 YouTrack uses `$top` / `$skip`. Wrap list operations with a `paginate()`
 helper that:
+
 - defaults `$top=100`,
 - streams pages until `result.length < $top`,
 - caps at `MAX_PAGES` (configurable per call) to bound LLM context.
@@ -328,6 +363,7 @@ statuses.* (already in union, newly supported)
 ## 11. Phased rollout
 
 **Phase 1 — bug fixes & cheap wins** (no new domain types)
+
 - Fix `updateLabel` color.
 - Implement `getComment`, `archive_project` (DELETE).
 - Add `numberInProject`, `reporter`, `updater`, `commentsCount`, `votes`,
@@ -335,21 +371,25 @@ statuses.* (already in union, newly supported)
 - Switch relations to `/api/issues/{id}/links` (no API surface change).
 
 **Phase 2 — statuses & richer custom fields**
+
 - Project custom-field discovery + cache.
 - Bundle-aware `buildCustomFields`.
 - Implement `statuses.*` via state bundles.
 - Add `type`, `estimation`, `spentTime` to `Task`.
 
 **Phase 3 — attachments & work items**
+
 - New `Attachment` and `WorkItem` types and tools.
 - Multipart upload through chat-platform file relay.
 - Time-tracking duration parser.
 
 **Phase 4 — collaboration**
+
 - Watchers, voters, comment reactions, visibility, project team, users
   resolver, `find_user` tool.
 
 **Phase 5 — agile & history**
+
 - Sprints + agile boards, saved queries, activity history, count tool.
 
 Each phase is independently shippable and gated by capabilities so the Kaneo
