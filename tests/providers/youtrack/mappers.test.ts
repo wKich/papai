@@ -119,7 +119,16 @@ describe('mapIssueToTask', () => {
       project: { id: 'proj-1' },
       customFields: [],
       attachments: [
-        { id: 'a-1', name: 'file.pdf', url: 'https://example.com/file.pdf' },
+        {
+          id: 'a-1',
+          name: 'file.pdf',
+          url: 'https://example.com/file.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+          thumbnailURL: 'https://example.com/thumb.png',
+          author: { login: 'alice' },
+          created: 1704067200000,
+        },
         { id: 'a-2', name: 'image.png', url: 'https://example.com/image.png' },
       ],
       visibility: { $type: 'LimitedVisibility', permittedGroups: [{ name: 'team-a' }] },
@@ -131,7 +140,26 @@ describe('mapIssueToTask', () => {
     )
 
     expect(result.attachments).toHaveLength(2)
-    expect(result.attachments?.[0]).toEqual({ id: 'a-1', name: 'file.pdf', url: 'https://example.com/file.pdf' })
+    expect(result.attachments?.[0]).toEqual({
+      id: 'a-1',
+      name: 'file.pdf',
+      url: 'https://example.com/file.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      thumbnailUrl: 'https://example.com/thumb.png',
+      author: 'alice',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    })
+    expect(result.attachments?.[1]).toEqual({
+      id: 'a-2',
+      name: 'image.png',
+      url: 'https://example.com/image.png',
+      mimeType: undefined,
+      size: undefined,
+      thumbnailUrl: undefined,
+      author: undefined,
+      createdAt: undefined,
+    })
     expect(result.visibility).toEqual({ $type: 'LimitedVisibility', permittedGroups: [{ name: 'team-a' }] })
   })
 

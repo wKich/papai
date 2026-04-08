@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 
-import type { Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
+import type { Attachment, Comment, RelationType, Task, TaskListItem, TaskSearchResult } from '../types.js'
 import type { CommentSchema } from './schemas/comment.js'
 import type { CustomFieldValueSchema } from './schemas/custom-fields.js'
 import type { IssueListSchema, IssueSchema } from './schemas/issue.js'
@@ -70,6 +70,42 @@ const mapSubtasks = (
     status: undefined,
   }))
 
+const mapAttachment = (a: {
+  id: string
+  name: string
+  url?: string
+  mimeType?: string
+  size?: number
+  thumbnailURL?: string
+  author?: { login?: string }
+  created?: number
+}): Attachment => ({
+  id: a.id,
+  name: a.name,
+  url: a.url ?? '',
+  mimeType: a.mimeType,
+  size: a.size,
+  thumbnailUrl: a.thumbnailURL,
+  author: a.author?.login,
+  createdAt: toIsoOrUndefined(a.created),
+})
+
+const mapAttachments = (
+  attachments:
+    | Array<{
+        id: string
+        name: string
+        url?: string
+        mimeType?: string
+        size?: number
+        thumbnailURL?: string
+        author?: { login?: string }
+        created?: number
+      }>
+    | undefined,
+): Attachment[] | undefined =>
+  attachments === undefined || attachments.length === 0 ? undefined : attachments.map(mapAttachment)
+
 export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: string): Task => {
   const relations = (issue.links ?? []).flatMap((link) => {
     const typeName = link.linkType?.name ?? 'Relate'
@@ -98,7 +134,7 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
     votes: issue.votes,
     commentsCount: issue.commentsCount,
     resolved: toIsoOrUndefined(issue.resolved),
-    attachments: issue.attachments,
+    attachments: mapAttachments(issue.attachments),
     visibility: issue.visibility,
     parent: mapParent(issue.parent),
     subtasks: mapSubtasks(issue.subtasks),

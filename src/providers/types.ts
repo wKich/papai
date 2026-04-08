@@ -43,6 +43,16 @@ export type Capability =
 
 // --- Common domain types ---
 
+export type Attachment = {
+  id: string
+  name: string
+  mimeType?: string
+  size?: number
+  url: string
+  thumbnailUrl?: string
+  author?: string
+  createdAt?: string
+}
 /** Normalized task returned by all providers. */
 export type Task = {
   id: string
@@ -63,17 +73,11 @@ export type Task = {
   votes?: number
   commentsCount?: number
   resolved?: string
-  attachments?: unknown[]
+  attachments?: Attachment[]
   visibility?: unknown
   parent?: { id: string; idReadable?: string; title: string }
   subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>
 }
-
-/**
- * Optional filters for `listTasks`. Mirrors the query params accepted by the
- * upstream @kaneo/mcp `list_tasks` tool. Providers that don't support a given
- * filter may ignore it.
- */
 export type ListTasksParams = {
   status?: string
   priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
@@ -97,7 +101,6 @@ export type TaskListItem = {
   resolved?: string
   url: string
 }
-
 /** Minimal task representation for search results. */
 export type TaskSearchResult = {
   id: string
@@ -108,14 +111,12 @@ export type TaskSearchResult = {
   projectId?: string
   url: string
 }
-
 export type Project = {
   id: string
   name: string
   description?: string | null
   url: string
 }
-
 export type Comment = {
   id: string
   body: string

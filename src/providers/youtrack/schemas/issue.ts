@@ -1,6 +1,6 @@
-// src/providers/youtrack/schemas/issue.ts
 import { z } from 'zod'
 
+import { YouTrackAttachmentSchema } from './attachment.js'
 import { BaseEntitySchema, TimestampSchema } from './common.js'
 import { CustomFieldValueSchema } from './custom-fields.js'
 import { IssueLinkSchema } from './issue-link.js'
@@ -26,7 +26,7 @@ export const IssueSchema = BaseEntitySchema.extend({
   links: z.array(IssueLinkSchema).optional(),
   commentsCount: z.number().optional(),
   votes: z.number().optional(),
-  attachments: z.array(z.unknown()).optional(),
+  attachments: z.array(YouTrackAttachmentSchema).optional(),
   visibility: z.unknown().optional(),
   parent: z
     .object({
