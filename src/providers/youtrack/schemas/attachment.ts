@@ -15,5 +15,3 @@ export const YouTrackAttachmentSchema = BaseEntitySchema.extend({
     .optional(),
   created: TimestampSchema.optional(),
 })
-
-export type YouTrackAttachment = z.infer<typeof YouTrackAttachmentSchema>
