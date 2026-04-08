@@ -20,10 +20,15 @@ export function makeReorderStatusesTool(provider: TaskProvider): ToolSet[string]
           }),
         )
         .describe('Array of statuses with their new positions'),
+      confirm: z.boolean().optional().describe('Set to true to confirm changes to shared state bundles'),
     }),
-    execute: async ({ projectId, statuses }) => {
+    execute: async ({ projectId, statuses, confirm }) => {
       try {
-        await provider.reorderStatuses!(projectId, statuses)
+        const result = await provider.reorderStatuses!(projectId, statuses, confirm)
+        if (result !== undefined && 'status' in result && result.status === 'confirmation_required') {
+          log.warn({ projectId }, 'reorder_statuses blocked — shared bundle confirmation required')
+          return result
+        }
         log.info({ projectId, statusCount: statuses.length }, 'Statuses reordered via tool')
         return { success: true }
       } catch (error) {

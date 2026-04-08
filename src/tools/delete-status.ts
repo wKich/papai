@@ -12,25 +12,33 @@ export function makeDeleteStatusTool(provider: TaskProvider): ToolSet[string] {
   return tool({
     description: 'Delete a status from a project.',
     inputSchema: z.object({
+      projectId: z.string().describe('Project ID'),
       statusId: z.string().describe('Status ID to delete'),
       label: z
         .string()
         .optional()
         .describe('Human-readable status name for the confirmation message (e.g. "In Progress")'),
       confidence: confidenceField,
+      confirm: z.boolean().optional().describe('Set to true to confirm changes to shared state bundles'),
     }),
-    execute: async ({ statusId, label, confidence }) => {
-      log.debug({ statusId, confidence }, 'delete_status called')
+    execute: async ({ projectId, statusId, label, confidence, confirm }) => {
+      log.debug({ projectId, statusId, confidence, confirm }, 'delete_status called')
       const gate = checkConfidence(confidence, `Delete status "${label ?? statusId}"`)
       if (gate !== null) {
-        log.warn({ statusId, confidence }, 'delete_status blocked — confirmation required')
+        log.warn({ projectId, statusId, confidence }, 'delete_status blocked — confirmation required')
         return gate
       }
       try {
-        return await provider.deleteStatus!(statusId)
+        const result = await provider.deleteStatus!(projectId, statusId, confirm)
+        if ('status' in result && result.status === 'confirmation_required') {
+          log.warn({ projectId, statusId }, 'delete_status blocked — shared bundle confirmation required')
+          return result
+        }
+        log.info({ projectId, statusId }, 'Status deleted')
+        return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), statusId, tool: 'delete_status' },
+          { error: error instanceof Error ? error.message : String(error), projectId, statusId, tool: 'delete_status' },
           'Tool execution failed',
         )
         throw error

@@ -69,9 +69,13 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     updateRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2', type: 'related' })),
     removeRelation: mock(() => Promise.resolve({ taskId: 'task-1', relatedTaskId: 'task-2' })),
     listStatuses: mock(() => Promise.resolve([])),
-    createStatus: mock(() => Promise.resolve({ id: 'status-1', name: 'Test' })),
-    updateStatus: mock(() => Promise.resolve({ id: 'status-1', name: 'Test' })),
-    deleteStatus: mock(() => Promise.resolve({ id: 'status-1' })),
+    createStatus: mock((_projectId: string, params: { name: string }) =>
+      Promise.resolve({ id: 'status-1', name: params.name }),
+    ),
+    updateStatus: mock((_projectId: string, _statusId: string, params: { name?: string }) =>
+      Promise.resolve({ id: 'status-1', name: params.name ?? 'Test' }),
+    ),
+    deleteStatus: mock((_projectId: string, statusId: string) => Promise.resolve({ id: statusId })),
     reorderStatuses: mock(() => Promise.resolve()),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),

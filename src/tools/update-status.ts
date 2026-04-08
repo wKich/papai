@@ -12,23 +12,31 @@ export function makeUpdateStatusTool(provider: TaskProvider): ToolSet[string] {
     description: 'Update an existing status in a project.',
     inputSchema: z
       .object({
+        projectId: z.string().describe('Project ID'),
         statusId: z.string().describe('Status ID'),
         name: z.string().optional().describe('New status name'),
         icon: z.string().optional().describe('New icon name'),
         color: z.string().optional().describe('New hex color code'),
         isFinal: z.boolean().optional().describe('Whether this is a final status'),
+        confirm: z.boolean().optional().describe('Set to true to confirm changes to shared state bundles'),
       })
       .refine(
         (data) =>
           data.name !== undefined || data.icon !== undefined || data.color !== undefined || data.isFinal !== undefined,
         'At least one field must be provided to update',
       ),
-    execute: async ({ statusId, name, icon, color, isFinal }) => {
+    execute: async ({ projectId, statusId, name, icon, color, isFinal, confirm }) => {
       try {
-        return await provider.updateStatus!(statusId, { name, icon, color, isFinal })
+        const result = await provider.updateStatus!(projectId, statusId, { name, icon, color, isFinal }, confirm)
+        if ('status' in result && result.status === 'confirmation_required') {
+          log.warn({ projectId, statusId }, 'update_status blocked — shared bundle confirmation required')
+          return result
+        }
+        log.info({ projectId, statusId }, 'Status updated')
+        return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), statusId, tool: 'update_status' },
+          { error: error instanceof Error ? error.message : String(error), projectId, statusId, tool: 'update_status' },
           'Tool execution failed',
         )
         throw error
