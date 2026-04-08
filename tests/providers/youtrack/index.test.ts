@@ -104,6 +104,7 @@ describe('YouTrackProvider', () => {
       expect(provider.capabilities.has('projects.list')).toBe(true)
       expect(provider.capabilities.has('projects.create')).toBe(true)
       expect(provider.capabilities.has('projects.update')).toBe(true)
+      expect(provider.capabilities.has('projects.delete')).toBe(true)
       // Comments (full CRUD support)
       expect(provider.capabilities.has('comments.read')).toBe(true)
       expect(provider.capabilities.has('comments.create')).toBe(true)
@@ -347,6 +348,14 @@ describe('YouTrackProvider', () => {
       mockFetchNoContent()
       const result = await provider.deleteTask('TEST-1')
       expect(result.id).toBe('TEST-1')
+    })
+  })
+
+  describe('deleteProject', () => {
+    test('sends DELETE request', async () => {
+      mockFetchNoContent()
+      const result = await provider.deleteProject('proj-1')
+      expect(result.id).toBe('proj-1')
     })
   })
 

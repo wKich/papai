@@ -6,6 +6,7 @@ import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/clas
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
   createYouTrackProject,
+  deleteYouTrackProject,
   getYouTrackProject,
   listYouTrackProjects,
   updateYouTrackProject,
@@ -362,6 +363,57 @@ describe('updateYouTrackProject', () => {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)
       if (error instanceof YouTrackClassifiedError) {
         expect(error.appError.code).toBe('project-not-found')
+      }
+    }
+  })
+})
+
+describe('deleteYouTrackProject', () => {
+  beforeEach(() => {
+    mockLogger()
+    fetchMock = undefined!
+  })
+
+  afterEach(() => {
+    restoreFetch()
+  })
+
+  test('deleteProject removes project via DELETE request', async () => {
+    mockFetchResponse({})
+
+    const result = await deleteYouTrackProject(config, 'proj-123')
+
+    expect(result).toEqual({ id: 'proj-123' })
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/admin/projects/proj-123')
+    expect(getLastFetchMethod()).toBe('DELETE')
+  })
+
+  test('throws classified error on 404', async () => {
+    mockFetchError(404, { error: 'Project not found' })
+
+    try {
+      await deleteYouTrackProject(config, 'nonexistent')
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('project-not-found')
+      }
+    }
+  })
+
+  test('throws classified error on auth failure', async () => {
+    mockFetchError(401)
+
+    try {
+      await deleteYouTrackProject(config, 'proj-1')
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('auth-failed')
       }
     }
   })

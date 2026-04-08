@@ -30,6 +30,7 @@ import {
 } from './operations/comments.js'
 import {
   createYouTrackProject,
+  deleteYouTrackProject,
   getYouTrackProject,
   listYouTrackProjects,
   updateYouTrackProject,
@@ -114,6 +115,10 @@ export class YouTrackProvider implements TaskProvider {
 
   updateProject(projectId: string, params: { name?: string; description?: string }): Promise<Project> {
     return updateYouTrackProject(this.config, projectId, params)
+  }
+
+  deleteProject(projectId: string): Promise<{ id: string }> {
+    return deleteYouTrackProject(this.config, projectId)
   }
 
   addComment(taskId: string, body: string): Promise<Comment> {

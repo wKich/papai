@@ -111,3 +111,15 @@ export async function updateYouTrackProject(
     throw classifyYouTrackError(error, { projectId })
   }
 }
+
+export async function deleteYouTrackProject(config: YouTrackConfig, projectId: string): Promise<{ id: string }> {
+  log.debug({ projectId }, 'deleteProject')
+  try {
+    await youtrackFetch(config, 'DELETE', `/api/admin/projects/${projectId}`)
+    log.info({ projectId }, 'Project deleted')
+    return { id: projectId }
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'Failed to delete project')
+    throw classifyYouTrackError(error, { projectId })
+  }
+}
