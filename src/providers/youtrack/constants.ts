@@ -28,7 +28,9 @@ export const ISSUE_FIELDS = [
 export const ISSUE_LIST_FIELDS = [
   'id',
   'idReadable',
+  'numberInProject',
   'summary',
+  'resolved',
   'created',
   'project(id,shortName)',
   'customFields($type,name,value($type,name,login))',
