@@ -33,7 +33,3 @@ export const ProjectCustomFieldSchema = z.object({
     })
     .optional(),
 })
-
-export type StateValue = z.infer<typeof StateValueSchema>
-export type StateBundle = z.infer<typeof StateBundleSchema>
-export type ProjectCustomField = z.infer<typeof ProjectCustomFieldSchema>

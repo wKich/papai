@@ -35,6 +35,11 @@
   "treatConfigHintsAsErrors": true,
   "ignoreExportsUsedInFile": true,
 
+  // Test-only exports (clearBundleCache is only used in test files)
+  "ignoreIssues": {
+    "src/providers/youtrack/bundle-cache.ts": ["exports"],
+  },
+
   // Ignore migration files (executed at runtime, not imported)
   "ignore": ["src/db/migrations/**"],
 }

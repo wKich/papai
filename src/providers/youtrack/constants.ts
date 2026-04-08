@@ -61,7 +61,12 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   'labels.update',
   'labels.delete',
   'labels.assign',
-  // Statuses (YouTrack uses State custom fields, not explicit status management)
+  // Statuses (state bundles)
+  'statuses.list',
+  'statuses.create',
+  'statuses.update',
+  'statuses.delete',
+  'statuses.reorder',
 ])
 
 export const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

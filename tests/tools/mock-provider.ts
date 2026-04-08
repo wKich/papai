@@ -76,7 +76,7 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
       Promise.resolve({ id: 'status-1', name: params.name ?? 'Test' }),
     ),
     deleteStatus: mock((_projectId: string, statusId: string) => Promise.resolve({ id: statusId })),
-    reorderStatuses: mock(() => Promise.resolve()),
+    reorderStatuses: mock(() => Promise.resolve(undefined)),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),
     classifyError: mock(() => ({

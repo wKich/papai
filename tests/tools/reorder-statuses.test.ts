@@ -18,7 +18,8 @@ describe('makeReorderStatusesTool', () => {
 
   test('reorders statuses successfully', async () => {
     const reorderStatuses = mock(
-      (_projectId: string, _statuses: { id: string; position: number }[], _confirm?: boolean) => Promise.resolve(),
+      (_projectId: string, _statuses: { id: string; position: number }[], _confirm?: boolean) =>
+        Promise.resolve(undefined),
     )
     const provider = createMockProvider({ reorderStatuses })
 
@@ -49,7 +50,8 @@ describe('makeReorderStatusesTool', () => {
 
   test('passes confirm parameter to provider', async () => {
     const reorderStatuses = mock(
-      (_projectId: string, _statuses: { id: string; position: number }[], _confirm?: boolean) => Promise.resolve(),
+      (_projectId: string, _statuses: { id: string; position: number }[], _confirm?: boolean) =>
+        Promise.resolve(undefined),
     )
     const provider = createMockProvider({ reorderStatuses })
 

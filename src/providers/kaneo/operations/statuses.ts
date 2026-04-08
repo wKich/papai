@@ -39,6 +39,7 @@ export async function kaneoReorderStatuses(
   config: KaneoConfig,
   projectId: string,
   statuses: { id: string; position: number }[],
-): Promise<void> {
+): Promise<undefined> {
   await reorderColumns({ config, projectId, columns: statuses })
+  return undefined
 }

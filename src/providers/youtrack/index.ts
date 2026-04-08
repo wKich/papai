@@ -1,6 +1,7 @@
 import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type {
+  Column,
   Comment,
   Label,
   ListTasksParams,
@@ -35,6 +36,13 @@ import {
   listYouTrackProjects,
   updateYouTrackProject,
 } from './operations/projects.js'
+import {
+  createYouTrackStatus,
+  deleteYouTrackStatus,
+  listYouTrackStatuses,
+  reorderYouTrackStatuses,
+  updateYouTrackStatus,
+} from './operations/statuses.js'
 import {
   createYouTrackTask,
   deleteYouTrackTask,
@@ -183,6 +191,49 @@ export class YouTrackProvider implements TaskProvider {
     type: import('../types.js').RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
     return updateYouTrackRelation(this.config, taskId, relatedTaskId, type)
+  }
+
+  listStatuses(projectId: string): Promise<Column[]> {
+    return listYouTrackStatuses(this.config, projectId)
+  }
+
+  createStatus(
+    projectId: string,
+    params: { name: string; icon?: string; color?: string; isFinal?: boolean },
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
+    return createYouTrackStatus(this.config, projectId, { name: params.name }, confirm)
+  }
+
+  updateStatus(
+    projectId: string,
+    statusId: string,
+    params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
+    return updateYouTrackStatus(
+      this.config,
+      projectId,
+      statusId,
+      { name: params.name, isFinal: params.isFinal },
+      confirm,
+    )
+  }
+
+  deleteStatus(
+    projectId: string,
+    statusId: string,
+    confirm?: boolean,
+  ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }> {
+    return deleteYouTrackStatus(this.config, projectId, statusId, confirm)
+  }
+
+  reorderStatuses(
+    projectId: string,
+    statuses: { id: string; position: number }[],
+    confirm?: boolean,
+  ): Promise<undefined | { status: 'confirmation_required'; message: string }> {
+    return reorderYouTrackStatuses(this.config, projectId, statuses, confirm)
   }
 
   buildTaskUrl(taskId: string): string {

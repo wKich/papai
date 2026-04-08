@@ -1,40 +1,23 @@
 import type { AppError } from '../errors.js'
 
-// --- Capabilities ---
-
-/**
- * Capabilities that a task tracker provider may support.
- * Core task operations are always required; everything else is optional.
- *
- * Each domain has granular capabilities for specific operations:
- * - projects: read, list, create, update, delete
- * - comments: read, create, update, delete
- * - labels: list, create, update, delete, assign
- * - statuses: list, create, update, delete, reorder
- * - tasks: delete, relations
- */
+/** Capabilities that a task tracker provider may support. */
 export type Capability =
-  // Tasks
   | 'tasks.delete'
   | 'tasks.relations'
-  // Projects
   | 'projects.read'
   | 'projects.list'
   | 'projects.create'
   | 'projects.update'
   | 'projects.delete'
-  // Comments
   | 'comments.read'
   | 'comments.create'
   | 'comments.update'
   | 'comments.delete'
-  // Labels
   | 'labels.list'
   | 'labels.create'
   | 'labels.update'
   | 'labels.delete'
   | 'labels.assign'
-  // Statuses
   | 'statuses.list'
   | 'statuses.create'
   | 'statuses.update'
@@ -101,6 +84,7 @@ export type TaskListItem = {
   resolved?: string
   url: string
 }
+
 /** Minimal task representation for search results. */
 export type TaskSearchResult = {
   id: string
@@ -111,6 +95,7 @@ export type TaskSearchResult = {
   projectId?: string
   url: string
 }
+
 export type Project = {
   id: string
   name: string
@@ -272,28 +257,33 @@ export interface TaskProvider {
   createStatus?(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column>
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }>
 
   updateStatus?(
+    projectId: string,
     statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column>
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }>
 
-  deleteStatus?(statusId: string): Promise<{ id: string }>
+  deleteStatus?(
+    projectId: string,
+    statusId: string,
+    confirm?: boolean,
+  ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }>
 
-  reorderStatuses?(projectId: string, statuses: { id: string; position: number }[]): Promise<void>
-
-  // --- URL builders ---
+  reorderStatuses?(
+    projectId: string,
+    statuses: { id: string; position: number }[],
+    confirm?: boolean,
+  ): Promise<undefined | { status: 'confirmation_required'; message: string }>
 
   buildTaskUrl(taskId: string, projectId?: string): string
 
   buildProjectUrl(projectId: string): string
 
-  // --- Error classification ---
-
   classifyError(error: unknown): AppError
-
-  // --- System prompt addendum ---
 
   /** Returns provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string

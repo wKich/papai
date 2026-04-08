@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { clearBundleCache } from '../../../src/providers/youtrack/bundle-cache.js'
 import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
-import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+import { mockLogger, restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 
 // Store reference to current fetch mock for call inspection
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>> | undefined
@@ -34,6 +35,23 @@ const mockFetchResponse = (data: unknown, status = 200): void => {
 
 const mockFetchNoContent = (): void => {
   installFetchMock(() => Promise.resolve(new Response(null, { status: 204 })))
+}
+
+const mockFetchSequence = (responses: Array<{ data: unknown; status?: number }>): void => {
+  let callIndex = 0
+  installFetchMock(() => {
+    const response = responses[callIndex]
+    callIndex++
+    if (response === undefined) {
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify(response.data), {
+        status: response.status ?? 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  })
 }
 
 /** Schema for a mock fetch call tuple: [url, init] */
@@ -81,6 +99,8 @@ describe('YouTrackProvider', () => {
   let provider: YouTrackProvider
 
   beforeEach(() => {
+    mockLogger()
+    clearBundleCache()
     provider = new YouTrackProvider(createConfig())
     fetchMock = undefined
   })
@@ -116,9 +136,12 @@ describe('YouTrackProvider', () => {
       expect(provider.capabilities.has('labels.update')).toBe(true)
       expect(provider.capabilities.has('labels.delete')).toBe(true)
       expect(provider.capabilities.has('labels.assign')).toBe(true)
-      // Statuses (YouTrack uses custom fields, not explicit status management)
-      expect(provider.capabilities.has('statuses.list')).toBe(false)
-      expect(provider.capabilities.has('statuses.create')).toBe(false)
+      // Statuses (state bundles)
+      expect(provider.capabilities.has('statuses.list')).toBe(true)
+      expect(provider.capabilities.has('statuses.create')).toBe(true)
+      expect(provider.capabilities.has('statuses.update')).toBe(true)
+      expect(provider.capabilities.has('statuses.delete')).toBe(true)
+      expect(provider.capabilities.has('statuses.reorder')).toBe(true)
     })
 
     test('has config requirements', () => {
@@ -534,6 +557,153 @@ describe('YouTrackProvider', () => {
       await expect(promise).rejects.toThrow('Relation not found')
       // The fetch should only be called once (for the get task to find the link)
       expect(fetchMock?.mock.calls).toHaveLength(1)
+    })
+  })
+
+  describe('listStatuses', () => {
+    test('returns list of columns from state bundle', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }] } } },
+        { data: [{ id: '57-1', name: 'Open', isResolved: false, ordinal: 0 }] },
+      ])
+
+      const statuses = await provider.listStatuses('proj-1')
+
+      expect(statuses).toHaveLength(1)
+      expect(statuses[0]!.id).toBe('57-1')
+      expect(statuses[0]!.name).toBe('Open')
+    })
+  })
+
+  describe('createStatus', () => {
+    test('creates status and returns column', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }] } } },
+        { data: { id: '57-2', name: 'Ready', isResolved: false, ordinal: 1 } },
+      ])
+
+      const result = await provider.createStatus('proj-1', { name: 'Ready' })
+
+      if ('status' in result) {
+        expect.unreachable('Should not require confirmation')
+      } else {
+        expect(result.id).toBe('57-2')
+        expect(result.name).toBe('Ready')
+      }
+    })
+
+    test('returns confirmation_required for shared bundles without confirm', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } } },
+      ])
+
+      const result = await provider.createStatus('proj-1', { name: 'New' })
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      if ('message' in result) {
+        expect(result.message).toContain('shared')
+      }
+    })
+  })
+
+  describe('updateStatus', () => {
+    test('updates status and returns column', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }] } } },
+        { data: { id: '57-1', name: 'Updated', isResolved: true, ordinal: 0 } },
+      ])
+
+      const result = await provider.updateStatus('proj-1', '57-1', { name: 'Updated', isFinal: true })
+
+      if ('status' in result) {
+        expect.unreachable('Should not require confirmation')
+      } else {
+        expect(result.id).toBe('57-1')
+        expect(result.name).toBe('Updated')
+      }
+    })
+
+    test('returns confirmation_required for shared bundles without confirm', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } } },
+      ])
+
+      const result = await provider.updateStatus('proj-1', '57-1', { name: 'X' })
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      if ('message' in result) {
+        expect(result.message).toContain('shared')
+      }
+    })
+  })
+
+  describe('deleteStatus', () => {
+    test('deletes status and returns id', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }] } } },
+        { data: {} },
+      ])
+
+      const result = await provider.deleteStatus('proj-1', '57-1')
+
+      if ('status' in result) {
+        expect.unreachable('Should not require confirmation')
+      } else {
+        expect(result).toEqual({ id: '57-1' })
+      }
+    })
+
+    test('returns confirmation_required for shared bundles without confirm', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } } },
+      ])
+
+      const result = await provider.deleteStatus('proj-1', '57-1')
+
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      if ('message' in result) {
+        expect(result.message).toContain('shared')
+      }
+    })
+  })
+
+  describe('reorderStatuses', () => {
+    test('reorders statuses', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }] } } },
+        { data: { id: '57-1', name: 'Open', isResolved: false, ordinal: 0 } },
+        { data: { id: '57-2', name: 'Done', isResolved: true, ordinal: 1 } },
+      ])
+
+      await provider.reorderStatuses('proj-1', [
+        { id: '57-1', position: 0 },
+        { id: '57-2', position: 1 },
+      ])
+
+      expect(fetchMock?.mock.calls).toHaveLength(4)
+    })
+
+    test('returns confirmation_required for shared bundles without confirm', async () => {
+      mockFetchSequence([
+        { data: [{ $type: 'StateProjectCustomField', field: { name: 'State' }, bundle: { id: 'bundle-1' } }] },
+        { data: { id: 'bundle-1', aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } } },
+      ])
+
+      const result = await provider.reorderStatuses('proj-1', [{ id: '57-1', position: 0 }])
+
+      expect(result).toBeDefined()
+      expect(result).toMatchObject({ status: 'confirmation_required' })
+      if (result && 'message' in result) {
+        expect(result.message).toContain('shared')
+      }
     })
   })
 })
