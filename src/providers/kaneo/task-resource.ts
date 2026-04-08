@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
 import { logger } from '../../logger.js'
+import type { ListTasksParams } from '../types.js'
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
+import { buildListTasksQuery } from './list-tasks-query.js'
 import { type KaneoTaskListItem } from './list-tasks.js'
 import { TaskSchema as KaneoTaskResponseSchema } from './schemas/create-task.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
@@ -60,16 +62,17 @@ export class TaskResource {
     }
   }
 
-  async list(projectId: string): Promise<KaneoTaskListItem[]> {
-    this.log.debug({ projectId }, 'Listing tasks')
+  async list(projectId: string, params?: ListTasksParams): Promise<KaneoTaskListItem[]> {
+    this.log.debug({ projectId, params }, 'Listing tasks')
 
     try {
+      const query: Record<string, string> | undefined = params === undefined ? undefined : buildListTasksQuery(params)
       const result = await kaneoFetch(
         this.config,
         'GET',
         `/task/tasks/${projectId}`,
         undefined,
-        undefined,
+        query,
         GetTasksResponseSchema,
       )
       const rawTasks = result.columns.flatMap((col) => col.tasks).concat(result.plannedTasks)
@@ -158,11 +161,6 @@ export class TaskResource {
     this.log.debug({ taskId, ...params }, 'Updating task')
 
     try {
-      // Validate and normalize status if being updated
-      if (params.status !== undefined) {
-        const existingTask = await this.get(taskId)
-        params.status = await validateStatus(this.config, existingTask.projectId, params.status, this.statusDeps)
-      }
       const task = await performUpdate(this.config, taskId, params, this.statusDeps)
       this.log.info({ taskId, number: task.number }, 'Task updated')
       return task

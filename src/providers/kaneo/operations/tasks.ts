@@ -1,4 +1,4 @@
-import type { Task, TaskListItem, TaskSearchResult } from '../../types.js'
+import type { ListTasksParams, Task, TaskListItem, TaskSearchResult } from '../../types.js'
 import type { KaneoConfig } from '../client.js'
 import { createTask } from '../create-task.js'
 import { deleteTask } from '../delete-task.js'
@@ -74,8 +74,9 @@ export async function kaneoListTasks(
   config: KaneoConfig,
   workspaceId: string,
   projectId: string,
+  params?: ListTasksParams,
 ): Promise<TaskListItem[]> {
-  const results = await listTasks({ config, projectId })
+  const results = await listTasks({ config, projectId, params })
   return results.map((t) => mapTaskListItem(t, buildTaskUrl(config.baseUrl, workspaceId, projectId, t.id)))
 }
 

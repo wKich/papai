@@ -1,6 +1,15 @@
 import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
-import type { Comment, Label, Project, Task, TaskListItem, TaskProvider, TaskSearchResult } from '../types.js'
+import type {
+  Comment,
+  Label,
+  ListTasksParams,
+  Project,
+  Task,
+  TaskListItem,
+  TaskProvider,
+  TaskSearchResult,
+} from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig } from './client.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
@@ -76,7 +85,9 @@ export class YouTrackProvider implements TaskProvider {
     return updateYouTrackTask(this.config, taskId, params)
   }
 
-  listTasks(projectId: string): Promise<TaskListItem[]> {
+  listTasks(projectId: string, _params?: ListTasksParams): Promise<TaskListItem[]> {
+    // YouTrack provider doesn't yet translate ListTasksParams to YouTrack query syntax;
+    // filters are accepted for API parity with Kaneo but currently ignored.
     return listYouTrackTasks(this.config, projectId)
   }
 

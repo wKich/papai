@@ -29,8 +29,8 @@ const defaultDeps: LlmOrchestratorDeps = {
   stepCountIs: (...args) => stepCountIs(...args),
   buildOpenAI: (apiKey: string, baseURL: string) =>
     createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL, fetch: fetchWithoutTimeout }),
-  buildProviderForUser,
-  maybeProvisionKaneo,
+  buildProviderForUser: (userId: string) => buildProviderForUser(userId, true),
+  maybeProvisionKaneo: (reply, contextId, username) => maybeProvisionKaneo(reply, contextId, username),
 }
 
 const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
@@ -159,7 +159,7 @@ const callLlm = async (
   const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
   const mainModel = getConfig(contextId, 'main_model')!
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const provider = deps.buildProviderForUser(contextId, true)
+  const provider = deps.buildProviderForUser(contextId)
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)

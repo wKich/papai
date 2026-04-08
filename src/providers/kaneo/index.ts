@@ -4,6 +4,7 @@ import type {
   Column,
   Comment,
   Label,
+  ListTasksParams,
   Project,
   RelationType,
   Task,
@@ -88,8 +89,8 @@ export class KaneoProvider implements TaskProvider {
     return kaneoUpdateTask(this.config, this.workspaceId, taskId, params)
   }
 
-  listTasks(projectId: string): Promise<TaskListItem[]> {
-    return kaneoListTasks(this.config, this.workspaceId, projectId)
+  listTasks(projectId: string, params?: ListTasksParams): Promise<TaskListItem[]> {
+    return kaneoListTasks(this.config, this.workspaceId, projectId, params)
   }
 
   searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
