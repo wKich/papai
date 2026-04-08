@@ -89,6 +89,73 @@ describe('buildPromptWithReplyContext', () => {
 
     expect(result).toContain('[Replying to message from user:')
   })
+
+  test('includes attached file metadata in prompt', () => {
+    const msg = makeDmMessage({
+      text: 'Please upload this',
+      files: [
+        {
+          fileId: 'f1',
+          filename: 'report.pdf',
+          mimeType: 'application/pdf',
+          size: 12345,
+          content: Buffer.from(''),
+        },
+      ],
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('upload_attachment')
+    expect(result).toContain('fileId=f1: report.pdf (application/pdf, 12345 bytes)')
+    expect(result).toContain('Please upload this')
+  })
+
+  test('includes multiple files in prompt', () => {
+    const msg = makeDmMessage({
+      text: 'Two files',
+      files: [
+        { fileId: 'f1', filename: 'a.txt', mimeType: 'text/plain', size: 100, content: Buffer.from('') },
+        { fileId: 'f2', filename: 'b.png', mimeType: 'image/png', size: 200, content: Buffer.from('') },
+      ],
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('fileId=f1: a.txt (text/plain, 100 bytes)')
+    expect(result).toContain('fileId=f2: b.png (image/png, 200 bytes)')
+  })
+
+  test('omits size from file metadata when size is undefined', () => {
+    const msg = makeDmMessage({
+      text: 'file',
+      files: [{ fileId: 'f1', filename: 'photo.jpg', mimeType: 'image/jpeg', content: Buffer.from('') }],
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('fileId=f1: photo.jpg (image/jpeg)')
+    expect(result).not.toContain('bytes')
+  })
+
+  test('includes file metadata alongside reply context', () => {
+    const msg = makeDmMessage({
+      text: 'Here it is',
+      replyContext: { messageId: 'prev', authorUsername: 'alice', text: 'Can you send the file?' },
+      files: [{ fileId: 'f1', filename: 'doc.pdf', content: Buffer.from('') }],
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('[Replying to message from alice:')
+    expect(result).toContain('fileId=f1: doc.pdf')
+    expect(result).toContain('Here it is')
+  })
+
+  test('returns plain text when no reply context and no files', () => {
+    const msg = makeDmMessage({ text: 'Just text' })
+    expect(buildPromptWithReplyContext(msg)).toBe('Just text')
+  })
 })
 
 describe('buildReplyContextChain', () => {

@@ -39,6 +39,8 @@ export const ISSUE_LIST_FIELDS = [
 export const COMMENT_FIELDS = 'id,text,author(id,$type,login,name),created,updated'
 export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
 export const TAG_FIELDS = 'id,name,color(id,background)'
+export const ATTACHMENT_FIELDS = 'id,name,mimeType,size,url,thumbnailURL,author(login),created'
+export const WORK_ITEM_FIELDS = 'id,date,duration(minutes,presentation),text,author(id,login,name),type(id,name)'
 
 export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
@@ -67,6 +69,15 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   'statuses.update',
   'statuses.delete',
   'statuses.reorder',
+  // Attachments
+  'attachments.list',
+  'attachments.upload',
+  'attachments.delete',
+  // Work items (time tracking)
+  'workItems.list',
+  'workItems.create',
+  'workItems.update',
+  'workItems.delete',
 ])
 
 export const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

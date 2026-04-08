@@ -68,3 +68,58 @@ export async function youtrackFetch(
   log.debug({ method, path }, 'YouTrack API response received')
   return data
 }
+
+/**
+ * Multipart form-data upload for YouTrack attachments.
+ * Uses repeated `upload` fields as required by the YouTrack API.
+ */
+export async function youtrackUpload(
+  config: YouTrackConfig,
+  path: string,
+  file: { name: string; content: Uint8Array | Blob; mimeType?: string },
+  query?: Record<string, string>,
+): Promise<unknown> {
+  const url = new URL(path, config.baseUrl)
+  if (query !== undefined) {
+    for (const [key, value] of Object.entries(query)) {
+      url.searchParams.set(key, value)
+    }
+  }
+
+  log.debug({ path, fileName: file.name }, 'YouTrack upload request')
+  const blob =
+    file.content instanceof Blob
+      ? file.content
+      : new Blob([Buffer.from(file.content)], { type: file.mimeType ?? 'application/octet-stream' })
+  const form = new FormData()
+  form.append('upload', blob, file.name)
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      Accept: 'application/json',
+    },
+    body: form,
+  })
+
+  if (!response.ok) {
+    let errorBody: unknown
+    try {
+      errorBody = await response.json()
+    } catch {
+      errorBody = await response.text().catch(() => null)
+    }
+    const msg = `YouTrack API POST ${path} returned ${response.status}`
+    log.error({ statusCode: response.status, path, errorBody }, msg)
+    throw new YouTrackApiError(msg, response.status, errorBody)
+  }
+
+  if (response.status === 204) {
+    return undefined
+  }
+
+  const data: unknown = await response.json()
+  log.debug({ path }, 'YouTrack upload response received')
+  return data
+}

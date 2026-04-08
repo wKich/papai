@@ -42,4 +42,51 @@ describe('makeTools', () => {
     const tools = makeTools(provider)
     expect(tools).not.toHaveProperty('create_deferred_prompt')
   })
+
+  test('includes attachment tools when capabilities present and userId given', () => {
+    const tools = makeTools(provider, 'user-1')
+    expect(tools).toHaveProperty('list_attachments')
+    expect(tools).toHaveProperty('upload_attachment')
+    expect(tools).toHaveProperty('remove_attachment')
+  })
+
+  test('excludes attachment tools when no userId', () => {
+    const tools = makeTools(provider)
+    expect(tools).not.toHaveProperty('list_attachments')
+    expect(tools).not.toHaveProperty('upload_attachment')
+    expect(tools).not.toHaveProperty('remove_attachment')
+  })
+
+  test('includes work item tools when capabilities present', () => {
+    const tools = makeTools(provider, 'user-1')
+    expect(tools).toHaveProperty('list_work')
+    expect(tools).toHaveProperty('log_work')
+    expect(tools).toHaveProperty('update_work')
+    expect(tools).toHaveProperty('remove_work')
+  })
+
+  test('excludes attachment tools when provider lacks capabilities', () => {
+    const { capabilities, ...rest } = provider
+    const limitedProvider = {
+      ...rest,
+      capabilities: new Set([...capabilities].filter((c) => !c.startsWith('attachments'))),
+    }
+    const tools = makeTools(limitedProvider as typeof provider, 'user-1')
+    expect(tools).not.toHaveProperty('list_attachments')
+    expect(tools).not.toHaveProperty('upload_attachment')
+    expect(tools).not.toHaveProperty('remove_attachment')
+  })
+
+  test('excludes work item tools when provider lacks capabilities', () => {
+    const { capabilities, ...rest } = provider
+    const limitedProvider = {
+      ...rest,
+      capabilities: new Set([...capabilities].filter((c) => !c.startsWith('workItems'))),
+    }
+    const tools = makeTools(limitedProvider as typeof provider, 'user-1')
+    expect(tools).not.toHaveProperty('list_work')
+    expect(tools).not.toHaveProperty('log_work')
+    expect(tools).not.toHaveProperty('update_work')
+    expect(tools).not.toHaveProperty('remove_work')
+  })
 })

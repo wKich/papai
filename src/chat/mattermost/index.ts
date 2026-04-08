@@ -1,5 +1,4 @@
 import { logger } from '../../logger.js'
-import { cacheMessage } from '../../message-cache/index.js'
 import type {
   AuthorizationResult,
   ChatProvider,
@@ -8,6 +7,13 @@ import type {
   IncomingMessage,
   ReplyFn,
 } from '../types.js'
+import {
+  cacheIncomingPost,
+  downloadMattermostFile,
+  fetchMattermostFiles,
+  parsePostedEvent,
+  uploadMattermostFile,
+} from './file-helpers.js'
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
 import {
@@ -15,10 +21,7 @@ import {
   ChannelMemberSchema,
   ChannelSchema,
   extractReplyId,
-  FileUploadSchema,
   type MattermostPost,
-  MattermostPostSchema,
-  MattermostPostedDataSchema,
   MattermostWsEventSchema,
   UserMeSchema,
 } from './schema.js'
@@ -26,18 +29,6 @@ import {
 export { extractReplyId, MattermostPostSchema } from './schema.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
-
-function cacheIncomingPost(post: MattermostPost, replyToMessageId: string | undefined, senderName?: string): void {
-  cacheMessage({
-    messageId: post.id,
-    contextId: post.channel_id,
-    authorId: post.user_id,
-    authorUsername: post.user_name ?? senderName,
-    text: post.message,
-    replyToMessageId,
-    timestamp: Date.now(),
-  })
-}
 
 export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
@@ -128,18 +119,28 @@ export class MattermostChatProvider implements ChatProvider {
   }
 
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
-    const postedDataResult = MattermostPostedDataSchema.safeParse(data)
-    if (!postedDataResult.success) return
+    const parsed = parsePostedEvent(data)
+    if (parsed === null) return
 
-    const { post: postJson, sender_name: senderName } = postedDataResult.data
-    const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
-    if (!postResult.success) return
-    const post = postResult.data
+    const { post, senderName } = parsed
     if (post.user_id === this.botUserId) return
 
     const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
     cacheIncomingPost(post, replyToMessageId, senderName)
+    const { msg, reply, command, isAdmin } = await this.buildPostedMessage(post, senderName, replyToMessageId)
+    await this.dispatchMsg(msg, reply, command, isAdmin)
+  }
 
+  private async buildPostedMessage(
+    post: MattermostPost,
+    senderName: string | undefined,
+    replyToMessageId: string | undefined,
+  ): Promise<{
+    msg: IncomingMessage
+    reply: ReplyFn
+    command: { handler: CommandHandler; match: string } | null
+    isAdmin: boolean
+  }> {
     const replyContext =
       replyToMessageId === undefined
         ? undefined
@@ -151,6 +152,14 @@ export class MattermostChatProvider implements ChatProvider {
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const username = post.user_name ?? senderName ?? null
+
+    const files =
+      post.file_ids !== undefined && post.file_ids.length > 0
+        ? await fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
+            downloadMattermostFile(this.baseUrl, this.token, fileId),
+          )
+        : undefined
+
     const msg: IncomingMessage = {
       user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
@@ -161,13 +170,23 @@ export class MattermostChatProvider implements ChatProvider {
       messageId: post.id,
       replyToMessageId,
       replyContext,
+      ...(files !== undefined && files.length > 0 ? { files } : {}),
     }
+    return { msg, reply, command, isAdmin }
+  }
+
+  private async dispatchMsg(
+    msg: IncomingMessage,
+    reply: ReplyFn,
+    command: { handler: CommandHandler; match: string } | null,
+    isAdmin: boolean,
+  ): Promise<void> {
     if (command !== null) {
       const auth: AuthorizationResult = {
         allowed: true,
         isBotAdmin: isAdmin,
         isGroupAdmin: isAdmin,
-        storageContextId: post.channel_id,
+        storageContextId: msg.contextId,
       }
       await command.handler(msg, reply, auth)
       return
@@ -227,28 +246,9 @@ export class MattermostChatProvider implements ChatProvider {
       getWsSeq: () => this.wsSeq++,
       apiFetch: this.apiFetch.bind(this),
       wsSend: this.wsSend.bind(this),
-      uploadFile: this.uploadFile.bind(this),
+      uploadFile: (uploadChannelId, content, filename) =>
+        uploadMattermostFile(this.baseUrl, this.token, uploadChannelId, content, filename),
     })
-  }
-
-  private async uploadFile(channelId: string, content: Buffer | string, filename: string): Promise<string> {
-    const body = new FormData()
-    const blobContent = typeof content === 'string' ? content : new Uint8Array(content)
-    const blob = new Blob([blobContent])
-    body.append('files', blob, filename)
-    const url = `${this.baseUrl}/api/v4/files?channel_id=${encodeURIComponent(channelId)}`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
-      body,
-    })
-    if (!res.ok) throw new Error(`Mattermost file upload failed: ${res.status}`)
-    const data: unknown = await res.json()
-    const result = FileUploadSchema.safeParse(data)
-    if (!result.success) throw new Error('Invalid file upload response from Mattermost')
-    const fileId = result.data.file_infos[0]?.id
-    if (fileId === undefined) throw new Error('Mattermost file upload returned no file ID')
-    return fileId
   }
 
   private async getOrCreateDmChannel(userId: string): Promise<string> {

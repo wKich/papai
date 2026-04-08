@@ -22,6 +22,7 @@ import { makeGetCurrentTimeTool } from './get-current-time.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetTaskTool } from './get-task.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
+import { makeListAttachmentsTool } from './list-attachments.js'
 import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListMemosTool } from './list-memos.js'
@@ -29,12 +30,16 @@ import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListTasksTool } from './list-tasks.js'
+import { makeListWorkTool } from './list-work.js'
+import { makeLogWorkTool } from './log-work.js'
 import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
 import { makePromoteMemoTool } from './promote-memo.js'
+import { makeRemoveAttachmentTool } from './remove-attachment.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
 import { makeRemoveLabelTool } from './remove-label.js'
 import { makeRemoveTaskLabelTool } from './remove-task-label.js'
 import { makeRemoveTaskRelationTool } from './remove-task-relation.js'
+import { makeRemoveWorkTool } from './remove-work.js'
 import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
 import { makeSaveMemoTool } from './save-memo.js'
@@ -49,6 +54,8 @@ import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
 import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateTaskTool } from './update-task.js'
+import { makeUpdateWorkTool } from './update-work.js'
+import { makeUploadAttachmentTool } from './upload-attachment.js'
 
 export type ToolMode = 'normal' | 'proactive'
 
@@ -142,6 +149,34 @@ function maybeAddStatusTools(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
+function maybeAddAttachmentTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
+  if (contextId === undefined) return
+  if (provider.capabilities.has('attachments.list')) {
+    tools['list_attachments'] = makeListAttachmentsTool(provider)
+  }
+  if (provider.capabilities.has('attachments.upload')) {
+    tools['upload_attachment'] = makeUploadAttachmentTool(provider, contextId)
+  }
+  if (provider.capabilities.has('attachments.delete')) {
+    tools['remove_attachment'] = makeRemoveAttachmentTool(provider)
+  }
+}
+
+function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('workItems.list')) {
+    tools['list_work'] = makeListWorkTool(provider)
+  }
+  if (provider.capabilities.has('workItems.create')) {
+    tools['log_work'] = makeLogWorkTool(provider)
+  }
+  if (provider.capabilities.has('workItems.update')) {
+    tools['update_work'] = makeUpdateWorkTool(provider)
+  }
+  if (provider.capabilities.has('workItems.delete')) {
+    tools['remove_work'] = makeRemoveWorkTool(provider)
+  }
+}
+
 function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('tasks.delete')) {
     tools['delete_task'] = makeDeleteTaskTool(provider)
@@ -192,6 +227,8 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
+  maybeAddAttachmentTools(tools, provider, userId)
+  maybeAddWorkItemTools(tools, provider)
   addRecurringTools(tools, userId)
   addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)

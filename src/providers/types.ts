@@ -1,4 +1,37 @@
 import type { AppError } from '../errors.js'
+import type {
+  Attachment,
+  Column,
+  Comment,
+  CreateWorkItemParams,
+  Label,
+  ListTasksParams,
+  Project,
+  RelationType,
+  Task,
+  TaskListItem,
+  TaskSearchResult,
+  UpdateWorkItemParams,
+  WorkItem,
+} from './domain-types.js'
+
+export type {
+  Attachment,
+  Column,
+  Comment,
+  CreateWorkItemParams,
+  Label,
+  ListTasksParams,
+  Project,
+  RelationType,
+  Task,
+  TaskLabel,
+  TaskListItem,
+  TaskRelation,
+  TaskSearchResult,
+  UpdateWorkItemParams,
+  WorkItem,
+} from './domain-types.js'
 
 /** Capabilities that a task tracker provider may support. */
 export type Capability =
@@ -23,118 +56,13 @@ export type Capability =
   | 'statuses.update'
   | 'statuses.delete'
   | 'statuses.reorder'
-
-// --- Common domain types ---
-
-export type Attachment = {
-  id: string
-  name: string
-  mimeType?: string
-  size?: number
-  url: string
-  thumbnailUrl?: string
-  author?: string
-  createdAt?: string
-}
-/** Normalized task returned by all providers. */
-export type Task = {
-  id: string
-  title: string
-  description?: string | null
-  status?: string
-  priority?: string
-  assignee?: string | null
-  dueDate?: string | null
-  createdAt?: string
-  projectId?: string
-  url: string
-  labels?: TaskLabel[]
-  relations?: TaskRelation[]
-  number?: number
-  reporter?: { id: string; login?: string; name?: string }
-  updater?: { id: string; login?: string; name?: string }
-  votes?: number
-  commentsCount?: number
-  resolved?: string
-  attachments?: Attachment[]
-  visibility?: unknown
-  parent?: { id: string; idReadable?: string; title: string }
-  subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>
-}
-export type ListTasksParams = {
-  status?: string
-  priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
-  assigneeId?: string
-  page?: number
-  limit?: number
-  sortBy?: 'createdAt' | 'priority' | 'dueDate' | 'position' | 'title' | 'number'
-  sortOrder?: 'asc' | 'desc'
-  dueBefore?: string
-  dueAfter?: string
-}
-
-/** Minimal task representation for list results. */
-export type TaskListItem = {
-  id: string
-  title: string
-  number?: number
-  status?: string
-  priority?: string
-  dueDate?: string | null
-  resolved?: string
-  url: string
-}
-
-/** Minimal task representation for search results. */
-export type TaskSearchResult = {
-  id: string
-  title: string
-  number?: number
-  status?: string
-  priority?: string
-  projectId?: string
-  url: string
-}
-
-export type Project = {
-  id: string
-  name: string
-  description?: string | null
-  url: string
-}
-export type Comment = {
-  id: string
-  body: string
-  author?: string
-  createdAt?: string
-}
-
-export type Label = {
-  id: string
-  name: string
-  color?: string
-}
-
-/** Label as attached to a task (may have additional fields). */
-export type TaskLabel = {
-  id: string
-  name: string
-  color?: string
-}
-
-export type Column = {
-  id: string
-  name: string
-  order?: number
-  isFinal?: boolean
-}
-
-export type RelationType = 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent'
-
-export type TaskRelation = {
-  type: RelationType
-  taskId: string
-}
+  | 'attachments.list'
+  | 'attachments.upload'
+  | 'attachments.delete'
+  | 'workItems.list'
+  | 'workItems.create'
+  | 'workItems.update'
+  | 'workItems.delete'
 
 // --- Provider interface ---
 
@@ -278,6 +206,27 @@ export interface TaskProvider {
     statuses: { id: string; position: number }[],
     confirm?: boolean,
   ): Promise<undefined | { status: 'confirmation_required'; message: string }>
+
+  // --- Optional: attachments.* ---
+
+  listAttachments?(taskId: string): Promise<Attachment[]>
+
+  uploadAttachment?(
+    taskId: string,
+    file: { name: string; content: Uint8Array | Blob; mimeType?: string },
+  ): Promise<Attachment>
+
+  deleteAttachment?(taskId: string, attachmentId: string): Promise<{ id: string }>
+
+  // --- Optional: workItems.* ---
+
+  listWorkItems?(taskId: string): Promise<WorkItem[]>
+
+  createWorkItem?(taskId: string, params: CreateWorkItemParams): Promise<WorkItem>
+
+  updateWorkItem?(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem>
+
+  deleteWorkItem?(taskId: string, workItemId: string): Promise<{ id: string }>
 
   buildTaskUrl(taskId: string, projectId?: string): string
 

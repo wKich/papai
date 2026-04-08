@@ -1,8 +1,10 @@
 import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type {
+  Attachment,
   Column,
   Comment,
+  CreateWorkItemParams,
   Label,
   ListTasksParams,
   Project,
@@ -10,6 +12,8 @@ import type {
   TaskListItem,
   TaskProvider,
   TaskSearchResult,
+  UpdateWorkItemParams,
+  WorkItem,
 } from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig } from './client.js'
@@ -22,6 +26,11 @@ import {
   removeYouTrackTaskLabel,
   updateYouTrackLabel,
 } from './labels.js'
+import {
+  deleteYouTrackAttachment,
+  listYouTrackAttachments,
+  uploadYouTrackAttachment,
+} from './operations/attachments.js'
 import {
   addYouTrackComment,
   getYouTrackComment,
@@ -51,6 +60,13 @@ import {
   searchYouTrackTasks,
   updateYouTrackTask,
 } from './operations/tasks.js'
+import {
+  createYouTrackWorkItem,
+  deleteYouTrackWorkItem,
+  listYouTrackWorkItems,
+  updateYouTrackWorkItem,
+} from './operations/work-items.js'
+import { YOUTRACK_PROMPT_ADDENDUM } from './prompt-addendum.js'
 import { addYouTrackRelation, removeYouTrackRelation, updateYouTrackRelation } from './relations.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
@@ -108,15 +124,12 @@ export class YouTrackProvider implements TaskProvider {
   deleteTask(taskId: string): Promise<{ id: string }> {
     return deleteYouTrackTask(this.config, taskId)
   }
-
   getProject(projectId: string): Promise<Project> {
     return getYouTrackProject(this.config, projectId)
   }
-
   listProjects(): Promise<Project[]> {
     return listYouTrackProjects(this.config)
   }
-
   createProject(params: { name: string; description?: string }): Promise<Project> {
     return createYouTrackProject(this.config, params)
   }
@@ -236,6 +249,37 @@ export class YouTrackProvider implements TaskProvider {
     return reorderYouTrackStatuses(this.config, projectId, statuses, confirm)
   }
 
+  listAttachments(taskId: string): Promise<Attachment[]> {
+    return listYouTrackAttachments(this.config, taskId)
+  }
+
+  uploadAttachment(
+    taskId: string,
+    file: { name: string; content: Uint8Array | Blob; mimeType?: string },
+  ): Promise<Attachment> {
+    return uploadYouTrackAttachment(this.config, taskId, file)
+  }
+
+  deleteAttachment(taskId: string, attachmentId: string): Promise<{ id: string }> {
+    return deleteYouTrackAttachment(this.config, taskId, attachmentId)
+  }
+
+  listWorkItems(taskId: string): Promise<WorkItem[]> {
+    return listYouTrackWorkItems(this.config, taskId)
+  }
+
+  createWorkItem(taskId: string, params: CreateWorkItemParams): Promise<WorkItem> {
+    return createYouTrackWorkItem(this.config, taskId, params)
+  }
+
+  updateWorkItem(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem> {
+    return updateYouTrackWorkItem(this.config, taskId, workItemId, params)
+  }
+
+  deleteWorkItem(taskId: string, workItemId: string): Promise<{ id: string }> {
+    return deleteYouTrackWorkItem(this.config, taskId, workItemId)
+  }
+
   buildTaskUrl(taskId: string): string {
     return `${this.config.baseUrl}/issue/${taskId}`
   }
@@ -249,12 +293,6 @@ export class YouTrackProvider implements TaskProvider {
   }
 
   getPromptAddendum(): string {
-    return [
-      'IMPORTANT — YouTrack issue statuses:',
-      '- Issues use "State" as a custom field (e.g. "Open", "In Progress", "Fixed", "Verified").',
-      '- State transitions may be governed by workflows. If a state update fails, try a different valid state.',
-      '- Issue IDs are human-readable like "PROJ-123". Always use these readable IDs.',
-      '- Tags are used as labels. To add/remove tags, use the label tools.',
-    ].join('\n')
+    return YOUTRACK_PROMPT_ADDENDUM
   }
 }

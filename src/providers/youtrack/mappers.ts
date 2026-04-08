@@ -70,7 +70,7 @@ const mapSubtasks = (
     status: undefined,
   }))
 
-const mapAttachment = (a: {
+export const mapAttachment = (a: {
   id: string
   name: string
   url?: string

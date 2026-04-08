@@ -12,6 +12,7 @@ import {
 } from './commands/index.js'
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
+import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
 import { isGroupMember } from './groups.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
@@ -187,6 +188,13 @@ async function handleMessage(
   if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
     // Silent ignore - natural language in groups requires mention
     return
+  }
+
+  // Relay incoming files to the file store so tools can access them this turn
+  if (msg.files !== undefined && msg.files.length > 0) {
+    storeIncomingFiles(auth.storageContextId, msg.files)
+  } else {
+    clearIncomingFiles(auth.storageContextId)
   }
 
   reply.typing()

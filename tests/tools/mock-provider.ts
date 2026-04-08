@@ -29,6 +29,15 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'statuses.update',
   'statuses.delete',
   'statuses.reorder',
+  // Attachments
+  'attachments.list',
+  'attachments.upload',
+  'attachments.delete',
+  // Work items
+  'workItems.list',
+  'workItems.create',
+  'workItems.update',
+  'workItems.delete',
 ])
 
 /** Create a mock TaskProvider with all methods stubbed. Override specific methods as needed. */
@@ -77,6 +86,23 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     ),
     deleteStatus: mock((_projectId: string, statusId: string) => Promise.resolve({ id: statusId })),
     reorderStatuses: mock(() => Promise.resolve(undefined)),
+    listAttachments: mock(() => Promise.resolve([])),
+    uploadAttachment: mock(() => Promise.resolve({ id: 'att-1', name: 'file.txt', url: 'https://test.com/att/1' })),
+    deleteAttachment: mock(() => Promise.resolve({ id: 'att-1' })),
+    listWorkItems: mock(() => Promise.resolve([])),
+    createWorkItem: mock((_taskId: string, params: { duration: string }) =>
+      Promise.resolve({
+        id: 'wi-1',
+        taskId: _taskId,
+        author: 'user',
+        date: '2024-01-15',
+        duration: params.duration,
+      }),
+    ),
+    updateWorkItem: mock((_taskId: string, workItemId: string) =>
+      Promise.resolve({ id: workItemId, taskId: _taskId, author: 'user', date: '2024-01-15', duration: 'PT1H' }),
+    ),
+    deleteWorkItem: mock((_taskId: string, workItemId: string) => Promise.resolve({ id: workItemId })),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),
     classifyError: mock(() => ({

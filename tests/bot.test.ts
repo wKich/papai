@@ -1,8 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 
 import { checkAuthorizationExtended, setupBot, type BotDeps } from '../src/bot.js'
-import type { IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { IncomingFile, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { setConfig } from '../src/config.js'
+import { getIncomingFiles } from '../src/file-relay.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser, isAuthorized, removeUser } from '../src/users.js'
 import {
@@ -378,5 +379,77 @@ describe('Demo Mode — wizard bypass (setupBot)', () => {
     // Should reach processMessage, not be intercepted by wizard
     expect(processMessageCallCount).toBe(1)
     expect(lastProcessedStorageId).toBe('demo-bypass-1')
+  })
+})
+
+describe('File relay integration (setupBot)', () => {
+  const RELAY_ADMIN = 'relay-admin'
+  let capturedStorageId: string | null = null
+  let getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+
+  function makeFile(overrides: Partial<IncomingFile> = {}): IncomingFile {
+    return {
+      fileId: 'f1',
+      filename: 'doc.pdf',
+      mimeType: 'application/pdf',
+      size: 1000,
+      content: Buffer.from('data'),
+      ...overrides,
+    }
+  }
+
+  beforeEach(async () => {
+    capturedStorageId = null
+    mockLogger()
+    await setupTestDb()
+
+    const botDeps: BotDeps = {
+      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+        capturedStorageId = storageContextId
+        return Promise.resolve()
+      },
+    }
+
+    const { provider: mockChat, getMessageHandler: getHandler } = createMockChatForBot()
+    getMessageHandler = getHandler
+    setupBot(mockChat, RELAY_ADMIN, botDeps)
+  })
+
+  test('stores files in relay keyed by storageContextId for authorized user', async () => {
+    addUser('relay-user', RELAY_ADMIN)
+    setupUserConfig('relay-user')
+    const file = makeFile()
+    const msg: IncomingMessage = { ...createDmMessage('relay-user'), files: [file] }
+    const { reply } = createMockReply()
+
+    await getMessageHandler()!(msg, reply)
+
+    expect(capturedStorageId).toBe('relay-user')
+    expect(getIncomingFiles('relay-user')).toHaveLength(1)
+    expect(getIncomingFiles('relay-user')[0]?.fileId).toBe('f1')
+  })
+
+  test('clears relay when message has no files', async () => {
+    addUser('relay-user2', RELAY_ADMIN)
+    setupUserConfig('relay-user2')
+    // Pre-populate relay
+    const { storeIncomingFiles } = await import('../src/file-relay.js')
+    storeIncomingFiles('relay-user2', [makeFile()])
+
+    const msg: IncomingMessage = { ...createDmMessage('relay-user2') }
+    const { reply } = createMockReply()
+    await getMessageHandler()!(msg, reply)
+
+    expect(getIncomingFiles('relay-user2')).toEqual([])
+  })
+
+  test('does not store files for unauthorized user', async () => {
+    const file = makeFile({ fileId: 'secret' })
+    const msg: IncomingMessage = { ...createDmMessage('unauth-user'), files: [file] }
+    const { reply } = createMockReply()
+
+    await getMessageHandler()!(msg, reply)
+
+    expect(getIncomingFiles('unauth-user')).toEqual([])
   })
 })

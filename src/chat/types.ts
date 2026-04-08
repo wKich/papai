@@ -15,6 +15,20 @@ export type ChatFile = {
   filename: string
 }
 
+/** An incoming file attached to a user message. */
+export type IncomingFile = {
+  /** Platform-specific file identifier */
+  fileId: string
+  /** Human-readable filename */
+  filename: string
+  /** MIME type (if available) */
+  mimeType?: string
+  /** File size in bytes (if available) */
+  size?: number
+  /** Raw file content */
+  content: Buffer
+}
+
 /** Context about a message reply or quote. */
 export type ReplyContext = {
   /** Platform-specific ID of the message being replied to */
@@ -51,6 +65,8 @@ export type IncomingMessage = {
   replyToMessageId?: string
   /** Reply or quote context if this message is a reply */
   replyContext?: ReplyContext
+  /** Files attached to this message (populated by platform adapters) */
+  files?: IncomingFile[]
 }
 
 /** Authorization result for message processing. */
