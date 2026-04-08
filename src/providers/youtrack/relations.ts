@@ -6,7 +6,6 @@ import { ProviderClassifiedError } from '../errors.js'
 import type { RelationType } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
-import { buildLinkCommand, buildRemoveLinkCommand } from './commands.js'
 import { IssueLinkSchema } from './schemas/issue-link.js'
 
 const IssueLinksSchema = z.object({
@@ -16,6 +15,34 @@ const IssueLinksSchema = z.object({
 
 const log = logger.child({ scope: 'provider:youtrack:relations' })
 
+function mapRelationTypeToLinkType(type: RelationType): string {
+  switch (type) {
+    case 'blocks':
+    case 'blocked_by':
+      return 'depends'
+    case 'duplicate':
+    case 'duplicate_of':
+      return 'duplicate'
+    case 'parent':
+      return 'subtask'
+    case 'related':
+      return 'relates'
+  }
+}
+
+function mapRelationTypeToDirection(type: RelationType): 'OUTWARD' | 'INWARD' {
+  switch (type) {
+    case 'blocks':
+    case 'duplicate':
+    case 'parent':
+      return 'OUTWARD'
+    case 'blocked_by':
+    case 'duplicate_of':
+    case 'related':
+      return 'INWARD'
+  }
+}
+
 export async function updateYouTrackRelation(
   config: YouTrackConfig,
   taskId: string,
@@ -24,10 +51,8 @@ export async function updateYouTrackRelation(
 ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
   log.debug({ taskId, relatedTaskId, type }, 'updateRelation')
 
-  // First remove the existing relation
   await removeYouTrackRelation(config, taskId, relatedTaskId)
 
-  // Then add the new relation with the updated type
   const result = await addYouTrackRelation(config, taskId, relatedTaskId, type)
 
   log.info({ taskId, relatedTaskId, type }, 'Relation updated')
@@ -41,10 +66,19 @@ export async function addYouTrackRelation(
   type: RelationType,
 ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
   log.debug({ taskId, relatedTaskId, type }, 'addRelation')
-  const command = buildLinkCommand(type, relatedTaskId)
-  await youtrackFetch(config, 'POST', `/api/issues/${taskId}/execute`, {
-    body: { query: command },
+
+  const linkTypeName = mapRelationTypeToLinkType(type)
+  const direction = mapRelationTypeToDirection(type)
+
+  await youtrackFetch(config, 'POST', `/api/issues/${taskId}/links`, {
+    body: {
+      linkType: { name: linkTypeName },
+      direction,
+      issues: [{ id: relatedTaskId }],
+    },
+    query: { fields: 'id' },
   })
+
   log.info({ taskId, relatedTaskId, type }, 'Relation added')
   return { taskId, relatedTaskId, type }
 }
@@ -55,22 +89,23 @@ export async function removeYouTrackRelation(
   relatedTaskId: string,
 ): Promise<{ taskId: string; relatedTaskId: string }> {
   log.debug({ taskId, relatedTaskId }, 'removeRelation')
+
   const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
     query: { fields: 'id,links(id,direction,linkType(name),issues(id,idReadable))' },
   })
   const issue = IssueLinksSchema.parse(raw)
+
   const matchingLink = (issue.links ?? []).find((link) =>
     (link.issues ?? []).some((i) => i.id === relatedTaskId || i.idReadable === relatedTaskId),
   )
+
   if (matchingLink === undefined) {
     const err = providerError.relationNotFound(taskId, relatedTaskId)
     throw new ProviderClassifiedError(`Relation not found: ${taskId} -> ${relatedTaskId}`, err)
   }
-  const typeName = matchingLink.linkType?.name ?? 'relates to'
-  const removeCmd = buildRemoveLinkCommand(typeName, matchingLink.direction ?? 'BOTH', relatedTaskId)
-  await youtrackFetch(config, 'POST', `/api/issues/${taskId}/execute`, {
-    body: { query: removeCmd },
-  })
+
+  await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}/links/${matchingLink.id}`)
+
   log.info({ taskId, relatedTaskId }, 'Relation removed')
   return { taskId, relatedTaskId }
 }
