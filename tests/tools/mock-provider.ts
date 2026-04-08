@@ -5,6 +5,7 @@ import type { Capability, TaskProvider } from '../../src/providers/types.js'
 const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
   'tasks.delete',
+  'tasks.count',
   'tasks.relations',
   'tasks.watchers',
   'tasks.votes',
@@ -43,6 +44,13 @@ const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   'workItems.create',
   'workItems.update',
   'workItems.delete',
+  // Sprints, activities, saved queries
+  'sprints.list',
+  'sprints.create',
+  'sprints.update',
+  'sprints.assign',
+  'activities.read',
+  'queries.saved',
 ])
 
 /** Create a mock TaskProvider with all methods stubbed. Override specific methods as needed. */
@@ -138,6 +146,21 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
       Promise.resolve({ id: workItemId, taskId: _taskId, author: 'user', date: '2024-01-15', duration: 'PT1H' }),
     ),
     deleteWorkItem: mock((_taskId: string, workItemId: string) => Promise.resolve({ id: workItemId })),
+    listAgiles: mock(() => Promise.resolve([{ id: 'agile-1', name: 'Team Board' }])),
+    listSprints: mock((agileId: string) =>
+      Promise.resolve([{ id: 'sprint-1', agileId, name: 'Sprint 1', archived: false }]),
+    ),
+    createSprint: mock((agileId: string, params: { name: string }) =>
+      Promise.resolve({ id: 'sprint-1', agileId, name: params.name, archived: false }),
+    ),
+    updateSprint: mock((agileId: string, sprintId: string, params: { name?: string }) =>
+      Promise.resolve({ id: sprintId, agileId, name: params.name ?? 'Sprint 1', archived: false }),
+    ),
+    assignTaskToSprint: mock((taskId: string, sprintId: string) => Promise.resolve({ taskId, sprintId })),
+    getTaskHistory: mock(() => Promise.resolve([])),
+    listSavedQueries: mock(() => Promise.resolve([{ id: 'query-1', name: 'Open Issues', query: 'State: Open' }])),
+    runSavedQuery: mock(() => Promise.resolve([])),
+    countTasks: mock(() => Promise.resolve(42)),
     buildTaskUrl: mock((_taskId: string, _projectId?: string) => 'https://test.com/task/1'),
     buildProjectUrl: mock((_projectId: string) => 'https://test.com/project/1'),
     classifyError: mock(() => ({

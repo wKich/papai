@@ -15,6 +15,7 @@ describe('YouTrack provider tools integration', () => {
     const youtrackCapabilities = new Set<Capability>([
       // Tasks
       'tasks.delete',
+      'tasks.count',
       'tasks.relations',
       'tasks.watchers',
       'tasks.votes',
@@ -61,6 +62,7 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('list_tasks')
     expect(toolNames).toContain('search_tasks')
     expect(toolNames).toContain('find_user')
+    expect(toolNames).toContain('count_tasks')
 
     // YouTrack-supported project tools (full CRUD)
     expect(toolNames).toContain('list_projects')

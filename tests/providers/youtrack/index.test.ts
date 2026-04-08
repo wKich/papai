@@ -152,6 +152,7 @@ describe('YouTrackProvider', () => {
     test('has expected capabilities', () => {
       // Tasks (full support)
       expect(provider.capabilities.has('tasks.delete')).toBe(true)
+      expect(provider.capabilities.has('tasks.count')).toBe(true)
       expect(provider.capabilities.has('tasks.relations')).toBe(true)
       expect(provider.capabilities.has('tasks.watchers')).toBe(true)
       expect(provider.capabilities.has('tasks.votes')).toBe(true)
@@ -181,6 +182,13 @@ describe('YouTrackProvider', () => {
       expect(provider.capabilities.has('statuses.update')).toBe(true)
       expect(provider.capabilities.has('statuses.delete')).toBe(true)
       expect(provider.capabilities.has('statuses.reorder')).toBe(true)
+      // Sprints, activities, and saved queries
+      expect(provider.capabilities.has('sprints.list')).toBe(true)
+      expect(provider.capabilities.has('sprints.create')).toBe(true)
+      expect(provider.capabilities.has('sprints.update')).toBe(true)
+      expect(provider.capabilities.has('sprints.assign')).toBe(true)
+      expect(provider.capabilities.has('activities.read')).toBe(true)
+      expect(provider.capabilities.has('queries.saved')).toBe(true)
     })
 
     test('has config requirements', () => {
@@ -209,6 +217,18 @@ describe('YouTrackProvider', () => {
       expect(typeof provider.setVisibility).toBe('function')
       expect(typeof provider.addCommentReaction).toBe('function')
       expect(typeof provider.removeCommentReaction).toBe('function')
+    })
+
+    test('exposes phase 5 methods', () => {
+      expect(typeof provider.listAgiles).toBe('function')
+      expect(typeof provider.listSprints).toBe('function')
+      expect(typeof provider.createSprint).toBe('function')
+      expect(typeof provider.updateSprint).toBe('function')
+      expect(typeof provider.assignTaskToSprint).toBe('function')
+      expect(typeof provider.getTaskHistory).toBe('function')
+      expect(typeof provider.listSavedQueries).toBe('function')
+      expect(typeof provider.runSavedQuery).toBe('function')
+      expect(typeof provider.countTasks).toBe('function')
     })
   })
 

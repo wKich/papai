@@ -11,6 +11,7 @@ import { makeAddWatcherTool } from './add-watcher.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { completionHook } from './completion-hook.js'
+import { makeCountTasksTool } from './count-tasks.js'
 import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
@@ -198,6 +199,12 @@ function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
+function maybeAddCountTasksTool(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
+    tools['count_tasks'] = makeCountTasksTool(provider)
+  }
+}
+
 function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('tasks.delete')) {
     tools['delete_task'] = makeDeleteTaskTool(provider)
@@ -269,6 +276,7 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   maybeAddCollaborationTaskTools(tools, provider)
   maybeAddAttachmentTools(tools, provider, userId)
   maybeAddWorkItemTools(tools, provider)
+  maybeAddCountTasksTool(tools, provider)
   addRecurringTools(tools, userId)
   addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)

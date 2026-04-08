@@ -18,8 +18,11 @@ import type {
   UserRef,
   WorkItem,
 } from './domain-types.js'
+import type { TaskProviderPhaseFive } from './task-provider-phase-five.js'
 
 export type {
+  Activity,
+  Agile,
   Attachment,
   Column,
   Comment,
@@ -29,6 +32,8 @@ export type {
   ListTasksParams,
   Project,
   RelationType,
+  SavedQuery,
+  Sprint,
   SetTaskVisibilityParams,
   Task,
   TaskLabel,
@@ -45,6 +50,7 @@ export type {
 /** Capabilities that a task tracker provider may support. */
 export type Capability =
   | 'tasks.delete'
+  | 'tasks.count'
   | 'tasks.relations'
   | 'tasks.watchers'
   | 'tasks.votes'
@@ -77,23 +83,18 @@ export type Capability =
   | 'workItems.create'
   | 'workItems.update'
   | 'workItems.delete'
-
-// --- Provider interface ---
+  | 'sprints.list'
+  | 'sprints.create'
+  | 'sprints.update'
+  | 'sprints.assign'
+  | 'activities.read'
+  | 'queries.saved'
 
 /** Configuration keys that a provider requires to function. */
-export type ProviderConfigRequirement = {
-  key: string
-  label: string
-  required: boolean
-}
+export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
 
-/**
- * The core interface every task tracker provider must implement.
- *
- * All core task operations are required. Optional capability methods
- * should only be present when the provider declares the matching capability.
- */
-export interface TaskProvider {
+/** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
+export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
   readonly name: string
 

@@ -185,3 +185,36 @@ export type TaskRelation = {
   type: RelationType
   taskId: string
 }
+
+export type Agile = {
+  id: string
+  name: string
+}
+
+export type Sprint = {
+  id: string
+  agileId: string
+  name: string
+  start?: string
+  finish?: string
+  archived: boolean
+  goal?: string | null
+  isDefault?: boolean
+  unresolvedIssuesCount?: number
+}
+
+export type Activity = {
+  id: string
+  timestamp: string
+  author?: string
+  category: string
+  field?: string
+  added?: string
+  removed?: string
+}
+
+export type SavedQuery = {
+  id: string
+  name: string
+  query?: string | null
+}

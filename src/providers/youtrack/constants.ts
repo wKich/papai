@@ -47,10 +47,36 @@ export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
 export const TAG_FIELDS = 'id,name,color(id,background)'
 export const ATTACHMENT_FIELDS = 'id,name,mimeType,size,url,thumbnailURL,author(login),created'
 export const WORK_ITEM_FIELDS = 'id,date,duration(minutes,presentation),text,author(id,login,name),type(id,name)'
+export const AGILE_FIELDS = 'id,name'
+export const SPRINT_FIELDS = 'id,name,archived,goal,isDefault,start,finish,unresolvedIssuesCount'
+export const ACTIVITY_FIELDS =
+  'id,timestamp,author(id,login,name,fullName),category(id),field(name),targetMember,added,removed'
+export const SAVED_QUERY_FIELDS = 'id,name,query'
+export const DEFAULT_ACTIVITY_CATEGORIES = [
+  'CommentsCategory',
+  'CommentTextCategory',
+  'CustomFieldCategory',
+  'LinksCategory',
+  'AttachmentsCategory',
+  'WorkItemCategory',
+  'IssueCreatedCategory',
+  'IssueResolvedCategory',
+  'SummaryCategory',
+  'DescriptionCategory',
+  'IssueVisibilityCategory',
+  'CommentVisibilityCategory',
+  'AttachmentVisibilityCategory',
+  'ProjectCategory',
+  'SprintCategory',
+  'TagsCategory',
+  'VotersCategory',
+  'TotalVotesCategory',
+].join(',')
 
 export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   // Tasks
   'tasks.delete',
+  'tasks.count',
   'tasks.relations',
   'tasks.watchers',
   'tasks.votes',
@@ -89,6 +115,13 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability
   'workItems.create',
   'workItems.update',
   'workItems.delete',
+  // Sprints, activities, saved queries
+  'sprints.list',
+  'sprints.create',
+  'sprints.update',
+  'sprints.assign',
+  'activities.read',
+  'queries.saved',
 ])
 
 export const CONFIG_REQUIREMENTS: readonly ProviderConfigRequirement[] = [

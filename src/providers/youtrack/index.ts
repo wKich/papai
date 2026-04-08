@@ -7,6 +7,7 @@ import type {
   Label,
   ListTasksParams,
   Project,
+  RelationType,
   Task,
   TaskListItem,
   TaskProvider,
@@ -15,7 +16,6 @@ import type {
   WorkItem,
 } from '../types.js'
 import { type YouTrackConfig } from './client.js'
-import { YouTrackCollaborationProvider } from './collaboration-provider.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import {
   addYouTrackTaskLabel,
@@ -65,11 +65,12 @@ import {
   listYouTrackWorkItems,
   updateYouTrackWorkItem,
 } from './operations/work-items.js'
+import { YouTrackPhaseFiveProvider } from './phase-five-provider.js'
 import { addYouTrackRelation, removeYouTrackRelation, updateYouTrackRelation } from './relations.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
-export class YouTrackProvider extends YouTrackCollaborationProvider implements TaskProvider {
+export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskProvider {
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
@@ -191,7 +192,7 @@ export class YouTrackProvider extends YouTrackCollaborationProvider implements T
   addRelation(
     taskId: string,
     relatedTaskId: string,
-    type: import('../types.js').RelationType,
+    type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
     return addYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }
@@ -203,7 +204,7 @@ export class YouTrackProvider extends YouTrackCollaborationProvider implements T
   updateRelation(
     taskId: string,
     relatedTaskId: string,
-    type: import('../types.js').RelationType,
+    type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
     return updateYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }

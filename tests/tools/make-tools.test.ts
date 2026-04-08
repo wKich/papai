@@ -65,6 +65,28 @@ describe('makeTools', () => {
     expect(tools).toHaveProperty('remove_work')
   })
 
+  test('includes count_tasks when provider has countTasks method and capability', () => {
+    const tools = makeTools(createMockProvider(), 'user-1')
+
+    expect(tools).toHaveProperty('count_tasks')
+  })
+
+  test('excludes count_tasks when provider has no countTasks method', () => {
+    const tools = makeTools(createMockProvider({ countTasks: undefined }), 'user-1')
+
+    expect(tools).not.toHaveProperty('count_tasks')
+  })
+
+  test('excludes count_tasks when provider lacks tasks.count capability', () => {
+    const limitedProvider = createMockProvider({
+      capabilities: new Set([...provider.capabilities].filter((capability) => capability !== 'tasks.count')),
+    })
+
+    const tools = makeTools(limitedProvider, 'user-1')
+
+    expect(tools).not.toHaveProperty('count_tasks')
+  })
+
   test('includes collaboration tools when capabilities and helpers are present', () => {
     const tools = makeTools(provider, 'user-1')
     expect(tools).toHaveProperty('find_user')
