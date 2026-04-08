@@ -25,6 +25,24 @@ export async function addYouTrackComment(config: YouTrackConfig, taskId: string,
   }
 }
 
+export async function getYouTrackComment(config: YouTrackConfig, taskId: string, commentId: string): Promise<Comment> {
+  log.debug({ taskId, commentId }, 'getComment')
+  try {
+    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments/${commentId}`, {
+      query: { fields: COMMENT_FIELDS },
+    })
+    const comment = CommentSchema.parse(raw)
+    log.info({ taskId, commentId: comment.id }, 'Comment retrieved')
+    return mapComment(comment)
+  } catch (error) {
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), taskId, commentId },
+      'Failed to get comment',
+    )
+    throw classifyYouTrackError(error, { taskId, commentId })
+  }
+}
+
 export async function getYouTrackComments(config: YouTrackConfig, taskId: string): Promise<Comment[]> {
   log.debug({ taskId }, 'getComments')
   try {

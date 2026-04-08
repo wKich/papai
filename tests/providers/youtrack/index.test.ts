@@ -377,6 +377,20 @@ describe('YouTrackProvider', () => {
       expect(comments[1]!.author).toBe('Bob')
     })
 
+    test('getComment fetches single comment', async () => {
+      mockFetchResponse({
+        id: 'c-42',
+        text: 'Specific comment',
+        author: { id: 'u-alice', login: 'alice', name: 'Alice' },
+        created: 1700000000000,
+      })
+
+      const comment = await provider.getComment('TEST-1', 'c-42')
+      expect(comment.id).toBe('c-42')
+      expect(comment.body).toBe('Specific comment')
+      expect(comment.author).toBe('Alice')
+    })
+
     test('updateComment sends POST', async () => {
       mockFetchResponse({
         id: 'c-1',

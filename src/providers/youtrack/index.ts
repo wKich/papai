@@ -23,6 +23,7 @@ import {
 } from './labels.js'
 import {
   addYouTrackComment,
+  getYouTrackComment,
   getYouTrackComments,
   removeYouTrackComment,
   updateYouTrackComment,
@@ -121,6 +122,10 @@ export class YouTrackProvider implements TaskProvider {
 
   getComments(taskId: string): Promise<Comment[]> {
     return getYouTrackComments(this.config, taskId)
+  }
+
+  getComment(taskId: string, commentId: string): Promise<Comment> {
+    return getYouTrackComment(this.config, taskId, commentId)
   }
 
   updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {

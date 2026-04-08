@@ -6,6 +6,7 @@ import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/clas
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
   addYouTrackComment,
+  getYouTrackComment,
   getYouTrackComments,
   removeYouTrackComment,
   updateYouTrackComment,
@@ -202,6 +203,43 @@ describe('getYouTrackComments', () => {
     mockFetchError(500)
 
     await expect(getYouTrackComments(config, 'TEST-1')).rejects.toBeInstanceOf(YouTrackClassifiedError)
+  })
+})
+
+describe('getYouTrackComment', () => {
+  beforeEach(() => {
+    fetchMock = undefined!
+  })
+
+  afterEach(() => {
+    restoreFetch()
+  })
+
+  test('fetches single comment by id', async () => {
+    mockFetchResponse(makeCommentResponse({ id: 'comment-456', text: 'This is a specific comment' }))
+
+    const comment = await getYouTrackComment(config, 'TEST-1', 'comment-456')
+
+    expect(comment.id).toBe('comment-456')
+    expect(comment.body).toBe('This is a specific comment')
+    expect(comment.author).toBe('Test User')
+    expect(comment.createdAt).toBeDefined()
+  })
+
+  test('uses GET method with task and comment id in path', async () => {
+    mockFetchResponse(makeCommentResponse())
+
+    await getYouTrackComment(config, 'TEST-1', 'comment-42')
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/issues/TEST-1/comments/comment-42')
+    expect(getLastFetchMethod()).toBe('GET')
+  })
+
+  test('throws classified error on 404', async () => {
+    mockFetchError(404, { error: 'Comment not found' })
+
+    await expect(getYouTrackComment(config, 'TEST-1', 'nonexistent')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
 })
 
