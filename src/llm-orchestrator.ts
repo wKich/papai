@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { APICallError } from '@ai-sdk/provider'
-import { streamText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
 import type { ReplyFn } from './chat/types.js'
@@ -9,7 +9,7 @@ import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from 
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
-import { emitLlmEnd, emitLlmStart, type ResolvedStreamTextResult } from './llm-orchestrator-events.js'
+import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import type { LlmOrchestratorDeps } from './llm-orchestrator-types.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
@@ -25,10 +25,10 @@ import { makeTools } from './tools/index.js'
 const log = logger.child({ scope: 'llm-orchestrator' })
 
 const defaultDeps: LlmOrchestratorDeps = {
-  streamText: (...args) => streamText(...args),
+  generateText: (...args) => generateText(...args),
   stepCountIs: (...args) => stepCountIs(...args),
   buildOpenAI: (apiKey: string, baseURL: string) =>
-    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL, fetch: fetchWithoutTimeout }),
+    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL }),
   buildProviderForUser: (userId: string) => buildProviderForUser(userId, true),
   maybeProvisionKaneo: (reply, contextId, username) => maybeProvisionKaneo(reply, contextId, username),
 }
@@ -84,35 +84,19 @@ const sendLlmResponse = async (
 }
 
 import type { InvokeModelArgs } from './llm-orchestrator-types.js'
-import { fetchWithoutTimeout } from './utils/fetch.js'
 
-// Await all promises from streamText result and return resolved result
-export const awaitStreamResult = async (r: ReturnType<typeof streamText>): Promise<ResolvedStreamTextResult> => ({
-  text: await r.text,
-  toolCalls: await r.toolCalls,
-  toolResults: await r.toolResults,
-  steps: await r.steps,
-  response: await r.response,
-  usage: await r.usage,
-  finishReason: await r.finishReason,
-  warnings: await r.warnings,
-  request: await r.request,
-  providerMetadata: await r.providerMetadata,
-})
-
-const invokeModel = async (args: InvokeModelArgs): Promise<ResolvedStreamTextResult> => {
+const invokeModel = async (args: InvokeModelArgs): ReturnType<LlmOrchestratorDeps['generateText']> => {
   const { contextId, mainModel, model, provider, tools, messages, deps } = args
   const start = Date.now()
   emitLlmStart(contextId, mainModel, messages, tools)
-  // streamText returns immediately but can throw synchronously for validation errors
-  const streamResult = deps.streamText({
+  const result = await deps.generateText({
     model,
     system: buildSystemPrompt(provider, contextId),
     messages,
     tools,
     timeout: 1_200_000,
     stopWhen: deps.stepCountIs(25),
-    experimental_onToolCallStart(event: { toolCall: { toolName: string; toolCallId: string; input: unknown } }) {
+    experimental_onToolCallStart(event) {
       emit('llm:tool_call', {
         userId: contextId,
         toolName: event.toolCall.toolName,
@@ -120,12 +104,7 @@ const invokeModel = async (args: InvokeModelArgs): Promise<ResolvedStreamTextRes
         args: event.toolCall.input,
       })
     },
-    experimental_onToolCallFinish(event: {
-      toolCall: { toolName: string; toolCallId: string }
-      durationMs: number
-      success: boolean
-      error?: unknown
-    }) {
+    experimental_onToolCallFinish(event) {
       emit('llm:tool_result', {
         userId: contextId,
         toolName: event.toolCall.toolName,
@@ -136,7 +115,6 @@ const invokeModel = async (args: InvokeModelArgs): Promise<ResolvedStreamTextRes
       })
     },
   })
-  const result = await awaitStreamResult(streamResult)
   emitLlmEnd(contextId, mainModel, result, start, messages, tools)
   return result
 }
@@ -163,7 +141,10 @@ const callLlm = async (
   const tools = getOrCreateTools(contextId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
-  log.debug({ contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone }, 'Calling streamText')
+  log.debug(
+    { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
+    'Calling generateText',
+  )
   const result = await invokeModel({
     contextId,
     mainModel,
@@ -174,15 +155,7 @@ const callLlm = async (
     deps,
   })
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
-  // Map toolResults (which have toolCallId) to include toolName for fact extraction
-  const toolResultsWithNames = result.toolResults.map((tr) => {
-    const matchingCall = result.toolCalls.find((tc) => tc.toolCallId === tr.toolCallId)
-    return {
-      toolName: matchingCall?.toolName ?? '',
-      output: tr.output,
-    }
-  })
-  persistFactsFromResults(contextId, result.toolCalls, toolResultsWithNames)
+  persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
   return result
 }

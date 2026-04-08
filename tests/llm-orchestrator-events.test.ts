@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { emitLlmStart, emitLlmEnd, type ResolvedStreamTextResult } from '../src/llm-orchestrator-events.js'
+import { emitLlmStart, emitLlmEnd, type LlmResult } from '../src/llm-orchestrator-events.js'
 import { makeTools } from '../src/tools/index.js'
 import { createMockProvider } from './tools/mock-provider.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
@@ -53,10 +53,8 @@ describe('llm-orchestrator-events', () => {
       subscribe(listener)
 
       try {
-        const result: ResolvedStreamTextResult = {
+        const result: LlmResult = {
           text: 'Done!',
-          toolCalls: [],
-          toolResults: [],
           steps: [
             {
               text: 'Step 1',
@@ -66,7 +64,7 @@ describe('llm-orchestrator-events', () => {
               usage: { inputTokens: 10, outputTokens: 5 },
             },
           ],
-          response: { messages: [{ role: 'assistant', content: 'Done!' }], id: 'resp-1', modelId: 'gpt-4' },
+          response: { id: 'resp-1', modelId: 'gpt-4' },
           usage: { inputTokens: 10, outputTokens: 5 },
           finishReason: 'stop',
         }

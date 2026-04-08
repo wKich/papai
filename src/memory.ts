@@ -1,4 +1,4 @@
-import { streamText, type LanguageModel, type ModelMessage } from 'ai'
+import { generateText, type LanguageModel, type ModelMessage } from 'ai'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -201,11 +201,11 @@ const parseModelResponse = (text: string): z.infer<typeof TrimResultSchema> => {
 }
 
 export interface MemoryDeps {
-  streamText: typeof streamText
+  generateText: typeof generateText
 }
 
 const defaultMemoryDeps: MemoryDeps = {
-  streamText: (...args) => streamText(...args),
+  generateText: (...args) => generateText(...args),
 }
 
 export async function trimWithMemoryModel(
@@ -229,13 +229,13 @@ export async function trimWithMemoryModel(
     .replace('{PREVIOUS_SUMMARY}', previousSummary ?? '(none)')
     .replace('{MESSAGES}', messagesText)
 
-  const streamResult = deps.streamText({
+  const result = await deps.generateText({
     model,
     prompt,
     timeout: 1_200_000,
   })
 
-  const data = parseModelResponse(await streamResult.text)
+  const data = parseModelResponse(result.text)
 
   const selected = clampIndices(
     [...new Set(data.keep_indices)].filter((i) => i >= 0 && i < history.length).sort((a, b) => a - b),

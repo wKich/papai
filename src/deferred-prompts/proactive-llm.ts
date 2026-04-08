@@ -1,33 +1,30 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai'
+import { generateText, stepCountIs, type ModelMessage } from 'ai'
 
 import { getCachedHistory } from '../cache.js'
 import { getConfig } from '../config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from '../conversation.js'
 import { appendHistory } from '../history.js'
-import type { ResolvedStreamTextResult } from '../llm-orchestrator-events.js'
-import { awaitStreamResult } from '../llm-orchestrator.js'
 import { logger } from '../logger.js'
 import { extractFactsFromSdkResults, upsertFact } from '../memory.js'
 import type { TaskProvider } from '../providers/types.js'
 import { buildSystemPrompt } from '../system-prompt.js'
 import { makeGetCurrentTimeTool } from '../tools/get-current-time.js'
 import { makeTools } from '../tools/index.js'
-import { fetchWithoutTimeout } from '../utils/fetch.js'
 import { buildProactiveTrigger } from './proactive-trigger.js'
 import type { ExecutionMetadata } from './types.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
 
 // Minimal toolset for lightweight/context modes - just get_current_time
-function makeMinimalTools(userId: string): ToolSet {
+function makeMinimalTools(userId: string): { get_current_time: ReturnType<typeof makeGetCurrentTimeTool> } {
   return {
     get_current_time: makeGetCurrentTimeTool(userId),
   }
 }
 
 export interface ProactiveLlmDeps {
-  streamText: typeof streamText
+  generateText: typeof generateText
   stepCountIs: typeof stepCountIs
   buildModel: (
     config: { apiKey: string; baseURL: string },
@@ -36,10 +33,9 @@ export interface ProactiveLlmDeps {
 }
 
 const defaultProactiveLlmDeps: ProactiveLlmDeps = {
-  streamText: (...args) => streamText(...args),
+  generateText: (...args) => generateText(...args),
   stepCountIs: (...args) => stepCountIs(...args),
-  buildModel: (config, modelId) =>
-    createOpenAICompatible({ name: 'openai-compatible', ...config, fetch: fetchWithoutTimeout })(modelId),
+  buildModel: (config, modelId) => createOpenAICompatible({ name: 'openai-compatible', ...config })(modelId),
 }
 
 export type BuildProviderFn = (userId: string) => TaskProvider | null
@@ -60,20 +56,10 @@ function getLlmConfig(userId: string): LlmConfig | string {
   return { apiKey, baseURL, mainModel }
 }
 
-function persistProactiveResults(
-  userId: string,
-  result: ResolvedStreamTextResult,
-  history: readonly ModelMessage[],
-): void {
-  // Map toolResults (which have toolCallId) to include toolName for fact extraction
-  const toolResultsWithNames = result.toolResults.map((tr) => {
-    const matchingCall = result.toolCalls.find((tc) => tc.toolCallId === tr.toolCallId)
-    return {
-      toolName: matchingCall?.toolName ?? '',
-      output: tr.output,
-    }
-  })
-  const newFacts = extractFactsFromSdkResults(result.toolCalls, toolResultsWithNames)
+type LlmResult = Awaited<ReturnType<typeof generateText>>
+
+function persistProactiveResults(userId: string, result: LlmResult, history: readonly ModelMessage[]): void {
+  const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
   for (const fact of newFacts) upsertFact(userId, fact)
   if (newFacts.length > 0)
     log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive results')
@@ -129,16 +115,14 @@ async function invokeLightweight(
   const model = deps.buildModel(config, modelId)
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]
 
-  log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling streamText')
-  const streamResult = deps.streamText({
+  log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling generateText')
+  const result = await deps.generateText({
     model,
     system: buildMinimalSystemPrompt(type),
     messages,
     tools: makeMinimalTools(userId),
     timeout: 1_200_000,
   })
-
-  const result = await awaitStreamResult(streamResult)
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -171,19 +155,14 @@ async function invokeWithContext(
     { role: 'user', content: wrapPrompt(prompt) },
   ]
 
-  log.debug(
-    { userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' },
-    'Calling streamText',
-  )
-  const streamResult = deps.streamText({
+  log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' }, 'generateText')
+  const result = await deps.generateText({
     model,
     system: buildMinimalSystemPrompt(type),
     messages,
     tools: makeMinimalTools(userId),
     timeout: 1_200_000,
   })
-
-  const result = await awaitStreamResult(streamResult)
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
@@ -227,8 +206,8 @@ async function invokeFull(
     { role: 'user', content: trigger.userContent },
   ]
 
-  log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'full' }, 'Calling streamText')
-  const streamResult = deps.streamText({
+  log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'full' }, 'generateText')
+  const result = await deps.generateText({
     model,
     system: systemPrompt,
     messages: finalMessages,
@@ -236,8 +215,6 @@ async function invokeFull(
     stopWhen: deps.stepCountIs(25),
     timeout: 1_200_000,
   })
-
-  const result = await awaitStreamResult(streamResult)
   persistProactiveResults(userId, result, history)
   return result.text ?? 'Done.'
 }

@@ -2,26 +2,14 @@ import type { ModelMessage, ToolSet } from 'ai'
 
 import { emit } from './debug/event-bus.js'
 import { buildStepsDetail } from './llm-orchestrator-steps.js'
+import type { StepInput } from './llm-orchestrator-types.js'
 
-// Result type after awaiting all streamText promises
-export type ResolvedStreamTextResult = {
+export type LlmResult = {
   text: string
-  toolCalls: Array<{ toolName: string; toolCallId: string; input: unknown }>
-  toolResults: Array<{ toolCallId: string; output: unknown }>
-  steps: Array<{
-    text?: string
-    finishReason?: string
-    toolCalls: Array<{ toolName: string; toolCallId: string; input: unknown }>
-    toolResults: Array<{ toolCallId: string; output: unknown }>
-    content?: ReadonlyArray<unknown>
-    usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
-  }>
-  response: { messages: ModelMessage[]; id?: string; modelId?: string }
-  usage: { inputTokens: number | undefined; outputTokens: number | undefined }
-  finishReason: string
-  warnings?: unknown[]
-  request?: unknown
-  providerMetadata?: unknown
+  steps: StepInput[]
+  response?: { id?: string; modelId?: string }
+  usage?: { inputTokens?: number; outputTokens?: number }
+  finishReason?: string
 }
 
 export function emitLlmStart(contextId: string, mainModel: string, messages: ModelMessage[], tools: ToolSet): void {
@@ -36,7 +24,7 @@ export function emitLlmStart(contextId: string, mainModel: string, messages: Mod
 export function emitLlmEnd(
   contextId: string,
   mainModel: string,
-  result: ResolvedStreamTextResult,
+  result: LlmResult,
   startTime: number,
   messages: ModelMessage[],
   tools: ToolSet,

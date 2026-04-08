@@ -11,10 +11,9 @@ import { flushMicrotasks } from './utils/test-helpers.js'
 type SpyInstance = { mockRestore: () => void }
 
 // Define local type and mutable implementation BEFORE mocking
-type StreamTextResult = { text: Promise<string> }
-const defaultStreamTextImpl = (): StreamTextResult => ({
-  text: Promise.resolve(JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' })),
-})
+type GenerateTextResult = { text: string }
+const defaultGenerateTextImpl = (): Promise<GenerateTextResult> =>
+  Promise.resolve({ text: JSON.stringify({ keep_indices: [0, 1], summary: 'Updated summary text' }) })
 
 describe('shouldTriggerTrim', () => {
   const makeMessages = (count: number, userEvery = 2): ModelMessage[] =>
@@ -176,7 +175,7 @@ describe('runTrimInBackground', () => {
   const mockHistories = new Map<string, ModelMessage[]>()
   const mockConfigs = new Map<string, Map<string, string | null>>()
   const spies: SpyInstance[] = []
-  let streamTextImpl = defaultStreamTextImpl
+  let generateTextImpl = defaultGenerateTextImpl
 
   function trackSpy<T extends SpyInstance>(spy: T): T {
     spies.push(spy)
@@ -184,12 +183,12 @@ describe('runTrimInBackground', () => {
   }
 
   beforeEach(() => {
-    streamTextImpl = defaultStreamTextImpl
+    generateTextImpl = defaultGenerateTextImpl
     mockSummaries.clear()
     mockHistories.clear()
     mockConfigs.clear()
     void mock.module('ai', () => ({
-      streamText: (..._args: unknown[]): StreamTextResult => streamTextImpl(),
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
     }))
     void mock.module('@ai-sdk/openai-compatible', () => ({
       createOpenAICompatible:
@@ -264,12 +263,12 @@ describe('runTrimInBackground', () => {
     )
 
     let callCount = 0
-    streamTextImpl = (): StreamTextResult => {
+    generateTextImpl = (): Promise<GenerateTextResult> => {
       callCount++
       if (callCount === 1) {
         mockHistories.set('user1', [...history, { role: 'user', content: 'New message during trim' }])
       }
-      return { text: Promise.resolve(JSON.stringify({ keep_indices: [0], summary: 'Trimmed' })) }
+      return Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Trimmed' }) })
     }
 
     trackSpy(
@@ -322,7 +321,7 @@ describe('runTrimInBackground', () => {
       ]),
     )
 
-    streamTextImpl = (): StreamTextResult => ({ text: Promise.reject(new Error('LLM API error')) })
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM API error'))
 
     trackSpy(
       spyOn(cacheModule, 'getCachedConfig').mockImplementation(
@@ -364,9 +363,8 @@ describe('runTrimInBackground', () => {
       ]),
     )
 
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.resolve(JSON.stringify({ keep_indices: [0], summary: 'Concurrent trim summary' })),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: JSON.stringify({ keep_indices: [0], summary: 'Concurrent trim summary' }) })
 
     trackSpy(
       spyOn(cacheModule, 'getCachedConfig').mockImplementation(
