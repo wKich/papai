@@ -26,7 +26,7 @@
   "ignoreStatic": true,
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
-  "concurrency": 2,
+  "concurrency": 8,
   "timeoutMS": 60000,
   "timeoutFactor": 2,
   "thresholds": {

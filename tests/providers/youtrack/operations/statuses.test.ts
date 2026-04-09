@@ -466,6 +466,28 @@ describe('updateYouTrackStatus', () => {
       YouTrackClassifiedError,
     )
   })
+
+  test('throws not-found error when state bundle is missing', async () => {
+    // First call returns empty custom fields (no State field)
+    installFetchMock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    try {
+      await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'Test' })
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('not-found')
+      }
+    }
+  })
 })
 
 describe('deleteYouTrackStatus', () => {
@@ -535,6 +557,28 @@ describe('deleteYouTrackStatus', () => {
     mockFetchError(404, { error: 'State not found' })
 
     await expect(deleteYouTrackStatus(config, 'proj-1', '57-999')).rejects.toBeInstanceOf(YouTrackClassifiedError)
+  })
+
+  test('throws not-found error when state bundle is missing', async () => {
+    // First call returns empty custom fields (no State field)
+    installFetchMock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    try {
+      await deleteYouTrackStatus(config, 'proj-1', '57-1')
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('not-found')
+      }
+    }
   })
 })
 

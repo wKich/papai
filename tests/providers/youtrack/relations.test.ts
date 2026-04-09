@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { ProviderClassifiedError } from '../../../src/providers/errors.js'
+import { YouTrackClassifiedError } from '../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import {
   addYouTrackRelation,
@@ -208,7 +208,7 @@ describe('removeYouTrackRelation', () => {
   test('throws when relation not found', async () => {
     mockFetchResponse({ id: 'issue-1', links: [] })
 
-    await expect(removeYouTrackRelation(config, 'PROJ-123', 'PROJ-456')).rejects.toBeInstanceOf(ProviderClassifiedError)
+    await expect(removeYouTrackRelation(config, 'PROJ-123', 'PROJ-456')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
 })
 

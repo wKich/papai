@@ -116,7 +116,12 @@ export async function updateYouTrackStatus(
   log.debug({ projectId, statusId }, 'updateYouTrackStatus')
   try {
     const bundleInfo = await resolveStateBundle(config, projectId)
-    if (bundleInfo === null) throw new Error('State bundle not found for project')
+    if (bundleInfo === null) {
+      throw new YouTrackClassifiedError(
+        'State bundle not found for project',
+        providerError.notFound('State bundle', projectId),
+      )
+    }
     if (bundleInfo.isShared && confirm !== true) {
       return {
         status: 'confirmation_required',
@@ -155,7 +160,10 @@ export async function deleteYouTrackStatus(
   try {
     const bundleInfo = await resolveStateBundle(config, projectId)
     if (bundleInfo === null) {
-      throw new Error('State bundle not found for project')
+      throw new YouTrackClassifiedError(
+        'State bundle not found for project',
+        providerError.notFound('State bundle', projectId),
+      )
     }
 
     if (bundleInfo.isShared && confirm !== true) {

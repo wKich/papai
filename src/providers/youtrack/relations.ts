@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import { providerError } from '../../errors.js'
 import { logger } from '../../logger.js'
-import { ProviderClassifiedError } from '../errors.js'
 import type { RelationType } from '../types.js'
+import { YouTrackClassifiedError } from './classify-error.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { IssueLinkSchema } from './schemas/issue-link.js'
@@ -103,7 +103,7 @@ export async function removeYouTrackRelation(
 
   if (matchingLink === undefined) {
     const err = providerError.relationNotFound(taskId, relatedTaskId)
-    throw new ProviderClassifiedError(`Relation not found: ${taskId} -> ${relatedTaskId}`, err)
+    throw new YouTrackClassifiedError(`Relation not found: ${taskId} -> ${relatedTaskId}`, err)
   }
 
   await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}/links/${matchingLink.id}`)
