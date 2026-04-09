@@ -1,7 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 
-import { resolveStateBundle, clearBundleCache } from '../../../src/providers/youtrack/bundle-cache.js'
+import { resolveStateBundle } from '../../../src/providers/youtrack/bundle-cache.js'
 import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+import { clearBundleCache } from './test-helpers.js'
 
 describe('bundle-cache', () => {
   const config = { baseUrl: 'https://example.com', token: 'test-token' }
