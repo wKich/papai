@@ -1,9 +1,17 @@
 # Discord ChatProvider — Full Design
 
-**Status:** Design, ready for review. Downstream of `docs/discord-chatprovider-direction-brief.md`.
+**Status:** Approved. Open questions resolved. Ready for implementation plan.
 **Date:** 2026-04-09
 **Author:** `designing-new-provider` skill, Step 5 (design doc).
 **Type:** Chat platform adapter (`ChatProvider`).
+
+## Changelog
+
+- **2026-04-09 (design review):**
+  - §3.4 ratified — `MessageContent` privileged intent will be requested.
+  - §7.2, §10 updated — `ChatProvider.resolveUserId` signature extends to accept the caller's `IncomingMessage` context so the Discord adapter can scope member search to the current guild. This is a breaking change to the shared interface; Telegram and Mattermost implementations accept the new parameter and ignore it.
+  - §13.2 Q3 resolved — `/help` on Discord appends a one-line note about `/context` being deferred to Phase 2.
+  - §13.2 Q4 resolved — `DISCORD_BOT_TOKEN` gets its own block at the bottom of `.env.example`.
 
 ## 1. Goal
 
@@ -68,9 +76,9 @@ new Client({
 
 Omitted on purpose: `GuildMembers` (privileged; not needed for Phase 1), `GuildPresences` (privileged; never needed), all reaction / typing / voice / scheduled-event intents.
 
-### 3.4 `MessageContent` intent decision — **revision to direction brief**
+### 3.4 `MessageContent` intent decision — **ratified revision to direction brief**
 
-The direction brief at `docs/discord-chatprovider-direction-brief.md` said we would rely on Discord's exemption that delivers full message content for DMs and @mentioned messages without requesting the privileged `MessageContent` intent. Research has changed the recommendation: **we will request the `MessageContent` intent in Phase 1**.
+The direction brief at `docs/discord-chatprovider-direction-brief.md` said we would rely on Discord's exemption that delivers full message content for DMs and @mentioned messages without requesting the privileged `MessageContent` intent. Research surfaced a brittleness in the exemption and a zero-cost path to the privileged intent for unverified bots. **Ratified at design review on 2026-04-09: request the `MessageContent` intent in Phase 1.**
 
 Rationale:
 
@@ -79,9 +87,7 @@ Rationale:
 3. **Operational simplicity.** Enabling the intent is a single checkbox in the Discord Developer Portal under the Bot page ("Privileged Gateway Intents → MESSAGE CONTENT INTENT"). The setup docs can say "toggle this on" and be done with it.
 4. **Future-proofing.** If Phase 2 ever wants to read attachment metadata or embed fields from passively observed messages, the intent is already there. Without it, any such extension is blocked.
 
-If the user rejects this revision at design review, we fall back to the exemption-only mode. In that mode, §4 `isMentioned` detection is unchanged, but `content`-dependent reply-context extraction would silently degrade for edge-case replies; this must be documented in the setup guide.
-
-**Open question:** ratify this revision (Y/N). If N, a note is added to Phase 1 Task 1.1 to remove the `MessageContent` intent bit from the Client config, and §13 adds an explicit risk about the brittleness.
+Fallback (not chosen): rely on the exemption only, add a defensive `content === ''` code path everywhere reply-context extraction reads content, and add a §13 risk about Discord narrowing the exemption. Rejected because the intent toggle is free.
 
 ### 3.5 Rate limiting
 
@@ -210,13 +216,18 @@ Total: **9 new `.ts` files** in `src/chat/discord/`.
 
 ### 5.2 Files modified
 
-| Path                   | Change                                                                                                                                                            |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/chat/registry.ts` | register `discord` factory                                                                                                                                        |
-| `src/index.ts`         | extend `CHAT_PROVIDER` allowlist check to include `'discord'`; add provider-specific env-var block that requires `DISCORD_BOT_TOKEN` when `CHAT_PROVIDER=discord` |
-| `package.json`         | add `discord.js` runtime dependency (exact version pinned to a recent 14.x)                                                                                       |
-| `CLAUDE.md`            | add Discord to the provider list in the Architecture section and to the Required Environment Variables section                                                    |
-| `.env.example`         | add `DISCORD_BOT_TOKEN=` line (empty value)                                                                                                                       |
+| Path                           | Change                                                                                                                                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/chat/types.ts`            | extend `ChatProvider.resolveUserId` signature to `(username, context: ResolveUserContext)`; export new `ResolveUserContext` type (`{ contextId: string; contextType: ContextType }`). Breaking change to the interface; absorbed by both adapters. |
+| `src/chat/telegram/index.ts`   | accept the `_context` parameter in `resolveUserId` and ignore it; no behavior change                                                                                                                                                               |
+| `src/chat/mattermost/index.ts` | accept the `_context` parameter in `resolveUserId` and ignore it; no behavior change                                                                                                                                                               |
+| `src/commands/group.ts`        | `extractUserId(chat, input)` → `extractUserId(chat, input, context)` and thread `{ contextId: msg.contextId, contextType: msg.contextType }` in from `handleAddUser` / `handleDelUser`                                                             |
+| `src/commands/help.ts`         | append a one-line "`/context` export is deferred on Discord" note when `chat.name === 'discord'` (see §13.2 Q3 resolution)                                                                                                                         |
+| `src/chat/registry.ts`         | register `discord` factory                                                                                                                                                                                                                         |
+| `src/index.ts`                 | extend `CHAT_PROVIDER` allowlist check to include `'discord'`; add provider-specific env-var block that requires `DISCORD_BOT_TOKEN` when `CHAT_PROVIDER=discord`                                                                                  |
+| `package.json`                 | add `discord.js` runtime dependency (exact version pinned to a recent 14.x)                                                                                                                                                                        |
+| `CLAUDE.md`                    | add Discord to the provider list in the Architecture section and to the Required Environment Variables section                                                                                                                                     |
+| `.env.example`                 | append a new `# Discord` block at the bottom with `DISCORD_BOT_TOKEN=` (§13.2 Q4 resolution)                                                                                                                                                       |
 
 ### 5.3 Tests added
 
@@ -244,27 +255,69 @@ Chat providers are primarily event-driven, so pagination shows up in only two pl
 
 Single `channel.messages.fetch(messageId)` call — not paginated. No cap needed beyond Discord's standard rate limit.
 
-### 7.2 `resolveUserId(username)` guild member search
+### 7.2 `resolveUserId(username, context)` guild-scoped member search
 
-Implementation uses `guild.members.fetch({ query: username, limit: 1 })`, which is a single REST call per guild. Because papai has no "active guild" concept yet, the adapter scopes the search to the bot's first joined guild only. If no match, return `null`.
+**Interface extension.** The existing `ChatProvider.resolveUserId(username)` signature is changed to accept the caller's message context, so that Discord's member search can be scoped to the guild where the `/group adduser @name` command was issued. This is the only way to correctly resolve a username on Discord: member search is guild-scoped by the Discord REST API and there is no global username directory.
 
 ```typescript
-async resolveUserId(username: string): Promise<string | null> {
+// src/chat/types.ts — extended signature (breaking change to the interface)
+interface ChatProvider {
+  // ...
+  resolveUserId(username: string, context: ResolveUserContext): Promise<string | null>
+}
+
+export type ResolveUserContext = {
+  contextId: string // storage key of the conversation issuing the lookup
+  contextType: ContextType // 'dm' | 'group'
+}
+```
+
+**Telegram** (`src/chat/telegram/index.ts`) and **Mattermost** (`src/chat/mattermost/index.ts`) accept the new parameter and ignore it — their implementations do not depend on guild scoping. The signature change is a two-line edit in each (parameter added, `_context` prefix to silence unused-var lint).
+
+**Discord implementation:**
+
+```typescript
+async resolveUserId(
+  username: string,
+  context: ResolveUserContext,
+): Promise<string | null> {
   const clean = username.startsWith('@') ? username.slice(1) : username
-  if (/^\d+$/.test(clean)) return clean  // already a snowflake
-  const guild = this.client.guilds.cache.first()
+  if (/^\d+$/.test(clean)) return clean // already a snowflake
+
+  // Guild-scoped resolution: look up the channel the caller is in,
+  // then search members in THAT guild. This matches the user's intent
+  // when they run `/group adduser @name` in a specific channel.
+  const guildId =
+    context.contextType === 'group'
+      ? (this.client.channels.cache.get(context.contextId) as GuildTextBasedChannel | undefined)?.guildId
+      : undefined
+
+  if (guildId === undefined) {
+    log.debug({ username: clean, context }, 'resolveUserId: no guild context, returning null')
+    return null
+  }
+
+  const guild = this.client.guilds.cache.get(guildId)
   if (guild === undefined) return null
+
   try {
     const members = await guild.members.fetch({ query: clean, limit: 1 })
     return members.first()?.id ?? null
   } catch (error) {
-    log.warn({ username: clean, error: ... }, 'Discord member search failed')
+    log.warn(
+      { username: clean, guildId, error: error instanceof Error ? error.message : String(error) },
+      'Discord member search failed',
+    )
     return null
   }
 }
 ```
 
-**Cap:** `limit: 1`, single guild, single REST call per invocation. No iteration, no paging loop. This mirrors Telegram's limitation (`resolveUserId` is best-effort) and Mattermost's (single lookup per call).
+**Caller update:** `src/commands/group.ts:111` `extractUserId(chat, input)` → `extractUserId(chat, input, { contextId: msg.contextId, contextType: msg.contextType })`. The `msg` is already in scope in `handleAddUser` and `handleDelUser`, so the threading is mechanical.
+
+**DM semantics:** when a user runs `/group adduser @name` in a DM with the bot (rare — `group` commands are gated to `contextType==='group'` in `src/commands/group.ts:9-12`), the Discord implementation returns `null` because there is no guild context. This is a non-regression: the `group` command itself already rejects DM invocations before `extractUserId` is called.
+
+**Cap:** `limit: 1`, single guild, single REST call per invocation. No iteration, no paging loop. Bounded.
 
 ### 7.3 What we do _not_ paginate
 
@@ -346,25 +399,25 @@ These steps go in a setup doc later, not in the source tree.
 
 Discord maps fully onto the `ChatProvider` + `ReplyFn` surface. Deviations from 100% coverage are called out explicitly.
 
-| Method / capability            | Status                                 | Notes                                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ChatProvider.name`            | full                                   | `'discord'`                                                                                                                                                                                                                                                                                                        |
-| `ChatProvider.registerCommand` | full                                   | text-prefix `/foo` matching in the same pattern as Mattermost (`src/chat/mattermost/index.ts:228-238`)                                                                                                                                                                                                             |
-| `ChatProvider.onMessage`       | full                                   | single handler, called for all non-command messages after mention filter                                                                                                                                                                                                                                           |
-| `ChatProvider.sendMessage`     | full                                   | creates DM channel via `user.createDM()`, then `channel.send`                                                                                                                                                                                                                                                      |
-| `ChatProvider.resolveUserId`   | partial                                | best-effort single-guild member search; returns `null` on miss (§7.2). Parity: Telegram is also partial (numeric only), Mattermost is full                                                                                                                                                                         |
-| `ChatProvider.start`           | full                                   | `client.login(token)`, awaits `ready` event, populates `botUserId` + `botUsername`                                                                                                                                                                                                                                 |
-| `ChatProvider.stop`            | full                                   | `client.destroy()`                                                                                                                                                                                                                                                                                                 |
-| `ReplyFn.text`                 | full                                   | `channel.send({ content })` with chunking on 2000-char overflow                                                                                                                                                                                                                                                    |
-| `ReplyFn.formatted`            | full                                   | LLM markdown → Discord dialect via `format.ts`, chunking preserved                                                                                                                                                                                                                                                 |
-| `ReplyFn.file`                 | **throws in Phase 1**                  | Plan ships `ReplyFn.file` that throws `Error('Discord file send not implemented — defer to Phase 2')`. Known breakage: `/context` admin command will fail on Discord; design doc §13 risk item                                                                                                                     |
-| `ReplyFn.typing`               | full                                   | `channel.sendTyping()` + 4500ms interval re-trigger inside `withTypingIndicator` wrapper                                                                                                                                                                                                                           |
-| `ReplyFn.redactMessage`        | full                                   | `message.edit({ content: replacement, components: [] })` on the bot's last outgoing message                                                                                                                                                                                                                        |
-| `ReplyFn.buttons`              | **full** (improvement over Mattermost) | `ActionRowBuilder` + `ButtonBuilder`; `primary→Primary`, `secondary→Secondary`, `danger→Danger`; click events dispatched via `Events.InteractionCreate` through the same cfg/wizard handler fan-out Telegram uses. Unlike Mattermost, Discord has no webhook-handler gap — buttons are click-functional on day one |
-| Reply chains / `replyContext`  | full                                   | `message.reference.messageId` + shared `buildReplyContextChain`                                                                                                                                                                                                                                                    |
-| `IncomingMessage.files`        | deferred                               | stays `undefined` in Phase 1                                                                                                                                                                                                                                                                                       |
-| `IncomingMessage.isMentioned`  | full                                   | true in DMs always, true in guild channels only when `<@botId>` present                                                                                                                                                                                                                                            |
-| `IncomingMessage.messageId`    | full                                   | `message.id`                                                                                                                                                                                                                                                                                                       |
+| Method / capability            | Status                                 | Notes                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ChatProvider.name`            | full                                   | `'discord'`                                                                                                                                                                                                                                                                                                                     |
+| `ChatProvider.registerCommand` | full                                   | text-prefix `/foo` matching in the same pattern as Mattermost (`src/chat/mattermost/index.ts:228-238`)                                                                                                                                                                                                                          |
+| `ChatProvider.onMessage`       | full                                   | single handler, called for all non-command messages after mention filter                                                                                                                                                                                                                                                        |
+| `ChatProvider.sendMessage`     | full                                   | creates DM channel via `user.createDM()`, then `channel.send`                                                                                                                                                                                                                                                                   |
+| `ChatProvider.resolveUserId`   | partial (context-scoped)               | Takes new `ResolveUserContext` argument (§7.2). When `contextType='group'`, looks up the channel → derives guild → single member search in that guild. When `contextType='dm'`, returns `null` (group command is already gated to guild channels in `src/commands/group.ts:9-12`). Interface change is adopted by all adapters. |
+| `ChatProvider.start`           | full                                   | `client.login(token)`, awaits `ready` event, populates `botUserId` + `botUsername`                                                                                                                                                                                                                                              |
+| `ChatProvider.stop`            | full                                   | `client.destroy()`                                                                                                                                                                                                                                                                                                              |
+| `ReplyFn.text`                 | full                                   | `channel.send({ content })` with chunking on 2000-char overflow                                                                                                                                                                                                                                                                 |
+| `ReplyFn.formatted`            | full                                   | LLM markdown → Discord dialect via `format.ts`, chunking preserved                                                                                                                                                                                                                                                              |
+| `ReplyFn.file`                 | **throws in Phase 1**                  | Plan ships `ReplyFn.file` that throws `Error('Discord file send not implemented — defer to Phase 2')`. Known breakage: `/context` admin command will fail on Discord; design doc §13 risk item                                                                                                                                  |
+| `ReplyFn.typing`               | full                                   | `channel.sendTyping()` + 4500ms interval re-trigger inside `withTypingIndicator` wrapper                                                                                                                                                                                                                                        |
+| `ReplyFn.redactMessage`        | full                                   | `message.edit({ content: replacement, components: [] })` on the bot's last outgoing message                                                                                                                                                                                                                                     |
+| `ReplyFn.buttons`              | **full** (improvement over Mattermost) | `ActionRowBuilder` + `ButtonBuilder`; `primary→Primary`, `secondary→Secondary`, `danger→Danger`; click events dispatched via `Events.InteractionCreate` through the same cfg/wizard handler fan-out Telegram uses. Unlike Mattermost, Discord has no webhook-handler gap — buttons are click-functional on day one              |
+| Reply chains / `replyContext`  | full                                   | `message.reference.messageId` + shared `buildReplyContextChain`                                                                                                                                                                                                                                                                 |
+| `IncomingMessage.files`        | deferred                               | stays `undefined` in Phase 1                                                                                                                                                                                                                                                                                                    |
+| `IncomingMessage.isMentioned`  | full                                   | true in DMs always, true in guild channels only when `<@botId>` present                                                                                                                                                                                                                                                         |
+| `IncomingMessage.messageId`    | full                                   | `message.id`                                                                                                                                                                                                                                                                                                                    |
 
 ## 11. Phased rollout
 
@@ -460,7 +513,7 @@ A future Phase 2 task can add a Docker-based Discord mock (there is no official 
 
 | Risk                                                                                                | Likelihood  | Mitigation                                                                                                                                                                                                                                            |
 | --------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MessageContent` intent revision rejected at review                                                 | medium      | §3.4 open question is ratified or rejected by the user. If rejected, Phase 1 Task 1.1 removes the intent; all reply-context and map-message tests must then add a "content is empty string" defensive path                                            |
+| `MessageContent` intent enabled but Developer Portal toggle forgotten by operator                   | medium      | §3.4 is ratified. `client.login()` rejects with `DisallowedIntents` when the toggle is off; §8 escalates this to `log.error` with a message pointing at the exact Developer Portal page, and `start()` rethrows so the bot exits fast                 |
 | `discord.js` major-version breakage (e.g. v15) between design and execute                           | low         | pin exact version in `package.json` (`"discord.js": "14.25.1"` or latest 14.x); version lock is an explicit Phase 1 task                                                                                                                              |
 | `/context` admin command broken on Discord in Phase 1                                               | **certain** | documented in §10; `ReplyFn.file` throws a clear error. Admin users are warned at `/help` (conditional line added only when provider is Discord). Phase 2 fixes permanently                                                                           |
 | Button `custom_id` overflow (existing callback data > 100 chars)                                    | low         | add a `custom_id` length guard in `src/chat/discord/buttons.ts` that throws at build time (not runtime). Existing Telegram/Mattermost callback data is always short (`cfg:edit:key`, `wiz:step:N`), but the guard protects against future regressions |
@@ -470,12 +523,12 @@ A future Phase 2 task can add a Docker-based Discord mock (there is no official 
 | Discord 2000-char limit narrowing (e.g. requiring Nitro for >N)                                     | low         | hard-code 2000 via const; re-verify in the Phase 2 plan                                                                                                                                                                                               |
 | Tests import `discord.js` at top level → slow `bun test`                                            | medium      | Tests import only types from `discord.js` (`type Message, ChannelType, ButtonStyle`) and build stubs. No runtime SDK import in the test tree                                                                                                          |
 
-### 13.2 Open questions (must be resolved at design review)
+### 13.2 Open questions — all resolved at 2026-04-09 design review
 
-1. **Ratify the `MessageContent` intent revision (§3.4).** Direction brief said no privileged intent; design recommends enabling it. Y/N.
-2. **`resolveUserId` scope.** Single-guild best-effort is proposed. Is that acceptable, or should it span all joined guilds with a loop cap? (Recommendation: single-guild.)
-3. **Help-text note for `/context` breakage.** Should the Discord `/help` response include a one-line note "`/context` is not yet supported on Discord (Phase 2)", or should we silently let it throw? (Recommendation: one-line note, behind a provider name check.)
-4. **`.env.example` ordering.** The file is already groomed; should Discord sit between Telegram and Mattermost, after both, or get its own block? (Recommendation: its own block, below Mattermost.)
+1. ✅ **Ratify `MessageContent` intent revision (§3.4).** Ratified. Request the intent; operator enables it in Developer Portal.
+2. ✅ **`resolveUserId` scope.** Resolved with an interface extension rather than a scope cap: the method now takes a `ResolveUserContext` parameter so Discord can scope to the caller's current guild. Telegram/Mattermost ignore the argument. See §7.2, §5.2, §10.
+3. ✅ **Help-text note for `/context` breakage.** Append a one-line note to `/help` when `chat.name === 'discord'`: _"Note: `/context` export is deferred to Phase 2 on Discord."_ Change lives in `src/commands/help.ts`.
+4. ✅ **`.env.example` ordering.** `DISCORD_BOT_TOKEN` gets its own `# Discord` block appended at the bottom of the file. Telegram and Mattermost blocks are unchanged.
 
 ## 14. Non-goals
 
@@ -512,4 +565,4 @@ Copied verbatim from the direction brief, slightly expanded:
 
 ## Next step
 
-Ratify or reject the `MessageContent` intent revision and the 3 other open questions, then the `designing-new-provider` skill moves to Step 6: write `docs/plans/2026-04-09-discord-implementation.md` via the `writing-plans` sub-skill.
+All open questions resolved (§13.2). The `designing-new-provider` skill now moves to Step 6: write `docs/plans/2026-04-09-discord-implementation.md` via the `writing-plans` sub-skill.
