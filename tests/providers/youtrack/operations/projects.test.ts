@@ -7,6 +7,7 @@ import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.j
 import {
   createYouTrackProject,
   deleteYouTrackProject,
+  generateShortName,
   getYouTrackProject,
   listYouTrackProjects,
   updateYouTrackProject,
@@ -239,6 +240,74 @@ describe('listYouTrackProjects', () => {
   })
 })
 
+describe('generateShortName', () => {
+  test('converts ASCII name to uppercase alphanumeric', () => {
+    const result = generateShortName('My Cool Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^MYCOOLP/)
+    expect(result.length).toBeLessThanOrEqual(10)
+  })
+
+  test('removes special characters', () => {
+    const result = generateShortName('Project!@#$%^&*()')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('normalizes Unicode diacritics (é → e)', () => {
+    const result = generateShortName('Café Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^CAFEP/)
+  })
+
+  test('handles non-ASCII characters with fallback', () => {
+    const result = generateShortName('日本語プロジェクト')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Falls back to PROJECT prefix
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('handles mixed ASCII and non-ASCII', () => {
+    const result = generateShortName('日本語Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Uses fallback since only ASCII is kept
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('limits length to 10 characters', () => {
+    const result = generateShortName('Very Long Project Name That Exceeds')
+    expect(result.length).toBeLessThanOrEqual(10)
+  })
+
+  test('adds random suffix for collision avoidance', () => {
+    const result1 = generateShortName('Test Project')
+    const result2 = generateShortName('Test Project')
+    // Should generate different suffixes
+    expect(result1).not.toBe(result2)
+    // Both should start with same base
+    expect(result1.slice(0, 6)).toBe(result2.slice(0, 6))
+  })
+
+  test('handles empty string with fallback', () => {
+    const result = generateShortName('')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('handles whitespace-only with fallback', () => {
+    const result = generateShortName('   \t\n  ')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('preserves numbers in name when within 7-char base limit', () => {
+    const result = generateShortName('Proj 2024 Alpha')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Base is first 7 chars: PROJ202 -> plus 3-char suffix = 10 total
+    expect(result.slice(0, 7)).toBe('PROJ202')
+  })
+})
+
 describe('createYouTrackProject', () => {
   beforeEach(() => {
     mockLogger()
@@ -265,7 +334,12 @@ describe('createYouTrackProject', () => {
     await createYouTrackProject(config, { name: 'My Cool Project!' })
 
     const body = getLastFetchBody()
-    expect(body['shortName']).toBe('MYCOOLPROJ')
+    const shortName = body['shortName'] as string
+    // Should start with cleaned name, be uppercase alphanumeric, max 10 chars
+    expect(shortName).toMatch(/^[A-Z0-9]+$/)
+    expect(shortName.length).toBeLessThanOrEqual(10)
+    // Starts with base name
+    expect(shortName).toMatch(/^MYCOOLP/)
     expect(body['name']).toBe('My Cool Project!')
   })
 

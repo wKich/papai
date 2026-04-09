@@ -149,7 +149,7 @@ export type Column = {
   isFinal?: boolean
 }
 
-export type RelationType = 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent'
+export type RelationType = 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent' | 'child'
 
 /** Normalized work item (time tracking entry) returned by providers. */
 export type WorkItem = {

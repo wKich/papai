@@ -105,28 +105,18 @@ describe('listYouTrackUsers', () => {
     ])
   })
 
-  test('fetches additional pages and applies the limit after filtering', async () => {
-    const firstPage = Array.from({ length: 100 }, (_, index) =>
-      makeUser({ id: `user-${index + 1}`, login: `user${index + 1}`, fullName: `User ${index + 1}` }),
-    )
-
-    mockFetchSequence([
-      { data: firstPage },
-      { data: [makeUser({ id: 'user-200', login: 'target', fullName: 'Target User' })] },
-    ])
+  test('uses server-side query filter and limit for efficient user search', async () => {
+    mockFetchSequence([{ data: [makeUser({ id: 'user-200', login: 'target', fullName: 'Target User' })] }])
 
     const users = await listYouTrackUsers(config, 'target', 1)
 
     expect(users).toEqual([{ id: 'user-200', login: 'target', name: 'Target User' }])
-    expect(fetchMock.mock.calls).toHaveLength(2)
+    expect(fetchMock.mock.calls).toHaveLength(1)
 
-    const firstUrl = getFetchUrlAt(0)
-    expect(firstUrl.pathname).toBe('/api/users')
-    expect(firstUrl.searchParams.get('$skip')).toBe('0')
-    expect(firstUrl.searchParams.get('$top')).toBe('100')
-
-    const secondUrl = getFetchUrlAt(1)
-    expect(secondUrl.searchParams.get('$skip')).toBe('100')
+    const url = getFetchUrlAt(0)
+    expect(url.pathname).toBe('/api/users')
+    expect(url.searchParams.get('query')).toBe('nameStartsWith:target')
+    expect(url.searchParams.get('$top')).toBe('1')
   })
 
   test('uses GET /api/users with expected fields', async () => {
@@ -217,5 +207,20 @@ describe('resolveYouTrackUserRingId', () => {
     mockFetchSequence([{ data: { error: 'Not found' }, status: 404 }, { data: [] }])
 
     await expect(resolveYouTrackUserRingId(config, 'missing-user')).rejects.toBeInstanceOf(YouTrackClassifiedError)
+  })
+
+  test('throws not-found error when user is not found in collection scan', async () => {
+    mockFetchSequence([{ data: { error: 'Not found' }, status: 404 }, { data: [] }])
+
+    const error = await resolveYouTrackUserRingId(config, 'missing-user').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(YouTrackClassifiedError)
+    const classifiedError = error as YouTrackClassifiedError
+    expect(classifiedError.appError).toEqual({
+      type: 'provider',
+      code: 'not-found',
+      resourceType: 'User',
+      resourceId: 'missing-user',
+    })
   })
 })

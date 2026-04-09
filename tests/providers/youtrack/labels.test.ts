@@ -224,6 +224,18 @@ describe('createYouTrackLabel', () => {
     expect(body['name']).toBe('my-label')
   })
 
+  test('sends color in request body when provided', async () => {
+    mockFetchResponse(
+      makeTagResponse({ id: 'tag-123', name: 'Colored Tag', color: { id: 'color-1', background: '#FF5722' } }),
+    )
+
+    await createYouTrackLabel(config, { name: 'Colored Tag', color: '#FF5722' })
+
+    const body = getLastFetchBody()
+    expect(body['name']).toBe('Colored Tag')
+    expect(body['color']).toEqual({ background: '#FF5722' })
+  })
+
   test('maps color from response when present', async () => {
     mockFetchResponse(makeTagResponse({ color: { id: 'c-1', background: '#0000ff' } }))
 

@@ -57,7 +57,7 @@ export async function listYouTrackStatuses(config: YouTrackConfig, projectId: st
 export async function createYouTrackStatus(
   config: YouTrackConfig,
   projectId: string,
-  params: { name: string },
+  params: { name: string; isFinal?: boolean },
   confirm?: boolean,
 ): Promise<Column | ConfirmationRequiredResult> {
   log.debug({ projectId, name: params.name }, 'createYouTrackStatus')
@@ -75,12 +75,15 @@ export async function createYouTrackStatus(
       }
     }
 
+    const body: Record<string, unknown> = { name: params.name }
+    if (params.isFinal !== undefined) body['isResolved'] = params.isFinal
+
     const raw = await youtrackFetch(
       config,
       'POST',
       `/api/admin/customFieldSettings/bundles/state/${bundleInfo.bundleId}/values`,
       {
-        body: { name: params.name },
+        body,
         query: { fields: STATE_VALUE_FIELDS },
       },
     )
@@ -178,6 +181,45 @@ export async function deleteYouTrackStatus(
   }
 }
 
+async function updateStatusOrdinals(
+  config: YouTrackConfig,
+  bundleId: string,
+  projectId: string,
+  statuses: Array<{ id: string; position: number }>,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    statuses.map((status) =>
+      youtrackFetch(config, 'POST', `/api/admin/customFieldSettings/bundles/state/${bundleId}/values/${status.id}`, {
+        body: { ordinal: status.position },
+        query: { fields: STATE_VALUE_FIELDS },
+      }),
+    ),
+  )
+
+  const failures: Array<{ statusId: string; error: unknown }> = []
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i]
+    if (result !== undefined && result.status === 'rejected') {
+      failures.push({ statusId: statuses[i]!.id, error: result.reason })
+    }
+  }
+
+  if (failures.length > 0) {
+    const failureDetails = failures
+      .map((f) => `${f.statusId}: ${f.error instanceof Error ? f.error.message : String(f.error)}`)
+      .join(', ')
+    log.error(
+      { projectId, failureCount: failures.length, failures: failureDetails },
+      'Partial failure reordering statuses',
+    )
+
+    const enhancedError = new Error(
+      `Failed to reorder ${failures.length} of ${statuses.length} statuses: ${failureDetails}`,
+    )
+    throw classifyYouTrackError(enhancedError, { projectId })
+  }
+}
+
 export async function reorderYouTrackStatuses(
   config: YouTrackConfig,
   projectId: string,
@@ -194,16 +236,9 @@ export async function reorderYouTrackStatuses(
         message: `This project uses a shared state bundle. Reordering states will affect other projects. Set confirm=true to proceed.`,
       }
     }
-    await Promise.all(
-      statuses.map((status) =>
-        youtrackFetch(
-          config,
-          'POST',
-          `/api/admin/customFieldSettings/bundles/state/${bundleInfo.bundleId}/values/${status.id}`,
-          { body: { ordinal: status.position }, query: { fields: STATE_VALUE_FIELDS } },
-        ),
-      ),
-    )
+
+    await updateStatusOrdinals(config, bundleInfo.bundleId, projectId, statuses)
+
     log.info({ projectId, count: statuses.length }, 'States reordered')
     return undefined
   } catch (error) {

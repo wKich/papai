@@ -30,13 +30,18 @@ export interface BundleInfo {
   isShared: boolean
 }
 
-function checkCachedSuccess(projectId: string): BundleInfo | null {
-  const cached = bundleCache.get(projectId)
+function getCacheKey(config: YouTrackConfig, projectId: string): string {
+  return `${config.baseUrl}|${projectId}`
+}
+
+function checkCachedSuccess(config: YouTrackConfig, projectId: string): BundleInfo | null {
+  const cacheKey = getCacheKey(config, projectId)
+  const cached = bundleCache.get(cacheKey)
   if (cached === undefined) return null
 
   const age = Date.now() - cached.fetchedAt
   if (age >= BUNDLE_CACHE_TTL_MS) {
-    bundleCache.delete(projectId)
+    bundleCache.delete(cacheKey)
     return null
   }
 
@@ -44,13 +49,14 @@ function checkCachedSuccess(projectId: string): BundleInfo | null {
   return { bundleId: cached.bundleId, isShared: cached.isShared }
 }
 
-function checkCachedFailure(projectId: string): boolean {
-  const cached = failureCache.get(projectId)
+function checkCachedFailure(config: YouTrackConfig, projectId: string): boolean {
+  const cacheKey = getCacheKey(config, projectId)
+  const cached = failureCache.get(cacheKey)
   if (cached === undefined) return false
 
   const age = Date.now() - cached.fetchedAt
   if (age >= FAILURE_CACHE_TTL_MS) {
-    failureCache.delete(projectId)
+    failureCache.delete(cacheKey)
     return false
   }
 
@@ -85,26 +91,26 @@ async function fetchBundleInfo(config: YouTrackConfig, projectId: string): Promi
 export async function resolveStateBundle(config: YouTrackConfig, projectId: string): Promise<BundleInfo | null> {
   log.debug({ projectId }, 'resolveStateBundle')
 
-  const cachedSuccess = checkCachedSuccess(projectId)
+  const cachedSuccess = checkCachedSuccess(config, projectId)
   if (cachedSuccess !== null) return cachedSuccess
 
-  if (checkCachedFailure(projectId)) return null
+  if (checkCachedFailure(config, projectId)) return null
 
   try {
     const result = await fetchBundleInfo(config, projectId)
 
     if (result === null) {
-      failureCache.set(projectId, { fetchedAt: Date.now() })
+      failureCache.set(getCacheKey(config, projectId), { fetchedAt: Date.now() })
       return null
     }
 
-    bundleCache.set(projectId, { ...result, fetchedAt: Date.now() })
+    bundleCache.set(getCacheKey(config, projectId), { ...result, fetchedAt: Date.now() })
     log.info({ projectId, bundleId: result.bundleId, isShared: result.isShared }, 'bundle resolved and cached')
     return result
   } catch (error) {
     const classified = classifyYouTrackError(error, { projectId })
     log.error({ projectId, error: classified.message }, 'failed to resolve state bundle')
-    failureCache.set(projectId, { fetchedAt: Date.now() })
+    failureCache.set(getCacheKey(config, projectId), { fetchedAt: Date.now() })
     return null
   }
 }

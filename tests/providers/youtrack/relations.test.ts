@@ -153,6 +153,16 @@ describe('addYouTrackRelation', () => {
     const body = getFetchBody(0)
     expect(body['linkType']).toEqual({ name: 'relates' })
   })
+
+  test('uses correct linkType and direction for child', async () => {
+    mockFetchResponse({ id: 'link-1' })
+
+    await addYouTrackRelation(config, 'PROJ-123', 'PROJ-456', 'child')
+
+    const body = getFetchBody(0)
+    expect(body['linkType']).toEqual({ name: 'subtask' })
+    expect(body['direction']).toBe('INWARD')
+  })
 })
 
 describe('removeYouTrackRelation', () => {

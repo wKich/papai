@@ -250,4 +250,167 @@ describe('bundle-cache', () => {
       expect(fetchCount).toBe(4)
     })
   })
+
+  describe('multi-instance isolation', () => {
+    test('does not share cache between different YouTrack instances', async () => {
+      const configA = { baseUrl: 'https://company-a.youtrack.cloud', token: 'token-a' }
+      const configB = { baseUrl: 'https://company-b.youtrack.cloud', token: 'token-b' }
+
+      let fetchCountA = 0
+      let fetchCountB = 0
+
+      setMockFetch((url) => {
+        if (url.includes('company-a')) {
+          fetchCountA++
+          if (url.includes('/customFields')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify([
+                  {
+                    $type: 'StateProjectCustomField',
+                    field: { name: 'State' },
+                    bundle: { id: 'bundle-from-a' },
+                  },
+                ]),
+                { status: 200 },
+              ),
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'bundle-from-a',
+                aggregated: { project: [{ id: 'proj-1' }] },
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+
+        if (url.includes('company-b')) {
+          fetchCountB++
+          if (url.includes('/customFields')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify([
+                  {
+                    $type: 'StateProjectCustomField',
+                    field: { name: 'State' },
+                    bundle: { id: 'bundle-from-b' },
+                  },
+                ]),
+                { status: 200 },
+              ),
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'bundle-from-b',
+                aggregated: { project: [{ id: 'proj-1' }] },
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+
+        return Promise.resolve(new Response(JSON.stringify({ error: 'Unknown URL' }), { status: 404 }))
+      })
+
+      const resultA = await resolveStateBundle(configA, 'proj-1')
+      const resultB = await resolveStateBundle(configB, 'proj-1')
+
+      // Each instance should have fetched their own bundle
+      expect(resultA).toEqual({ bundleId: 'bundle-from-a', isShared: false })
+      expect(resultB).toEqual({ bundleId: 'bundle-from-b', isShared: false })
+      expect(fetchCountA).toBe(2)
+      expect(fetchCountB).toBe(2)
+    })
+
+    test('caches are isolated per YouTrack instance', async () => {
+      const configA = { baseUrl: 'https://company-a.youtrack.cloud', token: 'token-a' }
+      const configB = { baseUrl: 'https://company-b.youtrack.cloud', token: 'token-b' }
+
+      let fetchCountA = 0
+      let fetchCountB = 0
+
+      setMockFetch((url) => {
+        if (url.includes('company-a')) {
+          fetchCountA++
+          if (url.includes('/customFields')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify([
+                  {
+                    $type: 'StateProjectCustomField',
+                    field: { name: 'State' },
+                    bundle: { id: 'bundle-a' },
+                  },
+                ]),
+                { status: 200 },
+              ),
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'bundle-a',
+                aggregated: { project: [{ id: 'shared-proj' }] },
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+
+        if (url.includes('company-b')) {
+          fetchCountB++
+          if (url.includes('/customFields')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify([
+                  {
+                    $type: 'StateProjectCustomField',
+                    field: { name: 'State' },
+                    bundle: { id: 'bundle-b' },
+                  },
+                ]),
+                { status: 200 },
+              ),
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: 'bundle-b',
+                aggregated: { project: [{ id: 'shared-proj' }] },
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+
+        return Promise.resolve(new Response(JSON.stringify({ error: 'Unknown URL' }), { status: 404 }))
+      })
+
+      // First call from instance A - should fetch
+      await resolveStateBundle(configA, 'shared-proj')
+      expect(fetchCountA).toBe(2)
+
+      // Second call from instance A - should use cache (no new fetch)
+      await resolveStateBundle(configA, 'shared-proj')
+      expect(fetchCountA).toBe(2)
+
+      // Call from instance B with same projectId - should fetch, not use A's cache
+      await resolveStateBundle(configB, 'shared-proj')
+      expect(fetchCountB).toBe(2)
+
+      // Second call from instance B - should use cache
+      await resolveStateBundle(configB, 'shared-proj')
+      expect(fetchCountB).toBe(2)
+
+      // Verify A's cache still works
+      await resolveStateBundle(configA, 'shared-proj')
+      expect(fetchCountA).toBe(2)
+    })
+  })
 })

@@ -78,7 +78,36 @@ describe('mapIssueToTask', () => {
     expect(result.number).toBe(1)
     expect(result.resolved).toBe('2024-01-01T00:00:00.000Z')
     expect(result.parent).toEqual({ id: '100', idReadable: 'PROJ-0', title: 'Parent Task' })
-    expect(result.subtasks).toEqual([{ id: '200', idReadable: 'PROJ-2', title: 'Subtask', status: undefined }])
+    expect(result.subtasks).toEqual([{ id: '200', idReadable: 'PROJ-2', title: 'Subtask', status: 'open' }])
+  })
+
+  test('maps subtask status based on resolved field', () => {
+    const issue = {
+      id: '123',
+      idReadable: 'PROJ-1',
+      summary: 'Test',
+      created: 1704067200000,
+      updated: 1704153600000,
+      project: { id: 'proj-1' },
+      customFields: [],
+      subtasks: {
+        issues: [
+          { id: '200', idReadable: 'PROJ-2', summary: 'Resolved Subtask', resolved: 1704067200000 },
+          { id: '201', idReadable: 'PROJ-3', summary: 'Unresolved Subtask', resolved: undefined },
+          { id: '202', idReadable: 'PROJ-4', summary: 'Null Resolved Subtask', resolved: null },
+        ],
+      },
+    }
+
+    const result = mapIssueToTask(
+      issue as unknown as z.infer<typeof import('../../../src/providers/youtrack/schemas/issue.js').IssueSchema>,
+      'https://example.com',
+    )
+
+    expect(result.subtasks).toHaveLength(3)
+    expect(result.subtasks?.[0]?.status).toBe('resolved')
+    expect(result.subtasks?.[1]?.status).toBe('open')
+    expect(result.subtasks?.[2]?.status).toBe('open')
   })
 
   test('handles missing reporter and updater', () => {
@@ -304,6 +333,32 @@ describe('mapIssueToTask', () => {
           direction: 'INWARD',
           linkType: { name: 'Subtask' },
           issues: [{ id: '456', idReadable: 'PROJ-2', summary: 'Subtask' }],
+        },
+      ],
+    }
+
+    const result = mapIssueToTask(
+      issue as unknown as z.infer<typeof import('../../../src/providers/youtrack/schemas/issue.js').IssueSchema>,
+      'https://example.com',
+    )
+    expect(result.relations).toEqual([{ type: 'child', taskId: 'PROJ-2' }])
+  })
+
+  test('maps subtask OUTWARD direction as parent', () => {
+    const issue = {
+      id: '123',
+      idReadable: 'PROJ-1',
+      summary: 'Test',
+      created: 1704067200000,
+      updated: 1704153600000,
+      project: { id: 'proj-1' },
+      customFields: [],
+      links: [
+        {
+          id: 'link-1',
+          direction: 'OUTWARD',
+          linkType: { name: 'Subtask' },
+          issues: [{ id: '456', idReadable: 'PROJ-2', summary: 'Parent Task' }],
         },
       ],
     }

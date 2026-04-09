@@ -115,8 +115,8 @@ export async function removeYouTrackWatcher(
 export async function addYouTrackVote(config: YouTrackConfig, taskId: string): Promise<{ taskId: string }> {
   log.debug({ taskId }, 'addVote')
   try {
-    await youtrackFetch(config, 'POST', '/api/commands', {
-      body: { query: 'vote', issues: [{ idReadable: taskId }] },
+    await youtrackFetch(config, 'POST', `/api/issues/${taskId}/voters`, {
+      body: { hasVote: true },
     })
     log.info({ taskId }, 'Vote added')
     return { taskId }
@@ -129,9 +129,7 @@ export async function addYouTrackVote(config: YouTrackConfig, taskId: string): P
 export async function removeYouTrackVote(config: YouTrackConfig, taskId: string): Promise<{ taskId: string }> {
   log.debug({ taskId }, 'removeVote')
   try {
-    await youtrackFetch(config, 'POST', '/api/commands', {
-      body: { query: 'unvote', issues: [{ idReadable: taskId }] },
-    })
+    await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}/voters`)
     log.info({ taskId }, 'Vote removed')
     return { taskId }
   } catch (error) {

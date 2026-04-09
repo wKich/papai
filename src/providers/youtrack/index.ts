@@ -111,10 +111,8 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
     return updateYouTrackTask(this.config, taskId, params)
   }
 
-  listTasks(projectId: string, _params?: ListTasksParams): Promise<TaskListItem[]> {
-    // YouTrack provider doesn't yet translate ListTasksParams to YouTrack query syntax;
-    // filters are accepted for API parity with Kaneo but currently ignored.
-    return listYouTrackTasks(this.config, projectId)
+  listTasks(projectId: string, params?: ListTasksParams): Promise<TaskListItem[]> {
+    return listYouTrackTasks(this.config, projectId, params)
   }
 
   searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
@@ -218,7 +216,7 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
     confirm?: boolean,
   ): Promise<Column | { status: 'confirmation_required'; message: string }> {
-    return createYouTrackStatus(this.config, projectId, { name: params.name }, confirm)
+    return createYouTrackStatus(this.config, projectId, { name: params.name, isFinal: params.isFinal }, confirm)
   }
 
   updateStatus(

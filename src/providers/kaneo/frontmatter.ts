@@ -3,7 +3,7 @@ import { logger } from '../../logger.js'
 const log = logger.child({ scope: 'kaneo:frontmatter' })
 
 export interface TaskRelation {
-  type: 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent'
+  type: 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent' | 'child'
   taskId: string
 }
 
@@ -32,7 +32,7 @@ export function parseRelationsFromDescription(description: string | undefined | 
   const relations: TaskRelation[] = []
 
   for (const line of frontmatterContent.split('\n')) {
-    const match = line.trim().match(/^(blocks|blocked_by|duplicate|duplicate_of|related|parent):\s*(.+)$/)
+    const match = line.trim().match(/^(blocks|blocked_by|duplicate|duplicate_of|related|parent|child):\s*(.+)$/)
     if (match !== null) {
       const ids = match[2]!
         .split(',')
@@ -45,7 +45,8 @@ export function parseRelationsFromDescription(description: string | undefined | 
         type === 'duplicate' ||
         type === 'duplicate_of' ||
         type === 'related' ||
-        type === 'parent'
+        type === 'parent' ||
+        type === 'child'
       ) {
         for (const taskId of ids) {
           relations.push({ type, taskId })
@@ -70,7 +71,7 @@ function buildDescriptionWithRelations(body: string, relations: TaskRelation[]):
   }
 
   const lines: string[] = []
-  for (const type of ['blocks', 'blocked_by', 'duplicate', 'duplicate_of', 'related', 'parent'] as const) {
+  for (const type of ['blocks', 'blocked_by', 'duplicate', 'duplicate_of', 'related', 'parent', 'child'] as const) {
     const ids = grouped[type]
     if (ids !== undefined && ids.length > 0) {
       lines.push(`${type}: ${ids.join(', ')}`)

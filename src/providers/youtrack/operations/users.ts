@@ -6,13 +6,10 @@ import type { UserRef } from '../../types.js'
 import { YouTrackClassifiedError, classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { YouTrackApiError, youtrackFetch } from '../client.js'
-import { paginate } from '../helpers.js'
 
 const log = logger.child({ scope: 'provider:youtrack:users' })
 
 const USER_FIELDS = 'id,login,fullName,name,email,ringId'
-const PAGE_SIZE = 100
-const UNBOUNDED_MAX_PAGES = Number.POSITIVE_INFINITY
 
 const DirectoryUserSchema = z.object({
   id: z.string(),
@@ -71,18 +68,54 @@ const getUserRingId = (user: DirectoryUser, userId: string): string => {
   )
 }
 
-const fetchAllUsers = (config: YouTrackConfig): Promise<DirectoryUser[]> =>
-  paginate(config, '/api/users', { fields: USER_FIELDS }, DirectoryUserSchema.array(), UNBOUNDED_MAX_PAGES, PAGE_SIZE)
+/**
+ * Build a YouTrack query string for user search.
+ * Uses nameStartsWith for prefix matching on login or name.
+ */
+const buildUserQuery = (searchQuery: string | undefined): string | undefined => {
+  if (searchQuery === undefined) {
+    return undefined
+  }
+  const trimmed = searchQuery.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+  // nameStartsWith matches users whose name or login starts with the given prefix
+  return `nameStartsWith:${trimmed}`
+}
+
+/**
+ * Fetch users from YouTrack API with server-side filtering.
+ * Uses query parameter for prefix search and $top for limiting results.
+ */
+const fetchUsersWithQuery = async (
+  config: YouTrackConfig,
+  query?: string,
+  limit?: number,
+): Promise<DirectoryUser[]> => {
+  const youtrackQuery = buildUserQuery(query)
+  const queryParams: Record<string, string> = { fields: USER_FIELDS }
+
+  if (youtrackQuery !== undefined) {
+    queryParams['query'] = youtrackQuery
+  }
+  if (limit !== undefined) {
+    queryParams['$top'] = String(limit)
+  }
+
+  const raw = await youtrackFetch(config, 'GET', '/api/users', { query: queryParams })
+  return DirectoryUserSchema.array().parse(raw)
+}
 
 export async function listYouTrackUsers(config: YouTrackConfig, query?: string, limit?: number): Promise<UserRef[]> {
   log.debug({ query, limit }, 'listUsers')
 
   try {
-    const users = await fetchAllUsers(config)
+    const users = await fetchUsersWithQuery(config, query, limit)
+    // Apply client-side filtering as a refinement on top of server-side results
     const filteredUsers = users.filter((user) => matchesQuery(user, query)).map(mapUserRef)
-    const limitedUsers = limit === undefined ? filteredUsers : filteredUsers.slice(0, limit)
-    log.info({ count: limitedUsers.length }, 'Users listed')
-    return limitedUsers
+    log.info({ count: filteredUsers.length }, 'Users listed')
+    return filteredUsers
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), query, limit }, 'Failed to list users')
     throw classifyYouTrackError(error)
@@ -104,17 +137,19 @@ export async function resolveYouTrackUserRingId(config: YouTrackConfig, userId: 
   } catch (error) {
     if (error instanceof YouTrackApiError && error.statusCode === 404) {
       try {
-        const users = await fetchAllUsers(config)
+        // Fall back to server-side search by login using nameStartsWith prefix match
+        const users = await fetchUsersWithQuery(config, userId, 50)
         const matchedUser = users.find((user) => matchesIdentifier(user, userId))
         if (matchedUser !== undefined) {
           const ringId = getUserRingId(matchedUser, userId)
-          log.info({ userId, ringId }, 'Resolved user Hub ringId from collection scan')
+          log.info({ userId, ringId }, 'Resolved user Hub ringId from query search')
           return ringId
         }
+        throw new YouTrackClassifiedError(`User "${userId}" not found`, providerError.notFound('User', userId))
       } catch (fallbackError) {
         log.error(
           { error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError), userId },
-          'Failed to resolve user Hub ringId from collection scan',
+          'Failed to resolve user Hub ringId from query search',
         )
         throw classifyYouTrackError(fallbackError)
       }

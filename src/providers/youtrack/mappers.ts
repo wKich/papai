@@ -44,7 +44,7 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
     return direction === 'OUTWARD' ? 'duplicate' : 'duplicate_of'
   }
   if (name === 'subtask') {
-    return direction === 'OUTWARD' ? 'parent' : 'parent'
+    return direction === 'OUTWARD' ? 'parent' : 'child'
   }
   return 'related'
 }
@@ -81,7 +81,7 @@ const mapSubtasks = (
     id: s.id,
     idReadable: s.idReadable,
     title: s.summary,
-    status: undefined,
+    status: s.resolved === undefined || s.resolved === null ? 'open' : 'resolved',
   }))
 
 const mapVisibilityGroups = (

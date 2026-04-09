@@ -670,23 +670,22 @@ describe('YouTrackProvider', () => {
       expect(getFetchMethodAt(0)).toBe('DELETE')
     })
 
-    test('vote methods delegate to command endpoint', async () => {
+    test('vote methods delegate to REST endpoint', async () => {
       mockFetchNoContent()
 
       const addVoteResult = await provider.addVote?.('TEST-1')
 
       expect(addVoteResult).toEqual({ taskId: 'TEST-1' })
-      expect(getFetchUrlAt(0).pathname).toBe('/api/commands')
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/voters')
       expect(getFetchMethodAt(0)).toBe('POST')
-      expect(getFetchBodyAt(0)).toEqual({ query: 'vote', issues: [{ idReadable: 'TEST-1' }] })
+      expect(getFetchBodyAt(0)).toEqual({ hasVote: true })
 
       mockFetchNoContent()
       const removeVoteResult = await provider.removeVote?.('TEST-1')
 
       expect(removeVoteResult).toEqual({ taskId: 'TEST-1' })
-      expect(getFetchUrlAt(0).pathname).toBe('/api/commands')
-      expect(getFetchMethodAt(0)).toBe('POST')
-      expect(getFetchBodyAt(0)).toEqual({ query: 'unvote', issues: [{ idReadable: 'TEST-1' }] })
+      expect(getFetchUrlAt(0).pathname).toBe('/api/issues/TEST-1/voters')
+      expect(getFetchMethodAt(0)).toBe('DELETE')
     })
 
     test('setVisibility delegates with normalized response', async () => {

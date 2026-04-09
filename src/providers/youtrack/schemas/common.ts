@@ -6,4 +6,4 @@ export const BaseEntitySchema = z.object({
   $type: z.string().optional(),
 })
 
-export const TimestampSchema = z.number().int().positive()
+export const TimestampSchema = z.number().int().min(0)

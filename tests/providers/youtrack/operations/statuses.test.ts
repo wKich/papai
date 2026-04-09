@@ -233,6 +233,42 @@ describe('createYouTrackStatus', () => {
     expect(body['name']).toBe('New State')
   })
 
+  test('sends isResolved when isFinal is true', async () => {
+    mockFetchSequence([
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue({ isResolved: true }) },
+    ])
+
+    const result = await createYouTrackStatus(config, 'proj-1', { name: 'Done', isFinal: true })
+
+    const body = getLastFetchBody()
+    expect(body['isResolved']).toBe(true)
+    if ('status' in result) {
+      expect.unreachable('Should not require confirmation')
+    } else {
+      expect(result.isFinal).toBe(true)
+    }
+  })
+
+  test('sends isResolved when isFinal is false', async () => {
+    mockFetchSequence([
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue({ isResolved: false }) },
+    ])
+
+    const result = await createYouTrackStatus(config, 'proj-1', { name: 'Open', isFinal: false })
+
+    const body = getLastFetchBody()
+    expect(body['isResolved']).toBe(false)
+    if ('status' in result) {
+      expect.unreachable('Should not require confirmation')
+    } else {
+      expect(result.isFinal).toBe(false)
+    }
+  })
+
   test('uses POST method', async () => {
     mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
 
@@ -574,5 +610,46 @@ describe('reorderYouTrackStatuses', () => {
     await expect(reorderYouTrackStatuses(config, 'proj-1', [{ id: '57-1', position: 0 }])).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
     )
+  })
+
+  test('throws error with details when some reorders fail', async () => {
+    let callIndex = 0
+    installFetchMock(() => {
+      callIndex++
+      // First two calls: get custom field and bundle info
+      if (callIndex <= 2) {
+        return Promise.resolve(
+          new Response(callIndex === 1 ? JSON.stringify([makeCustomField()]) : JSON.stringify(makeBundleInfo()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      // Third call: first reorder succeeds
+      if (callIndex === 3) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeStateValue({ id: '57-1', ordinal: 0 })), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      // Fourth call: second reorder fails
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'Conflict' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const promise = reorderYouTrackStatuses(config, 'proj-1', [
+      { id: '57-1', position: 0 },
+      { id: '57-2', position: 1 },
+    ])
+
+    await expect(promise).rejects.toBeInstanceOf(YouTrackClassifiedError)
+    // Error message should contain the failing status ID and partial failure context
+    await expect(promise).rejects.toThrow('Failed to reorder 1 of 2 statuses: 57-2:')
   })
 })

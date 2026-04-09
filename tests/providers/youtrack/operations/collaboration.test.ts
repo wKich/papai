@@ -138,29 +138,29 @@ describe('removeYouTrackWatcher', () => {
 })
 
 describe('addYouTrackVote', () => {
-  test('issues vote command for task id', async () => {
+  test('adds vote via REST endpoint for task id', async () => {
     mockFetchNoContent()
 
     const result = await addYouTrackVote(config, 'TEST-1')
 
     expect(result).toEqual({ taskId: 'TEST-1' })
-    expect(getLastFetchUrl().pathname).toBe('/api/commands')
+    expect(getLastFetchUrl().pathname).toBe('/api/issues/TEST-1/voters')
     expect(getLastFetchUrl().search).toBe('')
     expect(getLastFetchMethod()).toBe('POST')
-    expect(getLastFetchBody()).toEqual({ query: 'vote', issues: [{ idReadable: 'TEST-1' }] })
+    expect(getLastFetchBody()).toEqual({ hasVote: true })
   })
 })
 
 describe('removeYouTrackVote', () => {
-  test('issues unvote command for task id', async () => {
+  test('removes vote via REST endpoint for task id', async () => {
     mockFetchNoContent()
 
     const result = await removeYouTrackVote(config, 'TEST-1')
 
     expect(result).toEqual({ taskId: 'TEST-1' })
+    expect(getLastFetchUrl().pathname).toBe('/api/issues/TEST-1/voters')
     expect(getLastFetchUrl().search).toBe('')
-    expect(getLastFetchMethod()).toBe('POST')
-    expect(getLastFetchBody()).toEqual({ query: 'unvote', issues: [{ idReadable: 'TEST-1' }] })
+    expect(getLastFetchMethod()).toBe('DELETE')
   })
 })
 

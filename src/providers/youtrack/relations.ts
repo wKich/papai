@@ -24,6 +24,7 @@ function mapRelationTypeToLinkType(type: RelationType): string {
     case 'duplicate_of':
       return 'duplicate'
     case 'parent':
+    case 'child':
       return 'subtask'
     case 'related':
       return 'relates'
@@ -39,6 +40,7 @@ function mapRelationTypeToDirection(type: RelationType): 'OUTWARD' | 'INWARD' {
     case 'blocked_by':
     case 'duplicate_of':
     case 'related':
+    case 'child':
       return 'INWARD'
   }
 }
