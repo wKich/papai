@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-04-09
+
+### Added
+
+- **kaneo:** Add list_tasks filter params matching @kaneo/mcp
+- **youtrack:** Implement getComment operation
+- **youtrack:** Implement deleteProject via DELETE /api/admin/projects/{id}
+- **youtrack:** Extend ISSUE_FIELDS with reporter, updater, votes, attachments, parent, subtasks
+- **youtrack:** Complete Phase 1 - bug fixes and extended field coverage
+- **youtrack:** Add bundle schemas for state management
+- **youtrack:** Add bundle cache for state management
+- **tools:** Update status tools with shared bundle confirmation
+- **youtrack:** Complete Phase 2 - statuses and custom fields
+- **youtrack:** Complete phase 3
+- **youtrack:** Complete phase 5 - sprints, activities, saved queries, count_tasks
+
+### Changed
+
+- **kaneo:** Sync update-task with official @kaneo/mcp flow
+- **youtrack:** Switch relations to REST API /links endpoint
+
+### Documentation
+
+- Design for full YouTrack API coverage in tools
+- Add enhanced YouTrack full API design with error handling and observability
+- Add YouTrack full API implementation plan with TDD tasks
+- Add user profile memory design (Phase A)
+- Add user profile memory implementation plan (Phase A)
+- Mark YouTrack Phase 2 cleanup as complete
+
+### Fixed
+
+- **youtrack:** Use project shortName in search queries and add created field to list
+- **youtrack:** Send color in updateLabel request body
+- **youtrack:** Properly type Attachment on Task
+- **youtrack:** Add numberInProject and resolved to ISSUE_LIST_FIELDS
+- **youtrack:** Remove unused YouTrackAttachment type export
+- **youtrack:** Address relation type and timestamp schema issues
+- Replace unsafe type assertion in relations.test.ts
+- Use proper type guard in users.test.ts
+- Use proper type guards in work-items.test.ts
+- Update import and fix unsafe type assertions in statuses.test.ts
+- Replace unsafe type assertions with satisfies in mappers.test.ts
+- **youtrack:** Address code review issues #4, #5, #7, #8
+- Use correct config key and improve error handling
+
+### Miscellaneous
+
+- Re-enable no-unsafe-type-assertion and no-unsafe-argument lint rules
+- Remove knip ignoreIssues for bundle-cache.ts
+
+### Testing
+
+- Fix pre-existing failing tests in llm-orchestrator and tool tests
+- Create test helper for clearBundleCache, update bundle-cache.test.ts import
+- Update index.test.ts to use test helper for clearBundleCache
 ## [4.8.7] - 2026-04-08
 
 ### Added
