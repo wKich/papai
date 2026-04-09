@@ -56,11 +56,11 @@ describe('YouTrack common schemas', () => {
       expect(() => TimestampSchema.parse(1700000000000.5)).toThrow()
     })
 
-    test('zero rejects (.positive())', () => {
-      expect(() => TimestampSchema.parse(0)).toThrow()
+    test('zero accepts (epoch)', () => {
+      expect(TimestampSchema.parse(0)).toBe(0)
     })
 
-    test('negative rejects (.positive())', () => {
+    test('negative rejects (.min(0))', () => {
       expect(() => TimestampSchema.parse(-1)).toThrow()
     })
 

@@ -16,10 +16,17 @@ export function makeCreateStatusTool(provider: TaskProvider): ToolSet[string] {
       icon: z.string().optional().describe('Optional icon name for the status'),
       color: z.string().optional().describe('Optional hex color code (e.g., "#ff0000")'),
       isFinal: z.boolean().optional().describe('Whether this is a final/terminal status (default: false)'),
+      confirm: z.boolean().optional().describe('Set to true to confirm changes to shared state bundles'),
     }),
-    execute: async ({ projectId, name, icon, color, isFinal }) => {
+    execute: async ({ projectId, name, icon, color, isFinal, confirm }) => {
       try {
-        return await provider.createStatus!(projectId, { name, icon, color, isFinal })
+        const result = await provider.createStatus!(projectId, { name, icon, color, isFinal }, confirm)
+        if ('status' in result && result.status === 'confirmation_required') {
+          log.warn({ projectId, name }, 'create_status blocked — shared bundle confirmation required')
+          return result
+        }
+        log.info({ projectId, name }, 'Status created')
+        return result
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), projectId, name, tool: 'create_status' },

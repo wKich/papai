@@ -517,6 +517,321 @@ describe('listYouTrackTasks', () => {
       expect(error.appError.code).toBe('auth-failed')
     }
   })
+
+  test('includes status filter in query when provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { status: 'In Progress' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} State: {In Progress}')
+  })
+
+  test('includes priority filter in query when provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { priority: 'high' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Priority: {high}')
+  })
+
+  test('includes assignee filter in query when provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { assigneeId: 'john.doe' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Assignee: {john.doe}')
+  })
+
+  test('includes due date range filters in query when provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { dueAfter: '2024-01-01', dueBefore: '2024-12-31' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Due date: >2024-01-01 Due date: <2024-12-31')
+  })
+
+  test('uses limit parameter for $top', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { limit: 25 })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('$top')).toBe('25')
+  })
+
+  test('uses page parameter with limit for pagination', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { limit: 25, page: 3 })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('$top')).toBe('25')
+    expect(urlObj.searchParams.get('$skip')).toBe('50')
+  })
+
+  test('includes sort parameters in query when provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { sortBy: 'priority', sortOrder: 'desc' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} sort by: priority desc')
+  })
+
+  test('combines multiple filters in query', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', {
+      status: 'Open',
+      priority: 'urgent',
+      assigneeId: 'jane.doe',
+      limit: 10,
+    })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe(
+      'project: {DEMO} State: {Open} Priority: {urgent} Assignee: {jane.doe}',
+    )
+    expect(urlObj.searchParams.get('$top')).toBe('10')
+  })
+
+  test('automatically paginates to fetch all tasks when more than 100 exist', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      // First call: get project shortName
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      // Pages 1-3: return 100 items each (simulating large project)
+      if (callCount === 2 || callCount === 3) {
+        const items = Array.from({ length: 100 }, (_, i) =>
+          makeIssueListResponse({
+            id: `2-${i + (callCount - 2) * 100}`,
+            idReadable: `DEMO-${i + (callCount - 2) * 100 + 1}`,
+            summary: `Task ${i + (callCount - 2) * 100 + 1}`,
+          }),
+        )
+        return Promise.resolve(
+          new Response(JSON.stringify(items), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+      // Page 4: return 50 items (last page)
+      if (callCount === 4) {
+        const items = Array.from({ length: 50 }, (_, i) =>
+          makeIssueListResponse({
+            id: `2-${i + 200}`,
+            idReadable: `DEMO-${i + 201}`,
+            summary: `Task ${i + 201}`,
+          }),
+        )
+        return Promise.resolve(
+          new Response(JSON.stringify(items), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    const items = await listYouTrackTasks(config, '39-883')
+
+    // Should fetch all 250 tasks across 3 pages
+    expect(items).toHaveLength(250)
+    expect(items[0]!.id).toBe('DEMO-1')
+    expect(items[99]!.id).toBe('DEMO-100')
+    expect(items[199]!.id).toBe('DEMO-200')
+    expect(items[249]!.id).toBe('DEMO-250')
+    // Verify multiple API calls were made
+    // 1 project + 3 pages
+    expect(callCount).toBe(4)
+  })
+
+  test('respects maxPages limit to prevent excessive API calls', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      // Always return full pages to simulate infinite data
+      const items = Array.from({ length: 100 }, (_, i) =>
+        makeIssueListResponse({
+          id: `2-${i + (callCount - 2) * 100}`,
+          idReadable: `DEMO-${i + (callCount - 2) * 100 + 1}`,
+          summary: `Task ${i + (callCount - 2) * 100 + 1}`,
+        }),
+      )
+      return Promise.resolve(
+        new Response(JSON.stringify(items), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    const items = await listYouTrackTasks(config, '39-883')
+
+    // Should stop at maxPages (10 pages = 1000 items)
+    expect(items).toHaveLength(1000)
+    // 1 project + 10 pages
+    expect(callCount).toBe(11)
+  })
 })
 
 describe('searchYouTrackTasks', () => {

@@ -36,30 +36,48 @@ export function buildReplyContextChain(
 }
 
 /**
- * Builds a prompt string with reply context prepended.
+ * Builds a prompt string with reply context and file metadata prepended.
  *
  * ReplyContext is already fully populated by platform providers:
  * - Telegram: reply_to_message fields + message cache chain
  * - Mattermost: cached parent or API fetch + message cache chain
  */
 export function buildPromptWithReplyContext(msg: IncomingMessage): string {
-  if (msg.replyContext === undefined) {
+  const hasReplyContext = msg.replyContext !== undefined
+  const hasFiles = msg.files !== undefined && msg.files.length > 0
+
+  if (!hasReplyContext && !hasFiles) {
     return msg.text
   }
 
   const context: string[] = []
 
-  if (msg.replyContext.text !== undefined) {
-    const author = msg.replyContext.authorUsername ?? 'user'
-    context.push(`[Replying to message from ${author}: "${msg.replyContext.text}"]`)
+  if (msg.replyContext !== undefined) {
+    if (msg.replyContext.text !== undefined) {
+      const author = msg.replyContext.authorUsername ?? 'user'
+      context.push(`[Replying to message from ${author}: "${msg.replyContext.text}"]`)
+    }
+
+    if (msg.replyContext.quotedText !== undefined) {
+      context.push(`[Quoted text: "${msg.replyContext.quotedText}"]`)
+    }
+
+    if (msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== '') {
+      context.push(`[Earlier context: ${msg.replyContext.chainSummary}]`)
+    }
   }
 
-  if (msg.replyContext.quotedText !== undefined) {
-    context.push(`[Quoted text: "${msg.replyContext.quotedText}"]`)
-  }
-
-  if (msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== '') {
-    context.push(`[Earlier context: ${msg.replyContext.chainSummary}]`)
+  if (msg.files !== undefined && msg.files.length > 0) {
+    const fileList = msg.files
+      .map((f) => {
+        const meta: string[] = []
+        if (f.mimeType !== undefined) meta.push(f.mimeType)
+        if (f.size !== undefined) meta.push(`${f.size} bytes`)
+        const fileLabel = meta.length > 0 ? `${f.filename} (${meta.join(', ')})` : f.filename
+        return `fileId=${f.fileId}: ${fileLabel}`
+      })
+      .join('; ')
+    context.push(`[Attached files available for upload_attachment (use fileId): ${fileList}]`)
   }
 
   if (context.length === 0) {

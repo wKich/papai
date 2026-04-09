@@ -46,10 +46,14 @@ function seedLogBuffer(): void {
 }
 
 describe('debug-server', () => {
+  let capturedLogLevel: string
+
   beforeAll(() => {
     ensurePublicBuilt()
     restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
+    // Capture the log level that will be used for the stream
+    capturedLogLevel = getLogLevel()
     startDebugServer('test-admin')
     seedLogBuffer()
   })
@@ -203,7 +207,9 @@ describe('debug-server', () => {
       }
     }
     expect(foundLevel).toBeDefined()
-    const expectedLevel = PINO_LEVEL_VALUES[getLogLevel()]
+    // Use the captured log level from when the server started, not current env
+    // (other tests may have modified LOG_LEVEL after server start)
+    const expectedLevel = PINO_LEVEL_VALUES[capturedLogLevel]
     expect(expectedLevel).toBeDefined()
     expect(foundLevel).toBe(expectedLevel!)
   })

@@ -1,16 +1,20 @@
-import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
 import type {
+  Attachment,
+  Column,
   Comment,
+  CreateWorkItemParams,
   Label,
   ListTasksParams,
   Project,
+  RelationType,
   Task,
   TaskListItem,
   TaskProvider,
   TaskSearchResult,
+  UpdateWorkItemParams,
+  WorkItem,
 } from '../types.js'
-import { classifyYouTrackError } from './classify-error.js'
 import { type YouTrackConfig } from './client.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import {
@@ -22,17 +26,31 @@ import {
   updateYouTrackLabel,
 } from './labels.js'
 import {
+  deleteYouTrackAttachment,
+  listYouTrackAttachments,
+  uploadYouTrackAttachment,
+} from './operations/attachments.js'
+import {
   addYouTrackComment,
+  getYouTrackComment,
   getYouTrackComments,
   removeYouTrackComment,
   updateYouTrackComment,
 } from './operations/comments.js'
 import {
   createYouTrackProject,
+  deleteYouTrackProject,
   getYouTrackProject,
   listYouTrackProjects,
   updateYouTrackProject,
 } from './operations/projects.js'
+import {
+  createYouTrackStatus,
+  deleteYouTrackStatus,
+  listYouTrackStatuses,
+  reorderYouTrackStatuses,
+  updateYouTrackStatus,
+} from './operations/statuses.js'
 import {
   createYouTrackTask,
   deleteYouTrackTask,
@@ -41,16 +59,24 @@ import {
   searchYouTrackTasks,
   updateYouTrackTask,
 } from './operations/tasks.js'
+import {
+  createYouTrackWorkItem,
+  deleteYouTrackWorkItem,
+  listYouTrackWorkItems,
+  updateYouTrackWorkItem,
+} from './operations/work-items.js'
+import { YouTrackPhaseFiveProvider } from './phase-five-provider.js'
 import { addYouTrackRelation, removeYouTrackRelation, updateYouTrackRelation } from './relations.js'
 
 const log = logger.child({ scope: 'provider:youtrack' })
 
-export class YouTrackProvider implements TaskProvider {
+export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskProvider {
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
 
-  constructor(private readonly config: YouTrackConfig) {
+  constructor(config: YouTrackConfig) {
+    super(config)
     log.debug('YouTrackProvider created')
   }
 
@@ -85,10 +111,8 @@ export class YouTrackProvider implements TaskProvider {
     return updateYouTrackTask(this.config, taskId, params)
   }
 
-  listTasks(projectId: string, _params?: ListTasksParams): Promise<TaskListItem[]> {
-    // YouTrack provider doesn't yet translate ListTasksParams to YouTrack query syntax;
-    // filters are accepted for API parity with Kaneo but currently ignored.
-    return listYouTrackTasks(this.config, projectId)
+  listTasks(projectId: string, params?: ListTasksParams): Promise<TaskListItem[]> {
+    return listYouTrackTasks(this.config, projectId, params)
   }
 
   searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
@@ -115,12 +139,20 @@ export class YouTrackProvider implements TaskProvider {
     return updateYouTrackProject(this.config, projectId, params)
   }
 
+  deleteProject(projectId: string): Promise<{ id: string }> {
+    return deleteYouTrackProject(this.config, projectId)
+  }
+
   addComment(taskId: string, body: string): Promise<Comment> {
     return addYouTrackComment(this.config, taskId, body)
   }
 
   getComments(taskId: string): Promise<Comment[]> {
     return getYouTrackComments(this.config, taskId)
+  }
+
+  getComment(taskId: string, commentId: string): Promise<Comment> {
+    return getYouTrackComment(this.config, taskId, commentId)
   }
 
   updateComment(params: { taskId: string; commentId: string; body: string }): Promise<Comment> {
@@ -158,7 +190,7 @@ export class YouTrackProvider implements TaskProvider {
   addRelation(
     taskId: string,
     relatedTaskId: string,
-    type: import('../types.js').RelationType,
+    type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
     return addYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }
@@ -170,30 +202,82 @@ export class YouTrackProvider implements TaskProvider {
   updateRelation(
     taskId: string,
     relatedTaskId: string,
-    type: import('../types.js').RelationType,
+    type: RelationType,
   ): Promise<{ taskId: string; relatedTaskId: string; type: string }> {
     return updateYouTrackRelation(this.config, taskId, relatedTaskId, type)
   }
 
-  buildTaskUrl(taskId: string): string {
-    return `${this.config.baseUrl}/issue/${taskId}`
+  listStatuses(projectId: string): Promise<Column[]> {
+    return listYouTrackStatuses(this.config, projectId)
   }
 
-  buildProjectUrl(projectId: string): string {
-    return `${this.config.baseUrl}/projects/${projectId}`
+  createStatus(
+    projectId: string,
+    params: { name: string; icon?: string; color?: string; isFinal?: boolean },
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
+    return createYouTrackStatus(this.config, projectId, { name: params.name, isFinal: params.isFinal }, confirm)
   }
 
-  classifyError(error: unknown): AppError {
-    return classifyYouTrackError(error).appError
+  updateStatus(
+    projectId: string,
+    statusId: string,
+    params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
+    return updateYouTrackStatus(
+      this.config,
+      projectId,
+      statusId,
+      { name: params.name, isFinal: params.isFinal },
+      confirm,
+    )
   }
 
-  getPromptAddendum(): string {
-    return [
-      'IMPORTANT — YouTrack issue statuses:',
-      '- Issues use "State" as a custom field (e.g. "Open", "In Progress", "Fixed", "Verified").',
-      '- State transitions may be governed by workflows. If a state update fails, try a different valid state.',
-      '- Issue IDs are human-readable like "PROJ-123". Always use these readable IDs.',
-      '- Tags are used as labels. To add/remove tags, use the label tools.',
-    ].join('\n')
+  deleteStatus(
+    projectId: string,
+    statusId: string,
+    confirm?: boolean,
+  ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }> {
+    return deleteYouTrackStatus(this.config, projectId, statusId, confirm)
+  }
+
+  reorderStatuses(
+    projectId: string,
+    statuses: { id: string; position: number }[],
+    confirm?: boolean,
+  ): Promise<undefined | { status: 'confirmation_required'; message: string }> {
+    return reorderYouTrackStatuses(this.config, projectId, statuses, confirm)
+  }
+
+  listAttachments(taskId: string): Promise<Attachment[]> {
+    return listYouTrackAttachments(this.config, taskId)
+  }
+
+  uploadAttachment(
+    taskId: string,
+    file: { name: string; content: Uint8Array | Blob; mimeType?: string },
+  ): Promise<Attachment> {
+    return uploadYouTrackAttachment(this.config, taskId, file)
+  }
+
+  deleteAttachment(taskId: string, attachmentId: string): Promise<{ id: string }> {
+    return deleteYouTrackAttachment(this.config, taskId, attachmentId)
+  }
+
+  listWorkItems(taskId: string): Promise<WorkItem[]> {
+    return listYouTrackWorkItems(this.config, taskId)
+  }
+
+  createWorkItem(taskId: string, params: CreateWorkItemParams): Promise<WorkItem> {
+    return createYouTrackWorkItem(this.config, taskId, params)
+  }
+
+  updateWorkItem(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem> {
+    return updateYouTrackWorkItem(this.config, taskId, workItemId, params)
+  }
+
+  deleteWorkItem(taskId: string, workItemId: string): Promise<{ id: string }> {
+    return deleteYouTrackWorkItem(this.config, taskId, workItemId)
   }
 }

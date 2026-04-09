@@ -34,10 +34,14 @@ export async function createYouTrackLabel(
   config: YouTrackConfig,
   params: { name: string; color?: string },
 ): Promise<Label> {
-  log.debug({ name: params.name }, 'createLabel')
+  log.debug({ name: params.name, color: params.color }, 'createLabel')
   try {
+    const body: Record<string, unknown> = { name: params.name }
+    if (params.color !== undefined) {
+      body['color'] = { background: params.color }
+    }
     const raw = await youtrackFetch(config, 'POST', '/api/tags', {
-      body: { name: params.name },
+      body,
       query: { fields: TAG_FIELDS },
     })
     const tag = TagSchema.parse(raw)
@@ -58,6 +62,9 @@ export async function updateYouTrackLabel(
   try {
     const body: Record<string, unknown> = {}
     if (params.name !== undefined) body['name'] = params.name
+    if (params.color !== undefined) {
+      body['color'] = { background: params.color }
+    }
     const raw = await youtrackFetch(config, 'POST', `/api/tags/${labelId}`, {
       body,
       query: { fields: TAG_FIELDS },

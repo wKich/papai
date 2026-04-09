@@ -4,6 +4,7 @@ import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { COMMENT_FIELDS } from '../constants.js'
+import { paginate } from '../helpers.js'
 import { mapComment } from '../mappers.js'
 import { CommentSchema } from '../schemas/comment.js'
 
@@ -25,13 +26,33 @@ export async function addYouTrackComment(config: YouTrackConfig, taskId: string,
   }
 }
 
+export async function getYouTrackComment(config: YouTrackConfig, taskId: string, commentId: string): Promise<Comment> {
+  log.debug({ taskId, commentId }, 'getComment')
+  try {
+    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments/${commentId}`, {
+      query: { fields: COMMENT_FIELDS },
+    })
+    const comment = CommentSchema.parse(raw)
+    log.info({ taskId, commentId: comment.id }, 'Comment retrieved')
+    return mapComment(comment)
+  } catch (error) {
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), taskId, commentId },
+      'Failed to get comment',
+    )
+    throw classifyYouTrackError(error, { taskId, commentId })
+  }
+}
+
 export async function getYouTrackComments(config: YouTrackConfig, taskId: string): Promise<Comment[]> {
   log.debug({ taskId }, 'getComments')
   try {
-    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, {
-      query: { fields: COMMENT_FIELDS, $top: '100' },
-    })
-    const comments = CommentSchema.array().parse(raw)
+    const comments = await paginate(
+      config,
+      `/api/issues/${taskId}/comments`,
+      { fields: COMMENT_FIELDS },
+      CommentSchema.array(),
+    )
     log.info({ taskId, count: comments.length }, 'Comments retrieved')
     return comments.map(mapComment)
   } catch (error) {

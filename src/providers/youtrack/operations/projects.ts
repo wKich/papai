@@ -8,6 +8,32 @@ import { ProjectSchema } from '../schemas/project.js'
 
 const log = logger.child({ scope: 'provider:youtrack:projects' })
 
+/**
+ * Generate a unique shortName from a project name.
+ * - Handles non-ASCII characters by using a fallback prefix
+ * - Adds a random suffix to avoid collisions
+ * - Ensures result is never empty and max 10 chars
+ */
+export function generateShortName(name: string): string {
+  // Normalize Unicode characters (e.g., é → e, ñ → n)
+  // Remove diacritics
+  const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  // Extract ASCII alphanumeric characters
+  const alphanumeric = normalized.toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+  // Use first 7 chars of cleaned name, or fallback for non-ASCII names
+  const base = alphanumeric.length > 0 ? alphanumeric.slice(0, 7) : 'PROJECT'
+
+  // Generate random 3-char suffix for collision avoidance
+  const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase()
+
+  // Combine and ensure max 10 chars
+  const shortName = `${base}${randomSuffix}`.slice(0, 10)
+
+  return shortName
+}
+
 export async function getYouTrackProject(config: YouTrackConfig, projectId: string): Promise<Project> {
   log.debug({ projectId }, 'getProject')
   try {
@@ -56,11 +82,8 @@ export async function createYouTrackProject(
 ): Promise<Project> {
   log.debug({ name: params.name }, 'createProject')
   try {
-    // Generate shortName from name (first 10 chars, uppercase, no spaces)
-    const shortName = params.name
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 10)
+    // Generate shortName from name with collision avoidance
+    const shortName = generateShortName(params.name)
     const body: Record<string, unknown> = {
       name: params.name,
       shortName,
@@ -108,6 +131,18 @@ export async function updateYouTrackProject(
     }
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'Failed to update project')
+    throw classifyYouTrackError(error, { projectId })
+  }
+}
+
+export async function deleteYouTrackProject(config: YouTrackConfig, projectId: string): Promise<{ id: string }> {
+  log.debug({ projectId }, 'deleteProject')
+  try {
+    await youtrackFetch(config, 'DELETE', `/api/admin/projects/${projectId}`)
+    log.info({ projectId }, 'Project deleted')
+    return { id: projectId }
+  } catch (error) {
+    log.error({ error: error instanceof Error ? error.message : String(error), projectId }, 'Failed to delete project')
     throw classifyYouTrackError(error, { projectId })
   }
 }

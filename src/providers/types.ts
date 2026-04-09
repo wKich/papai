@@ -1,160 +1,100 @@
 import type { AppError } from '../errors.js'
+import type {
+  Attachment,
+  Column,
+  Comment,
+  CommentReaction,
+  CreateWorkItemParams,
+  Label,
+  ListTasksParams,
+  Project,
+  RelationType,
+  SetTaskVisibilityParams,
+  Task,
+  TaskListItem,
+  TaskSearchResult,
+  TaskVisibility,
+  UpdateWorkItemParams,
+  UserRef,
+  WorkItem,
+} from './domain-types.js'
+import type { TaskProviderPhaseFive } from './task-provider-phase-five.js'
 
-// --- Capabilities ---
+export type {
+  Activity,
+  Agile,
+  Attachment,
+  Column,
+  Comment,
+  CommentReaction,
+  CreateWorkItemParams,
+  Label,
+  ListTasksParams,
+  Project,
+  RelationType,
+  SavedQuery,
+  Sprint,
+  SetTaskVisibilityParams,
+  Task,
+  TaskLabel,
+  TaskListItem,
+  TaskRelation,
+  TaskSearchResult,
+  TaskVisibility,
+  UpdateWorkItemParams,
+  UserRef,
+  VisibilityGroupRef,
+  WorkItem,
+} from './domain-types.js'
 
-/**
- * Capabilities that a task tracker provider may support.
- * Core task operations are always required; everything else is optional.
- *
- * Each domain has granular capabilities for specific operations:
- * - projects: read, list, create, update, delete
- * - comments: read, create, update, delete
- * - labels: list, create, update, delete, assign
- * - statuses: list, create, update, delete, reorder
- * - tasks: delete, relations
- */
+/** Capabilities that a task tracker provider may support. */
 export type Capability =
-  // Tasks
   | 'tasks.delete'
+  | 'tasks.count'
   | 'tasks.relations'
-  // Projects
+  | 'tasks.watchers'
+  | 'tasks.votes'
+  | 'tasks.visibility'
   | 'projects.read'
   | 'projects.list'
   | 'projects.create'
   | 'projects.update'
   | 'projects.delete'
-  // Comments
+  | 'projects.team'
   | 'comments.read'
   | 'comments.create'
   | 'comments.update'
   | 'comments.delete'
-  // Labels
+  | 'comments.reactions'
   | 'labels.list'
   | 'labels.create'
   | 'labels.update'
   | 'labels.delete'
   | 'labels.assign'
-  // Statuses
   | 'statuses.list'
   | 'statuses.create'
   | 'statuses.update'
   | 'statuses.delete'
   | 'statuses.reorder'
-
-// --- Common domain types ---
-
-/** Normalized task returned by all providers. */
-export type Task = {
-  id: string
-  title: string
-  description?: string | null
-  status?: string
-  priority?: string
-  assignee?: string | null
-  dueDate?: string | null
-  createdAt?: string
-  projectId?: string
-  url: string
-  labels?: TaskLabel[]
-  relations?: TaskRelation[]
-}
-
-/**
- * Optional filters for `listTasks`. Mirrors the query params accepted by the
- * upstream @kaneo/mcp `list_tasks` tool. Providers that don't support a given
- * filter may ignore it.
- */
-export type ListTasksParams = {
-  status?: string
-  priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
-  assigneeId?: string
-  page?: number
-  limit?: number
-  sortBy?: 'createdAt' | 'priority' | 'dueDate' | 'position' | 'title' | 'number'
-  sortOrder?: 'asc' | 'desc'
-  dueBefore?: string
-  dueAfter?: string
-}
-
-/** Minimal task representation for list results. */
-export type TaskListItem = {
-  id: string
-  title: string
-  number?: number
-  status?: string
-  priority?: string
-  dueDate?: string | null
-  url: string
-}
-
-/** Minimal task representation for search results. */
-export type TaskSearchResult = {
-  id: string
-  title: string
-  number?: number
-  status?: string
-  priority?: string
-  projectId?: string
-  url: string
-}
-
-export type Project = {
-  id: string
-  name: string
-  description?: string | null
-  url: string
-}
-
-export type Comment = {
-  id: string
-  body: string
-  author?: string
-  createdAt?: string
-}
-
-export type Label = {
-  id: string
-  name: string
-  color?: string
-}
-
-/** Label as attached to a task (may have additional fields). */
-export type TaskLabel = {
-  id: string
-  name: string
-  color?: string
-}
-
-export type Column = {
-  id: string
-  name: string
-  order?: number
-  isFinal?: boolean
-}
-
-export type RelationType = 'blocks' | 'blocked_by' | 'duplicate' | 'duplicate_of' | 'related' | 'parent'
-
-export type TaskRelation = {
-  type: RelationType
-  taskId: string
-}
-
-// --- Provider interface ---
+  | 'attachments.list'
+  | 'attachments.upload'
+  | 'attachments.delete'
+  | 'workItems.list'
+  | 'workItems.create'
+  | 'workItems.update'
+  | 'workItems.delete'
+  | 'sprints.list'
+  | 'sprints.create'
+  | 'sprints.update'
+  | 'sprints.assign'
+  | 'activities.read'
+  | 'queries.saved'
 
 /** Configuration keys that a provider requires to function. */
-export type ProviderConfigRequirement = {
-  key: string
-  label: string
-  required: boolean
-}
+export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
 
-/**
- * The core interface every task tracker provider must implement.
- *
- * All core task operations are required. Optional capability methods
- * should only be present when the provider declares the matching capability.
- */
-export interface TaskProvider {
+/** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
+export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
   readonly name: string
 
@@ -199,6 +139,12 @@ export interface TaskProvider {
 
   deleteTask?(taskId: string): Promise<{ id: string }>
 
+  // --- Optional: shared user lookup helpers ---
+
+  listUsers?(query?: string, limit?: number): Promise<UserRef[]>
+
+  getCurrentUser?(): Promise<UserRef>
+
   // --- Optional: projects.* ---
 
   getProject?(projectId: string): Promise<Project>
@@ -211,6 +157,14 @@ export interface TaskProvider {
 
   deleteProject?(projectId: string): Promise<{ id: string }>
 
+  // --- Optional: projects.team ---
+
+  listProjectTeam?(projectId: string): Promise<UserRef[]>
+
+  addProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
+
+  removeProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
+
   // --- Optional: comments.* ---
 
   getComment?(taskId: string, commentId: string): Promise<Comment>
@@ -222,6 +176,16 @@ export interface TaskProvider {
   updateComment?(params: { taskId: string; commentId: string; body: string }): Promise<Comment>
 
   removeComment?(params: { taskId: string; commentId: string }): Promise<{ id: string }>
+
+  // --- Optional: comments.reactions ---
+
+  addCommentReaction?(taskId: string, commentId: string, reaction: string): Promise<CommentReaction>
+
+  removeCommentReaction?(
+    taskId: string,
+    commentId: string,
+    reactionId: string,
+  ): Promise<{ id: string; taskId: string; commentId: string }>
 
   // --- Optional: labels.* ---
 
@@ -253,6 +217,23 @@ export interface TaskProvider {
 
   removeRelation?(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }>
 
+  // --- Optional: collaboration task surfaces ---
+
+  listWatchers?(taskId: string): Promise<UserRef[]>
+
+  addWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
+
+  removeWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
+
+  addVote?(taskId: string): Promise<{ taskId: string }>
+
+  removeVote?(taskId: string): Promise<{ taskId: string }>
+
+  setVisibility?(
+    taskId: string,
+    params: SetTaskVisibilityParams,
+  ): Promise<{ taskId: string; visibility: TaskVisibility }>
+
   // --- Optional: statuses.* ---
 
   listStatuses?(projectId: string): Promise<Column[]>
@@ -260,28 +241,54 @@ export interface TaskProvider {
   createStatus?(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column>
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }>
 
   updateStatus?(
+    projectId: string,
     statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column>
+    confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }>
 
-  deleteStatus?(statusId: string): Promise<{ id: string }>
+  deleteStatus?(
+    projectId: string,
+    statusId: string,
+    confirm?: boolean,
+  ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }>
 
-  reorderStatuses?(projectId: string, statuses: { id: string; position: number }[]): Promise<void>
+  reorderStatuses?(
+    projectId: string,
+    statuses: { id: string; position: number }[],
+    confirm?: boolean,
+  ): Promise<undefined | { status: 'confirmation_required'; message: string }>
 
-  // --- URL builders ---
+  // --- Optional: attachments.* ---
+
+  listAttachments?(taskId: string): Promise<Attachment[]>
+
+  uploadAttachment?(
+    taskId: string,
+    file: { name: string; content: Uint8Array | Blob; mimeType?: string },
+  ): Promise<Attachment>
+
+  deleteAttachment?(taskId: string, attachmentId: string): Promise<{ id: string }>
+
+  // --- Optional: workItems.* ---
+
+  listWorkItems?(taskId: string): Promise<WorkItem[]>
+
+  createWorkItem?(taskId: string, params: CreateWorkItemParams): Promise<WorkItem>
+
+  updateWorkItem?(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem>
+
+  deleteWorkItem?(taskId: string, workItemId: string): Promise<{ id: string }>
 
   buildTaskUrl(taskId: string, projectId?: string): string
 
   buildProjectUrl(projectId: string): string
 
-  // --- Error classification ---
-
   classifyError(error: unknown): AppError
-
-  // --- System prompt addendum ---
 
   /** Returns provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string

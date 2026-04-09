@@ -6,6 +6,8 @@ import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/clas
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
   createYouTrackProject,
+  deleteYouTrackProject,
+  generateShortName,
   getYouTrackProject,
   listYouTrackProjects,
   updateYouTrackProject,
@@ -238,6 +240,74 @@ describe('listYouTrackProjects', () => {
   })
 })
 
+describe('generateShortName', () => {
+  test('converts ASCII name to uppercase alphanumeric', () => {
+    const result = generateShortName('My Cool Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^MYCOOLP/)
+    expect(result.length).toBeLessThanOrEqual(10)
+  })
+
+  test('removes special characters', () => {
+    const result = generateShortName('Project!@#$%^&*()')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('normalizes Unicode diacritics (é → e)', () => {
+    const result = generateShortName('Café Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^CAFEP/)
+  })
+
+  test('handles non-ASCII characters with fallback', () => {
+    const result = generateShortName('日本語プロジェクト')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Falls back to PROJECT prefix
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('handles mixed ASCII and non-ASCII', () => {
+    const result = generateShortName('日本語Project')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Uses fallback since only ASCII is kept
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('limits length to 10 characters', () => {
+    const result = generateShortName('Very Long Project Name That Exceeds')
+    expect(result.length).toBeLessThanOrEqual(10)
+  })
+
+  test('adds random suffix for collision avoidance', () => {
+    const result1 = generateShortName('Test Project')
+    const result2 = generateShortName('Test Project')
+    // Should generate different suffixes
+    expect(result1).not.toBe(result2)
+    // Both should start with same base
+    expect(result1.slice(0, 6)).toBe(result2.slice(0, 6))
+  })
+
+  test('handles empty string with fallback', () => {
+    const result = generateShortName('')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('handles whitespace-only with fallback', () => {
+    const result = generateShortName('   \t\n  ')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    expect(result).toMatch(/^PROJECT/)
+  })
+
+  test('preserves numbers in name when within 7-char base limit', () => {
+    const result = generateShortName('Proj 2024 Alpha')
+    expect(result).toMatch(/^[A-Z0-9]+$/)
+    // Base is first 7 chars: PROJ202 -> plus 3-char suffix = 10 total
+    expect(result.slice(0, 7)).toBe('PROJ202')
+  })
+})
+
 describe('createYouTrackProject', () => {
   beforeEach(() => {
     mockLogger()
@@ -264,7 +334,16 @@ describe('createYouTrackProject', () => {
     await createYouTrackProject(config, { name: 'My Cool Project!' })
 
     const body = getLastFetchBody()
-    expect(body['shortName']).toBe('MYCOOLPROJ')
+    const shortNameValue = body['shortName']
+    if (typeof shortNameValue !== 'string') {
+      throw new Error('Expected shortName to be a string')
+    }
+    const shortName = shortNameValue
+    // Should start with cleaned name, be uppercase alphanumeric, max 10 chars
+    expect(shortName).toMatch(/^[A-Z0-9]+$/)
+    expect(shortName.length).toBeLessThanOrEqual(10)
+    // Starts with base name
+    expect(shortName).toMatch(/^MYCOOLP/)
     expect(body['name']).toBe('My Cool Project!')
   })
 
@@ -362,6 +441,57 @@ describe('updateYouTrackProject', () => {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)
       if (error instanceof YouTrackClassifiedError) {
         expect(error.appError.code).toBe('project-not-found')
+      }
+    }
+  })
+})
+
+describe('deleteYouTrackProject', () => {
+  beforeEach(() => {
+    mockLogger()
+    fetchMock = undefined!
+  })
+
+  afterEach(() => {
+    restoreFetch()
+  })
+
+  test('deleteProject removes project via DELETE request', async () => {
+    mockFetchResponse({})
+
+    const result = await deleteYouTrackProject(config, 'proj-123')
+
+    expect(result).toEqual({ id: 'proj-123' })
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/admin/projects/proj-123')
+    expect(getLastFetchMethod()).toBe('DELETE')
+  })
+
+  test('throws classified error on 404', async () => {
+    mockFetchError(404, { error: 'Project not found' })
+
+    try {
+      await deleteYouTrackProject(config, 'nonexistent')
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('project-not-found')
+      }
+    }
+  })
+
+  test('throws classified error on auth failure', async () => {
+    mockFetchError(401)
+
+    try {
+      await deleteYouTrackProject(config, 'proj-1')
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('auth-failed')
       }
     }
   })

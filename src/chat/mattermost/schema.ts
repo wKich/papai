@@ -18,6 +18,14 @@ export const MattermostPostSchema = z.object({
   user_name: z.string().optional(),
   root_id: z.string().optional(),
   parent_id: z.string().optional(),
+  file_ids: z.array(z.string()).optional(),
+})
+
+export const MattermostFileInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  mime_type: z.string().optional(),
+  size: z.number().optional(),
 })
 
 export const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })

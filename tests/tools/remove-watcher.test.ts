@@ -1,0 +1,61 @@
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
+
+import { makeRemoveWatcherTool } from '../../src/tools/remove-watcher.js'
+import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
+import { createMockProvider } from './mock-provider.js'
+
+function isTaskUserResult(value: unknown): value is { taskId: string; userId: string } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'taskId' in value &&
+    typeof value.taskId === 'string' &&
+    'userId' in value &&
+    typeof value.userId === 'string'
+  )
+}
+
+describe('Remove Watcher Tool', () => {
+  beforeEach(() => {
+    mockLogger()
+    mock.restore()
+  })
+
+  test('returns tool with correct structure', () => {
+    const tool = makeRemoveWatcherTool(createMockProvider())
+    expect(tool.description).toContain('Remove a watcher')
+  })
+
+  test('removes watcher from task', async () => {
+    const removeWatcher = mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId }))
+    const tool = makeRemoveWatcherTool(createMockProvider({ removeWatcher }))
+
+    const result: unknown = await getToolExecutor(tool)(
+      { taskId: 'task-1', userId: 'user-2' },
+      { toolCallId: '1', messages: [] },
+    )
+
+    if (!isTaskUserResult(result)) throw new Error('Invalid result')
+    expect(result).toEqual({ taskId: 'task-1', userId: 'user-2' })
+    expect(removeWatcher).toHaveBeenCalledWith('task-1', 'user-2')
+  })
+
+  test('propagates provider errors', async () => {
+    const tool = makeRemoveWatcherTool(
+      createMockProvider({
+        removeWatcher: mock(() => Promise.reject(new Error('Watcher remove failed'))),
+      }),
+    )
+
+    await expect(
+      getToolExecutor(tool)({ taskId: 'task-1', userId: 'user-2' }, { toolCallId: '1', messages: [] }),
+    ).rejects.toThrow('Watcher remove failed')
+  })
+
+  test('validates required inputs', () => {
+    const tool = makeRemoveWatcherTool(createMockProvider())
+    expect(schemaValidates(tool, { userId: 'user-1' })).toBe(false)
+    expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
+    expect(schemaValidates(tool, { taskId: 'task-1', userId: 'user-1' })).toBe(true)
+  })
+})

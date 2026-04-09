@@ -1,0 +1,135 @@
+import { logger } from '../../logger.js'
+import { cacheMessage } from '../../message-cache/index.js'
+import type { IncomingFile } from '../types.js'
+import {
+  FileUploadSchema,
+  MattermostFileInfoSchema,
+  type MattermostPost,
+  MattermostPostSchema,
+  MattermostPostedDataSchema,
+} from './schema.js'
+
+const log = logger.child({ scope: 'chat:mattermost:files' })
+
+export async function fetchMattermostFiles(
+  fileIds: string[],
+  apiFetch: (method: string, path: string, body: unknown) => Promise<unknown>,
+  fetchContent: (fileId: string) => Promise<Buffer | null>,
+): Promise<IncomingFile[]> {
+  const files = await Promise.all(
+    fileIds.map(async (fileId): Promise<IncomingFile | null> => {
+      try {
+        const infoData = await apiFetch('GET', `/api/v4/files/${fileId}/info`, undefined)
+        const parsed = MattermostFileInfoSchema.safeParse(infoData)
+        if (!parsed.success) {
+          log.warn({ fileId, error: parsed.error.message }, 'Failed to parse Mattermost file info, skipping')
+          return null
+        }
+
+        const content = await fetchContent(fileId)
+        if (content === null) {
+          log.warn({ fileId }, 'Mattermost file content fetch returned null, skipping')
+          return null
+        }
+
+        return {
+          fileId,
+          filename: parsed.data.name,
+          mimeType: parsed.data.mime_type,
+          size: parsed.data.size,
+          content,
+        }
+      } catch (error) {
+        log.error(
+          { fileId, error: error instanceof Error ? error.message : String(error) },
+          'Failed to fetch Mattermost file',
+        )
+        return null
+      }
+    }),
+  )
+
+  return files.filter((file): file is IncomingFile => file !== null)
+}
+
+export function cacheIncomingPost(
+  post: MattermostPost,
+  replyToMessageId: string | undefined,
+  senderName?: string,
+): void {
+  cacheMessage({
+    messageId: post.id,
+    contextId: post.channel_id,
+    authorId: post.user_id,
+    authorUsername: post.user_name ?? senderName,
+    text: post.message,
+    replyToMessageId,
+    timestamp: Date.now(),
+  })
+}
+
+export function parsePostedEvent(data: Record<string, unknown>): { post: MattermostPost; senderName?: string } | null {
+  const postedDataResult = MattermostPostedDataSchema.safeParse(data)
+  if (!postedDataResult.success) return null
+
+  const { post: postJson, sender_name: senderName } = postedDataResult.data
+  const postResult = MattermostPostSchema.safeParse(JSON.parse(postJson))
+  if (!postResult.success) return null
+  return { post: postResult.data, senderName }
+}
+
+export async function downloadMattermostFile(baseUrl: string, token: string, fileId: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(`${baseUrl}/api/v4/files/${fileId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      log.warn({ fileId, status: res.status }, 'Mattermost file download failed')
+      return null
+    }
+
+    return Buffer.from(await res.arrayBuffer())
+  } catch (error) {
+    log.error(
+      { fileId, error: error instanceof Error ? error.message : String(error) },
+      'Failed to download Mattermost file content',
+    )
+    return null
+  }
+}
+
+export async function uploadMattermostFile(
+  baseUrl: string,
+  token: string,
+  channelId: string,
+  content: Buffer | string,
+  filename: string,
+): Promise<string> {
+  const body = new FormData()
+  const blobContent = typeof content === 'string' ? content : new Uint8Array(content)
+  const blob = new Blob([blobContent])
+  body.append('files', blob, filename)
+
+  const url = `${baseUrl}/api/v4/files?channel_id=${encodeURIComponent(channelId)}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  })
+  if (!res.ok) {
+    throw new Error(`Mattermost file upload failed: ${res.status}`)
+  }
+
+  const data: unknown = await res.json()
+  const result = FileUploadSchema.safeParse(data)
+  if (!result.success) {
+    throw new Error('Invalid file upload response from Mattermost')
+  }
+
+  const fileId = result.data.file_infos[0]?.id
+  if (fileId === undefined) {
+    throw new Error('Mattermost file upload returned no file ID')
+  }
+
+  return fileId
+}

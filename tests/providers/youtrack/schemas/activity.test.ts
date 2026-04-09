@@ -1,0 +1,35 @@
+import { describe, expect, test } from 'bun:test'
+
+import { ActivitySchema } from '../../../../src/providers/youtrack/schemas/activity.js'
+
+describe('ActivitySchema', () => {
+  test('parses valid activity', () => {
+    const data = {
+      id: 'activity-1',
+      timestamp: 1700000000000,
+      author: {
+        id: 'user-1',
+        login: 'alice',
+        fullName: 'Alice Example',
+      },
+      category: { id: 'SprintCategory' },
+      field: { name: 'Sprint' },
+      targetMember: 'Sprint',
+      added: [{ name: 'Sprint 1' }],
+      removed: { text: 'Backlog' },
+    }
+
+    expect(ActivitySchema.parse(data)).toEqual(data)
+  })
+
+  test('allows optional author and category fields to be omitted', () => {
+    expect(ActivitySchema.parse({ id: 'activity-1', timestamp: 1700000000000 })).toEqual({
+      id: 'activity-1',
+      timestamp: 1700000000000,
+    })
+  })
+
+  test('rejects missing timestamp', () => {
+    expect(() => ActivitySchema.parse({ id: 'activity-1' })).toThrow()
+  })
+})

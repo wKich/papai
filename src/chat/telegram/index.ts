@@ -3,20 +3,21 @@ import { Bot, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
-import { buildReplyContextChain } from '../../reply-context.js'
 import { handleWizardCallback } from '../../wizard/telegram-handlers.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
   ContextType,
+  IncomingFile,
   IncomingMessage,
-  ReplyContext,
   ReplyFn,
   ReplyOptions,
 } from '../types.js'
 import { handleConfigEditorCallback } from './config-editor-callbacks.js'
+import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
+import { extractReplyContext } from './reply-context-helpers.js'
 import {
   createReplyParamsBuilder,
   sendButtonReply,
@@ -25,46 +26,9 @@ import {
   sendTextReply,
 } from './reply-helpers.js'
 
+export { extractReplyContext } from './reply-context-helpers.js'
+
 const log = logger.child({ scope: 'chat:telegram' })
-
-/** Minimal interface for extractReplyContext input. Matches grammy Context structure. */
-interface ExtractReplyContextInput {
-  message?: {
-    message_id?: number
-    text?: string
-    message_thread_id?: number
-    reply_to_message?: {
-      message_id?: number
-      from?: { id?: number; username?: string } | undefined
-      text?: string
-    }
-    quote?: { text?: string }
-  }
-}
-
-/** Extract reply context from a Telegram message. Exported for testing. */
-export function extractReplyContext(ctx: ExtractReplyContextInput, contextId: string): ReplyContext | undefined {
-  const replyToMessage = ctx.message?.reply_to_message
-  const replyToMessageId = replyToMessage?.message_id
-  if (replyToMessage === undefined || replyToMessageId === undefined) return undefined
-
-  const idStr = String(replyToMessageId)
-  const quote = ctx.message?.quote
-  const { chain, chainSummary } = buildReplyContextChain(contextId, idStr)
-  const fromId = replyToMessage.from?.id
-  const threadId = ctx.message?.message_thread_id
-
-  return {
-    messageId: idStr,
-    authorId: fromId === undefined ? undefined : String(fromId),
-    authorUsername: replyToMessage.from?.username ?? null,
-    text: replyToMessage.text,
-    quotedText: quote?.text,
-    threadId: threadId === undefined ? undefined : String(threadId),
-    chain,
-    chainSummary,
-  }
-}
 
 export class TelegramChatProvider implements ChatProvider {
   readonly name = 'telegram'
@@ -104,6 +68,19 @@ export class TelegramChatProvider implements ChatProvider {
       const reply = this.buildReplyFn(ctx)
       await this.withTypingIndicator(ctx, () => handler(msg, reply))
     })
+
+    this.bot.on(
+      ['message:document', 'message:photo', 'message:audio', 'message:video', 'message:voice'],
+      async (ctx) => {
+        const isAdmin = await this.checkAdminStatus(ctx)
+        const msg = this.extractMessage(ctx, isAdmin)
+        if (msg === null) return
+        const files = await this.fetchFilesFromContext(ctx)
+        if (files.length > 0) msg.files = files
+        const reply = this.buildReplyFn(ctx)
+        await this.withTypingIndicator(ctx, () => handler(msg, reply))
+      },
+    )
   }
 
   async sendMessage(userId: string, markdown: string): Promise<void> {
@@ -184,8 +161,9 @@ export class TelegramChatProvider implements ChatProvider {
     const contextId = String(ctx.chat?.id ?? id)
     const contextType: ContextType = isGroup ? 'group' : 'dm'
 
-    const text = ctx.message?.text ?? ''
-    const isMentioned = this.isBotMentioned(text, ctx.message?.entities)
+    // Use caption for media messages (photo/document/etc), fallback to text or empty
+    const text = ctx.message?.text ?? ctx.message?.caption ?? ''
+    const isMentioned = this.isBotMentioned(text, ctx.message?.entities ?? ctx.message?.caption_entities)
 
     const messageId = ctx.message?.message_id
     const messageIdStr = messageId === undefined ? undefined : String(messageId)
@@ -217,6 +195,31 @@ export class TelegramChatProvider implements ChatProvider {
       replyToMessageId: replyToMessageIdStr,
       replyContext,
     }
+  }
+
+  /** Fetch all attached files from a grammy Context, downloading their content. */
+  private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
+    const token = process.env['TELEGRAM_BOT_TOKEN'] ?? ''
+    const fetcher: TelegramFileFetcher = async (fileId: string) => {
+      try {
+        const fileInfo = await this.bot.api.getFile(fileId)
+        if (fileInfo.file_path === undefined) return null
+        const url = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`
+        const response = await fetch(url)
+        if (!response.ok) {
+          log.warn({ fileId, status: response.status }, 'Telegram file download failed')
+          return null
+        }
+        return Buffer.from(await response.arrayBuffer())
+      } catch (error) {
+        log.error(
+          { fileId, error: error instanceof Error ? error.message : String(error) },
+          'Failed to fetch Telegram file',
+        )
+        return null
+      }
+    }
+    return extractFilesFromContext(ctx, fetcher)
   }
 
   private isBotMentioned(text: string, entities?: MessageEntity[]): boolean {

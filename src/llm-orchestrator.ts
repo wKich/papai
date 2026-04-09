@@ -10,7 +10,7 @@ import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
-import type { LlmOrchestratorDeps } from './llm-orchestrator-types.js'
+import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
@@ -21,6 +21,7 @@ import type { TaskProvider } from './providers/types.js'
 import { YouTrackClassifiedError } from './providers/youtrack/classify-error.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
+import { fetchWithoutTimeout } from './utils/fetch.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
 
@@ -28,7 +29,7 @@ const defaultDeps: LlmOrchestratorDeps = {
   generateText: (...args) => generateText(...args),
   stepCountIs: (...args) => stepCountIs(...args),
   buildOpenAI: (apiKey: string, baseURL: string) =>
-    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL }),
+    createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL, fetch: fetchWithoutTimeout }),
   buildProviderForUser: (userId: string) => buildProviderForUser(userId, true),
   maybeProvisionKaneo: (reply, contextId, username) => maybeProvisionKaneo(reply, contextId, username),
 }
@@ -82,8 +83,6 @@ const sendLlmResponse = async (
     'Response sent successfully',
   )
 }
-
-import type { InvokeModelArgs } from './llm-orchestrator-types.js'
 
 const invokeModel = async (args: InvokeModelArgs): ReturnType<LlmOrchestratorDeps['generateText']> => {
   const { contextId, mainModel, model, provider, tools, messages, deps } = args

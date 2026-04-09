@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { emitLlmStart, emitLlmEnd, type LlmResult } from '../src/llm-orchestrator-events.js'
+import { emitLlmStart, emitLlmEnd, type ResolvedStreamTextResult } from '../src/llm-orchestrator-events.js'
 import { makeTools } from '../src/tools/index.js'
 import { createMockProvider } from './tools/mock-provider.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
@@ -53,8 +53,10 @@ describe('llm-orchestrator-events', () => {
       subscribe(listener)
 
       try {
-        const result: LlmResult = {
+        const result: ResolvedStreamTextResult = {
           text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
           steps: [
             {
               text: 'Step 1',
@@ -64,7 +66,7 @@ describe('llm-orchestrator-events', () => {
               usage: { inputTokens: 10, outputTokens: 5 },
             },
           ],
-          response: { id: 'resp-1', modelId: 'gpt-4' },
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }], id: 'resp-1', modelId: 'gpt-4' },
           usage: { inputTokens: 10, outputTokens: 5 },
           finishReason: 'stop',
         }
@@ -88,6 +90,44 @@ describe('llm-orchestrator-events', () => {
       } finally {
         unsubscribe(listener)
       }
+    })
+  })
+
+  describe('ResolvedStreamTextResult type', () => {
+    test('type exists and can be used', () => {
+      const result: ResolvedStreamTextResult = {
+        text: 'Test',
+        toolCalls: [{ toolName: 'test', toolCallId: '1', input: {} }],
+        toolResults: [{ toolCallId: '1', output: {} }],
+        steps: [],
+        response: { messages: [] },
+        usage: { inputTokens: 0, outputTokens: 0 },
+        finishReason: 'stop',
+      }
+
+      expect(result.text).toBe('Test')
+      expect(result.toolCalls).toHaveLength(1)
+      expect(result.toolResults).toHaveLength(1)
+      expect(result.finishReason).toBe('stop')
+    })
+
+    test('optional fields can be undefined', () => {
+      const result: ResolvedStreamTextResult = {
+        text: 'Test',
+        toolCalls: [],
+        toolResults: [],
+        steps: [],
+        response: { messages: [] },
+        usage: { inputTokens: 0, outputTokens: 0 },
+        finishReason: 'stop',
+        warnings: undefined,
+        request: undefined,
+        providerMetadata: undefined,
+      }
+
+      expect(result.warnings).toBeUndefined()
+      expect(result.request).toBeUndefined()
+      expect(result.providerMetadata).toBeUndefined()
     })
   })
 })

@@ -184,22 +184,33 @@ export class KaneoProvider implements TaskProvider {
   createStatus(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column> {
+    _confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
     return kaneoCreateStatus(this.config, projectId, params)
   }
 
   updateStatus(
+    _projectId: string,
     statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
-  ): Promise<Column> {
+    _confirm?: boolean,
+  ): Promise<Column | { status: 'confirmation_required'; message: string }> {
     return kaneoUpdateStatus(this.config, statusId, params)
   }
 
-  deleteStatus(statusId: string): Promise<{ id: string }> {
+  deleteStatus(
+    _projectId: string,
+    statusId: string,
+    _confirm?: boolean,
+  ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }> {
     return kaneoDeleteStatus(this.config, statusId)
   }
 
-  reorderStatuses(projectId: string, statuses: { id: string; position: number }[]): Promise<void> {
+  reorderStatuses(
+    projectId: string,
+    statuses: { id: string; position: number }[],
+    _confirm?: boolean,
+  ): Promise<undefined | { status: 'confirmation_required'; message: string }> {
     return kaneoReorderStatuses(this.config, projectId, statuses)
   }
 
