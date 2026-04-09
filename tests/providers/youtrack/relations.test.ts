@@ -63,12 +63,14 @@ const getFetchUrl = (index: number): URL => {
   return new URL(parsed.data[0])
 }
 
+const BodySchema = z.looseObject({})
+
 const getFetchBody = (index: number): Record<string, unknown> => {
   const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[index])
   if (!parsed.success) return {}
   const { body } = parsed.data[1]
   if (body === undefined) return {}
-  return JSON.parse(body) as Record<string, unknown>
+  return BodySchema.parse(JSON.parse(body))
 }
 
 const getFetchMethod = (index: number): string => {
