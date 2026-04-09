@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.7] - 2026-04-08
+
+### Added
+
+- **kaneo:** Add list_tasks filter params matching @kaneo/mcp
+
+### Changed
+
+- **kaneo:** Sync update-task with official @kaneo/mcp flow
+
+### Fixed
+
+- **youtrack:** Use project shortName in search queries and add created field to list
+
+### Testing
+
+- Fix pre-existing failing tests in llm-orchestrator and tool tests
+
+### Revert
+
+- Migrate back from streamText to generateText
 ## [4.8.6] - 2026-04-07
 
 ### Changed

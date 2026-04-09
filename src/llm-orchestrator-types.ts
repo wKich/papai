@@ -1,15 +1,24 @@
 import type { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { streamText, stepCountIs, ModelMessage, ToolSet } from 'ai'
+import type { generateText, stepCountIs, ModelMessage, ToolSet } from 'ai'
 
 import type { ReplyFn } from './chat/types.js'
 import type { TaskProvider } from './providers/types.js'
 
 export interface LlmOrchestratorDeps {
-  streamText: typeof streamText
+  generateText: typeof generateText
   stepCountIs: typeof stepCountIs
   buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
   buildProviderForUser: (userId: string) => TaskProvider
   maybeProvisionKaneo: (reply: ReplyFn, contextId: string, username: string | null) => Promise<void>
+}
+
+export type StepInput = {
+  text?: string
+  finishReason?: string
+  toolCalls?: Array<{ toolName: string; toolCallId: string; input: unknown }>
+  toolResults?: ReadonlyArray<{ toolCallId: string; output: unknown }>
+  content?: ReadonlyArray<unknown>
+  usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
 }
 
 export type InvokeModelArgs = {
@@ -20,15 +29,6 @@ export type InvokeModelArgs = {
   tools: ToolSet
   messages: ModelMessage[]
   deps: LlmOrchestratorDeps
-}
-
-export type StepInput = {
-  text?: string
-  finishReason?: string
-  toolCalls?: Array<{ toolName: string; toolCallId: string; input: unknown }>
-  toolResults?: ReadonlyArray<{ toolCallId: string; output: unknown }>
-  content?: ReadonlyArray<unknown>
-  usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
 }
 
 export type StepOutput = {

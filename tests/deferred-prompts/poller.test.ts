@@ -25,17 +25,11 @@ beforeEach(() => {
 })
 
 // Mock AI module using mutable implementation pattern
-type StreamTextResult = {
-  text: Promise<string>
-  toolCalls: Promise<unknown[]>
-  toolResults: Promise<unknown[]>
-  response: Promise<{ messages: ModelMessage[] }>
-  steps: Promise<unknown[]>
-  usage: Promise<Record<string, unknown>>
-  finishReason: Promise<string>
-  warnings: Promise<unknown[] | undefined>
-  request: Promise<unknown>
-  providerMetadata: Promise<unknown>
+type GenerateTextResult = {
+  text: string
+  toolCalls: unknown[]
+  toolResults: unknown[]
+  response: { messages: ModelMessage[] }
 }
 
 // --- Tests ---
@@ -44,34 +38,14 @@ describe('pollScheduledOnce', () => {
   let sentMessages: Array<{ userId: string; text: string }>
   let chat: ChatProvider
   let provider: TaskProvider
-  let streamTextImpl = (): StreamTextResult => ({
-    text: Promise.resolve('Done.'),
-    toolCalls: Promise.resolve([]),
-    toolResults: Promise.resolve([]),
-    response: Promise.resolve({ messages: [] }),
-    steps: Promise.resolve([]),
-    usage: Promise.resolve({}),
-    finishReason: Promise.resolve('stop'),
-    warnings: Promise.resolve(undefined),
-    request: Promise.resolve({}),
-    providerMetadata: Promise.resolve(undefined),
-  })
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.resolve('Task completed.'),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('stop'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
-      streamText: (..._args: unknown[]): StreamTextResult => streamTextImpl(),
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
       stepCountIs: (_n: number): unknown => undefined,
     }))
     void mock.module('@ai-sdk/openai-compatible', () => ({
@@ -135,20 +109,14 @@ describe('pollScheduledOnce', () => {
 
   test('merges multiple due prompts for the same user into one LLM call', async () => {
     let callCount = 0
-    streamTextImpl = (): StreamTextResult => {
+    generateTextImpl = (): Promise<GenerateTextResult> => {
       callCount++
-      return {
-        text: Promise.resolve('All tasks handled.'),
-        toolCalls: Promise.resolve([]),
-        toolResults: Promise.resolve([]),
-        response: Promise.resolve({ messages: [] }),
-        steps: Promise.resolve([]),
-        usage: Promise.resolve({}),
-        finishReason: Promise.resolve('stop'),
-        warnings: Promise.resolve(undefined),
-        request: Promise.resolve({}),
-        providerMetadata: Promise.resolve(undefined),
-      }
+      return Promise.resolve({
+        text: 'All tasks handled.',
+        toolCalls: [],
+        toolResults: [],
+        response: { messages: [] },
+      })
     }
 
     const pastTime = new Date(Date.now() - 60_000).toISOString()
@@ -189,20 +157,9 @@ describe('pollScheduledOnce', () => {
 
   test('different users get separate LLM calls', async () => {
     let callCount = 0
-    streamTextImpl = (): StreamTextResult => {
+    generateTextImpl = (): Promise<GenerateTextResult> => {
       callCount++
-      return {
-        text: Promise.resolve('Done.'),
-        toolCalls: Promise.resolve([]),
-        toolResults: Promise.resolve([]),
-        response: Promise.resolve({ messages: [] }),
-        steps: Promise.resolve([]),
-        usage: Promise.resolve({}),
-        finishReason: Promise.resolve('stop'),
-        warnings: Promise.resolve(undefined),
-        request: Promise.resolve({}),
-        providerMetadata: Promise.resolve(undefined),
-      }
+      return Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
     }
 
     const otherUser = 'poller-user-2'
@@ -238,34 +195,14 @@ describe('pollScheduledOnce', () => {
 describe('pollScheduledOnce — error handling', () => {
   let sentMessages: Array<{ userId: string; text: string }>
   let chat: ChatProvider
-  let streamTextImpl = (): StreamTextResult => ({
-    text: Promise.resolve('Done.'),
-    toolCalls: Promise.resolve([]),
-    toolResults: Promise.resolve([]),
-    response: Promise.resolve({ messages: [] }),
-    steps: Promise.resolve([]),
-    usage: Promise.resolve({}),
-    finishReason: Promise.resolve('stop'),
-    warnings: Promise.resolve(undefined),
-    request: Promise.resolve({}),
-    providerMetadata: Promise.resolve(undefined),
-  })
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.resolve('Task completed.'),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('stop'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Task completed.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
-      streamText: (..._args: unknown[]): StreamTextResult => streamTextImpl(),
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
       stepCountIs: (_n: number): unknown => undefined,
     }))
     void mock.module('@ai-sdk/openai-compatible', () => ({
@@ -279,19 +216,7 @@ describe('pollScheduledOnce — error handling', () => {
   })
 
   test('notifies user when LLM throws', async () => {
-    const error = new Error('LLM down')
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.reject(error),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('error'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
     const userId = 'fail-user'
     setupUserConfig(userId)
     const pastTime = new Date(Date.now() - 60_000).toISOString()
@@ -303,19 +228,7 @@ describe('pollScheduledOnce — error handling', () => {
   })
 
   test('completes one-shot prompt even when LLM fails', async () => {
-    const error = new Error('LLM down')
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.reject(error),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('error'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
     const userId = 'fail-complete-user'
     setupUserConfig(userId)
     const pastTime = new Date(Date.now() - 60_000).toISOString()
@@ -329,19 +242,7 @@ describe('pollScheduledOnce — error handling', () => {
   })
 
   test('advances recurring prompt even when LLM fails', async () => {
-    const error = new Error('LLM down')
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.reject(error),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('error'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> => Promise.reject(new Error('LLM down'))
     const userId = 'fail-recurring-user'
     setupUserConfig(userId)
     const pastTime = new Date(Date.now() - 60_000).toISOString()
@@ -362,34 +263,14 @@ describe('pollScheduledOnce — error handling', () => {
 describe('pollAlertsOnce', () => {
   let sentMessages: Array<{ userId: string; text: string }>
   let chat: ChatProvider
-  let streamTextImpl = (): StreamTextResult => ({
-    text: Promise.resolve('Done.'),
-    toolCalls: Promise.resolve([]),
-    toolResults: Promise.resolve([]),
-    response: Promise.resolve({ messages: [] }),
-    steps: Promise.resolve([]),
-    usage: Promise.resolve({}),
-    finishReason: Promise.resolve('stop'),
-    warnings: Promise.resolve(undefined),
-    request: Promise.resolve({}),
-    providerMetadata: Promise.resolve(undefined),
-  })
+  let generateTextImpl = (): Promise<GenerateTextResult> =>
+    Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
 
   beforeEach(async () => {
-    streamTextImpl = (): StreamTextResult => ({
-      text: Promise.resolve('Alert triggered.'),
-      toolCalls: Promise.resolve([]),
-      toolResults: Promise.resolve([]),
-      response: Promise.resolve({ messages: [] }),
-      steps: Promise.resolve([]),
-      usage: Promise.resolve({}),
-      finishReason: Promise.resolve('stop'),
-      warnings: Promise.resolve(undefined),
-      request: Promise.resolve({}),
-      providerMetadata: Promise.resolve(undefined),
-    })
+    generateTextImpl = (): Promise<GenerateTextResult> =>
+      Promise.resolve({ text: 'Alert triggered.', toolCalls: [], toolResults: [], response: { messages: [] } })
     void mock.module('ai', () => ({
-      streamText: (..._args: unknown[]): StreamTextResult => streamTextImpl(),
+      generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
       tool: (opts: unknown): unknown => opts,
       stepCountIs: (_n: number): unknown => undefined,
     }))
