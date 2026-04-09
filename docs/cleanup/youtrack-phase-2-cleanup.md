@@ -174,20 +174,20 @@ The `ignoreIssues` entry was added temporarily during Phase 2 to accommodate tes
 
 ### Lint Rule Cleanup
 
-- [ ] `.oxlintrc.json` updated (2 rules removed from lines 49-50)
-- [ ] Run `bun lint` to identify violations
-- [ ] All `no-unsafe-type-assertion` violations fixed in tests
-- [ ] All `no-unsafe-argument` violations fixed in tests
-- [ ] Run `bun test` to verify tests still pass
+- [x] `.oxlintrc.json` updated (2 rules removed from lines 49-50)
+- [x] Run `bun lint` to identify violations
+- [x] All `no-unsafe-type-assertion` violations fixed in tests
+- [x] All `no-unsafe-argument` violations fixed in tests
+- [x] Run `bun test` to verify tests still pass
 
 ### Knip Cleanup
 
-- [ ] `knip.jsonc` updated (`ignoreIssues` removed, lines 39-41)
-- [ ] Decide on resolution option (A, B, or C) for `clearBundleCache`
-- [ ] Implement chosen resolution
-- [ ] Run `bun knip` to verify no unused export errors
+- [x] `knip.jsonc` updated (`ignoreIssues` removed, lines 39-41)
+- [x] Decide on resolution option (A, B, or C) for `clearBundleCache`
+- [x] Implement chosen resolution
+- [x] Run `bun knip` to verify no unused export errors
 
 ### Final Verification
 
-- [ ] All CI checks pass
-- [ ] PR created with `[cleanup]` prefix in title
+- [x] All CI checks pass
+- [x] PR created with `[cleanup]` prefix in title
