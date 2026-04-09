@@ -215,7 +215,10 @@ describe('resolveYouTrackUserRingId', () => {
     const error = await resolveYouTrackUserRingId(config, 'missing-user').catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(YouTrackClassifiedError)
-    const classifiedError = error as YouTrackClassifiedError
+    const classifiedError = error instanceof YouTrackClassifiedError ? error : null
+    if (classifiedError === null) {
+      throw new Error('Expected YouTrackClassifiedError')
+    }
     expect(classifiedError.appError).toEqual({
       type: 'provider',
       code: 'not-found',
