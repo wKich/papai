@@ -183,5 +183,15 @@ describe('Issue schemas', () => {
       expect(result.project?.name).toBe('Project')
       expect(result.customFields).toHaveLength(1)
     })
+
+    test('resolved as null accepts (nullable for unresolved issues)', () => {
+      const result = IssueListSchema.parse({ id: '1', summary: 'x', resolved: null })
+      expect(result.resolved).toBeNull()
+    })
+
+    test('resolved as number accepts', () => {
+      const result = IssueListSchema.parse({ id: '1', summary: 'x', resolved: 1700000000000 })
+      expect(result.resolved).toBe(1700000000000)
+    })
   })
 })

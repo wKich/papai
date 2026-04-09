@@ -67,7 +67,7 @@ export const IssueListSchema = z.object({
   idReadable: z.string().optional(),
   numberInProject: z.number().optional(),
   summary: z.string(),
-  resolved: TimestampSchema.optional(),
+  resolved: TimestampSchema.nullable().optional(),
   project: BaseEntitySchema.extend({
     name: z.string().optional(),
     shortName: z.string().optional(),
