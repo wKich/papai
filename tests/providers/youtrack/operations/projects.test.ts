@@ -334,7 +334,11 @@ describe('createYouTrackProject', () => {
     await createYouTrackProject(config, { name: 'My Cool Project!' })
 
     const body = getLastFetchBody()
-    const shortName = body['shortName'] as string
+    const shortNameValue = body['shortName']
+    if (typeof shortNameValue !== 'string') {
+      throw new Error('Expected shortName to be a string')
+    }
+    const shortName = shortNameValue
     // Should start with cleaned name, be uppercase alphanumeric, max 10 chars
     expect(shortName).toMatch(/^[A-Z0-9]+$/)
     expect(shortName.length).toBeLessThanOrEqual(10)

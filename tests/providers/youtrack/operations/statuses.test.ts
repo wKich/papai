@@ -572,16 +572,30 @@ describe('reorderYouTrackStatuses', () => {
     expect(call1).not.toBeNull()
     const body1 = call1![1].body
     if (body1 !== undefined && body1 !== null && typeof body1 === 'string') {
-      const parsed1 = JSON.parse(body1) as { ordinal?: number }
-      expect(parsed1.ordinal).toBe(5)
+      const parsed1 = JSON.parse(body1) as unknown
+      if (
+        parsed1 !== null &&
+        typeof parsed1 === 'object' &&
+        'ordinal' in parsed1 &&
+        typeof parsed1.ordinal === 'number'
+      ) {
+        expect(parsed1.ordinal).toBe(5)
+      }
     }
 
     const call2 = getFetchCall(3)
     expect(call2).not.toBeNull()
     const body2 = call2![1].body
     if (body2 !== undefined && body2 !== null && typeof body2 === 'string') {
-      const parsed2 = JSON.parse(body2) as { ordinal?: number }
-      expect(parsed2.ordinal).toBe(10)
+      const parsed2 = JSON.parse(body2) as unknown
+      if (
+        parsed2 !== null &&
+        typeof parsed2 === 'object' &&
+        'ordinal' in parsed2 &&
+        typeof parsed2.ordinal === 'number'
+      ) {
+        expect(parsed2.ordinal).toBe(10)
+      }
     }
   })
 
