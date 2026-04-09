@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { clearBundleCache } from '../../../../src/providers/youtrack/bundle-cache.js'
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
@@ -13,6 +12,7 @@ import {
   updateYouTrackStatus,
 } from '../../../../src/providers/youtrack/operations/statuses.js'
 import { mockLogger, restoreFetch, setMockFetch } from '../../../utils/test-helpers.js'
+import { clearBundleCache } from '../test-helpers.js'
 
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
 
@@ -56,6 +56,14 @@ const FetchCallSchema = z.tuple([
 ])
 
 const BodySchema = z.looseObject({})
+
+const getFetchCall = (index: number): [string, RequestInit] | null => {
+  const call = fetchMock.mock.calls[index]
+  if (!Array.isArray(call) || call.length < 2) return null
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return null
+  return [parsed.data[0], parsed.data[1]]
+}
 
 const getLastFetchUrl = (): URL => {
   const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[fetchMock.mock.calls.length - 1])
@@ -157,13 +165,19 @@ describe('listYouTrackStatuses', () => {
     const calls = fetchMock.mock.calls
     expect(calls.length).toBe(3)
 
-    const firstUrl = new URL((calls[0] as [string, RequestInit])[0])
+    const firstCall = getFetchCall(0)
+    expect(firstCall).not.toBeNull()
+    const firstUrl = new URL(firstCall![0])
     expect(firstUrl.pathname).toBe('/api/admin/projects/proj-1/customFields')
 
-    const secondUrl = new URL((calls[1] as [string, RequestInit])[0])
+    const secondCall = getFetchCall(1)
+    expect(secondCall).not.toBeNull()
+    const secondUrl = new URL(secondCall![0])
     expect(secondUrl.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123')
 
-    const thirdUrl = new URL((calls[2] as [string, RequestInit])[0])
+    const thirdCall = getFetchCall(2)
+    expect(thirdCall).not.toBeNull()
+    const thirdUrl = new URL(thirdCall![0])
     expect(thirdUrl.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123/values')
   })
 
@@ -286,7 +300,9 @@ describe('createYouTrackStatus', () => {
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'New' }, false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    expect((result as { message: string }).message).toContain('shared')
+    const resultMessage =
+      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
+    expect(String(resultMessage)).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -400,7 +416,9 @@ describe('updateYouTrackStatus', () => {
     const result = await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'X' }, false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    expect((result as { message: string }).message).toContain('shared')
+    const resultMessage =
+      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
+    expect(String(resultMessage)).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -470,7 +488,9 @@ describe('deleteYouTrackStatus', () => {
     const result = await deleteYouTrackStatus(config, 'proj-1', '57-1', false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    expect((result as { message: string }).message).toContain('shared')
+    const resultMessage =
+      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
+    expect(String(resultMessage)).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -523,8 +543,13 @@ describe('reorderYouTrackStatuses', () => {
     const calls = fetchMock.mock.calls
     expect(calls.length).toBe(4)
 
-    const thirdCallUrl = new URL((calls[2] as [string, RequestInit])[0])
-    const fourthCallUrl = new URL((calls[3] as [string, RequestInit])[0])
+    const thirdCall = getFetchCall(2)
+    expect(thirdCall).not.toBeNull()
+    const thirdCallUrl = new URL(thirdCall![0])
+
+    const fourthCall = getFetchCall(3)
+    expect(fourthCall).not.toBeNull()
+    const fourthCallUrl = new URL(fourthCall![0])
 
     expect(thirdCallUrl.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123/values/57-1')
     expect(fourthCallUrl.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123/values/57-2')
@@ -543,12 +568,21 @@ describe('reorderYouTrackStatuses', () => {
       { id: '57-2', position: 10 },
     ])
 
-    const calls = fetchMock.mock.calls
-    const body1 = JSON.parse((calls[2] as [string, { body?: string }])[1].body ?? '{}') as { ordinal: number }
-    const body2 = JSON.parse((calls[3] as [string, { body?: string }])[1].body ?? '{}') as { ordinal: number }
+    const call1 = getFetchCall(2)
+    expect(call1).not.toBeNull()
+    const body1 = call1![1].body
+    if (body1 !== undefined && body1 !== null && typeof body1 === 'string') {
+      const parsed1 = JSON.parse(body1) as { ordinal?: number }
+      expect(parsed1.ordinal).toBe(5)
+    }
 
-    expect(body1.ordinal).toBe(5)
-    expect(body2.ordinal).toBe(10)
+    const call2 = getFetchCall(3)
+    expect(call2).not.toBeNull()
+    const body2 = call2![1].body
+    if (body2 !== undefined && body2 !== null && typeof body2 === 'string') {
+      const parsed2 = JSON.parse(body2) as { ordinal?: number }
+      expect(parsed2.ordinal).toBe(10)
+    }
   })
 
   test('requires confirmation for shared bundles', async () => {
@@ -568,7 +602,9 @@ describe('reorderYouTrackStatuses', () => {
     )
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    expect((result as { message: string }).message).toContain('shared')
+    const resultMessage =
+      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
+    expect(String(resultMessage)).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
