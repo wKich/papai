@@ -15,7 +15,7 @@ export function buildSessionCard(
     html += `<div class="session-detail">config: ${s.configKeys.length} keys</div>`
   }
   if (s.workspaceId !== null && s.workspaceId !== undefined) {
-    html += `<div class="session-detail">workspace: ${escapeHtml(String(s.workspaceId))}</div>`
+    html += `<div class="session-detail">workspace: ${escapeHtml(s.workspaceId)}</div>`
   }
   if (wiz !== undefined) {
     html += `<div class="wizard-badge">\uD83E\uDDD9 wizard step ${wiz.currentStep}/${wiz.totalSteps}</div>`

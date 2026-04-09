@@ -70,6 +70,8 @@ export const semanticScheduleToCron = (schedule: SemanticSchedule): string => {
       const dom = schedule.day_of_month ?? 1
       return `${m} ${h} ${dom} * *`
     }
+    default:
+      return `${m} ${h} * * *`
   }
 }
 

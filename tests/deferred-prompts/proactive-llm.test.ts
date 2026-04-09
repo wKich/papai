@@ -147,9 +147,7 @@ describe('dispatchExecution', () => {
       await dispatchExecution(USER_ID, 'scheduled', 'drink water', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
       expect(
-        messages.some(
-          (m) => typeof m.content === 'string' && String(m.content).includes('[CONTEXT FROM CREATION TIME]'),
-        ),
+        messages.some((m) => typeof m.content === 'string' && m.content.includes('[CONTEXT FROM CREATION TIME]')),
       ).toBe(false)
     })
   })

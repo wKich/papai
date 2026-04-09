@@ -97,6 +97,8 @@ export const getProviderMessage = (error: ProviderError): string => {
       return `The task tracker returned an unexpected response. Please try again.`
     case 'unknown':
       return `Task tracker API error occurred. Please try again later.`
+    default:
+      return `Task tracker API error occurred. Please try again later.`
   }
 }
 

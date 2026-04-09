@@ -147,10 +147,9 @@ const preprocessTables = (markdown: string): string =>
   lexer(markdown)
     .map((token) => {
       if (isTableToken(token)) {
-        const trailingNewlines = token.raw.match(/\n+$/)?.[0] ?? '\n'
         const headerLine = token.header.map((c) => c.text).join(' | ')
         const dataLines = token.rows.map((row) => row.map((c) => c.text).join(' | '))
-        return [headerLine, ...dataLines].join('\n') + trailingNewlines
+        return [headerLine, ...dataLines].join('\n')
       }
       return token.raw
     })

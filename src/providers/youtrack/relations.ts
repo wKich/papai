@@ -28,6 +28,8 @@ function mapRelationTypeToLinkType(type: RelationType): string {
       return 'subtask'
     case 'related':
       return 'relates'
+    default:
+      return 'relates'
   }
 }
 
@@ -41,6 +43,8 @@ function mapRelationTypeToDirection(type: RelationType): 'OUTWARD' | 'INWARD' {
     case 'duplicate_of':
     case 'related':
     case 'child':
+      return 'INWARD'
+    default:
       return 'INWARD'
   }
 }
