@@ -157,7 +157,7 @@ describe('kaneoFetch', () => {
     let capturedMethod = ''
     let capturedHeaders: Record<string, string> = {}
     setMockFetch((_url, options) => {
-      capturedMethod = String(options.method ?? '')
+      capturedMethod = options.method ?? ''
       capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
       return Promise.resolve(new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), { status: 200 }))
     })
@@ -173,7 +173,7 @@ describe('kaneoFetch', () => {
     let capturedMethod = ''
     let capturedHeaders: Record<string, string> = {}
     setMockFetch((_url, options) => {
-      capturedMethod = String(options.method ?? '')
+      capturedMethod = options.method ?? ''
       capturedHeaders = Object.fromEntries(Object.entries(options.headers ?? {}))
       return Promise.resolve(new Response(JSON.stringify(createMockTask({ id: '1', number: 1 })), { status: 200 }))
     })

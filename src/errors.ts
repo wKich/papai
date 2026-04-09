@@ -44,6 +44,8 @@ const getLlmMessage = (error: LlmError): string => {
       return `AI service request timed out. Please try again.`
     case 'token-limit':
       return `Message is too long. Please shorten your request and try again.`
+    default:
+      return `An AI service error occurred. Please try again later.`
   }
 }
 
@@ -53,6 +55,8 @@ const getValidationMessage = (error: ValidationError): string => {
       return `Invalid ${error.field}: ${error.reason}`
     case 'missing-required':
       return `Missing required field: ${error.field}`
+    default:
+      return `Invalid input provided.`
   }
 }
 
@@ -63,6 +67,8 @@ const getSystemMessage = (error: SystemError): string => {
     case 'network-error':
       return `Network error: ${error.message}. Please check your connection and try again.`
     case 'unexpected':
+      return `An unexpected error occurred. Please try again later.`
+    default:
       return `An unexpected error occurred. Please try again later.`
   }
 }
@@ -77,5 +83,7 @@ export const getUserMessage = (error: AppError): string => {
       return getValidationMessage(error)
     case 'system':
       return getSystemMessage(error)
+    default:
+      return `An unexpected error occurred. Please try again later.`
   }
 }

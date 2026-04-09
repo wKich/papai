@@ -41,7 +41,7 @@ export function getSessionModalElements(): SessionModalElements {
 
 function renderBasicInfo(userId: string, session: SessionDetail): string {
   const hasTools = session.hasTools !== undefined && session.hasTools
-  const workspaceValue = session.workspaceId === null ? 'none' : escapeHtml(String(session.workspaceId))
+  const workspaceValue = session.workspaceId === null ? 'none' : escapeHtml(session.workspaceId)
 
   return `<div class="session-detail-section">
     <h4>Basic Info</h4>

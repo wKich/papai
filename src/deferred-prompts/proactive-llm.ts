@@ -238,5 +238,7 @@ export function dispatchExecution(
       return invokeWithContext(userId, type, prompt, metadata, deps)
     case 'full':
       return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
+    default:
+      return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
   }
 }
