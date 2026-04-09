@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
-import { clearBundleCache } from '../../../src/providers/youtrack/bundle-cache.js'
 import { YouTrackApiError } from '../../../src/providers/youtrack/client.js'
 import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
 import { mockLogger, restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+import { clearBundleCache } from './test-helpers.js'
 
 // Store reference to current fetch mock for call inspection
 let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>> | undefined
