@@ -25,9 +25,10 @@ describe('User schemas', () => {
       expect(() => UserSchema.parse(invalid)).toThrow()
     })
 
-    test('missing fullName rejects', () => {
-      const { fullName: _, ...invalid } = validUser
-      expect(() => UserSchema.parse(invalid)).toThrow()
+    test('missing fullName accepts (optional for service accounts)', () => {
+      const { fullName: _, ...withoutFullName } = validUser
+      const result = UserSchema.parse(withoutFullName)
+      expect(result.fullName).toBeUndefined()
     })
 
     test('missing id rejects', () => {

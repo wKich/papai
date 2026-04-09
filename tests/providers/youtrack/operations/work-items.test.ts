@@ -151,7 +151,9 @@ describe('createYouTrackWorkItem', () => {
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '90m' })
     const body = getLastFetchBody()
     const duration = body['duration']
-    expect(typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined).toBe(90)
+    expect(
+      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
+    ).toBe(90)
   })
 
   test('parses "1.5h" duration in request', async () => {
@@ -159,7 +161,9 @@ describe('createYouTrackWorkItem', () => {
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1.5h' })
     const body = getLastFetchBody()
     const duration = body['duration']
-    expect(typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined).toBe(90)
+    expect(
+      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
+    ).toBe(90)
   })
 
   test('includes description in request body', async () => {
@@ -274,7 +278,9 @@ describe('updateYouTrackWorkItem', () => {
     await updateYouTrackWorkItem(config, 'PROJ-1', '8-1', { duration: '2h 30m' })
     const body = getLastFetchBody()
     const duration = body['duration']
-    expect(typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined).toBe(150)
+    expect(
+      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
+    ).toBe(150)
   })
 
   test('calls correct endpoint with POST', async () => {

@@ -12,7 +12,7 @@ export const IssueSchema = BaseEntitySchema.extend({
   idReadable: z.string(),
   numberInProject: z.number().optional(),
   summary: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   project: BaseEntitySchema.extend({
     name: z.string().optional(),
     shortName: z.string().optional(),
@@ -21,7 +21,7 @@ export const IssueSchema = BaseEntitySchema.extend({
   updater: z.lazy(() => UserSchema).optional(),
   created: TimestampSchema,
   updated: TimestampSchema,
-  resolved: TimestampSchema.optional(),
+  resolved: TimestampSchema.nullable().optional(),
   customFields: z.array(CustomFieldValueSchema),
   tags: z.array(z.lazy(() => TagSchema)).optional(),
   links: z.array(IssueLinkSchema).optional(),
@@ -53,7 +53,7 @@ export const IssueSchema = BaseEntitySchema.extend({
           id: z.string(),
           idReadable: z.string().optional(),
           summary: z.string(),
-          resolved: TimestampSchema.optional(),
+          resolved: TimestampSchema.nullable().optional(),
         }),
       ),
     })

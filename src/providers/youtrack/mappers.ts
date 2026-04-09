@@ -49,8 +49,8 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
   return 'related'
 }
 
-const toIsoOrUndefined = (timestamp: number | undefined): string | undefined =>
-  timestamp === undefined ? undefined : new Date(timestamp).toISOString()
+const toIsoOrUndefined = (timestamp: number | null | undefined): string | undefined =>
+  timestamp === undefined || timestamp === null ? undefined : new Date(timestamp).toISOString()
 
 export const mapUserRef = (
   user: { id: string; login?: string; fullName?: string; name?: string } | undefined,
@@ -75,7 +75,9 @@ const mapParent = (
       }
 
 const mapSubtasks = (
-  subtasks: { issues: Array<{ id: string; idReadable?: string; summary: string; resolved?: number }> } | undefined,
+  subtasks:
+    | { issues: Array<{ id: string; idReadable?: string; summary: string; resolved?: number | null | undefined }> }
+    | undefined,
 ): Array<{ id: string; idReadable?: string; title: string; status?: string }> | undefined =>
   subtasks?.issues.map((s) => ({
     id: s.id,

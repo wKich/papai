@@ -1,5 +1,5 @@
+import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
-import { providerError } from '../../../providers/errors.js'
 import type { CreateWorkItemParams, UpdateWorkItemParams, WorkItem } from '../../types.js'
 import { YouTrackClassifiedError, classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'

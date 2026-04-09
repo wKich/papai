@@ -100,8 +100,14 @@ describe('Issue schemas', () => {
       expect(() => IssueSchema.parse({ ...validIssue, commentsCount: 'five' })).toThrow()
     })
 
-    test('resolved as null rejects (optional, not nullable)', () => {
-      expect(() => IssueSchema.parse({ ...validIssue, resolved: null })).toThrow()
+    test('resolved as null accepts (nullable, results in null)', () => {
+      const result = IssueSchema.parse({ ...validIssue, resolved: null })
+      expect(result.resolved).toBeNull()
+    })
+
+    test('description as null accepts (nullable, results in null)', () => {
+      const result = IssueSchema.parse({ ...validIssue, description: null })
+      expect(result.description).toBeNull()
     })
 
     test('minimal valid issue', () => {

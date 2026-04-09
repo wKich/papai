@@ -124,7 +124,7 @@ async function invokeLightweight(
   const config = getLlmConfig(userId)
   if (typeof config === 'string') return config
 
-  const smallModel = getConfig(userId, 'small_model')
+  const smallModel = getConfig(userId, 'main_model')
   const modelId = smallModel ?? config.mainModel
   const model = deps.buildModel(config, modelId)
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]

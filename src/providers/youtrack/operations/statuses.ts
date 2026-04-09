@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
+import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
 import type { Column } from '../../types.js'
 import { resolveStateBundle } from '../bundle-cache.js'
-import { classifyYouTrackError } from '../classify-error.js'
+import { YouTrackClassifiedError, classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { StateValueSchema } from '../schemas/bundle.js'
@@ -65,7 +66,8 @@ export async function createYouTrackStatus(
   try {
     const bundleInfo = await resolveStateBundle(config, projectId)
     if (bundleInfo === null) {
-      throw new Error('State bundle not found for project')
+      const reason = 'State bundle not found for project'
+      throw new YouTrackClassifiedError(reason, providerError.notFound('State bundle', projectId))
     }
 
     if (bundleInfo.isShared && confirm !== true) {
@@ -229,7 +231,10 @@ export async function reorderYouTrackStatuses(
   log.debug({ projectId, count: statuses.length }, 'reorderYouTrackStatuses')
   try {
     const bundleInfo = await resolveStateBundle(config, projectId)
-    if (bundleInfo === null) throw new Error('State bundle not found for project')
+    if (bundleInfo === null) {
+      const reason = 'State bundle not found for project'
+      throw new YouTrackClassifiedError(reason, providerError.notFound('State bundle', projectId))
+    }
     if (bundleInfo.isShared && confirm !== true) {
       return {
         status: 'confirmation_required',

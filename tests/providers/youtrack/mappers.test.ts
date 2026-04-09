@@ -132,6 +132,23 @@ describe('mapIssueToTask', () => {
     expect(result.subtasks).toBeUndefined()
   })
 
+  test('handles null resolved timestamp', () => {
+    const issue = {
+      id: '123',
+      idReadable: 'PROJ-1',
+      summary: 'Test',
+      created: 1704067200000,
+      updated: 1704153600000,
+      project: { id: 'proj-1' },
+      customFields: [],
+      resolved: null,
+    } satisfies z.infer<typeof import('../../../src/providers/youtrack/schemas/issue.js').IssueSchema>
+
+    const result = mapIssueToTask(issue, 'https://example.com')
+
+    expect(result.resolved).toBeUndefined()
+  })
+
   test('extracts attachments and visibility', () => {
     const issue = {
       id: '123',

@@ -5,7 +5,7 @@ import { BaseEntitySchema, TimestampSchema } from './common.js'
 
 export const UserSchema = BaseEntitySchema.extend({
   login: z.string(),
-  fullName: z.string(),
+  fullName: z.string().optional(),
   email: z.string().optional(),
   avatarUrl: z.string().optional(),
   created: TimestampSchema.optional(),

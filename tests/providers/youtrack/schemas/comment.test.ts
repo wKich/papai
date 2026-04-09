@@ -104,12 +104,12 @@ describe('Comment schemas', () => {
     expect(result.text).toBe('')
   })
 
-  test('rejects invalid reaction payload', () => {
-    expect(() =>
-      CommentSchema.parse({
-        ...validComment,
-        reactions: [{ id: 'reaction-1', reaction: 'thumbs_up', author: { id: 'user-1', login: 'john.doe' } }],
-      }),
-    ).toThrow()
+  test('accepts reaction without fullName (optional)', () => {
+    const result = CommentSchema.parse({
+      ...validComment,
+      reactions: [{ id: 'reaction-1', reaction: 'thumbs_up', author: { id: 'user-1', login: 'john.doe' } }],
+    })
+    expect(result.reactions).toHaveLength(1)
+    expect(result.reactions?.[0]?.author.fullName).toBeUndefined()
   })
 })

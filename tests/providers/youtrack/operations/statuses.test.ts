@@ -340,6 +340,28 @@ describe('createYouTrackStatus', () => {
       YouTrackClassifiedError,
     )
   })
+
+  test('throws not-found error when state bundle is missing', async () => {
+    // First call returns empty custom fields (no State field)
+    installFetchMock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    try {
+      await createYouTrackStatus(config, 'proj-1', { name: 'Test' })
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (error instanceof YouTrackClassifiedError) {
+        expect(error.appError.code).toBe('not-found')
+      }
+    }
+  })
 })
 
 describe('updateYouTrackStatus', () => {
