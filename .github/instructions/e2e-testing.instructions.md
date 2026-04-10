@@ -40,3 +40,10 @@ describe('Feature', () => {
 - No `beforeAll`/`afterAll` needed — global setup handles Docker lifecycle
 - Do NOT mock anything — these tests hit real APIs
 - E2E tests are excluded from `bun test` via `bunfig.toml` — run with `bun test:e2e`
+
+## Planning New E2E Coverage
+
+- Before proposing or writing a new E2E plan, read `docs/superpowers/e2e-planning-workflow.md`.
+- Start new plan files from `docs/superpowers/templates/e2e-test-plan-template.md`.
+- Treat the existing Docker-backed Kaneo suite as **Tier 1: Provider-Real E2E**.
+- Prefer the smallest realism tier that proves the boundary; do not inflate Tier 2-4 coverage when Tier 1 or cheaper tests are sufficient.

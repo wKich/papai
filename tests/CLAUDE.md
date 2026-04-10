@@ -183,3 +183,7 @@ describe('Feature', () => {
 - No `beforeAll`/`afterAll` needed — Docker lifecycle is global
 - Do NOT mock anything in E2E tests
 - Run with `bun test:e2e` (excluded from `bun test`)
+- Before writing a new E2E plan, read `docs/superpowers/e2e-planning-workflow.md`.
+- Start new E2E plan docs from `docs/superpowers/templates/e2e-test-plan-template.md`.
+- The current Docker-backed Kaneo harness maps to **Tier 1: Provider-Real E2E**.
+- Escalate to Tier 2-4 only when the scenario depends on runtime, platform, or operational boundaries that Tier 1 cannot prove.
