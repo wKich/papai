@@ -1,6 +1,16 @@
 /** Methods by which an identity mapping can be established */
 export type MatchMethod = 'auto' | 'manual_nl' | 'unmatched'
 
+const MATCH_METHOD_VALUES: readonly string[] = ['auto', 'manual_nl', 'unmatched']
+
+/**
+ * Type guard to check if a value is a valid MatchMethod.
+ */
+export function isMatchMethod(value: string | null | undefined): value is MatchMethod {
+  if (value === null || value === undefined) return false
+  return MATCH_METHOD_VALUES.includes(value)
+}
+
 /** Stored identity mapping linking chat user to task tracker user */
 export interface IdentityMapping {
   contextId: string

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import type { IdentityMapping, UserIdentity } from '../../src/identity/types.js'
+import { isMatchMethod } from '../../src/identity/types.js'
 
 describe('identity types', () => {
   it('should define IdentityMapping interface', () => {
@@ -32,5 +33,24 @@ describe('identity types', () => {
     expect(methods).toContain('auto')
     expect(methods).toContain('manual_nl')
     expect(methods).toContain('unmatched')
+  })
+
+  describe('isMatchMethod', () => {
+    it('should return true for valid match methods', () => {
+      expect(isMatchMethod('auto')).toBe(true)
+      expect(isMatchMethod('manual_nl')).toBe(true)
+      expect(isMatchMethod('unmatched')).toBe(true)
+    })
+
+    it('should return false for invalid match methods', () => {
+      expect(isMatchMethod('invalid')).toBe(false)
+      expect(isMatchMethod('')).toBe(false)
+      expect(isMatchMethod('AUTO')).toBe(false)
+    })
+
+    it('should return false for null and undefined', () => {
+      expect(isMatchMethod(null)).toBe(false)
+      expect(isMatchMethod(undefined)).toBe(false)
+    })
   })
 })
