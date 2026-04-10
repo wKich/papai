@@ -3,7 +3,6 @@ import { Bot, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
-import { routeInteraction } from '../interaction-router.js'
 import type {
   AuthorizationResult,
   ChatProvider,
@@ -291,10 +290,10 @@ export class TelegramChatProvider implements ChatProvider {
     if (interaction === null) return
     await ctx.answerCallbackQuery()
     const reply = this.buildReplyFn(ctx)
-    if (this.interactionHandler !== undefined) {
-      await this.interactionHandler(interaction, reply)
+    if (this.interactionHandler === undefined) {
+      log.warn({ callbackData: ctx.callbackQuery?.data }, 'No interaction handler registered')
       return
     }
-    await routeInteraction(interaction, reply)
+    await this.interactionHandler(interaction, reply)
   }
 }
