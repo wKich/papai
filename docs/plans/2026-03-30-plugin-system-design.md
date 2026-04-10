@@ -71,6 +71,8 @@ type PluginManifest = {
     | 'taskProvider' // create/query tasks
     | 'chat' // send proactive messages to users
   )[]
+  requiredTaskCapabilities?: TaskCapability[]
+  requiredChatCapabilities?: ChatCapability[]
 
   // Plugin entry point relative to plugin directory
   main?: string // default: "index.ts"
@@ -96,6 +98,7 @@ The manifest is validated with Zod at discovery time — malformed manifests are
 
 - `contributes` is **declarative**: the framework knows what a plugin offers before loading its code. This enables the admin to review what a plugin does before approving it.
 - `permissions` is an **allowlist**: the plugin only receives the services it declares. A plugin without `"chat"` permission cannot send proactive messages.
+- `permissions` and `required*Capabilities` are separate: permissions control framework access, while required capabilities describe which task/chat provider features must exist before the plugin can activate safely.
 - `configRequirements` integrates with the existing `/setup` wizard and `/config` display.
 
 ---
@@ -285,6 +288,8 @@ interface PluginChatService {
 
 Deliberately minimal — plugins can send messages but cannot register message handlers or intercept incoming messages.
 
+Ordinary plugins keep this minimal `PluginChatService` surface. Full provider-as-plugin contracts for chat or task providers are a later dedicated phase, not a responsibility of the initial plugin framework.
+
 ### TaskProvider Access
 
 Plugins receive the same `TaskProvider` interface that core tools use. However, the instance is **resolved per-user at tool execution time**, not at activation time. During `activate()`, `ctx.taskProvider` is not available — it only resolves when a plugin's tool is called by the LLM for a specific user.
@@ -339,6 +344,7 @@ type DiscoveredPlugin = {
 type PluginState =
   | 'discovered' // found on disk, not yet approved
   | 'approved' // admin approved, will be loaded on next startup
+  | 'incompatible' // approved, but current providers do not satisfy required capabilities
   | 'rejected' // admin explicitly rejected
   | 'active' // loaded and activate() succeeded
   | 'error' // activate() threw — logged, skipped
@@ -346,7 +352,7 @@ type PluginState =
 type RegisteredPlugin = {
   readonly manifest: PluginManifest
   readonly dir: string
-  readonly state: PluginState
+  state: PluginState
   readonly instance?: PluginInstance // present only when state = 'active'
   readonly error?: string // present only when state = 'error'
 }
@@ -365,8 +371,11 @@ type RegisteredPlugin = {
        ├── admin_state = 'rejected' → skip, do not load
        └── admin_state = 'approved' → proceed to load
               │
-4. Validate permissions against manifest
+4. Validate permissions and provider capability requirements against manifest
        │
+       ├── requirements unmet → state = 'incompatible', log reason, continue
+       └── requirements satisfied → proceed to load
+              │
 5. Dynamic import: import(path.join(dir, manifest.main ?? 'index.ts'))
        │
 6. Call factory: const instance = createPlugin()
@@ -420,6 +429,7 @@ Buttons use callback routing like the existing config editor:
 State indicators:
 
 - 🆕 `discovered` — new, awaiting admin review
+- ⏸️ `incompatible` — approved, but current provider capabilities do not satisfy the manifest requirements
 - ✅ `active` — approved and loaded
 - ❌ `rejected` — admin rejected
 - ⚠️ `error` — approved but activate() failed

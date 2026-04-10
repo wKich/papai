@@ -2,11 +2,24 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement the plugin framework described in `docs/plans/2026-03-30-plugin-system-design.md` — convention-based plugin discovery, scoped storage API, framework service injection, two-layer permissions, and LLM tool/prompt integration.
+**Goal:** Implement the plugin framework described in `docs/plans/2026-03-30-plugin-system-design.md` — convention-based plugin discovery, scoped storage API, framework service injection, two-layer permissions, provider capability compatibility, and LLM tool/prompt integration.
 
-**Architecture:** Plugins live in `plugins/<id>/` with a `plugin.json` manifest and a factory function entry point. The framework discovers, validates, loads, and activates plugins at startup. Each plugin receives a frozen `PluginContext` with scoped registration APIs (tools, prompts, scheduler, commands) and permission-gated framework services (store, taskProvider, chat). A `plugin_kv` table provides isolated key-value storage. Tools and prompt fragments are merged into the existing `makeTools()` and `buildSystemPrompt()` flows. Admin manages plugins via `/plugin` command with inline buttons; users opt-in via `/config`.
+**Architecture:** Plugins live in `plugins/<id>/` with a `plugin.json` manifest and a factory function entry point. The framework discovers, validates, loads, and activates plugins at startup. Each plugin receives a frozen `PluginContext` with scoped registration APIs (tools, prompts, scheduler, commands) and permission-gated framework services (store, taskProvider, chat). A `plugin_kv` table provides isolated key-value storage. Plugin tools are stored as provider/user-bound factories and are built inside `makeTools()` for the current user and task provider. Plugin manifests can also declare `requiredTaskCapabilities` and `requiredChatCapabilities`, allowing the loader to keep approved-but-incompatible plugins out of the active set. Admin manages plugins via `/plugin` command with inline buttons; users opt-in via `/config`.
 
 **Tech Stack:** Bun, TypeScript (strict), Zod v4, Drizzle ORM (SQLite), pino, Vercel AI SDK (`ai` package), existing scheduler utility (`src/utils/scheduler.ts`)
+
+---
+
+## Phase 0: Provider Capability Alignment
+
+Before plugin-runtime tasks begin, align the shared provider surface that plugin compatibility depends on:
+
+1. shared provider metadata (`TaskCapability`, `ChatCapability`, traits, startup helper)
+2. provider-agnostic interaction routing for chat callbacks
+3. capability-gated consumer refactors (`/config`, wizard, `/context`, `/group`)
+4. plugin compatibility checks using `requiredTaskCapabilities` / `requiredChatCapabilities`
+
+This phase is intentionally front-loaded so plugin activation can treat provider requirements as first-class compatibility rules instead of bolting them onto the loader later.
 
 ---
 
@@ -105,8 +118,8 @@ import { z } from 'zod'
 import type { ToolSet } from 'ai'
 import type { Logger } from 'pino'
 
-import type { CommandHandler } from '../chat/types.js'
-import type { TaskProvider } from '../providers/types.js'
+import type { ChatCapability, CommandHandler } from '../chat/types.js'
+import type { TaskCapability, TaskProvider } from '../providers/types.js'
 
 // ── Manifest Schema ──
 
@@ -153,7 +166,11 @@ export type PluginFactory = () => PluginInstance
 
 // ── Plugin State ──
 
-export type PluginState = 'discovered' | 'approved' | 'rejected' | 'active' | 'error'
+export type PluginState = 'discovered' | 'approved' | 'incompatible' | 'rejected' | 'active' | 'error'
+
+export interface RegisteredPluginTool {
+  build(args: { userId: string; taskProvider: TaskProvider; store: PluginStore }): ToolSet[string]
+}
 
 export type RegisteredPlugin = {
   readonly manifest: PluginManifest
@@ -161,7 +178,7 @@ export type RegisteredPlugin = {
   state: PluginState
   instance?: PluginInstance
   error?: string
-  readonly registeredTools: Map<string, ToolSet[string]>
+  readonly registeredTools: Map<string, RegisteredPluginTool>
   readonly registeredPrompts: Map<string, string | (() => string | Promise<string>)>
   readonly registeredJobs: string[]
   readonly registeredCommands: string[]
@@ -170,7 +187,7 @@ export type RegisteredPlugin = {
 // ── Plugin Context (injected into plugins) ──
 
 export interface PluginToolRegistry {
-  register(name: string, tool: ToolSet[string]): void
+  register(name: string, tool: RegisteredPluginTool): void
 }
 
 export interface PluginPromptRegistry {
@@ -217,6 +234,15 @@ export interface PluginContext {
   readonly chat: PluginChatService
 }
 ```
+
+Also extend `PluginManifest` and `pluginManifestSchema` in this task with:
+
+```typescript
+requiredTaskCapabilities?: TaskCapability[]
+requiredChatCapabilities?: ChatCapability[]
+```
+
+These fields are checked separately from framework `permissions` so a plugin can be approved yet remain in the `incompatible` state until the active task/chat providers satisfy its requirements.
 
 **Step 4: Run test to verify it passes**
 
@@ -1086,15 +1112,19 @@ describe('buildPluginContext', () => {
   test('tools.register adds to plugin registeredTools', () => {
     const plugin = makePlugin([])
     const ctx = buildPluginContext(plugin, {})
-    const fakeTool = { description: 'test', execute: async () => ({}) }
-    ctx.tools.register('my_tool', fakeTool as any)
+    const fakeTool = { build: () => ({ description: 'test', execute: async () => ({}) }) }
+    ctx.tools.register('my_tool', fakeTool)
     expect(plugin.registeredTools.has('my_tool')).toBe(true)
   })
 
   test('tools.register rejects undeclared tool name', () => {
     const plugin = makePlugin([])
     const ctx = buildPluginContext(plugin, {})
-    expect(() => ctx.tools.register('undeclared_tool', {} as any)).toThrow('not declared')
+    expect(() =>
+      ctx.tools.register('undeclared_tool', {
+        build: () => ({ description: 'test', execute: async () => ({}) }),
+      }),
+    ).toThrow('not declared')
   })
 
   test('prompts.register adds to plugin registeredPrompts', () => {
@@ -1178,11 +1208,11 @@ export function buildPluginContext(plugin: RegisteredPlugin, services: Framework
   const pluginLogger = logger.child({ plugin: pluginId })
 
   const tools: PluginToolRegistry = {
-    register(name, tool) {
+    register(name, toolFactory) {
       if (!plugin.manifest.contributes.tools?.includes(name)) {
         throw new Error(`Tool '${name}' not declared in plugin '${pluginId}' manifest contributes.tools`)
       }
-      plugin.registeredTools.set(name, tool)
+      plugin.registeredTools.set(name, toolFactory)
       pluginLogger.debug({ tool: name }, 'Tool registered')
     },
   }
@@ -1328,7 +1358,12 @@ describe('loadAndActivatePlugins', () => {
     const activateFn = mock(() => {})
     writePlugin(
       'good',
-      `export default () => ({ activate: ${activateFn.toString().replace('() => {}', '(ctx) => { ctx.tools.register("test_tool", { description: "t", execute: async () => ({}) }) }')} })`,
+      `export default () => ({ activate: ${activateFn
+        .toString()
+        .replace(
+          '() => {}',
+          '(ctx) => { ctx.tools.register("test_tool", { build: () => ({ description: "t", execute: async () => ({}) }) }) }',
+        )} })`,
     )
 
     // Since dynamic import of temp files is tricky, test the registry state transitions instead
@@ -1501,7 +1536,9 @@ describe('makeTools plugin integration', () => {
     mockActivePlugins = [
       {
         manifest: { id: 'finance' },
-        registeredTools: new Map([['record_expense', { description: 'Record expense', execute: async () => ({}) }]]),
+        registeredTools: new Map([
+          ['record_expense', { build: () => ({ description: 'Record expense', execute: async () => ({}) }) }],
+        ]),
       },
     ]
 
@@ -1514,7 +1551,9 @@ describe('makeTools plugin integration', () => {
     mockActivePlugins = [
       {
         manifest: { id: 'finance' },
-        registeredTools: new Map([['record_expense', { description: 'Record expense', execute: async () => ({}) }]]),
+        registeredTools: new Map([
+          ['record_expense', { build: () => ({ description: 'Record expense', execute: async () => ({}) }) }],
+        ]),
       },
     ]
 
@@ -1587,8 +1626,13 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
     const registry = getPluginRegistry()
     if (registry !== null) {
       for (const plugin of registry.getActivePluginsForUser(userId)) {
-        for (const [name, tool] of plugin.registeredTools) {
-          tools[`${plugin.manifest.id}__${name}`] = tool
+        const store = createPluginStore(plugin.manifest.id)
+        for (const [name, toolFactory] of plugin.registeredTools) {
+          tools[`${plugin.manifest.id}__${name}`] = toolFactory.build({
+            userId,
+            taskProvider: provider,
+            store,
+          })
         }
       }
     }
@@ -2150,7 +2194,9 @@ describe('Plugin full lifecycle', () => {
     const ctx = buildPluginContext(plugin, { store })
 
     // Register tool and prompt (simulating what activate() would do)
-    ctx.tools.register('greet', { description: 'Say hi', execute: async () => ({ message: 'hello' }) } as any)
+    ctx.tools.register('greet', {
+      build: () => ({ description: 'Say hi', execute: async () => ({ message: 'hello' }) }),
+    })
     ctx.prompts.register('greeter-ctx', 'You can greet users.')
 
     plugin.state = 'active'
