@@ -140,4 +140,77 @@ describe('DiscordChatProvider', () => {
     await provider.stop()
     expect(destroyed).toBe(true)
   })
+
+  test('sendMessage creates a DM channel and sends the markdown', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+
+    const sends: { content?: string }[] = []
+    const dmChannel = {
+      id: 'dm-chan-1',
+      send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+        sends.push(arg)
+        return Promise.resolve({ id: 'msg-x', edit: (): Promise<void> => Promise.resolve() })
+      },
+      sendTyping: (): Promise<void> => Promise.resolve(),
+    }
+    const fakeClient = {
+      destroy: (): Promise<void> => Promise.resolve(),
+      users: {
+        fetch: (id: string): Promise<{ createDM: () => Promise<typeof dmChannel> }> => {
+          expect(id).toBe('user-42')
+          return Promise.resolve({
+            createDM: (): Promise<typeof dmChannel> => Promise.resolve(dmChannel),
+          })
+        },
+      },
+    }
+    provider.testSetClient(fakeClient)
+
+    await provider.sendMessage('user-42', 'hello discord')
+    expect(sends).toHaveLength(1)
+    expect(sends[0]!.content).toBe('hello discord')
+  })
+
+  test('resolveUserId returns snowflake as-is when the input is numeric', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+    const result = await provider.resolveUserId('1234567890', { contextId: 'c1', contextType: 'group' })
+    expect(result).toBe('1234567890')
+  })
+
+  test('resolveUserId returns null in DMs (no guild context)', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+    const result = await provider.resolveUserId('@alice', { contextId: 'u1', contextType: 'dm' })
+    expect(result).toBeNull()
+  })
+
+  test('resolveUserId searches members in the channel guild for group context', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+
+    const fakeGuild = {
+      members: {
+        search: (arg: { query: string; limit: number }): Promise<Map<string, { id: string }>> => {
+          expect(arg.query).toBe('alice')
+          expect(arg.limit).toBe(1)
+          return Promise.resolve(new Map([['u-9', { id: 'u-9' }]]))
+        },
+      },
+    }
+    const fakeClient = {
+      destroy: (): Promise<void> => Promise.resolve(),
+      channels: {
+        cache: new Map([['chan-7', { guildId: 'guild-3' }]]),
+      },
+      guilds: {
+        cache: new Map([['guild-3', fakeGuild]]),
+      },
+    }
+    provider.testSetClient(fakeClient)
+
+    const result = await provider.resolveUserId('@alice', { contextId: 'chan-7', contextType: 'group' })
+    expect(result).toBe('u-9')
+  })
 })

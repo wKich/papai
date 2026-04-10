@@ -7,12 +7,14 @@ import type {
   ResolveUserContext,
   ThreadCapabilities,
 } from '../types.js'
+import { chunkForDiscord } from './format-chunking.js'
 import { type DiscordMessageLike, mapDiscordMessage } from './map-message.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { type SendableChannel, createDiscordReplyFn } from './reply-helpers.js'
 import { withTypingIndicator } from './typing-indicator.js'
 
 const log = logger.child({ scope: 'chat:discord' })
+const DISCORD_MAX_CONTENT_LEN = 2000
 
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
 
@@ -21,6 +23,27 @@ type DispatchableMessage = DiscordMessageLike & {
     messages?: {
       fetch: (id: string) => Promise<{ id: string; author: { id: string; username: string }; content: string }>
     }
+  }
+}
+
+/** Structural type covering the discord.js Client API surface we use. */
+export type DiscordClientLike = {
+  destroy: () => Promise<void>
+  users?: {
+    fetch: (id: string) => Promise<{
+      createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
+    }>
+  }
+  channels?: { cache: Map<string, { guildId?: string }> }
+  guilds?: {
+    cache: Map<
+      string,
+      {
+        members: {
+          search: (arg: { query: string; limit: number }) => Promise<Map<string, { id: string }>>
+        }
+      }
+    >
   }
 }
 
@@ -34,7 +57,7 @@ export class DiscordChatProvider implements ChatProvider {
   private readonly token: string
   private readonly commands = new Map<string, CommandHandler>()
   private messageHandler: OnMessageHandler | null = null
-  private client: { destroy: () => Promise<void> } | null = null
+  private client: DiscordClientLike | null = null
 
   constructor() {
     const token = process.env['DISCORD_BOT_TOKEN']
@@ -54,12 +77,46 @@ export class DiscordChatProvider implements ChatProvider {
     this.messageHandler = handler
   }
 
-  sendMessage(_userId: string, _markdown: string): Promise<void> {
-    return Promise.reject(new Error('DiscordChatProvider.sendMessage not implemented yet'))
+  async sendMessage(userId: string, markdown: string): Promise<void> {
+    if (this.client === null || this.client.users === undefined) {
+      throw new Error('DiscordChatProvider.sendMessage called before start()')
+    }
+    const user = await this.client.users.fetch(userId)
+    const dm = await user.createDM()
+    const chunks = chunkForDiscord(markdown, DISCORD_MAX_CONTENT_LEN)
+    await chunks.reduce<Promise<unknown>>(
+      (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
+      Promise.resolve(null),
+    )
+    log.info({ userId }, 'Discord DM sent')
   }
 
-  resolveUserId(_username: string, _context: ResolveUserContext): Promise<string | null> {
-    return Promise.resolve(null)
+  async resolveUserId(username: string, context: ResolveUserContext): Promise<string | null> {
+    const clean = username.startsWith('@') ? username.slice(1) : username
+    if (/^\d+$/.test(clean)) return clean
+    if (context.contextType !== 'group') return null
+    if (this.client === null) return null
+
+    if (this.client.channels === undefined || this.client.guilds === undefined) return null
+    const channel = this.client.channels.cache.get(context.contextId)
+    const guildId = channel?.guildId
+    if (guildId === undefined) return null
+    const guild = this.client.guilds.cache.get(guildId)
+    if (guild === undefined) return null
+
+    try {
+      const members = await guild.members.search({ query: clean, limit: 1 })
+      for (const m of members.values()) {
+        return m.id
+      }
+      return null
+    } catch (error) {
+      log.warn(
+        { username: clean, guildId, error: error instanceof Error ? error.message : String(error) },
+        'Discord member search failed',
+      )
+      return null
+    }
   }
 
   start(): Promise<void> {
@@ -72,8 +129,8 @@ export class DiscordChatProvider implements ChatProvider {
     this.client = null
   }
 
-  /** Test-only: inject a stub client for stop() testing. */
-  testSetClient(c: { destroy: () => Promise<void> }): void {
+  /** Test-only: inject a stub client. */
+  testSetClient(c: DiscordClientLike): void {
     this.client = c
   }
 
