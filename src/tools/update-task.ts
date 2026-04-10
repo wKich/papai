@@ -3,12 +3,34 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
+import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import type { CompletionHookFn } from './completion-hook.js'
 
 const log = logger.child({ scope: 'tool:update-task' })
+
+interface ResolveAssigneeResult {
+  assignee?: string
+  identityRequired?: { status: 'identity_required'; message: string }
+}
+
+function resolveAssignee(
+  assignee: string | undefined,
+  userId: string | undefined,
+  provider: TaskProvider,
+): ResolveAssigneeResult {
+  if (assignee === undefined || assignee.toLowerCase() !== 'me' || userId === undefined) {
+    return { assignee }
+  }
+
+  const identity = resolveMeReference(userId, provider)
+  if (identity.type === 'found') {
+    return { assignee: identity.identity.userId }
+  }
+  return { identityRequired: { status: 'identity_required', message: identity.message } }
+}
 
 const inputSchema = z.object({
   taskId: z.string().describe('The task ID'),
@@ -41,6 +63,11 @@ export function makeUpdateTaskTool(
         const resolvedDueDate =
           dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
 
+        const { assignee: resolvedAssignee, identityRequired } = resolveAssignee(assignee, userId, provider)
+        if (identityRequired !== undefined) {
+          return identityRequired
+        }
+
         const task = await provider.updateTask(taskId, {
           title,
           description,
@@ -48,7 +75,7 @@ export function makeUpdateTaskTool(
           priority,
           dueDate: resolvedDueDate,
           projectId,
-          assignee,
+          assignee: resolvedAssignee,
         })
         log.info({ taskId }, 'Task updated via tool')
 
