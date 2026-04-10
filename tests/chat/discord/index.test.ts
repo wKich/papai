@@ -717,4 +717,111 @@ describe('DiscordChatProvider', () => {
       expect(seen[0]!.text).toBe('fallback:action')
     })
   })
+
+  describe('listener rejection handling', () => {
+    test('messageCreate listener catches and does not rethrow when dispatchMessage rejects', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const messageListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: { id: 'bot-42', username: 'testbot' },
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'messageCreate') messageListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+
+      provider.onMessage((): Promise<void> => Promise.reject(new Error('handler boom')))
+
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      const fakeMessage = {
+        id: 'msg-rej-1',
+        author: { id: 'u1', username: 'alice', bot: false },
+        content: 'hello',
+        channel: {
+          id: 'dm-rej-1',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'out-rej', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        mentions: { has: (_id: string): boolean => false },
+        reference: null,
+        type: 0,
+      }
+
+      // Fire the listener — the rejection must be caught inside the listener, not propagated
+      messageListeners[0]!(fakeMessage)
+      // Flush microtasks to let the promise rejection propagate if unhandled
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0)
+      })
+      // No assertion needed: reaching here without an unhandled rejection is the proof
+    })
+
+    test('interactionCreate listener catches and does not rethrow when handleButtonInteraction rejects', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const interactionListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: { id: 'bot-42', username: 'testbot' },
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'interactionCreate') interactionListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+
+      // message handler throws so the full dispatch path rejects
+      provider.onMessage((): Promise<void> => Promise.reject(new Error('interaction boom')))
+
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      const fakeInteraction = {
+        type: 3,
+        componentType: 2,
+        user: { id: 'u-rej', username: 'rej-user' },
+        customId: 'some:action',
+        channelId: 'u-rej',
+        channel: {
+          id: 'u-rej',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'm-rej', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-rej-btn' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      interactionListeners[0]!(fakeInteraction)
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0)
+      })
+    })
+  })
 })

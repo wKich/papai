@@ -133,12 +133,19 @@ export class DiscordChatProvider implements ChatProvider {
 
     client.on('messageCreate', (rawMsg) => {
       if (!isDispatchableMessage(rawMsg)) return
-      void this.dispatchMessage(rawMsg, client.user?.id ?? '', adminUserId)
+      this.dispatchMessage(rawMsg, client.user?.id ?? '', adminUserId).catch((error: unknown) => {
+        log.error({ error: error instanceof Error ? error.message : String(error) }, 'messageCreate dispatch failed')
+      })
     })
 
     client.on('interactionCreate', (rawInteraction) => {
       if (!isButtonInteraction(rawInteraction)) return
-      void this.handleButtonInteraction(rawInteraction, adminUserId)
+      this.handleButtonInteraction(rawInteraction, adminUserId).catch((error: unknown) => {
+        log.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          'interactionCreate dispatch failed',
+        )
+      })
     })
 
     client.on('error', (rawError) => {
@@ -201,16 +208,16 @@ export class DiscordChatProvider implements ChatProvider {
 
     await dispatchButtonInteraction(interaction, onCfg, onWizard)
 
-    this.routeButtonFallback(interaction, channel, contextId, contextType, adminUserId)
+    await this.routeButtonFallback(interaction, channel, contextId, contextType, adminUserId)
   }
 
-  private routeButtonFallback(
+  private async routeButtonFallback(
     interaction: ButtonInteractionLike,
     channel: NonNullable<ButtonInteractionLike['channel']>,
     contextId: string,
     contextType: 'dm' | 'group',
     adminUserId: string,
-  ): void {
+  ): Promise<void> {
     const data = interaction.customId
     if (data.startsWith('cfg:') || data.startsWith('wizard_')) return
 
@@ -238,12 +245,12 @@ export class DiscordChatProvider implements ChatProvider {
         isGroupAdmin: mapped.user.isAdmin,
         storageContextId: mapped.contextId,
       }
-      void command.handler(mapped, reply, auth)
+      await command.handler(mapped, reply, auth)
       return
     }
 
     if (this.messageHandler !== null) {
-      void this.messageHandler(mapped, reply)
+      await this.messageHandler(mapped, reply)
     }
   }
 
