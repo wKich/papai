@@ -13,6 +13,7 @@ import type {
   IncomingMessage,
   ReplyFn,
   ReplyOptions,
+  ResolveUserContext,
 } from '../types.js'
 import { handleConfigEditorCallback } from './config-editor-callbacks.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
@@ -128,9 +129,8 @@ export class TelegramChatProvider implements ChatProvider {
     await this.bot.stop()
   }
 
-  resolveUserId(username: string): Promise<string | null> {
-    // Telegram Bot API cannot resolve usernames to user IDs
-    // Only numeric IDs can be used directly
+  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
+    // Telegram Bot API cannot resolve usernames to user IDs; only numeric IDs work directly
     const cleanUsername = username.startsWith('@') ? username.slice(1) : username
     if (/^\d+$/.test(cleanUsername)) {
       return Promise.resolve(cleanUsername)
