@@ -1,4 +1,5 @@
 import type { ChatButton, ChatProvider, CommandHandler } from '../chat/types.js'
+import { serializeCallbackData } from '../config-editor/index.js'
 import { getAllConfig, maskValue } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
@@ -67,14 +68,14 @@ export function registerConfigCommand(
     // Create buttons for each config field
     const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
       text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
-      callbackData: `cfg:edit:${key}`,
+      callbackData: serializeCallbackData({ action: 'edit', key }),
       style: config[key] === undefined ? 'secondary' : 'primary',
     }))
 
     // Add full setup button at the end
     buttons.push({
       text: '🔄 Full Setup',
-      callbackData: 'cfg:setup',
+      callbackData: serializeCallbackData({ action: 'setup' }),
       style: 'primary',
     })
 

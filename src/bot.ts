@@ -214,4 +214,5 @@ async function onIncomingMessage(
 export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps = defaultBotDeps): void {
   registerCommands(chat, adminUserId)
   chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
+  // Task 4 will add the chat.onInteraction wiring intentionally left out of Task 3.
 }

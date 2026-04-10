@@ -4,7 +4,13 @@
  * Separate from the wizard - no singleStep hack needed
  */
 
-export { handleEditorCallback, handleEditorMessage, parseCallbackData, startEditor } from './handlers.js'
+export {
+  handleEditorCallback,
+  handleEditorMessage,
+  parseCallbackData,
+  serializeCallbackData,
+  startEditor,
+} from './handlers.js'
 export {
   createEditorSession,
   deleteEditorSession,

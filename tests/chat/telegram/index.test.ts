@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { extractFilesFromContext } from '../../../src/chat/telegram/file-helpers.js'
 import { TelegramChatProvider } from '../../../src/chat/telegram/index.js'
+import type { ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 describe('TelegramChatProvider', () => {
@@ -62,6 +63,70 @@ describe('TelegramChatProvider', () => {
         // Handler
       })
 
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('dispatchCallbackQuery answers callback queries before null exit', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const calls: string[] = []
+      const dispatchCallbackQuery: unknown = Reflect.get(provider, 'dispatchCallbackQuery')
+      expect(dispatchCallbackQuery).toBeInstanceOf(Function)
+      if (!(dispatchCallbackQuery instanceof Function)) {
+        throw new Error('dispatchCallbackQuery not available')
+      }
+
+      await Promise.resolve(
+        dispatchCallbackQuery.call(provider, {
+          answerCallbackQuery: (): Promise<void> => {
+            calls.push('answered')
+            return Promise.resolve()
+          },
+          callbackQuery: {},
+        }),
+      )
+
+      expect(calls).toEqual(['answered'])
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('dispatchCallbackQuery builds replies with the interaction thread id', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const captured: Array<string | undefined> = []
+      const dispatchCallbackQuery: unknown = Reflect.get(provider, 'dispatchCallbackQuery')
+      expect(dispatchCallbackQuery).toBeInstanceOf(Function)
+      if (!(dispatchCallbackQuery instanceof Function)) {
+        throw new Error('dispatchCallbackQuery not available')
+      }
+
+      Reflect.set(provider, 'buildReplyFn', (_ctx: object, threadId?: string): ReplyFn => {
+        captured.push(threadId)
+        return {
+          text: (): Promise<void> => Promise.resolve(),
+          formatted: (): Promise<void> => Promise.resolve(),
+          file: (): Promise<void> => Promise.resolve(),
+          typing: (): void => {},
+          redactMessage: (): Promise<void> => Promise.resolve(),
+          buttons: (): Promise<void> => Promise.resolve(),
+        }
+      })
+      Reflect.set(provider, 'checkAdminStatus', (): Promise<boolean> => Promise.resolve(false))
+      Reflect.set(provider, 'interactionHandler', (): Promise<void> => Promise.resolve())
+
+      await Promise.resolve(
+        dispatchCallbackQuery.call(provider, {
+          from: { id: 42, username: 'alice' },
+          chat: { id: 99, type: 'supergroup' },
+          callbackQuery: {
+            data: 'cfg:edit:timezone',
+            message: { message_thread_id: 123 },
+          },
+          answerCallbackQuery: (): Promise<void> => Promise.resolve(),
+        }),
+      )
+
+      expect(captured).toEqual(['123'])
       delete process.env['TELEGRAM_BOT_TOKEN']
     })
   })

@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { routeInteraction } from '../../src/chat/interaction-router.js'
 import type { IncomingInteraction, ReplyFn } from '../../src/chat/types.js'
+import { deleteWizardSession } from '../../src/wizard/state.js'
 
 const interaction: IncomingInteraction = {
   kind: 'button',
@@ -21,6 +22,10 @@ const reply: ReplyFn = {
 }
 
 describe('routeInteraction', () => {
+  beforeEach(() => {
+    deleteWizardSession(interaction.user.id, interaction.contextId)
+  })
+
   test('routes cfg callbacks through the config interaction dependency', async () => {
     const calls: string[] = []
     const handled = await routeInteraction(interaction, reply, {
@@ -56,5 +61,22 @@ describe('routeInteraction', () => {
     })
 
     expect(handled).toBe(false)
+  })
+
+  test('replies when wizard edit is clicked without an active session', async () => {
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'wizard_edit' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+    )
+
+    expect(handled).toBe(true)
+    expect(replies).toEqual(['No active setup session. Type /setup to start.'])
   })
 })

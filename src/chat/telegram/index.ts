@@ -43,7 +43,7 @@ export class TelegramChatProvider implements ChatProvider {
   readonly configRequirements = telegramConfigRequirements
   private readonly bot: Bot
   private botUsername: string | null = null
-  private interactionHandler?: Parameters<NonNullable<ChatProvider['onInteraction']>>[0]
+  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
 
   constructor() {
     const token = process.env['TELEGRAM_BOT_TOKEN']
@@ -286,10 +286,10 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   private async dispatchCallbackQuery(ctx: Context): Promise<void> {
+    await ctx.answerCallbackQuery()
     const interaction = buildTelegramInteraction(ctx, await this.checkAdminStatus(ctx))
     if (interaction === null) return
-    await ctx.answerCallbackQuery()
-    const reply = this.buildReplyFn(ctx)
+    const reply = this.buildReplyFn(ctx, interaction.threadId)
     if (this.interactionHandler === undefined) {
       log.warn({ callbackData: ctx.callbackQuery?.data }, 'No interaction handler registered')
       return

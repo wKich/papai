@@ -23,7 +23,10 @@ export function buildTelegramInteraction(
   const callbackData = ctx.callbackQuery?.data ?? ''
   if (callbackData === '') return null
 
-  const userId = String(ctx.from?.id ?? '')
+  const fromId = ctx.from?.id
+  if (fromId === undefined) return null
+
+  const userId = String(fromId)
   return {
     kind: 'button',
     user: { id: userId, username: ctx.from?.username ?? null, isAdmin },

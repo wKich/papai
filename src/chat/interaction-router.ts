@@ -1,4 +1,4 @@
-import { handleEditorCallback, parseCallbackData } from '../config-editor/index.js'
+import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
 import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
@@ -36,7 +36,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
     await reply.buttons(result.response ?? '', {
       buttons: result.buttons.map((btn) => ({
         text: btn.text,
-        callbackData: buildCallbackData(btn),
+        callbackData: serializeCallbackData(btn),
       })),
     })
   } else {
@@ -63,7 +63,10 @@ async function replyWithWizardButtons(
 
 async function handleWizardEdit(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   const session = getWizardSession(userId, storageContextId)
-  if (session === null) return true
+  if (session === null) {
+    await reply.text('No active setup session. Type /setup to start.')
+    return true
+  }
 
   resetWizardSession(userId, storageContextId)
   await reply.text(`🔧 Editing configuration from the beginning...\n\n${getNextPrompt(userId, storageContextId)}`)
@@ -138,21 +141,4 @@ export function routeInteraction(
 
   log.debug({ callbackData }, 'No route matched for interaction callback')
   return Promise.resolve(false)
-}
-
-function buildCallbackData(button: { action: string; key?: string }): string {
-  switch (button.action) {
-    case 'edit':
-      return button.key === undefined ? 'cfg:back' : `cfg:edit:${button.key}`
-    case 'save':
-      return button.key === undefined ? 'cfg:back' : `cfg:save:${button.key}`
-    case 'cancel':
-      return 'cfg:cancel'
-    case 'back':
-      return 'cfg:back'
-    case 'setup':
-      return 'cfg:setup'
-    default:
-      return 'cfg:back'
-  }
 }

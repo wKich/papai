@@ -35,4 +35,17 @@ describe('buildTelegramInteraction', () => {
 
     expect(interaction).toBeNull()
   })
+
+  test('returns null when from.id is missing', () => {
+    const interaction = buildTelegramInteraction(
+      {
+        from: { username: 'alice' },
+        chat: { id: 99, type: 'private' },
+        callbackQuery: { data: 'cfg:edit:timezone' },
+      },
+      false,
+    )
+
+    expect(interaction).toBeNull()
+  })
 })
