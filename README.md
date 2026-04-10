@@ -46,15 +46,21 @@ The bot interprets natural language requests, invokes appropriate operations thr
 
 ## Features
 
-| Category      | Capability                  | Description                                |
-| ------------- | --------------------------- | ------------------------------------------ |
-| **Tasks**     | Create, Update, Search      | Full task lifecycle with natural language  |
-| **Comments**  | Add, Read, Update, Delete   | Threaded discussions on tasks              |
-| **Relations** | Blocks, Duplicates, Related | Task dependencies and associations         |
-| **Labels**    | Create, Apply, Remove       | Categorization and filtering               |
-| **Projects**  | List, Create, Update        | Workspace organization                     |
-| **Statuses**  | CRUD, Reorder               | Kanban board column management             |
-| **Memory**    | Conversation, Facts         | Per-user history and knowledge persistence |
+| Category             | Capability                           | Description                                 |
+| -------------------- | ------------------------------------ | ------------------------------------------- |
+| **Tasks**            | Create, Update, Search, Delete       | Full task lifecycle with natural language   |
+| **Comments**         | Add, Read, Update, Delete, Reactions | Threaded discussions with emoji reactions   |
+| **Relations**        | Blocks, Duplicates, Related, Subtask | Task dependencies and associations          |
+| **Labels**           | Create, Apply, Remove                | Categorization and filtering                |
+| **Projects**         | List, Create, Update, Delete, Team   | Workspace organization with team management |
+| **Statuses**         | CRUD, Reorder                        | Kanban board column management              |
+| **Time Tracking**    | Log, Update, Remove work             | Work item tracking and time logging         |
+| **Collaboration**    | Watchers, Votes, Visibility          | Team coordination features                  |
+| **Memory**           | Conversation, Facts                  | Per-user history and knowledge persistence  |
+| **Memos**            | Save, Search, Promote                | Quick notes with semantic search            |
+| **Recurring Tasks**  | Templates with schedules             | Automated task creation                     |
+| **Deferred Prompts** | Schedule for later                   | Proactive assistance                        |
+| **Instructions**     | Context-specific guidance            | Per-chat custom instructions                |
 
 ### Platform Support
 
@@ -65,10 +71,10 @@ The bot interprets natural language requests, invokes appropriate operations thr
 
 ### Task Provider Support
 
-| Provider     | Auto-Provisioning | Relations | Labels  | Comments |
-| ------------ | ----------------- | --------- | ------- | -------- |
-| **Kaneo**    | Yes               | Yes       | Yes     | Yes      |
-| **YouTrack** | No                | Yes       | Limited | Yes      |
+| Provider     | Auto-Provisioning | Relations | Labels  | Comments | Work Items | Watchers | Votes |
+| ------------ | ----------------- | --------- | ------- | -------- | ---------- | -------- | ----- |
+| **Kaneo**    | Yes               | Yes       | Yes     | Yes      | Yes        | Yes      | Yes   |
+| **YouTrack** | No                | Yes       | Limited | Yes      | Yes        | Yes      | Yes   |
 
 ---
 
@@ -150,6 +156,12 @@ flowchart TD
 | `src/config.ts`           | Per-user runtime configuration                  |
 | `src/memory.ts`           | Fact extraction and long-term storage           |
 | `src/conversation.ts`     | History management with summarization           |
+| `src/identity/`           | Chat-to-task-tracker user identity resolution   |
+| `src/memos/`              | Quick notes with semantic search                |
+| `src/scheduler.ts`        | Cron-based recurring tasks and deferred prompts |
+| `src/instructions/`       | Per-context custom instructions                 |
+| `src/proactive-delivery/` | Proactive message delivery modes                |
+| `src/embeddings.ts`       | Vector embeddings for semantic search           |
 
 ---
 
