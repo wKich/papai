@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
+import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { IncomingMessage } from '../../../src/chat/types.js'
-import { mockLogger, mockMessageCache } from '../../utils/test-helpers.js'
+import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
 describe('DiscordChatProvider', () => {
   const originalToken = process.env['DISCORD_BOT_TOKEN']
@@ -212,5 +214,507 @@ describe('DiscordChatProvider', () => {
 
     const result = await provider.resolveUserId('@alice', { contextId: 'chan-7', contextType: 'group' })
     expect(result).toBe('u-9')
+  })
+
+  describe('defaultClientFactory', () => {
+    test('creates a discord.js Client instance with the required interface', async () => {
+      const { defaultClientFactory } = await import('../../../src/chat/discord/index.js')
+      const client = defaultClientFactory()
+      expect(typeof client.on).toBe('function')
+      expect(typeof client.once).toBe('function')
+      expect(typeof client.login).toBe('function')
+      expect(typeof client.destroy).toBe('function')
+      // Clean up the client to avoid open handles
+      await client.destroy().catch(() => undefined)
+    })
+  })
+
+  describe('start()', () => {
+    test('resolves when ClientReady fires after login', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: null,
+        on: (_event: string, _listener: (...args: unknown[]) => void): void => undefined,
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+      const startPromise = provider.start()
+
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+
+      await startPromise
+    })
+
+    test('registers messageCreate, interactionCreate, and error listeners', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const registeredEvents: string[] = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: null,
+        on: (event: string, _listener: (...args: unknown[]) => void): void => {
+          registeredEvents.push(event)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+      const startPromise = provider.start()
+
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      expect(registeredEvents).toContain('messageCreate')
+      expect(registeredEvents).toContain('interactionCreate')
+      expect(registeredEvents).toContain('error')
+    })
+
+    test('dispatches incoming DM message via messageCreate listener', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const messageListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: { id: 'bot-42', username: 'testbot' },
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'messageCreate') messageListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+
+      let resolveReceived!: (msg: IncomingMessage) => void
+      const received = new Promise<IncomingMessage>((res) => {
+        resolveReceived = res
+      })
+      provider.onMessage((msg): Promise<void> => {
+        resolveReceived(msg)
+        return Promise.resolve()
+      })
+
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      const fakeMessage = {
+        id: 'msg-dm-1',
+        author: { id: 'u1', username: 'alice', bot: false },
+        content: 'hello from dm',
+        channel: {
+          id: 'dm-chan-1',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'out1', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        mentions: { has: (_id: string): boolean => false },
+        reference: null,
+        type: 0,
+      }
+
+      messageListeners[0]!(fakeMessage)
+      const msg = await received
+
+      expect(msg.text).toBe('hello from dm')
+      expect(msg.contextType).toBe('dm')
+      expect(msg.user.id).toBe('u1')
+    })
+
+    test('error listener fires without throwing', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const errorListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: null,
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'error') errorListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      // Fire the error listener — should not throw
+      expect(() => errorListeners[0]!(new Error('test discord error'))).not.toThrow()
+      // Also exercise the non-Error path
+      expect(() => errorListeners[0]!('string error')).not.toThrow()
+    })
+
+    test('non-button interactionCreate is silently ignored', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const interactionListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: null,
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'interactionCreate') interactionListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      interactionListeners[0]!({ type: 2, componentType: 2 })
+      await Promise.resolve()
+
+      expect(seen).toHaveLength(0)
+    })
+
+    test('button interactionCreate dispatches to message handler via start()', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+
+      const interactionListeners: Array<(...args: unknown[]) => void> = []
+      const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
+
+      const fakeClient = {
+        destroy: (): Promise<void> => Promise.resolve(),
+        user: { id: 'bot-42', username: 'testbot' },
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'interactionCreate') interactionListeners.push(listener)
+        },
+        once: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'ready') readyListeners.push(listener as (typeof readyListeners)[0])
+        },
+        login: (_token: string): Promise<string> => Promise.resolve('fake-token-123'),
+      }
+
+      const factory: DiscordClientFactory = () => fakeClient
+      const provider = new DiscordChatProvider(factory)
+
+      let resolveReceived!: (msg: IncomingMessage) => void
+      const received = new Promise<IncomingMessage>((res) => {
+        resolveReceived = res
+      })
+      provider.onMessage((msg): Promise<void> => {
+        resolveReceived(msg)
+        return Promise.resolve()
+      })
+
+      const startPromise = provider.start()
+      await Promise.resolve()
+      readyListeners[0]!({ user: { id: 'bot-42', username: 'testbot' } })
+      await startPromise
+
+      const fakeButtonInteraction = {
+        type: 3,
+        componentType: 2,
+        user: { id: 'u5', username: 'eve' },
+        customId: 'test:btn',
+        channelId: 'u5',
+        channel: {
+          id: 'u5',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'm-btn', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-btn-1' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      interactionListeners[0]!(fakeButtonInteraction)
+      const msg = await received
+
+      expect(msg.text).toBe('test:btn')
+      expect(msg.user.id).toBe('u5')
+    })
+  })
+
+  describe('testDispatchButtonInteraction', () => {
+    test('calls deferUpdate and routes customId to message handler', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      let deferred = false
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'u1', username: 'alice' },
+        customId: 'test:action',
+        channelId: 'u1',
+        channel: {
+          id: 'u1',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'msg-x', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'original-msg-1' },
+        deferUpdate: (): Promise<void> => {
+          deferred = true
+          return Promise.resolve()
+        },
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(deferred).toBe(true)
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.text).toBe('test:action')
+    })
+
+    test('routes slash-prefixed customId to registered command handler', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const captured: IncomingMessage[] = []
+      provider.registerCommand('help', (msg): Promise<void> => {
+        captured.push(msg)
+        return Promise.resolve()
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'u2', username: 'bob' },
+        customId: '/help',
+        channelId: 'u2',
+        channel: {
+          id: 'u2',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'msg-y', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'btn-msg-2' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(captured).toHaveLength(1)
+      expect(captured[0]!.text).toBe('/help')
+    })
+
+    test('uses user ID as contextId in DM channels (type=1)', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'user-77', username: 'carol' },
+        customId: 'some:action',
+        channelId: 'dm-channel-77',
+        channel: {
+          id: 'dm-channel-77',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'm1', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-3' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(seen[0]!.contextId).toBe('user-77')
+      expect(seen[0]!.contextType).toBe('dm')
+    })
+
+    test('uses channelId as contextId in guild channels (type=0)', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'user-88', username: 'dave' },
+        customId: 'some:action',
+        channelId: 'guild-channel-99',
+        channel: {
+          id: 'guild-channel-99',
+          type: 0,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'm2', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-4' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(seen[0]!.contextId).toBe('guild-channel-99')
+      expect(seen[0]!.contextType).toBe('group')
+    })
+
+    test('skips dispatch when channel is null', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'u3', username: 'eve' },
+        customId: 'some:action',
+        channelId: 'chan-x',
+        channel: null,
+        message: { id: 'msg-5' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(seen).toHaveLength(0)
+    })
+
+    test('handles cfg: callback when no active editor (no-op)', async () => {
+      await setupTestDb()
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      let deferred = false
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'user-cfg', username: 'cfguser' },
+        customId: 'cfg:edit:llm_apikey',
+        channelId: 'user-cfg',
+        channel: {
+          id: 'user-cfg',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'msg-cfg', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-cfg-1' },
+        deferUpdate: (): Promise<void> => {
+          deferred = true
+          return Promise.resolve()
+        },
+      }
+
+      // No active editor, should defer and return without error
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+      expect(deferred).toBe(true)
+    })
+
+    test('handles wizard_ callback when no active wizard (no-op)', async () => {
+      await setupTestDb()
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      let deferred = false
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'user-wiz', username: 'wizuser' },
+        customId: 'wizard_confirm',
+        channelId: 'user-wiz',
+        channel: {
+          id: 'user-wiz',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'msg-wiz', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-wiz-1' },
+        deferUpdate: (): Promise<void> => {
+          deferred = true
+          return Promise.resolve()
+        },
+      }
+
+      // No active wizard, should defer and return without error
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+      expect(deferred).toBe(true)
+    })
+
+    test('handles deferUpdate failure gracefully', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const seen: IncomingMessage[] = []
+      provider.onMessage((msg): Promise<void> => {
+        seen.push(msg)
+        return Promise.resolve()
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'u-def', username: 'defer-fail' },
+        customId: 'fallback:action',
+        channelId: 'u-def',
+        channel: {
+          id: 'u-def',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'msg-def', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'msg-def-1' },
+        deferUpdate: (): Promise<void> => Promise.reject(new Error('Defer failed')),
+      }
+
+      // Should still route to message handler despite defer failure
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.text).toBe('fallback:action')
+    })
   })
 })
