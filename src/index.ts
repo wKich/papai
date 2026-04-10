@@ -1,6 +1,7 @@
 import { announceNewVersion } from './announcements.js'
 import { setupBot } from './bot.js'
 import { createChatProvider } from './chat/registry.js'
+import { registerCommandMenuIfSupported } from './chat/startup.js'
 import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
@@ -73,7 +74,7 @@ setupBot(chatProvider, adminUserId)
 
 await chatProvider.start()
 
-void chatProvider.setCommands?.(adminUserId)
+void registerCommandMenuIfSupported(chatProvider, adminUserId)
 
 void announceNewVersion(chatProvider, adminUserId)
 

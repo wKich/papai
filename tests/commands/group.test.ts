@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler, IncomingMessage } from '../../src/chat/types.js'
+import type { ChatCapability, ChatProvider, CommandHandler, IncomingMessage } from '../../src/chat/types.js'
 import { registerGroupCommand } from '../../src/commands/group.js'
 import {
   createAuth,
@@ -150,14 +150,14 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      // Should still add with the raw value (input.slice(1)) when resolver returns null
+      // With users.resolve capability but null result, should error not fall back
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('User @unknown_user added to this group.')
+      expect(lastReply).toBe("Couldn't resolve that username. Use an explicit user ID.")
 
-      // Verify the null-fallback path: stored ID must be the sliced username, not '@unknown_user'
+      // No member should have been added
       const { listGroupMembers } = await import('../../src/groups.js')
       const members = listGroupMembers('group1')
-      expect(members.some((m) => m.user_id === 'unknown_user')).toBe(true)
+      expect(members.some((m) => m.user_id === 'unknown_user')).toBe(false)
     })
   })
 
@@ -339,6 +339,70 @@ describe('group commands', () => {
 
       lastReply = textCalls[0] ?? null
       expect(lastReply).toContain('Usage: /group adduser')
+    })
+  })
+
+  describe('username resolution capability gating', () => {
+    let noResolveChat: ChatProvider
+    let noResolveHandlers: Map<string, CommandHandler>
+
+    beforeEach(async () => {
+      mockLogger()
+      await setupTestDb()
+
+      noResolveHandlers = new Map()
+      const capabilities = new Set<ChatCapability>([
+        'messages.buttons',
+        'messages.files',
+        'messages.redact',
+        'files.receive',
+        'messages.reply-context',
+        // users.resolve intentionally omitted
+      ])
+      noResolveChat = createMockChat({ commandHandlers: noResolveHandlers, capabilities })
+      registerGroupCommand(noResolveChat)
+    })
+
+    test('adduser @username errors when provider lacks users.resolve', async () => {
+      const handler = noResolveHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser @someone', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      expect(textCalls[0]).toBe('This chat provider does not support username lookup. Use an explicit user ID.')
+    })
+
+    test('deluser @username errors when provider lacks users.resolve', async () => {
+      const handler = noResolveHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'deluser @someone', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      expect(textCalls[0]).toBe('This chat provider does not support username lookup. Use an explicit user ID.')
+    })
+
+    test('adduser with plain ID still works when provider lacks users.resolve', async () => {
+      const handler = noResolveHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser 12345', true),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      expect(textCalls[0]).toBe('User 12345 added to this group.')
     })
   })
 })

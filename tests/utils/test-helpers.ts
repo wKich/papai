@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import type {
   AuthorizationResult,
   ChatCapability,
+  ChatFile,
   ChatProvider,
   ChatProviderConfigRequirement,
   ChatProviderTraits,
@@ -198,6 +199,7 @@ export interface MockReplyResult {
   textCalls: string[]
   buttonCalls: string[]
   redactCalls: string[]
+  fileCalls: ChatFile[]
   getReplies: () => string[]
   getRedactions: () => string[]
 }
@@ -209,13 +211,17 @@ export function createMockReply(): MockReplyResult {
   const textCalls: string[] = []
   const buttonCalls: string[] = []
   const redactCalls: string[] = []
+  const fileCalls: ChatFile[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
       textCalls.push(content)
       return Promise.resolve()
     },
     formatted: (): Promise<void> => Promise.resolve(),
-    file: (): Promise<void> => Promise.resolve(),
+    file: (file: ChatFile): Promise<void> => {
+      fileCalls.push(file)
+      return Promise.resolve()
+    },
     typing: (): void => {},
     redactMessage: (replacementText: string): Promise<void> => {
       redactCalls.push(replacementText)
@@ -226,7 +232,15 @@ export function createMockReply(): MockReplyResult {
       return Promise.resolve()
     },
   }
-  return { reply, textCalls, buttonCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
+  return {
+    reply,
+    textCalls,
+    buttonCalls,
+    redactCalls,
+    fileCalls,
+    getReplies: () => textCalls,
+    getRedactions: () => redactCalls,
+  }
 }
 
 /**
