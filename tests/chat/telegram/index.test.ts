@@ -66,6 +66,17 @@ describe('TelegramChatProvider', () => {
     })
   })
 
+  test('provider exposes interactive capabilities and onInteraction hook', () => {
+    process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+    const provider = new TelegramChatProvider()
+
+    expect(provider.capabilities.has('messages.buttons')).toBe(true)
+    expect(provider.capabilities.has('interactions.callbacks')).toBe(true)
+    expect(typeof provider.onInteraction).toBe('function')
+
+    delete process.env['TELEGRAM_BOT_TOKEN']
+  })
+
   describe('resolveUserId', () => {
     test('returns numeric ID as-is', async () => {
       process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'

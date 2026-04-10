@@ -2,6 +2,7 @@ import type { ChatCapability, ChatProviderConfigRequirement, ChatProviderTraits 
 
 export const telegramCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCapability>([
   'commands.menu',
+  'interactions.callbacks',
   'messages.buttons',
   'messages.files',
   'messages.redact',
