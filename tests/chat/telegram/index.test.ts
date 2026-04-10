@@ -67,10 +67,12 @@ describe('TelegramChatProvider', () => {
   })
 
   describe('resolveUserId', () => {
+    const context = { contextId: 'c1', contextType: 'group' as const }
+
     test('returns numeric ID as-is', async () => {
       process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
       const provider = new TelegramChatProvider()
-      const result = await provider.resolveUserId('123456789')
+      const result = await provider.resolveUserId('123456789', context)
       expect(result).toBe('123456789')
       delete process.env['TELEGRAM_BOT_TOKEN']
     })
@@ -78,7 +80,7 @@ describe('TelegramChatProvider', () => {
     test('returns null for username (cannot resolve via Bot API)', async () => {
       process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
       const provider = new TelegramChatProvider()
-      const result = await provider.resolveUserId('@username')
+      const result = await provider.resolveUserId('@username', context)
       expect(result).toBeNull()
       delete process.env['TELEGRAM_BOT_TOKEN']
     })

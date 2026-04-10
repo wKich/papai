@@ -1,4 +1,4 @@
-import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../chat/types.js'
+import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn, ResolveUserContext } from '../chat/types.js'
 import { addGroupMember, listGroupMembers, removeGroupMember } from '../groups.js'
 import { logger } from '../logger.js'
 
@@ -58,7 +58,10 @@ async function handleAddUser(
     return
   }
 
-  const userId = await extractUserId(chat, targetUser)
+  const userId = await extractUserId(chat, targetUser, {
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+  })
   if (userId === null) {
     await reply.text('Please provide a valid user mention or ID.')
     return
@@ -85,7 +88,10 @@ async function handleDelUser(
     return
   }
 
-  const userId = await extractUserId(chat, targetUser)
+  const userId = await extractUserId(chat, targetUser, {
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+  })
   if (userId === null) {
     await reply.text('Please provide a valid user mention or ID.')
     return
@@ -108,10 +114,10 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
   await reply.text(`Group members:\n${memberList}`)
 }
 
-async function extractUserId(chat: ChatProvider, input: string): Promise<string | null> {
+async function extractUserId(chat: ChatProvider, input: string, context: ResolveUserContext): Promise<string | null> {
   if (input.startsWith('@')) {
     // Try to resolve username to user ID via chat provider
-    const resolved = await chat.resolveUserId(input)
+    const resolved = await chat.resolveUserId(input, context)
     // If resolution fails, fall back to using the raw username (for backward compatibility)
     return resolved ?? input.slice(1)
   }

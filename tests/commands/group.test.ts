@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler, IncomingMessage } from '../../src/chat/types.js'
+import type { ChatProvider, CommandHandler, IncomingMessage, ResolveUserContext } from '../../src/chat/types.js'
 import { registerGroupCommand } from '../../src/commands/group.js'
 import {
   createAuth,
@@ -25,7 +25,7 @@ describe('group commands', () => {
     commandHandlers = new Map()
     mockChat = createMockChat({
       commandHandlers,
-      resolveUserId: (username: string): Promise<string | null> => {
+      resolveUserId: (username: string, _context): Promise<string | null> => {
         const clean = username.startsWith('@') ? username.slice(1) : username
         if (clean === 'user1') return Promise.resolve('user1_id')
         if (clean === 'user2') return Promise.resolve('user2_id')
@@ -158,6 +158,32 @@ describe('group commands', () => {
       const { listGroupMembers } = await import('../../src/groups.js')
       const members = listGroupMembers('group1')
       expect(members.some((m) => m.user_id === 'unknown_user')).toBe(true)
+    })
+
+    test('passes msg context into ChatProvider.resolveUserId', async () => {
+      let lastResolveContext: ResolveUserContext | null = null
+      const contextHandlers = new Map<string, CommandHandler>()
+      const contextChat = createMockChat({
+        commandHandlers: contextHandlers,
+        resolveUserId: (_username: string, context: ResolveUserContext): Promise<string | null> => {
+          lastResolveContext = context
+          return Promise.resolve('resolved-id')
+        },
+      })
+      registerGroupCommand(contextChat)
+      const handler = contextHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      await handler!(
+        createGroupMessage('admin1', 'adduser @alice', true, 'channel-42'),
+        reply,
+        createAuth('admin1', { isGroupAdmin: true }),
+      )
+
+      expect(lastResolveContext).not.toBeNull()
+      expect(lastResolveContext!.contextId).toBe('channel-42')
+      expect(lastResolveContext!.contextType).toBe('group')
     })
   })
 

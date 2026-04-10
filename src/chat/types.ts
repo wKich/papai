@@ -9,6 +9,14 @@ export type ChatUser = {
 /** Context type for messages - DM or group chat. */
 export type ContextType = 'dm' | 'group'
 
+/** Context passed to resolveUserId so adapters can scope searches. */
+export type ResolveUserContext = {
+  /** Storage key of the conversation where the lookup originated (userId in DMs, channel/group ID in groups). */
+  contextId: string
+  /** 'dm' or 'group' — adapters may use this to decide whether guild-scoped search is possible. */
+  contextType: ContextType
+}
+
 /** Thread support capabilities for a chat platform. */
 export type ThreadCapabilities = {
   /** Platform has thread/topic support */
@@ -137,8 +145,8 @@ export interface ChatProvider {
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
 
-  /** Resolve a username to a user ID. Returns null if not found. */
-  resolveUserId(username: string): Promise<string | null>
+  /** Resolve a username to a user ID. Returns null if not found. `context` allows adapters like Discord to scope the lookup to the caller's guild. */
+  resolveUserId(username: string, context: ResolveUserContext): Promise<string | null>
 
   /** Start the bot event loop. */
   start(): Promise<void>

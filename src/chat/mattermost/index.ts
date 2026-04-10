@@ -6,6 +6,7 @@ import type {
   ContextType,
   IncomingMessage,
   ReplyFn,
+  ResolveUserContext,
 } from '../types.js'
 import {
   cacheIncomingPost,
@@ -262,7 +263,7 @@ export class MattermostChatProvider implements ChatProvider {
     return ChannelSchema.parse(data).id
   }
 
-  async resolveUserId(username: string): Promise<string | null> {
+  async resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
     const cleanUsername = username.startsWith('@') ? username.slice(1) : username
     try {
       const data = await this.apiFetch('GET', `/api/v4/users/username/${encodeURIComponent(cleanUsername)}`, undefined)
