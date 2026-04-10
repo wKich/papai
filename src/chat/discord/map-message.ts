@@ -1,0 +1,64 @@
+import { logger } from '../../logger.js'
+import type { ContextType, IncomingMessage } from '../types.js'
+import { isBotMentioned, stripBotMention } from './mention-helpers.js'
+
+const log = logger.child({ scope: 'chat:discord:map' })
+
+// Minimal structural type over discord.js Message to keep this module
+// runtime-free of discord.js. Production code will pass a real Message
+// object and the structural match will hold.
+export type DiscordMessageLike = {
+  id: string
+  author: { id: string; username: string; bot: boolean }
+  content: string
+  channel: { id: string; type: number }
+  mentions: { has: (id: string) => boolean }
+  reference: { messageId?: string } | null
+  type: number
+}
+
+// Discord.js ChannelType: DM = 1. Everything else maps to 'group'.
+const CHANNEL_TYPE_DM = 1
+
+// Discord.js MessageType values we accept. Default = 0, Reply = 19.
+const ACCEPTED_MESSAGE_TYPES = new Set<number>([0, 19])
+
+/** Map a Discord message to papai's IncomingMessage. Returns null if the message should be ignored. */
+export function mapDiscordMessage(
+  message: DiscordMessageLike,
+  botId: string,
+  adminUserId: string,
+): IncomingMessage | null {
+  if (message.author.bot) {
+    log.debug({ messageId: message.id, authorId: message.author.id }, 'Skipping bot-authored message')
+    return null
+  }
+  if (!ACCEPTED_MESSAGE_TYPES.has(message.type)) {
+    log.debug({ messageId: message.id, type: message.type }, 'Skipping unsupported message type')
+    return null
+  }
+
+  const contextType: ContextType = message.channel.type === CHANNEL_TYPE_DM ? 'dm' : 'group'
+  const contextId = contextType === 'dm' ? message.author.id : message.channel.id
+  const mentioned = isBotMentioned(message.content, botId, contextType)
+
+  if (contextType === 'group' && !mentioned) {
+    return null
+  }
+
+  const text = stripBotMention(message.content, botId)
+
+  return {
+    user: {
+      id: message.author.id,
+      username: message.author.username.length > 0 ? message.author.username : null,
+      isAdmin: message.author.id === adminUserId,
+    },
+    contextId,
+    contextType,
+    isMentioned: mentioned,
+    text,
+    messageId: message.id,
+    replyToMessageId: message.reference?.messageId,
+  }
+}
