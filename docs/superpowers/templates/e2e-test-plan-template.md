@@ -35,8 +35,8 @@ DM message
 
 ## Scenario Matrix
 
-| Scenario                      | Feature Tags                      | Journey Tags           | Layers Crossed                        | Trigger                       | User Oracle                       | System Oracle              | Failure Mode                                    | Cleanup                         | Notes                               |
-| ----------------------------- | --------------------------------- | ---------------------- | ------------------------------------- | ----------------------------- | --------------------------------- | -------------------------- | ----------------------------------------------- | ------------------------------- | ----------------------------------- |
+| Scenario | Feature Tags | Journey Tags | Layers Crossed | Trigger | User Oracle | System Oracle | Failure Mode | Cleanup | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Describe the happy path first | List the product domains involved | List the journey class | List the runtime boundaries exercised | Describe what starts the flow | Describe what the user should see | Describe the backend proof | Name the negative or degraded condition covered | Describe teardown and isolation | Note harness gaps or backend quirks |
 
 Add more rows until the plan covers happy path, routing or permission gates, invalid input, external failure, persistence verification, and cleanup.
