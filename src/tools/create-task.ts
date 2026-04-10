@@ -3,11 +3,33 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
+import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:create-task' })
+
+interface ResolveAssigneeResult {
+  assignee?: string
+  identityRequired?: { status: 'identity_required'; message: string }
+}
+
+function resolveAssignee(
+  assignee: string | undefined,
+  userId: string | undefined,
+  provider: TaskProvider,
+): ResolveAssigneeResult {
+  if (assignee === undefined || assignee.toLowerCase() !== 'me' || userId === undefined) {
+    return { assignee }
+  }
+
+  const identity = resolveMeReference(userId, provider)
+  if (identity.type === 'found') {
+    return { assignee: identity.identity.userId }
+  }
+  return { identityRequired: { status: 'identity_required', message: identity.message } }
+}
 
 export function makeCreateTaskTool(provider: TaskProvider, userId?: string): ToolSet[string] {
   return tool({
@@ -25,12 +47,18 @@ export function makeCreateTaskTool(provider: TaskProvider, userId?: string): Too
         .optional()
         .describe("Due date in the user's local time — tool converts to UTC"),
       status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
+      assignee: z.string().optional().describe("User ID to assign the task to, or 'me' to assign to yourself"),
     }),
-    execute: async ({ title, description, priority, projectId, dueDate, status }) => {
+    execute: async ({ title, description, priority, projectId, dueDate, status, assignee }) => {
       try {
         const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
         const resolvedDueDate =
           dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+
+        const { assignee: resolvedAssignee, identityRequired } = resolveAssignee(assignee, userId, provider)
+        if (identityRequired !== undefined) {
+          return identityRequired
+        }
 
         const task = await provider.createTask({
           projectId,
@@ -39,6 +67,7 @@ export function makeCreateTaskTool(provider: TaskProvider, userId?: string): Too
           priority,
           status,
           dueDate: resolvedDueDate,
+          assignee: resolvedAssignee,
         })
         log.info({ taskId: task.id, title }, 'Task created via tool')
         return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
