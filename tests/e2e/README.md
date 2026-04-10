@@ -11,6 +11,14 @@ These tests verify the integration between papai and the Kaneo API by:
 3. Running tests against the live API
 4. Cleaning up resources and stopping the server
 
+## Planning New E2E Coverage
+
+Before drafting a new papai E2E plan, read `docs/superpowers/e2e-planning-workflow.md` and start from `docs/superpowers/templates/e2e-test-plan-template.md`.
+
+Treat the current Docker-backed Kaneo suite as **Tier 1: Provider-Real E2E** in that workflow.
+
+Only promote scenarios to higher tiers when they need full runtime, platform, or operational boundaries that Tier 1 cannot prove.
+
 ## Running E2E Tests
 
 ### Prerequisites
