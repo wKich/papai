@@ -5,8 +5,12 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import type {
   AuthorizationResult,
+  ChatCapability,
   ChatProvider,
+  ChatProviderConfigRequirement,
+  ChatProviderTraits,
   CommandHandler,
+  IncomingInteraction,
   IncomingMessage,
   ReplyFn,
 } from '../../src/chat/types.js'
@@ -300,6 +304,15 @@ export function createAuth(
 // CHAT PROVIDER MOCK
 // ============================================================================
 
+/** Default capability set for mock chat providers. */
+export const DEFAULT_CHAT_CAPABILITIES = new Set<ChatCapability>([
+  'commands.menu',
+  'interactions.callbacks',
+  'messages.buttons',
+  'messages.files',
+  'users.resolve',
+])
+
 /**
  * Create a mock chat provider with configurable behavior.
  * @param options - Optional configuration for the mock provider
@@ -315,6 +328,16 @@ export function createMockChat(
     onMessageHandler?: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
     /** Custom resolveUserId implementation */
     resolveUserId?: (username: string) => Promise<string | null>
+    /** Callback when an interaction handler is registered via onInteraction */
+    onInteractionHandler?: (handler: (interaction: IncomingInteraction) => Promise<void>) => void
+    /** Custom setCommands implementation */
+    setCommands?: (commands: Array<{ command: string; description: string }>) => Promise<void>
+    /** Capability set for this provider (defaults to DEFAULT_CHAT_CAPABILITIES) */
+    capabilities?: Set<ChatCapability>
+    /** Behavioral traits for this provider */
+    traits?: ChatProviderTraits
+    /** Config requirements for this provider */
+    configRequirements?: ChatProviderConfigRequirement[]
   } = {},
 ): ChatProvider {
   return {
@@ -324,11 +347,17 @@ export function createMockChat(
       canCreateThreads: false,
       threadScope: 'message',
     },
+    capabilities: options.capabilities ?? DEFAULT_CHAT_CAPABILITIES,
+    traits: options.traits ?? { observedGroupMessages: 'all' },
+    configRequirements: options.configRequirements ?? [],
     registerCommand: (name: string, handler: CommandHandler): void => {
       options.commandHandlers?.set(name, handler)
     },
     onMessage: (handler): void => {
       options.onMessageHandler?.(handler)
+    },
+    onInteraction: (handler): void => {
+      options.onInteractionHandler?.(handler)
     },
     sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
     resolveUserId:
@@ -337,6 +366,7 @@ export function createMockChat(
         const clean = username.startsWith('@') ? username.slice(1) : username
         return Promise.resolve(clean)
       }),
+    setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
     start: (): Promise<void> => Promise.resolve(),
     stop: (): Promise<void> => Promise.resolve(),
   }
@@ -345,12 +375,12 @@ export function createMockChat(
 /**
  * Create a mock chat provider that captures command registrations.
  */
-export function createMockChatWithCommandHandlers(): {
+export function createMockChatWithCommandHandlers(options: Parameters<typeof createMockChat>[0] = {}): {
   provider: ChatProvider
   commandHandlers: Map<string, CommandHandler>
 } {
   const commandHandlers = new Map<string, CommandHandler>()
-  const provider = createMockChat({ commandHandlers })
+  const provider = createMockChat({ ...options, commandHandlers })
   return { provider, commandHandlers }
 }
 

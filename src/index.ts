@@ -11,8 +11,10 @@ import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
 
-const hasSetCommands = (chat: unknown): chat is { setCommands: (adminUserId: string) => Promise<void> } =>
-  typeof chat === 'object' && chat !== null && 'setCommands' in chat
+const hasRegisterCommandMenuForAdmin = (
+  chat: unknown,
+): chat is { registerCommandMenuForAdmin: (adminUserId: string) => Promise<void> } =>
+  typeof chat === 'object' && chat !== null && 'registerCommandMenuForAdmin' in chat
 
 const log = logger.child({ scope: 'main' })
 
@@ -76,8 +78,8 @@ setupBot(chatProvider, adminUserId)
 
 await chatProvider.start()
 
-if (hasSetCommands(chatProvider)) {
-  void chatProvider.setCommands(adminUserId)
+if (hasRegisterCommandMenuForAdmin(chatProvider)) {
+  void chatProvider.registerCommandMenuForAdmin(adminUserId)
 }
 
 void announceNewVersion(chatProvider, adminUserId)

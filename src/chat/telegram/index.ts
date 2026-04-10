@@ -18,6 +18,7 @@ import { handleConfigEditorCallback } from './config-editor-callbacks.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
 import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
+import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
 import { extractReplyContext } from './reply-context-helpers.js'
 import {
   createReplyParamsBuilder,
@@ -26,7 +27,6 @@ import {
   sendFormattedReply,
   sendTextReply,
 } from './reply-helpers.js'
-
 export { extractReplyContext } from './reply-context-helpers.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
@@ -38,6 +38,9 @@ export class TelegramChatProvider implements ChatProvider {
     canCreateThreads: true,
     threadScope: 'message' as const,
   }
+  readonly capabilities = telegramCapabilities
+  readonly traits = telegramTraits
+  readonly configRequirements = telegramConfigRequirements
   private readonly bot: Bot
   private botUsername: string | null = null
 
@@ -129,16 +132,12 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   resolveUserId(username: string): Promise<string | null> {
-    // Telegram Bot API cannot resolve usernames to user IDs
-    // Only numeric IDs can be used directly
-    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
-    if (/^\d+$/.test(cleanUsername)) {
-      return Promise.resolve(cleanUsername)
-    }
-    return Promise.resolve(null)
+    // Telegram Bot API cannot resolve usernames to IDs; only numeric IDs work directly
+    const clean = username.startsWith('@') ? username.slice(1) : username
+    return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
 
-  async setCommands(adminUserId: string): Promise<void> {
+  async registerCommandMenuForAdmin(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },
       { command: 'setup', description: 'Interactive configuration wizard' },

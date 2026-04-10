@@ -111,7 +111,7 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
 async function extractUserId(chat: ChatProvider, input: string): Promise<string | null> {
   if (input.startsWith('@')) {
     // Try to resolve username to user ID via chat provider
-    const resolved = await chat.resolveUserId(input)
+    const resolved = await chat.resolveUserId?.(input)
     // If resolution fails, fall back to using the raw username (for backward compatibility)
     return resolved ?? input.slice(1)
   }
