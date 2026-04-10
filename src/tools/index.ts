@@ -79,7 +79,7 @@ function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
   return {
     create_task: makeCreateTaskTool(provider, userId),
     update_task: makeUpdateTaskTool(provider, completionHook, userId),
-    search_tasks: makeSearchTasksTool(provider),
+    search_tasks: makeSearchTasksTool(provider, userId),
     list_tasks: makeListTasksTool(provider, userId),
     get_task: makeGetTaskTool(provider, userId),
     get_current_time: makeGetCurrentTimeTool(userId),

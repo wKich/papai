@@ -2,12 +2,13 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:search-tasks' })
 
-export function makeSearchTasksTool(provider: TaskProvider): ToolSet[string] {
+export function makeSearchTasksTool(provider: TaskProvider, userId?: string): ToolSet[string] {
   return tool({
     description: 'Search for tasks by keyword. Use this when the user asks about existing tasks.',
     inputSchema: z.object({
@@ -17,8 +18,22 @@ export function makeSearchTasksTool(provider: TaskProvider): ToolSet[string] {
     }),
     execute: async ({ query, projectId, limit }) => {
       try {
-        const tasks = await provider.searchTasks({ query, projectId, limit })
-        log.info({ query, resultCount: tasks.length }, 'Tasks searched via tool')
+        let resolvedQuery = query
+
+        // Resolve identity references in query
+        if (userId !== undefined && /\b(my|me)\b/i.test(query)) {
+          const identity = resolveMeReference(userId, provider)
+          if (identity.type === 'found') {
+            // Replace "my" and "me" references with actual user login
+            // Use a callback to preserve the original casing of surrounding text
+            resolvedQuery = query.replace(/\bmy\b/gi, identity.identity.login)
+            resolvedQuery = resolvedQuery.replace(/\bme\b/gi, identity.identity.login)
+            log.debug({ userId, originalQuery: query, resolvedQuery }, 'Resolved identity in search query')
+          }
+        }
+
+        const tasks = await provider.searchTasks({ query: resolvedQuery, projectId, limit })
+        log.info({ query: resolvedQuery, resultCount: tasks.length }, 'Tasks searched via tool')
         return tasks
       } catch (error) {
         log.error(
