@@ -1,8 +1,10 @@
-import { eq, and } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+
 import { getDrizzleDb } from '../db/drizzle.js'
 import { userIdentityMappings } from '../db/schema.js'
-import type { IdentityMapping, MatchMethod } from './types.js'
 import { logger } from '../logger.js'
+import { isMatchMethod } from './types.js'
+import type { IdentityMapping, MatchMethod } from './types.js'
 
 const log = logger.child({ scope: 'identity:mapping' })
 
@@ -42,7 +44,7 @@ export function getIdentityMapping(contextId: string, providerName: string): Ide
     providerUserLogin: row.providerUserLogin,
     displayName: row.displayName,
     matchedAt: row.matchedAt,
-    matchMethod: row.matchMethod as MatchMethod | null,
+    matchMethod: isMatchMethod(row.matchMethod) ? row.matchMethod : null,
     confidence: row.confidence,
   }
 }

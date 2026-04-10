@@ -1,8 +1,5 @@
-import { describe, expect, it, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 
-import { getDrizzleDb } from '../../src/db/drizzle.js'
-import { userIdentityMappings } from '../../src/db/schema.js'
-import { eq } from 'drizzle-orm'
 import { clearIdentityMapping, getIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
