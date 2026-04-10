@@ -3,7 +3,6 @@ import type { ToolSet } from 'ai'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentReactionTool } from './add-comment-reaction.js'
 import { makeAddCommentTool } from './add-comment.js'
-import { makeClearMyIdentityTool } from './clear-my-identity.js'
 import { makeAddProjectMemberTool } from './add-project-member.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
@@ -11,6 +10,7 @@ import { makeAddVoteTool } from './add-vote.js'
 import { makeAddWatcherTool } from './add-watcher.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
+import { makeClearMyIdentityTool } from './clear-my-identity.js'
 import { completionHook } from './completion-hook.js'
 import { makeCountTasksTool } from './count-tasks.js'
 import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
@@ -58,8 +58,8 @@ import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
 import { makeSaveMemoTool } from './save-memo.js'
 import { makeSearchMemosTool } from './search-memos.js'
-import { makeSetMyIdentityTool } from './set-my-identity.js'
 import { makeSearchTasksTool } from './search-tasks.js'
+import { makeSetMyIdentityTool } from './set-my-identity.js'
 import { makeSetVisibilityTool } from './set-visibility.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import { makeUpdateCommentTool } from './update-comment.js'
@@ -176,15 +176,10 @@ function maybeAddStatusTools(tools: ToolSet, provider: TaskProvider): void {
 
 function maybeAddAttachmentTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
   if (contextId === undefined) return
-  if (provider.capabilities.has('attachments.list')) {
-    tools['list_attachments'] = makeListAttachmentsTool(provider)
-  }
-  if (provider.capabilities.has('attachments.upload')) {
+  if (provider.capabilities.has('attachments.list')) tools['list_attachments'] = makeListAttachmentsTool(provider)
+  if (provider.capabilities.has('attachments.upload'))
     tools['upload_attachment'] = makeUploadAttachmentTool(provider, contextId)
-  }
-  if (provider.capabilities.has('attachments.delete')) {
-    tools['remove_attachment'] = makeRemoveAttachmentTool(provider)
-  }
+  if (provider.capabilities.has('attachments.delete')) tools['remove_attachment'] = makeRemoveAttachmentTool(provider)
 }
 
 function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
@@ -203,15 +198,12 @@ function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
 }
 
 function maybeAddCountTasksTool(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
+  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined)
     tools['count_tasks'] = makeCountTasksTool(provider)
-  }
 }
 
 function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('tasks.delete')) {
-    tools['delete_task'] = makeDeleteTaskTool(provider)
-  }
+  if (provider.capabilities.has('tasks.delete')) tools['delete_task'] = makeDeleteTaskTool(provider)
 }
 
 function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider): void {
@@ -273,15 +265,8 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
 
-function maybeAddIdentityTools(
-  tools: ToolSet,
-  provider: TaskProvider,
-  contextId: string | undefined,
-): void {
-  // Only add identity tools for group chats (contextId contains non-user context)
-  if (contextId === undefined) return
-  if (provider.identityResolver === undefined) return
-
+function maybeAddIdentityTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
+  if (contextId === undefined || provider.identityResolver === undefined) return
   tools['set_my_identity'] = makeSetMyIdentityTool(provider, contextId)
   tools['clear_my_identity'] = makeClearMyIdentityTool(provider, contextId)
 }

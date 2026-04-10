@@ -42,32 +42,32 @@ describe('makeTools', () => {
     it('should include set_my_identity tool for group chats', () => {
       const providerWithResolver = createMockProvider({
         identityResolver: {
-          searchUsers: async () => [],
+          searchUsers: () => Promise.resolve([]),
         },
       })
       const tools = makeTools(providerWithResolver, 'user-123', 'normal', 'group-123')
-      expect(tools.set_my_identity).toBeDefined()
+      expect(tools['set_my_identity']).toBeDefined()
     })
 
     it('should include clear_my_identity tool for group chats', () => {
       const providerWithResolver = createMockProvider({
         identityResolver: {
-          searchUsers: async () => [],
+          searchUsers: () => Promise.resolve([]),
         },
       })
       const tools = makeTools(providerWithResolver, 'user-123', 'normal', 'group-123')
-      expect(tools.clear_my_identity).toBeDefined()
+      expect(tools['clear_my_identity']).toBeDefined()
     })
 
     it('should exclude identity tools when contextId is undefined', () => {
       const providerWithResolver = createMockProvider({
         identityResolver: {
-          searchUsers: async () => [],
+          searchUsers: () => Promise.resolve([]),
         },
       })
       const tools = makeTools(providerWithResolver, 'user-123', 'normal', undefined)
-      expect(tools.set_my_identity).toBeUndefined()
-      expect(tools.clear_my_identity).toBeUndefined()
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
     })
 
     it('should exclude identity tools when provider has no identityResolver', () => {
@@ -75,8 +75,8 @@ describe('makeTools', () => {
         identityResolver: undefined,
       })
       const tools = makeTools(providerWithoutResolver, 'user-123', 'normal', 'group-123')
-      expect(tools.set_my_identity).toBeUndefined()
-      expect(tools.clear_my_identity).toBeUndefined()
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
     })
   })
 })
