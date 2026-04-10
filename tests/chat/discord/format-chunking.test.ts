@@ -46,6 +46,20 @@ describe('chunkForDiscord', () => {
     expect(chunkForDiscord(input, 2000)).toEqual([input])
   })
 
+  test('does not exceed maxLen when fence healing adds characters', () => {
+    // Create a scenario where chunk ends exactly at maxLen with unbalanced fence
+    // Fence close adds 4 chars ('\n```'), which should not exceed maxLen
+    const fenceOpen = '```typescript\n'
+    // Leave room for one char
+    const codeContent = 'x'.repeat(100 - fenceOpen.length - 1)
+    const input = fenceOpen + codeContent + '\n```\nmore content here that will cause another split'
+    const chunks = chunkForDiscord(input, 100)
+
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(100)
+    }
+  })
+
   test('splits at sentence boundary when no paragraph break exists', () => {
     const sentence1 = 'A'.repeat(1500) + '. '
     const sentence2 = 'B'.repeat(400) + '.'

@@ -1,3 +1,9 @@
+// Length of fence markers for chunk budget calculations
+// FENCE_CLOSE_LEN represents the length of newline + three backticks
+const FENCE_CLOSE_LEN = 4
+// FENCE_OPEN_LEN represents the length of three backticks + newline
+const FENCE_OPEN_LEN = 4
+
 /**
  * Split a string into chunks no longer than `maxLen`, preferring to split
  * on paragraph breaks, then sentence breaks, then word breaks. If a fenced
@@ -12,7 +18,14 @@ export function chunkForDiscord(input: string, maxLen: number): string[] {
   let carriedOpenFence = false
 
   while (remainder.length > maxLen) {
-    const sliceEnd = findSplitPoint(remainder, maxLen)
+    // Reserve space for fence operations:
+    // - Opening fence from previous chunk (if carriedOpenFence)
+    // - Potential closing fence for this chunk (we must reserve for worst case)
+    let budget = maxLen - FENCE_CLOSE_LEN
+    if (carriedOpenFence) {
+      budget = budget - FENCE_OPEN_LEN
+    }
+    const sliceEnd = findSplitPoint(remainder, budget)
     let chunk = remainder.slice(0, sliceEnd)
     remainder = remainder.slice(sliceEnd)
 

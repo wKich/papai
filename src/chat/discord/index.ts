@@ -53,6 +53,7 @@ function isReadyPayload(v: unknown): v is ReadyPayload {
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
   readonly threadCapabilities: ThreadCapabilities = {
+    // Out of scope per §14 of discord-chat-design.md (Phase 1). Threads are treated as non-supported.
     supportsThreads: false,
     canCreateThreads: false,
     threadScope: 'message',

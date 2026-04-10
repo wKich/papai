@@ -84,8 +84,10 @@ const sendLlmResponse = async (
   )
 }
 
-const invokeModel = async (args: InvokeModelArgs): ReturnType<LlmOrchestratorDeps['generateText']> => {
-  const { contextId, mainModel, model, provider, tools, messages, deps } = args
+const invokeModel = async (
+  args: InvokeModelArgs & { reply?: ReplyFn },
+): ReturnType<LlmOrchestratorDeps['generateText']> => {
+  const { contextId, mainModel, model, provider, tools, messages, deps, reply } = args
   const start = Date.now()
   emitLlmStart(contextId, mainModel, messages, tools)
   const result = await deps.generateText({
@@ -112,6 +114,13 @@ const invokeModel = async (args: InvokeModelArgs): ReturnType<LlmOrchestratorDep
         success: event.success,
         ...(event.success ? {} : { error: String(event.error) }),
       })
+      // Provide immediate user feedback for tool execution failures
+      if (!event.success && reply !== undefined) {
+        const toolName = event.toolCall.toolName
+        const errorMessage = event.error instanceof Error ? event.error.message : String(event.error)
+        log.warn({ contextId, toolName, error: errorMessage }, 'Tool execution failed')
+        void reply.text(`⚠️ Tool "${toolName}" failed: ${errorMessage}`)
+      }
     },
   })
   emitLlmEnd(contextId, mainModel, result, start, messages, tools)
@@ -152,6 +161,7 @@ const callLlm = async (
     tools,
     messages: messagesWithMemory,
     deps,
+    reply,
   })
   log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)

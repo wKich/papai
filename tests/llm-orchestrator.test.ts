@@ -378,6 +378,105 @@ describe('processMessage', () => {
     })
   })
 
+  describe('tool execution failure', () => {
+    // Store callback captured by generateText for testing tool failure feedback
+    let capturedOnToolCallFinish:
+      | ((event: {
+          toolCall: { toolName: string; toolCallId: string; input: unknown }
+          durationMs: number
+          success: boolean
+          error?: unknown
+        }) => void)
+      | undefined
+
+    beforeEach(() => {
+      capturedOnToolCallFinish = undefined
+      // Override generateText to capture the onToolCallFinish callback
+      void mock.module('ai', () => ({
+        ...realAi,
+        generateText: (args: {
+          messages?: unknown[]
+          experimental_onToolCallFinish?: typeof capturedOnToolCallFinish
+        }): Promise<GenerateTextResult> => {
+          capturedOnToolCallFinish = args.experimental_onToolCallFinish
+          return generateTextImpl(args)
+        },
+        stepCountIs: (): (() => boolean) => () => false,
+      }))
+    })
+
+    test('sends immediate user feedback when tool execution fails', async () => {
+      seedConfigForContext('tool-fail-ctx')
+
+      generateTextImpl = (): Promise<GenerateTextResult> =>
+        Promise.resolve({
+          text: 'Done!',
+          toolCalls: [{ toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } }],
+          toolResults: [{ toolName: 'create_task', toolCallId: 'call-1', output: { error: 'failed' } }],
+          steps: [],
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
+          usage: {},
+          finishReason: 'stop',
+          warnings: undefined,
+          request: {},
+          providerMetadata: undefined,
+        })
+
+      const { reply, textCalls } = createMockReply()
+
+      await processMessage(reply, 'tool-fail-ctx', null, 'create a task')
+
+      // Simulate a tool failure by calling the captured callback
+      if (capturedOnToolCallFinish !== undefined) {
+        capturedOnToolCallFinish({
+          toolCall: { toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } },
+          durationMs: 100,
+          success: false,
+          error: new Error('Task creation failed'),
+        })
+      }
+
+      // Should have received immediate feedback about the tool failure
+      expect(textCalls.some((call) => call.includes('create_task') && call.includes('failed'))).toBe(true)
+    })
+
+    test('handles non-Error objects in tool failure callback', async () => {
+      seedConfigForContext('tool-fail-string-ctx')
+
+      generateTextImpl = (): Promise<GenerateTextResult> =>
+        Promise.resolve({
+          text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
+          steps: [],
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
+          usage: {},
+          finishReason: 'stop',
+          warnings: undefined,
+          request: {},
+          providerMetadata: undefined,
+        })
+
+      const { reply, textCalls } = createMockReply()
+
+      await processMessage(reply, 'tool-fail-string-ctx', null, 'do something')
+
+      // Simulate a tool failure with a string error
+      if (capturedOnToolCallFinish !== undefined) {
+        capturedOnToolCallFinish({
+          toolCall: { toolName: 'search_tasks', toolCallId: 'call-2', input: { q: 'test' } },
+          durationMs: 50,
+          success: false,
+          error: 'String error message',
+        })
+      }
+
+      expect(textCalls.some((call) => call.includes('search_tasks') && call.includes('String error message'))).toBe(
+        true,
+      )
+    })
+  })
+
   describe('success path history', () => {
     test('on success, history is extended with assistant messages', async () => {
       generateTextImpl = (): Promise<GenerateTextResult> =>
