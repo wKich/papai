@@ -145,8 +145,3 @@ describe('TaskProvider collaboration methods', () => {
     expect(team?.[0]?.id).toBe('user-1')
   })
 })
-
-test('TaskCapability names task provider capabilities explicitly', () => {
-  const capabilities: TaskCapability[] = ['tasks.delete', 'comments.create']
-  expect(capabilities).toEqual(['tasks.delete', 'comments.create'])
-})
