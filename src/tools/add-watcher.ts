@@ -35,7 +35,12 @@ export function makeAddWatcherTool(provider: TaskProvider, contextUserId?: strin
         return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), taskId, userId: userIdParam, tool: 'add_watcher' },
+          {
+            error: error instanceof Error ? error.message : String(error),
+            taskId,
+            userId: userIdParam,
+            tool: 'add_watcher',
+          },
           'Tool execution failed',
         )
         throw error

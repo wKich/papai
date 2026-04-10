@@ -35,7 +35,12 @@ export function makeRemoveWatcherTool(provider: TaskProvider, contextUserId?: st
         return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), taskId, userId: userIdParam, tool: 'remove_watcher' },
+          {
+            error: error instanceof Error ? error.message : String(error),
+            taskId,
+            userId: userIdParam,
+            tool: 'remove_watcher',
+          },
           'Tool execution failed',
         )
         throw error
