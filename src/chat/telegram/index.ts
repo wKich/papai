@@ -15,9 +15,9 @@ import type {
   ReplyOptions,
 } from '../types.js'
 import { handleConfigEditorCallback } from './config-editor-callbacks.js'
-import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
+import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
 import { extractReplyContext } from './reply-context-helpers.js'
 import {
   createReplyParamsBuilder,
@@ -192,9 +192,12 @@ export class TelegramChatProvider implements ChatProvider {
     const replyContext = extractReplyContext(ctx, contextId)
 
     // Create forum topic when mentioned in group, otherwise use existing thread
-    const threadId = isMentioned && contextType === 'group'
-      ? await createForumTopicIfNeeded(ctx, this.bot.api)
-      : (ctx.message?.message_thread_id !== undefined ? String(ctx.message.message_thread_id) : undefined)
+    let threadId: string | undefined
+    if (isMentioned && contextType === 'group') {
+      threadId = await createForumTopicIfNeeded(ctx, this.bot.api)
+    } else if (ctx.message?.message_thread_id !== undefined) {
+      threadId = String(ctx.message.message_thread_id)
+    }
 
     return {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },

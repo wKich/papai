@@ -2,17 +2,18 @@
  * Tests for Telegram reply helpers
  */
 
-import type { Context } from 'grammy'
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import {
-  createReplyParamsBuilder,
-  type ReplyParamsBuilder,
-} from '../../../src/chat/telegram/reply-helpers.js'
+import type { Context } from 'grammy'
+
+import { createReplyParamsBuilder, type ReplyParamsBuilder } from '../../../src/chat/telegram/reply-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 /** Create mock Context with message for tests */
-function createMockContext(message: { message_id: number | undefined; message_thread_id: number | undefined }): Context {
+function createMockContext(message: {
+  message_id: number | undefined
+  message_thread_id: number | undefined
+}): Context {
   return { message } as unknown as Context
 }
 

@@ -2,8 +2,9 @@
  * Tests for Telegram forum topic helpers
  */
 
-import type { Context } from 'grammy'
 import { beforeEach, describe, expect, test } from 'bun:test'
+
+import type { Context } from 'grammy'
 
 import { createForumTopicIfNeeded } from '../../../src/chat/telegram/forum-topic-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'

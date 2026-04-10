@@ -40,6 +40,7 @@ import { makeListTasksTool } from './list-tasks.js'
 import { makeListWatchersTool } from './list-watchers.js'
 import { makeListWorkTool } from './list-work.js'
 import { makeLogWorkTool } from './log-work.js'
+import { makeLookupGroupHistoryTool } from './lookup-group-history.js'
 import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
 import { makePromoteMemoTool } from './promote-memo.js'
 import { makeRemoveAttachmentTool } from './remove-attachment.js'
@@ -265,7 +266,17 @@ function addDeferredPromptTools(tools: ToolSet, userId: string | undefined): voi
   tools['cancel_deferred_prompt'] = makeCancelDeferredPromptTool(userId)
 }
 
-export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMode = 'normal'): ToolSet {
+function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, contextId: string | undefined): void {
+  if (userId === undefined || contextId === undefined) return
+  tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
+}
+
+export function makeTools(
+  provider: TaskProvider,
+  userId?: string,
+  mode: ToolMode = 'normal',
+  contextId?: string,
+): ToolSet {
   const tools = makeCoreTools(provider, userId)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)
@@ -280,6 +291,7 @@ export function makeTools(provider: TaskProvider, userId?: string, mode: ToolMod
   addRecurringTools(tools, userId)
   addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)
+  addLookupGroupHistoryTool(tools, userId, contextId)
   if (mode === 'normal') {
     addDeferredPromptTools(tools, userId)
   }
