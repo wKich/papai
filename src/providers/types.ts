@@ -104,6 +104,12 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   /** Config keys this provider needs (shown in /config, validated by /setup). */
   readonly configRequirements: readonly ProviderConfigRequirement[]
 
+  /** Optional identity resolver for user matching (auto-link). */
+  readonly identityResolver?: {
+    /** Search users by query string, returns matching users. */
+    searchUsers(query: string, limit?: number): Promise<Array<{ id: string; login: string; name?: string }>>
+  }
+
   // --- Core task operations (required) ---
 
   createTask(params: {
@@ -285,9 +291,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   deleteWorkItem?(taskId: string, workItemId: string): Promise<{ id: string }>
 
   buildTaskUrl(taskId: string, projectId?: string): string
-
   buildProjectUrl(projectId: string): string
-
   classifyError(error: unknown): AppError
 
   /** Returns provider-specific instructions to append to the LLM system prompt. */
