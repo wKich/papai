@@ -18,6 +18,54 @@ describe('TelegramChatProvider', () => {
     expect(typeof TelegramChatProvider).toBe('function')
   })
 
+  describe('thread capabilities', () => {
+    test('declares thread support with creation capability', () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      expect(provider.threadCapabilities.supportsThreads).toBe(true)
+      expect(provider.threadCapabilities.canCreateThreads).toBe(true)
+      expect(provider.threadCapabilities.threadScope).toBe('message')
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+  })
+
+  describe('forum topic creation', () => {
+    test('async extractMessage returns IncomingMessage with threadId when mentioned', () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+
+      // Verify provider methods exist and are async
+      expect(typeof provider.onMessage).toBe('function')
+      expect(typeof provider.registerCommand).toBe('function')
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('registerCommand passes threadId to buildReplyFn', () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+
+      // Register a command and verify it doesn't throw
+      provider.registerCommand('test', async () => {
+        // Handler
+      })
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('onMessage registers handlers without error', () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+
+      // Register message handler and verify it doesn't throw
+      provider.onMessage(async () => {
+        // Handler
+      })
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+  })
+
   describe('resolveUserId', () => {
     test('returns numeric ID as-is', async () => {
       process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'

@@ -8,20 +8,26 @@ export type ReplyParamsBuilder = (
   options?: ReplyOptions,
 ) => { message_id: number; message_thread_id?: number } | undefined
 
-export function createReplyParamsBuilder(ctx: Context): ReplyParamsBuilder {
+export function createReplyParamsBuilder(ctx: Context, threadId?: string): ReplyParamsBuilder {
   const messageId = ctx.message?.message_id
-  const threadId = ctx.message?.message_thread_id
+  const contextThreadId = ctx.message?.message_thread_id
 
   return (options?: ReplyOptions): { message_id: number; message_thread_id?: number } | undefined => {
     const targetMessageId = options?.replyToMessageId === undefined ? messageId : parseInt(options.replyToMessageId, 10)
 
     if (targetMessageId === undefined) return undefined
 
-    const targetThreadId = options?.threadId === undefined ? threadId : parseInt(options.threadId, 10)
+    // Priority: explicit threadId param > options.threadId > context threadId
+    const effectiveThreadId =
+      threadId === undefined
+        ? options?.threadId === undefined
+          ? contextThreadId
+          : parseInt(options.threadId, 10)
+        : parseInt(threadId, 10)
 
     return {
       message_id: targetMessageId,
-      ...(targetThreadId !== undefined && { message_thread_id: targetThreadId }),
+      ...(effectiveThreadId !== undefined && { message_thread_id: effectiveThreadId }),
     }
   }
 }

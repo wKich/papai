@@ -15,6 +15,7 @@ import type {
   ReplyOptions,
 } from '../types.js'
 import { handleConfigEditorCallback } from './config-editor-callbacks.js'
+import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
 import { extractReplyContext } from './reply-context-helpers.js'
@@ -51,10 +52,10 @@ export class TelegramChatProvider implements ChatProvider {
   registerCommand(name: string, handler: CommandHandler): void {
     this.bot.command(name, async (ctx) => {
       const isAdmin = await this.checkAdminStatus(ctx)
-      const msg = this.extractMessage(ctx, isAdmin)
+      const msg = await this.extractMessage(ctx, isAdmin)
       if (msg === null) return
       msg.commandMatch = typeof ctx.match === 'string' ? ctx.match : ''
-      const reply = this.buildReplyFn(ctx)
+      const reply = this.buildReplyFn(ctx, msg.threadId)
       const auth: AuthorizationResult = {
         allowed: true,
         isBotAdmin: isAdmin,
@@ -68,9 +69,9 @@ export class TelegramChatProvider implements ChatProvider {
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void {
     this.bot.on('message:text', async (ctx) => {
       const isAdmin = await this.checkAdminStatus(ctx)
-      const msg = this.extractMessage(ctx, isAdmin)
+      const msg = await this.extractMessage(ctx, isAdmin)
       if (msg === null) return
-      const reply = this.buildReplyFn(ctx)
+      const reply = this.buildReplyFn(ctx, msg.threadId)
       await this.withTypingIndicator(ctx, () => handler(msg, reply))
     })
 
@@ -78,11 +79,11 @@ export class TelegramChatProvider implements ChatProvider {
       ['message:document', 'message:photo', 'message:audio', 'message:video', 'message:voice'],
       async (ctx) => {
         const isAdmin = await this.checkAdminStatus(ctx)
-        const msg = this.extractMessage(ctx, isAdmin)
+        const msg = await this.extractMessage(ctx, isAdmin)
         if (msg === null) return
         const files = await this.fetchFilesFromContext(ctx)
         if (files.length > 0) msg.files = files
-        const reply = this.buildReplyFn(ctx)
+        const reply = this.buildReplyFn(ctx, msg.threadId)
         await this.withTypingIndicator(ctx, () => handler(msg, reply))
       },
     )
@@ -157,7 +158,7 @@ export class TelegramChatProvider implements ChatProvider {
     log.info({ adminUserId }, 'Telegram command menu registered')
   }
 
-  private extractMessage(ctx: Context, isAdmin: boolean): IncomingMessage | null {
+  private async extractMessage(ctx: Context, isAdmin: boolean): Promise<IncomingMessage | null> {
     const id = ctx.from?.id
     if (id === undefined) return null
 
@@ -166,7 +167,7 @@ export class TelegramChatProvider implements ChatProvider {
     const contextId = String(ctx.chat?.id ?? id)
     const contextType: ContextType = isGroup ? 'group' : 'dm'
 
-    // Use caption for media messages (photo/document/etc), fallback to text or empty
+    // Use caption for media messages, fallback to text or empty
     const text = ctx.message?.text ?? ctx.message?.caption ?? ''
     const isMentioned = this.isBotMentioned(text, ctx.message?.entities ?? ctx.message?.caption_entities)
 
@@ -190,6 +191,11 @@ export class TelegramChatProvider implements ChatProvider {
 
     const replyContext = extractReplyContext(ctx, contextId)
 
+    // Create forum topic when mentioned in group, otherwise use existing thread
+    const threadId = isMentioned && contextType === 'group'
+      ? await createForumTopicIfNeeded(ctx, this.bot.api)
+      : (ctx.message?.message_thread_id !== undefined ? String(ctx.message.message_thread_id) : undefined)
+
     return {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
       contextId,
@@ -199,6 +205,7 @@ export class TelegramChatProvider implements ChatProvider {
       messageId: messageIdStr,
       replyToMessageId: replyToMessageIdStr,
       replyContext,
+      threadId,
     }
   }
 
@@ -257,10 +264,10 @@ export class TelegramChatProvider implements ChatProvider {
     }
   }
 
-  private buildReplyFn(ctx: Context): ReplyFn {
+  private buildReplyFn(ctx: Context, threadId?: string): ReplyFn {
     const chatId = ctx.chat?.id
     const messageId = ctx.message?.message_id
-    const buildReplyParams = createReplyParamsBuilder(ctx)
+    const buildReplyParams = createReplyParamsBuilder(ctx, threadId)
 
     return {
       text: (content: string, options?: ReplyOptions) => sendTextReply(ctx, content, buildReplyParams, options),
