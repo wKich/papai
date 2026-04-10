@@ -1,7 +1,9 @@
 import { describe, expect, it, beforeEach } from 'bun:test'
+
+import { eq, and } from 'drizzle-orm'
+
 import { getDrizzleDb } from '../../src/db/drizzle.js'
 import { userIdentityMappings } from '../../src/db/schema.js'
-import { eq, and } from 'drizzle-orm'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('userIdentityMappings', () => {
@@ -44,8 +46,10 @@ describe('userIdentityMappings', () => {
       .get()
 
     expect(row).toBeDefined()
-    expect(row.providerUserId).toBeNull()
-    expect(row.matchMethod).toBe('unmatched')
+    if (row !== undefined) {
+      expect(row.providerUserId).toBeNull()
+      expect(row.matchMethod).toBe('unmatched')
+    }
 
     // Cleanup
     db.delete(userIdentityMappings).where(eq(userIdentityMappings.contextId, 'test-user-123')).run()

@@ -1,5 +1,6 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
+
 import { migration019UserIdentityMappings } from '../../../src/db/migrations/019_user_identity_mappings.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -80,12 +81,16 @@ describe('migration019UserIdentityMappings', () => {
       VALUES ('user-1', 'kaneo', NULL, '2026-01-01T00:00:00Z', 'unmatched', 0)
     `)
 
-    const row = db.query('SELECT * FROM user_identity_mappings WHERE context_id = ?').get('user-1') as {
-      provider_user_id: unknown
-      match_method: string
-    }
+    const row = db
+      .query<{ provider_user_id: unknown; match_method: string }, string[]>(
+        'SELECT * FROM user_identity_mappings WHERE context_id = ?',
+      )
+      .get('user-1')
 
-    expect(row.provider_user_id).toBeNull()
-    expect(row.match_method).toBe('unmatched')
+    expect(row).not.toBeNull()
+    if (row !== null) {
+      expect(row.provider_user_id).toBeNull()
+      expect(row.match_method).toBe('unmatched')
+    }
   })
 })
