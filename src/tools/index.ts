@@ -3,6 +3,7 @@ import type { ToolSet } from 'ai'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentReactionTool } from './add-comment-reaction.js'
 import { makeAddCommentTool } from './add-comment.js'
+import { makeClearMyIdentityTool } from './clear-my-identity.js'
 import { makeAddProjectMemberTool } from './add-project-member.js'
 import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
@@ -57,6 +58,7 @@ import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
 import { makeSaveMemoTool } from './save-memo.js'
 import { makeSearchMemosTool } from './search-memos.js'
+import { makeSetMyIdentityTool } from './set-my-identity.js'
 import { makeSearchTasksTool } from './search-tasks.js'
 import { makeSetVisibilityTool } from './set-visibility.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
@@ -271,6 +273,19 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
 
+function maybeAddIdentityTools(
+  tools: ToolSet,
+  provider: TaskProvider,
+  contextId: string | undefined,
+): void {
+  // Only add identity tools for group chats (contextId contains non-user context)
+  if (contextId === undefined) return
+  if (provider.identityResolver === undefined) return
+
+  tools['set_my_identity'] = makeSetMyIdentityTool(provider, contextId)
+  tools['clear_my_identity'] = makeClearMyIdentityTool(provider, contextId)
+}
+
 export function makeTools(
   provider: TaskProvider,
   userId?: string,
@@ -292,6 +307,7 @@ export function makeTools(
   addMemoTools(tools, provider, userId)
   addInstructionTools(tools, userId)
   addLookupGroupHistoryTool(tools, userId, contextId)
+  maybeAddIdentityTools(tools, provider, contextId)
   if (mode === 'normal') {
     addDeferredPromptTools(tools, userId)
   }
