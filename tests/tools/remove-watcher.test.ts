@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { clearIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
 import { makeRemoveWatcherTool } from '../../src/tools/remove-watcher.js'
-import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function isTaskUserResult(value: unknown): value is { taskId: string; userId: string } {
@@ -16,8 +17,9 @@ function isTaskUserResult(value: unknown): value is { taskId: string; userId: st
 }
 
 describe('Remove Watcher Tool', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLogger()
+    await setupTestDb()
     mock.restore()
   })
 
@@ -57,5 +59,65 @@ describe('Remove Watcher Tool', () => {
     expect(schemaValidates(tool, { userId: 'user-1' })).toBe(false)
     expect(schemaValidates(tool, { taskId: 'task-1' })).toBe(false)
     expect(schemaValidates(tool, { taskId: 'task-1', userId: 'user-1' })).toBe(true)
+  })
+
+  describe('identity resolution', () => {
+    const testUserId = 'test-unwatcher-identity'
+
+    beforeEach(() => {
+      setIdentityMapping({
+        contextId: testUserId,
+        providerName: 'mock',
+        providerUserId: 'resolved-user-789',
+        providerUserLogin: 'jsmith',
+        displayName: 'John Smith',
+        matchMethod: 'manual_nl',
+        confidence: 100,
+      })
+    })
+
+    test('resolves "me" userId to identity', async () => {
+      const removeWatcher = mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId }))
+      const tool = makeRemoveWatcherTool(createMockProvider({ removeWatcher }), testUserId)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'me' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      if (!isTaskUserResult(result)) throw new Error('Invalid result')
+      expect(result).toEqual({ taskId: 'task-123', userId: 'resolved-user-789' })
+      expect(removeWatcher).toHaveBeenCalledWith('task-123', 'resolved-user-789')
+    })
+
+    test('returns identity_required when identity not found', async () => {
+      clearIdentityMapping(testUserId, 'mock')
+
+      const tool = makeRemoveWatcherTool(createMockProvider(), testUserId)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'me' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toEqual({
+        status: 'identity_required',
+        message: "I couldn't automatically match you. What's your login?",
+      })
+    })
+
+    test('uses original userId when not "me"', async () => {
+      const removeWatcher = mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId }))
+      const tool = makeRemoveWatcherTool(createMockProvider({ removeWatcher }), testUserId)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'other-user' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      if (!isTaskUserResult(result)) throw new Error('Invalid result')
+      expect(result).toEqual({ taskId: 'task-123', userId: 'other-user' })
+      expect(removeWatcher).toHaveBeenCalledWith('task-123', 'other-user')
+    })
   })
 })

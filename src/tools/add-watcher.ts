@@ -2,26 +2,40 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:add-watcher' })
 
-export function makeAddWatcherTool(provider: TaskProvider): ToolSet[string] {
+export function makeAddWatcherTool(provider: TaskProvider, contextUserId?: string): ToolSet[string] {
   return tool({
     description: 'Add a watcher to a task so the specified user is notified about future updates.',
     inputSchema: z.object({
       taskId: z.string().describe('Task ID to watch'),
       userId: z.string().describe('User ID to add as a watcher'),
     }),
-    execute: async ({ taskId, userId }) => {
+    execute: async ({ taskId, userId: userIdParam }) => {
       try {
-        const result = await provider.addWatcher!(taskId, userId)
-        log.info({ taskId, userId }, 'Watcher added via tool')
+        let resolvedUserId = userIdParam
+        if (userIdParam.toLowerCase() === 'me' && contextUserId !== undefined) {
+          const identity = resolveMeReference(contextUserId, provider)
+          if (identity.type === 'found') {
+            resolvedUserId = identity.identity.userId
+          } else {
+            return {
+              status: 'identity_required',
+              message: identity.message,
+            }
+          }
+        }
+
+        const result = await provider.addWatcher!(taskId, resolvedUserId)
+        log.info({ taskId, userId: userIdParam, resolvedUserId }, 'Watcher added via tool')
         return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), taskId, userId, tool: 'add_watcher' },
+          { error: error instanceof Error ? error.message : String(error), taskId, userId: userIdParam, tool: 'add_watcher' },
           'Tool execution failed',
         )
         throw error

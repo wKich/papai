@@ -206,14 +206,14 @@ function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('tasks.delete')) tools['delete_task'] = makeDeleteTaskTool(provider)
 }
 
-function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider): void {
+function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
   if (provider.listUsers !== undefined) {
     tools['find_user'] = makeFindUserTool(provider)
   }
   if (provider.capabilities.has('tasks.watchers')) {
     tools['list_watchers'] = makeListWatchersTool(provider)
-    tools['add_watcher'] = makeAddWatcherTool(provider)
-    tools['remove_watcher'] = makeRemoveWatcherTool(provider)
+    tools['add_watcher'] = makeAddWatcherTool(provider, contextId)
+    tools['remove_watcher'] = makeRemoveWatcherTool(provider, contextId)
   }
   if (provider.capabilities.has('tasks.votes')) {
     tools['add_vote'] = makeAddVoteTool(provider)
@@ -284,7 +284,7 @@ export function makeTools(
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
-  maybeAddCollaborationTaskTools(tools, provider)
+  maybeAddCollaborationTaskTools(tools, provider, contextId)
   maybeAddAttachmentTools(tools, provider, userId)
   maybeAddWorkItemTools(tools, provider)
   maybeAddCountTasksTool(tools, provider)
