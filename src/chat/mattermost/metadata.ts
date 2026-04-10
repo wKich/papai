@@ -1,6 +1,6 @@
 import type { ChatCapability, ChatProviderConfigRequirement, ChatProviderTraits } from '../types.js'
 
-export const mattermostCapabilities = new Set<ChatCapability>([
+export const mattermostCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCapability>([
   'messages.files',
   'messages.reply-context',
   'files.receive',

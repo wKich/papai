@@ -310,6 +310,9 @@ export const DEFAULT_CHAT_CAPABILITIES = new Set<ChatCapability>([
   'interactions.callbacks',
   'messages.buttons',
   'messages.files',
+  'messages.redact',
+  'files.receive',
+  'messages.reply-context',
   'users.resolve',
 ])
 

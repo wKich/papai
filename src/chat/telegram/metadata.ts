@@ -1,8 +1,7 @@
 import type { ChatCapability, ChatProviderConfigRequirement, ChatProviderTraits } from '../types.js'
 
-export const telegramCapabilities = new Set<ChatCapability>([
+export const telegramCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCapability>([
   'commands.menu',
-  'interactions.callbacks',
   'messages.buttons',
   'messages.files',
   'messages.redact',

@@ -187,7 +187,10 @@ export interface ChatProvider {
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
 
-  /** Resolve a username to a user ID. Returns null if not found. */
+  /**
+   * Resolve a username to a user ID. Returns null if not found.
+   * Providers that implement this method should also advertise the `users.resolve` capability.
+   */
   resolveUserId?(username: string): Promise<string | null>
 
   /** Register the bot's command list with the platform (for command menus). */
