@@ -6,44 +6,49 @@ import {
   supportsInteractiveButtons,
   supportsUserResolution,
 } from '../../src/chat/capabilities.js'
-import type { ChatCapability, ChatProvider } from '../../src/chat/types.js'
+import type { ChatCapability } from '../../src/chat/types.js'
 
-const interactiveChat: ChatProvider = {
-  name: 'mock',
-  threadCapabilities: { supportsThreads: true, canCreateThreads: false, threadScope: 'message' },
-  capabilities: new Set<ChatCapability>([
-    'messages.buttons',
-    'interactions.callbacks',
-    'messages.files',
-    'users.resolve',
-    'commands.menu',
-  ]),
-  traits: { observedGroupMessages: 'all' },
-  configRequirements: [],
-  registerCommand: (): void => {},
-  onMessage: (): void => {},
-  onInteraction: (): void => {},
-  sendMessage: (): Promise<void> => Promise.resolve(),
-  resolveUserId: (): Promise<string | null> => Promise.resolve('user-1'),
-  setCommands: (): Promise<void> => Promise.resolve(),
-  start: (): Promise<void> => Promise.resolve(),
-  stop: (): Promise<void> => Promise.resolve(),
-}
+const allCapabilities = new Set<ChatCapability>([
+  'messages.buttons',
+  'interactions.callbacks',
+  'messages.files',
+  'users.resolve',
+  'commands.menu',
+])
+
+const withCapabilities = (caps: ChatCapability[]): { capabilities: Set<ChatCapability> } => ({
+  capabilities: new Set<ChatCapability>(caps),
+})
 
 describe('chat capability helpers', () => {
   test('supportsInteractiveButtons requires both button rendering and callbacks', () => {
-    expect(supportsInteractiveButtons(interactiveChat)).toBe(true)
-    expect(
-      supportsInteractiveButtons({
-        ...interactiveChat,
-        capabilities: new Set<ChatCapability>(['messages.buttons']),
-      }),
-    ).toBe(false)
+    expect(supportsInteractiveButtons({ capabilities: allCapabilities })).toBe(true)
+    expect(supportsInteractiveButtons(withCapabilities(['messages.buttons']))).toBe(false)
+    expect(supportsInteractiveButtons(withCapabilities(['interactions.callbacks']))).toBe(false)
+    expect(supportsInteractiveButtons(withCapabilities([]))).toBe(false)
   })
 
-  test('supportsFileReplies, supportsUserResolution, and supportsCommandMenu read the capability set', () => {
-    expect(supportsFileReplies(interactiveChat)).toBe(true)
-    expect(supportsUserResolution(interactiveChat)).toBe(true)
-    expect(supportsCommandMenu(interactiveChat)).toBe(true)
+  test('supportsFileReplies returns true when messages.files is present', () => {
+    expect(supportsFileReplies({ capabilities: allCapabilities })).toBe(true)
+  })
+
+  test('supportsFileReplies returns false when messages.files is absent', () => {
+    expect(supportsFileReplies(withCapabilities(['messages.buttons']))).toBe(false)
+  })
+
+  test('supportsUserResolution returns true when users.resolve is present', () => {
+    expect(supportsUserResolution({ capabilities: allCapabilities })).toBe(true)
+  })
+
+  test('supportsUserResolution returns false when users.resolve is absent', () => {
+    expect(supportsUserResolution(withCapabilities(['messages.buttons']))).toBe(false)
+  })
+
+  test('supportsCommandMenu returns true when commands.menu is present', () => {
+    expect(supportsCommandMenu({ capabilities: allCapabilities })).toBe(true)
+  })
+
+  test('supportsCommandMenu returns false when commands.menu is absent', () => {
+    expect(supportsCommandMenu(withCapabilities(['messages.buttons']))).toBe(false)
   })
 })

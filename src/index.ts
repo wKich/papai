@@ -11,11 +11,6 @@ import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
 
-const hasRegisterCommandMenuForAdmin = (
-  chat: unknown,
-): chat is { registerCommandMenuForAdmin: (adminUserId: string) => Promise<void> } =>
-  typeof chat === 'object' && chat !== null && 'registerCommandMenuForAdmin' in chat
-
 const log = logger.child({ scope: 'main' })
 
 const REQUIRED_ENV_VARS = ['CHAT_PROVIDER', 'ADMIN_USER_ID', 'TASK_PROVIDER'] as const
@@ -78,9 +73,7 @@ setupBot(chatProvider, adminUserId)
 
 await chatProvider.start()
 
-if (hasRegisterCommandMenuForAdmin(chatProvider)) {
-  void chatProvider.registerCommandMenuForAdmin(adminUserId)
-}
+void chatProvider.setCommands?.(adminUserId)
 
 void announceNewVersion(chatProvider, adminUserId)
 

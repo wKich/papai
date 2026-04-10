@@ -1,6 +1,12 @@
 import { describe, expect, it, test } from 'bun:test'
 
-import type { ChatCapability, ChatProvider, IncomingInteraction, ThreadCapabilities } from '../../src/chat/types.js'
+import type {
+  ChatCapability,
+  ChatProvider,
+  IncomingInteraction,
+  ReplyFn,
+  ThreadCapabilities,
+} from '../../src/chat/types.js'
 
 describe('ThreadCapabilities', () => {
   it('should have correct structure', () => {
@@ -61,10 +67,10 @@ describe('ChatProvider interface', () => {
       configRequirements: [{ key: 'BOT_TOKEN', label: 'Bot Token', required: true }],
       registerCommand: (): void => {},
       onMessage: (): void => {},
-      onInteraction: (_handler): void => {},
+      onInteraction: (_handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {},
       sendMessage: (): Promise<void> => Promise.resolve(),
       resolveUserId: (): Promise<string | null> => Promise.resolve('user123'),
-      setCommands: (): Promise<void> => Promise.resolve(),
+      setCommands: (_adminUserId: string): Promise<void> => Promise.resolve(),
       start: (): Promise<void> => Promise.resolve(),
       stop: (): Promise<void> => Promise.resolve(),
     }

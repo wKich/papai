@@ -169,11 +169,11 @@ export interface ChatProvider {
   /** Thread support capabilities */
   readonly threadCapabilities: ThreadCapabilities
   /** Set of supported capability strings */
-  readonly capabilities: Set<ChatCapability>
+  readonly capabilities: ReadonlySet<ChatCapability>
   /** Behavioral traits for this platform */
   readonly traits: ChatProviderTraits
   /** Environment/config requirements for startup */
-  readonly configRequirements: ChatProviderConfigRequirement[]
+  readonly configRequirements: readonly ChatProviderConfigRequirement[]
 
   /** Register a slash command handler (e.g., 'help' for /help). */
   registerCommand(name: string, handler: CommandHandler): void
@@ -182,7 +182,7 @@ export interface ChatProvider {
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void
 
   /** Register the handler for button/callback interactions (optional). */
-  onInteraction?(handler: (interaction: IncomingInteraction) => Promise<void>): void
+  onInteraction?(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void
 
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
@@ -191,7 +191,7 @@ export interface ChatProvider {
   resolveUserId?(username: string): Promise<string | null>
 
   /** Register the bot's command list with the platform (for command menus). */
-  setCommands?(commands: Array<{ command: string; description: string }>): Promise<void>
+  setCommands?(adminUserId: string): Promise<void>
 
   /** Start the bot event loop. */
   start(): Promise<void>

@@ -137,7 +137,7 @@ export class TelegramChatProvider implements ChatProvider {
     return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
 
-  async registerCommandMenuForAdmin(adminUserId: string): Promise<void> {
+  async setCommands(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },
       { command: 'setup', description: 'Interactive configuration wizard' },

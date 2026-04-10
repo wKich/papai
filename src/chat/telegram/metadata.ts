@@ -8,7 +8,6 @@ export const telegramCapabilities = new Set<ChatCapability>([
   'messages.redact',
   'messages.reply-context',
   'files.receive',
-  'users.resolve',
 ])
 
 export const telegramTraits: ChatProviderTraits = {

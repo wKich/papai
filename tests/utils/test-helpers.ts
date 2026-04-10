@@ -329,9 +329,9 @@ export function createMockChat(
     /** Custom resolveUserId implementation */
     resolveUserId?: (username: string) => Promise<string | null>
     /** Callback when an interaction handler is registered via onInteraction */
-    onInteractionHandler?: (handler: (interaction: IncomingInteraction) => Promise<void>) => void
+    onInteractionHandler?: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
     /** Custom setCommands implementation */
-    setCommands?: (commands: Array<{ command: string; description: string }>) => Promise<void>
+    setCommands?: (adminUserId: string) => Promise<void>
     /** Capability set for this provider (defaults to DEFAULT_CHAT_CAPABILITIES) */
     capabilities?: Set<ChatCapability>
     /** Behavioral traits for this provider */
@@ -356,9 +356,13 @@ export function createMockChat(
     onMessage: (handler): void => {
       options.onMessageHandler?.(handler)
     },
-    onInteraction: (handler): void => {
-      options.onInteractionHandler?.(handler)
-    },
+    ...(options.onInteractionHandler === undefined
+      ? {}
+      : {
+          onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
+            options.onInteractionHandler?.(handler)
+          },
+        }),
     sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
     resolveUserId:
       options.resolveUserId ??
