@@ -3,11 +3,42 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
+import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import type { ListTasksParams, TaskProvider } from '../providers/types.js'
 import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:list-tasks' })
+
+interface ResolveAssigneeFilterResult {
+  params: ListTasksParams
+  identityRequired?: { status: 'identity_required'; message: string }
+}
+
+function resolveAssigneeFilter(
+  params: ListTasksParams,
+  userId: string | undefined,
+  provider: TaskProvider,
+): ResolveAssigneeFilterResult {
+  const assigneeId = params.assigneeId
+  if (assigneeId === undefined || assigneeId.toLowerCase() !== 'me' || userId === undefined) {
+    return { params }
+  }
+
+  const identity = resolveMeReference(userId, provider)
+  if (identity.type === 'found') {
+    return {
+      params: {
+        ...params,
+        assigneeId: identity.identity.userId,
+      },
+    }
+  }
+  return {
+    params,
+    identityRequired: { status: 'identity_required', message: identity.message },
+  }
+}
 
 export function makeListTasksTool(provider: TaskProvider, userId?: string): ToolSet[string] {
   return tool({
@@ -31,7 +62,12 @@ export function makeListTasksTool(provider: TaskProvider, userId?: string): Tool
     execute: async ({ projectId, ...rest }) => {
       const params: ListTasksParams = rest
       try {
-        const tasks = await provider.listTasks(projectId, params)
+        const { params: resolvedParams, identityRequired } = resolveAssigneeFilter(params, userId, provider)
+        if (identityRequired !== undefined) {
+          return identityRequired
+        }
+
+        const tasks = await provider.listTasks(projectId, resolvedParams)
         log.info({ projectId, taskCount: tasks.length, filters: rest }, 'Tasks listed via tool')
         const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
         return tasks.map((task) => ({ ...task, dueDate: utcToLocal(task.dueDate, timezone) }))
