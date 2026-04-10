@@ -17,6 +17,7 @@ import type {
 } from '../types.js'
 import { type YouTrackConfig } from './client.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
+import { createYouTrackIdentityResolver } from './identity-resolver.js'
 import {
   addYouTrackTaskLabel,
   createYouTrackLabel,
@@ -74,10 +75,12 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly identityResolver
 
   constructor(config: YouTrackConfig) {
     super(config)
     log.debug('YouTrackProvider created')
+    this.identityResolver = createYouTrackIdentityResolver(this.config)
   }
 
   createTask(params: {

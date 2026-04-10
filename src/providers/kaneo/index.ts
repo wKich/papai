@@ -15,6 +15,7 @@ import type {
 import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig } from './client.js'
 import { ALL_CAPABILITIES, CONFIG_REQUIREMENTS } from './constants.js'
+import { createKaneoIdentityResolver } from './identity-resolver.js'
 import { kaneoAddComment, kaneoGetComments, kaneoRemoveComment, kaneoUpdateComment } from './operations/comments.js'
 import {
   kaneoAddTaskLabel,
@@ -50,12 +51,14 @@ export class KaneoProvider implements TaskProvider {
   readonly name = 'kaneo'
   readonly capabilities = ALL_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly identityResolver
 
   constructor(
     private readonly config: KaneoConfig,
     private readonly workspaceId: string,
   ) {
     log.debug({ workspaceId }, 'KaneoProvider created')
+    this.identityResolver = createKaneoIdentityResolver(this.config, this.workspaceId)
   }
 
   createTask(params: {
