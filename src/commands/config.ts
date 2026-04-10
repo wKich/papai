@@ -81,7 +81,7 @@ export function registerConfigCommand(
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command executed')
 
     if (!supportsInteractiveButtons(chat)) {
-      lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/set <key> <value>` to update settings.')
+      lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/setup` to configure everything.')
       await reply.text(lines.join('\n'))
       return
     }

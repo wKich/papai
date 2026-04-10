@@ -43,10 +43,13 @@ describe('registerCommandMenuIfSupported', () => {
   })
 
   test('handles provider with no setCommands method when capability present', async () => {
-    const chat = createMockChat({
-      capabilities: new Set<ChatCapability>(['commands.menu']),
-    })
-    // Ensure no error thrown even if setCommands resolves as no-op
+    const chat = {
+      ...createMockChat({
+        capabilities: new Set<ChatCapability>(['commands.menu']),
+      }),
+      setCommands: undefined,
+    }
+
     await expect(registerCommandMenuIfSupported(chat, 'admin123')).resolves.toBeUndefined()
   })
 })
