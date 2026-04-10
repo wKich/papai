@@ -1,4 +1,4 @@
-import type { ChatProvider, CommandHandler } from '../chat/types.js'
+import type { ChatProvider, CommandHandler, ContextType } from '../chat/types.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:help' })
@@ -57,15 +57,29 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
   return text
 }
 
+export function buildHelpText(
+  providerName: string,
+  contextType: ContextType,
+  opts: { isBotAdmin: boolean; isGroupAdmin: boolean },
+): string {
+  let helpText = contextType === 'dm' ? getDmHelpText(opts.isBotAdmin) : getGroupHelpText(opts.isGroupAdmin)
+
+  if (providerName === 'discord' && opts.isBotAdmin) {
+    helpText += '\n\nNote: `/context` export is deferred on Discord.'
+  }
+
+  return helpText
+}
+
 export function registerHelpCommand(chat: ChatProvider): void {
   const handler: CommandHandler = async (msg, reply, auth) => {
     log.info({ userId: msg.user.id, contextType: msg.contextType }, '/help command executed')
 
-    if (msg.contextType === 'dm') {
-      await reply.text(getDmHelpText(auth.isBotAdmin))
-    } else {
-      await reply.text(getGroupHelpText(auth.isGroupAdmin))
-    }
+    const helpText = buildHelpText(chat.name, msg.contextType, {
+      isBotAdmin: auth.isBotAdmin,
+      isGroupAdmin: auth.isGroupAdmin,
+    })
+    await reply.text(helpText)
   }
 
   chat.registerCommand('help', handler)
