@@ -1,4 +1,4 @@
-import type { Capability, ProviderConfigRequirement } from '../types.js'
+import type { TaskCapability, ProviderConfigRequirement } from '../types.js'
 
 /** Fields parameter for issue requests returning full detail. */
 export const REACTION_FIELDS = 'id,reaction,author(id,login,fullName,email)'
@@ -73,7 +73,7 @@ export const DEFAULT_ACTIVITY_CATEGORIES = [
   'TotalVotesCategory',
 ].join(',')
 
-export const YOUTRACK_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+export const YOUTRACK_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   // Tasks
   'tasks.delete',
   'tasks.count',

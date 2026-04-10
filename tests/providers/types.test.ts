@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { TaskCapability } from '../../src/providers/types.js'
 import type {
   Attachment,
-  Capability,
   Comment,
   CommentReaction,
   SetTaskVisibilityParams,
@@ -126,7 +126,7 @@ describe('collaboration domain types', () => {
 
 describe('TaskProvider collaboration methods', () => {
   test('TaskProvider accepts optional collaboration methods and capabilities', async () => {
-    const capabilities: Capability[] = [
+    const capabilities: TaskCapability[] = [
       'tasks.watchers',
       'tasks.votes',
       'tasks.visibility',
@@ -144,4 +144,9 @@ describe('TaskProvider collaboration methods', () => {
     expect(visibility).toEqual({ taskId: 'PROJ-1', visibility: { kind: 'public' } })
     expect(team?.[0]?.id).toBe('user-1')
   })
+})
+
+test('TaskCapability names task provider capabilities explicitly', () => {
+  const capabilities: TaskCapability[] = ['tasks.delete', 'comments.create']
+  expect(capabilities).toEqual(['tasks.delete', 'comments.create'])
 })

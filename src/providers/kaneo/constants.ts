@@ -1,6 +1,6 @@
-import type { Capability, ProviderConfigRequirement } from '../types.js'
+import type { TaskCapability, ProviderConfigRequirement } from '../types.js'
 
-export const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+export const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   // Tasks
   'tasks.delete',
   'tasks.relations',
