@@ -56,7 +56,7 @@ export async function kaneoListUsers(
 
     const filteredMembers = members.filter((user) => matchesQuery(user, query)).map(mapUserRef)
 
-    const result = limit !== undefined ? filteredMembers.slice(0, limit) : filteredMembers
+    const result = limit === undefined ? filteredMembers : filteredMembers.slice(0, limit)
 
     log.info({ workspaceId, count: result.length }, 'Users listed')
     return result

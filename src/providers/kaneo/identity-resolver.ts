@@ -8,10 +8,7 @@ export interface UserIdentityResolver {
   searchUsers(query: string, limit?: number): Promise<Array<{ id: string; login: string; name?: string }>>
 }
 
-export function createKaneoIdentityResolver(
-  config: KaneoConfig,
-  workspaceId: string,
-): UserIdentityResolver {
+export function createKaneoIdentityResolver(config: KaneoConfig, workspaceId: string): UserIdentityResolver {
   log.debug('createKaneoIdentityResolver called')
 
   return {
@@ -26,10 +23,7 @@ export function createKaneoIdentityResolver(
           name: u.name ?? u.login ?? u.id,
         }))
       } catch (error) {
-        log.error(
-          { error: error instanceof Error ? error.message : String(error), query },
-          'Kaneo searchUsers failed',
-        )
+        log.error({ error: error instanceof Error ? error.message : String(error), query }, 'Kaneo searchUsers failed')
         throw error
       }
     },
