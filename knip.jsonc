@@ -41,7 +41,9 @@
   "ignoreExportsUsedInFile": true,
 
   // Ignore migration files (executed at runtime, not imported)
-  "ignore": ["src/db/migrations/**"],
+  // env-validation.ts is used by the entry point but cannot be statically imported
+  // without triggering side effects in tests
+  "ignore": ["src/db/migrations/**", "src/env-validation.ts"],
 
   // Intentionally exported for future orchestrator integration (identity claim detection and auto-link)
   "ignoreIssues": {
