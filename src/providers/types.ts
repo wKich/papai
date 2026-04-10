@@ -89,9 +89,6 @@ export type TaskCapability =
   | 'sprints.assign'
   | 'activities.read'
   | 'queries.saved'
-/** @deprecated Use `TaskCapability` instead. */
-export type Capability = TaskCapability
-
 /** Configuration keys that a provider requires to function. */
 export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
 /** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
