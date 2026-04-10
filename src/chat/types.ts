@@ -9,6 +9,16 @@ export type ChatUser = {
 /** Context type for messages - DM or group chat. */
 export type ContextType = 'dm' | 'group'
 
+/** Thread support capabilities for a chat platform. */
+export type ThreadCapabilities = {
+  /** Platform has thread/topic support */
+  supportsThreads: boolean
+  /** Bot can create new threads (Telegram: yes, Mattermost: no) */
+  canCreateThreads: boolean
+  /** Platform-specific thread identifier type */
+  threadScope: 'message' | 'post'
+}
+
 /** A file to send to the user. */
 export type ChatFile = {
   content: Buffer | string
@@ -67,6 +77,8 @@ export type IncomingMessage = {
   replyContext?: ReplyContext
   /** Files attached to this message (populated by platform adapters) */
   files?: IncomingFile[]
+  /** Platform thread ID (if in thread) */
+  threadId?: string
 }
 
 /** Authorization result for message processing. */
@@ -113,6 +125,8 @@ export type ReplyFn = {
 /** The core interface every chat platform provider must implement. */
 export interface ChatProvider {
   readonly name: string
+  /** Thread support capabilities */
+  readonly threadCapabilities: ThreadCapabilities
 
   /** Register a slash command handler (e.g., 'help' for /help). */
   registerCommand(name: string, handler: CommandHandler): void

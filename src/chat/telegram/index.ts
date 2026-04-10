@@ -32,6 +32,11 @@ const log = logger.child({ scope: 'chat:telegram' })
 
 export class TelegramChatProvider implements ChatProvider {
   readonly name = 'telegram'
+  readonly threadCapabilities = {
+    supportsThreads: true,
+    canCreateThreads: true,
+    threadScope: 'message' as const,
+  }
   private readonly bot: Bot
   private botUsername: string | null = null
 

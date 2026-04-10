@@ -32,6 +32,11 @@ const log = logger.child({ scope: 'chat:mattermost' })
 
 export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
+  readonly threadCapabilities = {
+    supportsThreads: true,
+    canCreateThreads: false,
+    threadScope: 'post' as const,
+  }
   private readonly baseUrl: string
   private readonly token: string
   private readonly commands = new Map<string, CommandHandler>()

@@ -317,6 +317,11 @@ export function createMockChat(
 ): ChatProvider {
   return {
     name: 'mock',
+    threadCapabilities: {
+      supportsThreads: true,
+      canCreateThreads: false,
+      threadScope: 'message',
+    },
     registerCommand: (name: string, handler: CommandHandler): void => {
       options.commandHandlers?.set(name, handler)
     },
