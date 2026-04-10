@@ -1,6 +1,6 @@
 # E2E Test Plan
 
-Rename this file and title to match the specific behavior or journey before saving it under `docs/superpowers/plans/`.
+Rename this file and title to match the specific behavior or journey before saving it as `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
 
 **Objective:** State the user-visible behavior being validated.
 
