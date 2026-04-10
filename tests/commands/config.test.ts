@@ -39,17 +39,17 @@ describe('/config Command', () => {
   test('shows all config keys with values and masked secrets', async () => {
     setConfig(USER_ID, 'llm_apikey', 'sk-abc1234')
     expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
+    const { reply, buttonCalls } = createMockReply()
     await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
-    expect(textCalls[0]).toContain('****1234')
-    expect(textCalls[0]).toContain('*(not set)*')
+    expect(buttonCalls[0]).toContain('****1234')
+    expect(buttonCalls[0]).toContain('*(not set)*')
   })
 
   test('shows unset placeholder for unconfigured keys', async () => {
     expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
+    const { reply, buttonCalls } = createMockReply()
     await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
-    const output = textCalls[0] ?? ''
+    const output = buttonCalls[0] ?? ''
     expect(output.length).toBeGreaterThan(0)
     const lines = output.split('\n').filter((line) => line.trim().length > 0)
     expect(lines.length).toBeGreaterThan(0)
@@ -61,8 +61,8 @@ describe('/config Command', () => {
 
   test('rejects unauthorized user silently', async () => {
     expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
+    const { reply, buttonCalls } = createMockReply()
     await configHandler!(createDmMessage('unauthorized-user'), reply, createAuth('unauthorized-user', false))
-    expect(textCalls).toHaveLength(0)
+    expect(buttonCalls).toHaveLength(0)
   })
 })

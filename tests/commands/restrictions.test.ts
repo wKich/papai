@@ -112,10 +112,10 @@ describe('command context restrictions', () => {
       const msg = createGroupMessage('user456', '', true, 'group1')
       const auth = createAuth('user456', { isGroupAdmin: true })
 
-      const { reply, textCalls } = createMockReply()
+      const { reply, buttonCalls } = createMockReply()
       await handler!(msg, reply, auth)
 
-      lastReply = textCalls[0] ?? null
+      lastReply = buttonCalls[0] ?? null
       expect(lastReply).toContain('🔐 Kaneo API Key')
     })
 
@@ -128,10 +128,10 @@ describe('command context restrictions', () => {
       const auth = createAuth('user456')
       auth.storageContextId = 'user456'
 
-      const { reply, textCalls } = createMockReply()
+      const { reply, buttonCalls } = createMockReply()
       await handler!(msg, reply, auth)
 
-      lastReply = textCalls[0] ?? null
+      lastReply = buttonCalls[0] ?? null
       expect(lastReply).toContain('🔐 Kaneo API Key')
     })
   })
