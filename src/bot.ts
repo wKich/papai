@@ -1,5 +1,6 @@
+import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './auth.js'
 import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
-import type { AuthorizationResult, ChatProvider, ContextType, IncomingMessage, ReplyFn } from './chat/types.js'
+import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -13,11 +14,10 @@ import {
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
-import { isGroupMember } from './groups.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
-import { addUser, isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
+import { isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { handleWizardMessage } from './wizard-integration.js'
 import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
@@ -40,81 +40,8 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
   return false
 }
 
-const getBotAdminAuth = (
-  userId: string,
-  contextId: string,
-  contextType: ContextType,
-  isPlatformAdmin: boolean,
-): AuthorizationResult => ({
-  allowed: true,
-  isBotAdmin: true,
-  isGroupAdmin: isPlatformAdmin,
-  storageContextId: contextType === 'dm' ? userId : contextId,
-})
-
-const getGroupMemberAuth = (contextId: string, isPlatformAdmin: boolean): AuthorizationResult => ({
-  allowed: true,
-  isBotAdmin: false,
-  isGroupAdmin: isPlatformAdmin,
-  storageContextId: contextId,
-})
-
-const getUnauthorizedGroupAuth = (contextId: string): AuthorizationResult => ({
-  allowed: false,
-  isBotAdmin: false,
-  isGroupAdmin: false,
-  storageContextId: contextId,
-})
-
-const getDmUserAuth = (userId: string): AuthorizationResult => ({
-  allowed: true,
-  isBotAdmin: true,
-  isGroupAdmin: false,
-  storageContextId: userId,
-})
-
-const getUnauthorizedDmAuth = (userId: string): AuthorizationResult => ({
-  allowed: false,
-  isBotAdmin: false,
-  isGroupAdmin: false,
-  storageContextId: userId,
-})
-
-export const checkAuthorizationExtended = (
-  userId: string,
-  username: string | null,
-  contextId: string,
-  contextType: ContextType,
-  isPlatformAdmin: boolean,
-): AuthorizationResult => {
-  log.debug({ userId, contextId, contextType }, 'Checking authorization')
-
-  if (process.env['DEMO_MODE'] === 'true' && !isAuthorized(userId) && contextType === 'dm') {
-    log.info({ userId, username }, 'Demo mode: auto-adding user')
-    addUser(userId, 'demo-auto', username ?? undefined)
-    return getGroupMemberAuth(userId, false)
-  }
-
-  if (isAuthorized(userId)) {
-    if (contextType === 'dm' && isDemoUser(userId)) {
-      return getGroupMemberAuth(userId, false)
-    }
-    return getBotAdminAuth(userId, contextId, contextType, isPlatformAdmin)
-  }
-
-  if (contextType === 'group') {
-    if (isGroupMember(contextId, userId)) {
-      return getGroupMemberAuth(contextId, isPlatformAdmin)
-    }
-    return getUnauthorizedGroupAuth(contextId)
-  }
-
-  if (username !== null && resolveUserByUsername(userId, username)) {
-    return getDmUserAuth(userId)
-  }
-
-  return getUnauthorizedDmAuth(userId)
-}
+// Re-export for backward compatibility
+export { checkAuthorizationExtended, getThreadScopedStorageContextId }
 
 function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerHelpCommand(chat)
@@ -245,6 +172,7 @@ async function onIncomingMessage(
     userId: msg.user.id,
     contextId: msg.contextId,
     contextType: msg.contextType,
+    threadId: msg.threadId,
     textLength: msg.text.length,
     isCommand: msg.text.startsWith('/'),
   })
@@ -255,6 +183,7 @@ async function onIncomingMessage(
     msg.user.username,
     msg.contextId,
     msg.contextType,
+    msg.threadId,
     msg.user.isAdmin,
   )
 
