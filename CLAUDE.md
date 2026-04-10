@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-papai is a chat bot that manages tasks via LLM tool-calling. A user sends natural language messages through a configurable chat platform (Telegram or Mattermost), the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes task tracker operations, then replies with the result. The chat platform, task tracker provider (Kaneo, YouTrack, or any future provider), LLM provider, base URL, and model are all runtime-configurable.
+papai is a chat bot that manages tasks via LLM tool-calling. A user sends natural language messages through a configurable chat platform (Telegram, Mattermost, or Discord), the bot invokes a configurable OpenAI-compatible LLM (via Vercel AI SDK) which autonomously selects and executes task tracker operations, then replies with the result. The chat platform, task tracker provider (Kaneo, YouTrack, or any future provider), LLM provider, base URL, and model are all runtime-configurable.
 
 ## Commands
 
@@ -183,6 +183,8 @@ Copy `.env.example` to `.env`. Required at startup (validated in `src/index.ts`)
 
 **Mattermost-specific:** `MATTERMOST_URL`, `MATTERMOST_BOT_TOKEN`
 
+**Discord-specific (when CHAT_PROVIDER=discord):** `DISCORD_BOT_TOKEN`
+
 **Kaneo-specific (when TASK_PROVIDER=kaneo):** `KANEO_CLIENT_URL`
 
 **YouTrack-specific (when TASK_PROVIDER=youtrack):** `YOUTRACK_URL`
@@ -211,9 +213,10 @@ User (Telegram/Mattermost) ─→ ChatProvider (chat/registry.ts) ─→ bot.ts 
 - **`src/index.ts`** — entry point; validates env vars, runs migrations, creates `ChatProvider`, calls `setupBot`, starts the provider.
 - **`src/bot.ts`** — platform-agnostic wiring; registers all command handlers and the message handler via `setupBot(chat, adminUserId)`.
 - **`src/chat/types.ts`** — `ChatProvider` interface, `ReplyFn`, `IncomingMessage`, `ChatUser`, `ChatFile`, `ThreadCapabilities` types.
-- **`src/chat/registry.ts`** — provider factory registry; `createChatProvider(name)` instantiates the named provider. Built-in: `telegram`, `mattermost`.
+- **`src/chat/registry.ts`** — provider factory registry; `createChatProvider(name)` instantiates the named provider. Built-in: `telegram`, `mattermost`, `discord`.
 - **`src/chat/telegram/`** — Grammy-based Telegram adapter (`TelegramChatProvider`). `format.ts` converts LLM markdown to Telegram `MessageEntity[]`. Supports forum topics (threads) for group chats.
 - **`src/chat/mattermost/`** — Mattermost REST+WebSocket adapter (`MattermostChatProvider`).
+- **`src/chat/discord/`** — discord.js v14 adapter (`DiscordChatProvider`). Supports DMs and guild-channel @mentions with chunked replies, button interactions, and guild-scoped `resolveUserId`. Outgoing file attachments are deferred.
 - **`src/config.ts`** — SQLite-backed **per-user** runtime config store; exposes `getConfig(userId, key)`, `setConfig(userId, key, value)`, `getAllConfig(userId)`.
 - **`src/users.ts`** — SQLite-backed user authorization store; `addUser`, `removeUser`, `isAuthorized`, `isAuthorizedByUsername`, `resolveUserByUsername`, `listUsers`.
 
@@ -482,7 +485,7 @@ someFunction(deps)
 - Runtime: **Bun** (not Node)
 - Validation: **Zod v4** for all schemas
 - LLM integration: **Vercel AI SDK** (`ai` package) with `@ai-sdk/openai`
-- Chat platforms: **Grammy** (Telegram adapter), Mattermost REST+WebSocket
+- Chat platforms: **Grammy** (Telegram adapter), Mattermost REST+WebSocket, **discord.js** v14 (Discord adapter)
 - Linting/formatting: **oxlint / oxfmt** (not ESLint/Prettier)
 - Strict TypeScript (`tsconfig.json` has strict mode + all safety flags)
 - Logging: **pino** with structured JSON output
