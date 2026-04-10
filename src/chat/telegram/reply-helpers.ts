@@ -8,7 +8,12 @@ export type ReplyParamsBuilder = (
   options?: ReplyOptions,
 ) => { message_id: number; message_thread_id?: number } | undefined
 
-export function createReplyParamsBuilder(ctx: Context, threadId?: string): ReplyParamsBuilder {
+/** Subset of Context properties that createReplyParamsBuilder uses */
+export type ReplyContext = {
+  message?: { message_id?: number; message_thread_id?: number }
+}
+
+export function createReplyParamsBuilder(ctx: ReplyContext, threadId?: string): ReplyParamsBuilder {
   const messageId = ctx.message?.message_id
   const contextThreadId = ctx.message?.message_thread_id
 

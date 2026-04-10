@@ -109,7 +109,7 @@ export function makeLookupGroupHistoryTool(userId?: string, contextId?: string):
           'Search queries or topics to look for in the group context. Be specific about what you need to find.',
         ),
     }),
-    execute: ({ queries }) => {
+    execute: ({ queries }): Promise<string> => {
       if (userId === undefined || contextId === undefined) {
         return Promise.resolve('Unable to search: missing user or context information.')
       }

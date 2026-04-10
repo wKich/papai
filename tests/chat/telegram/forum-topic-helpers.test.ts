@@ -4,9 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { Context } from 'grammy'
-
-import { createForumTopicIfNeeded } from '../../../src/chat/telegram/forum-topic-helpers.js'
+import { createForumTopicIfNeeded, type ForumTopicContext } from '../../../src/chat/telegram/forum-topic-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 /** Mock API interface */
@@ -16,13 +14,15 @@ interface MockApi {
 }
 
 /** Create mock Context for testing */
-function createMockContext(overrides: { chatType?: string; threadId?: number; username?: string } = {}): Context {
+function createMockContext(
+  overrides: { chatType?: string; threadId?: number; username?: string } = {},
+): ForumTopicContext {
   const { chatType = 'supergroup', threadId, username = 'testuser' } = overrides
   return {
     chat: { type: chatType, id: 123456 },
     message: { message_thread_id: threadId },
     from: { username },
-  } as unknown as Context
+  }
 }
 
 describe('createForumTopicIfNeeded', () => {
@@ -34,8 +34,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext({ threadId: 999 })
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: true }),
-      createForumTopic: async () => Promise.resolve({ message_thread_id: 111 }),
+      getChat: () => Promise.resolve({ is_forum: true }),
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)
@@ -47,8 +47,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext({ chatType: 'group' })
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: true }),
-      createForumTopic: async () => Promise.resolve({ message_thread_id: 111 }),
+      getChat: () => Promise.resolve({ is_forum: true }),
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)
@@ -60,8 +60,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext()
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: false }),
-      createForumTopic: async () => Promise.resolve({ message_thread_id: 111 }),
+      getChat: () => Promise.resolve({ is_forum: false }),
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)
@@ -73,8 +73,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext()
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: true }),
-      createForumTopic: async () => Promise.resolve({ message_thread_id: 111 }),
+      getChat: () => Promise.resolve({ is_forum: true }),
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)
@@ -86,8 +86,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext({ username: undefined })
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: true }),
-      createForumTopic: async () => Promise.resolve({ message_thread_id: 111 }),
+      getChat: () => Promise.resolve({ is_forum: true }),
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)
@@ -99,8 +99,8 @@ describe('createForumTopicIfNeeded', () => {
     const ctx = createMockContext()
 
     const mockApi: MockApi = {
-      getChat: async () => Promise.resolve({ is_forum: true }),
-      createForumTopic: async () => Promise.reject(new Error('API Error')),
+      getChat: () => Promise.resolve({ is_forum: true }),
+      createForumTopic: () => Promise.reject(new Error('API Error')),
     }
 
     const result = await createForumTopicIfNeeded(ctx, mockApi)

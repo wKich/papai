@@ -1,15 +1,20 @@
-import type { Context } from 'grammy'
-
 import { logger } from '../../logger.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
+
+/** Subset of Context properties that createForumTopicIfNeeded uses */
+export type ForumTopicContext = {
+  chat?: { type: string; id: number }
+  message?: { message_thread_id?: number }
+  from?: { username?: string }
+}
 
 /**
  * Creates a new forum topic when bot is mentioned in main chat of a forum group.
  * Returns threadId if topic created or already in thread, undefined otherwise.
  */
 export async function createForumTopicIfNeeded(
-  ctx: Context,
+  ctx: ForumTopicContext,
   api: {
     getChat: (chatId: number) => Promise<unknown>
     createForumTopic: (chatId: number, name: string) => Promise<{ message_thread_id: number }>

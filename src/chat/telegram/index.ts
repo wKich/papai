@@ -151,10 +151,9 @@ export class TelegramChatProvider implements ChatProvider {
       { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
       { command: 'users', description: 'List authorized users' },
     ]
+    const chatId = parseInt(adminUserId, 10)
     await this.bot.api.setMyCommands(userCmds, { scope: { type: 'all_private_chats' } })
-    await this.bot.api.setMyCommands(adminCmds, {
-      scope: { type: 'chat', chat_id: parseInt(adminUserId, 10) },
-    })
+    await this.bot.api.setMyCommands(adminCmds, { scope: { type: 'chat', chat_id: chatId } })
     log.info({ adminUserId }, 'Telegram command menu registered')
   }
 
@@ -166,14 +165,12 @@ export class TelegramChatProvider implements ChatProvider {
     const isGroup = chatType === 'group' || chatType === 'supergroup' || chatType === 'channel'
     const contextId = String(ctx.chat?.id ?? id)
     const contextType: ContextType = isGroup ? 'group' : 'dm'
-
-    // Use caption for media messages, fallback to text or empty
     const text = ctx.message?.text ?? ctx.message?.caption ?? ''
-    const isMentioned = this.isBotMentioned(text, ctx.message?.entities ?? ctx.message?.caption_entities)
+    const entities = ctx.message?.entities ?? ctx.message?.caption_entities
+    const isMentioned = this.isBotMentioned(text, entities)
 
     const messageId = ctx.message?.message_id
     const messageIdStr = messageId === undefined ? undefined : String(messageId)
-
     const replyToMessageId = ctx.message?.reply_to_message?.message_id
     const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
 
@@ -190,14 +187,7 @@ export class TelegramChatProvider implements ChatProvider {
     }
 
     const replyContext = extractReplyContext(ctx, contextId)
-
-    // Create forum topic when mentioned in group, otherwise use existing thread
-    let threadId: string | undefined
-    if (isMentioned && contextType === 'group') {
-      threadId = await createForumTopicIfNeeded(ctx, this.bot.api)
-    } else if (ctx.message?.message_thread_id !== undefined) {
-      threadId = String(ctx.message.message_thread_id)
-    }
+    const threadId = await this.resolveThreadId(ctx, isMentioned, contextType)
 
     return {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
@@ -210,6 +200,20 @@ export class TelegramChatProvider implements ChatProvider {
       replyContext,
       threadId,
     }
+  }
+
+  private resolveThreadId(
+    ctx: Context,
+    isMentioned: boolean,
+    contextType: ContextType,
+  ): Promise<string | undefined> | string | undefined {
+    if (isMentioned && contextType === 'group') {
+      return createForumTopicIfNeeded(ctx, this.bot.api)
+    }
+    if (ctx.message?.message_thread_id !== undefined) {
+      return String(ctx.message.message_thread_id)
+    }
+    return undefined
   }
 
   /** Fetch all attached files from a grammy Context, downloading their content. */
@@ -227,10 +231,8 @@ export class TelegramChatProvider implements ChatProvider {
         }
         return Buffer.from(await response.arrayBuffer())
       } catch (error) {
-        log.error(
-          { fileId, error: error instanceof Error ? error.message : String(error) },
-          'Failed to fetch Telegram file',
-        )
+        const errMsg = error instanceof Error ? error.message : String(error)
+        log.error({ fileId, error: errMsg }, 'Failed to fetch Telegram file')
         return null
       }
     }
@@ -240,28 +242,17 @@ export class TelegramChatProvider implements ChatProvider {
   private isBotMentioned(text: string, entities?: MessageEntity[]): boolean {
     if (this.botUsername === null) return false
     if (text.includes(`@${this.botUsername}`)) return true
-
-    if (entities !== undefined) {
-      for (const entity of entities) {
-        if (entity.type === 'mention') {
-          const mentionText = text.slice(entity.offset, entity.offset + entity.length)
-          if (mentionText === `@${this.botUsername}`) return true
-        }
-      }
-    }
-
-    return false
+    return (entities ?? []).some(
+      (e) => e.type === 'mention' && text.slice(e.offset, e.offset + e.length) === `@${this.botUsername}`,
+    )
   }
 
   private async checkAdminStatus(ctx: Context): Promise<boolean> {
     if (ctx.chat?.type === 'private') return true
     if (ctx.chat?.id === undefined) return false
-
     try {
       const admins = await this.bot.api.getChatAdministrators(ctx.chat.id)
-      const userId = ctx.from?.id
-      if (userId === undefined) return false
-      return admins.some((admin) => admin.user.id === userId)
+      return admins.some((admin) => admin.user.id === ctx.from?.id)
     } catch {
       return false
     }

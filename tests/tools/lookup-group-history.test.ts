@@ -8,6 +8,11 @@ type GenerateTextResult = {
   text: string
 }
 
+/** Input type for lookup_group_history tool */
+type LookupGroupHistoryInput = {
+  queries: string[]
+}
+
 let generateTextImpl: () => Promise<GenerateTextResult>
 
 describe('makeLookupGroupHistoryTool', () => {
@@ -32,11 +37,9 @@ describe('makeLookupGroupHistoryTool', () => {
     const { makeLookupGroupHistoryTool } = await import('../../src/tools/lookup-group-history.js')
 
     const tool = makeLookupGroupHistoryTool(undefined, 'group123')
-    const execute = tool.execute
-    if (execute === undefined) {
-      throw new Error('execute should be defined')
-    }
-    const result = await execute({ queries: ['test'] }, { toolCallId: '1', messages: [] })
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const input: LookupGroupHistoryInput = { queries: ['test'] }
+    const result: unknown = await tool.execute(input, { toolCallId: '1', messages: [] })
     expect(result).toBe('Unable to search: missing user or context information.')
   })
 
@@ -44,11 +47,9 @@ describe('makeLookupGroupHistoryTool', () => {
     const { makeLookupGroupHistoryTool } = await import('../../src/tools/lookup-group-history.js')
 
     const tool = makeLookupGroupHistoryTool('user123', undefined)
-    const execute = tool.execute
-    if (execute === undefined) {
-      throw new Error('execute should be defined')
-    }
-    const result = await execute({ queries: ['test'] }, { toolCallId: '1', messages: [] })
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const input: LookupGroupHistoryInput = { queries: ['test'] }
+    const result: unknown = await tool.execute(input, { toolCallId: '1', messages: [] })
     expect(result).toBe('Unable to search: missing user or context information.')
   })
 
