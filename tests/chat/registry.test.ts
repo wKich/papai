@@ -1,0 +1,55 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+
+import { createChatProvider } from '../../src/chat/registry.js'
+import { mockLogger } from '../utils/test-helpers.js'
+
+describe('chat registry', () => {
+  const originalDiscordToken = process.env['DISCORD_BOT_TOKEN']
+  const originalTelegramToken = process.env['TELEGRAM_BOT_TOKEN']
+
+  beforeEach(() => {
+    mockLogger()
+    process.env['DISCORD_BOT_TOKEN'] = 'fake-discord-token'
+    process.env['TELEGRAM_BOT_TOKEN'] = 'fake-telegram-token'
+  })
+
+  afterEach(() => {
+    if (originalDiscordToken === undefined) {
+      delete process.env['DISCORD_BOT_TOKEN']
+    } else {
+      process.env['DISCORD_BOT_TOKEN'] = originalDiscordToken
+    }
+    if (originalTelegramToken === undefined) {
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    } else {
+      process.env['TELEGRAM_BOT_TOKEN'] = originalTelegramToken
+    }
+  })
+
+  test('createChatProvider("discord") returns a DiscordChatProvider instance', () => {
+    const provider = createChatProvider('discord')
+    expect(provider.name).toBe('discord')
+  })
+
+  test('createChatProvider("telegram") returns a TelegramChatProvider instance', () => {
+    const provider = createChatProvider('telegram')
+    expect(provider.name).toBe('telegram')
+  })
+
+  // Failure paths: pass { env: {} } so validation fires before the constructor reads process.env
+  test('createChatProvider throws for unknown provider', () => {
+    expect(() => createChatProvider('unknown', { env: {} })).toThrow(/CHAT_PROVIDER must be/)
+  })
+
+  test('createChatProvider("discord") throws when DISCORD_BOT_TOKEN is missing', () => {
+    expect(() => createChatProvider('discord', { env: {} })).toThrow(/Missing discord env vars/)
+  })
+
+  test('createChatProvider("telegram") throws when TELEGRAM_BOT_TOKEN is missing', () => {
+    expect(() => createChatProvider('telegram', { env: {} })).toThrow(/Missing telegram env vars/)
+  })
+
+  test('createChatProvider("mattermost") throws when required env vars are missing', () => {
+    expect(() => createChatProvider('mattermost', { env: {} })).toThrow(/Missing mattermost env vars/)
+  })
+})

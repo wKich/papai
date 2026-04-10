@@ -114,3 +114,25 @@ describe('help command', () => {
     expect(capturedText).toContain('Admin commands:')
   })
 })
+
+describe('buildHelpText', () => {
+  test('/help on Discord admin appends a /context deferral note', async () => {
+    const { buildHelpText } = await import('../../src/commands/help.js')
+    const discordHelp = buildHelpText('discord', 'dm', { isBotAdmin: true, isGroupAdmin: false })
+
+    expect(discordHelp).toContain('/context')
+    expect(discordHelp).toContain('deferred')
+  })
+
+  test('/help on Discord for non-admin does NOT mention /context', async () => {
+    const { buildHelpText } = await import('../../src/commands/help.js')
+    const discordHelp = buildHelpText('discord', 'dm', { isBotAdmin: false, isGroupAdmin: false })
+    expect(discordHelp).not.toContain('/context')
+  })
+
+  test('/help on telegram does not contain deferral note', async () => {
+    const { buildHelpText } = await import('../../src/commands/help.js')
+    const telegramHelp = buildHelpText('telegram', 'dm', { isBotAdmin: true, isGroupAdmin: false })
+    expect(telegramHelp).not.toContain('deferred')
+  })
+})

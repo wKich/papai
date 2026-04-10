@@ -1,5 +1,5 @@
 import { supportsUserResolution } from '../chat/capabilities.js'
-import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from '../chat/types.js'
+import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn, ResolveUserContext } from '../chat/types.js'
 import { addGroupMember, listGroupMembers, removeGroupMember } from '../groups.js'
 import { logger } from '../logger.js'
 
@@ -59,7 +59,10 @@ async function handleAddUser(
     return
   }
 
-  const result = await extractUserId(chat, targetUser)
+  const result = await extractUserId(chat, targetUser, {
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+  })
   if (result.kind === 'error') {
     await reply.text(result.message)
     return
@@ -87,7 +90,10 @@ async function handleDelUser(
     return
   }
 
-  const result = await extractUserId(chat, targetUser)
+  const result = await extractUserId(chat, targetUser, {
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+  })
   if (result.kind === 'error') {
     await reply.text(result.message)
     return
@@ -114,12 +120,13 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
 async function extractUserId(
   chat: ChatProvider,
   input: string,
+  context: ResolveUserContext,
 ): Promise<{ kind: 'resolved'; userId: string } | { kind: 'error'; message: string }> {
   if (input.startsWith('@')) {
     if (!supportsUserResolution(chat)) {
       return { kind: 'error', message: 'This chat provider does not support username lookup. Use an explicit user ID.' }
     }
-    const resolved = await chat.resolveUserId?.(input)
+    const resolved = await chat.resolveUserId?.(input, context)
     if (resolved === null || resolved === undefined) {
       return { kind: 'error', message: "Couldn't resolve that username. Use an explicit user ID." }
     }

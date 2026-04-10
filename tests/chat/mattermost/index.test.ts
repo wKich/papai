@@ -24,7 +24,7 @@ describe('MattermostChatProvider', () => {
       })
 
       provider = new MattermostChatProvider()
-      const userId = await provider.resolveUserId('testuser')
+      const userId = await provider.resolveUserId('testuser', { contextId: 'c1', contextType: 'group' })
 
       expect(userId).toBe('user123')
       restoreFetch()
@@ -39,7 +39,7 @@ describe('MattermostChatProvider', () => {
       })
 
       provider = new MattermostChatProvider()
-      const userId = await provider.resolveUserId('@testuser')
+      const userId = await provider.resolveUserId('@testuser', { contextId: 'c1', contextType: 'group' })
 
       expect(userId).toBe('user123')
       restoreFetch()
@@ -51,7 +51,7 @@ describe('MattermostChatProvider', () => {
       })
 
       provider = new MattermostChatProvider()
-      const userId = await provider.resolveUserId('nonexistent')
+      const userId = await provider.resolveUserId('nonexistent', { contextId: 'c1', contextType: 'group' })
 
       expect(userId).toBeNull()
       restoreFetch()

@@ -14,6 +14,7 @@ import type {
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
+  ResolveUserContext,
 } from '../../src/chat/types.js'
 import { _resetDrizzleDb, _setDrizzleDb } from '../../src/db/drizzle.js'
 import type { Migration } from '../../src/db/migrate.js'
@@ -346,7 +347,7 @@ export function createMockChat(
     /** Callback when a message handler is registered via onMessage */
     onMessageHandler?: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
     /** Custom resolveUserId implementation */
-    resolveUserId?: (username: string) => Promise<string | null>
+    resolveUserId?: (username: string, context: ResolveUserContext) => Promise<string | null>
     /** Callback when an interaction handler is registered via onInteraction */
     onInteractionHandler?: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
     /** Custom setCommands implementation */
@@ -388,7 +389,7 @@ export function createMockChat(
     sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
     resolveUserId:
       options.resolveUserId ??
-      ((username: string): Promise<string | null> => {
+      ((username: string, _context: ResolveUserContext): Promise<string | null> => {
         const clean = username.startsWith('@') ? username.slice(1) : username
         return Promise.resolve(clean)
       }),

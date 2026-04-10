@@ -3,8 +3,10 @@ import { describe, expect, it, test } from 'bun:test'
 import type {
   ChatCapability,
   ChatProvider,
+  ContextType,
   IncomingInteraction,
   ReplyFn,
+  ResolveUserContext,
   ThreadCapabilities,
 } from '../../src/chat/types.js'
 
@@ -21,9 +23,25 @@ describe('ThreadCapabilities', () => {
   })
 })
 
+describe('ResolveUserContext', () => {
+  test('has contextId and contextType', () => {
+    const ctx: ResolveUserContext = { contextId: 'c1', contextType: 'group' }
+    expect(ctx.contextId).toBe('c1')
+    expect(ctx.contextType).toBe('group')
+  })
+
+  test('contextType accepts dm and group', () => {
+    const dm: ContextType = 'dm'
+    const group: ContextType = 'group'
+    const ctxDm: ResolveUserContext = { contextId: 'u1', contextType: dm }
+    const ctxGroup: ResolveUserContext = { contextId: 'g1', contextType: group }
+    expect(ctxDm.contextType).toBe('dm')
+    expect(ctxGroup.contextType).toBe('group')
+  })
+})
+
 describe('ChatProvider interface', () => {
-  test('resolveUserId method exists', async () => {
-    // Mock provider implementing the interface
+  test('resolveUserId accepts username and context', async () => {
     const mockProvider: ChatProvider = {
       name: 'mock',
       threadCapabilities: {
@@ -37,7 +55,7 @@ describe('ChatProvider interface', () => {
       registerCommand: (): void => {},
       onMessage: (): void => {},
       sendMessage: async (): Promise<void> => {},
-      resolveUserId: (username: string): Promise<string | null> => {
+      resolveUserId: (username: string, _context: ResolveUserContext): Promise<string | null> => {
         if (username === 'testuser') return Promise.resolve('user123')
         return Promise.resolve(null)
       },
@@ -45,10 +63,11 @@ describe('ChatProvider interface', () => {
       stop: async (): Promise<void> => {},
     }
 
-    const result = await mockProvider.resolveUserId?.('testuser')
+    const context: ResolveUserContext = { contextId: 'c1', contextType: 'group' }
+    const result = await mockProvider.resolveUserId?.('testuser', context)
     expect(result).toBe('user123')
 
-    const notFound = await mockProvider.resolveUserId?.('nonexistent')
+    const notFound = await mockProvider.resolveUserId?.('nonexistent', context)
     expect(notFound).toBeNull()
   })
 

@@ -9,6 +9,14 @@ export type ChatUser = {
 /** Context type for messages - DM or group chat. */
 export type ContextType = 'dm' | 'group'
 
+/** Context passed to resolveUserId so adapters can scope searches. */
+export type ResolveUserContext = {
+  /** Storage key of the conversation where the lookup originated (userId in DMs, channel/group ID in groups). */
+  contextId: string
+  /** 'dm' or 'group' — adapters may use this to decide whether guild-scoped search is possible. */
+  contextType: ContextType
+}
+
 /** Thread support capabilities for a chat platform. */
 export type ThreadCapabilities = {
   /** Platform has thread/topic support */
@@ -193,8 +201,10 @@ export interface ChatProvider {
    * The `users.resolve` capability signals full username-resolution support (e.g. Mattermost).
    * A provider may still expose a narrower passthrough implementation without advertising that
    * capability — for example, accepting numeric IDs directly while rejecting plain usernames.
+   *
+   * The `context` parameter lets adapters like Discord scope the lookup to the caller's guild.
    */
-  resolveUserId?(username: string): Promise<string | null>
+  resolveUserId?(username: string, context: ResolveUserContext): Promise<string | null>
 
   /** Register the bot's command list with the platform (for command menus). */
   setCommands?(adminUserId: string): Promise<void>

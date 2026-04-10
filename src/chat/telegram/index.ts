@@ -13,6 +13,7 @@ import type {
   IncomingMessage,
   ReplyFn,
   ReplyOptions,
+  ResolveUserContext,
 } from '../types.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
@@ -125,7 +126,7 @@ export class TelegramChatProvider implements ChatProvider {
     await this.bot.stop()
   }
 
-  resolveUserId(username: string): Promise<string | null> {
+  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
     const clean = username.startsWith('@') ? username.slice(1) : username
     return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
