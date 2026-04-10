@@ -253,5 +253,23 @@ export const memoLinks = sqliteTable(
   ],
 )
 
+export const userIdentityMappings = sqliteTable(
+  'user_identity_mappings',
+  {
+    contextId: text('context_id').notNull(),
+    providerName: text('provider_name').notNull(),
+    providerUserId: text('provider_user_id'),
+    providerUserLogin: text('provider_user_login'),
+    displayName: text('display_name'),
+    matchedAt: text('matched_at').notNull(),
+    matchMethod: text('match_method'),
+    confidence: integer('confidence'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contextId, table.providerName] }),
+    index('idx_identity_mappings_provider_user').on(table.providerName, table.providerUserId),
+  ],
+)
+
 export type MemoRow = typeof memos.$inferSelect
 export type MemoLinkRow = typeof memoLinks.$inferSelect
