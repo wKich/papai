@@ -219,6 +219,17 @@ export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps 
   registerCommands(chat, adminUserId)
   chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
   chat.onInteraction?.(async (interaction, reply) => {
-    await routeInteraction(interaction, reply)
+    try {
+      await routeInteraction(interaction, reply)
+    } catch (error) {
+      logger.error(
+        {
+          callbackData: interaction.callbackData,
+          userId: interaction.user?.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Interaction routing failed',
+      )
+    }
   })
 }

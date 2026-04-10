@@ -28,11 +28,12 @@ describe('wizard-integration', () => {
 
   test('handleWizardMessage falls back to text when interactive buttons are disabled', async () => {
     await createWizard(userId, storageContextId, 'kaneo')
-    const { reply, textCalls } = createMockReply()
+    const { reply, textCalls, buttonCalls } = createMockReply()
 
     const handled = await handleWizardMessage(userId, storageContextId, 'sk-test12345', reply, false)
 
     expect(handled).toBe(true)
     expect(textCalls.length).toBeGreaterThan(0)
+    expect(buttonCalls.length).toBe(0)
   })
 })

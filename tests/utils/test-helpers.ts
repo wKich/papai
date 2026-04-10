@@ -196,6 +196,7 @@ export {
 export interface MockReplyResult {
   reply: ReplyFn
   textCalls: string[]
+  buttonCalls: string[]
   redactCalls: string[]
   getReplies: () => string[]
   getRedactions: () => string[]
@@ -206,6 +207,7 @@ export interface MockReplyResult {
  */
 export function createMockReply(): MockReplyResult {
   const textCalls: string[] = []
+  const buttonCalls: string[] = []
   const redactCalls: string[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
@@ -220,11 +222,11 @@ export function createMockReply(): MockReplyResult {
       return Promise.resolve()
     },
     buttons: (content: string): Promise<void> => {
-      textCalls.push(content)
+      buttonCalls.push(content)
       return Promise.resolve()
     },
   }
-  return { reply, textCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
+  return { reply, textCalls, buttonCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
 }
 
 /**
