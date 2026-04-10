@@ -132,7 +132,8 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   resolveUserId(username: string): Promise<string | null> {
-    // Telegram Bot API cannot resolve usernames to IDs; only numeric IDs work directly
+    // Telegram Bot API cannot look up usernames — only numeric IDs work directly.
+    // This passthrough therefore intentionally omits `users.resolve` (full username-to-ID resolution).
     const clean = username.startsWith('@') ? username.slice(1) : username
     return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }

@@ -188,8 +188,11 @@ export interface ChatProvider {
   sendMessage(userId: string, markdown: string): Promise<void>
 
   /**
-   * Resolve a username to a user ID. Returns null if not found.
-   * Providers that implement this method should also advertise the `users.resolve` capability.
+   * Resolve a username to a user ID. Returns null if not found or not supported.
+   *
+   * The `users.resolve` capability signals full username-resolution support (e.g. Mattermost).
+   * A provider may still expose a narrower passthrough implementation without advertising that
+   * capability — for example, accepting numeric IDs directly while rejecting plain usernames.
    */
   resolveUserId?(username: string): Promise<string | null>
 

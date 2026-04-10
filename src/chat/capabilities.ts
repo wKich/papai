@@ -1,6 +1,6 @@
 import type { ChatCapability } from './types.js'
 
-type WithCapabilities = Pick<{ capabilities: ReadonlySet<ChatCapability> }, 'capabilities'>
+type WithCapabilities = { capabilities: ReadonlySet<ChatCapability> }
 
 /** Returns true if the chat platform supports interactive buttons with callbacks. */
 export function supportsInteractiveButtons(chat: WithCapabilities): boolean {

@@ -361,11 +361,14 @@ export function createMockChat(
     },
     ...(options.onInteractionHandler === undefined
       ? {}
-      : {
-          onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
-            options.onInteractionHandler?.(handler)
-          },
-        }),
+      : (() => {
+          const interactionHandler = options.onInteractionHandler
+          return {
+            onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
+              interactionHandler(handler)
+            },
+          }
+        })()),
     sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
     resolveUserId:
       options.resolveUserId ??
