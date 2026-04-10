@@ -89,14 +89,12 @@ describe('getWizardSnapshots', () => {
       userId: 'admin-1',
       storageContextId: 'admin-1',
       totalSteps: 5,
-      platform: 'telegram',
       taskProvider: 'kaneo',
     })
     createWizardSession({
       userId: 'other-user',
       storageContextId: 'other-user',
       totalSteps: 5,
-      platform: 'telegram',
       taskProvider: 'kaneo',
     })
 
@@ -105,7 +103,6 @@ describe('getWizardSnapshots', () => {
     expect(snaps[0]!.userId).toBe('admin-1')
     expect(snaps[0]!).toHaveProperty('currentStep')
     expect(snaps[0]!).toHaveProperty('totalSteps')
-    expect(snaps[0]!).toHaveProperty('platform')
     expect(snaps[0]!).toHaveProperty('taskProvider')
     expect(snaps[0]!).toHaveProperty('skippedSteps')
     expect(snaps[0]!).toHaveProperty('dataKeys')

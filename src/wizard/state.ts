@@ -16,7 +16,6 @@ export interface CreateWizardSessionParams {
   readonly userId: string
   readonly storageContextId: string
   readonly totalSteps: number
-  readonly platform: 'telegram' | 'mattermost'
   readonly taskProvider: 'kaneo' | 'youtrack'
   readonly initialData?: WizardData
 }
@@ -43,7 +42,7 @@ const createSessionKey = (userId: string, storageContextId: string): string => `
  * Returns existing session if one already exists for this user/context
  */
 export const createWizardSession = (params: CreateWizardSessionParams): WizardSession => {
-  const { userId, storageContextId, totalSteps, platform, taskProvider, initialData } = params
+  const { userId, storageContextId, totalSteps, taskProvider, initialData } = params
   const key = createSessionKey(userId, storageContextId)
 
   const existingSession = activeSessions.get(key)
@@ -60,15 +59,14 @@ export const createWizardSession = (params: CreateWizardSessionParams): WizardSe
     totalSteps,
     data: initialData ?? {},
     skippedSteps: [],
-    platform,
     taskProvider,
   }
 
   activeSessions.set(key, session)
-  emit('wizard:created', { userId, storageContextId, totalSteps, platform, taskProvider })
+  emit('wizard:created', { userId, storageContextId, totalSteps, taskProvider })
 
   log.info(
-    { userId, storageContextId, totalSteps, platform, taskProvider, hasInitialData: initialData !== undefined },
+    { userId, storageContextId, totalSteps, taskProvider, hasInitialData: initialData !== undefined },
     'Wizard session created',
   )
 
@@ -191,7 +189,6 @@ export type WizardSnapshot = {
   startedAt: string
   currentStep: number
   totalSteps: number
-  platform: 'telegram' | 'mattermost'
   taskProvider: 'kaneo' | 'youtrack'
   skippedSteps: number[]
   dataKeys: string[]
@@ -207,7 +204,6 @@ export function getWizardSnapshots(userId: string): WizardSnapshot[] {
       startedAt: session.startedAt.toISOString(),
       currentStep: session.currentStep,
       totalSteps: session.totalSteps,
-      platform: session.platform,
       taskProvider: session.taskProvider,
       skippedSteps: [...session.skippedSteps],
       dataKeys: Object.keys(session.data),

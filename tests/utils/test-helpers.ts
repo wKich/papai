@@ -416,18 +416,24 @@ export function createMockChatWithHandler(sendMessageImpl: (userId: string, mark
 export function createMockChatForBot(): {
   provider: ChatProvider
   getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+  getInteractionHandler: () => ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null
 } {
   let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null = null
+  let interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null = null
 
   const provider = createMockChat({
     onMessageHandler: (handler): void => {
       messageHandler = handler
+    },
+    onInteractionHandler: (handler): void => {
+      interactionHandler = handler
     },
   })
 
   return {
     provider,
     getMessageHandler: () => messageHandler,
+    getInteractionHandler: () => interactionHandler,
   }
 }
 

@@ -27,8 +27,7 @@ export function registerSetupCommand(
     log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
 
     // Create wizard session - actual prompts handled by wizard engine
-    const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
-    const result = createWizard(msg.user.id, auth.storageContextId, platform, TASK_PROVIDER)
+    const result = createWizard(msg.user.id, auth.storageContextId, TASK_PROVIDER)
 
     if (result.success) {
       await reply.text(result.prompt)

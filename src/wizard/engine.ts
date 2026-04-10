@@ -164,12 +164,7 @@ function completeStep(
   return { success: true, prompt: getNextPrompt(userId, storageContextId) }
 }
 
-export function createWizard(
-  userId: string,
-  storageContextId: string,
-  platform: 'telegram' | 'mattermost',
-  taskProvider: TaskProvider,
-): CreateWizardResult {
+export function createWizard(userId: string, storageContextId: string, taskProvider: TaskProvider): CreateWizardResult {
   const steps = getWizardSteps(taskProvider)
 
   // Pre-populate with existing config values
@@ -187,12 +182,11 @@ export function createWizard(
     userId,
     storageContextId,
     totalSteps: steps.length,
-    platform,
     taskProvider,
     initialData,
   })
 
-  log.info({ userId, storageContextId, platform, taskProvider }, 'Wizard created with existing config')
+  log.info({ userId, storageContextId, taskProvider }, 'Wizard created with existing config')
 
   const firstStep = steps[0]
   if (firstStep === undefined) return { success: false, prompt: 'Error: No wizard steps configured' }

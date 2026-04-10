@@ -34,7 +34,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -43,7 +42,6 @@ describe('Wizard State Management', () => {
       expect(session.storageContextId).toBe(storageContextId)
       expect(session.currentStep).toBe(0)
       expect(session.totalSteps).toBe(5)
-      expect(session.platform).toBe('telegram')
       expect(session.taskProvider).toBe('kaneo')
       expect(session.data).toEqual({})
       expect(session.skippedSteps).toEqual([])
@@ -55,7 +53,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -63,13 +60,11 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 3,
-        platform: 'mattermost',
         taskProvider: 'youtrack',
       })
 
       expect(secondSession).toBe(firstSession)
       expect(secondSession.totalSteps).toBe(5)
-      expect(secondSession.platform).toBe('telegram')
     })
   })
 
@@ -79,7 +74,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -102,7 +96,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -124,7 +117,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -142,7 +134,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -165,7 +156,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -187,7 +177,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -211,7 +200,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -227,7 +215,6 @@ describe('Wizard State Management', () => {
         userId: 'user1',
         storageContextId,
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -235,7 +222,6 @@ describe('Wizard State Management', () => {
         userId: 'user2',
         storageContextId,
         totalSteps: 3,
-        platform: 'mattermost',
         taskProvider: 'youtrack',
       })
 
@@ -249,7 +235,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId: 'ctx1',
         totalSteps: 5,
-        platform: 'telegram',
         taskProvider: 'kaneo',
       })
 
@@ -257,7 +242,6 @@ describe('Wizard State Management', () => {
         userId,
         storageContextId: 'ctx2',
         totalSteps: 3,
-        platform: 'mattermost',
         taskProvider: 'youtrack',
       })
 

@@ -51,7 +51,7 @@ describe('Wizard Engine', () => {
 
   describe('createWizard', () => {
     test('creates a new wizard session and returns welcome prompt', async () => {
-      const result = await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      const result = await createWizard(userId, storageContextId, 'kaneo')
 
       expect(result.success).toBe(true)
       expect(result.prompt).toContain('Welcome to papai configuration')
@@ -63,14 +63,23 @@ describe('Wizard Engine', () => {
     })
 
     test('returns existing session if wizard already active', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
-      const result = await createWizard(userId, storageContextId, 'mattermost', 'youtrack')
+      await createWizard(userId, storageContextId, 'kaneo')
+      const result = await createWizard(userId, storageContextId, 'youtrack')
 
       // Should return existing session with original settings
       expect(result.success).toBe(true)
       const session = await getWizardSession(userId, storageContextId)
-      expect(session?.platform).toBe('telegram')
       expect(session?.taskProvider).toBe('kaneo')
+    })
+
+    test('createWizard stores task provider only and no platform field', async () => {
+      const result = await createWizard(userId, storageContextId, 'kaneo')
+
+      expect(result.success).toBe(true)
+
+      const session = await getWizardSession(userId, storageContextId)
+      expect(session?.taskProvider).toBe('kaneo')
+      expect('platform' in (session ?? {})).toBe(false)
     })
 
     // Note: Log assertion tests removed due to Bun module caching issues in full test suite
@@ -79,7 +88,7 @@ describe('Wizard Engine', () => {
 
   describe('advanceStep', () => {
     test('advances through wizard steps', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Step 1: LLM API Key
       const step1 = await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -101,7 +110,7 @@ describe('Wizard Engine', () => {
     })
 
     test('validates invalid input', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       const result = await advanceStep(userId, storageContextId, '')
 
@@ -114,7 +123,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles URL validation', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
       await advanceStep(userId, storageContextId, 'sk-test12345')
 
       // Step 2: Base URL with invalid value
@@ -125,7 +134,7 @@ describe('Wizard Engine', () => {
     })
 
     test('allows skipping optional steps', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Skip through required steps first
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -145,7 +154,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles same value for small model', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       await advanceStep(userId, storageContextId, 'sk-test12345')
       await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
@@ -159,7 +168,7 @@ describe('Wizard Engine', () => {
     })
 
     test('returns summary when all steps complete', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       // Step 1: LLM API Key
@@ -186,7 +195,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles timezone validation', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Skip to timezone step
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -214,7 +223,7 @@ describe('Wizard Engine', () => {
 
   describe('saveWizardConfig', () => {
     test('saves configuration and deletes session when confirmed', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -243,7 +252,7 @@ describe('Wizard Engine', () => {
     })
 
     test('validates all fields before saving', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
       await advanceStep(userId, storageContextId, 'sk-test12345')
 
       const result = await validateAndSaveWizardConfig(userId, storageContextId)
@@ -255,7 +264,7 @@ describe('Wizard Engine', () => {
     })
 
     test('skips empty values when saving', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -284,7 +293,7 @@ describe('Wizard Engine', () => {
 
   describe('cancelWizard', () => {
     test('deletes wizard session', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       await cancelWizard(userId, storageContextId)
 
@@ -303,7 +312,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles cancel command', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       const result = await processWizardMessage(userId, storageContextId, 'cancel')
 
@@ -315,7 +324,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles yes/confirm when wizard complete', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -333,7 +342,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles confirm command when wizard complete', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -351,7 +360,7 @@ describe('Wizard Engine', () => {
     })
 
     test('advances step for normal input', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
 
@@ -361,7 +370,7 @@ describe('Wizard Engine', () => {
     })
 
     test('returns requiresInput: true for incomplete wizard', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
 
@@ -370,7 +379,7 @@ describe('Wizard Engine', () => {
     })
 
     test('returns requiresInput: false when complete', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       // Complete all steps
       await advanceStep(userId, storageContextId, 'sk-test12345')
@@ -389,7 +398,7 @@ describe('Wizard Engine', () => {
     })
 
     test('handles validation errors during processing', async () => {
-      await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+      await createWizard(userId, storageContextId, 'kaneo')
 
       const result = await processWizardMessage(userId, storageContextId, '')
 
@@ -447,7 +456,7 @@ describe('Wizard engine with end-of-wizard validation', () => {
       ),
     )
 
-    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    createWizard(userId, storageContextId, 'kaneo')
 
     // Should advance without validation error
     const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
@@ -478,7 +487,7 @@ describe('Wizard engine masking behavior', () => {
     setConfig(storageContextId, 'llm_apikey', 'sk-super-secret-api-key')
 
     // Create wizard - should show masked value in prompt
-    const result = createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    const result = createWizard(userId, storageContextId, 'kaneo')
 
     expect(result.success).toBe(true)
     // Should show masked value (**** + last 4 chars: -key)
@@ -493,7 +502,7 @@ describe('Wizard engine masking behavior', () => {
     setConfig(storageContextId, 'llm_apikey', 'sk-secret12345')
 
     // Create wizard - should show masked value for the first step from existing config
-    const result = createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    const result = createWizard(userId, storageContextId, 'kaneo')
 
     expect(result.success).toBe(true)
     // Should show masked value (**** + last 4 chars: 2345)
@@ -508,7 +517,7 @@ describe('Wizard engine masking behavior', () => {
     setConfig(storageContextId, 'main_model', 'gpt-4-turbo')
 
     // Create wizard and advance to the model step
-    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    createWizard(userId, storageContextId, 'kaneo')
     await advanceStep(userId, storageContextId, 'sk-test12345')
     await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
 
@@ -539,7 +548,7 @@ describe('Wizard engine skip with existing config', () => {
   test('keeps existing value when typing "skip" with existing config', async () => {
     // Pre-set an existing config value
     setConfig(storageContextId, 'kaneo_apikey', 'existing-kaneo-key')
-    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    createWizard(userId, storageContextId, 'kaneo')
     // Step 0: LLM API Key
     await advanceStep(userId, storageContextId, 'sk-test12345')
     // Step 1: Base URL
@@ -563,7 +572,7 @@ describe('Wizard engine skip with existing config', () => {
   })
 
   test('clears value when typing "skip" without existing config', async () => {
-    createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    createWizard(userId, storageContextId, 'kaneo')
     // Step 0: LLM API Key
     await advanceStep(userId, storageContextId, 'sk-test12345')
     // Step 1: Base URL
