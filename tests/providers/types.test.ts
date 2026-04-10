@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { TaskCapability } from '../../src/providers/types.js'
 import type {
   Attachment,
   Comment,
   CommentReaction,
   SetTaskVisibilityParams,
   Task,
+  TaskCapability,
   TaskListItem,
   TaskProvider,
   TaskVisibility,

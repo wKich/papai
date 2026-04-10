@@ -89,13 +89,11 @@ export type TaskCapability =
   | 'sprints.assign'
   | 'activities.read'
   | 'queries.saved'
-
 /** @deprecated Use `TaskCapability` instead. */
 export type Capability = TaskCapability
 
 /** Configuration keys that a provider requires to function. */
 export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
-
 /** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
 export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
@@ -151,6 +149,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   // --- Optional: shared user lookup helpers ---
 
   listUsers?(query?: string, limit?: number): Promise<UserRef[]>
+
   getCurrentUser?(): Promise<UserRef>
 
   // --- Optional: projects.* ---
@@ -162,6 +161,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   createProject?(params: { name: string; description?: string }): Promise<Project>
 
   updateProject?(projectId: string, params: { name?: string; description?: string }): Promise<Project>
+
   deleteProject?(projectId: string): Promise<{ id: string }>
 
   // --- Optional: projects.team ---
