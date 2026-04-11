@@ -9,6 +9,7 @@ const mockProvider: TaskProvider = {
   name: 'mock',
   capabilities: new Set(),
   configRequirements: [],
+  preferredUserIdentifier: 'id',
   identityResolver: {
     searchUsers: mock((query: string) => {
       if (query === 'jsmith') {
@@ -90,5 +91,43 @@ describe('set_my_identity tool', () => {
     )
 
     expect(result).toHaveProperty('status', 'error')
+  })
+
+  test('should isolate identities by chatUserId in group contexts', async () => {
+    // Alice sets her identity using her chatUserId
+    const aliceTool = makeSetMyIdentityTool(mockProvider, 'user-alice')
+    await getToolExecutor(aliceTool)({ claim: "I'm jsmith" }, { toolCallId: '1', messages: [] })
+
+    // Verify Alice's identity is stored under her chatUserId
+    const aliceMapping = getIdentityMapping('user-alice', 'mock')
+    expect(aliceMapping?.providerUserLogin).toBe('jsmith')
+
+    // Verify group context doesn't have Alice's identity
+    const groupMapping = getIdentityMapping('group-123', 'mock')
+    expect(groupMapping).toBeNull()
+
+    // Bob sets his identity using his chatUserId
+    const bobProvider = {
+      ...mockProvider,
+      identityResolver: {
+        searchUsers: mock((query: string) => {
+          if (query === 'bobsmith') {
+            return Promise.resolve([{ id: 'user-789', login: 'bobsmith', name: 'Bob Smith' }])
+          }
+          return Promise.resolve([])
+        }),
+      },
+    } as TaskProvider
+
+    const bobTool = makeSetMyIdentityTool(bobProvider, 'user-bob')
+    await getToolExecutor(bobTool)({ claim: "I'm bobsmith" }, { toolCallId: '2', messages: [] })
+
+    // Verify Bob's identity is stored separately
+    const bobMapping = getIdentityMapping('user-bob', 'mock')
+    expect(bobMapping?.providerUserLogin).toBe('bobsmith')
+
+    // Alice's identity should be unchanged
+    const aliceMappingAfter = getIdentityMapping('user-alice', 'mock')
+    expect(aliceMappingAfter?.providerUserLogin).toBe('jsmith')
   })
 })

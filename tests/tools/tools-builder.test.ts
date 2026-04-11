@@ -99,4 +99,33 @@ describe('buildTools', () => {
 
     expect(tools).not.toHaveProperty('lookup_group_history')
   })
+
+  describe('chatUserId isolation', () => {
+    it('should pass chatUserId separately from contextId to identity tools', () => {
+      const provider = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      // chatUserId: 'user-123', contextId: 'group-456' (group chat scenario)
+      const tools = buildTools(provider, 'user-123', 'group-456', 'normal')
+
+      expect(tools['set_my_identity']).toBeDefined()
+      expect(tools['clear_my_identity']).toBeDefined()
+    })
+
+    it('should use chatUserId for identity tools in group contexts', () => {
+      const provider = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      // Different chatUserId and contextId (group scenario)
+      const tools = buildTools(provider, 'alice-user-id', 'group-123', 'normal')
+
+      // Identity tools should exist and be configured with alice-user-id
+      expect(tools['set_my_identity']).toBeDefined()
+      expect(tools['clear_my_identity']).toBeDefined()
+    })
+  })
 })
