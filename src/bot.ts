@@ -16,6 +16,7 @@ import {
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
+import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { enqueueMessage } from './message-queue/index.js'
@@ -43,7 +44,6 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
   return false
 }
 
-// Re-export for backward compatibility
 export { checkAuthorizationExtended, getThreadScopedStorageContextId }
 
 function registerCommands(chat: ChatProvider, adminUserId: string): void {
@@ -210,6 +210,25 @@ async function maybeInterceptWizard(
   return false
 }
 
+function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void {
+  if (msg.contextType !== 'group') {
+    return
+  }
+
+  upsertKnownGroupContext({
+    contextId: msg.contextId,
+    provider: chat.name,
+    displayName: msg.contextName ?? msg.contextId,
+    parentName: msg.contextParentName ?? null,
+  })
+  upsertGroupAdminObservation({
+    contextId: msg.contextId,
+    userId: msg.user.id,
+    username: msg.user.username,
+    isAdmin: msg.user.isAdmin,
+  })
+}
+
 async function onIncomingMessage(
   chat: ChatProvider,
   msg: IncomingMessage,
@@ -225,7 +244,8 @@ async function onIncomingMessage(
     isCommand: msg.text.startsWith('/'),
   })
 
-  // Get authorization FIRST (needed for wizard storage context)
+  recordGroupObservation(chat, msg)
+
   const auth = checkAuthorizationExtended(
     msg.user.id,
     msg.user.username,
@@ -244,9 +264,6 @@ async function onIncomingMessage(
   })
 
   const interactiveButtons = supportsInteractiveButtons(chat)
-
-  // WIZARD INTERCEPTION - Platform agnostic
-  // Commands (starting with /) are always routed to their handlers, even during wizard
   if (await maybeInterceptWizard(msg, reply, auth, interactiveButtons)) return
 
   const start = Date.now()

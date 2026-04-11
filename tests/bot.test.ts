@@ -1,14 +1,19 @@
 import { describe, expect, mock, test, beforeEach, afterEach } from 'bun:test'
 
+import { and, eq } from 'drizzle-orm'
+
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
 import type { IncomingFile, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { setConfig } from '../src/config.js'
+import { getDrizzleDb } from '../src/db/drizzle.js'
+import { groupAdminObservations, knownGroupContexts } from '../src/db/schema.js'
 import { getIncomingFiles } from '../src/file-relay.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser, isAuthorized, removeUser } from '../src/users.js'
 import {
   createDmMessage,
+  createGroupMessage,
   createMockChatForBot,
   createMockReply,
   mockLogger,
@@ -308,6 +313,34 @@ describe('Bot Authorization Gate (setupBot)', () => {
       expect(processMessageCallCount).toBe(1)
       expect(lastProcessedStorageId).toBe('auth-user')
     })
+  })
+
+  test('records known group and admin observations before normal message handling', async () => {
+    addUser('group-admin', ADMIN_ID)
+    setupUserConfig('group-admin')
+
+    const messageHandler = getMessageHandler()
+    expect(messageHandler).not.toBeNull()
+
+    const groupMessage = createGroupMessage('group-admin', '@bot status', true, 'group-ops')
+    groupMessage.contextName = 'Operations'
+    groupMessage.contextParentName = 'Platform'
+    groupMessage.threadId = 'thread-1'
+
+    const { reply } = createMockReply()
+    await messageHandler!(groupMessage, reply)
+
+    const db = getDrizzleDb()
+    const knownGroup = db.select().from(knownGroupContexts).where(eq(knownGroupContexts.contextId, 'group-ops')).get()
+    const adminObservation = db
+      .select()
+      .from(groupAdminObservations)
+      .where(and(eq(groupAdminObservations.contextId, 'group-ops'), eq(groupAdminObservations.userId, 'group-admin')))
+      .get()
+
+    expect(knownGroup?.displayName).toBe('Operations')
+    expect(knownGroup?.parentName).toBe('Platform')
+    expect(adminObservation?.isAdmin).toBe(true)
   })
 
   test('setupBot registers chat interaction handler when supported', () => {
