@@ -4,7 +4,11 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { createForumTopicIfNeeded, type ForumTopicContext } from '../../../src/chat/telegram/forum-topic-helpers.js'
+import {
+  createForumTopicIfNeeded,
+  _clearForumStatusCache,
+  type ForumTopicContext,
+} from '../../../src/chat/telegram/forum-topic-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 /** Mock API interface */
@@ -28,6 +32,7 @@ function createMockContext(
 describe('createForumTopicIfNeeded', () => {
   beforeEach(() => {
     mockLogger()
+    _clearForumStatusCache()
   })
 
   test('returns existing threadId if already in thread', async () => {
@@ -106,5 +111,49 @@ describe('createForumTopicIfNeeded', () => {
     const result = await createForumTopicIfNeeded(ctx, mockApi)
 
     expect(result).toBeUndefined()
+  })
+
+  test('caches getChat result to avoid repeated API calls', async () => {
+    const ctx = createMockContext()
+    let getChatCallCount = 0
+
+    const mockApi: MockApi = {
+      getChat: () => {
+        getChatCallCount++
+        return Promise.resolve({ is_forum: true })
+      },
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
+    }
+
+    // First call should trigger getChat
+    await createForumTopicIfNeeded(ctx, mockApi)
+    expect(getChatCallCount).toBe(1)
+
+    // Second call to same chat should use cache, not call getChat again
+    await createForumTopicIfNeeded(ctx, mockApi)
+    expect(getChatCallCount).toBe(1)
+  })
+
+  test('caches getChat result per chatId', async () => {
+    const ctx1 = createMockContext()
+    const ctx2: ForumTopicContext = {
+      chat: { type: 'supergroup', id: 999999 },
+      message: {},
+      from: { username: 'testuser' },
+    }
+    let getChatCallCount = 0
+
+    const mockApi: MockApi = {
+      getChat: () => {
+        getChatCallCount++
+        return Promise.resolve({ is_forum: true })
+      },
+      createForumTopic: () => Promise.resolve({ message_thread_id: 111 }),
+    }
+
+    // Call for different chats should each trigger getChat
+    await createForumTopicIfNeeded(ctx1, mockApi)
+    await createForumTopicIfNeeded(ctx2, mockApi)
+    expect(getChatCallCount).toBe(2)
   })
 })

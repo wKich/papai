@@ -1,6 +1,7 @@
 import type { MessageEntity } from '@grammyjs/types/message.js'
 import { Bot, type Context } from 'grammy'
 
+import { getThreadScopedStorageContextId } from '../../auth.js'
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
 import type {
@@ -65,7 +66,7 @@ export class TelegramChatProvider implements ChatProvider {
         allowed: true,
         isBotAdmin: isAdmin,
         isGroupAdmin: isAdmin,
-        storageContextId: msg.contextId,
+        storageContextId: getThreadScopedStorageContextId(msg.contextId, msg.contextType, msg.threadId),
       }
       await handler(msg, reply, auth)
     })
@@ -207,7 +208,6 @@ export class TelegramChatProvider implements ChatProvider {
     }
     return undefined
   }
-
   /** Fetch all attached files from a grammy Context, downloading their content. */
   private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
     const token = process.env['TELEGRAM_BOT_TOKEN'] ?? ''
@@ -285,7 +285,6 @@ export class TelegramChatProvider implements ChatProvider {
       clearInterval(interval)
     }
   }
-
   private async dispatchCallbackQuery(ctx: Context): Promise<void> {
     await ctx.answerCallbackQuery()
     const interaction = buildTelegramInteraction(ctx, await this.checkAdminStatus(ctx))

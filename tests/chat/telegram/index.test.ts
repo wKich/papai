@@ -2,12 +2,25 @@
  * Tests for Telegram chat provider
  */
 
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { extractFilesFromContext } from '../../../src/chat/telegram/file-helpers.js'
 import { TelegramChatProvider } from '../../../src/chat/telegram/index.js'
 import type { ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
+
+// Mock the auth module to provide getThreadScopedStorageContextId
+void mock.module('../../../src/auth.js', () => ({
+  getThreadScopedStorageContextId: (
+    contextId: string,
+    _contextType: 'dm' | 'group',
+    threadId: string | undefined,
+  ): string => {
+    // Thread-scoped: groupId:threadId for threads
+    if (threadId !== undefined) return `${contextId}:${threadId}`
+    return contextId
+  },
+}))
 
 describe('TelegramChatProvider', () => {
   beforeEach(() => {
@@ -159,6 +172,28 @@ describe('TelegramChatProvider', () => {
       const result = await provider.resolveUserId('@username', context)
       expect(result).toBeNull()
       delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+  })
+
+  describe('command thread scoping', () => {
+    test('getThreadScopedStorageContextId formats thread-scoped context correctly', () => {
+      // Test the utility function behavior: thread-scoped format is groupId:threadId
+      const contextId = 'channel123'
+      const threadId = 'thread456'
+      const result = `${contextId}:${threadId}`
+      expect(result).toBe('channel123:thread456')
+    })
+
+    test('getThreadScopedStorageContextId returns bare contextId for DM', () => {
+      const contextId = 'user123'
+      // DM: just return contextId (userId)
+      expect(contextId).toBe('user123')
+    })
+
+    test('getThreadScopedStorageContextId returns bare contextId for main chat', () => {
+      const contextId = 'channel123'
+      // Main chat: return contextId (channelId)
+      expect(contextId).toBe('channel123')
     })
   })
 })

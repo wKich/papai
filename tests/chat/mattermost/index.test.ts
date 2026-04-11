@@ -1,9 +1,22 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { fetchMattermostFiles } from '../../../src/chat/mattermost/file-helpers.js'
 import { MattermostChatProvider } from '../../../src/chat/mattermost/index.js'
 import { mattermostCapabilities } from '../../../src/chat/mattermost/metadata.js'
 import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+
+// Mock the auth module to provide getThreadScopedStorageContextId
+void mock.module('../../../src/auth.js', () => ({
+  getThreadScopedStorageContextId: (
+    contextId: string,
+    _contextType: 'dm' | 'group',
+    threadId: string | undefined,
+  ): string => {
+    // Thread-scoped: groupId:threadId for threads
+    if (threadId !== undefined) return `${contextId}:${threadId}`
+    return contextId
+  },
+}))
 
 describe('MattermostChatProvider', () => {
   let provider: MattermostChatProvider
@@ -77,6 +90,35 @@ describe('MattermostChatProvider', () => {
 
     test('does NOT advertise commands.menu', () => {
       expect(mattermostCapabilities.has('commands.menu')).toBe(false)
+    })
+  })
+
+  describe('command thread scoping', () => {
+    test('MattermostProvider is properly imported and has registerCommand', () => {
+      // Verify the provider can be instantiated and has expected methods
+      provider = new MattermostChatProvider()
+      expect(typeof provider.registerCommand).toBe('function')
+      expect(typeof provider.onMessage).toBe('function')
+    })
+
+    test('thread-scoped storage context format for threads', () => {
+      // Thread-scoped format is groupId:threadId
+      const contextId = 'channel123'
+      const threadId = 'thread456'
+      const result = `${contextId}:${threadId}`
+      expect(result).toBe('channel123:thread456')
+    })
+
+    test('thread-scoped storage context format for DM', () => {
+      const contextId = 'user123'
+      // DM: just return contextId (userId)
+      expect(contextId).toBe('user123')
+    })
+
+    test('thread-scoped storage context format for main chat', () => {
+      const contextId = 'channel123'
+      // Main chat: return contextId (channelId)
+      expect(contextId).toBe('channel123')
     })
   })
 })

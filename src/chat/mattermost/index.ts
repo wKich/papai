@@ -1,3 +1,4 @@
+import { getThreadScopedStorageContextId } from '../../auth.js'
 import { logger } from '../../logger.js'
 import type {
   AuthorizationResult,
@@ -131,7 +132,6 @@ export class MattermostChatProvider implements ChatProvider {
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
     const parsed = parsePostedEvent(data)
     if (parsed === null) return
-
     const { post, senderName } = parsed
     if (post.user_id === this.botUserId) return
 
@@ -196,7 +196,7 @@ export class MattermostChatProvider implements ChatProvider {
         allowed: true,
         isBotAdmin: isAdmin,
         isGroupAdmin: isAdmin,
-        storageContextId: msg.contextId,
+        storageContextId: getThreadScopedStorageContextId(msg.contextId, msg.contextType, msg.threadId),
       }
       await command.handler(msg, reply, auth)
       return
