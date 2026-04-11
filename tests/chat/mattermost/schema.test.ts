@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 
-import { MattermostPostSchema } from '../../../src/chat/mattermost/index.js'
+import { MattermostPostSchema } from '../../../src/chat/mattermost/schema.js'
 describe('MattermostPostSchema', () => {
   test('should parse basic post without reply fields', () => {
     const post = {

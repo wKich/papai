@@ -29,8 +29,6 @@ import {
   UserMeSchema,
 } from './schema.js'
 
-export { extractReplyId, MattermostPostSchema } from './schema.js'
-
 const log = logger.child({ scope: 'chat:mattermost' })
 
 export class MattermostChatProvider implements ChatProvider {
@@ -141,7 +139,8 @@ export class MattermostChatProvider implements ChatProvider {
     await this.dispatchMsg(msg, reply, command, isAdmin)
   }
 
-  private async buildPostedMessage(
+  /** @package Visible for testing */
+  async buildPostedMessage(
     post: MattermostPost,
     senderName: string | undefined,
     replyToMessageId: string | undefined,
@@ -180,6 +179,7 @@ export class MattermostChatProvider implements ChatProvider {
       messageId: post.id,
       replyToMessageId,
       replyContext,
+      threadId,
       ...(files !== undefined && files.length > 0 ? { files } : {}),
     }
     return { msg, reply, command, isAdmin }

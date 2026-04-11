@@ -26,4 +26,23 @@ describe('types', () => {
 
     expect(options).toBeDefined()
   })
+
+  it('should accept chatUserId parameter', () => {
+    const options: MakeToolsOptions = {
+      storageContextId: 'group-123',
+      chatUserId: 'user-456',
+    }
+
+    expect(options.storageContextId).toBe('group-123')
+    expect(options.chatUserId).toBe('user-456')
+  })
+
+  it('should work without chatUserId (backward compatibility)', () => {
+    const options: MakeToolsOptions = {
+      storageContextId: 'user-123',
+    }
+
+    expect(options.storageContextId).toBe('user-123')
+    expect(options.chatUserId).toBeUndefined()
+  })
 })
