@@ -1,14 +1,52 @@
-import { describe, expect, mock, test, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import type { IncomingFile, ReplyFn } from '../../src/chat/types.js'
-import { enqueueMessage, flushOnShutdown } from '../../src/message-queue/index.js'
 import type { CoalescedItem } from '../../src/message-queue/types.js'
 import { mockLogger } from '../utils/test-helpers.js'
+
+type MessageQueueModule = Pick<typeof import('../../src/message-queue/index.js'), 'enqueueMessage' | 'flushOnShutdown'>
 
 const delay = (ms: number): Promise<void> =>
   new Promise((r) => {
     setTimeout(r, ms)
   })
+
+async function waitFor(
+  condition: () => boolean,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 1500
+  const intervalMs = options.intervalMs ?? 25
+  const deadline = Date.now() + timeoutMs
+
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Condition not met within ${timeoutMs}ms`)
+    }
+    await delay(intervalMs)
+  }
+}
+
+function isMessageQueueModule(value: unknown): value is MessageQueueModule {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'enqueueMessage' in value &&
+    typeof value.enqueueMessage === 'function' &&
+    'flushOnShutdown' in value &&
+    typeof value.flushOnShutdown === 'function'
+  )
+}
+
+async function loadMessageQueueModule(): Promise<MessageQueueModule> {
+  const module: unknown = await import(`../../src/message-queue/index.js?test=${crypto.randomUUID()}`)
+
+  if (!isMessageQueueModule(module)) {
+    throw new TypeError('Failed to load message queue module')
+  }
+
+  return module
+}
 
 describe('MessageQueue Integration', () => {
   beforeEach(() => {
@@ -16,6 +54,8 @@ describe('MessageQueue Integration', () => {
   })
 
   test('should process messages sequentially per context', async () => {
+    const { enqueueMessage } = await loadMessageQueueModule()
+    const storageContextId = `ctx1-${crypto.randomUUID()}`
     const processed: string[] = []
     const mockReply: ReplyFn = {
       text: async (): Promise<void> => {},
@@ -27,17 +67,15 @@ describe('MessageQueue Integration', () => {
 
     const handler = async (coalesced: CoalescedItem): Promise<void> => {
       processed.push(coalesced.text)
-      // Simulate async work
       await delay(10)
     }
 
-    // Send two messages to same context
     enqueueMessage(
       {
         text: 'Message 1',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId,
         contextType: 'dm',
         files: [],
       },
@@ -50,7 +88,7 @@ describe('MessageQueue Integration', () => {
         text: 'Message 2',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId,
         contextType: 'dm',
         files: [],
       },
@@ -58,15 +96,15 @@ describe('MessageQueue Integration', () => {
       handler,
     )
 
-    // Wait for debounce + processing
-    await delay(600)
+    await waitFor(() => processed.length === 1)
 
-    // Should be coalesced into one
     expect(processed.length).toBe(1)
     expect(processed[0]).toBe('Message 1\n\nMessage 2')
   })
 
   test('should accumulate files from multiple messages', async () => {
+    const { enqueueMessage } = await loadMessageQueueModule()
+    const storageContextId = `ctx1-${crypto.randomUUID()}`
     const fileResults: IncomingFile[] = []
     const mockReply: ReplyFn = {
       text: async (): Promise<void> => {},
@@ -89,7 +127,7 @@ describe('MessageQueue Integration', () => {
         text: 'First',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId,
         contextType: 'dm',
         files: [file1],
       },
@@ -102,7 +140,7 @@ describe('MessageQueue Integration', () => {
         text: 'Second',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId,
         contextType: 'dm',
         files: [file2],
       },
@@ -110,7 +148,7 @@ describe('MessageQueue Integration', () => {
       handler,
     )
 
-    await delay(600)
+    await waitFor(() => fileResults.length === 2)
 
     expect(fileResults.length).toBe(2)
     expect(fileResults[0]?.filename).toBe('a.jpg')
@@ -118,6 +156,8 @@ describe('MessageQueue Integration', () => {
   })
 
   test('should flush on shutdown', async () => {
+    const { enqueueMessage, flushOnShutdown } = await loadMessageQueueModule()
+    const storageContextId = `ctx1-${crypto.randomUUID()}`
     const processed: string[] = []
     const mockReply: ReplyFn = {
       text: async (): Promise<void> => {},
@@ -137,7 +177,7 @@ describe('MessageQueue Integration', () => {
         text: 'Pending',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId,
         contextType: 'dm',
         files: [],
       },
@@ -145,7 +185,6 @@ describe('MessageQueue Integration', () => {
       handler,
     )
 
-    // Don't wait for debounce - call flush directly
     await flushOnShutdown({ timeoutMs: 1000 })
 
     expect(processed.length).toBe(1)
@@ -153,6 +192,9 @@ describe('MessageQueue Integration', () => {
   })
 
   test('should process different contexts concurrently without blocking', async () => {
+    const { enqueueMessage } = await loadMessageQueueModule()
+    const firstContextId = `ctx1-${crypto.randomUUID()}`
+    const secondContextId = `ctx2-${crypto.randomUUID()}`
     const processed: string[] = []
     const typingSpy = mock(() => {})
 
@@ -182,13 +224,12 @@ describe('MessageQueue Integration', () => {
       await Promise.resolve()
     }
 
-    // Send message to context 1
     enqueueMessage(
       {
         text: 'Message for ctx1',
         userId: 'user1',
         username: 'alice',
-        storageContextId: 'ctx1',
+        storageContextId: firstContextId,
         contextType: 'dm',
         files: [],
       },
@@ -196,13 +237,12 @@ describe('MessageQueue Integration', () => {
       handler1,
     )
 
-    // Send message to context 2
     enqueueMessage(
       {
         text: 'Message for ctx2',
         userId: 'user2',
         username: 'bob',
-        storageContextId: 'ctx2',
+        storageContextId: secondContextId,
         contextType: 'dm',
         files: [],
       },
@@ -210,8 +250,7 @@ describe('MessageQueue Integration', () => {
       handler2,
     )
 
-    // Both contexts should process independently
-    await delay(600)
+    await waitFor(() => processed.length === 2)
 
     expect(processed.length).toBe(2)
     expect(processed).toContain('ctx1: Message for ctx1')
@@ -219,6 +258,9 @@ describe('MessageQueue Integration', () => {
   })
 
   test('should keep contexts isolated - messages do not interleave', async () => {
+    const { enqueueMessage, flushOnShutdown } = await loadMessageQueueModule()
+    const firstContextId = `ctx1-${crypto.randomUUID()}`
+    const secondContextId = `ctx2-${crypto.randomUUID()}`
     const ctx1Results: string[] = []
     const ctx2Results: string[] = []
     const typingSpy = mock(() => {})
@@ -241,42 +283,43 @@ describe('MessageQueue Integration', () => {
       await Promise.resolve()
     }
 
-    // Interleave messages to different contexts
     enqueueMessage(
-      { text: 'A1', userId: 'u1', username: 'a', storageContextId: 'ctx1', contextType: 'dm', files: [] },
+      { text: 'A1', userId: 'u1', username: 'a', storageContextId: firstContextId, contextType: 'dm', files: [] },
       createMockReply(),
       handler1,
     )
 
     enqueueMessage(
-      { text: 'B1', userId: 'u2', username: 'b', storageContextId: 'ctx2', contextType: 'dm', files: [] },
+      { text: 'B1', userId: 'u2', username: 'b', storageContextId: secondContextId, contextType: 'dm', files: [] },
       createMockReply(),
       handler2,
     )
 
     enqueueMessage(
-      { text: 'A2', userId: 'u1', username: 'a', storageContextId: 'ctx1', contextType: 'dm', files: [] },
+      { text: 'A2', userId: 'u1', username: 'a', storageContextId: firstContextId, contextType: 'dm', files: [] },
       createMockReply(),
       handler1,
     )
 
     enqueueMessage(
-      { text: 'B2', userId: 'u2', username: 'b', storageContextId: 'ctx2', contextType: 'dm', files: [] },
+      { text: 'B2', userId: 'u2', username: 'b', storageContextId: secondContextId, contextType: 'dm', files: [] },
       createMockReply(),
       handler2,
     )
 
-    await delay(600)
+    await flushOnShutdown({ timeoutMs: 1000 })
 
-    // Each context should have its own coalesced message
     expect(ctx1Results.length).toBe(1)
     expect(ctx1Results[0]).toBe('A1\n\nA2')
-
     expect(ctx2Results.length).toBe(1)
     expect(ctx2Results[0]).toBe('B1\n\nB2')
   })
 
   test('should flush multiple contexts on shutdown', async () => {
+    const { enqueueMessage, flushOnShutdown } = await loadMessageQueueModule()
+    const contextAId = `ctxA-${crypto.randomUUID()}`
+    const contextBId = `ctxB-${crypto.randomUUID()}`
+    const contextCId = `ctxC-${crypto.randomUUID()}`
     const processed: string[] = []
     const typingSpy = mock(() => {})
 
@@ -293,31 +336,29 @@ describe('MessageQueue Integration', () => {
       await Promise.resolve()
     }
 
-    // Enqueue to multiple contexts
     enqueueMessage(
-      { text: 'Msg1', userId: 'u1', username: 'a', storageContextId: 'ctxA', contextType: 'dm', files: [] },
+      { text: 'Msg1', userId: 'u1', username: 'a', storageContextId: contextAId, contextType: 'dm', files: [] },
       createMockReply(),
       handler,
     )
 
     enqueueMessage(
-      { text: 'Msg2', userId: 'u2', username: 'b', storageContextId: 'ctxB', contextType: 'dm', files: [] },
+      { text: 'Msg2', userId: 'u2', username: 'b', storageContextId: contextBId, contextType: 'dm', files: [] },
       createMockReply(),
       handler,
     )
 
     enqueueMessage(
-      { text: 'Msg3', userId: 'u3', username: 'c', storageContextId: 'ctxC', contextType: 'dm', files: [] },
+      { text: 'Msg3', userId: 'u3', username: 'c', storageContextId: contextCId, contextType: 'dm', files: [] },
       createMockReply(),
       handler,
     )
 
-    // Flush all on shutdown
     await flushOnShutdown({ timeoutMs: 1000 })
 
     expect(processed.length).toBe(3)
-    expect(processed).toContain('ctxA: Msg1')
-    expect(processed).toContain('ctxB: Msg2')
-    expect(processed).toContain('ctxC: Msg3')
+    expect(processed).toContain(`${contextAId}: Msg1`)
+    expect(processed).toContain(`${contextBId}: Msg2`)
+    expect(processed).toContain(`${contextCId}: Msg3`)
   })
 })
