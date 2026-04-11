@@ -168,8 +168,8 @@ function handleCancelAction(userId: string, storageContextId: string): EditorPro
   }
 }
 
-function handleBackAction(storageContextId: string): EditorProcessResult {
-  deleteEditorSession(storageContextId, storageContextId)
+function handleBackAction(userId: string, storageContextId: string): EditorProcessResult {
+  deleteEditorSession(userId, storageContextId)
   const { text, buttons } = buildConfigList(storageContextId)
   return { handled: true, response: text, buttons }
 }
@@ -198,7 +198,7 @@ export function handleEditorCallback(
     case 'cancel':
       return handleCancelAction(userId, storageContextId)
     case 'back':
-      return handleBackAction(storageContextId)
+      return handleBackAction(userId, storageContextId)
     case 'setup':
       return handleSetupAction()
     default:

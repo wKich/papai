@@ -1,4 +1,7 @@
+import { renderConfigForTarget } from '../commands/config.js'
 import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
+import { handleGroupSettingsSelectorCallback } from '../group-settings/selector.js'
+import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
 import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
@@ -8,12 +11,41 @@ import type { IncomingInteraction, ReplyFn } from './types.js'
 const log = logger.child({ scope: 'chat:interaction-router' })
 
 export type InteractionRouteDeps = {
+  handleGroupSettingsInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleConfigInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleWizardInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
 }
 
+async function defaultHandleGroupSettingsInteraction(
+  interaction: IncomingInteraction,
+  reply: ReplyFn,
+): Promise<boolean> {
+  const result = handleGroupSettingsSelectorCallback(interaction.user.id, interaction.callbackData)
+  if (!result.handled) return false
+  if ('continueWith' in result && result.continueWith.command === 'config') {
+    await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
+    return true
+  }
+  if ('buttons' in result && result.buttons !== undefined) {
+    await reply.buttons(result.response, { buttons: result.buttons })
+    return true
+  }
+  if ('response' in result) {
+    await reply.text(result.response)
+    return true
+  }
+  return false
+}
+
+function getSettingsTargetContextId(interaction: IncomingInteraction): string {
+  if (interaction.contextType !== 'dm') {
+    return interaction.contextId
+  }
+  return getActiveGroupSettingsTarget(interaction.user.id) ?? interaction.contextId
+}
+
 async function defaultHandleConfigInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
-  const { callbackData, user, contextId } = interaction
+  const { callbackData, user } = interaction
   if (!callbackData.startsWith('cfg:')) return false
 
   const { action, key } = parseCallbackData(callbackData)
@@ -23,9 +55,10 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
     return true
   }
 
-  log.debug({ userId: user.id, contextId, action, key }, 'Handling config editor callback')
+  const targetContextId = getSettingsTargetContextId(interaction)
+  log.debug({ userId: user.id, contextId: targetContextId, action, key }, 'Handling config editor callback')
 
-  const result = handleEditorCallback(user.id, contextId, action, key ?? undefined)
+  const result = handleEditorCallback(user.id, targetContextId, action, key ?? undefined)
 
   if (!result.handled) {
     log.warn({ action, key }, 'Config editor callback not handled')
@@ -87,11 +120,11 @@ async function handleWizardSkip(
 }
 
 async function defaultHandleWizardInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
-  const { callbackData, user, contextId } = interaction
+  const { callbackData, user } = interaction
   if (!callbackData.startsWith('wizard_')) return false
 
   const userId = user.id
-  const storageContextId = contextId
+  const storageContextId = getSettingsTargetContextId(interaction)
 
   switch (callbackData) {
     case 'wizard_confirm': {
@@ -120,6 +153,7 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
 }
 
 const defaultDeps: InteractionRouteDeps = {
+  handleGroupSettingsInteraction: defaultHandleGroupSettingsInteraction,
   handleConfigInteraction: defaultHandleConfigInteraction,
   handleWizardInteraction: defaultHandleWizardInteraction,
 }
@@ -130,6 +164,10 @@ export function routeInteraction(
   deps: InteractionRouteDeps = defaultDeps,
 ): Promise<boolean> {
   const { callbackData } = interaction
+
+  if (callbackData.startsWith('gsel:')) {
+    return deps.handleGroupSettingsInteraction(interaction, reply)
+  }
 
   if (callbackData.startsWith('cfg:')) {
     return deps.handleConfigInteraction(interaction, reply)

@@ -17,34 +17,28 @@ import {
   defaultClientFactory,
 } from './client-factory.js'
 import { chunkForDiscord } from './format-chunking.js'
+import { getDiscordSettingsTargetContextId, handleDiscordGroupSettingsSelection } from './group-settings.js'
 import { handleConfigEditorCallback, handleWizardCallback } from './handlers.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
 import { withTypingIndicator } from './typing-indicator.js'
-
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
-
 const log = logger.child({ scope: 'chat:discord' })
 const DISCORD_MAX_CONTENT_LEN = 2000
 const CHANNEL_TYPE_DM = 1
-
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
-
 type ReadyPayload = { user: { id: string; username: string } }
-
 function isDispatchableMessage(v: unknown): v is DispatchableMessage {
   return typeof v === 'object' && v !== null && 'id' in v && 'author' in v && 'channel' in v
 }
-
 function isGuildLike(v: unknown): v is GuildLike {
   if (typeof v !== 'object' || v === null || !('members' in v)) return false
   const m = v.members
   return typeof m === 'object' && m !== null && 'search' in m && typeof m.search === 'function'
 }
-
 function isReadyPayload(v: unknown): v is ReadyPayload {
   if (typeof v !== 'object' || v === null || !('user' in v)) return false
   const u = v.user
@@ -81,11 +75,9 @@ export class DiscordChatProvider implements ChatProvider {
     this.commands.set(name, handler)
     log.debug({ command: name }, 'Discord command registered')
   }
-
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
   }
-
   async sendMessage(userId: string, markdown: string): Promise<void> {
     if (this.client === null || this.client.users === undefined) {
       throw new Error('DiscordChatProvider.sendMessage called before start()')
@@ -171,21 +163,19 @@ export class DiscordChatProvider implements ChatProvider {
     await this.client.destroy()
     this.client = null
   }
-
   testSetClient(c: DiscordClientLike): void {
     this.client = c
   }
-
-  async testDispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
-    await this.dispatchMessage(message, botId, adminUserId)
+  testDispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
+    return this.dispatchMessage(message, botId, adminUserId)
   }
 
-  async testDispatchButtonInteraction(
+  testDispatchButtonInteraction(
     interaction: ButtonInteractionLike,
     _botId: string,
     adminUserId: string,
   ): Promise<void> {
-    await this.handleButtonInteraction(interaction, adminUserId)
+    return this.handleButtonInteraction(interaction, adminUserId)
   }
 
   private async handleButtonInteraction(interaction: ButtonInteractionLike, adminUserId: string): Promise<void> {
@@ -198,12 +188,15 @@ export class DiscordChatProvider implements ChatProvider {
     const contextType = channel.type === CHANNEL_TYPE_DM ? ('dm' as const) : ('group' as const)
     const contextId = contextType === 'dm' ? interaction.user.id : interaction.channelId
     const userId = interaction.user.id
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+    if (await handleDiscordGroupSettingsSelection(interaction, userId, reply)) return
+    const settingsTargetContextId = getDiscordSettingsTargetContextId(contextType, contextId, userId)
 
     const onCfg = async (data: string): Promise<void> => {
-      await handleConfigEditorCallback(userId, contextId, data, channel)
+      await handleConfigEditorCallback(userId, settingsTargetContextId, data, channel)
     }
     const onWizard = async (data: string): Promise<void> => {
-      await handleWizardCallback(userId, contextId, data, channel)
+      await handleWizardCallback(userId, settingsTargetContextId, data, channel)
     }
 
     await dispatchButtonInteraction(interaction, onCfg, onWizard)

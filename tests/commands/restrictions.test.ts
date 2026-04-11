@@ -92,7 +92,7 @@ describe('command context restrictions', () => {
   })
 
   describe('/config command', () => {
-    test('rejected for non-admin in group', async () => {
+    test('non-admin in group gets the DM-only admin restriction', async () => {
       const handler = commandHandlers.get('config')
       expect(handler).toBeDefined()
 
@@ -103,20 +103,24 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Only group admins can run this command.')
+      expect(lastReply).toBe(
+        'Only group admins can configure group settings, and group settings are configured in direct messages with the bot.',
+      )
     })
 
-    test('allowed for group admin in group', async () => {
+    test('group admin in group gets a DM-only redirect', async () => {
       const handler = commandHandlers.get('config')
 
       const msg = createGroupMessage('user456', '', true, 'group1')
       const auth = createAuth('user456', { isGroupAdmin: true })
 
-      const { reply, buttonCalls } = createMockReply()
+      const { reply, textCalls } = createMockReply()
       await handler!(msg, reply, auth)
 
-      lastReply = buttonCalls[0] ?? null
-      expect(lastReply).toContain('🔐 Kaneo API Key')
+      lastReply = textCalls[0] ?? null
+      expect(lastReply).toBe(
+        'Group settings are configured in direct messages with the bot. Open a DM with me and run /config.',
+      )
     })
 
     test('allowed for regular user in DM', async () => {
@@ -132,7 +136,7 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = buttonCalls[0] ?? null
-      expect(lastReply).toContain('🔐 Kaneo API Key')
+      expect(lastReply).toContain('What do you want to configure?')
     })
   })
 

@@ -1,0 +1,59 @@
+import { renderConfigForTarget } from '../../commands/config.js'
+import { handleGroupSettingsSelectorCallback } from '../../group-settings/selector.js'
+import { getActiveGroupSettingsTarget } from '../../group-settings/state.js'
+import { logger } from '../../logger.js'
+import type { ReplyFn } from '../types.js'
+import type { ButtonInteractionLike } from './buttons.js'
+
+const log = logger.child({ scope: 'chat:discord:group-settings' })
+
+export function getDiscordSettingsTargetContextId(
+  contextType: 'dm' | 'group',
+  contextId: string,
+  userId: string,
+): string {
+  if (contextType !== 'dm') {
+    return contextId
+  }
+  return getActiveGroupSettingsTarget(userId) ?? contextId
+}
+
+export async function handleDiscordGroupSettingsSelection(
+  interaction: ButtonInteractionLike,
+  userId: string,
+  reply: ReplyFn,
+): Promise<boolean> {
+  if (!interaction.customId.startsWith('gsel:')) {
+    return false
+  }
+
+  try {
+    await interaction.deferUpdate()
+  } catch (error) {
+    log.warn(
+      { error: error instanceof Error ? error.message : String(error), customId: interaction.customId },
+      'Failed to defer Discord group-settings interaction',
+    )
+  }
+
+  const result = handleGroupSettingsSelectorCallback(userId, interaction.customId)
+  if (!result.handled) {
+    return false
+  }
+  if ('continueWith' in result) {
+    if (result.continueWith.command !== 'config') {
+      return false
+    }
+    await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
+    return true
+  }
+  if ('buttons' in result && result.buttons !== undefined) {
+    await reply.buttons(result.response, { buttons: result.buttons })
+    return true
+  }
+  if ('response' in result) {
+    await reply.text(result.response)
+    return true
+  }
+  return false
+}

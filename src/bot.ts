@@ -3,6 +3,7 @@ import { supportsInteractiveButtons } from './chat/capabilities.js'
 import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
 import { routeInteraction } from './chat/interaction-router.js'
 import type { AuthorizationResult, ChatProvider, IncomingFile, IncomingMessage, ReplyFn } from './chat/types.js'
+import { renderConfigForTarget } from './commands/config.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -17,6 +18,8 @@ import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
+import { handleGroupSettingsSelectorMessage } from './group-settings/selector.js'
+import { getActiveGroupSettingsTarget } from './group-settings/state.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { enqueueMessage } from './message-queue/index.js'
@@ -30,9 +33,7 @@ export interface BotDeps {
   processMessage: (reply: ReplyFn, contextId: string, username: string | null, userText: string) => Promise<void>
 }
 
-const defaultBotDeps: BotDeps = {
-  processMessage: defaultProcessMessage,
-}
+const defaultBotDeps: BotDeps = { processMessage: defaultProcessMessage }
 
 const log = logger.child({ scope: 'bot' })
 
@@ -61,7 +62,6 @@ function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtr
   const config = getAllConfig(storageContextId)
   const steps = getWizardSteps(taskProvider)
 
-  // Check if any required step is missing a value
   return steps.some((step) => {
     if (step.isOptional === true) return false
     const value = config[step.key]
@@ -72,12 +72,10 @@ function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtr
 async function autoStartWizardIfNeeded(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   if (hasActiveWizard(userId, storageContextId)) return false
 
-  // Demo users get config from admin via maybeProvisionKaneo — skip wizard
   if (process.env['DEMO_MODE'] === 'true' && isDemoUser(userId)) return false
 
   const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
 
-  // Don't auto-start if user already has config
   if (!userNeedsSetup(storageContextId, taskProvider)) {
     return false
   }
@@ -105,10 +103,8 @@ async function processCoalescedMessage(
 ): Promise<void> {
   const start = Date.now()
 
-  // Show typing when processing starts
   coalescedItem.reply.typing()
 
-  // Store accumulated files before processing
   if (coalescedItem.files.length > 0) {
     storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
   } else {
@@ -123,10 +119,7 @@ async function processCoalescedMessage(
       coalescedItem.text,
     )
   } finally {
-    // Clear files after processing
     clearIncomingFiles(coalescedItem.storageContextId)
-
-    // Emit metrics (moved from caller to handler callback)
     emit('message:replied', {
       userId: coalescedItem.userId,
       contextId: coalescedItem.storageContextId,
@@ -141,7 +134,6 @@ async function handleMessage(
   auth: AuthorizationResult,
   deps: BotDeps,
 ): Promise<void> {
-  // Check authorization
   if (!auth.allowed) {
     if (msg.isMentioned) {
       await reply.text(
@@ -154,11 +146,9 @@ async function handleMessage(
   const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
   const isNaturalLanguage = !hasCommand
   if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
-    // Silent ignore - natural language in groups requires mention
     return
   }
 
-  // Create queue item
   const queueItem = {
     text: buildPromptWithReplyContext(msg),
     userId: msg.user.id,
@@ -168,7 +158,6 @@ async function handleMessage(
     files: msg.files ?? [],
   }
 
-  // Enqueue the message (fire-and-forget)
   enqueueMessage(queueItem, reply, (coalescedItem) => processCoalescedMessage(coalescedItem, deps))
 }
 
@@ -180,40 +169,47 @@ async function maybeInterceptWizard(
 ): Promise<boolean> {
   const isCommand = msg.text.startsWith('/')
 
-  // AUTO-START WIZARD FOR NEW USERS
-  // Only auto-start for authorized users (to maintain silent drop for unauthorized)
-  if (!isCommand && auth.allowed) {
-    const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, reply)
-    if (wasWizardAutoStarted) return true
+  if (!isCommand && msg.contextType === 'dm') {
+    const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
+    if (selection.handled) {
+      if ('continueWith' in selection) {
+        if (selection.continueWith.command !== 'config') return false
+        await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
+      } else if ('buttons' in selection && selection.buttons !== undefined) {
+        await reply.buttons(selection.response, { buttons: selection.buttons })
+      } else if ('response' in selection) {
+        await reply.text(selection.response)
+      }
+      return true
+    }
   }
 
-  // CONFIG EDITOR INTERCEPTION - Check before wizard
-  // If user is editing a config field via button UI, handle their input
-  if (!isCommand) {
-    const wasEditorHandled = await handleConfigEditorMessage(msg.user.id, auth.storageContextId, msg.text, reply)
-    if (wasEditorHandled) return true
-  }
+  const settingsTargetContextId =
+    msg.contextType === 'dm'
+      ? (getActiveGroupSettingsTarget(msg.user.id) ?? auth.storageContextId)
+      : auth.storageContextId
 
-  // Use auth.storageContextId (not msg.contextId) for wizard lookup
-  // This ensures DM wizards use userId, group wizards use groupId
-  if (!isCommand) {
-    const wasWizardHandled = await handleWizardMessage(
-      msg.user.id,
-      auth.storageContextId,
-      msg.text,
-      reply,
-      interactiveButtons,
-    )
-    if (wasWizardHandled) return true
-  }
+  if (
+    !isCommand &&
+    auth.allowed &&
+    (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply))
+  )
+    return true
+
+  if (
+    !isCommand &&
+    (await handleWizardMessage(msg.user.id, settingsTargetContextId, msg.text, reply, interactiveButtons))
+  )
+    return true
+
+  if (!isCommand && auth.allowed && (await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, reply)))
+    return true
 
   return false
 }
 
 function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void {
-  if (msg.contextType !== 'group') {
-    return
-  }
+  if (msg.contextType !== 'group') return
 
   upsertKnownGroupContext({
     contextId: msg.contextId,
