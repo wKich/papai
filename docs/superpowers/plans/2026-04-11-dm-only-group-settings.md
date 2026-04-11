@@ -480,6 +480,8 @@ test('extractMessage includes Telegram chat title for group messages', async () 
 
 ```typescript
 // tests/chat/mattermost/index.test.ts - add to the existing suite
+import { createMockReply } from '../../utils/test-helpers.js'
+
 test('buildPostedMessage includes channel and team names', async () => {
   process.env['MATTERMOST_URL'] = 'https://mattermost.example.com'
   process.env['MATTERMOST_BOT_TOKEN'] = 'token'
@@ -1170,6 +1172,17 @@ describe('group settings selector', () => {
     })
   })
 
+  test('returns the DM user id when personal settings are selected', () => {
+    startGroupSettingsSelection('user-1', 'config', true)
+    const result = handleGroupSettingsSelectorCallback('user-1', 'gsel:scope:personal')
+
+    expect(result).toEqual({
+      handled: true,
+      continueWith: { command: 'config', targetContextId: 'user-1' },
+    })
+    expect(getActiveGroupSettingsTarget('user-1')).toBeNull()
+  })
+
   test('returns guidance when the user has no known manageable groups', () => {
     startGroupSettingsSelection('user-1', 'config', false)
     const result = handleGroupSettingsSelectorMessage('user-1', 'group', false)
@@ -1599,7 +1612,12 @@ test('group admin in group gets a DM-only redirect', async () => {
 ```typescript
 // tests/chat/interaction-router.test.ts - add a real router test
 import { createEditorSession, deleteEditorSession } from '../../src/config-editor/state.js'
+import { getConfig } from '../../src/config.js'
+import { handleEditorMessage } from '../../src/config-editor/handlers.js'
 import { createGroupSettingsSession, deleteGroupSettingsSession } from '../../src/group-settings/state.js'
+
+// Update the existing dependency-based router tests in this file to add:
+// handleGroupSettingsInteraction: () => Promise.resolve(false)
 
 test('uses the active group target for cfg callbacks received in DM', async () => {
   createGroupSettingsSession({
@@ -1632,13 +1650,39 @@ test('uses the active group target for cfg callbacks received in DM', async () =
   deleteEditorSession(interaction.user.id, 'group-9')
   deleteGroupSettingsSession(interaction.user.id)
 })
+
+test('saves edited config into the selected group context instead of the DM user context', async () => {
+  createGroupSettingsSession({
+    userId: interaction.user.id,
+    command: 'config',
+    stage: 'active',
+    targetContextId: 'group-9',
+  })
+  createEditorSession({
+    userId: interaction.user.id,
+    storageContextId: 'group-9',
+    editingKey: 'timezone',
+  })
+  handleEditorMessage(interaction.user.id, 'group-9', 'Europe/Berlin')
+
+  await routeInteraction({ ...interaction, callbackData: 'cfg:save:timezone' }, reply)
+
+  expect(getConfig('group-9', 'timezone')).toBe('Europe/Berlin')
+  expect(getConfig(interaction.user.id, 'timezone')).toBeNull()
+
+  deleteGroupSettingsSession(interaction.user.id)
+})
 ```
 
 ```typescript
 // tests/chat/discord/index.test.ts - add a selector callback test
+import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
+import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
+
 test('Discord DM group-settings callback opens config for the selected group', async () => {
   const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
   const provider = new DiscordChatProvider()
+  await setupTestDb()
 
   upsertKnownGroupContext({
     contextId: 'group-1',
@@ -1715,9 +1759,9 @@ Expected: FAIL because `/config` still renders immediately in DM, still works in
 ```typescript
 // src/commands/config.ts - add helper above registerConfigCommand()
 export async function renderConfigForTarget(
-  chat: ChatProvider,
   reply: import('../chat/types.js').ReplyFn,
   targetContextId: string,
+  interactiveButtons: boolean,
 ): Promise<void> {
   const config = getAllConfig(targetContextId)
   const lines = ['⚙️ **Current Configuration**\n']
@@ -1726,7 +1770,7 @@ export async function renderConfigForTarget(
     lines.push(formatConfigLine(key, config[key]))
   }
 
-  if (!supportsInteractiveButtons(chat)) {
+  if (!interactiveButtons) {
     lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/setup` to configure everything.')
     await reply.text(lines.join('\n'))
     return
@@ -1758,9 +1802,10 @@ export function registerConfigCommand(
       return
     }
 
-    const selection = startGroupSettingsSelection(msg.user.id, 'config', supportsInteractiveButtons(chat))
+    const interactiveButtons = supportsInteractiveButtons(chat)
+    const selection = startGroupSettingsSelection(msg.user.id, 'config', interactiveButtons)
     if (selection.handled && 'continueWith' in selection) {
-      await renderConfigForTarget(chat, reply, selection.continueWith.targetContextId)
+      await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
       return
     }
     if (selection.handled && 'buttons' in selection && selection.buttons !== undefined) {
@@ -1788,7 +1833,6 @@ import { handleGroupSettingsSelectorMessage } from './group-settings/selector.js
 ```typescript
 // src/bot.ts - replace maybeInterceptWizard() with the new order
 async function maybeInterceptWizard(
-  chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   auth: AuthorizationResult,
@@ -1797,10 +1841,10 @@ async function maybeInterceptWizard(
   const isCommand = msg.text.startsWith('/')
 
   if (!isCommand && msg.contextType === 'dm') {
-    const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text)
+    const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
     if (selection.handled) {
       if ('continueWith' in selection) {
-        await renderConfigForTarget(chat, reply, selection.continueWith.targetContextId)
+        await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
       } else if ('buttons' in selection && selection.buttons !== undefined) {
         await reply.buttons(selection.response, { buttons: selection.buttons })
       } else if ('response' in selection) {
@@ -1840,7 +1884,7 @@ async function maybeInterceptWizard(
 
 ```typescript
 // src/bot.ts - update the call site
-if (await maybeInterceptWizard(chat, msg, reply, auth, interactiveButtons)) return
+if (await maybeInterceptWizard(msg, reply, auth, interactiveButtons)) return
 ```
 
 ```typescript
@@ -1863,23 +1907,7 @@ async function defaultHandleGroupSettingsInteraction(
   if (!result.handled) return false
 
   if ('continueWith' in result && result.continueWith.command === 'config') {
-    await renderConfigForTarget(
-      {
-        name: 'interaction-router',
-        threadCapabilities: { supportsThreads: false, canCreateThreads: false, threadScope: 'message' },
-        capabilities: new Set(),
-        traits: { observedGroupMessages: 'mentions_only' },
-        configRequirements: [],
-        registerCommand: (): void => {},
-        onMessage: (): void => {},
-        sendMessage: (): Promise<void> => Promise.resolve(),
-        start: (): Promise<void> => Promise.resolve(),
-        stop: (): Promise<void> => Promise.resolve(),
-        buttons: undefined,
-      } as never,
-      reply,
-      result.continueWith.targetContextId,
-    )
+    await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
     return true
   }
 
@@ -2010,9 +2038,10 @@ private async handleButtonInteraction(interaction: ButtonInteractionLike, adminU
   const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
 
   if (interaction.customId.startsWith('gsel:')) {
+    await interaction.deferUpdate().catch(() => undefined)
     const result = handleGroupSettingsSelectorCallback(userId, interaction.customId)
     if ('continueWith' in result && result.continueWith.command === 'config') {
-      await renderConfigForTarget(this, reply, result.continueWith.targetContextId)
+      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
       return
     }
     if ('buttons' in result && result.buttons !== undefined) {
@@ -2116,7 +2145,7 @@ git commit -m "feat(config): route group settings through DM" -m "Co-authored-by
 // tests/commands/setup.test.ts
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { AuthorizationResult, CommandHandler } from '../../src/chat/types.js'
+import type { CommandHandler } from '../../src/chat/types.js'
 import { registerSetupCommand } from '../../src/commands/setup.js'
 import {
   createAuth,
@@ -2197,9 +2226,12 @@ test('routes gsel callbacks into the setup continuation when selector state says
 
 ```typescript
 // tests/chat/discord/index.test.ts - add a selected-group setup continuation case
+import { handleGroupSettingsSelectorCallback } from '../../../src/group-settings/selector.js'
+
 test('Discord DM selector continues into setup when the selector command is setup', async () => {
   const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
   const provider = new DiscordChatProvider()
+  await setupTestDb()
 
   upsertKnownGroupContext({
     contextId: 'group-1',
@@ -2288,7 +2320,8 @@ export function registerSetupCommand(
       return
     }
 
-    const selection = startGroupSettingsSelection(msg.user.id, 'setup', supportsInteractiveButtons(chat))
+    const interactiveButtons = supportsInteractiveButtons(chat)
+    const selection = startGroupSettingsSelection(msg.user.id, 'setup', interactiveButtons)
     if (selection.handled && 'continueWith' in selection) {
       await startSetupForTarget(msg.user.id, reply, selection.continueWith.targetContextId)
       return
@@ -2316,11 +2349,11 @@ import { startSetupForTarget } from './commands/setup.js'
 ```typescript
 // src/bot.ts - extend the selector continuation branch
 if (!isCommand && msg.contextType === 'dm') {
-  const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text)
+  const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
   if (selection.handled) {
     if ('continueWith' in selection) {
       if (selection.continueWith.command === 'config') {
-        await renderConfigForTarget(chat, reply, selection.continueWith.targetContextId)
+        await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
       } else {
         await startSetupForTarget(msg.user.id, reply, selection.continueWith.targetContextId)
       }
@@ -2347,23 +2380,7 @@ async function defaultHandleGroupSettingsInteraction(
 
   if ('continueWith' in result) {
     if (result.continueWith.command === 'config') {
-      await renderConfigForTarget(
-        {
-          name: 'interaction-router',
-          threadCapabilities: { supportsThreads: false, canCreateThreads: false, threadScope: 'message' },
-          capabilities: new Set(),
-          traits: { observedGroupMessages: 'mentions_only' },
-          configRequirements: [],
-          registerCommand: (): void => {},
-          onMessage: (): void => {},
-          sendMessage: (): Promise<void> => Promise.resolve(),
-          start: (): Promise<void> => Promise.resolve(),
-          stop: (): Promise<void> => Promise.resolve(),
-          buttons: undefined,
-        } as never,
-        reply,
-        result.continueWith.targetContextId,
-      )
+      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
     } else {
       await startSetupForTarget(interaction.user.id, reply, result.continueWith.targetContextId)
     }
@@ -2392,7 +2409,7 @@ if (interaction.customId.startsWith('gsel:')) {
   const result = handleGroupSettingsSelectorCallback(userId, interaction.customId)
   if ('continueWith' in result) {
     if (result.continueWith.command === 'config') {
-      await renderConfigForTarget(this, reply, result.continueWith.targetContextId)
+      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
     } else {
       await startSetupForTarget(userId, reply, result.continueWith.targetContextId)
     }
@@ -2531,7 +2548,7 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
 - [ ] **Step 4: Run the help tests, then the full unit suite and typecheck**
 
 ```bash
-bun test tests/commands/help.test.ts && bun typecheck && bun test
+bun test tests/commands/help.test.ts && bun run check:full
 ```
 
 Expected: PASS

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { QueueItem, CoalescedItem, QueueState, InternalQueueState } from '../../src/message-queue/types.js'
+import type { QueueItem, CoalescedItem } from '../../src/message-queue/types.js'
 
 describe('QueueItem interface', () => {
   test('accepts valid queue item', () => {
@@ -37,33 +37,5 @@ describe('CoalescedItem interface', () => {
     }
     expect(item.text).toBe('Hello')
     expect(item.reply).toBe(mockReply)
-  })
-})
-
-describe('QueueState interface', () => {
-  test('accepts valid queue state', () => {
-    const state: QueueState = {
-      items: [],
-      processing: false,
-      timer: null,
-      lastUserId: null,
-      files: [],
-    }
-    expect(state.processing).toBe(false)
-    expect(state.timer).toBeNull()
-  })
-})
-
-describe('InternalQueueState interface', () => {
-  test('accepts valid internal state', () => {
-    const state: InternalQueueState = {
-      items: [],
-      processing: false,
-      timer: null,
-      lastUserId: null,
-      files: [],
-      replies: [],
-    }
-    expect(state.replies).toEqual([])
   })
 })

@@ -72,8 +72,22 @@ export class MessageQueue {
       clearTimeout(this.timer)
     }
     this.timer = setTimeout(() => {
-      this.flush()
+      void this.flushAndHandle()
     }, DEBOUNCE_MS)
+  }
+
+  private async flushAndHandle(): Promise<void> {
+    const result = this.flush()
+    if (result !== null && this.handler !== null) {
+      try {
+        await this.handler(result)
+      } catch (error) {
+        log.error(
+          { storageContextId: this.storageContextId, error: error instanceof Error ? error.message : String(error) },
+          'Handler error during flush',
+        )
+      }
+    }
   }
 
   private flush(): CoalescedItem | null {

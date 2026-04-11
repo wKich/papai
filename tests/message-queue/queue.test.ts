@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, mock } from 'bun:test'
 
 import type { IncomingFile, ReplyFn } from '../../src/chat/types.js'
 import { MessageQueue } from '../../src/message-queue/queue.js'
-import type { QueueItem } from '../../src/message-queue/types.js'
+import type { CoalescedItem, QueueItem } from '../../src/message-queue/types.js'
 import { mockLogger } from '../utils/logger-mock.js'
 
 const createMockFile = (fileId: string): IncomingFile => ({
@@ -301,6 +301,83 @@ describe('MessageQueue', () => {
   describe('empty state', () => {
     it('should return 0 for empty queue', () => {
       expect(queue.getBufferedCount()).toBe(0)
+    })
+  })
+
+  describe('handler invocation', () => {
+    it('should call handler on timer flush', async () => {
+      const handlerCalls: string[] = []
+      const handler = async (coalesced: CoalescedItem): Promise<void> => {
+        handlerCalls.push(coalesced.text)
+        await Promise.resolve()
+      }
+
+      queue.setHandler(handler)
+      queue.enqueue(
+        {
+          text: 'Hello',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      // Wait for debounce timer (500ms)
+      await new Promise((r) => {
+        setTimeout(r, 550)
+      })
+
+      expect(handlerCalls.length).toBe(1)
+      expect(handlerCalls[0]).toBe('Hello')
+    })
+
+    it('should handle errors from handler gracefully', async () => {
+      let handlerCallCount = 0
+      const handler = async (_coalesced: CoalescedItem): Promise<void> => {
+        handlerCallCount++
+        await Promise.resolve()
+        throw new Error('Handler failed')
+      }
+
+      queue.setHandler(handler)
+      queue.enqueue(
+        {
+          text: 'Hello',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      // Wait for debounce timer - should not throw
+      await new Promise((r) => {
+        setTimeout(r, 550)
+      })
+
+      expect(handlerCallCount).toBe(1)
+    })
+
+    it('should not call handler when queue is empty', async () => {
+      const handlerCalls: string[] = []
+      const handler = async (coalesced: CoalescedItem): Promise<void> => {
+        handlerCalls.push(coalesced.text)
+        await Promise.resolve()
+      }
+
+      queue.setHandler(handler)
+      // Don't enqueue anything, just wait
+
+      await new Promise((r) => {
+        setTimeout(r, 550)
+      })
+
+      expect(handlerCalls.length).toBe(0)
     })
   })
 
