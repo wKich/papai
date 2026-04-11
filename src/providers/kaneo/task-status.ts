@@ -1,7 +1,7 @@
 import { logger } from '../../logger.js'
 import { providerError } from '../../providers/errors.js'
 import { KaneoClassifiedError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { listColumns as defaultListColumns } from './list-columns.js'
 
 const log = logger.child({ scope: 'kaneo:task-status' })

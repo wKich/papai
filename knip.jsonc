@@ -43,9 +43,8 @@
   // Ignore migration files (executed at runtime, not imported)
   "ignore": ["src/db/migrations/**"],
 
-  // Intentionally exported for future orchestrator integration (identity claim detection and auto-link)
+  // Intentionally exported for future proactive NL identity detection
   "ignoreIssues": {
     "src/identity/nl-detection.ts": ["exports"],
-    "src/identity/resolver.ts": ["exports"],
   },
 }

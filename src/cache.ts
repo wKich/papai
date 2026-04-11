@@ -1,4 +1,4 @@
-import { type ModelMessage } from 'ai'
+import type { ModelMessage } from 'ai'
 import { sql } from 'drizzle-orm'
 
 import {

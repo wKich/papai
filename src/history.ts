@@ -1,4 +1,4 @@
-import { type ModelMessage } from 'ai'
+import type { ModelMessage } from 'ai'
 import { eq } from 'drizzle-orm'
 
 import { getCachedHistory, setCachedHistory, appendToCachedHistory, clearCachedHistoryFlag } from './cache.js'

@@ -15,7 +15,7 @@ import type {
   UpdateWorkItemParams,
   WorkItem,
 } from '../types.js'
-import { type YouTrackConfig } from './client.js'
+import type { YouTrackConfig } from './client.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import { createYouTrackIdentityResolver } from './identity-resolver.js'
 import {

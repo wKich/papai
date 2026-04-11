@@ -13,7 +13,7 @@ import type {
   TaskSearchResult,
 } from '../types.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { ALL_CAPABILITIES, CONFIG_REQUIREMENTS } from './constants.js'
 import { createKaneoIdentityResolver } from './identity-resolver.js'
 import { kaneoAddComment, kaneoGetComments, kaneoRemoveComment, kaneoUpdateComment } from './operations/comments.js'

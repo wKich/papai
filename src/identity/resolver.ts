@@ -127,7 +127,12 @@ export function resolveMeReference(contextId: string, provider: TaskProvider): I
 
 /**
  * Attempt to auto-link based on username match.
- * Called on first interaction in group chats.
+ * Called on first interaction in group chats by llm-orchestrator.ts.
+ *
+ * @param contextId - The storage context ID (group ID in groups)
+ * @param chatUsername - The username from the chat platform
+ * @param provider - The task provider with optional identity resolver
+ * @returns IdentityResolutionResult indicating found, not_found, or unmatched
  */
 export async function attemptAutoLink(
   contextId: string,

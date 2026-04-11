@@ -9,6 +9,8 @@ import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from 
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
+import { getIdentityMapping } from './identity/mapping.js'
+import { attemptAutoLink } from './identity/resolver.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
 import { logger } from './logger.js'
@@ -127,6 +129,23 @@ const invokeModel = async (
   return result
 }
 
+const maybeAutoLinkIdentity = async (
+  contextId: string,
+  username: string | null,
+  provider: TaskProvider,
+): Promise<void> => {
+  if (username === null || provider.identityResolver === undefined) return
+  const existingMapping = getIdentityMapping(contextId, provider.name)
+  if (existingMapping !== null) return
+  log.debug({ contextId, username }, 'Attempting auto-link for first group interaction')
+  const autoLinkResult = await attemptAutoLink(contextId, username, provider)
+  if (autoLinkResult.type === 'found') {
+    log.info({ contextId, login: autoLinkResult.identity.login }, 'Auto-linked user on first interaction')
+  } else {
+    log.debug({ contextId, username, result: autoLinkResult.type }, 'Auto-link did not find match')
+  }
+}
+
 const callLlm = async (
   reply: ReplyFn,
   contextId: string,
@@ -147,6 +166,12 @@ const callLlm = async (
   const mainModel = getConfig(contextId, 'main_model')!
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(contextId)
+
+  // Auto-link on first group chat interaction (skip for DMs)
+  // DMs use userId as contextId; groups use groupId (different from user's ID)
+  // We detect groups by checking if username exists and no mapping exists yet
+  await maybeAutoLinkIdentity(contextId, username, provider)
+
   const tools = getOrCreateTools(contextId, chatUserId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)

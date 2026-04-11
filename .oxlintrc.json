@@ -24,8 +24,10 @@
     "typescript/explicit-function-return-type": "error",
     "typescript/explicit-module-boundary-types": "error",
     "typescript/no-dynamic-delete": "error",
+    "typescript/no-empty-object-type": "error",
     "typescript/no-explicit-any": "error",
     "typescript/no-invalid-void-type": "error",
+    "typescript/no-import-type-side-effects": "error",
     "typescript/no-namespace": "error",
     "typescript/no-require-imports": "error",
     "typescript/no-restricted-types": "error",
@@ -35,7 +37,16 @@
     "typescript/prefer-literal-enum-member": "error",
     "typescript/promise-function-async": "off",
     "typescript/use-unknown-in-catch-callback-variable": "error",
-    "no-param-reassign": "error"
+    "eslint/no-empty": "error",
+    "eslint/no-empty-function": "error",
+    "eslint/no-param-reassign": "error",
+    "import/extensions": ["error", "always", { "ignorePackages": true }],
+    "import/no-cycle": "error",
+    "oxc/no-barrel-file": "error",
+    "oxc/no-optional-chaining": "error",
+    "node/no-path-concat": "error",
+    "promise/catch-or-return": "error",
+    "unicorn/no-abusive-eslint-disable": "error"
   },
   "overrides": [
     {
@@ -45,7 +56,8 @@
         "max-lines": "off",
         "no-await-in-loop": "off",
         "typescript/no-confusing-void-expression": "off",
-        "typescript/await-thenable": "off"
+        "typescript/await-thenable": "off",
+        "eslint/no-empty-function": "off"
       }
     }
   ]

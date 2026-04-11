@@ -14,6 +14,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
+import { getIdentityMapping, clearIdentityMapping } from '../src/identity/mapping.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
 import { setKaneoWorkspace } from '../src/users.js'
@@ -610,6 +611,144 @@ describe('processMessage', () => {
 
       // LLM config should NOT be copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBeNull()
+    })
+  })
+
+  describe('auto-link flow', () => {
+    const GROUP_CTX = 'group-123'
+    const USER_ID = 'user-456'
+    const USERNAME = 'jsmith'
+
+    beforeEach(() => {
+      // Clear any existing identity mapping for the group context
+      clearIdentityMapping(GROUP_CTX, 'mock')
+    })
+
+    test('skips auto-link when username is null', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      // Pass null for username - should skip auto-link
+      await processMessage(reply, GROUP_CTX, USER_ID, null, 'hello')
+
+      // No mapping should be created
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).toBeNull()
+    })
+
+    test('skips auto-link when provider has no identity resolver', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Use mockProvider without identityResolver
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof mockProvider => mockProvider,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+
+      // No mapping should be created
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).toBeNull()
+    })
+
+    test('skips auto-link when mapping already exists', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Pre-set a mapping
+      const { setIdentityMapping } = await import('../src/identity/mapping.js')
+      setIdentityMapping({
+        contextId: GROUP_CTX,
+        providerName: 'mock',
+        providerUserId: 'existing-user',
+        providerUserLogin: 'existing',
+        displayName: 'Existing User',
+        matchMethod: 'manual_nl',
+        confidence: 100,
+      })
+
+      // Create provider with identity resolver that would match if called
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: USERNAME, name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+
+      // Existing mapping should be preserved
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping?.providerUserLogin).toBe('existing')
+      expect(mapping?.matchMethod).toBe('manual_nl')
+    })
+
+    test('attempts auto-link when username provided and no mapping exists', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver that finds a match
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: USERNAME, name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+
+      // Auto-link should have created a mapping
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).not.toBeNull()
+      expect(mapping?.providerUserLogin).toBe(USERNAME)
+      expect(mapping?.matchMethod).toBe('auto')
+      expect(mapping?.confidence).toBe(100)
+    })
+
+    test('stores unmatched when auto-link finds no match', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver that finds no match
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, 'unknownuser', 'hello')
+
+      // Should store unmatched mapping
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).not.toBeNull()
+      expect(mapping?.providerUserId).toBeNull()
+      expect(mapping?.matchMethod).toBe('unmatched')
     })
   })
 })

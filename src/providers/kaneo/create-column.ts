@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { logger } from '../../logger.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 import { ColumnCompatSchema } from './schemas/api-compat.js'
 
