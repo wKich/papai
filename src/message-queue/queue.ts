@@ -16,10 +16,19 @@ export class MessageQueue {
   private messages: BufferedMessage[] = []
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastUserId: string | null = null
+  private handler: ((coalesced: CoalescedItem) => Promise<void>) | null = null
 
   constructor(storageContextId: string) {
     this.storageContextId = storageContextId
     log.debug({ storageContextId }, 'MessageQueue created')
+  }
+
+  setHandler(handler: (coalesced: CoalescedItem) => Promise<void>): void {
+    this.handler = handler
+  }
+
+  getHandler(): ((coalesced: CoalescedItem) => Promise<void>) | null {
+    return this.handler
   }
 
   enqueue(item: QueueItem, reply: ReplyFn): CoalescedItem | null {
