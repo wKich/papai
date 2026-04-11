@@ -103,16 +103,3 @@ export function getActiveGroupSettingsTarget(userId: string): string | null {
   }
   return session.targetContextId ?? null
 }
-
-export function cleanupExpiredGroupSettingsSessions(): void {
-  log.debug('cleanupExpiredGroupSettingsSessions called')
-
-  const expiredUserIds = [...activeSessions.entries()]
-    .filter(([, session]) => isExpired(session))
-    .map(([userId]) => userId)
-
-  expiredUserIds.forEach((userId) => {
-    activeSessions.delete(userId)
-    log.info({ userId }, 'Cleaned up expired group settings session')
-  })
-}

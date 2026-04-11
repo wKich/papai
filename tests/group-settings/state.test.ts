@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import {
-  cleanupExpiredGroupSettingsSessions,
   createGroupSettingsSession,
   deleteGroupSettingsSession,
   getActiveGroupSettingsTarget,
@@ -27,8 +26,6 @@ describe('group settings state', () => {
   test('expires selector sessions after the 30 minute TTL', () => {
     const session = createGroupSettingsSession({ userId: 'user-1', command: 'config', stage: 'choose_scope' })
     session.startedAt = new Date(Date.now() - 31 * 60 * 1000)
-
-    cleanupExpiredGroupSettingsSessions()
 
     expect(getGroupSettingsSession('user-1')).toBeNull()
   })

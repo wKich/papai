@@ -8,8 +8,8 @@ const DM_USER_HELP = [
   '',
   'Commands:',
   '/help — Show this message',
-  '/setup — Interactive configuration wizard',
-  '/config — View current configuration',
+  '/setup — Interactive configuration wizard for personal or group settings',
+  '/config — View or edit personal settings, or choose a group to configure from DM',
   '/clear — Clear conversation history and memory',
   '',
   'Any other message is sent to the AI assistant.',
@@ -48,9 +48,9 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
     text += [
       '',
       'Admin commands:',
-      '/setup — Interactive configuration wizard',
-      '/config — View group configuration',
       '/clear — Clear group conversation history',
+      '',
+      'Group settings are configured in DM with the bot.',
     ].join('\n')
   }
 

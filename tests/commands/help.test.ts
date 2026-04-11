@@ -55,7 +55,7 @@ describe('help command', () => {
     expect(capturedText).toContain('/context')
   })
 
-  test('DM help shows basic commands for non-admin', async () => {
+  test('DM help explains that /setup and /config can target personal or group settings', async () => {
     const dmMsg = createDmMessage('user1', '/help')
 
     const auth = {
@@ -68,8 +68,8 @@ describe('help command', () => {
     await lastHandler!(dmMsg, mockReply, auth)
 
     expect(capturedText).toContain('/help')
-    expect(capturedText).toContain('/setup')
-    expect(capturedText).toContain('/config')
+    expect(capturedText).toContain('/setup — Interactive configuration wizard for personal or group settings')
+    expect(capturedText).toContain('/config — View or edit personal settings, or choose a group to configure from DM')
     expect(capturedText).toContain('/clear')
     expect(capturedText).not.toContain('/user add')
     expect(capturedText).not.toContain('Admin commands:')
@@ -96,7 +96,7 @@ describe('help command', () => {
     expect(capturedText).not.toContain('Admin commands:')
   })
 
-  test('Group admin help includes config commands', async () => {
+  test('Group admin help no longer advertises in-group /setup or /config', async () => {
     const groupMsg = createGroupMessage('admin1', '/help', true, 'group1')
 
     const auth = {
@@ -108,8 +108,9 @@ describe('help command', () => {
 
     await lastHandler!(groupMsg, mockReply, auth)
 
-    expect(capturedText).toContain('/setup')
-    expect(capturedText).toContain('/config')
+    expect(capturedText).toContain('Group settings are configured in DM with the bot')
+    expect(capturedText).not.toContain('/setup — Interactive configuration wizard')
+    expect(capturedText).not.toContain('/config — View group configuration')
     expect(capturedText).toContain('/clear')
     expect(capturedText).toContain('Admin commands:')
   })
