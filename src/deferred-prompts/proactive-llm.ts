@@ -193,7 +193,9 @@ async function invokeFull(
   }
 
   const model = deps.buildModel(config, config.mainModel)
-  const tools = makeTools(provider, { storageContextId: userId, mode: 'proactive' })
+  // In deferred prompts, userId is already the actual user (not a group)
+  // So we pass it as both storageContextId and chatUserId
+  const tools = makeTools(provider, { storageContextId: userId, chatUserId: userId, mode: 'proactive' })
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const systemPrompt = buildSystemPrompt(provider, userId)
   const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
