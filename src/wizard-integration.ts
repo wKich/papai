@@ -15,7 +15,7 @@ export async function handleWizardMessage(
   storageContextId: string,
   text: string,
   reply: ReplyFn,
-  platform: string,
+  supportsInteractiveButtons: boolean,
 ): Promise<boolean> {
   if (!hasActiveWizard(userId, storageContextId)) {
     return false
@@ -24,9 +24,8 @@ export async function handleWizardMessage(
   const wizardResult = await processWizardMessage(userId, storageContextId, text)
 
   if (wizardResult.handled) {
-    // Only show buttons on Telegram (Mattermost buttons don't work due to missing webhook handler)
     const buttons = wizardResult.buttons
-    const shouldShowButtons = platform === 'telegram' && buttons !== undefined && buttons.length > 0
+    const shouldShowButtons = supportsInteractiveButtons && buttons !== undefined && buttons.length > 0
     if (shouldShowButtons && buttons !== undefined) {
       // Send message with buttons
       const chatButtons: import('./chat/types.js').ChatButton[] = buttons.map((btn) => {

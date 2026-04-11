@@ -48,7 +48,7 @@ export type {
 } from './domain-types.js'
 
 /** Capabilities that a task tracker provider may support. */
-export type Capability =
+export type TaskCapability =
   | 'tasks.delete'
   | 'tasks.count'
   | 'tasks.relations'
@@ -89,17 +89,15 @@ export type Capability =
   | 'sprints.assign'
   | 'activities.read'
   | 'queries.saved'
-
 /** Configuration keys that a provider requires to function. */
 export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
-
 /** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
 export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
   readonly name: string
 
   /** Capabilities this provider supports beyond core task CRUD. */
-  readonly capabilities: ReadonlySet<Capability>
+  readonly capabilities: ReadonlySet<TaskCapability>
 
   /** Config keys this provider needs (shown in /config, validated by /setup). */
   readonly configRequirements: readonly ProviderConfigRequirement[]

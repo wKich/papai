@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { fetchMattermostFiles } from '../../../src/chat/mattermost/file-helpers.js'
 import { MattermostChatProvider } from '../../../src/chat/mattermost/index.js'
+import { mattermostCapabilities } from '../../../src/chat/mattermost/metadata.js'
 import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 
 describe('MattermostChatProvider', () => {
@@ -54,6 +55,28 @@ describe('MattermostChatProvider', () => {
 
       expect(userId).toBeNull()
       restoreFetch()
+    })
+  })
+
+  describe('capabilities', () => {
+    test('advertises messages.files capability', () => {
+      expect(mattermostCapabilities.has('messages.files')).toBe(true)
+    })
+
+    test('advertises users.resolve capability', () => {
+      expect(mattermostCapabilities.has('users.resolve')).toBe(true)
+    })
+
+    test('does NOT advertise messages.buttons', () => {
+      expect(mattermostCapabilities.has('messages.buttons')).toBe(false)
+    })
+
+    test('does NOT advertise interactions.callbacks', () => {
+      expect(mattermostCapabilities.has('interactions.callbacks')).toBe(false)
+    })
+
+    test('does NOT advertise commands.menu', () => {
+      expect(mattermostCapabilities.has('commands.menu')).toBe(false)
     })
   })
 })

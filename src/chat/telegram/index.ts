@@ -3,22 +3,23 @@ import { Bot, type Context } from 'grammy'
 
 import { logger } from '../../logger.js'
 import { cacheMessage } from '../../message-cache/index.js'
-import { handleWizardCallback } from '../../wizard/telegram-handlers.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
   ContextType,
   IncomingFile,
+  IncomingInteraction,
   IncomingMessage,
   ReplyFn,
   ReplyOptions,
   ResolveUserContext,
 } from '../types.js'
-import { handleConfigEditorCallback } from './config-editor-callbacks.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
 import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
+import { buildTelegramInteraction } from './interaction-helpers.js'
+import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
 import { extractReplyContext } from './reply-context-helpers.js'
 import {
   createReplyParamsBuilder,
@@ -27,7 +28,6 @@ import {
   sendFormattedReply,
   sendTextReply,
 } from './reply-helpers.js'
-
 export { extractReplyContext } from './reply-context-helpers.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
@@ -39,8 +39,12 @@ export class TelegramChatProvider implements ChatProvider {
     canCreateThreads: true,
     threadScope: 'message' as const,
   }
+  readonly capabilities = telegramCapabilities
+  readonly traits = telegramTraits
+  readonly configRequirements = telegramConfigRequirements
   private readonly bot: Bot
   private botUsername: string | null = null
+  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
 
   constructor() {
     const token = process.env['TELEGRAM_BOT_TOKEN']
@@ -90,24 +94,17 @@ export class TelegramChatProvider implements ChatProvider {
     )
   }
 
+  onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
+    this.interactionHandler = handler
+  }
+
   async sendMessage(userId: string, markdown: string): Promise<void> {
     const formatted = formatLlmOutput(markdown)
-    await this.bot.api.sendMessage(parseInt(userId, 10), formatted.text, {
-      entities: formatted.entities,
-    })
+    await this.bot.api.sendMessage(parseInt(userId, 10), formatted.text, { entities: formatted.entities })
   }
 
   start(): Promise<void> {
-    this.bot.on('callback_query:data', async (ctx) => {
-      // Handle config editor callbacks (new button-based editor)
-      if (ctx.callbackQuery.data?.startsWith('cfg:')) {
-        const handled = await handleConfigEditorCallback(ctx)
-        if (handled) return
-      }
-      // Handle wizard callbacks
-      await handleWizardCallback(ctx)
-    })
-
+    this.bot.on('callback_query:data', (ctx) => this.dispatchCallbackQuery(ctx))
     return new Promise<void>((resolve, reject) => {
       this.bot
         .start({
@@ -130,12 +127,8 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
-    // Telegram Bot API cannot resolve usernames to user IDs; only numeric IDs work directly
-    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
-    if (/^\d+$/.test(cleanUsername)) {
-      return Promise.resolve(cleanUsername)
-    }
-    return Promise.resolve(null)
+    const clean = username.startsWith('@') ? username.slice(1) : username
+    return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
 
   async setCommands(adminUserId: string): Promise<void> {
@@ -151,9 +144,8 @@ export class TelegramChatProvider implements ChatProvider {
       { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
       { command: 'users', description: 'List authorized users' },
     ]
-    const chatId = parseInt(adminUserId, 10)
     await this.bot.api.setMyCommands(userCmds, { scope: { type: 'all_private_chats' } })
-    await this.bot.api.setMyCommands(adminCmds, { scope: { type: 'chat', chat_id: chatId } })
+    await this.bot.api.setMyCommands(adminCmds, { scope: { type: 'chat', chat_id: parseInt(adminUserId, 10) } })
     log.info({ adminUserId }, 'Telegram command menu registered')
   }
 
@@ -268,9 +260,7 @@ export class TelegramChatProvider implements ChatProvider {
       formatted: (markdown: string, options?: ReplyOptions) =>
         sendFormattedReply(ctx, markdown, buildReplyParams, options),
       file: (file, options?: ReplyOptions) => sendFileReply(ctx, file, buildReplyParams, options),
-      typing: () => {
-        ctx.replyWithChatAction('typing').catch(() => undefined)
-      },
+      typing: () => void ctx.replyWithChatAction('typing').catch(() => undefined),
       redactMessage: async (replacementText: string) => {
         if (chatId !== undefined && messageId !== undefined) {
           await this.bot.api.editMessageText(chatId, messageId, replacementText).catch((err: unknown) => {
@@ -286,9 +276,7 @@ export class TelegramChatProvider implements ChatProvider {
   }
 
   private async withTypingIndicator<T>(ctx: Context, fn: () => Promise<T>): Promise<T> {
-    const send = (): void => {
-      ctx.replyWithChatAction('typing').catch(() => undefined)
-    }
+    const send = (): void => void ctx.replyWithChatAction('typing').catch(() => undefined)
     send()
     const interval = setInterval(send, 4500)
     try {
@@ -296,5 +284,17 @@ export class TelegramChatProvider implements ChatProvider {
     } finally {
       clearInterval(interval)
     }
+  }
+
+  private async dispatchCallbackQuery(ctx: Context): Promise<void> {
+    await ctx.answerCallbackQuery()
+    const interaction = buildTelegramInteraction(ctx, await this.checkAdminStatus(ctx))
+    if (interaction === null) return
+    const reply = this.buildReplyFn(ctx, interaction.threadId)
+    if (this.interactionHandler === undefined) {
+      log.warn({ callbackData: ctx.callbackQuery?.data }, 'No interaction handler registered')
+      return
+    }
+    await this.interactionHandler(interaction, reply)
   }
 }

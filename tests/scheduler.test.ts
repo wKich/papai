@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { setCachedConfig } from '../src/cache.js'
 import type { ChatProvider } from '../src/chat/types.js'
 import * as schema from '../src/db/schema.js'
-import type { Capability, Task, TaskProvider } from '../src/providers/types.js'
+import type { TaskCapability, Task, TaskProvider } from '../src/providers/types.js'
 import { createRecurringTask, getDueRecurringTasks } from '../src/recurring.js'
 import type { SchedulerDeps } from '../src/scheduler.js'
 import { tick, createMissedTasks, startScheduler, stopScheduler } from '../src/scheduler.js'
@@ -27,7 +27,7 @@ describe('scheduler', () => {
 
   let createTaskImpl: (...args: unknown[]) => Promise<MockTask>
   let addTaskLabelImpl: (taskId: string, labelId: string) => Promise<{ taskId: string; labelId: string }>
-  let mockCapabilities: Set<Capability>
+  let mockCapabilities: Set<TaskCapability>
   let schedulerDeps: SchedulerDeps
 
   let resolveCreateTask: (() => void) | null
@@ -124,7 +124,7 @@ describe('scheduler', () => {
     createTaskImpl = defaultCreateTask
     addTaskLabelImpl = (taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> =>
       Promise.resolve({ taskId, labelId })
-    mockCapabilities = new Set<Capability>()
+    mockCapabilities = new Set<TaskCapability>()
     sendMessageCalls = []
     sendMessageImpl = (): Promise<void> => Promise.resolve()
 
@@ -290,7 +290,7 @@ describe('scheduler', () => {
 
   describe('tick() — label application', () => {
     test('tick() applies labels when provider supports labels.assign', async () => {
-      mockCapabilities = new Set<Capability>(['labels.assign'])
+      mockCapabilities = new Set<TaskCapability>(['labels.assign'])
       const addTaskLabelCalls: Array<{ taskId: string; labelId: string }> = []
       addTaskLabelImpl = (taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> => {
         addTaskLabelCalls.push({ taskId, labelId })

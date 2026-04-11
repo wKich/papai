@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { AuthorizationResult, CommandHandler } from '../../src/chat/types.js'
+import type { AuthorizationResult, ChatCapability, CommandHandler } from '../../src/chat/types.js'
 import { registerConfigCommand } from '../../src/commands/config.js'
 import { setConfig } from '../../src/config.js'
 import { clearUserCache } from '../utils/test-cache.js'
@@ -26,43 +26,85 @@ function createAuth(userId: string, allowed: boolean): AuthorizationResult {
 describe('/config Command', () => {
   let configHandler: CommandHandler | null
 
-  beforeEach(async () => {
-    mockLogger()
-    await setupTestDb()
-    clearUserCache(USER_ID)
+  describe('with interactive button support', () => {
+    beforeEach(async () => {
+      mockLogger()
+      await setupTestDb()
+      clearUserCache(USER_ID)
 
-    const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
-    registerConfigCommand(mockChat, (_userId: string) => true)
-    configHandler = commandHandlers.get('config') ?? null
+      const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
+      registerConfigCommand(mockChat, (_userId: string) => true)
+      configHandler = commandHandlers.get('config') ?? null
+    })
+
+    test('shows all config keys with values and masked secrets', async () => {
+      setConfig(USER_ID, 'llm_apikey', 'sk-abc1234')
+      expect(configHandler).not.toBeNull()
+      const { reply, buttonCalls } = createMockReply()
+      await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
+      expect(buttonCalls[0]).toContain('****1234')
+      expect(buttonCalls[0]).toContain('*(not set)*')
+    })
+
+    test('shows unset placeholder for unconfigured keys', async () => {
+      expect(configHandler).not.toBeNull()
+      const { reply, buttonCalls } = createMockReply()
+      await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
+      const output = buttonCalls[0] ?? ''
+      expect(output.length).toBeGreaterThan(0)
+      const lines = output.split('\n').filter((line) => line.trim().length > 0)
+      expect(lines.length).toBeGreaterThan(0)
+      // Every config line should show "(not set)" since no keys are configured
+      // (exclude the hint line at the end)
+      const configLines = lines.filter((line) => line.includes(':'))
+      expect(configLines.every((line) => line.includes('(not set)'))).toBe(true)
+    })
+
+    test('rejects unauthorized user silently', async () => {
+      expect(configHandler).not.toBeNull()
+      const { reply, buttonCalls } = createMockReply()
+      await configHandler!(createDmMessage('unauthorized-user'), reply, createAuth('unauthorized-user', false))
+      expect(buttonCalls).toHaveLength(0)
+    })
   })
 
-  test('shows all config keys with values and masked secrets', async () => {
-    setConfig(USER_ID, 'llm_apikey', 'sk-abc1234')
-    expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
-    await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
-    expect(textCalls[0]).toContain('****1234')
-    expect(textCalls[0]).toContain('*(not set)*')
-  })
+  describe('without interactive button support', () => {
+    beforeEach(async () => {
+      mockLogger()
+      await setupTestDb()
+      clearUserCache(USER_ID)
 
-  test('shows unset placeholder for unconfigured keys', async () => {
-    expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
-    await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
-    const output = textCalls[0] ?? ''
-    expect(output.length).toBeGreaterThan(0)
-    const lines = output.split('\n').filter((line) => line.trim().length > 0)
-    expect(lines.length).toBeGreaterThan(0)
-    // Every config line should show "(not set)" since no keys are configured
-    // (exclude the hint line at the end)
-    const configLines = lines.filter((line) => line.includes(':'))
-    expect(configLines.every((line) => line.includes('(not set)'))).toBe(true)
-  })
+      const capabilities = new Set<ChatCapability>([
+        'commands.menu',
+        'messages.files',
+        'messages.redact',
+        'files.receive',
+        'messages.reply-context',
+        'users.resolve',
+        // messages.buttons and interactions.callbacks intentionally omitted
+      ])
+      const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers({ capabilities })
+      registerConfigCommand(mockChat, (_userId: string) => true)
+      configHandler = commandHandlers.get('config') ?? null
+    })
 
-  test('rejects unauthorized user silently', async () => {
-    expect(configHandler).not.toBeNull()
-    const { reply, textCalls } = createMockReply()
-    await configHandler!(createDmMessage('unauthorized-user'), reply, createAuth('unauthorized-user', false))
-    expect(textCalls).toHaveLength(0)
+    test('falls back to plain text with config output', async () => {
+      setConfig(USER_ID, 'llm_apikey', 'sk-abc1234')
+      expect(configHandler).not.toBeNull()
+      const { reply, textCalls, buttonCalls } = createMockReply()
+      await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
+      expect(buttonCalls).toHaveLength(0)
+      expect(textCalls).toHaveLength(1)
+      const output = textCalls[0] ?? ''
+      expect(output).toContain('****1234')
+    })
+
+    test('includes note that interactive editing is unavailable', async () => {
+      expect(configHandler).not.toBeNull()
+      const { reply, textCalls } = createMockReply()
+      await configHandler!(createDmMessage(USER_ID), reply, createAuth(USER_ID, true))
+      const output = textCalls[0] ?? ''
+      expect(output).toContain('not available')
+    })
   })
 })

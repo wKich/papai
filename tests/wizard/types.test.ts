@@ -20,7 +20,6 @@ describe('Wizard Types', () => {
         timezone: 'UTC',
       },
       skippedSteps: [2],
-      platform: 'telegram',
       taskProvider: 'kaneo',
     }
 

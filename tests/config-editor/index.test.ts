@@ -12,6 +12,7 @@ import {
   handleEditorMessage,
   hasActiveEditor,
   parseCallbackData,
+  serializeCallbackData,
   startEditor,
 } from '../../src/config-editor/index.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -41,6 +42,7 @@ describe('config-editor public API', () => {
     expect(typeof handleEditorCallback).toBe('function')
     expect(typeof handleEditorMessage).toBe('function')
     expect(typeof parseCallbackData).toBe('function')
+    expect(typeof serializeCallbackData).toBe('function')
   })
 
   test('parseCallbackData works correctly', () => {
@@ -50,5 +52,13 @@ describe('config-editor public API', () => {
     expect(parseCallbackData('cfg:edit:llm_apikey')).toEqual({ action: 'edit', key: 'llm_apikey' })
     expect(parseCallbackData('cfg:save:main_model')).toEqual({ action: 'save', key: 'main_model' })
     expect(parseCallbackData('invalid')).toEqual({ action: null, key: null })
+  })
+
+  test('serializeCallbackData works correctly', () => {
+    expect(serializeCallbackData({ action: 'cancel' })).toBe('cfg:cancel')
+    expect(serializeCallbackData({ action: 'back' })).toBe('cfg:back')
+    expect(serializeCallbackData({ action: 'setup' })).toBe('cfg:setup')
+    expect(serializeCallbackData({ action: 'edit', key: 'llm_apikey' })).toBe('cfg:edit:llm_apikey')
+    expect(serializeCallbackData({ action: 'save', key: 'main_model' })).toBe('cfg:save:main_model')
   })
 })

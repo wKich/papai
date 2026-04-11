@@ -5,8 +5,13 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 
 import type {
   AuthorizationResult,
+  ChatCapability,
+  ChatFile,
   ChatProvider,
+  ChatProviderConfigRequirement,
+  ChatProviderTraits,
   CommandHandler,
+  IncomingInteraction,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
@@ -193,7 +198,9 @@ export {
 export interface MockReplyResult {
   reply: ReplyFn
   textCalls: string[]
+  buttonCalls: string[]
   redactCalls: string[]
+  fileCalls: ChatFile[]
   getReplies: () => string[]
   getRedactions: () => string[]
 }
@@ -203,25 +210,38 @@ export interface MockReplyResult {
  */
 export function createMockReply(): MockReplyResult {
   const textCalls: string[] = []
+  const buttonCalls: string[] = []
   const redactCalls: string[] = []
+  const fileCalls: ChatFile[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
       textCalls.push(content)
       return Promise.resolve()
     },
     formatted: (): Promise<void> => Promise.resolve(),
-    file: (): Promise<void> => Promise.resolve(),
+    file: (file: ChatFile): Promise<void> => {
+      fileCalls.push(file)
+      return Promise.resolve()
+    },
     typing: (): void => {},
     redactMessage: (replacementText: string): Promise<void> => {
       redactCalls.push(replacementText)
       return Promise.resolve()
     },
     buttons: (content: string): Promise<void> => {
-      textCalls.push(content)
+      buttonCalls.push(content)
       return Promise.resolve()
     },
   }
-  return { reply, textCalls, redactCalls, getReplies: () => textCalls, getRedactions: () => redactCalls }
+  return {
+    reply,
+    textCalls,
+    buttonCalls,
+    redactCalls,
+    fileCalls,
+    getReplies: () => textCalls,
+    getRedactions: () => redactCalls,
+  }
 }
 
 /**
@@ -301,6 +321,18 @@ export function createAuth(
 // CHAT PROVIDER MOCK
 // ============================================================================
 
+/** Default capability set for mock chat providers. */
+export const DEFAULT_CHAT_CAPABILITIES = new Set<ChatCapability>([
+  'commands.menu',
+  'interactions.callbacks',
+  'messages.buttons',
+  'messages.files',
+  'messages.redact',
+  'files.receive',
+  'messages.reply-context',
+  'users.resolve',
+])
+
 /**
  * Create a mock chat provider with configurable behavior.
  * @param options - Optional configuration for the mock provider
@@ -316,6 +348,16 @@ export function createMockChat(
     onMessageHandler?: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
     /** Custom resolveUserId implementation */
     resolveUserId?: (username: string, context: ResolveUserContext) => Promise<string | null>
+    /** Callback when an interaction handler is registered via onInteraction */
+    onInteractionHandler?: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
+    /** Custom setCommands implementation */
+    setCommands?: (adminUserId: string) => Promise<void>
+    /** Capability set for this provider (defaults to DEFAULT_CHAT_CAPABILITIES) */
+    capabilities?: Set<ChatCapability>
+    /** Behavioral traits for this provider */
+    traits?: ChatProviderTraits
+    /** Config requirements for this provider */
+    configRequirements?: ChatProviderConfigRequirement[]
   } = {},
 ): ChatProvider {
   return {
@@ -325,12 +367,25 @@ export function createMockChat(
       canCreateThreads: false,
       threadScope: 'message',
     },
+    capabilities: options.capabilities ?? DEFAULT_CHAT_CAPABILITIES,
+    traits: options.traits ?? { observedGroupMessages: 'all' },
+    configRequirements: options.configRequirements ?? [],
     registerCommand: (name: string, handler: CommandHandler): void => {
       options.commandHandlers?.set(name, handler)
     },
     onMessage: (handler): void => {
       options.onMessageHandler?.(handler)
     },
+    ...(options.onInteractionHandler === undefined
+      ? {}
+      : (() => {
+          const interactionHandler = options.onInteractionHandler
+          return {
+            onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
+              interactionHandler(handler)
+            },
+          }
+        })()),
     sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
     resolveUserId:
       options.resolveUserId ??
@@ -338,6 +393,7 @@ export function createMockChat(
         const clean = username.startsWith('@') ? username.slice(1) : username
         return Promise.resolve(clean)
       }),
+    setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
     start: (): Promise<void> => Promise.resolve(),
     stop: (): Promise<void> => Promise.resolve(),
   }
@@ -346,12 +402,12 @@ export function createMockChat(
 /**
  * Create a mock chat provider that captures command registrations.
  */
-export function createMockChatWithCommandHandlers(): {
+export function createMockChatWithCommandHandlers(options: Parameters<typeof createMockChat>[0] = {}): {
   provider: ChatProvider
   commandHandlers: Map<string, CommandHandler>
 } {
   const commandHandlers = new Map<string, CommandHandler>()
-  const provider = createMockChat({ commandHandlers })
+  const provider = createMockChat({ ...options, commandHandlers })
   return { provider, commandHandlers }
 }
 
@@ -377,18 +433,24 @@ export function createMockChatWithHandler(sendMessageImpl: (userId: string, mark
 export function createMockChatForBot(): {
   provider: ChatProvider
   getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
+  getInteractionHandler: () => ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null
 } {
   let messageHandler: ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null = null
+  let interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null = null
 
   const provider = createMockChat({
     onMessageHandler: (handler): void => {
       messageHandler = handler
+    },
+    onInteractionHandler: (handler): void => {
+      interactionHandler = handler
     },
   })
 
   return {
     provider,
     getMessageHandler: () => messageHandler,
+    getInteractionHandler: () => interactionHandler,
   }
 }
 

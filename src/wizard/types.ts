@@ -15,7 +15,6 @@ export interface WizardSession {
   totalSteps: number
   data: WizardData
   skippedSteps: number[]
-  platform: 'telegram' | 'mattermost'
   taskProvider: 'kaneo' | 'youtrack'
 }
 

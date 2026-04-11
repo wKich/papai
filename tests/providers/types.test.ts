@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import type {
   Attachment,
-  Capability,
   Comment,
   CommentReaction,
   SetTaskVisibilityParams,
   Task,
+  TaskCapability,
   TaskListItem,
   TaskProvider,
   TaskVisibility,
@@ -126,7 +126,7 @@ describe('collaboration domain types', () => {
 
 describe('TaskProvider collaboration methods', () => {
   test('TaskProvider accepts optional collaboration methods and capabilities', async () => {
-    const capabilities: Capability[] = [
+    const capabilities: TaskCapability[] = [
       'tasks.watchers',
       'tasks.votes',
       'tasks.visibility',

@@ -3,7 +3,7 @@
  * Bridges config-editor with ReplyFn
  */
 
-import { handleEditorMessage, hasActiveEditor } from '../config-editor/index.js'
+import { handleEditorMessage, hasActiveEditor, serializeCallbackData } from '../config-editor/index.js'
 import type { ChatButton, ReplyFn } from './types.js'
 
 /**
@@ -27,12 +27,7 @@ export async function handleConfigEditorMessage(
     if (buttons !== undefined && buttons.length > 0) {
       const chatButtons: ChatButton[] = buttons.map((btn) => ({
         text: btn.text,
-        callbackData:
-          btn.action === 'edit' && btn.key !== undefined
-            ? `cfg:edit:${btn.key}`
-            : btn.action === 'save' && btn.key !== undefined
-              ? `cfg:save:${btn.key}`
-              : `cfg:${btn.action}`,
+        callbackData: serializeCallbackData(btn),
         style: btn.style ?? 'primary',
       }))
       await reply.buttons(result.response ?? '', { buttons: chatButtons })

@@ -1,5 +1,7 @@
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './auth.js'
+import { supportsInteractiveButtons } from './chat/capabilities.js'
 import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
+import { routeInteraction } from './chat/interaction-router.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
   registerAdminCommands,
@@ -66,12 +68,7 @@ function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtr
   })
 }
 
-async function autoStartWizardIfNeeded(
-  userId: string,
-  storageContextId: string,
-  platform: 'telegram' | 'mattermost',
-  reply: ReplyFn,
-): Promise<boolean> {
+async function autoStartWizardIfNeeded(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   if (hasActiveWizard(userId, storageContextId)) return false
 
   // Demo users get config from admin via maybeProvisionKaneo — skip wizard
@@ -84,7 +81,7 @@ async function autoStartWizardIfNeeded(
     return false
   }
 
-  const result = createWizard(userId, storageContextId, platform, taskProvider)
+  const result = createWizard(userId, storageContextId, taskProvider)
 
   if (result.success) {
     await reply.text(result.prompt)
@@ -130,18 +127,17 @@ async function handleMessage(
 }
 
 async function maybeInterceptWizard(
-  chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   auth: AuthorizationResult,
+  interactiveButtons: boolean,
 ): Promise<boolean> {
   const isCommand = msg.text.startsWith('/')
-  const platform = chat.name === 'telegram' || chat.name === 'mattermost' ? chat.name : 'telegram'
 
   // AUTO-START WIZARD FOR NEW USERS
   // Only auto-start for authorized users (to maintain silent drop for unauthorized)
   if (!isCommand && auth.allowed) {
-    const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, platform, reply)
+    const wasWizardAutoStarted = await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, reply)
     if (wasWizardAutoStarted) return true
   }
 
@@ -155,7 +151,13 @@ async function maybeInterceptWizard(
   // Use auth.storageContextId (not msg.contextId) for wizard lookup
   // This ensures DM wizards use userId, group wizards use groupId
   if (!isCommand) {
-    const wasWizardHandled = await handleWizardMessage(msg.user.id, auth.storageContextId, msg.text, reply, platform)
+    const wasWizardHandled = await handleWizardMessage(
+      msg.user.id,
+      auth.storageContextId,
+      msg.text,
+      reply,
+      interactiveButtons,
+    )
     if (wasWizardHandled) return true
   }
 
@@ -195,9 +197,11 @@ async function onIncomingMessage(
     storageContextId: auth.storageContextId,
   })
 
+  const interactiveButtons = supportsInteractiveButtons(chat)
+
   // WIZARD INTERCEPTION - Platform agnostic
   // Commands (starting with /) are always routed to their handlers, even during wizard
-  if (await maybeInterceptWizard(chat, msg, reply, auth)) return
+  if (await maybeInterceptWizard(msg, reply, auth, interactiveButtons)) return
 
   const start = Date.now()
   try {
@@ -214,4 +218,18 @@ async function onIncomingMessage(
 export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps = defaultBotDeps): void {
   registerCommands(chat, adminUserId)
   chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
+  chat.onInteraction?.(async (interaction, reply) => {
+    try {
+      await routeInteraction(interaction, reply)
+    } catch (error) {
+      logger.error(
+        {
+          callbackData: interaction.callbackData,
+          userId: interaction.user?.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Interaction routing failed',
+      )
+    }
+  })
 }

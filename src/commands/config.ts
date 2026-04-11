@@ -1,4 +1,6 @@
+import { supportsInteractiveButtons } from '../chat/capabilities.js'
 import type { ChatButton, ChatProvider, CommandHandler } from '../chat/types.js'
+import { serializeCallbackData } from '../config-editor/index.js'
 import { getAllConfig, maskValue } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
@@ -39,6 +41,20 @@ function formatConfigLine(key: ConfigKey, value: string | undefined): string {
   return `${emoji} ${displayName}: ${maskValue(key, value)}`
 }
 
+function buildConfigButtons(config: Partial<Record<ConfigKey, string>>): ChatButton[] {
+  const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
+    text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
+    callbackData: serializeCallbackData({ action: 'edit', key }),
+    style: config[key] === undefined ? 'secondary' : 'primary',
+  }))
+  buttons.push({
+    text: '🔄 Full Setup',
+    callbackData: serializeCallbackData({ action: 'setup' }),
+    style: 'primary',
+  })
+  return buttons
+}
+
 export function registerConfigCommand(
   chat: ChatProvider,
   _checkAuthorization: (userId: string, username?: string | null) => boolean,
@@ -62,24 +78,16 @@ export function registerConfigCommand(
       lines.push(formatConfigLine(key, value))
     }
 
-    lines.push('\n💡 Click a field below to edit it, or use `/setup` to configure everything.')
-
-    // Create buttons for each config field
-    const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
-      text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
-      callbackData: `cfg:edit:${key}`,
-      style: config[key] === undefined ? 'secondary' : 'primary',
-    }))
-
-    // Add full setup button at the end
-    buttons.push({
-      text: '🔄 Full Setup',
-      callbackData: 'cfg:setup',
-      style: 'primary',
-    })
-
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command executed')
-    await reply.buttons(lines.join('\n'), { buttons })
+
+    if (!supportsInteractiveButtons(chat)) {
+      lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/setup` to configure everything.')
+      await reply.text(lines.join('\n'))
+      return
+    }
+
+    lines.push('\n💡 Click a field below to edit it, or use `/setup` to configure everything.')
+    await reply.buttons(lines.join('\n'), { buttons: buildConfigButtons(config) })
   }
 
   chat.registerCommand('config', handler)

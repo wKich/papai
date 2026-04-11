@@ -23,6 +23,23 @@ const FIELD_DISPLAY_NAMES: Record<ConfigKey, string> = {
   timezone: 'Timezone',
 }
 
+export function serializeCallbackData(button: Pick<EditorButton, 'action' | 'key'>): string {
+  switch (button.action) {
+    case 'edit':
+      return button.key === undefined ? 'cfg:back' : `cfg:edit:${button.key}`
+    case 'save':
+      return button.key === undefined ? 'cfg:back' : `cfg:save:${button.key}`
+    case 'cancel':
+      return 'cfg:cancel'
+    case 'back':
+      return 'cfg:back'
+    case 'setup':
+      return 'cfg:setup'
+    default:
+      return 'cfg:back'
+  }
+}
+
 function getFieldEmoji(key: ConfigKey): string {
   const emojiMap: Record<ConfigKey, string> = {
     llm_apikey: '🔑',

@@ -1,8 +1,8 @@
 import { mock } from 'bun:test'
 
-import type { Capability, TaskProvider } from '../../src/providers/types.js'
+import type { TaskCapability, TaskProvider } from '../../src/providers/types.js'
 
-const ALL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   // Tasks
   'tasks.delete',
   'tasks.count',

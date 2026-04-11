@@ -1,5 +1,6 @@
 import type { ModelMessage } from 'ai'
 
+import { supportsFileReplies } from '../chat/capabilities.js'
 import type { ChatProvider } from '../chat/types.js'
 import { loadHistory } from '../history.js'
 import { logger } from '../logger.js'
@@ -113,6 +114,12 @@ export function registerContextCommand(chat: ChatProvider, adminUserId: string):
       await reply.text('Only the admin can use this command.')
       return
     }
+
+    if (!supportsFileReplies(chat)) {
+      await reply.text('File replies are not supported in this chat. Context export is unavailable.')
+      return
+    }
+
     log.debug({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/context command called')
 
     const history = loadHistory(auth.storageContextId)

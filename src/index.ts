@@ -1,6 +1,7 @@
 import { announceNewVersion } from './announcements.js'
 import { setupBot } from './bot.js'
 import { createChatProvider } from './chat/registry.js'
+import { registerCommandMenuIfSupported } from './chat/startup.js'
 import { closeDrizzleDb } from './db/drizzle.js'
 import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
@@ -10,9 +11,6 @@ import { buildProviderForUser } from './providers/factory.js'
 import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
 import { addUser } from './users.js'
-
-const hasSetCommands = (chat: unknown): chat is { setCommands: (adminUserId: string) => Promise<void> } =>
-  typeof chat === 'object' && chat !== null && 'setCommands' in chat
 
 const log = logger.child({ scope: 'main' })
 
@@ -76,9 +74,7 @@ setupBot(chatProvider, adminUserId)
 
 await chatProvider.start()
 
-if (hasSetCommands(chatProvider)) {
-  void chatProvider.setCommands(adminUserId)
-}
+void registerCommandMenuIfSupported(chatProvider, adminUserId)
 
 void announceNewVersion(chatProvider, adminUserId)
 

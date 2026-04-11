@@ -1,3 +1,4 @@
+import { supportsUserResolution } from '../chat/capabilities.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn, ResolveUserContext } from '../chat/types.js'
 import { addGroupMember, listGroupMembers, removeGroupMember } from '../groups.js'
 import { logger } from '../logger.js'
@@ -58,15 +59,16 @@ async function handleAddUser(
     return
   }
 
-  const userId = await extractUserId(chat, targetUser, {
+  const result = await extractUserId(chat, targetUser, {
     contextId: msg.contextId,
     contextType: msg.contextType,
   })
-  if (userId === null) {
-    await reply.text('Please provide a valid user mention or ID.')
+  if (result.kind === 'error') {
+    await reply.text(result.message)
     return
   }
 
+  const { userId } = result
   addGroupMember(msg.contextId, userId, msg.user.id)
   await reply.text(`User ${targetUser} added to this group.`)
   log.info({ groupId: msg.contextId, userId }, 'Group member added')
@@ -88,15 +90,16 @@ async function handleDelUser(
     return
   }
 
-  const userId = await extractUserId(chat, targetUser, {
+  const result = await extractUserId(chat, targetUser, {
     contextId: msg.contextId,
     contextType: msg.contextType,
   })
-  if (userId === null) {
-    await reply.text('Please provide a valid user mention or ID.')
+  if (result.kind === 'error') {
+    await reply.text(result.message)
     return
   }
 
+  const { userId } = result
   removeGroupMember(msg.contextId, userId)
   await reply.text(`User ${targetUser} removed from this group.`)
   log.info({ groupId: msg.contextId, userId }, 'Group member removed')
@@ -114,15 +117,23 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
   await reply.text(`Group members:\n${memberList}`)
 }
 
-async function extractUserId(chat: ChatProvider, input: string, context: ResolveUserContext): Promise<string | null> {
+async function extractUserId(
+  chat: ChatProvider,
+  input: string,
+  context: ResolveUserContext,
+): Promise<{ kind: 'resolved'; userId: string } | { kind: 'error'; message: string }> {
   if (input.startsWith('@')) {
-    // Try to resolve username to user ID via chat provider
-    const resolved = await chat.resolveUserId(input, context)
-    // If resolution fails, fall back to using the raw username (for backward compatibility)
-    return resolved ?? input.slice(1)
+    if (!supportsUserResolution(chat)) {
+      return { kind: 'error', message: 'This chat provider does not support username lookup. Use an explicit user ID.' }
+    }
+    const resolved = await chat.resolveUserId?.(input, context)
+    if (resolved === null || resolved === undefined) {
+      return { kind: 'error', message: "Couldn't resolve that username. Use an explicit user ID." }
+    }
+    return { kind: 'resolved', userId: resolved }
   }
   if (/^\d+$/.test(input) || /^[a-zA-Z0-9_-]+$/.test(input)) {
-    return input
+    return { kind: 'resolved', userId: input }
   }
-  return null
+  return { kind: 'error', message: 'Please provide a valid user mention or ID.' }
 }

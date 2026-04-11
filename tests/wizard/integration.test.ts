@@ -40,7 +40,7 @@ describe('Wizard Integration', () => {
 
   test('should complete full wizard flow', async () => {
     // Start wizard
-    const startResult = await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    const startResult = await createWizard(userId, storageContextId, 'kaneo')
     expect(startResult.success).toBe(true)
     expect(await hasActiveWizard(userId, storageContextId)).toBe(true)
     expect(startResult.prompt).toContain('Welcome to papai configuration')
@@ -104,7 +104,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle processWizardMessage', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Send API key through processWizardMessage
     const result = await processWizardMessage(userId, storageContextId, 'sk-test-key')
@@ -119,7 +119,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should cancel wizard', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
     expect(await hasActiveWizard(userId, storageContextId)).toBe(true)
 
     // Cancel via processWizardMessage
@@ -134,7 +134,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle invalid input', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Try empty API key (don't skip validation)
     const result = await advanceStep(userId, storageContextId, '')
@@ -149,7 +149,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle cancel command at any step', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Complete first step
     await advanceStep(userId, storageContextId, 'sk-test-key', true)
@@ -163,7 +163,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should confirm with yes command', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Complete all steps
     await advanceStep(userId, storageContextId, 'sk-test-key', true)
@@ -182,7 +182,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should confirm with confirm command', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Complete all steps
     await advanceStep(userId, storageContextId, 'sk-test-key', true)
@@ -202,7 +202,7 @@ describe('Wizard Integration', () => {
 
   test('should handle YouTrack provider flow', async () => {
     // Start wizard with YouTrack
-    const startResult = await createWizard(userId, storageContextId, 'mattermost', 'youtrack')
+    const startResult = await createWizard(userId, storageContextId, 'youtrack')
     expect(startResult.success).toBe(true)
 
     // Complete all steps
@@ -234,7 +234,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should skip only optional steps', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Try to skip required step 1 (API key)
     const result = await advanceStep(userId, storageContextId, 'skip', true)
@@ -254,7 +254,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should reject default as invalid base URL', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Step 1
     await advanceStep(userId, storageContextId, 'sk-api-key', true)
@@ -266,7 +266,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle invalid URL validation', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Step 1
     await advanceStep(userId, storageContextId, 'sk-api-key', true)
@@ -278,7 +278,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle invalid timezone validation', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Complete steps up to timezone
     await advanceStep(userId, storageContextId, 'sk-api-key', true)
@@ -301,7 +301,7 @@ describe('Wizard Integration', () => {
   })
 
   test('should handle case insensitive cancel', async () => {
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
 
     // Test different cases
     const result1 = await processWizardMessage(userId, storageContextId, 'CANCEL')
@@ -309,12 +309,12 @@ describe('Wizard Integration', () => {
     expect(result1.response).toContain('cancelled')
 
     // Recreate wizard
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
     const result2 = await processWizardMessage(userId, storageContextId, 'Cancel')
     expect(result2.handled).toBe(true)
 
     // Recreate wizard
-    await createWizard(userId, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId, storageContextId, 'kaneo')
     const result3 = await processWizardMessage(userId, storageContextId, '  cancel  ')
     expect(result3.handled).toBe(true)
   })
@@ -323,8 +323,8 @@ describe('Wizard Integration', () => {
     const userId1 = 'user-1'
     const userId2 = 'user-2'
 
-    await createWizard(userId1, storageContextId, 'telegram', 'kaneo')
-    await createWizard(userId2, storageContextId, 'telegram', 'kaneo')
+    await createWizard(userId1, storageContextId, 'kaneo')
+    await createWizard(userId2, storageContextId, 'kaneo')
 
     // Both should have active wizards
     expect(await hasActiveWizard(userId1, storageContextId)).toBe(true)
@@ -345,8 +345,8 @@ describe('Wizard Integration', () => {
     const contextId1 = 'ctx-1'
     const contextId2 = 'ctx-2'
 
-    await createWizard(userId, contextId1, 'telegram', 'kaneo')
-    await createWizard(userId, contextId2, 'telegram', 'kaneo')
+    await createWizard(userId, contextId1, 'kaneo')
+    await createWizard(userId, contextId2, 'kaneo')
 
     // Both should have active wizards
     expect(await hasActiveWizard(userId, contextId1)).toBe(true)

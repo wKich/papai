@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { Capability } from '../../../src/providers/types.js'
+import type { TaskCapability } from '../../../src/providers/types.js'
 import { makeTools } from '../../../src/tools/index.js'
 import { createMockProvider } from '../../tools/mock-provider.js'
 
@@ -12,7 +12,7 @@ describe('YouTrack provider tools integration', () => {
     // - comments: read, create, update, delete, reactions
     // - labels: list, create, update, delete, assign
     // - statuses: full CRUD + reorder
-    const youtrackCapabilities = new Set<Capability>([
+    const youtrackCapabilities = new Set<TaskCapability>([
       // Tasks
       'tasks.delete',
       'tasks.count',

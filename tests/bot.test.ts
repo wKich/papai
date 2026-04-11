@@ -276,6 +276,23 @@ describe('Bot Authorization Gate (setupBot)', () => {
     })
   })
 
+  test('setupBot registers chat interaction handler when supported', () => {
+    addUser('auth-user', ADMIN_ID)
+    setupUserConfig('auth-user')
+
+    const {
+      provider: mockChat,
+      getMessageHandler: getRegisteredMessageHandler,
+      getInteractionHandler,
+    } = createMockChatForBot()
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    expect(getRegisteredMessageHandler()).not.toBeNull()
+    expect(getInteractionHandler()).not.toBeNull()
+  })
+
   describe('Username resolution on first message', () => {
     test('resolves username to real ID on first message', async () => {
       // Add user by username (placeholder ID, like /user add @newuser)

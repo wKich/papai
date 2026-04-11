@@ -15,6 +15,7 @@ import {
   parsePostedEvent,
   uploadMattermostFile,
 } from './file-helpers.js'
+import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
 import {
@@ -38,6 +39,9 @@ export class MattermostChatProvider implements ChatProvider {
     canCreateThreads: false,
     threadScope: 'post' as const,
   }
+  readonly capabilities = mattermostCapabilities
+  readonly traits = mattermostTraits
+  readonly configRequirements = mattermostConfigRequirements
   private readonly baseUrl: string
   private readonly token: string
   private readonly commands = new Map<string, CommandHandler>()

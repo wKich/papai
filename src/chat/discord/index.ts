@@ -19,6 +19,7 @@ import {
 import { chunkForDiscord } from './format-chunking.js'
 import { handleConfigEditorCallback, handleWizardCallback } from './handlers.js'
 import { mapDiscordMessage } from './map-message.js'
+import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
 import { withTypingIndicator } from './typing-indicator.js'
@@ -53,11 +54,13 @@ function isReadyPayload(v: unknown): v is ReadyPayload {
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
   readonly threadCapabilities: ThreadCapabilities = {
-    // Out of scope per §14 of discord-chat-design.md (Phase 1). Threads are treated as non-supported.
     supportsThreads: false,
     canCreateThreads: false,
     threadScope: 'message',
   }
+  readonly capabilities = discordCapabilities
+  readonly traits = discordTraits
+  readonly configRequirements = discordConfigRequirements
   private readonly token: string
   private readonly clientFactory: DiscordClientFactory
   private readonly commands = new Map<string, CommandHandler>()
@@ -169,17 +172,14 @@ export class DiscordChatProvider implements ChatProvider {
     this.client = null
   }
 
-  /** Test-only: inject a stub client. */
   testSetClient(c: DiscordClientLike): void {
     this.client = c
   }
 
-  /** Test-only: simulate inbound messageCreate without a live Client. */
   async testDispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
     await this.dispatchMessage(message, botId, adminUserId)
   }
 
-  /** Test-only: simulate a button interaction without a live Client. */
   async testDispatchButtonInteraction(
     interaction: ButtonInteractionLike,
     _botId: string,

@@ -27,6 +27,34 @@ export type ThreadCapabilities = {
   threadScope: 'message' | 'post'
 }
 
+/** Capability strings for chat platform features. */
+export type ChatCapability =
+  | 'commands.menu'
+  | 'interactions.callbacks'
+  | 'messages.buttons'
+  | 'messages.files'
+  | 'messages.redact'
+  | 'messages.reply-context'
+  | 'files.receive'
+  | 'users.resolve'
+
+/** Behavioral traits for a chat platform. */
+export type ChatProviderTraits = {
+  /** Whether the bot sees all group messages or only mentions */
+  observedGroupMessages: 'all' | 'mentions_only'
+  /** Maximum length of a single message (platform limit) */
+  maxMessageLength?: number
+  /** Maximum length of callback data in button interactions */
+  callbackDataMaxLength?: number
+}
+
+/** A config key required by this chat provider. */
+export type ChatProviderConfigRequirement = {
+  key: string
+  label: string
+  required: boolean
+}
+
 /** A file to send to the user. */
 export type ChatFile = {
   content: Buffer | string
@@ -89,6 +117,19 @@ export type IncomingMessage = {
   threadId?: string
 }
 
+/** An incoming button interaction from a user. */
+export type IncomingInteraction = {
+  kind: 'button'
+  user: ChatUser
+  contextId: string
+  contextType: ContextType
+  callbackData: string
+  /** Platform-specific message ID of the interactive message */
+  messageId?: string
+  /** Platform thread ID (if in thread) */
+  threadId?: string
+}
+
 /** Authorization result for message processing. */
 export type AuthorizationResult = {
   allowed: boolean
@@ -135,6 +176,12 @@ export interface ChatProvider {
   readonly name: string
   /** Thread support capabilities */
   readonly threadCapabilities: ThreadCapabilities
+  /** Set of supported capability strings */
+  readonly capabilities: ReadonlySet<ChatCapability>
+  /** Behavioral traits for this platform */
+  readonly traits: ChatProviderTraits
+  /** Environment/config requirements for startup */
+  readonly configRequirements: readonly ChatProviderConfigRequirement[]
 
   /** Register a slash command handler (e.g., 'help' for /help). */
   registerCommand(name: string, handler: CommandHandler): void
@@ -142,11 +189,25 @@ export interface ChatProvider {
   /** Register the catch-all handler for non-command messages. */
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void
 
+  /** Register the handler for button/callback interactions (optional). */
+  onInteraction?(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void
+
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
 
-  /** Resolve a username to a user ID. Returns null if not found. `context` allows adapters like Discord to scope the lookup to the caller's guild. */
-  resolveUserId(username: string, context: ResolveUserContext): Promise<string | null>
+  /**
+   * Resolve a username to a user ID. Returns null if not found or not supported.
+   *
+   * The `users.resolve` capability signals full username-resolution support (e.g. Mattermost).
+   * A provider may still expose a narrower passthrough implementation without advertising that
+   * capability — for example, accepting numeric IDs directly while rejecting plain usernames.
+   *
+   * The `context` parameter lets adapters like Discord scope the lookup to the caller's guild.
+   */
+  resolveUserId?(username: string, context: ResolveUserContext): Promise<string | null>
+
+  /** Register the bot's command list with the platform (for command menus). */
+  setCommands?(adminUserId: string): Promise<void>
 
   /** Start the bot event loop. */
   start(): Promise<void>
