@@ -1,5 +1,5 @@
-import { MessageQueue } from './queue.js'
 import { logger } from '../logger.js'
+import { MessageQueue } from './queue.js'
 
 const log = logger.child({ scope: 'message-queue:registry' })
 // 30 minutes
@@ -21,7 +21,11 @@ export class QueueRegistry {
   }
 
   get(storageContextId: string): MessageQueue | undefined {
-    return this.queues.get(storageContextId)
+    const queue = this.queues.get(storageContextId)
+    if (queue !== undefined) {
+      this.lastAccessed.set(storageContextId, Date.now())
+    }
+    return queue
   }
 
   cleanupExpired(): void {

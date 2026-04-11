@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
+
 import { QueueRegistry } from '../../src/message-queue/registry.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -47,5 +48,30 @@ describe('QueueRegistry', () => {
     expect(queues.size).toBe(2)
     expect(queues.has('user123')).toBe(true)
     expect(queues.has('user456')).toBe(true)
+  })
+
+  test('should update lastAccessed on get', () => {
+    registry.getOrCreate('user123')
+    const queue1 = registry.get('user123')
+    const queue2 = registry.get('user123')
+    expect(queue1).toBe(queue2)
+    expect(queue1).toBeDefined()
+  })
+
+  test('should not affect state when getting non-existent queue', () => {
+    const queue = registry.get('nonexistent')
+    expect(queue).toBeUndefined()
+    expect(registry.getAllQueues().size).toBe(0)
+  })
+
+  test('should cleanup expired queues', () => {
+    registry.getOrCreate('user123')
+    registry.cleanupExpired()
+    expect(registry.get('user123')).toBeDefined()
+  })
+
+  test('should handle cleanup on empty registry', () => {
+    registry.cleanupExpired()
+    expect(registry.getAllQueues().size).toBe(0)
   })
 })
