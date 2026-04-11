@@ -159,4 +159,37 @@ describe('update_task identity resolution', () => {
 
     expect(capturedAssignee).toBe('me')
   })
+
+  test('should use login when provider prefers login identifier', async () => {
+    // Setup identity mapping
+    setIdentityMapping({
+      contextId: 'test-update-identity',
+      providerName: 'mock',
+      providerUserId: 'resolved-user-789',
+      providerUserLogin: 'jsmith',
+      displayName: 'John Smith',
+      matchMethod: 'manual_nl',
+      confidence: 100,
+    })
+
+    let capturedAssignee: string | undefined
+    const updateTask = mock((taskId: string, params: { assignee?: string }) => {
+      capturedAssignee = params.assignee
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ updateTask, preferredUserIdentifier: 'login' })
+    const tool = makeUpdateTaskTool(provider, undefined, 'test-update-identity')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute({ taskId: 'task-1', assignee: 'me' }, { toolCallId: '1', messages: [] })
+
+    expect(updateTask).toHaveBeenCalledTimes(1)
+    expect(capturedAssignee).toBe('jsmith')
+  })
 })

@@ -26,7 +26,13 @@ import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
 
 export interface BotDeps {
-  processMessage: (reply: ReplyFn, contextId: string, chatUserId: string, username: string | null, userText: string) => Promise<void>
+  processMessage: (
+    reply: ReplyFn,
+    contextId: string,
+    chatUserId: string,
+    username: string | null,
+    userText: string,
+  ) => Promise<void>
 }
 
 const defaultBotDeps: BotDeps = {

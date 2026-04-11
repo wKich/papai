@@ -9,7 +9,7 @@
     "build:client": "bun scripts/build-client.ts",
     "start": "bun build:client && bun run src/index.ts",
     "start:debug": "bun build:client && DEBUG_SERVER=true bun run src/index.ts",
-    "knip": "knip-bun --strict",
+    "knip": "knip-bun --strict --no-gitignore",
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint --config .oxlintrc.json .",
     "lint:fix": "oxlint --config .oxlintrc.json --fix .",

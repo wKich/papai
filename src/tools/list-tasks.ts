@@ -27,10 +27,11 @@ function resolveAssigneeFilter(
 
   const identity = resolveMeReference(userId, provider)
   if (identity.type === 'found') {
+    const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
     return {
       params: {
         ...params,
-        assigneeId: identity.identity.userId,
+        assigneeId: identifier,
       },
     }
   }

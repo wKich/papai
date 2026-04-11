@@ -10,6 +10,7 @@ const mockProvider: TaskProvider = {
   name: 'mock',
   capabilities: new Set(),
   configRequirements: [],
+  preferredUserIdentifier: 'id',
   identityResolver: {
     searchUsers: (query: string) => {
       if (query === 'jsmith') {

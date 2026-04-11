@@ -119,5 +119,19 @@ describe('Add Watcher Tool', () => {
       expect(result).toEqual({ taskId: 'task-123', userId: 'other-user' })
       expect(addWatcher).toHaveBeenCalledWith('task-123', 'other-user')
     })
+
+    test('uses login when provider prefers login identifier', async () => {
+      const addWatcher = mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId }))
+      const tool = makeAddWatcherTool(createMockProvider({ addWatcher, preferredUserIdentifier: 'login' }), testUserId)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'me' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      if (!isTaskUserResult(result)) throw new Error('Invalid result')
+      expect(result).toEqual({ taskId: 'task-123', userId: 'jsmith' })
+      expect(addWatcher).toHaveBeenCalledWith('task-123', 'jsmith')
+    })
   })
 })

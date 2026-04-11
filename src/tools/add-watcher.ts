@@ -21,7 +21,8 @@ export function makeAddWatcherTool(provider: TaskProvider, contextUserId?: strin
         if (userIdParam.toLowerCase() === 'me' && contextUserId !== undefined) {
           const identity = resolveMeReference(contextUserId, provider)
           if (identity.type === 'found') {
-            resolvedUserId = identity.identity.userId
+            resolvedUserId =
+              provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
           } else {
             return {
               status: 'identity_required',
