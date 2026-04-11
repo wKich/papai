@@ -66,7 +66,7 @@ const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet =>
     return cachedTools
   }
   log.debug({ contextId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider, contextId)
+  const tools = makeTools(provider, { storageContextId: contextId })
   setCachedTools(contextId, tools)
   return tools
 }

@@ -204,11 +204,14 @@ describe('dispatchExecution', () => {
       expect(generateTextCalls[0]!.model).toContain('main-model')
     })
 
-    test('includes tools', async () => {
+    test('includes tools with proactive mode', async () => {
       setupUserConfig()
       const provider = createMockProvider()
       await dispatchExecution(USER_ID, 'scheduled', 'check overdue', metadata, () => provider)
       expect(generateTextCalls[0]!.tools).toBeDefined()
+      // Full mode with proactive delivery should exclude deferred prompt tools
+      expect(generateTextCalls[0]!.tools).not.toHaveProperty('create_deferred_prompt')
+      expect(generateTextCalls[0]!.tools).toHaveProperty('create_task')
     })
 
     test('uses full system prompt', async () => {

@@ -57,6 +57,7 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0051](0051-discord-chat-provider.md)                          | Discord Chat Provider                                          | 2026-04-09 | Implemented                           |
 | [0052](0052-youtrack-full-api-implementation.md)               | YouTrack Full API Implementation                               | 2026-04-08 | Implemented                           |
 | [0053](0053-llm-trace-detail-modal.md)                         | LLM Trace Detail Modal                                         | 2026-04-05 | Implemented                           |
+| [0054](0054-mock-isolation-guardrails.md)                      | Guardrail-First Mock Isolation for Bun Tests                   | 2026-04-11 | Partially Implemented                 |
 
 ## Skipped / Not Written
 

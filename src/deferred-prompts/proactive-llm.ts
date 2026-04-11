@@ -193,7 +193,7 @@ async function invokeFull(
   }
 
   const model = deps.buildModel(config, config.mainModel)
-  const tools = makeTools(provider, userId, 'proactive')
+  const tools = makeTools(provider, { storageContextId: userId, mode: 'proactive' })
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
   const systemPrompt = buildSystemPrompt(provider, userId)
   const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
