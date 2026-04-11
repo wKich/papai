@@ -11,9 +11,9 @@ const log = logger.child({ scope: 'file-relay' })
 const relay = new Map<string, IncomingFile[]>()
 
 /** Store incoming files for a context, replacing any previously stored files. */
-export function storeIncomingFiles(contextId: string, files: IncomingFile[]): void {
+export function storeIncomingFiles(contextId: string, files: readonly IncomingFile[]): void {
   log.debug({ contextId, count: files.length }, 'Storing incoming files in relay')
-  relay.set(contextId, files)
+  relay.set(contextId, [...files])
 }
 
 /** Retrieve the currently stored files for a context. Returns [] if none. */

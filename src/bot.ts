@@ -2,7 +2,7 @@ import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './a
 import { supportsInteractiveButtons } from './chat/capabilities.js'
 import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
 import { routeInteraction } from './chat/interaction-router.js'
-import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn } from './chat/types.js'
+import type { AuthorizationResult, ChatProvider, IncomingFile, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -18,6 +18,7 @@ import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
+import { enqueueMessage } from './message-queue/index.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { handleWizardMessage } from './wizard-integration.js'
@@ -91,6 +92,49 @@ async function autoStartWizardIfNeeded(userId: string, storageContextId: string,
   return false
 }
 
+async function processCoalescedMessage(
+  coalescedItem: {
+    text: string
+    userId: string
+    username: string | null
+    storageContextId: string
+    files: readonly IncomingFile[]
+    reply: ReplyFn
+  },
+  deps: BotDeps,
+): Promise<void> {
+  const start = Date.now()
+
+  // Show typing when processing starts
+  coalescedItem.reply.typing()
+
+  // Store accumulated files before processing
+  if (coalescedItem.files.length > 0) {
+    storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
+  } else {
+    clearIncomingFiles(coalescedItem.storageContextId)
+  }
+
+  try {
+    await deps.processMessage(
+      coalescedItem.reply,
+      coalescedItem.storageContextId,
+      coalescedItem.username,
+      coalescedItem.text,
+    )
+  } finally {
+    // Clear files after processing
+    clearIncomingFiles(coalescedItem.storageContextId)
+
+    // Emit metrics (moved from caller to handler callback)
+    emit('message:replied', {
+      userId: coalescedItem.userId,
+      contextId: coalescedItem.storageContextId,
+      duration: Date.now() - start,
+    })
+  }
+}
+
 async function handleMessage(
   msg: IncomingMessage,
   reply: ReplyFn,
@@ -114,16 +158,18 @@ async function handleMessage(
     return
   }
 
-  // Relay incoming files to the file store so tools can access them this turn
-  if (msg.files !== undefined && msg.files.length > 0) {
-    storeIncomingFiles(auth.storageContextId, msg.files)
-  } else {
-    clearIncomingFiles(auth.storageContextId)
+  // Create queue item
+  const queueItem = {
+    text: buildPromptWithReplyContext(msg),
+    userId: msg.user.id,
+    username: msg.user.username,
+    storageContextId: auth.storageContextId,
+    contextType: msg.contextType,
+    files: msg.files ?? [],
   }
 
-  reply.typing()
-  const prompt = buildPromptWithReplyContext(msg)
-  await deps.processMessage(reply, auth.storageContextId, msg.user.username, prompt)
+  // Enqueue the message (fire-and-forget)
+  enqueueMessage(queueItem, reply, (coalescedItem) => processCoalescedMessage(coalescedItem, deps))
 }
 
 async function maybeInterceptWizard(

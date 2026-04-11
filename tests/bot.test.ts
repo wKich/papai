@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
+import { describe, expect, mock, test, beforeEach, afterEach } from 'bun:test'
 
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
@@ -14,6 +14,40 @@ import {
   mockLogger,
   setupTestDb,
 } from './utils/test-helpers.js'
+
+// Mock enqueueMessage to process synchronously for tests
+void mock.module('../src/message-queue/index.js', () => ({
+  enqueueMessage: (
+    item: {
+      text: string
+      userId: string
+      username: string | null
+      storageContextId: string
+      contextType: 'dm' | 'group'
+      files: readonly IncomingFile[]
+    },
+    reply: ReplyFn,
+    handler: (coalesced: {
+      text: string
+      userId: string
+      username: string | null
+      storageContextId: string
+      files: readonly IncomingFile[]
+      reply: ReplyFn
+    }) => Promise<void>,
+  ): void => {
+    // Execute handler synchronously for tests
+    void handler({
+      text: item.text,
+      userId: item.userId,
+      username: item.username,
+      storageContextId: item.storageContextId,
+      files: item.files,
+      reply,
+    })
+  },
+  flushOnShutdown: (): Promise<void> => Promise.resolve(),
+}))
 
 describe('Authorization Logic', () => {
   beforeEach(async () => {
@@ -403,6 +437,7 @@ describe('Demo Mode — wizard bypass (setupBot)', () => {
 describe('File relay integration (setupBot)', () => {
   const RELAY_ADMIN = 'relay-admin'
   let capturedStorageId: string | null = null
+  let filesAtProcessingTime: readonly IncomingFile[] = []
   let getMessageHandler: () => ((msg: IncomingMessage, reply: ReplyFn) => Promise<void>) | null
 
   function makeFile(overrides: Partial<IncomingFile> = {}): IncomingFile {
@@ -418,12 +453,15 @@ describe('File relay integration (setupBot)', () => {
 
   beforeEach(async () => {
     capturedStorageId = null
+    filesAtProcessingTime = []
     mockLogger()
     await setupTestDb()
 
     const botDeps: BotDeps = {
       processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
         capturedStorageId = storageContextId
+        // Capture files at processing time (before they're cleared in finally block)
+        filesAtProcessingTime = getIncomingFiles(storageContextId)
         return Promise.resolve()
       },
     }
@@ -443,8 +481,9 @@ describe('File relay integration (setupBot)', () => {
     await getMessageHandler()!(msg, reply)
 
     expect(capturedStorageId).toBe('relay-user')
-    expect(getIncomingFiles('relay-user')).toHaveLength(1)
-    expect(getIncomingFiles('relay-user')[0]?.fileId).toBe('f1')
+    // Files are cleared after processing, so check what was captured during processing
+    expect(filesAtProcessingTime).toHaveLength(1)
+    expect(filesAtProcessingTime[0]?.fileId).toBe('f1')
   })
 
   test('clears relay when message has no files', async () => {
