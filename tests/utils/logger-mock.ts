@@ -42,17 +42,18 @@ export function createLoggerMock(): {
   error: Mock<() => void>
   child: Mock<() => { debug: () => void; info: () => void; warn: () => void; error: () => void }>
 } {
+  const childLogger = {
+    debug: mock((): void => {}),
+    info: mock((): void => {}),
+    warn: mock((): void => {}),
+    error: mock((): void => {}),
+  }
   return {
     debug: mock(() => {}),
     info: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
-    child: mock((): { debug: () => void; info: () => void; warn: () => void; error: () => void } => ({
-      debug: (): void => {},
-      info: (): void => {},
-      warn: (): void => {},
-      error: (): void => {},
-    })),
+    child: mock((): { debug: () => void; info: () => void; warn: () => void; error: () => void } => childLogger),
   }
 }
 
