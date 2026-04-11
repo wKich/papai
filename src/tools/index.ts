@@ -11,14 +11,14 @@ export type { MakeToolsOptions, ToolMode }
  *
  * Usage:
  * ```ts
- * makeTools(provider, { storageContextId: 'user-1:group-1', mode: 'normal' })
+ * makeTools(provider, { storageContextId: 'user-1:group-1', chatUserId: 'user-1', mode: 'normal' })
  * ```
  */
 export function makeTools(provider: TaskProvider, options: MakeToolsOptions = {}): ToolSet {
   const storageContextId = options.storageContextId
-  const userId = storageContextId
+  const chatUserId = options.chatUserId ?? storageContextId
   const contextId = storageContextId
   const mode = options.mode ?? 'normal'
 
-  return buildTools(provider, userId, contextId, mode)
+  return buildTools(provider, chatUserId, contextId, mode)
 }

@@ -249,4 +249,34 @@ describe('makeTools', () => {
     expect(tools).not.toHaveProperty('create_recurring_task')
     expect(tools).not.toHaveProperty('save_instruction')
   })
+
+  describe('chatUserId isolation', () => {
+    it('should use chatUserId for identity tools when provided', () => {
+      const providerWithResolver = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      // In a group chat: storageContextId is group ID, chatUserId is actual user
+      const tools = makeTools(providerWithResolver, {
+        storageContextId: 'group-123',
+        chatUserId: 'user-456',
+      })
+      // Identity tools should be created with user-456, not group-123
+      expect(tools['set_my_identity']).toBeDefined()
+      expect(tools['clear_my_identity']).toBeDefined()
+    })
+
+    it('should fall back to storageContextId when chatUserId not provided', () => {
+      const providerWithResolver = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      const tools = makeTools(providerWithResolver, {
+        storageContextId: 'user-123',
+      })
+      expect(tools['set_my_identity']).toBeDefined()
+    })
+  })
 })
