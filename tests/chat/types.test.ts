@@ -40,6 +40,23 @@ describe('ResolveUserContext', () => {
   })
 })
 
+describe('IncomingMessage context metadata', () => {
+  test('supports optional contextName and contextParentName fields', () => {
+    const message = {
+      user: { id: 'u1', username: 'alice', isAdmin: false },
+      contextId: 'group-1',
+      contextType: 'group' as const,
+      contextName: 'Operations',
+      contextParentName: 'Platform',
+      isMentioned: true,
+      text: 'hello',
+    }
+
+    expect(message.contextName).toBe('Operations')
+    expect(message.contextParentName).toBe('Platform')
+  })
+})
+
 describe('ChatProvider interface', () => {
   test('resolveUserId accepts username and context', async () => {
     const mockProvider: ChatProvider = {

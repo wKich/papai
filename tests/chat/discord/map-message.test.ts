@@ -86,4 +86,24 @@ describe('mapDiscordMessage', () => {
     const result = mapDiscordMessage(msg, botId, adminId)
     expect(result!.replyToMessageId).toBe('parent-msg-99')
   })
+
+  test('maps Discord channel and guild names onto IncomingMessage metadata', () => {
+    const mapped = mapDiscordMessage(
+      {
+        id: 'm1',
+        author: { id: 'user-1', username: 'alice', bot: false },
+        content: `<@${botId}> /help`,
+        channel: { id: 'chan-1', type: 0, name: 'operations' },
+        guild: { id: 'guild-1', name: 'Platform' },
+        mentions: { has: (id: string) => id === botId },
+        reference: null,
+        type: 0,
+      },
+      botId,
+      adminId,
+    )
+
+    expect(mapped?.contextName).toBe('operations')
+    expect(mapped?.contextParentName).toBe('Platform')
+  })
 })

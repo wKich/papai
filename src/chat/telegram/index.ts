@@ -29,7 +29,6 @@ import {
   sendTextReply,
 } from './reply-helpers.js'
 export { extractReplyContext } from './reply-context-helpers.js'
-
 const log = logger.child({ scope: 'chat:telegram' })
 
 export class TelegramChatProvider implements ChatProvider {
@@ -185,6 +184,7 @@ export class TelegramChatProvider implements ChatProvider {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
       contextId,
       contextType,
+      contextName: isGroup ? ctx.chat?.title : undefined,
       isMentioned,
       text,
       messageId: messageIdStr,
@@ -208,7 +208,6 @@ export class TelegramChatProvider implements ChatProvider {
     return undefined
   }
 
-  /** Fetch all attached files from a grammy Context, downloading their content. */
   private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
     const token = process.env['TELEGRAM_BOT_TOKEN'] ?? ''
     const fetcher: TelegramFileFetcher = async (fileId: string) => {

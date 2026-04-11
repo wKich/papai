@@ -3,7 +3,25 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { fetchMattermostFiles } from '../../../src/chat/mattermost/file-helpers.js'
 import { MattermostChatProvider } from '../../../src/chat/mattermost/index.js'
 import { mattermostCapabilities } from '../../../src/chat/mattermost/metadata.js'
-import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+import type { IncomingMessage } from '../../../src/chat/types.js'
+import { createMockReply, restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
+
+type BuiltPostedMessage = { readonly msg: IncomingMessage }
+
+function isIncomingMessage(value: unknown): value is IncomingMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'contextId' in value &&
+    'contextType' in value &&
+    'isMentioned' in value &&
+    'text' in value
+  )
+}
+
+function isBuiltPostedMessage(value: unknown): value is BuiltPostedMessage {
+  return typeof value === 'object' && value !== null && 'msg' in value && isIncomingMessage(value.msg)
+}
 
 describe('MattermostChatProvider', () => {
   let provider: MattermostChatProvider
@@ -78,6 +96,61 @@ describe('MattermostChatProvider', () => {
     test('does NOT advertise commands.menu', () => {
       expect(mattermostCapabilities.has('commands.menu')).toBe(false)
     })
+  })
+
+  test('buildPostedMessage includes channel and team names', async () => {
+    const { reply } = createMockReply()
+
+    provider = new MattermostChatProvider()
+
+    Reflect.set(provider, 'apiFetch', (_method: string, path: string, _body: unknown) => {
+      if (path === '/api/v4/channels/chan-1') {
+        return Promise.resolve({
+          type: 'O',
+          display_name: 'Operations',
+          name: 'operations',
+          team_id: 'team-1',
+        })
+      }
+      if (path === '/api/v4/teams/team-1') {
+        return Promise.resolve({
+          display_name: 'Platform',
+          name: 'platform',
+        })
+      }
+      return Promise.resolve({})
+    })
+    Reflect.set(provider, 'checkChannelAdmin', () => Promise.resolve(true))
+    Reflect.set(provider, 'buildReplyFn', () => reply)
+
+    const buildPostedMessage: unknown = Reflect.get(provider, 'buildPostedMessage')
+    expect(buildPostedMessage).toBeInstanceOf(Function)
+    if (!(buildPostedMessage instanceof Function)) {
+      throw new TypeError('buildPostedMessage not available')
+    }
+
+    const result: unknown = await Promise.resolve(
+      buildPostedMessage.call(
+        provider,
+        {
+          id: 'post-1',
+          user_id: 'user-1',
+          channel_id: 'chan-1',
+          message: '@papai hi',
+          user_name: 'alice',
+          file_ids: [],
+        },
+        'alice',
+        undefined,
+      ),
+    )
+
+    if (!isBuiltPostedMessage(result)) {
+      throw new TypeError('Expected buildPostedMessage to return a message wrapper')
+    }
+
+    expect(result.msg.contextName).toBe('Operations')
+    expect(result.msg.contextParentName).toBe('Platform')
   })
 })
 

@@ -8,6 +8,7 @@ import type {
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
+import { fetchMattermostChannelInfo, fetchMattermostTeamInfo } from './context-metadata.js'
 import {
   cacheIncomingPost,
   downloadMattermostFile,
@@ -19,7 +20,6 @@ import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits 
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
 import {
-  ChannelInfoSchema,
   ChannelMemberSchema,
   ChannelSchema,
   extractReplyId,
@@ -29,8 +29,14 @@ import {
 } from './schema.js'
 
 export { extractReplyId, MattermostPostSchema } from './schema.js'
-
 const log = logger.child({ scope: 'chat:mattermost' })
+type MattermostCommandMatch = { handler: CommandHandler; match: string }
+type BuiltPostedMessage = {
+  msg: IncomingMessage
+  reply: ReplyFn
+  command: MattermostCommandMatch | null
+  isAdmin: boolean
+}
 
 export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
@@ -145,23 +151,25 @@ export class MattermostChatProvider implements ChatProvider {
     post: MattermostPost,
     senderName: string | undefined,
     replyToMessageId: string | undefined,
-  ): Promise<{
-    msg: IncomingMessage
-    reply: ReplyFn
-    command: { handler: CommandHandler; match: string } | null
-    isAdmin: boolean
-  }> {
+  ): Promise<BuiltPostedMessage> {
     const replyContext =
       replyToMessageId === undefined
         ? undefined
         : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
-    const channelInfo = await this.fetchChannelInfo(post.channel_id)
+    const channelInfo = await fetchMattermostChannelInfo(this.apiFetch.bind(this), post.channel_id)
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
+    const teamInfo =
+      contextType === 'group' && channelInfo.team_id !== undefined
+        ? await fetchMattermostTeamInfo(this.apiFetch.bind(this), channelInfo.team_id)
+        : null
     const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
     const threadId = post.root_id === undefined || post.root_id === '' ? replyToMessageId : post.root_id
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const username = post.user_name ?? senderName ?? null
+    const contextName =
+      contextType === 'group' ? (channelInfo.display_name ?? channelInfo.name ?? post.channel_id) : undefined
+    const contextParentName = contextType === 'group' ? (teamInfo?.display_name ?? teamInfo?.name) : undefined
 
     const files =
       post.file_ids !== undefined && post.file_ids.length > 0
@@ -174,6 +182,8 @@ export class MattermostChatProvider implements ChatProvider {
       user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
       contextType,
+      contextName,
+      contextParentName,
       isMentioned: this.isBotMentioned(post.message),
       text: post.message,
       commandMatch: command?.match,
@@ -188,7 +198,7 @@ export class MattermostChatProvider implements ChatProvider {
   private async dispatchMsg(
     msg: IncomingMessage,
     reply: ReplyFn,
-    command: { handler: CommandHandler; match: string } | null,
+    command: MattermostCommandMatch | null,
     isAdmin: boolean,
   ): Promise<void> {
     if (command !== null) {
@@ -211,16 +221,6 @@ export class MattermostChatProvider implements ChatProvider {
     return message.includes(`@${this.botUsername}`)
   }
 
-  private async fetchChannelInfo(channelId: string): Promise<{ type: string }> {
-    const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}`, undefined)
-    const parsed = ChannelInfoSchema.safeParse(data)
-    if (!parsed.success) {
-      log.warn({ channelId, error: parsed.error }, 'Failed to parse channel info')
-      return { type: '' }
-    }
-    return parsed.data
-  }
-
   private async checkChannelAdmin(channelId: string, userId: string): Promise<boolean> {
     try {
       const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}/members/${userId}`, undefined)
@@ -235,7 +235,7 @@ export class MattermostChatProvider implements ChatProvider {
     }
   }
 
-  private matchCommand(text: string): { handler: CommandHandler; match: string } | null {
+  private matchCommand(text: string): MattermostCommandMatch | null {
     const trimmed = text.trim()
     if (!trimmed.startsWith('/')) return null
     for (const [name, handler] of this.commands) {
