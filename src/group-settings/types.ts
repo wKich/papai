@@ -16,3 +16,18 @@ export type GroupAdminObservation = {
 }
 
 export type GroupSettingsCommand = 'config' | 'setup'
+
+export type GroupSettingsSessionStage = 'choose_scope' | 'choose_group' | 'active'
+
+export type GroupSettingsSession = {
+  userId: string
+  command: GroupSettingsCommand
+  stage: GroupSettingsSessionStage
+  startedAt: Date
+  targetContextId?: string
+}
+
+export type GroupSettingsSelectorResult =
+  | { handled: false }
+  | { handled: true; response: string; buttons?: import('../chat/types.js').ChatButton[] }
+  | { handled: true; continueWith: { command: GroupSettingsCommand; targetContextId: string } }
