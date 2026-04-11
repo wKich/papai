@@ -1,4 +1,5 @@
 import { renderConfigForTarget } from '../../commands/config.js'
+import { startSetupForTarget } from '../../commands/setup.js'
 import { handleGroupSettingsSelectorCallback } from '../../group-settings/selector.js'
 import { getActiveGroupSettingsTarget } from '../../group-settings/state.js'
 import { logger } from '../../logger.js'
@@ -41,10 +42,11 @@ export async function handleDiscordGroupSettingsSelection(
     return false
   }
   if ('continueWith' in result) {
-    if (result.continueWith.command !== 'config') {
-      return false
+    if (result.continueWith.command === 'config') {
+      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
+    } else {
+      await startSetupForTarget(userId, reply, result.continueWith.targetContextId)
     }
-    await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
     return true
   }
   if ('buttons' in result && result.buttons !== undefined) {

@@ -5,6 +5,7 @@ import type { IncomingInteraction, ReplyFn } from '../../src/chat/types.js'
 import { handleEditorMessage } from '../../src/config-editor/handlers.js'
 import { createEditorSession, deleteEditorSession } from '../../src/config-editor/state.js'
 import { getConfig } from '../../src/config.js'
+import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../src/group-settings/registry.js'
 import { createGroupSettingsSession, deleteGroupSettingsSession } from '../../src/group-settings/state.js'
 import { deleteWizardSession } from '../../src/wizard/state.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -155,5 +156,40 @@ describe('routeInteraction', () => {
 
     expect(getConfig('group-9', 'timezone')).toBe('Europe/Berlin')
     expect(getConfig(interaction.user.id, 'timezone')).toBeNull()
+  })
+
+  test('starts setup for the selected group target', async () => {
+    upsertKnownGroupContext({
+      contextId: 'group-9',
+      provider: 'telegram',
+      displayName: 'Operations',
+      parentName: 'Platform',
+    })
+    upsertGroupAdminObservation({
+      contextId: 'group-9',
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      isAdmin: true,
+    })
+    createGroupSettingsSession({
+      userId: interaction.user.id,
+      command: 'setup',
+      stage: 'choose_group',
+    })
+
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'gsel:group:group-9' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+    )
+
+    expect(handled).toBe(true)
+    expect(replies[0]).toContain('Welcome to papai configuration wizard!')
   })
 })

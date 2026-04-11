@@ -14,6 +14,7 @@ import {
   registerSetupCommand,
   registerStartCommand,
 } from './commands/index.js'
+import { startSetupForTarget } from './commands/setup.js'
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
@@ -173,8 +174,11 @@ async function maybeInterceptWizard(
     const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
     if (selection.handled) {
       if ('continueWith' in selection) {
-        if (selection.continueWith.command !== 'config') return false
-        await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
+        if (selection.continueWith.command === 'config') {
+          await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
+        } else {
+          await startSetupForTarget(msg.user.id, reply, selection.continueWith.targetContextId)
+        }
       } else if ('buttons' in selection && selection.buttons !== undefined) {
         await reply.buttons(selection.response, { buttons: selection.buttons })
       } else if ('response' in selection) {

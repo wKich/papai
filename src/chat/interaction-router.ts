@@ -1,4 +1,5 @@
 import { renderConfigForTarget } from '../commands/config.js'
+import { startSetupForTarget } from '../commands/setup.js'
 import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
 import { handleGroupSettingsSelectorCallback } from '../group-settings/selector.js'
 import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
@@ -22,8 +23,12 @@ async function defaultHandleGroupSettingsInteraction(
 ): Promise<boolean> {
   const result = handleGroupSettingsSelectorCallback(interaction.user.id, interaction.callbackData)
   if (!result.handled) return false
-  if ('continueWith' in result && result.continueWith.command === 'config') {
-    await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
+  if ('continueWith' in result) {
+    if (result.continueWith.command === 'config') {
+      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
+    } else {
+      await startSetupForTarget(interaction.user.id, reply, result.continueWith.targetContextId)
+    }
     return true
   }
   if ('buttons' in result && result.buttons !== undefined) {
