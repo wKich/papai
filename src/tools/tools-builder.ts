@@ -57,7 +57,7 @@ import { makeSearchMemosTool } from './search-memos.js'
 import { makeSetMyIdentityTool } from './set-my-identity.js'
 import { makeSetVisibilityTool } from './set-visibility.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
-import type { ToolMode } from './types.js'
+import type { ContextType, ToolMode } from './types.js'
 import { makeUpdateCommentTool } from './update-comment.js'
 import { makeUpdateDeferredPromptTool } from './update-deferred-prompt.js'
 import { makeUpdateLabelTool } from './update-label.js'
@@ -252,8 +252,17 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
 
-function maybeAddIdentityTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
+function maybeAddIdentityTools(
+  tools: ToolSet,
+  provider: TaskProvider,
+  chatUserId: string | undefined,
+  contextType: ContextType | undefined,
+): void {
+  // Identity tools are only available in group chats, not DMs
+  // Per spec: "Only add identity tools for group chats (contextId contains non-user context)"
   if (chatUserId === undefined || provider.identityResolver === undefined) return
+  if (contextType !== 'group') return
+
   tools['set_my_identity'] = makeSetMyIdentityTool(provider, chatUserId)
   tools['clear_my_identity'] = makeClearMyIdentityTool(provider, chatUserId)
 }
@@ -263,6 +272,7 @@ export function buildTools(
   chatUserId: string | undefined,
   contextId: string | undefined,
   mode: ToolMode,
+  contextType?: ContextType,
 ): ToolSet {
   const tools = makeCoreTools(provider, chatUserId)
   maybeAddProjectTools(tools, provider)
@@ -279,7 +289,7 @@ export function buildTools(
   addMemoTools(tools, provider, chatUserId)
   addInstructionTools(tools, contextId)
   addLookupGroupHistoryTool(tools, chatUserId, contextId)
-  maybeAddIdentityTools(tools, provider, chatUserId)
+  maybeAddIdentityTools(tools, provider, chatUserId, contextType)
   if (mode === 'normal') {
     addDeferredPromptTools(tools, chatUserId)
   }

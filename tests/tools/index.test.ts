@@ -47,7 +47,10 @@ describe('makeTools', () => {
           searchUsers: () => Promise.resolve([]),
         },
       })
-      const tools = makeTools(providerWithResolver, { storageContextId: 'user-123:group-123' })
+      const tools = makeTools(providerWithResolver, {
+        storageContextId: 'user-123:group-123',
+        contextType: 'group',
+      })
       expect(tools['set_my_identity']).toBeDefined()
     })
 
@@ -57,8 +60,25 @@ describe('makeTools', () => {
           searchUsers: () => Promise.resolve([]),
         },
       })
-      const tools = makeTools(providerWithResolver, { storageContextId: 'user-123:group-123' })
+      const tools = makeTools(providerWithResolver, {
+        storageContextId: 'user-123:group-123',
+        contextType: 'group',
+      })
       expect(tools['clear_my_identity']).toBeDefined()
+    })
+
+    it('should exclude identity tools in DM contexts', () => {
+      const providerWithResolver = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      const tools = makeTools(providerWithResolver, {
+        storageContextId: 'user-123',
+        contextType: 'dm',
+      })
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
     })
 
     it('should exclude identity tools when storageContextId is undefined', () => {
@@ -76,7 +96,10 @@ describe('makeTools', () => {
       const providerWithoutResolver = createMockProvider({
         identityResolver: undefined,
       })
-      const tools = makeTools(providerWithoutResolver, { storageContextId: 'user-123:group-123' })
+      const tools = makeTools(providerWithoutResolver, {
+        storageContextId: 'user-123:group-123',
+        contextType: 'group',
+      })
       expect(tools['set_my_identity']).toBeUndefined()
       expect(tools['clear_my_identity']).toBeUndefined()
     })
@@ -261,6 +284,7 @@ describe('makeTools', () => {
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'group-123',
         chatUserId: 'user-456',
+        contextType: 'group',
       })
       // Identity tools should be created with user-456, not group-123
       expect(tools['set_my_identity']).toBeDefined()
@@ -275,6 +299,7 @@ describe('makeTools', () => {
       })
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'user-123',
+        contextType: 'group',
       })
       expect(tools['set_my_identity']).toBeDefined()
     })

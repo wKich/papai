@@ -54,13 +54,13 @@ describe('resolveMeReference', () => {
     clearIdentityMapping(testContextId, 'mock')
   })
 
-  it('should return not_found when no mapping exists', () => {
+  it('should return not_found when no mapping exists', async () => {
     const providerWithoutResolver = { ...mockProvider, identityResolver: undefined }
-    const result = resolveMeReference(testContextId, providerWithoutResolver as TaskProvider)
+    const result = await resolveMeReference(testContextId, providerWithoutResolver as TaskProvider)
     expect(result.type).toBe('not_found')
   })
 
-  it('should return found when mapping exists', () => {
+  it('should return found when mapping exists', async () => {
     setIdentityMapping({
       contextId: testContextId,
       providerName: 'mock',
@@ -71,7 +71,7 @@ describe('resolveMeReference', () => {
       confidence: 100,
     })
 
-    const result = resolveMeReference(testContextId, mockProvider)
+    const result = await resolveMeReference(testContextId, mockProvider)
     expect(result.type).toBe('found')
     if (result.type === 'found') {
       expect(result.identity.login).toBe('jsmith')
@@ -80,7 +80,7 @@ describe('resolveMeReference', () => {
     }
   })
 
-  it('should return unmatched when mapping is marked unmatched', () => {
+  it('should return unmatched when mapping is marked unmatched', async () => {
     setIdentityMapping({
       contextId: testContextId,
       providerName: 'mock',
@@ -93,11 +93,11 @@ describe('resolveMeReference', () => {
 
     clearIdentityMapping(testContextId, 'mock')
 
-    const result = resolveMeReference(testContextId, mockProvider)
+    const result = await resolveMeReference(testContextId, mockProvider)
     expect(result.type).toBe('unmatched')
   })
 
-  it('should handle mapping with empty displayName', () => {
+  it('should handle mapping with empty displayName', async () => {
     setIdentityMapping({
       contextId: testContextId,
       providerName: 'mock',
@@ -108,7 +108,7 @@ describe('resolveMeReference', () => {
       confidence: 100,
     })
 
-    const result = resolveMeReference(testContextId, mockProvider)
+    const result = await resolveMeReference(testContextId, mockProvider)
     expect(result.type).toBe('found')
     if (result.type === 'found') {
       expect(result.identity.displayName).toBe('')
@@ -184,7 +184,53 @@ describe('attemptAutoLink', () => {
     expect(autoLinkResult.type).toBe('unmatched')
 
     // Then: subsequent resolveMeReference should return unmatched (not found with empty userId)
-    const resolveResult = resolveMeReference(testContextId, mockProvider)
+    const resolveResult = await resolveMeReference(testContextId, mockProvider)
     expect(resolveResult.type).toBe('unmatched')
+  })
+
+  it('should auto-link when login is email and username matches local part', async () => {
+    // Provider where login is email (like Kaneo)
+    const emailLoginProvider: TaskProvider = {
+      ...mockProvider,
+      identityResolver: {
+        searchUsers: (query: string) => {
+          if (query === 'jsmith') {
+            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
+          }
+          return Promise.resolve([])
+        },
+      },
+    } as TaskProvider
+
+    const result = await attemptAutoLink(testContextId, 'jsmith', emailLoginProvider)
+    expect(result.type).toBe('found')
+    if (result.type === 'found') {
+      expect(result.identity.login).toBe('jsmith@example.com')
+      expect(result.identity.userId).toBe('user-123')
+    }
+
+    const mapping = getIdentityMapping(testContextId, 'mock')
+    expect(mapping?.providerUserLogin).toBe('jsmith@example.com')
+  })
+
+  it('should auto-link with exact email match when login is email', async () => {
+    // Provider where login is email (like Kaneo)
+    const emailLoginProvider: TaskProvider = {
+      ...mockProvider,
+      identityResolver: {
+        searchUsers: (query: string) => {
+          if (query === 'jsmith' || query === 'jsmith@example.com') {
+            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
+          }
+          return Promise.resolve([])
+        },
+      },
+    } as TaskProvider
+
+    const result = await attemptAutoLink(testContextId, 'jsmith@example.com', emailLoginProvider)
+    expect(result.type).toBe('found')
+    if (result.type === 'found') {
+      expect(result.identity.login).toBe('jsmith@example.com')
+    }
   })
 })

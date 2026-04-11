@@ -2,13 +2,33 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { clearIdentityMapping, getIdentityMapping } from '../identity/mapping.js'
+import { getDrizzleDb as defaultGetDrizzleDb } from '../db/drizzle.js'
+import {
+  clearIdentityMapping as defaultClearIdentityMapping,
+  getIdentityMapping as defaultGetIdentityMapping,
+  type IdentityMappingDeps,
+} from '../identity/mapping.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:clear-my-identity' })
 
-export function makeClearMyIdentityTool(provider: TaskProvider, chatUserId: string): ToolSet[string] {
+export interface ClearMyIdentityDeps extends IdentityMappingDeps {
+  getIdentityMapping: typeof defaultGetIdentityMapping
+  clearIdentityMapping: typeof defaultClearIdentityMapping
+}
+
+const defaultDeps: ClearMyIdentityDeps = {
+  getIdentityMapping: defaultGetIdentityMapping,
+  clearIdentityMapping: defaultClearIdentityMapping,
+  getDrizzleDb: defaultGetDrizzleDb,
+}
+
+export function makeClearMyIdentityTool(
+  provider: TaskProvider,
+  chatUserId: string,
+  deps: ClearMyIdentityDeps = defaultDeps,
+): ToolSet[string] {
   return tool({
     description:
       "Clear the user's task tracker identity mapping. Use when user says things like 'I'm not Alice', 'That's not me', 'These aren't my tasks', or 'Unlink my account'.",
@@ -16,7 +36,7 @@ export function makeClearMyIdentityTool(provider: TaskProvider, chatUserId: stri
     execute: () => {
       log.debug({ chatUserId }, 'clear_my_identity called')
 
-      const existing = getIdentityMapping(chatUserId, provider.name)
+      const existing = deps.getIdentityMapping(chatUserId, provider.name, deps)
       if (existing === null || existing.providerUserId === null) {
         return {
           status: 'info',
@@ -24,7 +44,7 @@ export function makeClearMyIdentityTool(provider: TaskProvider, chatUserId: stri
         }
       }
 
-      clearIdentityMapping(chatUserId, provider.name)
+      deps.clearIdentityMapping(chatUserId, provider.name, deps)
 
       log.info({ chatUserId }, 'Identity cleared via NL')
       return {

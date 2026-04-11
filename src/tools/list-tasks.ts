@@ -15,17 +15,17 @@ interface ResolveAssigneeFilterResult {
   identityRequired?: { status: 'identity_required'; message: string }
 }
 
-function resolveAssigneeFilter(
+async function resolveAssigneeFilter(
   params: ListTasksParams,
   userId: string | undefined,
   provider: TaskProvider,
-): ResolveAssigneeFilterResult {
+): Promise<ResolveAssigneeFilterResult> {
   const assigneeId = params.assigneeId
   if (assigneeId === undefined || assigneeId.toLowerCase() !== 'me' || userId === undefined) {
     return { params }
   }
 
-  const identity = resolveMeReference(userId, provider)
+  const identity = await resolveMeReference(userId, provider)
   if (identity.type === 'found') {
     const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
     return {
@@ -63,7 +63,7 @@ export function makeListTasksTool(provider: TaskProvider, userId?: string): Tool
     execute: async ({ projectId, ...rest }) => {
       const params: ListTasksParams = rest
       try {
-        const { params: resolvedParams, identityRequired } = resolveAssigneeFilter(params, userId, provider)
+        const { params: resolvedParams, identityRequired } = await resolveAssigneeFilter(params, userId, provider)
         if (identityRequired !== undefined) {
           return identityRequired
         }

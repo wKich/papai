@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { clearIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
+import type { TaskProvider } from '../../src/providers/types.js'
 import { makeAddWatcherTool } from '../../src/tools/add-watcher.js'
 import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
@@ -132,6 +133,27 @@ describe('Add Watcher Tool', () => {
       if (!isTaskUserResult(result)) throw new Error('Invalid result')
       expect(result).toEqual({ taskId: 'task-123', userId: 'jsmith' })
       expect(addWatcher).toHaveBeenCalledWith('task-123', 'jsmith')
+    })
+
+    test('returns error when addWatcher is not supported', async () => {
+      // Create a base provider and then create a version without addWatcher
+      const baseProvider = createMockProvider()
+      const providerWithoutWatcher: TaskProvider = {
+        ...baseProvider,
+        addWatcher: undefined,
+      }
+
+      const tool = makeAddWatcherTool(providerWithoutWatcher)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'user-1' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toEqual({
+        status: 'error',
+        message: 'Provider does not support adding watchers',
+      })
     })
   })
 })

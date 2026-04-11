@@ -61,14 +61,19 @@ const persistFactsFromResults = (
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (contextId: string, chatUserId: string, provider: TaskProvider): ToolSet => {
+const getOrCreateTools = (
+  contextId: string,
+  chatUserId: string,
+  provider: TaskProvider,
+  contextType: 'dm' | 'group' | undefined,
+): ToolSet => {
   const cachedTools = getCachedTools(contextId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
     log.debug({ contextId }, 'Using cached tools')
     return cachedTools
   }
   log.debug({ contextId, chatUserId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider, { storageContextId: contextId, chatUserId })
+  const tools = makeTools(provider, { storageContextId: contextId, chatUserId, contextType })
   setCachedTools(contextId, tools)
   return tools
 }
@@ -152,6 +157,7 @@ const callLlm = async (
   chatUserId: string,
   username: string | null,
   history: readonly ModelMessage[],
+  contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
   await deps.maybeProvisionKaneo(reply, contextId, username)
@@ -172,7 +178,7 @@ const callLlm = async (
   // We detect groups by checking if username exists and no mapping exists yet
   await maybeAutoLinkIdentity(contextId, username, provider)
 
-  const tools = getOrCreateTools(contextId, chatUserId, provider)
+  const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
   log.debug(
@@ -238,6 +244,7 @@ export const processMessage = async (
   chatUserId: string,
   username: string | null,
   userText: string,
+  contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps = defaultDeps,
 ): Promise<void> => {
   log.debug({ contextId, chatUserId, userText }, 'processMessage called')
@@ -248,7 +255,7 @@ export const processMessage = async (
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, chatUserId, username, history, deps)
+    const result = await callLlm(reply, contextId, chatUserId, username, history, contextType, deps)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)

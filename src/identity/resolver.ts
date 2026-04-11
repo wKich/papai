@@ -1,11 +1,16 @@
+import { getDrizzleDb as defaultGetDrizzleDb } from '../db/drizzle.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
-import { getIdentityMapping, setIdentityMapping } from './mapping.js'
+import {
+  getIdentityMapping as defaultGetIdentityMapping,
+  setIdentityMapping as defaultSetIdentityMapping,
+  type IdentityMappingDeps,
+} from './mapping.js'
 import type { IdentityResolutionResult, UserIdentity } from './types.js'
 
 const log = logger.child({ scope: 'identity:resolver' })
 
-interface SearchResultUser {
+export interface SearchResultUser {
   id: string
   login: string
   name?: string
@@ -30,6 +35,19 @@ function buildFoundResult(existing: FoundResultInput): Extract<IdentityResolutio
 }
 
 /**
+ * Check if login matches username (exact or email prefix).
+ */
+function isLoginMatch(login: string, normalizedUsername: string): boolean {
+  const normalizedLogin = login.toLowerCase()
+  if (normalizedLogin === normalizedUsername) return true
+  if (normalizedLogin.includes('@')) {
+    const localPart = normalizedLogin.split('@')[0]
+    if (localPart === normalizedUsername) return true
+  }
+  return false
+}
+
+/**
  * Search for exact match and store mapping if found.
  */
 async function tryStoreExactMatch(
@@ -37,15 +55,24 @@ async function tryStoreExactMatch(
   chatUsername: string,
   providerName: string,
   resolver: { searchUsers(q: string, limit?: number): Promise<SearchResultUser[]> },
+  setIdentityMappingFn: (params: {
+    contextId: string
+    providerName: string
+    providerUserId: string
+    providerUserLogin: string
+    displayName: string
+    matchMethod: 'auto' | 'manual_nl' | 'unmatched'
+    confidence: number
+  }) => void,
 ): Promise<IdentityResolutionResult | null> {
   const users = await resolver.searchUsers(chatUsername, 10)
-  const exactMatch = users.find((u: SearchResultUser) => u.login.toLowerCase() === chatUsername.toLowerCase())
+  const normalizedUsername = chatUsername.toLowerCase()
 
-  if (exactMatch === undefined) {
-    return null
-  }
+  const exactMatch = users.find((u: SearchResultUser) => isLoginMatch(u.login, normalizedUsername))
 
-  setIdentityMapping({
+  if (exactMatch === undefined) return null
+
+  setIdentityMappingFn({
     contextId,
     providerName,
     providerUserId: exactMatch.id,
@@ -73,8 +100,17 @@ function storeUnmatched(
   contextId: string,
   providerName: string,
   chatUsername: string,
+  setIdentityMappingFn: (params: {
+    contextId: string
+    providerName: string
+    providerUserId: null
+    providerUserLogin: null
+    displayName: null
+    matchMethod: 'auto' | 'manual_nl' | 'unmatched'
+    confidence: number
+  }) => void,
 ): Extract<IdentityResolutionResult, { type: 'unmatched' }> {
-  setIdentityMapping({
+  setIdentityMappingFn({
     contextId,
     providerName,
     providerUserId: null,
@@ -91,14 +127,35 @@ function storeUnmatched(
   }
 }
 
+export interface ResolverDeps extends IdentityMappingDeps {
+  getIdentityMapping: typeof defaultGetIdentityMapping
+  setIdentityMapping: typeof defaultSetIdentityMapping
+}
+
+const defaultDeps: ResolverDeps = {
+  getIdentityMapping: defaultGetIdentityMapping,
+  setIdentityMapping: defaultSetIdentityMapping,
+  getDrizzleDb: defaultGetDrizzleDb,
+}
+
 /**
  * Resolve "me" reference to actual task tracker user identity.
  * Checks cache first, then attempts auto-link if no mapping exists.
+ *
+ * Note: This function is async to support future auto-link integration.
+ * When auto-link is wired, the six tool call sites will need await added.
  */
-export function resolveMeReference(contextId: string, provider: TaskProvider): IdentityResolutionResult {
+export async function resolveMeReference(
+  contextId: string,
+  provider: TaskProvider,
+  deps: ResolverDeps = defaultDeps,
+): Promise<IdentityResolutionResult> {
   log.debug({ contextId, providerName: provider.name }, 'resolveMeReference called')
 
-  const existing = getIdentityMapping(contextId, provider.name)
+  // getIdentityMapping is synchronous; wrapping in Promise.resolve()
+  // makes this function properly async for future compatibility when
+  // auto-link is wired and actual async operations are needed.
+  const existing = await Promise.resolve(deps.getIdentityMapping(contextId, provider.name, deps))
 
   if (existing === null) {
     log.debug({ contextId }, 'No identity mapping exists')
@@ -138,6 +195,7 @@ export async function attemptAutoLink(
   contextId: string,
   chatUsername: string,
   provider: TaskProvider,
+  deps: ResolverDeps = defaultDeps,
 ): Promise<IdentityResolutionResult> {
   log.debug({ contextId, chatUsername, providerName: provider.name }, 'attemptAutoLink called')
 
@@ -150,12 +208,22 @@ export async function attemptAutoLink(
   }
 
   try {
-    const result = await tryStoreExactMatch(contextId, chatUsername, provider.name, provider.identityResolver)
+    const result = await tryStoreExactMatch(
+      contextId,
+      chatUsername,
+      provider.name,
+      provider.identityResolver,
+      (params): void => {
+        deps.setIdentityMapping(params, deps)
+      },
+    )
     if (result !== null) {
       return result
     }
 
-    return storeUnmatched(contextId, provider.name, chatUsername)
+    return storeUnmatched(contextId, provider.name, chatUsername, (params): void => {
+      deps.setIdentityMapping(params, deps)
+    })
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), contextId }, 'Auto-link failed')
     return {

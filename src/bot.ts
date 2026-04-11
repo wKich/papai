@@ -32,6 +32,7 @@ export interface BotDeps {
     chatUserId: string,
     username: string | null,
     userText: string,
+    contextType: 'dm' | 'group',
   ) => Promise<void>
 }
 
@@ -104,6 +105,7 @@ async function processCoalescedMessage(
     userId: string
     username: string | null
     storageContextId: string
+    contextType: 'dm' | 'group'
     files: readonly IncomingFile[]
     reply: ReplyFn
   },
@@ -128,6 +130,7 @@ async function processCoalescedMessage(
       coalescedItem.userId,
       coalescedItem.username,
       coalescedItem.text,
+      coalescedItem.contextType,
     )
   } finally {
     // Clear files after processing

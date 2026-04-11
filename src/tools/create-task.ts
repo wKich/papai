@@ -15,16 +15,16 @@ interface ResolveAssigneeResult {
   identityRequired?: { status: 'identity_required'; message: string }
 }
 
-function resolveAssignee(
+async function resolveAssignee(
   assignee: string | undefined,
   userId: string | undefined,
   provider: TaskProvider,
-): ResolveAssigneeResult {
+): Promise<ResolveAssigneeResult> {
   if (assignee === undefined || assignee.toLowerCase() !== 'me' || userId === undefined) {
     return { assignee }
   }
 
-  const identity = resolveMeReference(userId, provider)
+  const identity = await resolveMeReference(userId, provider)
   if (identity.type === 'found') {
     const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
     return { assignee: identifier }
@@ -56,7 +56,7 @@ export function makeCreateTaskTool(provider: TaskProvider, userId?: string): Too
         const resolvedDueDate =
           dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
 
-        const { assignee: resolvedAssignee, identityRequired } = resolveAssignee(assignee, userId, provider)
+        const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
         if (identityRequired !== undefined) {
           return identityRequired
         }

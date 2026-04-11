@@ -127,6 +127,7 @@ export class MessageQueue {
       userId: firstMessage.item.userId,
       username: firstMessage.item.username,
       storageContextId: this.storageContextId,
+      contextType: firstMessage.item.contextType,
       files: allFiles,
       reply,
     }

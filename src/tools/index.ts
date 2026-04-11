@@ -19,6 +19,7 @@ export function makeTools(provider: TaskProvider, options: MakeToolsOptions = {}
   const chatUserId = options.chatUserId ?? storageContextId
   const contextId = storageContextId
   const mode = options.mode ?? 'normal'
+  const contextType = options.contextType
 
-  return buildTools(provider, chatUserId, contextId, mode)
+  return buildTools(provider, chatUserId, contextId, mode, contextType)
 }

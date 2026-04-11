@@ -108,7 +108,7 @@ describe('buildTools', () => {
         },
       })
       // chatUserId: 'user-123', contextId: 'group-456' (group chat scenario)
-      const tools = buildTools(provider, 'user-123', 'group-456', 'normal')
+      const tools = buildTools(provider, 'user-123', 'group-456', 'normal', 'group')
 
       expect(tools['set_my_identity']).toBeDefined()
       expect(tools['clear_my_identity']).toBeDefined()
@@ -121,11 +121,49 @@ describe('buildTools', () => {
         },
       })
       // Different chatUserId and contextId (group scenario)
-      const tools = buildTools(provider, 'alice-user-id', 'group-123', 'normal')
+      const tools = buildTools(provider, 'alice-user-id', 'group-123', 'normal', 'group')
 
       // Identity tools should exist and be configured with alice-user-id
       expect(tools['set_my_identity']).toBeDefined()
       expect(tools['clear_my_identity']).toBeDefined()
+    })
+  })
+
+  describe('identity tools context gating', () => {
+    it('should include identity tools in group contexts', () => {
+      const provider = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      const tools = buildTools(provider, 'user-123', 'group-456', 'normal', 'group')
+
+      expect(tools['set_my_identity']).toBeDefined()
+      expect(tools['clear_my_identity']).toBeDefined()
+    })
+
+    it('should NOT include identity tools in DM contexts', () => {
+      const provider = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      const tools = buildTools(provider, 'user-123', 'user-123', 'normal', 'dm')
+
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
+    })
+
+    it('should NOT include identity tools when contextType is undefined', () => {
+      const provider = createMockProvider({
+        identityResolver: {
+          searchUsers: () => Promise.resolve([]),
+        },
+      })
+      const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
     })
   })
 })

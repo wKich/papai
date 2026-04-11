@@ -89,6 +89,15 @@ export type TaskCapability =
   | 'sprints.assign'
   | 'activities.read'
   | 'queries.saved'
+/** User search result for identity resolution. */
+export type IdentityUser = { id: string; login: string; name?: string }
+
+/** Identity resolver interface for linking chat users to task tracker users. */
+export interface UserIdentityResolver {
+  /** Search users by query string, returns matching users. */
+  searchUsers(query: string, limit?: number): Promise<IdentityUser[]>
+}
+
 /** Configuration keys that a provider requires to function. */
 export type ProviderConfigRequirement = { key: string; label: string; required: boolean }
 /** Core task tracker interface: required task CRUD plus optional capability-gated methods. */
@@ -106,10 +115,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   readonly preferredUserIdentifier: 'id' | 'login'
 
   /** Optional identity resolver for user matching (auto-link). */
-  readonly identityResolver?: {
-    /** Search users by query string, returns matching users. */
-    searchUsers(query: string, limit?: number): Promise<Array<{ id: string; login: string; name?: string }>>
-  }
+  readonly identityResolver?: UserIdentityResolver
 
   // --- Core task operations (required) ---
 
@@ -242,28 +248,23 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   ): Promise<{ taskId: string; visibility: TaskVisibility }>
 
   // --- Optional: statuses.* ---
-
   listStatuses?(projectId: string): Promise<Column[]>
-
   createStatus?(
     projectId: string,
     params: { name: string; icon?: string; color?: string; isFinal?: boolean },
     confirm?: boolean,
   ): Promise<Column | { status: 'confirmation_required'; message: string }>
-
   updateStatus?(
     projectId: string,
     statusId: string,
     params: { name?: string; icon?: string; color?: string; isFinal?: boolean },
     confirm?: boolean,
   ): Promise<Column | { status: 'confirmation_required'; message: string }>
-
   deleteStatus?(
     projectId: string,
     statusId: string,
     confirm?: boolean,
   ): Promise<{ id: string } | { status: 'confirmation_required'; message: string }>
-
   reorderStatuses?(
     projectId: string,
     statuses: { id: string; position: number }[],
@@ -271,30 +272,23 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   ): Promise<undefined | { status: 'confirmation_required'; message: string }>
 
   // --- Optional: attachments.* ---
-
   listAttachments?(taskId: string): Promise<Attachment[]>
-
   uploadAttachment?(
     taskId: string,
     file: { name: string; content: Uint8Array | Blob; mimeType?: string },
   ): Promise<Attachment>
-
   deleteAttachment?(taskId: string, attachmentId: string): Promise<{ id: string }>
 
   // --- Optional: workItems.* ---
-
   listWorkItems?(taskId: string): Promise<WorkItem[]>
-
   createWorkItem?(taskId: string, params: CreateWorkItemParams): Promise<WorkItem>
-
   updateWorkItem?(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem>
-
   deleteWorkItem?(taskId: string, workItemId: string): Promise<{ id: string }>
 
   buildTaskUrl(taskId: string, projectId?: string): string
   buildProjectUrl(projectId: string): string
   classifyError(error: unknown): AppError
 
-  /** Returns provider-specific instructions to append to the LLM system prompt. */
+  /** Provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string
 }

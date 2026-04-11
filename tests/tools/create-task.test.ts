@@ -18,7 +18,7 @@ describe('create_task identity resolution', () => {
     mock.restore()
   })
 
-  test('should resolve "me" assignee to identity', () => {
+  test('should resolve "me" assignee to identity', async () => {
     // Setup identity mapping
     setIdentityMapping({
       contextId: 'test-user-456',
@@ -30,22 +30,22 @@ describe('create_task identity resolution', () => {
       confidence: 100,
     })
 
-    const result = resolveMeReference('test-user-456', createMockProvider())
+    const result = await resolveMeReference('test-user-456', createMockProvider())
     expect(result.type).toBe('found')
     if (result.type === 'found') {
       expect(result.identity.userId).toBe('resolved-user-789')
     }
   })
 
-  test('should return not_found when no identity mapping exists', () => {
-    const result = resolveMeReference('unknown-user', createMockProvider())
+  test('should return not_found when no identity mapping exists', async () => {
+    const result = await resolveMeReference('unknown-user', createMockProvider())
     expect(result.type).toBe('not_found')
     if (result.type === 'not_found') {
       expect(result.message).toContain("don't know who you are")
     }
   })
 
-  test('should return unmatched when identity was previously unmatched', () => {
+  test('should return unmatched when identity was previously unmatched', async () => {
     // Set an unmatched mapping using null for providerUserId
     setIdentityMapping({
       contextId: 'unmatched-user',
@@ -60,7 +60,7 @@ describe('create_task identity resolution', () => {
     // Clear it first to set providerUserId to null (the actual unmatched state)
     clearIdentityMapping('unmatched-user', 'mock')
 
-    const result = resolveMeReference('unmatched-user', createMockProvider())
+    const result = await resolveMeReference('unmatched-user', createMockProvider())
     expect(result.type).toBe('unmatched')
     if (result.type === 'unmatched') {
       expect(result.message).toContain("couldn't automatically match")

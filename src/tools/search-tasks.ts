@@ -22,7 +22,7 @@ export function makeSearchTasksTool(provider: TaskProvider, userId?: string): To
 
         // Resolve identity references in query
         if (userId !== undefined && /\b(my|me)\b/i.test(query)) {
-          const identity = resolveMeReference(userId, provider)
+          const identity = await resolveMeReference(userId, provider)
           if (identity.type === 'found') {
             // Replace "my" and "me" references with actual user login
             // Use a callback to preserve the original casing of surrounding text

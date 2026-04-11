@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import type { ToolMode, MakeToolsOptions } from '../../src/tools/types.js'
+import type { ContextType, ToolMode, MakeToolsOptions } from '../../src/tools/types.js'
 
 describe('types', () => {
   it('should export ToolMode type', () => {
@@ -44,5 +44,28 @@ describe('types', () => {
 
     expect(options.storageContextId).toBe('user-123')
     expect(options.chatUserId).toBeUndefined()
+  })
+
+  it('should export ContextType type', () => {
+    const dm: ContextType = 'dm'
+    const group: ContextType = 'group'
+
+    expect(dm).toBe('dm')
+    expect(group).toBe('group')
+  })
+
+  it('should accept contextType parameter', () => {
+    const dmOptions: MakeToolsOptions = {
+      storageContextId: 'user-123',
+      contextType: 'dm',
+    }
+
+    const groupOptions: MakeToolsOptions = {
+      storageContextId: 'group-123',
+      contextType: 'group',
+    }
+
+    expect(dmOptions.contextType).toBe('dm')
+    expect(groupOptions.contextType).toBe('group')
   })
 })

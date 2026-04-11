@@ -32,6 +32,7 @@ describe('CoalescedItem interface', () => {
       userId: '123',
       username: 'alice',
       storageContextId: '456',
+      contextType: 'dm',
       files: [],
       reply: mockReply,
     }

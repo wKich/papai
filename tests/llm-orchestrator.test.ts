@@ -149,7 +149,7 @@ describe('processMessage', () => {
       // llm_apikey deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, 'user-1', null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -165,7 +165,7 @@ describe('processMessage', () => {
       // llm_apikey and main_model deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, 'user-1', null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -192,7 +192,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -206,7 +206,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('T-1')
@@ -219,7 +219,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('P-1')
@@ -232,7 +232,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -250,7 +250,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, rollbackCtx, 'user-1', null, 'new message')
+      await processMessage(reply, rollbackCtx, 'user-1', null, 'new message', 'dm')
 
       // processMessage should have caught the error and replied with an error message
       expect(textCalls).toHaveLength(1)
@@ -306,7 +306,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-ctx', 'user-1', null, 'hello')
+        await processMessage(reply, 'steps-detail-ctx', 'user-1', null, 'hello', 'dm')
       } finally {
         unsubscribe(listener)
       }
@@ -366,7 +366,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-empty-ctx', 'user-1', null, 'hello')
+        await processMessage(reply, 'steps-detail-empty-ctx', 'user-1', null, 'hello', 'dm')
       } finally {
         unsubscribe(listener)
       }
@@ -425,7 +425,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-ctx', 'user-1', null, 'create a task')
+      await processMessage(reply, 'tool-fail-ctx', 'user-1', null, 'create a task', 'dm')
 
       // Simulate a tool failure by calling the captured callback
       if (capturedOnToolCallFinish !== undefined) {
@@ -460,7 +460,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-string-ctx', 'user-1', null, 'do something')
+      await processMessage(reply, 'tool-fail-string-ctx', 'user-1', null, 'do something', 'dm')
 
       // Simulate a tool failure with a string error
       if (capturedOnToolCallFinish !== undefined) {
@@ -495,7 +495,7 @@ describe('processMessage', () => {
         })
       const { reply } = createMockReply()
 
-      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       // History should contain: user message + assistant message
       const history = getCachedHistory(CTX_ID)
@@ -536,7 +536,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-ctx', 'user-1', null, 'create a test task')
+      await processMessage(reply, 'tool-results-ctx', 'user-1', null, 'create a test task', 'dm')
 
       // Should complete without error - tool results passed directly to fact extraction
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -566,7 +566,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-missing-ctx', 'user-1', null, 'do something')
+      await processMessage(reply, 'tool-results-missing-ctx', 'user-1', null, 'do something', 'dm')
 
       // Should complete without error
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -589,7 +589,7 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello', 'dm')
 
       // Verify admin's LLM config was copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBe('test-key')
@@ -607,7 +607,7 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello', 'dm')
 
       // LLM config should NOT be copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBeNull()
@@ -641,7 +641,7 @@ describe('processMessage', () => {
 
       const { reply } = createMockReply()
       // Pass null for username - should skip auto-link
-      await processMessage(reply, GROUP_CTX, USER_ID, null, 'hello')
+      await processMessage(reply, GROUP_CTX, USER_ID, null, 'hello', 'group')
 
       // No mapping should be created
       const mapping = getIdentityMapping(GROUP_CTX, 'mock')
@@ -657,7 +657,7 @@ describe('processMessage', () => {
       }))
 
       const { reply } = createMockReply()
-      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
 
       // No mapping should be created
       const mapping = getIdentityMapping(GROUP_CTX, 'mock')
@@ -692,7 +692,7 @@ describe('processMessage', () => {
       }))
 
       const { reply } = createMockReply()
-      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
 
       // Existing mapping should be preserved
       const mapping = getIdentityMapping(GROUP_CTX, 'mock')
@@ -716,7 +716,7 @@ describe('processMessage', () => {
       }))
 
       const { reply } = createMockReply()
-      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello')
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
 
       // Auto-link should have created a mapping
       const mapping = getIdentityMapping(GROUP_CTX, 'mock')
@@ -742,7 +742,7 @@ describe('processMessage', () => {
       }))
 
       const { reply } = createMockReply()
-      await processMessage(reply, GROUP_CTX, USER_ID, 'unknownuser', 'hello')
+      await processMessage(reply, GROUP_CTX, USER_ID, 'unknownuser', 'hello', 'group')
 
       // Should store unmatched mapping
       const mapping = getIdentityMapping(GROUP_CTX, 'mock')

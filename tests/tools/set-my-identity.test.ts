@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { getIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
+import { getIdentityMapping, clearIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { makeSetMyIdentityTool } from '../../src/tools/set-my-identity.js'
 import { mockLogger, setupTestDb, getToolExecutor } from '../utils/test-helpers.js'
@@ -129,5 +129,79 @@ describe('set_my_identity tool', () => {
     // Alice's identity should be unchanged
     const aliceMappingAfter = getIdentityMapping('user-alice', 'mock')
     expect(aliceMappingAfter?.providerUserLogin).toBe('jsmith')
+  })
+
+  test('should match user when login is email and claim is username prefix', async () => {
+    // Simulate Kaneo provider where login is email
+    const kaneoLikeProvider: TaskProvider = {
+      ...mockProvider,
+      identityResolver: {
+        searchUsers: mock((query: string) => {
+          if (query === 'jsmith') {
+            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
+          }
+          return Promise.resolve([])
+        }),
+      },
+    } as TaskProvider
+
+    const tool = makeSetMyIdentityTool(kaneoLikeProvider, testUserId)
+    const result: unknown = await getToolExecutor(tool)({ claim: "I'm jsmith" }, { toolCallId: '1', messages: [] })
+
+    expect(result).toHaveProperty('status', 'success')
+    const mapping = getIdentityMapping(testUserId, 'mock')
+    expect(mapping?.providerUserLogin).toBe('jsmith@example.com')
+  })
+
+  test('should match user with exact email claim when login is email', async () => {
+    // Simulate Kaneo provider where login is email
+    const kaneoLikeProvider: TaskProvider = {
+      ...mockProvider,
+      identityResolver: {
+        searchUsers: mock((query: string) => {
+          // Search matches both local part and full email
+          if (query === 'jsmith' || query === 'jsmith@example.com') {
+            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
+          }
+          return Promise.resolve([])
+        }),
+      },
+    } as TaskProvider
+
+    const tool = makeSetMyIdentityTool(kaneoLikeProvider, testUserId)
+    const result: unknown = await getToolExecutor(tool)(
+      { claim: "I'm jsmith@example.com" },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(result).toHaveProperty('status', 'success')
+    const mapping = getIdentityMapping(testUserId, 'mock')
+    expect(mapping?.providerUserLogin).toBe('jsmith@example.com')
+  })
+
+  test('should use injected deps', async () => {
+    const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+    let setMappingCalled = false
+
+    const mockSetIdentityMapping = (
+      params: Parameters<typeof setIdentityMapping>[0],
+      depsArg?: Parameters<typeof setIdentityMapping>[1],
+    ): void => {
+      setMappingCalled = true
+      setIdentityMapping(params, depsArg)
+    }
+
+    const deps = {
+      setIdentityMapping: mockSetIdentityMapping,
+      getDrizzleDb,
+    }
+
+    const tool = makeSetMyIdentityTool(mockProvider, testUserId, deps)
+    const result: unknown = await getToolExecutor(tool)({ claim: "I'm jsmith" }, { toolCallId: '1', messages: [] })
+
+    expect(result).toHaveProperty('status', 'success')
+    expect(setMappingCalled).toBe(true)
+    const mapping = getIdentityMapping(testUserId, 'mock')
+    expect(mapping?.providerUserLogin).toBe('jsmith')
   })
 })

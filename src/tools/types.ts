@@ -1,5 +1,7 @@
 export type ToolMode = 'normal' | 'proactive'
 
+export type ContextType = 'dm' | 'group'
+
 /**
  * Options for makeTools function.
  * Use this options object pattern for clarity - the single storageContextId
@@ -26,4 +28,10 @@ export type MakeToolsOptions = {
    * 'proactive' excludes them for proactive delivery contexts.
    */
   mode?: ToolMode
+  /**
+   * The context type: 'dm' for direct messages, 'group' for group chats.
+   * Used to conditionally include/exclude tools that should only be available
+   * in specific contexts (e.g., identity tools are only available in groups).
+   */
+  contextType?: ContextType
 }
