@@ -252,19 +252,19 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
 
-function maybeAddIdentityTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
-  if (contextId === undefined || provider.identityResolver === undefined) return
-  tools['set_my_identity'] = makeSetMyIdentityTool(provider, contextId)
-  tools['clear_my_identity'] = makeClearMyIdentityTool(provider, contextId)
+function maybeAddIdentityTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
+  if (chatUserId === undefined || provider.identityResolver === undefined) return
+  tools['set_my_identity'] = makeSetMyIdentityTool(provider, chatUserId)
+  tools['clear_my_identity'] = makeClearMyIdentityTool(provider, chatUserId)
 }
 
 export function buildTools(
   provider: TaskProvider,
-  userId: string | undefined,
+  chatUserId: string | undefined,
   contextId: string | undefined,
   mode: ToolMode,
 ): ToolSet {
-  const tools = makeCoreTools(provider, userId)
+  const tools = makeCoreTools(provider, chatUserId)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)
   maybeAddLabelTools(tools, provider)
@@ -272,16 +272,16 @@ export function buildTools(
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
   maybeAddCollaborationTaskTools(tools, provider, contextId)
-  maybeAddAttachmentTools(tools, provider, userId)
+  maybeAddAttachmentTools(tools, provider, chatUserId)
   maybeAddWorkItemTools(tools, provider)
   maybeAddCountTasksTool(tools, provider)
-  addRecurringTools(tools, userId)
-  addMemoTools(tools, provider, userId)
-  addInstructionTools(tools, userId)
-  addLookupGroupHistoryTool(tools, userId, contextId)
-  maybeAddIdentityTools(tools, provider, contextId)
+  addRecurringTools(tools, chatUserId)
+  addMemoTools(tools, provider, chatUserId)
+  addInstructionTools(tools, contextId)
+  addLookupGroupHistoryTool(tools, chatUserId, contextId)
+  maybeAddIdentityTools(tools, provider, chatUserId)
   if (mode === 'normal') {
-    addDeferredPromptTools(tools, userId)
+    addDeferredPromptTools(tools, chatUserId)
   }
   return tools
 }

@@ -176,4 +176,14 @@ describe('attemptAutoLink', () => {
       expect(result.message).toContain('Unable to search')
     }
   })
+
+  it('should return unmatched on subsequent resolveMeReference after auto-link miss', async () => {
+    // First: attemptAutoLink fails to find match
+    const autoLinkResult = await attemptAutoLink(testContextId, 'unknownuser', mockProvider)
+    expect(autoLinkResult.type).toBe('unmatched')
+
+    // Then: subsequent resolveMeReference should return unmatched (not found with empty userId)
+    const resolveResult = resolveMeReference(testContextId, mockProvider)
+    expect(resolveResult.type).toBe('unmatched')
+  })
 })

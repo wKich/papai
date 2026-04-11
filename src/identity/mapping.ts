@@ -11,9 +11,9 @@ const log = logger.child({ scope: 'identity:mapping' })
 export interface SetIdentityMappingParams {
   contextId: string
   providerName: string
-  providerUserId: string
-  providerUserLogin: string
-  displayName: string
+  providerUserId: string | null
+  providerUserLogin: string | null
+  displayName: string | null
   matchMethod: MatchMethod
   confidence: number
 }

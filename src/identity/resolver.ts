@@ -77,9 +77,9 @@ function storeUnmatched(
   setIdentityMapping({
     contextId,
     providerName,
-    providerUserId: '',
-    providerUserLogin: '',
-    displayName: '',
+    providerUserId: null,
+    providerUserLogin: null,
+    displayName: null,
     matchMethod: 'unmatched',
     confidence: 0,
   })

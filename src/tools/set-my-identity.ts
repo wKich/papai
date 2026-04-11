@@ -59,12 +59,12 @@ async function findUser(
 }
 
 function storeIdentity(
-  userId: string,
+  chatUserId: string,
   providerName: string,
   matched: { id: string; login: string; name?: string },
 ): SuccessResult {
   setIdentityMapping({
-    contextId: userId,
+    contextId: chatUserId,
     providerName,
     providerUserId: matched.id,
     providerUserLogin: matched.login,
@@ -73,7 +73,7 @@ function storeIdentity(
     confidence: 100,
   })
 
-  log.info({ userId, login: matched.login }, 'Identity set via NL')
+  log.info({ chatUserId, login: matched.login }, 'Identity set via NL')
   return {
     status: 'success',
     message: `Linked you to ${matched.login} (${matched.name ?? matched.login}) in ${providerName}.`,
@@ -84,7 +84,7 @@ function storeIdentity(
   }
 }
 
-export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): ToolSet[string] {
+export function makeSetMyIdentityTool(provider: TaskProvider, chatUserId: string): ToolSet[string] {
   return tool({
     description:
       "Set or correct the user's task tracker identity. Use when user says things like 'I'm jsmith', 'My login is john.smith', or 'Link me to user jsmith'.",
@@ -92,7 +92,7 @@ export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): T
       claim: z.string().describe("The user's natural language claim about their identity"),
     }),
     execute: async ({ claim }) => {
-      log.debug({ userId, claim }, 'set_my_identity called')
+      log.debug({ chatUserId, claim }, 'set_my_identity called')
 
       const resolverError = validateResolver(provider)
       if (resolverError !== null) return resolverError
@@ -113,10 +113,10 @@ export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): T
           }
         }
 
-        return storeIdentity(userId, provider.name, matched)
+        return storeIdentity(chatUserId, provider.name, matched)
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), userId, claimedLogin: login },
+          { error: error instanceof Error ? error.message : String(error), chatUserId, claimedLogin: login },
           'Failed to set identity',
         )
         return {
