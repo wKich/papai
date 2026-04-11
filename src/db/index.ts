@@ -23,6 +23,8 @@ import { migration015DropBackgroundEvents } from './migrations/015_drop_backgrou
 import { migration016ExecutionMetadata } from './migrations/016_execution_metadata.js'
 import { migration017MessageMetadata } from './migrations/017_message_metadata.js'
 import { migration018Memos } from './migrations/018_memos.js'
+import { migration019UserIdentityMappings } from './migrations/019_user_identity_mappings.js'
+import { migration020GroupSettingsRegistry } from './migrations/020_group_settings_registry.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -68,6 +70,8 @@ const MIGRATIONS = [
   migration016ExecutionMetadata,
   migration017MessageMetadata,
   migration018Memos,
+  migration019UserIdentityMappings,
+  migration020GroupSettingsRegistry,
 ] as const
 
 export const initDb = (): void => {

@@ -252,7 +252,6 @@ export const memoLinks = sqliteTable(
     index('idx_memo_links_target_memo').on(table.targetMemoId),
   ],
 )
-
 export const userIdentityMappings = sqliteTable(
   'user_identity_mappings',
   {
@@ -270,6 +269,32 @@ export const userIdentityMappings = sqliteTable(
     index('idx_identity_mappings_provider_user').on(table.providerName, table.providerUserId),
   ],
 )
-
-export type MemoRow = typeof memos.$inferSelect
-export type MemoLinkRow = typeof memoLinks.$inferSelect
+export const knownGroupContexts = sqliteTable(
+  'known_group_contexts',
+  {
+    contextId: text('context_id').primaryKey(),
+    provider: text('provider').notNull(),
+    displayName: text('display_name').notNull(),
+    parentName: text('parent_name'),
+    firstSeenAt: text('first_seen_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (table) => [
+    index('idx_known_group_contexts_provider').on(table.provider),
+    index('idx_known_group_contexts_last_seen').on(table.lastSeenAt),
+  ],
+)
+export const groupAdminObservations = sqliteTable(
+  'group_admin_observations',
+  {
+    contextId: text('context_id').notNull(),
+    userId: text('user_id').notNull(),
+    username: text('username'),
+    isAdmin: integer('is_admin', { mode: 'boolean' }).notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contextId, table.userId] }),
+    index('idx_group_admin_observations_user_admin').on(table.userId, table.isAdmin),
+  ],
+)
