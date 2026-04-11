@@ -75,6 +75,7 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly preferredUserIdentifier = 'login' as const
   readonly identityResolver
 
   constructor(config: YouTrackConfig) {

@@ -193,4 +193,37 @@ describe('create_task identity resolution', () => {
 
     expect(capturedAssignee).toBeUndefined()
   })
+
+  test('create_task tool should use login when provider prefers login identifier', async () => {
+    // Setup identity mapping
+    setIdentityMapping({
+      contextId: 'test-user-456',
+      providerName: 'mock',
+      providerUserId: 'resolved-user-789',
+      providerUserLogin: 'jsmith',
+      displayName: 'John Smith',
+      matchMethod: 'manual_nl',
+      confidence: 100,
+    })
+
+    let capturedAssignee: string | undefined
+    const createTask = mock((params: { title: string; assignee?: string }) => {
+      capturedAssignee = params.assignee
+      return Promise.resolve({
+        id: 'task-1',
+        title: params.title,
+        status: 'todo',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ createTask, preferredUserIdentifier: 'login' })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute({ title: 'Test Task', projectId: 'proj-1', assignee: 'me' }, { toolCallId: '1', messages: [] })
+
+    expect(createTask).toHaveBeenCalledTimes(1)
+    expect(capturedAssignee).toBe('jsmith')
+  })
 })

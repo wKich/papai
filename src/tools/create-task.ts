@@ -26,7 +26,8 @@ function resolveAssignee(
 
   const identity = resolveMeReference(userId, provider)
   if (identity.type === 'found') {
-    return { assignee: identity.identity.userId }
+    const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
+    return { assignee: identifier }
   }
   return { identityRequired: { status: 'identity_required', message: identity.message } }
 }

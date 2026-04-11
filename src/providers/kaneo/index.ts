@@ -51,6 +51,7 @@ export class KaneoProvider implements TaskProvider {
   readonly name = 'kaneo'
   readonly capabilities = ALL_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly preferredUserIdentifier = 'id' as const
   readonly identityResolver
 
   constructor(

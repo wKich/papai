@@ -266,7 +266,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
     await setupTestDb()
 
     const botDeps: BotDeps = {
-      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+      processMessage: (_reply: ReplyFn, storageContextId: string, _chatUserId: string): Promise<void> => {
         processMessageCallCount++
         lastProcessedStorageId = storageContextId
         return Promise.resolve()
@@ -402,7 +402,7 @@ describe('Demo Mode — wizard bypass (setupBot)', () => {
     await setupTestDb()
 
     const botDeps: BotDeps = {
-      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+      processMessage: (_reply: ReplyFn, storageContextId: string, _chatUserId: string): Promise<void> => {
         processMessageCallCount++
         lastProcessedStorageId = storageContextId
         return Promise.resolve()
@@ -458,7 +458,7 @@ describe('File relay integration (setupBot)', () => {
     await setupTestDb()
 
     const botDeps: BotDeps = {
-      processMessage: (_reply: ReplyFn, storageContextId: string): Promise<void> => {
+      processMessage: (_reply: ReplyFn, storageContextId: string, _chatUserId: string): Promise<void> => {
         capturedStorageId = storageContextId
         // Capture files at processing time (before they're cleared in finally block)
         filesAtProcessingTime = getIncomingFiles(storageContextId)

@@ -102,6 +102,9 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   /** Config keys this provider needs (shown in /config, validated by /setup). */
   readonly configRequirements: readonly ProviderConfigRequirement[]
 
+  /** Which user identifier this provider prefers for assignee/watcher operations. */
+  readonly preferredUserIdentifier: 'id' | 'login'
+
   /** Optional identity resolver for user matching (auto-link). */
   readonly identityResolver?: {
     /** Search users by query string, returns matching users. */

@@ -59,6 +59,7 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
     name: 'mock',
     capabilities: ALL_CAPABILITIES,
     configRequirements: [],
+    preferredUserIdentifier: 'id',
     createTask: mock(() =>
       Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: 'https://test.com/task/1' }),
     ),

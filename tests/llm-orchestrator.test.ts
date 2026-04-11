@@ -148,7 +148,7 @@ describe('processMessage', () => {
       // llm_apikey deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -164,7 +164,7 @@ describe('processMessage', () => {
       // llm_apikey and main_model deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -191,7 +191,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -205,7 +205,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('T-1')
@@ -218,7 +218,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('P-1')
@@ -231,7 +231,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -249,7 +249,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, rollbackCtx, null, 'new message')
+      await processMessage(reply, rollbackCtx, 'user-1', null, 'new message')
 
       // processMessage should have caught the error and replied with an error message
       expect(textCalls).toHaveLength(1)
@@ -305,7 +305,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-ctx', null, 'hello')
+        await processMessage(reply, 'steps-detail-ctx', 'user-1', null, 'hello')
       } finally {
         unsubscribe(listener)
       }
@@ -365,7 +365,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-empty-ctx', null, 'hello')
+        await processMessage(reply, 'steps-detail-empty-ctx', 'user-1', null, 'hello')
       } finally {
         unsubscribe(listener)
       }
@@ -424,7 +424,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-ctx', null, 'create a task')
+      await processMessage(reply, 'tool-fail-ctx', 'user-1', null, 'create a task')
 
       // Simulate a tool failure by calling the captured callback
       if (capturedOnToolCallFinish !== undefined) {
@@ -459,7 +459,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-string-ctx', null, 'do something')
+      await processMessage(reply, 'tool-fail-string-ctx', 'user-1', null, 'do something')
 
       // Simulate a tool failure with a string error
       if (capturedOnToolCallFinish !== undefined) {
@@ -494,7 +494,7 @@ describe('processMessage', () => {
         })
       const { reply } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello')
 
       // History should contain: user message + assistant message
       const history = getCachedHistory(CTX_ID)
@@ -535,7 +535,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-ctx', null, 'create a test task')
+      await processMessage(reply, 'tool-results-ctx', 'user-1', null, 'create a test task')
 
       // Should complete without error - tool results passed directly to fact extraction
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -565,7 +565,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-missing-ctx', null, 'do something')
+      await processMessage(reply, 'tool-results-missing-ctx', 'user-1', null, 'do something')
 
       // Should complete without error
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -588,7 +588,7 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello')
 
       // Verify admin's LLM config was copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBe('test-key')
@@ -606,7 +606,7 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello')
 
       // LLM config should NOT be copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBeNull()

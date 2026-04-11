@@ -59,14 +59,14 @@ const persistFactsFromResults = (
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet => {
+const getOrCreateTools = (contextId: string, chatUserId: string, provider: TaskProvider): ToolSet => {
   const cachedTools = getCachedTools(contextId)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
     log.debug({ contextId }, 'Using cached tools')
     return cachedTools
   }
-  log.debug({ contextId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider, { storageContextId: contextId })
+  log.debug({ contextId, chatUserId }, 'Building tools (cache miss)')
+  const tools = makeTools(provider, { storageContextId: contextId, chatUserId })
   setCachedTools(contextId, tools)
   return tools
 }
@@ -130,6 +130,7 @@ const invokeModel = async (
 const callLlm = async (
   reply: ReplyFn,
   contextId: string,
+  chatUserId: string,
   username: string | null,
   history: readonly ModelMessage[],
   deps: LlmOrchestratorDeps,
@@ -146,7 +147,7 @@ const callLlm = async (
   const mainModel = getConfig(contextId, 'main_model')!
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(contextId)
-  const tools = getOrCreateTools(contextId, provider)
+  const tools = getOrCreateTools(contextId, chatUserId, provider)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
   log.debug(
@@ -209,19 +210,20 @@ const handleMessageError = async (reply: ReplyFn, contextId: string, error: unkn
 export const processMessage = async (
   reply: ReplyFn,
   contextId: string,
+  chatUserId: string,
   username: string | null,
   userText: string,
   deps: LlmOrchestratorDeps = defaultDeps,
 ): Promise<void> => {
-  log.debug({ contextId, userText }, 'processMessage called')
-  log.info({ contextId, messageLength: userText.length }, 'Message received from user')
+  log.debug({ contextId, chatUserId, userText }, 'processMessage called')
+  log.info({ contextId, chatUserId, messageLength: userText.length }, 'Message received from user')
 
   const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, username, history, deps)
+    const result = await callLlm(reply, contextId, chatUserId, username, history, deps)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)
