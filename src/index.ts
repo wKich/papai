@@ -7,6 +7,7 @@ import { closeMigrationDbInstance, initDb } from './db/index.js'
 import { startPollers, stopPollers } from './deferred-prompts/poller.js'
 import { logger } from './logger.js'
 import { initializeMessageCache } from './message-cache/index.js'
+import { flushOnShutdown } from './message-queue/index.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { scheduler } from './scheduler-instance.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
@@ -93,26 +94,37 @@ if (process.env['DEBUG_SERVER'] === 'true') {
   stopDebugServerFn = stopDebugServer
 }
 
-process.on('SIGINT', () => {
-  log.info('SIGINT received, shutting down gracefully')
-  stopScheduler()
-  scheduler.stopAll()
-  stopPollers()
-  stopDebugServerFn?.()
-  void chatProvider.stop()
-  closeDrizzleDb()
-  closeMigrationDbInstance()
-  process.exit(0)
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  log.info('SIGTERM received, starting graceful shutdown...')
+  void flushOnShutdown({ timeoutMs: 5000 })
+    .then(() => {
+      stopScheduler()
+      scheduler.stopAll()
+      stopPollers()
+      stopDebugServerFn?.()
+      return chatProvider.stop()
+    })
+    .then(() => {
+      closeDrizzleDb()
+      closeMigrationDbInstance()
+      process.exit(0)
+    })
 })
 
-process.on('SIGTERM', () => {
-  log.info('SIGTERM received, shutting down gracefully')
-  stopScheduler()
-  scheduler.stopAll()
-  stopPollers()
-  stopDebugServerFn?.()
-  void chatProvider.stop()
-  closeDrizzleDb()
-  closeMigrationDbInstance()
-  process.exit(0)
+process.on('SIGINT', () => {
+  log.info('SIGINT received, starting graceful shutdown...')
+  void flushOnShutdown({ timeoutMs: 5000 })
+    .then(() => {
+      stopScheduler()
+      scheduler.stopAll()
+      stopPollers()
+      stopDebugServerFn?.()
+      return chatProvider.stop()
+    })
+    .then(() => {
+      closeDrizzleDb()
+      closeMigrationDbInstance()
+      process.exit(0)
+    })
 })
