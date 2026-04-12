@@ -2,7 +2,7 @@ import { describe, expect, mock, test, beforeEach, afterEach } from 'bun:test'
 
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
-import type { IncomingFile, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { IncomingFile, IncomingInteraction, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { setConfig } from '../src/config.js'
 import { getIncomingFiles } from '../src/file-relay.js'
 import { addGroupMember } from '../src/groups.js'
@@ -325,6 +325,50 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
     expect(getRegisteredMessageHandler()).not.toBeNull()
     expect(getInteractionHandler()).not.toBeNull()
+  })
+
+  test('interaction handler replies with error message when routeInteraction throws', async () => {
+    // Import the real module first to restore later
+    const { routeInteraction: realRouteInteraction } = await import('../src/chat/interaction-router.js')
+
+    // Mock routeInteraction to throw an error
+    void mock.module('../src/chat/interaction-router.js', () => ({
+      routeInteraction: (): Promise<boolean> => {
+        throw new Error('Simulated routing failure')
+      },
+    }))
+
+    addUser('auth-user', ADMIN_ID)
+    setupUserConfig('auth-user')
+
+    const { provider: mockChat, getInteractionHandler } = createMockChatForBot()
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const interactionHandler = getInteractionHandler()
+    expect(interactionHandler).not.toBeNull()
+
+    const { reply, textCalls } = createMockReply()
+    const interaction: IncomingInteraction = {
+      kind: 'button',
+      user: { id: 'auth-user', username: 'authuser', isAdmin: false },
+      contextId: 'auth-user',
+      contextType: 'dm',
+      storageContextId: 'auth-user',
+      callbackData: 'wizard_confirm',
+    }
+
+    await interactionHandler!(interaction, reply)
+
+    // Should show user-visible error when routeInteraction fails
+    expect(textCalls.length).toBeGreaterThan(0)
+    expect(textCalls[0]).toContain('Something went wrong')
+
+    // Restore the real module to prevent mock pollution
+    void mock.module('../src/chat/interaction-router.js', () => ({
+      routeInteraction: realRouteInteraction,
+    }))
   })
 
   describe('Username resolution on first message', () => {

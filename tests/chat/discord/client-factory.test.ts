@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { GuildLike } from '../../../src/chat/discord/client-factory.js'
+import type { GuildLike, ReadyPayload } from '../../../src/chat/discord/client-factory.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 describe('client-factory', () => {
@@ -26,5 +26,11 @@ describe('client-factory', () => {
       },
     }
     expect(typeof guild.members.search).toBe('function')
+  })
+
+  test('ReadyPayload type accepts objects with user.id and user.username', () => {
+    const payload: ReadyPayload = { user: { id: '123', username: 'testuser' } }
+    expect(payload.user.id).toBe('123')
+    expect(payload.user.username).toBe('testuser')
   })
 })

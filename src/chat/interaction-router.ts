@@ -3,7 +3,7 @@ import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
 import { getWizardSession, resetWizardSession } from '../wizard/state.js'
-import type { IncomingInteraction, ReplyFn } from './types.js'
+import type { AuthorizationResult, IncomingInteraction, ReplyFn } from './types.js'
 
 const log = logger.child({ scope: 'chat:interaction-router' })
 
@@ -126,8 +126,13 @@ const defaultDeps: InteractionRouteDeps = {
 export function routeInteraction(
   interaction: IncomingInteraction,
   reply: ReplyFn,
+  auth: AuthorizationResult,
   deps: InteractionRouteDeps = defaultDeps,
 ): Promise<boolean> {
+  if (!auth.allowed) {
+    return reply.text('You are not authorized to use this bot.').then(() => true)
+  }
+
   const { callbackData } = interaction
 
   if (callbackData.startsWith('cfg:')) {

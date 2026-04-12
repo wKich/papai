@@ -3,15 +3,18 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { IncomingMessage } from '../../../src/chat/types.js'
+import { addUser } from '../../../src/users.js'
 import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
 describe('DiscordChatProvider', () => {
   const originalToken = process.env['DISCORD_BOT_TOKEN']
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLogger()
     mockMessageCache()
+    await setupTestDb()
     process.env['DISCORD_BOT_TOKEN'] = 'fake-token-123'
+    process.env['ADMIN_USER_ID'] = 'admin-id'
   })
 
   afterEach(() => {
@@ -417,6 +420,9 @@ describe('DiscordChatProvider', () => {
     test('button interactionCreate dispatches to message handler via start()', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
 
+      // Authorize the user
+      addUser('u5', 'admin-id', 'eve')
+
       const interactionListeners: Array<(...args: unknown[]) => void> = []
       const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
 
@@ -479,6 +485,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('u1', 'admin-id', 'alice')
+
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
         seen.push(msg)
@@ -515,6 +524,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('u2', 'admin-id', 'bob')
+
       const captured: IncomingMessage[] = []
       provider.registerCommand('help', (msg): Promise<void> => {
         captured.push(msg)
@@ -546,6 +558,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('user-77', 'admin-id', 'carol')
+
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
         seen.push(msg)
@@ -576,6 +591,9 @@ describe('DiscordChatProvider', () => {
     test('uses channelId as contextId in guild channels (type=0)', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
+
+      // Authorize the user
+      addUser('user-88', 'admin-id', 'dave')
 
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
@@ -689,6 +707,9 @@ describe('DiscordChatProvider', () => {
     test('handles deferUpdate failure gracefully', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
+
+      // Authorize the user
+      addUser('u-def', 'admin-id', 'defer-fail')
 
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {

@@ -276,16 +276,25 @@ export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps 
   chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
   chat.onInteraction?.(async (interaction, reply) => {
     try {
-      await routeInteraction(interaction, reply)
+      const auth = checkAuthorizationExtended(
+        interaction.user.id,
+        interaction.user.username,
+        interaction.contextId,
+        interaction.contextType,
+        interaction.threadId,
+        interaction.user.isAdmin,
+      )
+      await routeInteraction(interaction, reply, auth)
     } catch (error) {
       logger.error(
         {
           callbackData: interaction.callbackData,
-          userId: interaction.user?.id,
+          userId: interaction.user.id,
           error: error instanceof Error ? error.message : String(error),
         },
         'Interaction routing failed',
       )
+      await reply.text('❌ Something went wrong processing your action. Please try again.')
     }
   })
 }
