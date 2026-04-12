@@ -111,4 +111,30 @@ describe('distillWebContent', () => {
     expect(result.summary).toContain('Paragraph one summary candidate.')
     expect(result.excerpt).toBe('B'.repeat(MAX_EXCERPT_CHARS))
   })
+
+  test('uses a single-paragraph model response as both summary and excerpt', async () => {
+    const runDistill = getDistillWebContent(distillWebContent)
+
+    setCachedConfig('ctx-1', 'llm_apikey', 'test-key')
+    setCachedConfig('ctx-1', 'llm_baseurl', 'https://llm.example')
+    setCachedConfig('ctx-1', 'main_model', 'main-model')
+
+    const result = await runDistill(
+      {
+        storageContextId: 'ctx-1',
+        title: 'Large page',
+        content: createLongContent(),
+      },
+      {
+        buildModel: () => ({ id: 'main-model' }),
+        generateText: () => Promise.resolve({ text: 'Single paragraph summary only' }),
+      },
+    )
+
+    expect(result).toEqual({
+      summary: 'Single paragraph summary only',
+      excerpt: 'Single paragraph summary only',
+      truncated: true,
+    })
+  })
 })

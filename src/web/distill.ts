@@ -51,9 +51,10 @@ const getModelConfig = (storageContextId: string): { apiKey: string; baseUrl: st
 
 const parseDistilledContent = (text: string): DistilledContent => {
   const [summary = '', ...excerptParts] = splitParagraphs(text)
+  const excerptSource = excerptParts.length > 0 ? excerptParts.join('\n\n') : summary
   return {
-    summary,
-    excerpt: excerptParts.join('\n\n').slice(0, MAX_EXCERPT_CHARS),
+    summary: summary || excerptSource,
+    excerpt: excerptSource.slice(0, MAX_EXCERPT_CHARS),
     truncated: true,
   }
 }
