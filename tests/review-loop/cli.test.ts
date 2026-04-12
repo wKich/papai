@@ -87,4 +87,47 @@ describe('review-loop CLI bootstrap', () => {
     expect(config.reviewer.invocationPrefix).toBe('/review-code')
     expect(config.fixer.verifyInvocationPrefix).toBe('/verify-issue')
   })
+
+  test('loadReviewLoopConfig resolves --repo overrides from the caller cwd', async () => {
+    const dir = makeTempDir()
+    const configDir = path.join(dir, 'config')
+    const configPath = path.join(configDir, 'review-loop.config.json')
+
+    mkdirSync(configDir, { recursive: true })
+    writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          repoRoot: '../repo',
+          planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
+          workDir: '.review-loop',
+          maxRounds: 5,
+          maxNoProgressRounds: 2,
+          reviewer: {
+            command: '/usr/local/bin/claude-acp-adapter',
+            args: [],
+            invocationPrefix: '/review-code',
+            requireInvocationPrefix: false,
+          },
+          fixer: {
+            command: 'opencode',
+            args: ['acp'],
+            verifyInvocationPrefix: '/verify-issue',
+            fixInvocationPrefix: null,
+            requireVerifyInvocation: false,
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const config = await loadReviewLoopConfig({ configPath, repoRoot: '.' })
+
+    expect(config.repoRoot).toBe(process.cwd())
+    expect(config.planPath).toBe(
+      path.join(process.cwd(), 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
+    )
+    expect(config.workDir).toBe(path.join(process.cwd(), '.review-loop'))
+  })
 })

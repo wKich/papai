@@ -46,7 +46,8 @@ export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<Revi
   const raw = JSON.parse(await readFile(configPath, 'utf8')) as unknown
   const parsed = ReviewLoopConfigSchema.parse(raw)
 
-  const repoRoot = path.resolve(configDir, input.repoRoot ?? parsed.repoRoot)
+  const repoRoot =
+    input.repoRoot === undefined ? path.resolve(configDir, parsed.repoRoot) : path.resolve(input.repoRoot)
   const planPath = path.resolve(repoRoot, input.planPath ?? parsed.planPath)
   const workDir = path.resolve(repoRoot, parsed.workDir)
 
