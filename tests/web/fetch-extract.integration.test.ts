@@ -7,9 +7,11 @@ type FetchAndExtract = typeof import('../../src/web/fetch-extract.js').fetchAndE
 type SafeFetchContent = typeof import('../../src/web/safe-fetch.js').safeFetchContent
 
 const HTML_PATH = '/html'
+const LARGE_PATH = '/large'
 const REDIRECT_PATH = '/redirect'
 const FIXTURE_TITLE = 'Local Fixture Title'
 const FIXTURE_BODY = 'Local fixture body content for extraction.'
+const LARGE_FIXTURE_BODY = 'Large fixture body content. '.repeat(400)
 
 describe('fetchAndExtract integration', () => {
   let fetchAndExtract: FetchAndExtract
@@ -42,6 +44,26 @@ describe('fetchAndExtract integration', () => {
                   <article>
                     <h1>${FIXTURE_TITLE}</h1>
                     <p>${FIXTURE_BODY}</p>
+                  </article>
+                </main>
+              </body>
+            </html>`,
+            {
+              headers: { 'content-type': 'text/html; charset=utf-8' },
+            },
+          )
+        }
+
+        if (url.pathname === LARGE_PATH) {
+          return new Response(
+            `<!doctype html>
+            <html>
+              <head><title>${FIXTURE_TITLE}</title></head>
+              <body>
+                <main>
+                  <article>
+                    <h1>${FIXTURE_TITLE}</h1>
+                    <p>${LARGE_FIXTURE_BODY}</p>
                   </article>
                 </main>
               </body>
@@ -113,26 +135,94 @@ describe('fetchAndExtract integration', () => {
     expect(second.fetchedAt).toBe(first.fetchedAt)
   })
 
-  test('follows redirects and extracts content from the final URL', async () => {
+  test('follows redirects and returns a cached result on the second request', async () => {
     const redirectedUrl = `${baseUrl}${HTML_PATH}`
+    const redirectUrl = `${baseUrl}${REDIRECT_PATH}`
+    const safeFetchOverride = (
+      targetUrl: string,
+      options?: { abortSignal?: AbortSignal },
+    ): ReturnType<SafeFetchContent> => safeFetchContent(targetUrl, options, { fetch, assertPublicUrl: async () => {} })
+
+    const first = await fetchAndExtract(
+      {
+        storageContextId: 'ctx-1',
+        url: redirectUrl,
+      },
+      { safeFetchContent: safeFetchOverride },
+    )
+
+    const second = await fetchAndExtract(
+      {
+        storageContextId: 'ctx-1',
+        url: redirectUrl,
+      },
+      { safeFetchContent: safeFetchOverride },
+    )
+
+    expect(first).toMatchObject({
+      url: redirectedUrl,
+      title: FIXTURE_TITLE,
+      contentType: 'text/html',
+      source: 'fetch',
+      truncated: false,
+    })
+    expect(first.summary).toContain(FIXTURE_BODY)
+    expect(first.excerpt).toContain(FIXTURE_BODY)
+
+    expect(second).toMatchObject({
+      url: redirectedUrl,
+      title: FIXTURE_TITLE,
+      contentType: 'text/html',
+      source: 'cache',
+      truncated: false,
+      fetchedAt: first.fetchedAt,
+    })
+    expect(second.summary).toBe(first.summary)
+    expect(second.excerpt).toBe(first.excerpt)
+  })
+
+  test('uses the distillation branch for large extracted content', async () => {
+    const url = `${baseUrl}${LARGE_PATH}`
+    const safeFetchOverride = (
+      targetUrl: string,
+      options?: { abortSignal?: AbortSignal },
+    ): ReturnType<SafeFetchContent> => safeFetchContent(targetUrl, options, { fetch, assertPublicUrl: async () => {} })
+
+    let capturedStorageContextId = ''
+    let capturedTitle = ''
+    let capturedContentLength = 0
 
     const result = await fetchAndExtract(
       {
         storageContextId: 'ctx-1',
-        url: `${baseUrl}${REDIRECT_PATH}`,
+        url,
       },
       {
-        safeFetchContent: (targetUrl: string, options?: { abortSignal?: AbortSignal }) =>
-          safeFetchContent(targetUrl, options, { fetch, assertPublicUrl: async () => {} }),
+        safeFetchContent: safeFetchOverride,
+        distillWebContent: (input) => {
+          capturedStorageContextId = input.storageContextId
+          capturedTitle = input.title
+          capturedContentLength = input.content.length
+          return Promise.resolve({
+            summary: 'Large summary',
+            excerpt: 'Large excerpt',
+            truncated: true,
+          })
+        },
       },
     )
 
-    expect(result.url).toBe(redirectedUrl)
-    expect(result.title).toBe(FIXTURE_TITLE)
-    expect(result.summary).toContain(FIXTURE_BODY)
-    expect(result.excerpt).toContain(FIXTURE_BODY)
-    expect(result.contentType).toBe('text/html')
-    expect(result.source).toBe('fetch')
-    expect(result.truncated).toBe(false)
+    expect(capturedStorageContextId).toBe('ctx-1')
+    expect(capturedTitle).toBe(FIXTURE_TITLE)
+    expect(capturedContentLength).toBeGreaterThan(8_000)
+    expect(result).toMatchObject({
+      url,
+      title: FIXTURE_TITLE,
+      summary: 'Large summary',
+      excerpt: 'Large excerpt',
+      contentType: 'text/html',
+      source: 'fetch',
+      truncated: true,
+    })
   })
 })
