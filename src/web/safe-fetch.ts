@@ -194,7 +194,7 @@ function getAllowedContentType(response: Response): { contentType: string; maxBy
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError'
+  return error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')
 }
 
 function rethrowSafeFetchError(error: unknown): never {

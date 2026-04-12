@@ -110,4 +110,28 @@ describe('safeFetchContent', () => {
       })
     }
   })
+
+  test('maps timeout errors to the web-fetch timeout shape', async () => {
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock((_input: Parameters<typeof fetch>[0]): Promise<Response> => {
+        throw new DOMException('Timed out', 'TimeoutError')
+      }),
+      assertPublicUrl: (): Promise<void> => Promise.resolve(),
+    }
+
+    try {
+      await safeFetchContent('https://example.com/slow', { abortSignal: AbortSignal.timeout(1000) }, deps)
+      throw new Error('Expected safeFetchContent to reject')
+    } catch (error) {
+      expectAppError(error, getUserMessage(webFetchError.timeout()))
+      if (!hasAppError(error)) {
+        throw new Error('Expected error with appError', { cause: error })
+      }
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'timeout',
+        appError: webFetchError.timeout(),
+      })
+    }
+  })
 })
