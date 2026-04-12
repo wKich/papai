@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+
 import { z } from 'zod'
 
 import type { ReviewLoopConfig } from './config.js'
@@ -34,14 +35,15 @@ export interface RunState {
   noProgressRounds: number
 }
 
+const SessionPointerSchema = z.object({
+  sessionId: z.string().nullable(),
+})
+
 function makeRunId(): string {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-export async function createRunState(
-  config: ReviewLoopConfig,
-  planPath: string,
-): Promise<RunState> {
+export async function createRunState(config: ReviewLoopConfig, planPath: string): Promise<RunState> {
   const runId = makeRunId()
   const runDir = path.join(config.workDir, 'runs', runId)
   const transcriptDir = path.join(runDir, 'transcripts')
@@ -74,9 +76,28 @@ export async function createRunState(
 
 export async function loadRunState(workDir: string, runId: string): Promise<RunState> {
   const statePath = path.join(workDir, 'runs', runId, 'state.json')
-  return RunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  const runDir = path.dirname(statePath)
+  const state = RunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  const reviewerSessionPath = path.join(runDir, 'reviewer-session.json')
+  const fixerSessionPath = path.join(runDir, 'fixer-session.json')
+
+  return {
+    ...state,
+    reviewerSessionId: await readSessionPointer(reviewerSessionPath),
+    fixerSessionId: await readSessionPointer(fixerSessionPath),
+  }
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
   await writeFile(state.statePath, JSON.stringify(state, null, 2))
+  await writeSessionPointer(state.reviewerSessionPath, state.reviewerSessionId)
+  await writeSessionPointer(state.fixerSessionPath, state.fixerSessionId)
+}
+
+async function readSessionPointer(pointerPath: string): Promise<string | null> {
+  return SessionPointerSchema.parse(JSON.parse(await readFile(pointerPath, 'utf8'))).sessionId
+}
+
+async function writeSessionPointer(pointerPath: string, sessionId: string | null): Promise<void> {
+  await writeFile(pointerPath, JSON.stringify({ sessionId }, null, 2))
 }
