@@ -16,6 +16,7 @@ export function chunkForDiscord(input: string, maxLen: number): string[] {
   const chunks: string[] = []
   let remainder = input
   let carriedOpenFence = false
+  let carriedLanguage: string | null = null
 
   while (remainder.length > maxLen) {
     // Reserve space for fence operations:
@@ -23,19 +24,25 @@ export function chunkForDiscord(input: string, maxLen: number): string[] {
     // - Potential closing fence for this chunk (we must reserve for worst case)
     let budget = maxLen - FENCE_CLOSE_LEN
     if (carriedOpenFence) {
-      budget = budget - FENCE_OPEN_LEN
+      budget = budget - FENCE_OPEN_LEN - (carriedLanguage?.length ?? 0)
     }
     const sliceEnd = findSplitPoint(remainder, budget)
     let chunk = remainder.slice(0, sliceEnd)
     remainder = remainder.slice(sliceEnd)
 
     if (carriedOpenFence) {
-      chunk = '```\n' + chunk
+      chunk = (carriedLanguage === null ? '```\n' : '```' + carriedLanguage + '\n') + chunk
       carriedOpenFence = false
+      carriedLanguage = null
     }
 
-    const fenceCount = (chunk.match(/```/g) ?? []).length
+    const fenceMatch = chunk.match(/```(\w+)?/g)
+    const fenceCount = fenceMatch?.length ?? 0
     if (fenceCount % 2 === 1) {
+      // Extract language tag from opening fence if present
+      const lastFence = fenceMatch![fenceMatch!.length - 1]
+      const langMatch = lastFence!.match(/```(\w+)/)
+      carriedLanguage = langMatch?.[1] ?? null
       chunk = chunk + '\n```'
       carriedOpenFence = true
     }
@@ -46,7 +53,7 @@ export function chunkForDiscord(input: string, maxLen: number): string[] {
   if (remainder.length > 0) {
     let tail = remainder
     if (carriedOpenFence) {
-      tail = '```\n' + tail
+      tail = (carriedLanguage === null ? '```\n' : '```' + carriedLanguage + '\n') + tail
     }
     chunks.push(tail)
   }

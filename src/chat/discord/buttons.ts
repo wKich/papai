@@ -20,11 +20,11 @@ export type ButtonChannelLike = {
 
 /** Structural type for a Discord button interaction. */
 export type ButtonInteractionLike = {
-  user: { id: string; username: string }
+  user: { id: string; username: string; bot?: boolean; isAdmin?: boolean }
   customId: string
   channelId: string
   channel: ButtonChannelLike | null
-  message: { id: string }
+  message: { id: string; channelId?: string; threadId?: string }
   deferUpdate(): Promise<void>
 }
 

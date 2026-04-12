@@ -34,7 +34,6 @@ export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 
 const log = logger.child({ scope: 'chat:discord' })
-const DISCORD_MAX_CONTENT_LEN = 2000
 
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
 
@@ -84,7 +83,7 @@ export class DiscordChatProvider implements ChatProvider {
     }
     const user = await this.client.users.fetch(userId)
     const dm = await user.createDM()
-    const chunks = chunkForDiscord(markdown, DISCORD_MAX_CONTENT_LEN)
+    const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
     await chunks.reduce<Promise<unknown>>(
       (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
       Promise.resolve(null),

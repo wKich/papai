@@ -37,21 +37,27 @@ describe('stripBotMention', () => {
 describe('isBotMentioned', () => {
   const botId = '1234567890123456'
 
+  function createMockMentions(hasResult: boolean): { has: (id: string) => boolean } {
+    return {
+      has: (id: string): boolean => id === botId && hasResult,
+    }
+  }
+
   test('returns true in DMs unconditionally', () => {
-    expect(isBotMentioned('hello there', botId, 'dm')).toBe(true)
-    expect(isBotMentioned('', botId, 'dm')).toBe(true)
+    expect(isBotMentioned(createMockMentions(false), botId, 'dm')).toBe(true)
+    expect(isBotMentioned(createMockMentions(false), botId, 'dm')).toBe(true)
   })
 
-  test('returns true when <@botId> appears in group channel content', () => {
-    expect(isBotMentioned(`<@${botId}> do a thing`, botId, 'group')).toBe(true)
+  test('returns true when bot is mentioned in group channel', () => {
+    expect(isBotMentioned(createMockMentions(true), botId, 'group')).toBe(true)
   })
 
-  test('returns true when <@!botId> (nickname) appears in group content', () => {
-    expect(isBotMentioned(`<@!${botId}> hey`, botId, 'group')).toBe(true)
+  test('returns false when bot is not mentioned in group channel', () => {
+    expect(isBotMentioned(createMockMentions(false), botId, 'group')).toBe(false)
   })
 
-  test('returns false in group content that does not mention the bot', () => {
-    expect(isBotMentioned('hello world', botId, 'group')).toBe(false)
-    expect(isBotMentioned('<@9999> hey', botId, 'group')).toBe(false)
+  test('returns false when different user is mentioned in group channel', () => {
+    const differentUserMentions = { has: (id: string): boolean => id !== botId }
+    expect(isBotMentioned(differentUserMentions, botId, 'group')).toBe(false)
   })
 })

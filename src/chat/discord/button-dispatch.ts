@@ -1,5 +1,6 @@
+import { checkAuthorizationExtended } from '../../auth.js'
 import { logger } from '../../logger.js'
-import type { AuthorizationResult, CommandHandler, IncomingInteraction, IncomingMessage, ReplyFn } from '../types.js'
+import type { CommandHandler, IncomingInteraction, IncomingMessage, ReplyFn } from '../types.js'
 import type { ButtonInteractionLike } from './buttons.js'
 import { buildDiscordInteraction } from './interaction-helpers.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
@@ -50,13 +51,13 @@ export function createFallbackMessage(
   interaction: ButtonInteractionLike,
   contextId: string,
   contextType: 'dm' | 'group',
-  adminUserId: string,
+  isPlatformAdmin: boolean,
 ): IncomingMessage {
   return {
     user: {
       id: interaction.user.id,
       username: interaction.user.username.length > 0 ? interaction.user.username : null,
-      isAdmin: interaction.user.id === adminUserId,
+      isAdmin: isPlatformAdmin,
     },
     contextId,
     contextType,
@@ -64,6 +65,52 @@ export function createFallbackMessage(
     text: interaction.customId,
     messageId: interaction.message.id,
   }
+}
+
+function findCommand(
+  text: string,
+  commands: Map<string, CommandHandler>,
+): { name: string; handler: CommandHandler; match: string } | null {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('/')) return null
+
+  for (const [name, handler] of commands.entries()) {
+    if (trimmed === `/${name}` || trimmed.startsWith(`/${name} `)) {
+      const match = trimmed.slice(name.length + 2).trim()
+      return { name, handler, match }
+    }
+  }
+  return null
+}
+
+async function executeCommand(
+  mapped: IncomingMessage,
+  handler: CommandHandler,
+  interaction: ButtonInteractionLike,
+  reply: ReplyFn,
+): Promise<void> {
+  // Extract thread ID from the interaction message if present
+  const threadId =
+    'threadId' in interaction.message && interaction.message.threadId !== undefined
+      ? interaction.message.threadId
+      : undefined
+
+  // Use proper authorization check instead of hardcoded values
+  const auth = checkAuthorizationExtended(
+    mapped.user.id,
+    mapped.user.username,
+    mapped.contextId,
+    mapped.contextType,
+    threadId,
+    mapped.user.isAdmin,
+  )
+
+  if (!auth.allowed) {
+    await reply.text('You are not authorized to use this bot.')
+    return
+  }
+
+  await handler(mapped, reply, auth)
 }
 
 export async function routeButtonFallback(
@@ -79,7 +126,9 @@ export async function routeButtonFallback(
 
   log.debug({ customId: data }, 'Unhandled button interaction in routeButtonFallback')
 
-  const mapped = createFallbackMessage(interaction, contextId, contextType, adminUserId)
+  // Use user's platform admin status if true, otherwise check if user is bot admin
+  const isPlatformAdmin = interaction.user.isAdmin === true || interaction.user.id === adminUserId
+  const mapped = createFallbackMessage(interaction, contextId, contextType, isPlatformAdmin)
   const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
 
   const trimmed = mapped.text.trim()
@@ -88,19 +137,10 @@ export async function routeButtonFallback(
     return
   }
 
-  const commandEntry = Array.from(commands.entries()).find(
-    ([name]) => trimmed === `/${name}` || trimmed.startsWith(`/${name} `),
-  )
-  if (commandEntry !== undefined) {
-    const [name, handler] = commandEntry
-    mapped.commandMatch = trimmed.slice(name.length + 2).trim()
-    const auth: AuthorizationResult = {
-      allowed: true,
-      isBotAdmin: mapped.user.isAdmin,
-      isGroupAdmin: mapped.user.isAdmin,
-      storageContextId: mapped.contextId,
-    }
-    await handler(mapped, reply, auth)
+  const command = findCommand(mapped.text, commands)
+  if (command !== null) {
+    mapped.commandMatch = command.match
+    await executeCommand(mapped, command.handler, interaction, reply)
     return
   }
 

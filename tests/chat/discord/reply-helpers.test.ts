@@ -80,6 +80,45 @@ describe('createDiscordReplyFn', () => {
     await expect(reply.redactMessage!('[redacted]')).resolves.toBeUndefined()
   })
 
+  test('redactMessage() edits all chunks when multi-chunk message was sent', async () => {
+    const { channel, sends } = makeChannel()
+    const edits: { id: string; content: string }[] = []
+
+    // Override channel.send to capture edit calls
+    channel.send = (
+      arg: SendArg,
+    ): Promise<{ id: string; edit: (editArg: { content?: string; components?: unknown[] }) => Promise<unknown> }> => {
+      sends.push(arg)
+      // Get the message ID and override edit method
+      const msgId = `bot-msg-${String(sends.length)}`
+      return Promise.resolve({
+        id: msgId,
+        edit: (editArg: { content?: string }): Promise<void> => {
+          edits.push({ id: msgId, content: editArg.content ?? '' })
+          return Promise.resolve()
+        },
+      })
+    }
+
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+
+    // Send a message that will be chunked (>2000 chars)
+    const longContent = 'x'.repeat(4500)
+    await reply.formatted(longContent)
+
+    // Should have sent multiple chunks
+    expect(sends.length).toBeGreaterThanOrEqual(3)
+
+    // Redact should edit all chunks
+    await reply.redactMessage!('[redacted]')
+
+    // All chunks should have been edited
+    expect(edits.length).toBe(sends.length)
+    for (const edit of edits) {
+      expect(edit.content).toBe('[redacted]')
+    }
+  })
+
   test('buttons() builds action rows and sends', async () => {
     const { channel, sends } = makeChannel()
     const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })

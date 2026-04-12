@@ -33,8 +33,14 @@ Mirror the structure of `src/chat/mattermost/`. A single `DiscordChatProvider` c
 - `Guilds`
 - `GuildMessages`
 - `DirectMessages`
+- `MessageContent` (privileged)
 
-**No privileged `MessageContent` intent** is requested. Discord delivers full message content unconditionally for (a) DM channels and (b) guild messages that @mention the bot user, which is exactly the MVP scope. This must be re-verified against current Discord docs in the research phase.
+**Note on `MessageContent` intent:** The original direction specified no privileged intents, but the implementation requires `MessageContent` for two reasons:
+
+1. **Mention detection**: `isBotMentioned()` performs string-based detection on message content to identify `<@botId>` mentions
+2. **Reply context**: When fetching parent messages for reply threading via REST API, the content is only available with this intent (the DM/mention exemption applies only to Gateway events, not REST fetches)
+
+Discord delivers message content unconditionally for DMs and @mentions in Gateway events, but the reply context feature requires REST API access to parent message content.
 
 ### Event → `IncomingMessage` mapping
 
