@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -43,15 +43,18 @@ describe('review-loop CLI bootstrap', () => {
 
   test('loadReviewLoopConfig resolves repo and plan paths and creates workDir', async () => {
     const dir = makeTempDir()
+    const repoDir = realpathSync(dir)
     const configPath = path.join(dir, 'review-loop.config.json')
+    const cwd = process.cwd()
+    process.chdir(dir)
 
     writeFileSync(
       configPath,
       JSON.stringify(
         {
-          repoRoot: dir,
-          planPath: path.join(dir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
-          workDir: path.join(dir, '.review-loop'),
+          repoRoot: '.',
+          planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
+          workDir: '.review-loop',
           maxRounds: 5,
           maxNoProgressRounds: 2,
           reviewer: {
@@ -73,14 +76,22 @@ describe('review-loop CLI bootstrap', () => {
       ),
     )
 
-    const config = await loadReviewLoopConfig({
-      configPath,
-      planPath: path.join(dir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
-    })
+    try {
+      const config = await loadReviewLoopConfig({
+        configPath,
+        planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
+      })
 
-    expect(config.repoRoot).toBe(dir)
-    expect(config.workDir).toBe(path.join(dir, '.review-loop'))
-    expect(config.reviewer.invocationPrefix).toBe('/review-code')
-    expect(config.fixer.verifyInvocationPrefix).toBe('/verify-issue')
+      expect(config.repoRoot).toBe(repoDir)
+      expect(config.planPath).toBe(
+        path.join(repoDir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
+      )
+      expect(config.workDir).toBe(path.join(repoDir, '.review-loop'))
+      expect(existsSync(config.workDir)).toBe(true)
+      expect(config.reviewer.invocationPrefix).toBe('/review-code')
+      expect(config.fixer.verifyInvocationPrefix).toBe('/verify-issue')
+    } finally {
+      process.chdir(cwd)
+    }
   })
 })
