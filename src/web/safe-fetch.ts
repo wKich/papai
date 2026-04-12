@@ -17,12 +17,20 @@ const TOTAL_TIMEOUT_MS = 30_000
 const TEXT_CONTENT_TYPES = new Set(['text/html', 'application/xhtml+xml', 'text/plain', 'text/markdown'])
 
 class SafeFetchClassifiedError extends Error {
+  readonly type = 'web-fetch' as const
+  readonly code: WebFetchError['code']
+  readonly status?: number
+
   constructor(
     message: string,
     public readonly appError: WebFetchError,
   ) {
     super(message)
     this.name = 'SafeFetchClassifiedError'
+    this.code = appError.code
+    if ('status' in appError && appError.status !== undefined) {
+      this.status = appError.status
+    }
   }
 }
 
@@ -40,20 +48,16 @@ function throwWebFetchError(appError: WebFetchError, message: string): never {
   throw new SafeFetchClassifiedError(message, appError)
 }
 
-export function isBlockedAddress(address: string): boolean {
-  try {
-    const range = ipaddr.parse(address).range()
-    return (
-      range === 'loopback' ||
-      range === 'private' ||
-      range === 'linkLocal' ||
-      range === 'uniqueLocal' ||
-      range === 'carrierGradeNat' ||
-      range === 'unspecified'
-    )
-  } catch {
-    return true
-  }
+function isBlockedAddress(address: string): boolean {
+  const range = ipaddr.parse(address).range()
+  return (
+    range === 'loopback' ||
+    range === 'private' ||
+    range === 'linkLocal' ||
+    range === 'uniqueLocal' ||
+    range === 'carrierGradeNat' ||
+    range === 'unspecified'
+  )
 }
 
 export async function assertPublicUrl(url: URL): Promise<void> {
@@ -62,7 +66,15 @@ export async function assertPublicUrl(url: URL): Promise<void> {
   }
 
   const addresses = await lookupPublicAddresses(url.hostname)
-  if (addresses.length === 0 || addresses.some((address) => isBlockedAddress(address.address))) {
+  if (addresses.length === 0) {
+    throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
+  }
+
+  try {
+    if (addresses.some((address) => isBlockedAddress(address.address))) {
+      throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
+    }
+  } catch {
     throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
   }
 }
@@ -79,7 +91,7 @@ async function lookupPublicAddresses(hostname: string): Promise<LookupAddress[]>
   }
 }
 
-export async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   const reader = response.body?.getReader()
   if (reader === undefined) {
     return new Uint8Array()
@@ -99,6 +111,10 @@ async function readChunks(
   const { done, value } = await reader.read()
   if (done) {
     return totalBytes
+  }
+
+  if (value === undefined) {
+    return readChunks(reader, maxBytes, chunks, totalBytes)
   }
 
   const nextTotal = totalBytes + value.byteLength
@@ -156,7 +172,7 @@ function isRedirect(response: Response): boolean {
 function resolveRedirectUrl(response: Response, url: URL): URL {
   const location = response.headers.get('location')
   if (location === null) {
-    return throwWebFetchError(webFetchError.upstreamError(response.status), 'Redirect response missing location header')
+    throwWebFetchError(webFetchError.upstreamError(response.status), 'Redirect response missing location header')
   }
 
   try {
@@ -185,6 +201,9 @@ function rethrowSafeFetchError(error: unknown): never {
   if (isAbortError(error)) {
     throwWebFetchError(webFetchError.timeout(), 'Web fetch timed out')
   }
+  if (error instanceof SafeFetchClassifiedError) {
+    throw error
+  }
   throw error
 }
 
@@ -201,7 +220,7 @@ export async function safeFetchContent(
   await deps.assertPublicUrl(url)
 
   try {
-    const response = await deps.fetch(url, {
+    const response = await deps.fetch(url.toString(), {
       method: 'GET',
       redirect: 'manual',
       signal: abortSignal,

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { getUserMessage, webFetchError } from '../../src/errors.js'
-import { safeFetchContent } from '../../src/web/safe-fetch.js'
+import { safeFetchContent, type SafeFetchDeps } from '../../src/web/safe-fetch.js'
 import { expectAppError, mockLogger } from '../utils/test-helpers.js'
 
 function createFetchMock(impl: (...args: Parameters<typeof fetch>) => Promise<Response>): typeof fetch {
@@ -52,62 +52,62 @@ describe('safeFetchContent', () => {
   })
 
   test('rejects unsupported content types', async () => {
-    const fetchMock = createFetchMock(
-      (..._args: Parameters<typeof fetch>): Promise<Response> =>
-        Promise.resolve(
-          new Response('not allowed', {
-            status: 200,
-            headers: { 'content-type': 'image/png' },
-          }),
-        ),
-    )
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock(
+        (..._args: Parameters<typeof fetch>): Promise<Response> =>
+          Promise.resolve(
+            new Response('not allowed', {
+              status: 200,
+              headers: { 'content-type': 'image/png' },
+            }),
+          ),
+      ),
+      assertPublicUrl: (): Promise<void> => Promise.resolve(),
+    }
 
     try {
-      await safeFetchContent(
-        'https://example.com/file',
-        { abortSignal: AbortSignal.timeout(1000) },
-        {
-          fetch: fetchMock,
-          assertPublicUrl: (): Promise<void> => Promise.resolve(),
-        },
-      )
+      await safeFetchContent('https://example.com/file', { abortSignal: AbortSignal.timeout(1000) }, deps)
       throw new Error('Expected safeFetchContent to reject')
     } catch (error) {
       expectAppError(error, getUserMessage(webFetchError.blockedContentType()))
       if (!hasAppError(error)) {
         throw new Error('Expected error with appError', { cause: error })
       }
-      expect(error.appError).toEqual(webFetchError.blockedContentType())
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'blocked-content-type',
+        appError: webFetchError.blockedContentType(),
+      })
     }
   })
 
   test('rejects oversized text bodies', async () => {
-    const fetchMock = createFetchMock(
-      (..._args: Parameters<typeof fetch>): Promise<Response> =>
-        Promise.resolve(
-          new Response('x'.repeat(2_000_001), {
-            status: 200,
-            headers: { 'content-type': 'text/plain; charset=utf-8' },
-          }),
-        ),
-    )
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock(
+        (..._args: Parameters<typeof fetch>): Promise<Response> =>
+          Promise.resolve(
+            new Response('x'.repeat(2_000_001), {
+              status: 200,
+              headers: { 'content-type': 'text/plain; charset=utf-8' },
+            }),
+          ),
+      ),
+      assertPublicUrl: (): Promise<void> => Promise.resolve(),
+    }
 
     try {
-      await safeFetchContent(
-        'https://example.com/large',
-        { abortSignal: AbortSignal.timeout(1000) },
-        {
-          fetch: fetchMock,
-          assertPublicUrl: (): Promise<void> => Promise.resolve(),
-        },
-      )
+      await safeFetchContent('https://example.com/large', { abortSignal: AbortSignal.timeout(1000) }, deps)
       throw new Error('Expected safeFetchContent to reject')
     } catch (error) {
       expectAppError(error, getUserMessage(webFetchError.tooLarge()))
       if (!hasAppError(error)) {
         throw new Error('Expected error with appError', { cause: error })
       }
-      expect(error.appError).toEqual(webFetchError.tooLarge())
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'too-large',
+        appError: webFetchError.tooLarge(),
+      })
     }
   })
 })
