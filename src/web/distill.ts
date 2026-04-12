@@ -1,0 +1,123 @@
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { generateText, type LanguageModel } from 'ai'
+
+import { getConfig } from '../config.js'
+import { logger } from '../logger.js'
+import { fetchWithoutTimeout } from '../utils/fetch.js'
+
+const log = logger.child({ scope: 'web:distill' })
+
+export const MAX_EXCERPT_CHARS = 8_000
+
+const DEFAULT_GOAL = 'Summarize the page for later memo/task use.'
+
+type DistilledContent = { summary: string; excerpt: string; truncated: boolean }
+
+const buildPrompt = (title: string, goal: string, content: string): string =>
+  [
+    `Title: ${title}`,
+    `Goal: ${goal}`,
+    'Reply with a 1-3 sentence summary, then a blank line, then an excerpt under 8000 chars.',
+    '',
+    content,
+  ].join('\n')
+
+const splitParagraphs = (text: string): readonly string[] =>
+  text
+    .trim()
+    .split(/\n\s*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0)
+
+const requireConfigValue = (storageContextId: string, key: 'llm_apikey' | 'llm_baseurl' | 'main_model'): string => {
+  const value = getConfig(storageContextId, key)
+  if (value !== null) {
+    return value
+  }
+
+  throw new Error(`Missing required config: ${key}`)
+}
+
+const bypassDistillation = (storageContextId: string, content: string): DistilledContent => {
+  log.info({ storageContextId, contentLength: content.length }, 'Bypassed distillation')
+  return { summary: content, excerpt: content, truncated: false }
+}
+
+const getModelConfig = (storageContextId: string): { apiKey: string; baseUrl: string; modelId: string } => ({
+  apiKey: requireConfigValue(storageContextId, 'llm_apikey'),
+  baseUrl: requireConfigValue(storageContextId, 'llm_baseurl'),
+  modelId: getConfig(storageContextId, 'small_model') ?? requireConfigValue(storageContextId, 'main_model'),
+})
+
+const parseDistilledContent = (text: string): DistilledContent => {
+  const [summary = '', ...excerptParts] = splitParagraphs(text)
+  return {
+    summary,
+    excerpt: excerptParts.join('\n\n').slice(0, MAX_EXCERPT_CHARS),
+    truncated: true,
+  }
+}
+
+const logDistilledContent = (storageContextId: string, modelId: string, result: DistilledContent): DistilledContent => {
+  log.info(
+    {
+      storageContextId,
+      modelId,
+      summaryLength: result.summary.length,
+      excerptLength: result.excerpt.length,
+    },
+    'Distilled web content',
+  )
+  return result
+}
+
+export interface DistillDeps {
+  readonly generateText: typeof generateText
+  readonly buildModel: (apiKey: string, baseUrl: string, modelId: string) => LanguageModel
+}
+
+const defaultDeps: DistillDeps = {
+  generateText: (...args) => generateText(...args),
+  buildModel: (apiKey, baseUrl, modelId) =>
+    createOpenAICompatible({
+      name: 'openai-compatible',
+      apiKey,
+      baseURL: baseUrl,
+      fetch: fetchWithoutTimeout,
+    })(modelId),
+}
+
+export async function distillWebContent(
+  input: {
+    readonly storageContextId: string
+    readonly title: string
+    readonly content: string
+    readonly goal?: string
+  },
+  deps: DistillDeps = defaultDeps,
+): Promise<DistilledContent> {
+  log.debug(
+    {
+      storageContextId: input.storageContextId,
+      title: input.title,
+      contentLength: input.content.length,
+      hasGoal: input.goal !== undefined,
+    },
+    'distillWebContent called',
+  )
+
+  if (input.content.length <= MAX_EXCERPT_CHARS) {
+    return bypassDistillation(input.storageContextId, input.content)
+  }
+
+  const { apiKey, baseUrl, modelId } = getModelConfig(input.storageContextId)
+  const model = deps.buildModel(apiKey, baseUrl, modelId)
+  const prompt = buildPrompt(input.title, input.goal ?? DEFAULT_GOAL, input.content)
+  const result = await deps.generateText({
+    model,
+    prompt,
+    timeout: 1_200_000,
+  })
+
+  return logDistilledContent(input.storageContextId, modelId, parseDistilledContent(result.text))
+}
