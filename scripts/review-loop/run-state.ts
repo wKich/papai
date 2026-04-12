@@ -20,6 +20,11 @@ export const RunStateSchema = z.object({
   noProgressRounds: z.number().int().nonnegative(),
 })
 
+const PersistedRunStateSchema = RunStateSchema.omit({
+  reviewerSessionId: true,
+  fixerSessionId: true,
+})
+
 export interface RunState {
   runId: string
   runDir: string
@@ -77,7 +82,7 @@ export async function createRunState(config: ReviewLoopConfig, planPath: string)
 export async function loadRunState(workDir: string, runId: string): Promise<RunState> {
   const statePath = path.join(workDir, 'runs', runId, 'state.json')
   const runDir = path.dirname(statePath)
-  const state = RunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  const state = PersistedRunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
   const reviewerSessionPath = path.join(runDir, 'reviewer-session.json')
   const fixerSessionPath = path.join(runDir, 'fixer-session.json')
 
@@ -89,7 +94,8 @@ export async function loadRunState(workDir: string, runId: string): Promise<RunS
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
-  await writeFile(state.statePath, JSON.stringify(state, null, 2))
+  const { reviewerSessionId: _reviewerSessionId, fixerSessionId: _fixerSessionId, ...persistedState } = state
+  await writeFile(state.statePath, JSON.stringify(persistedState, null, 2))
   await writeSessionPointer(state.reviewerSessionPath, state.reviewerSessionId)
   await writeSessionPointer(state.fixerSessionPath, state.fixerSessionId)
 }

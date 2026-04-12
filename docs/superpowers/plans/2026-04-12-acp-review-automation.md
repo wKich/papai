@@ -618,14 +618,22 @@ import { createHash } from 'node:crypto'
 
 import type { ReviewerIssue } from './issue-schema.js'
 
-const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ')
+const normalize = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+const stripLineReferences = (value: string): string => value.replace(/\b(lines?|line)\s+\d+(?:\s*[-–]\s*\d+)?\b/gi, ' ')
 
 export function computeIssueFingerprint(issue: ReviewerIssue): string {
   const source = [
     normalize(issue.file),
-    `${issue.lineStart}-${issue.lineEnd}`,
     normalize(issue.title),
     normalize(issue.summary),
+    normalize(issue.whyItMatters),
+    normalize(stripLineReferences(issue.evidence)),
   ].join('|')
 
   return createHash('sha256').update(source).digest('hex').slice(0, 16)
@@ -655,6 +663,11 @@ export interface RunState {
   currentRound: number
   noProgressRounds: number
 }
+
+const PersistedRunStateSchema = RunStateSchema.omit({
+  reviewerSessionId: true,
+  fixerSessionId: true,
+})
 
 function makeRunId(): string {
   return new Date().toISOString().replace(/[:.]/g, '-')
@@ -693,11 +706,20 @@ export async function createRunState(config: ReviewLoopConfig, planPath: string)
 
 export async function loadRunState(workDir: string, runId: string): Promise<RunState> {
   const statePath = path.join(workDir, 'runs', runId, 'state.json')
-  return JSON.parse(await readFile(statePath, 'utf8')) as RunState
+  const runDir = path.dirname(statePath)
+  const state = PersistedRunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  return {
+    ...state,
+    reviewerSessionId: JSON.parse(await readFile(path.join(runDir, 'reviewer-session.json'), 'utf8')).sessionId,
+    fixerSessionId: JSON.parse(await readFile(path.join(runDir, 'fixer-session.json'), 'utf8')).sessionId,
+  } as RunState
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
-  await writeFile(state.statePath, JSON.stringify(state, null, 2))
+  const { reviewerSessionId: _reviewerSessionId, fixerSessionId: _fixerSessionId, ...persistedState } = state
+  await writeFile(state.statePath, JSON.stringify(persistedState, null, 2))
+  await writeFile(state.reviewerSessionPath, JSON.stringify({ sessionId: state.reviewerSessionId }, null, 2))
+  await writeFile(state.fixerSessionPath, JSON.stringify({ sessionId: state.fixerSessionId }, null, 2))
 }
 ```
 

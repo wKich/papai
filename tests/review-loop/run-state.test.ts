@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -55,7 +55,14 @@ test('run state persists session ids through pointer files', async () => {
     config,
     path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
   )
-  const persisted = z.object({ planPath: z.string() }).parse(JSON.parse(readFileSync(state.statePath, 'utf8')))
+  const persisted = z
+    .object({
+      planPath: z.string(),
+      statePath: z.string(),
+      reviewerSessionPath: z.string(),
+      fixerSessionPath: z.string(),
+    })
+    .parse(JSON.parse(readFileSync(state.statePath, 'utf8')))
   const reviewerSessionPointer = SessionPointerSchema.parse(JSON.parse(readFileSync(state.reviewerSessionPath, 'utf8')))
   const fixerSessionPointer = SessionPointerSchema.parse(JSON.parse(readFileSync(state.fixerSessionPath, 'utf8')))
 
@@ -63,6 +70,8 @@ test('run state persists session ids through pointer files', async () => {
   expect(persisted.planPath).toBe(
     path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
   )
+  expect('reviewerSessionId' in JSON.parse(readFileSync(state.statePath, 'utf8'))).toBe(false)
+  expect('fixerSessionId' in JSON.parse(readFileSync(state.statePath, 'utf8'))).toBe(false)
   expect(reviewerSessionPointer.sessionId).toBeNull()
   expect(fixerSessionPointer.sessionId).toBeNull()
   expect(existsSync(state.reviewerSessionPath)).toBe(true)
@@ -71,6 +80,21 @@ test('run state persists session ids through pointer files', async () => {
   state.reviewerSessionId = 'reviewer-session-123'
   state.fixerSessionId = 'fixer-session-456'
   await saveRunState(state)
+
+  writeFileSync(
+    state.statePath,
+    JSON.stringify(
+      {
+        ...JSON.parse(readFileSync(state.statePath, 'utf8')),
+        reviewerSessionId: 'stale-reviewer-session',
+        fixerSessionId: 'stale-fixer-session',
+      },
+      null,
+      2,
+    ),
+  )
+  writeFileSync(state.reviewerSessionPath, JSON.stringify({ sessionId: 'reviewer-session-123' }, null, 2))
+  writeFileSync(state.fixerSessionPath, JSON.stringify({ sessionId: 'fixer-session-456' }, null, 2))
 
   const reloaded = await loadRunState(config.workDir, state.runId)
   const savedReviewerSessionPointer = SessionPointerSchema.parse(
