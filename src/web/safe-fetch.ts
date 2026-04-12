@@ -200,7 +200,7 @@ function resolveRedirectUrl(response: Response, url: URL): URL {
 }
 
 function getAllowedContentType(response: Response): { contentType: string; maxBytes: number } {
-  const contentType = (response.headers.get('content-type') ?? '').split(';', 1)[0]?.trim() ?? ''
+  const contentType = (response.headers.get('content-type') ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? ''
   if (contentType === 'application/pdf') {
     return { contentType, maxBytes: MAX_PDF_BYTES }
   }

@@ -81,6 +81,28 @@ describe('safeFetchContent', () => {
     }
   })
 
+  test('accepts content types case-insensitively', async () => {
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock(
+        (..._args: Parameters<typeof fetch>): Promise<Response> =>
+          Promise.resolve(
+            new Response('<html><body>Hello</body></html>', {
+              status: 200,
+              headers: { 'content-type': 'TEXT/HTML; charset=utf-8' },
+            }),
+          ),
+      ),
+      assertPublicUrl: (): Promise<void> => Promise.resolve(),
+    }
+
+    await expect(
+      safeFetchContent('https://example.com/mixed-case', { abortSignal: AbortSignal.timeout(1000) }, deps),
+    ).resolves.toMatchObject({
+      finalUrl: 'https://example.com/mixed-case',
+      contentType: 'text/html',
+    })
+  })
+
   test('rejects oversized text bodies', async () => {
     const deps: SafeFetchDeps = {
       fetch: createFetchMock(
