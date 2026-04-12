@@ -233,7 +233,10 @@ function rethrowSafeFetchError(error: unknown): never {
   if (error instanceof SafeFetchClassifiedError) {
     throw error
   }
-  throw error
+  if (error instanceof Error) {
+    throwWebFetchError(webFetchError.upstreamError(), error.message)
+  }
+  throwWebFetchError(webFetchError.upstreamError(), String(error))
 }
 
 export async function safeFetchContent(

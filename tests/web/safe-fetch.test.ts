@@ -161,4 +161,28 @@ describe('safeFetchContent', () => {
       })
     }
   })
+
+  test('classifies non-abort fetch failures as upstream errors', async () => {
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock((_input: Parameters<typeof fetch>[0]): Promise<Response> => {
+        throw new TypeError('fetch failed')
+      }),
+      assertPublicUrl: (): Promise<void> => Promise.resolve(),
+    }
+
+    try {
+      await safeFetchContent('https://example.com/down', { abortSignal: AbortSignal.timeout(1000) }, deps)
+      throw new Error('Expected safeFetchContent to reject')
+    } catch (error) {
+      expectAppError(error, getUserMessage(webFetchError.upstreamError()))
+      if (!hasAppError(error)) {
+        throw new Error('Expected error with appError', { cause: error })
+      }
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'upstream-error',
+        appError: webFetchError.upstreamError(),
+      })
+    }
+  })
 })
