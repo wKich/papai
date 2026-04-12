@@ -146,7 +146,12 @@ export interface TaskProvider extends TaskProviderPhaseFive {
 
   listTasks(projectId: string, params?: ListTasksParams): Promise<TaskListItem[]>
 
-  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]>
+  searchTasks(params: {
+    query: string
+    projectId?: string
+    assigneeId?: string
+    limit?: number
+  }): Promise<TaskSearchResult[]>
 
   // --- Optional: tasks.delete ---
 

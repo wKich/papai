@@ -97,7 +97,12 @@ export class KaneoProvider implements TaskProvider {
     return kaneoListTasks(this.config, this.workspaceId, projectId, params)
   }
 
-  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
+  searchTasks(params: {
+    query: string
+    projectId?: string
+    assigneeId?: string
+    limit?: number
+  }): Promise<TaskSearchResult[]> {
     return kaneoSearchTasks(this.config, this.workspaceId, params)
   }
 

@@ -14,12 +14,12 @@ export type { MakeToolsOptions, ToolMode }
  * makeTools(provider, { storageContextId: 'user-1:group-1', chatUserId: 'user-1', mode: 'normal' })
  * ```
  */
-export function makeTools(provider: TaskProvider, options: MakeToolsOptions = {}): ToolSet {
-  const storageContextId = options.storageContextId
-  const chatUserId = options.chatUserId ?? storageContextId
+export function makeTools(provider: TaskProvider, options?: MakeToolsOptions): ToolSet {
+  const storageContextId = options?.storageContextId
+  const chatUserId = options?.chatUserId
   const contextId = storageContextId
-  const mode = options.mode ?? 'normal'
-  const contextType = options.contextType
+  const mode = options?.mode ?? 'normal'
+  const contextType = options?.contextType
 
   return buildTools(provider, chatUserId, contextId, mode, contextType)
 }

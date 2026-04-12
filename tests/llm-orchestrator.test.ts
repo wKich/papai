@@ -620,8 +620,9 @@ describe('processMessage', () => {
     const USERNAME = 'jsmith'
 
     beforeEach(() => {
-      // Clear any existing identity mapping for the group context
-      clearIdentityMapping(GROUP_CTX, 'mock')
+      // Clear any existing identity mapping for the user (not group)
+      // Identity mappings are per-user, stored under chatUserId
+      clearIdentityMapping(USER_ID, 'mock')
     })
 
     test('skips auto-link when username is null', async () => {
@@ -667,10 +668,10 @@ describe('processMessage', () => {
     test('skips auto-link when mapping already exists', async () => {
       seedConfigForContext(GROUP_CTX)
 
-      // Pre-set a mapping
+      // Pre-set a mapping under the user ID (not group context)
       const { setIdentityMapping } = await import('../src/identity/mapping.js')
       setIdentityMapping({
-        contextId: GROUP_CTX,
+        contextId: USER_ID,
         providerName: 'mock',
         providerUserId: 'existing-user',
         providerUserLogin: 'existing',
@@ -694,8 +695,8 @@ describe('processMessage', () => {
       const { reply } = createMockReply()
       await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
 
-      // Existing mapping should be preserved
-      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      // Existing mapping should be preserved (stored under user ID)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping?.providerUserLogin).toBe('existing')
       expect(mapping?.matchMethod).toBe('manual_nl')
     })
@@ -718,8 +719,8 @@ describe('processMessage', () => {
       const { reply } = createMockReply()
       await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
 
-      // Auto-link should have created a mapping
-      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      // Auto-link should have created a mapping under the user ID (not group context)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
       expect(mapping?.providerUserLogin).toBe(USERNAME)
       expect(mapping?.matchMethod).toBe('auto')
@@ -744,8 +745,8 @@ describe('processMessage', () => {
       const { reply } = createMockReply()
       await processMessage(reply, GROUP_CTX, USER_ID, 'unknownuser', 'hello', 'group')
 
-      // Should store unmatched mapping
-      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      // Should store unmatched mapping under the user ID (not group context)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
       expect(mapping?.providerUserId).toBeNull()
       expect(mapping?.matchMethod).toBe('unmatched')

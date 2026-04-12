@@ -198,9 +198,9 @@ export async function listYouTrackTasks(
 
 export async function searchYouTrackTasks(
   config: YouTrackConfig,
-  params: { query: string; projectId?: string; limit?: number },
+  params: { query: string; projectId?: string; assigneeId?: string; limit?: number },
 ): Promise<TaskSearchResult[]> {
-  log.debug({ query: params.query, projectId: params.projectId }, 'searchTasks')
+  log.debug({ query: params.query, projectId: params.projectId, assigneeId: params.assigneeId }, 'searchTasks')
   try {
     let query = params.query
     if (params.projectId !== undefined) {
@@ -211,11 +211,15 @@ export async function searchYouTrackTasks(
       const project = z.object({ shortName: z.string() }).parse(projectRaw)
       query = `project: {${project.shortName}} ${query}`
     }
+    // Add assignee filter to YouTrack query syntax
+    if (params.assigneeId !== undefined) {
+      query = `assignee: {${params.assigneeId}} ${query}`
+    }
     const raw = await youtrackFetch(config, 'GET', '/api/issues', {
       query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
     })
     const issues = IssueListSchema.array().parse(raw)
-    log.info({ query: params.query, count: issues.length }, 'Tasks searched')
+    log.info({ query: params.query, assigneeId: params.assigneeId, count: issues.length }, 'Tasks searched')
     return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
   } catch (error) {
     log.error(
@@ -223,6 +227,7 @@ export async function searchYouTrackTasks(
         error: error instanceof Error ? error.message : String(error),
         query: params.query,
         projectId: params.projectId,
+        assigneeId: params.assigneeId,
       },
       'Failed to search tasks',
     )

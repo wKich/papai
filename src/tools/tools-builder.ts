@@ -192,14 +192,16 @@ function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
-function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
+function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
   if (provider.listUsers !== undefined) {
     tools['find_user'] = makeFindUserTool(provider)
   }
   if (provider.capabilities.has('tasks.watchers')) {
+    // NC1 Fix: Pass chatUserId (actual user ID) instead of contextId for identity resolution
+    // contextId may be a group ID, but identity mappings are keyed by user ID
     tools['list_watchers'] = makeListWatchersTool(provider)
-    tools['add_watcher'] = makeAddWatcherTool(provider, contextId)
-    tools['remove_watcher'] = makeRemoveWatcherTool(provider, contextId)
+    tools['add_watcher'] = makeAddWatcherTool(provider, chatUserId)
+    tools['remove_watcher'] = makeRemoveWatcherTool(provider, chatUserId)
   }
   if (provider.capabilities.has('tasks.votes')) {
     tools['add_vote'] = makeAddVoteTool(provider)
@@ -274,14 +276,15 @@ export function buildTools(
   mode: ToolMode,
   contextType?: ContextType,
 ): ToolSet {
-  const tools = makeCoreTools(provider, chatUserId)
+  // NI2 Fix: Pass contextId as storageContextId for timezone config lookup
+  const tools = makeCoreTools(provider, chatUserId, contextId)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)
   maybeAddLabelTools(tools, provider)
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
   maybeAddDeleteTool(tools, provider)
-  maybeAddCollaborationTaskTools(tools, provider, contextId)
+  maybeAddCollaborationTaskTools(tools, provider, chatUserId)
   maybeAddAttachmentTools(tools, provider, chatUserId)
   maybeAddWorkItemTools(tools, provider)
   maybeAddCountTasksTool(tools, provider)

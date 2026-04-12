@@ -5,7 +5,7 @@ import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
-describe('search_tasks identity resolution', () => {
+describe('search_tasks', () => {
   beforeEach(async () => {
     mockLogger()
     await setupTestDb()
@@ -16,189 +16,145 @@ describe('search_tasks identity resolution', () => {
     mock.restore()
   })
 
-  test('should inject identity into "my tasks" query', async () => {
-    setIdentityMapping({
-      contextId: 'test-search-identity',
-      providerName: 'mock',
-      providerUserId: 'resolved-user-789',
-      providerUserLogin: 'jsmith',
-      displayName: 'John Smith',
-      matchMethod: 'manual_nl',
-      confidence: 100,
+  describe('identity resolution via assigneeId', () => {
+    test('should resolve "me" to login when provider prefers login', async () => {
+      setIdentityMapping({
+        contextId: 'test-search-identity',
+        providerName: 'mock',
+        providerUserId: 'resolved-user-789',
+        providerUserLogin: 'jsmith',
+        displayName: 'John Smith',
+        matchMethod: 'manual_nl',
+        confidence: 100,
+      })
+
+      let capturedAssigneeId: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedAssigneeId = params.assigneeId
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
+
+      const provider = createMockProvider({ searchTasks, preferredUserIdentifier: 'login' })
+      const tool = makeSearchTasksTool(provider, 'test-search-identity')
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'tasks', assigneeId: 'me' }, { toolCallId: '1', messages: [] })
+
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedAssigneeId).toBe('jsmith')
     })
 
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+    test('should resolve "me" to userId when provider prefers id', async () => {
+      setIdentityMapping({
+        contextId: 'test-search-identity',
+        providerName: 'mock',
+        providerUserId: 'resolved-user-789',
+        providerUserLogin: 'jsmith',
+        displayName: 'John Smith',
+        matchMethod: 'manual_nl',
+        confidence: 100,
+      })
+
+      let capturedAssigneeId: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedAssigneeId = params.assigneeId
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
+
+      const provider = createMockProvider({ searchTasks, preferredUserIdentifier: 'id' })
+      const tool = makeSearchTasksTool(provider, 'test-search-identity')
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'tasks', assigneeId: 'me' }, { toolCallId: '1', messages: [] })
+
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedAssigneeId).toBe('resolved-user-789')
     })
 
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
+    test('should pass through query unchanged', async () => {
+      let capturedQuery: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedQuery = params.query
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
 
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'my tasks' }, { toolCallId: '1', messages: [] })
+      const provider = createMockProvider({ searchTasks })
+      const tool = makeSearchTasksTool(provider, 'test-search-identity')
 
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('jsmith tasks')
-  })
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'my tasks', assigneeId: 'me' }, { toolCallId: '1', messages: [] })
 
-  test('should inject identity into "show me tasks" query', async () => {
-    setIdentityMapping({
-      contextId: 'test-search-identity',
-      providerName: 'mock',
-      providerUserId: 'resolved-user-789',
-      providerUserLogin: 'jsmith',
-      displayName: 'John Smith',
-      matchMethod: 'manual_nl',
-      confidence: 100,
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedQuery).toBe('my tasks')
     })
 
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+    test('should pass through assigneeId unchanged when not "me"', async () => {
+      let capturedAssigneeId: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedAssigneeId = params.assigneeId
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
+
+      const provider = createMockProvider({ searchTasks })
+      const tool = makeSearchTasksTool(provider, 'test-search-identity')
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'tasks', assigneeId: 'user-123' }, { toolCallId: '1', messages: [] })
+
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedAssigneeId).toBe('user-123')
     })
 
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
+    test('should not resolve when userId is undefined', async () => {
+      let capturedAssigneeId: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedAssigneeId = params.assigneeId
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
 
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'show me tasks' }, { toolCallId: '1', messages: [] })
+      const provider = createMockProvider({ searchTasks })
+      const tool = makeSearchTasksTool(provider, undefined)
 
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('show jsmith tasks')
-  })
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'tasks', assigneeId: 'me' }, { toolCallId: '1', messages: [] })
 
-  test('should inject identity into "MY TASKS" (uppercase) query', async () => {
-    setIdentityMapping({
-      contextId: 'test-search-identity',
-      providerName: 'mock',
-      providerUserId: 'resolved-user-789',
-      providerUserLogin: 'jsmith',
-      displayName: 'John Smith',
-      matchMethod: 'manual_nl',
-      confidence: 100,
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedAssigneeId).toBe('me')
     })
 
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+    test('should not resolve when no identity mapping exists', async () => {
+      let capturedAssigneeId: string | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedAssigneeId = params.assigneeId
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
+
+      const provider = createMockProvider({ searchTasks })
+      const tool = makeSearchTasksTool(provider, 'no-mapping-user')
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'tasks', assigneeId: 'me' }, { toolCallId: '1', messages: [] })
+
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedAssigneeId).toBe('me')
     })
 
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
+    test('should work without assigneeId', async () => {
+      let capturedParams: { query: string; assigneeId?: string } | undefined
+      const searchTasks = mock((params: { query: string; projectId?: string; assigneeId?: string; limit?: number }) => {
+        capturedParams = params
+        return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      })
 
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'MY TASKS' }, { toolCallId: '1', messages: [] })
+      const provider = createMockProvider({ searchTasks })
+      const tool = makeSearchTasksTool(provider, 'test-search-identity')
 
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('jsmith TASKS')
-  })
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ query: 'bug fix' }, { toolCallId: '1', messages: [] })
 
-  test('should pass through query unchanged when no "my" or "me" in query', async () => {
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
+      expect(searchTasks).toHaveBeenCalledTimes(1)
+      expect(capturedParams?.query).toBe('bug fix')
+      expect(capturedParams?.assigneeId).toBeUndefined()
     })
-
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
-
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'bug fix' }, { toolCallId: '1', messages: [] })
-
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('bug fix')
-  })
-
-  test('should pass through query unchanged when userId is undefined', async () => {
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
-    })
-
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, undefined)
-
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'my tasks' }, { toolCallId: '1', messages: [] })
-
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('my tasks')
-  })
-
-  test('should pass through query unchanged when no identity mapping exists', async () => {
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
-    })
-
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'no-mapping-user')
-
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'my tasks' }, { toolCallId: '1', messages: [] })
-
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('my tasks')
-  })
-
-  test('should preserve original query case when replacing', async () => {
-    setIdentityMapping({
-      contextId: 'test-search-identity',
-      providerName: 'mock',
-      providerUserId: 'resolved-user-789',
-      providerUserLogin: 'jsmith',
-      displayName: 'John Smith',
-      matchMethod: 'manual_nl',
-      confidence: 100,
-    })
-
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
-    })
-
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
-
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'Find My Open Tasks' }, { toolCallId: '1', messages: [] })
-
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('Find jsmith Open Tasks')
-  })
-
-  test('should replace multiple occurrences of "my"', async () => {
-    setIdentityMapping({
-      contextId: 'test-search-identity',
-      providerName: 'mock',
-      providerUserId: 'resolved-user-789',
-      providerUserLogin: 'jsmith',
-      displayName: 'John Smith',
-      matchMethod: 'manual_nl',
-      confidence: 100,
-    })
-
-    let capturedQuery: string | undefined
-    const searchTasks = mock((params: { query: string; projectId?: string; limit?: number }) => {
-      capturedQuery = params.query
-      return Promise.resolve([{ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }])
-    })
-
-    const provider = createMockProvider({ searchTasks })
-    const tool = makeSearchTasksTool(provider, 'test-search-identity')
-
-    if (!tool.execute) throw new Error('Tool execute is undefined')
-    await tool.execute({ query: 'my tasks and my bugs' }, { toolCallId: '1', messages: [] })
-
-    expect(searchTasks).toHaveBeenCalledTimes(1)
-    expect(capturedQuery).toBe('jsmith tasks and jsmith bugs')
   })
 })

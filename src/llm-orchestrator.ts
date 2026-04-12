@@ -135,19 +135,19 @@ const invokeModel = async (
 }
 
 const maybeAutoLinkIdentity = async (
-  contextId: string,
+  chatUserId: string,
   username: string | null,
   provider: TaskProvider,
 ): Promise<void> => {
   if (username === null || provider.identityResolver === undefined) return
-  const existingMapping = getIdentityMapping(contextId, provider.name)
+  const existingMapping = getIdentityMapping(chatUserId, provider.name)
   if (existingMapping !== null) return
-  log.debug({ contextId, username }, 'Attempting auto-link for first group interaction')
-  const autoLinkResult = await attemptAutoLink(contextId, username, provider)
+  log.debug({ chatUserId, username }, 'Attempting auto-link for first group interaction')
+  const autoLinkResult = await attemptAutoLink(chatUserId, username, provider)
   if (autoLinkResult.type === 'found') {
-    log.info({ contextId, login: autoLinkResult.identity.login }, 'Auto-linked user on first interaction')
+    log.info({ chatUserId, login: autoLinkResult.identity.login }, 'Auto-linked user on first interaction')
   } else {
-    log.debug({ contextId, username, result: autoLinkResult.type }, 'Auto-link did not find match')
+    log.debug({ chatUserId, username, result: autoLinkResult.type }, 'Auto-link did not find match')
   }
 }
 
@@ -175,8 +175,8 @@ const callLlm = async (
 
   // Auto-link on first group chat interaction (skip for DMs)
   // DMs use userId as contextId; groups use groupId (different from user's ID)
-  // We detect groups by checking if username exists and no mapping exists yet
-  await maybeAutoLinkIdentity(contextId, username, provider)
+  // Identity mappings are per-user, so we use chatUserId (not contextId) for storage
+  await maybeAutoLinkIdentity(chatUserId, username, provider)
 
   const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'

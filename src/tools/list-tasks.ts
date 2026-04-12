@@ -41,7 +41,7 @@ async function resolveAssigneeFilter(
   }
 }
 
-export function makeListTasksTool(provider: TaskProvider, userId?: string): ToolSet[string] {
+export function makeListTasksTool(provider: TaskProvider, userId?: string, storageContextId?: string): ToolSet[string] {
   return tool({
     description:
       'List tasks in a project. Optional filters match the upstream @kaneo/mcp list_tasks tool (status, priority, assignee, pagination, sort, due-date range).',
@@ -70,7 +70,10 @@ export function makeListTasksTool(provider: TaskProvider, userId?: string): Tool
 
         const tasks = await provider.listTasks(projectId, resolvedParams)
         log.info({ projectId, taskCount: tasks.length, filters: rest }, 'Tasks listed via tool')
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
+        // Falls back to userId for backwards compatibility, then UTC
+        const configKey = storageContextId ?? userId
+        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
         return tasks.map((task) => ({ ...task, dueDate: utcToLocal(task.dueDate, timezone) }))
       } catch (error) {
         log.error(

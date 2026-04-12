@@ -83,13 +83,14 @@ export async function kaneoListTasks(
 export async function kaneoSearchTasks(
   config: KaneoConfig,
   workspaceId: string,
-  params: { query: string; projectId?: string; limit?: number },
+  params: { query: string; projectId?: string; assigneeId?: string; limit?: number },
 ): Promise<TaskSearchResult[]> {
   const results = await searchTasks({
     config,
     query: params.query,
     workspaceId,
     projectId: params.projectId,
+    assigneeId: params.assigneeId,
     limit: params.limit,
   })
   return results.map((t) => mapTaskSearchResult(t, buildTaskUrl(config.baseUrl, workspaceId, t.projectId ?? '', t.id)))

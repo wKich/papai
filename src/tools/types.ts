@@ -22,7 +22,7 @@ export type MakeToolsOptions = {
    * In DMs, this is the same as storageContextId.
    * In groups, this is the actual user ID while storageContextId is the group ID.
    */
-  chatUserId?: string
+  chatUserId: string
   /**
    * Tool mode: 'normal' (default) includes deferred prompt tools,
    * 'proactive' excludes them for proactive delivery contexts.

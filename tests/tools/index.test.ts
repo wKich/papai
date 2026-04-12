@@ -13,29 +13,29 @@ describe('makeTools', () => {
   const provider = createMockProvider()
 
   test('includes get_current_time tool', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('get_current_time')
   })
 
   test('get_current_time tool has correct structure', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools['get_current_time']?.description).toContain('current date and time')
   })
 
   test('excludes lookup_group_history when storageContextId is undefined', () => {
-    const tools = makeTools(provider)
+    const tools = makeTools(provider, { chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('lookup_group_history')
   })
 
   test('excludes lookup_group_history in DM contexts (plain userId)', () => {
     // DMs use userId as storageContextId without colon separator
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('lookup_group_history')
   })
 
   test('includes lookup_group_history in group/thread contexts (contains colon)', () => {
     // Groups use userId:groupId format (contains colon separator)
-    const tools = makeTools(provider, { storageContextId: 'user-1:group-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1:group-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('lookup_group_history')
     expect(tools['lookup_group_history']?.description).toContain('main group chat')
   })
@@ -49,6 +49,7 @@ describe('makeTools', () => {
       })
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'user-123:group-123',
+        chatUserId: 'user-123',
         contextType: 'group',
       })
       expect(tools['set_my_identity']).toBeDefined()
@@ -62,6 +63,7 @@ describe('makeTools', () => {
       })
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'user-123:group-123',
+        chatUserId: 'user-123',
         contextType: 'group',
       })
       expect(tools['clear_my_identity']).toBeDefined()
@@ -75,13 +77,14 @@ describe('makeTools', () => {
       })
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'user-123',
+        chatUserId: 'user-123',
         contextType: 'dm',
       })
       expect(tools['set_my_identity']).toBeUndefined()
       expect(tools['clear_my_identity']).toBeUndefined()
     })
 
-    it('should exclude identity tools when storageContextId is undefined', () => {
+    it('should exclude identity tools when chatUserId is undefined', () => {
       const providerWithResolver = createMockProvider({
         identityResolver: {
           searchUsers: () => Promise.resolve([]),
@@ -98,6 +101,7 @@ describe('makeTools', () => {
       })
       const tools = makeTools(providerWithoutResolver, {
         storageContextId: 'user-123:group-123',
+        chatUserId: 'user-123',
         contextType: 'group',
       })
       expect(tools['set_my_identity']).toBeUndefined()
@@ -106,7 +110,7 @@ describe('makeTools', () => {
   })
 
   test('normal mode includes deferred prompt tools', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('create_deferred_prompt')
     expect(tools).toHaveProperty('update_deferred_prompt')
     expect(tools).toHaveProperty('list_deferred_prompts')
@@ -115,7 +119,7 @@ describe('makeTools', () => {
   })
 
   test('proactive mode excludes deferred prompt tools', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1', mode: 'proactive' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1', mode: 'proactive' })
     expect(tools).not.toHaveProperty('create_deferred_prompt')
     expect(tools).not.toHaveProperty('update_deferred_prompt')
     expect(tools).not.toHaveProperty('list_deferred_prompts')
@@ -124,7 +128,7 @@ describe('makeTools', () => {
   })
 
   test('proactive mode still includes core task tools', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1', mode: 'proactive' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1', mode: 'proactive' })
     expect(tools).toHaveProperty('create_task')
     expect(tools).toHaveProperty('update_task')
     expect(tools).toHaveProperty('search_tasks')
@@ -133,23 +137,23 @@ describe('makeTools', () => {
   })
 
   test('default mode is normal (includes deferred tools)', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('create_deferred_prompt')
   })
 
-  test('no storageContextId skips deferred tools', () => {
+  test('no chatUserId skips deferred tools', () => {
     const tools = makeTools(provider)
     expect(tools).not.toHaveProperty('create_deferred_prompt')
   })
 
-  test('includes attachment tools when capabilities present and storageContextId given', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+  test('includes attachment tools when capabilities present and chatUserId given', () => {
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('list_attachments')
     expect(tools).toHaveProperty('upload_attachment')
     expect(tools).toHaveProperty('remove_attachment')
   })
 
-  test('excludes attachment tools when no storageContextId', () => {
+  test('excludes attachment tools when no chatUserId', () => {
     const tools = makeTools(provider)
     expect(tools).not.toHaveProperty('list_attachments')
     expect(tools).not.toHaveProperty('upload_attachment')
@@ -157,7 +161,7 @@ describe('makeTools', () => {
   })
 
   test('includes work item tools when capabilities present', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('list_work')
     expect(tools).toHaveProperty('log_work')
     expect(tools).toHaveProperty('update_work')
@@ -165,12 +169,15 @@ describe('makeTools', () => {
   })
 
   test('includes count_tasks when provider has countTasks method and capability', () => {
-    const tools = makeTools(createMockProvider(), { storageContextId: 'user-1' })
+    const tools = makeTools(createMockProvider(), { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('count_tasks')
   })
 
   test('excludes count_tasks when provider has no countTasks method', () => {
-    const tools = makeTools(createMockProvider({ countTasks: undefined }), { storageContextId: 'user-1' })
+    const tools = makeTools(createMockProvider({ countTasks: undefined }), {
+      storageContextId: 'user-1',
+      chatUserId: 'user-1',
+    })
     expect(tools).not.toHaveProperty('count_tasks')
   })
 
@@ -178,12 +185,12 @@ describe('makeTools', () => {
     const limitedProvider = createMockProvider({
       capabilities: new Set([...provider.capabilities].filter((capability) => capability !== 'tasks.count')),
     })
-    const tools = makeTools(limitedProvider, { storageContextId: 'user-1' })
+    const tools = makeTools(limitedProvider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('count_tasks')
   })
 
   test('includes collaboration tools when capabilities and helpers are present', () => {
-    const tools = makeTools(provider, { storageContextId: 'user-1' })
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('find_user')
     expect(tools).toHaveProperty('list_watchers')
     expect(tools).toHaveProperty('add_watcher')
@@ -204,7 +211,7 @@ describe('makeTools', () => {
       ...rest,
       capabilities: new Set([...capabilities].filter((c) => !c.startsWith('attachments'))),
     }
-    const tools = makeTools(limitedProvider as typeof provider, { storageContextId: 'user-1' })
+    const tools = makeTools(limitedProvider as typeof provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('list_attachments')
     expect(tools).not.toHaveProperty('upload_attachment')
     expect(tools).not.toHaveProperty('remove_attachment')
@@ -216,7 +223,7 @@ describe('makeTools', () => {
       ...rest,
       capabilities: new Set([...capabilities].filter((c) => !c.startsWith('workItems'))),
     }
-    const tools = makeTools(limitedProvider as typeof provider, { storageContextId: 'user-1' })
+    const tools = makeTools(limitedProvider as typeof provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('list_work')
     expect(tools).not.toHaveProperty('log_work')
     expect(tools).not.toHaveProperty('update_work')
@@ -224,7 +231,10 @@ describe('makeTools', () => {
   })
 
   test('excludes find_user when provider has no listUsers helper', () => {
-    const tools = makeTools(createMockProvider({ listUsers: undefined }), { storageContextId: 'user-1' })
+    const tools = makeTools(createMockProvider({ listUsers: undefined }), {
+      storageContextId: 'user-1',
+      chatUserId: 'user-1',
+    })
     expect(tools).not.toHaveProperty('find_user')
   })
 
@@ -241,7 +251,7 @@ describe('makeTools', () => {
         ),
       ),
     })
-    const tools = makeTools(limitedProvider, { storageContextId: 'user-1' })
+    const tools = makeTools(limitedProvider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('list_watchers')
     expect(tools).not.toHaveProperty('add_watcher')
     expect(tools).not.toHaveProperty('remove_watcher')
@@ -255,9 +265,10 @@ describe('makeTools', () => {
     expect(tools).not.toHaveProperty('remove_project_member')
   })
 
-  test('includes memos, recurring, and instructions tools when storageContextId provided', () => {
+  test('includes memos, recurring, and instructions tools when chatUserId provided', () => {
     const options: MakeToolsOptions = {
       storageContextId: 'user-1',
+      chatUserId: 'user-1',
     }
     const tools = makeTools(provider, options)
     expect(tools).toHaveProperty('save_memo')
@@ -267,6 +278,7 @@ describe('makeTools', () => {
   })
 
   test('excludes user-scoped tools when storageContextId is undefined', () => {
+    // When storageContextId is undefined, user-scoped tools should be excluded
     const tools = makeTools(provider)
     expect(tools).not.toHaveProperty('save_memo')
     expect(tools).not.toHaveProperty('create_recurring_task')
@@ -291,17 +303,21 @@ describe('makeTools', () => {
       expect(tools['clear_my_identity']).toBeDefined()
     })
 
-    it('should fall back to storageContextId when chatUserId not provided', () => {
+    it('should work when chatUserId equals storageContextId in DM contexts', () => {
       const providerWithResolver = createMockProvider({
         identityResolver: {
           searchUsers: () => Promise.resolve([]),
         },
       })
+      // In a DM: storageContextId and chatUserId are the same
       const tools = makeTools(providerWithResolver, {
         storageContextId: 'user-123',
-        contextType: 'group',
+        chatUserId: 'user-123',
+        contextType: 'dm',
       })
-      expect(tools['set_my_identity']).toBeDefined()
+      // Identity tools not available in DMs by design
+      expect(tools['set_my_identity']).toBeUndefined()
+      expect(tools['clear_my_identity']).toBeUndefined()
     })
   })
 })

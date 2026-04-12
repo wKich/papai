@@ -9,13 +9,13 @@ import { makeListTasksTool } from './list-tasks.js'
 import { makeSearchTasksTool } from './search-tasks.js'
 import { makeUpdateTaskTool } from './update-task.js'
 
-export function makeCoreTools(provider: TaskProvider, userId?: string): ToolSet {
+export function makeCoreTools(provider: TaskProvider, userId?: string, storageContextId?: string): ToolSet {
   return {
-    create_task: makeCreateTaskTool(provider, userId),
-    update_task: makeUpdateTaskTool(provider, completionHook, userId),
+    create_task: makeCreateTaskTool(provider, userId, storageContextId),
+    update_task: makeUpdateTaskTool(provider, completionHook, userId, storageContextId),
     search_tasks: makeSearchTasksTool(provider, userId),
-    list_tasks: makeListTasksTool(provider, userId),
-    get_task: makeGetTaskTool(provider, userId),
+    list_tasks: makeListTasksTool(provider, userId, storageContextId),
+    get_task: makeGetTaskTool(provider, userId, storageContextId),
     get_current_time: makeGetCurrentTimeTool(userId),
   }
 }

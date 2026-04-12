@@ -14,26 +14,25 @@ export function makeSearchTasksTool(provider: TaskProvider, userId?: string): To
     inputSchema: z.object({
       query: z.string().describe('Search keyword or phrase'),
       projectId: z.string().optional().describe('Filter by project ID'),
+      assigneeId: z.string().optional().describe('Filter by assignee user ID, or "me" to filter by your own tasks'),
       limit: z.number().optional().describe('Maximum number of results to return'),
     }),
-    execute: async ({ query, projectId, limit }) => {
+    execute: async ({ query, projectId, assigneeId, limit }) => {
       try {
-        let resolvedQuery = query
+        let resolvedAssigneeId = assigneeId
 
-        // Resolve identity references in query
-        if (userId !== undefined && /\b(my|me)\b/i.test(query)) {
+        // Resolve "me" reference using preferredUserIdentifier (same pattern as list_tasks)
+        if (assigneeId !== undefined && assigneeId.toLowerCase() === 'me' && userId !== undefined) {
           const identity = await resolveMeReference(userId, provider)
           if (identity.type === 'found') {
-            // Replace "my" and "me" references with actual user login
-            // Use a callback to preserve the original casing of surrounding text
-            resolvedQuery = query.replace(/\bmy\b/gi, identity.identity.login)
-            resolvedQuery = resolvedQuery.replace(/\bme\b/gi, identity.identity.login)
-            log.debug({ userId, originalQuery: query, resolvedQuery }, 'Resolved identity in search query')
+            resolvedAssigneeId =
+              provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
+            log.debug({ userId, resolvedAssigneeId }, 'Resolved identity for assignee filter')
           }
         }
 
-        const tasks = await provider.searchTasks({ query: resolvedQuery, projectId, limit })
-        log.info({ query: resolvedQuery, resultCount: tasks.length }, 'Tasks searched via tool')
+        const tasks = await provider.searchTasks({ query, projectId, assigneeId: resolvedAssigneeId, limit })
+        log.info({ query, assigneeId: resolvedAssigneeId, resultCount: tasks.length }, 'Tasks searched via tool')
         return tasks
       } catch (error) {
         log.error(

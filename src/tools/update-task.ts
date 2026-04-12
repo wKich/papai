@@ -54,13 +54,17 @@ export function makeUpdateTaskTool(
   provider: TaskProvider,
   completionHook?: CompletionHookFn,
   userId?: string,
+  storageContextId?: string,
 ): ToolSet[string] {
   return tool({
     description: "Update an existing task's status, priority, assignee, due date, title, description, or project.",
     inputSchema,
     execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId }) => {
       try {
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
+        // Falls back to userId for backwards compatibility, then UTC
+        const configKey = storageContextId ?? userId
+        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
         const resolvedDueDate =
           dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
 
