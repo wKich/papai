@@ -1,6 +1,6 @@
 const TRACKING_PARAM_PATTERNS = [/^utm_/i, /^fbclid$/i, /^gclid$/i] as const
 
-export function isTrackingParam(key: string): boolean {
+function isTrackingParam(key: string): boolean {
   return TRACKING_PARAM_PATTERNS.some((pattern) => pattern.test(key))
 }
 

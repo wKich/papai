@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, lt, sql } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../db/drizzle.js'
 import { webRateLimit } from '../db/schema.js'
@@ -13,34 +13,37 @@ const LIMIT = 20
 export function consumeWebFetchQuota(actorId: string, nowMs: number = Date.now()): RateLimitResult {
   const db = getDrizzleDb()
   const windowStart = Math.floor(nowMs / WINDOW_MS) * WINDOW_MS
-  const existing = db
-    .select()
-    .from(webRateLimit)
-    .where(and(eq(webRateLimit.actorId, actorId), eq(webRateLimit.windowStart, windowStart)))
-    .get()
+  return db.transaction((tx) => {
+    tx.insert(webRateLimit).values({ actorId, windowStart, count: 0 }).onConflictDoNothing().run()
 
-  if (existing === undefined) {
-    db.insert(webRateLimit).values({ actorId, windowStart, count: 1 }).run()
+    const updated = tx
+      .update(webRateLimit)
+      .set({ count: sql`${webRateLimit.count} + 1` })
+      .where(
+        and(
+          eq(webRateLimit.actorId, actorId),
+          eq(webRateLimit.windowStart, windowStart),
+          lt(webRateLimit.count, LIMIT),
+        ),
+      )
+      .returning({ count: webRateLimit.count })
+      .get()
 
-    log.info({ actorId, windowStart, count: 1, remaining: LIMIT - 1 }, 'Consumed web fetch quota')
-    return { allowed: true, remaining: LIMIT - 1 }
-  }
+    if (updated !== undefined) {
+      const remaining = LIMIT - updated.count
 
-  if (existing.count >= LIMIT) {
+      log.info({ actorId, windowStart, count: updated.count, remaining }, 'Consumed web fetch quota')
+      return { allowed: true, remaining }
+    }
+
     const retryAfterSec = Math.ceil((windowStart + WINDOW_MS - nowMs) / 1000)
+    const existing = tx
+      .select({ count: webRateLimit.count })
+      .from(webRateLimit)
+      .where(and(eq(webRateLimit.actorId, actorId), eq(webRateLimit.windowStart, windowStart)))
+      .get()
 
-    log.warn({ actorId, windowStart, count: existing.count, retryAfterSec }, 'Web fetch quota exceeded')
+    log.warn({ actorId, windowStart, count: existing?.count ?? LIMIT, retryAfterSec }, 'Web fetch quota exceeded')
     return { allowed: false, remaining: 0, retryAfterSec }
-  }
-
-  const nextCount = existing.count + 1
-  const remaining = LIMIT - nextCount
-
-  db.update(webRateLimit)
-    .set({ count: nextCount })
-    .where(and(eq(webRateLimit.actorId, actorId), eq(webRateLimit.windowStart, windowStart)))
-    .run()
-
-  log.info({ actorId, windowStart, count: nextCount, remaining }, 'Consumed web fetch quota')
-  return { allowed: true, remaining }
+  })
 }

@@ -13,9 +13,10 @@ describe('consumeWebFetchQuota', () => {
 
   test('allows the first 20 requests in a window', () => {
     for (let index = 0; index < 20; index += 1) {
-      const result = consumeWebFetchQuota('actor-1', 0)
-
-      expect(result.allowed).toBe(true)
+      expect(consumeWebFetchQuota('actor-1', 0)).toEqual({
+        allowed: true,
+        remaining: 19 - index,
+      })
     }
   })
 
@@ -25,6 +26,18 @@ describe('consumeWebFetchQuota', () => {
     }
 
     expect(consumeWebFetchQuota('actor-1', 0)).toEqual({ allowed: false, remaining: 0, retryAfterSec: 300 })
+  })
+
+  test('reports the remaining time for a blocked mid-window request', () => {
+    for (let index = 0; index < 20; index += 1) {
+      consumeWebFetchQuota('actor-1', 0)
+    }
+
+    expect(consumeWebFetchQuota('actor-1', 60_000)).toEqual({
+      allowed: false,
+      remaining: 0,
+      retryAfterSec: 240,
+    })
   })
 
   test('resets quota after the window rolls over', () => {
