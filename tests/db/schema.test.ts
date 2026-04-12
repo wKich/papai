@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { eq, and } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../../src/db/drizzle.js'
-import { userIdentityMappings } from '../../src/db/schema.js'
+import { userIdentityMappings, webCache, webRateLimit } from '../../src/db/schema.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('userIdentityMappings', () => {
@@ -53,5 +53,18 @@ describe('userIdentityMappings', () => {
 
     // Cleanup
     db.delete(userIdentityMappings).where(eq(userIdentityMappings.contextId, 'test-user-123')).run()
+  })
+})
+
+describe('web fetch schema', () => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  it('exports the web fetch tables', () => {
+    expect(getDrizzleDb()).toBeDefined()
+    expect(webCache.urlHash).toBeDefined()
+    expect(webRateLimit.actorId).toBeDefined()
   })
 })
