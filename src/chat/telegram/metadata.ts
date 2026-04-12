@@ -11,7 +11,7 @@ export const telegramCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCap
 ])
 
 export const telegramTraits: ChatProviderTraits = {
-  observedGroupMessages: 'mentions_only',
+  observedGroupMessages: 'all',
   maxMessageLength: 4096,
   callbackDataMaxLength: 64,
 }

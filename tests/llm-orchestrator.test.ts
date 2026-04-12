@@ -17,6 +17,8 @@ import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { getIdentityMapping, clearIdentityMapping } from '../src/identity/mapping.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
+import type { TaskProvider } from '../src/providers/types.js'
+import type { MakeToolsOptions } from '../src/tools/index.js'
 import { setKaneoWorkspace } from '../src/users.js'
 
 const CTX_ID = 'ctx-1'
@@ -750,6 +752,78 @@ describe('processMessage', () => {
       expect(mapping).not.toBeNull()
       expect(mapping?.providerUserId).toBeNull()
       expect(mapping?.matchMethod).toBe('unmatched')
+    })
+  })
+
+  describe('tool cache isolation in group chats', () => {
+    const GROUP_CTX = 'group-shared-ctx'
+    const USER_A = 'user-a-123'
+    const USER_B = 'user-b-456'
+
+    test('group chat tools are cached per-user to prevent cross-user contamination', async () => {
+      // Seed config for the group context
+      seedConfigForContext(GROUP_CTX)
+
+      // Track how many times tools are built by capturing makeTools calls
+      let toolBuildCount = 0
+      const { makeTools: realMakeTools } = await import('../src/tools/index.js')
+
+      void mock.module('../src/tools/index.js', () => ({
+        makeTools: (provider: TaskProvider, options: MakeToolsOptions): unknown => {
+          toolBuildCount++
+          return realMakeTools(provider, options)
+        },
+      }))
+
+      const { reply: replyA } = createMockReply()
+      const { reply: replyB } = createMockReply()
+
+      // User A speaks first in group
+      await processMessage(replyA, GROUP_CTX, USER_A, null, 'hello from A', 'group')
+      expect(toolBuildCount).toBe(1)
+
+      // User B speaks in same group - should trigger NEW tool build with different user ID
+      await processMessage(replyB, GROUP_CTX, USER_B, null, 'hello from B', 'group')
+      expect(toolBuildCount).toBe(2)
+
+      // User A speaks again - should use cached tools
+      await processMessage(replyA, GROUP_CTX, USER_A, null, 'hello again A', 'group')
+      expect(toolBuildCount).toBe(2)
+
+      // User B speaks again - should use cached tools
+      await processMessage(replyB, GROUP_CTX, USER_B, null, 'hello again B', 'group')
+      expect(toolBuildCount).toBe(2)
+    })
+
+    test('DM tools are cached per-context without user suffix', async () => {
+      // In DMs, contextId === chatUserId, so caching by contextId is sufficient
+      seedConfigForContext('dm-ctx-1')
+      seedConfigForContext('dm-ctx-2')
+
+      let toolBuildCount = 0
+      const { makeTools: realMakeTools } = await import('../src/tools/index.js')
+
+      void mock.module('../src/tools/index.js', () => ({
+        makeTools: (provider: TaskProvider, options: MakeToolsOptions): unknown => {
+          toolBuildCount++
+          return realMakeTools(provider, options)
+        },
+      }))
+
+      const { reply: reply1 } = createMockReply()
+      const { reply: reply2 } = createMockReply()
+
+      // First DM user
+      await processMessage(reply1, 'dm-ctx-1', 'user-1', null, 'hello', 'dm')
+      expect(toolBuildCount).toBe(1)
+
+      // Second DM user - different context, should build new tools
+      await processMessage(reply2, 'dm-ctx-2', 'user-2', null, 'hello', 'dm')
+      expect(toolBuildCount).toBe(2)
+
+      // First DM user again - should use cache
+      await processMessage(reply1, 'dm-ctx-1', 'user-1', null, 'hello again', 'dm')
+      expect(toolBuildCount).toBe(2)
     })
   })
 })

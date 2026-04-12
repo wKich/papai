@@ -67,14 +67,17 @@ const getOrCreateTools = (
   provider: TaskProvider,
   contextType: 'dm' | 'group' | undefined,
 ): ToolSet => {
-  const cachedTools = getCachedTools(contextId)
+  // Security fix: In group chats, tools embed chatUserId-specific closures for "me" resolution.
+  // The cache key must include chatUserId to prevent cross-user contamination.
+  const cacheKey = contextType === 'group' ? `${contextId}:${chatUserId}` : contextId
+  const cachedTools = getCachedTools(cacheKey)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
-    log.debug({ contextId }, 'Using cached tools')
+    log.debug({ contextId, chatUserId }, 'Using cached tools')
     return cachedTools
   }
   log.debug({ contextId, chatUserId }, 'Building tools (cache miss)')
   const tools = makeTools(provider, { storageContextId: contextId, chatUserId, contextType })
-  setCachedTools(contextId, tools)
+  setCachedTools(cacheKey, tools)
   return tools
 }
 
