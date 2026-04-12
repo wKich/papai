@@ -206,8 +206,9 @@ async function distillProcessedContent(
 
 export async function fetchAndExtract(
   input: FetchAndExtractInput,
-  deps: FetchAndExtractDeps = defaultDeps,
+  overrides: Partial<FetchAndExtractDeps> = {},
 ): Promise<WebFetchResult> {
+  const deps: FetchAndExtractDeps = { ...defaultDeps, ...overrides }
   const actorId = input.actorUserId ?? input.storageContextId
   const requestStartedAt = deps.now()
 
