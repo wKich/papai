@@ -190,16 +190,15 @@ export class DiscordChatProvider implements ChatProvider {
 
     const { incoming, channel } = result
 
-    const auth = checkAuthorizationExtended(
-      incoming.user.id,
-      incoming.user.username,
-      incoming.contextId,
-      incoming.contextType,
-      incoming.threadId,
-      incoming.user.isAdmin,
-    )
-
     if (this.interactionHandler === undefined) {
+      const auth = checkAuthorizationExtended(
+        incoming.user.id,
+        incoming.user.username,
+        incoming.contextId,
+        incoming.contextType,
+        incoming.threadId,
+        incoming.user.isAdmin,
+      )
       const handled = await routeInteraction(incoming, result.reply, auth)
       if (handled) return
       await routeButtonFallbackExternal(
@@ -225,15 +224,19 @@ export class DiscordChatProvider implements ChatProvider {
       replyToMessageId: mapped.messageId,
     })
 
+    const auth = checkAuthorizationExtended(
+      mapped.user.id,
+      mapped.user.username,
+      mapped.contextId,
+      mapped.contextType,
+      mapped.threadId,
+      mapped.user.isAdmin,
+    )
+
     const command = this.matchCommand(mapped.text)
     if (command !== null) {
       mapped.commandMatch = command.match
-      await command.handler(mapped, reply, {
-        allowed: true,
-        isBotAdmin: mapped.user.isAdmin,
-        isGroupAdmin: mapped.user.isAdmin,
-        storageContextId: mapped.contextId,
-      })
+      await command.handler(mapped, reply, auth)
       return
     }
 

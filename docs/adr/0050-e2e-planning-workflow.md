@@ -4,6 +4,10 @@
 
 Accepted
 
+## Date
+
+2026-04-10
+
 ## Context
 
 The papai project had accumulated E2E tests in `tests/e2e/` that validated provider operations against real Kaneo instances in Docker. However, there was no standardized process for:
@@ -70,21 +74,16 @@ Create:
 
 ## Rationale
 
-The workflow addresses the core problem through:
+We chose **Option 2** (Planning Workflow with Realism Tiers) over **Option 1** (Status Quo) because the ad-hoc approach produced inconsistent plans and forced every contributor to rediscover papai's architecture boundaries. The workflow provides shared vocabulary and structure without requiring tooling investment.
 
-1. **Planning Algorithm**: Provides step-by-step guidance for defining planning units, mapping architecture paths, choosing realism tiers, and emitting plans with required structure
+We deferred **Option 3** (Tool-Based Planning) because the documentation approach delivers 80% of the value at minimal cost. Tooling can be added later if E2E planning volume increases significantly.
 
-2. **Realism Tiers**: Creates clear vocabulary for test classification:
-   - Tier 1: Provider-Real E2E (current Kaneo harness)
-   - Tier 2: Runtime E2E (controlled chat injection)
-   - Tier 3: Platform-Integrated E2E (real chat platforms)
-   - Tier 4: Operational E2E (schedulers, background delivery)
+Specifically:
 
-3. **Papai Priority Order**: Guides test authors to highest-signal lanes first (setup/auth/wizard, DM vs group routing, orchestrator happy path, capability-gated behavior)
-
-4. **Reusable Template**: Ensures consistent output with required sections (architecture path, scenario matrix, non-E2E coverage, harness reuse, implementation order)
-
-5. **Documentation Integration**: Makes workflow discoverable from human-facing docs (tests/e2e/README.md), AI agent instructions (tests/CLAUDE.md), and Copilot snippets (.github/instructions/)
+- The **8-step planning algorithm** standardizes decision-making that was previously inconsistent across contributors
+- The **4-tier realism model** resolves ambiguity about when to use real providers versus mocked runtime versus full platform integration
+- The **reusable template** eliminates boilerplate and ensures required sections (oracles, fixtures, cleanup) are not forgotten
+- The **papai-specific priority order** directs limited testing effort to highest-signal areas first (auth/wizard, routing, orchestrator-tool-provider path)
 
 ## Consequences
 
