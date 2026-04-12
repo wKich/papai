@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { getDocumentProxy } from 'unpdf'
+
 import { extractPdfText, type PdfDeps } from '../../src/web/pdf.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -45,10 +47,9 @@ describe('extractPdfText', () => {
 
   test('returns merged PDF text', async () => {
     const bytes = new Uint8Array([37, 80, 68, 70])
-    const { getDocumentProxy } = await import('unpdf')
     const document = await getDocumentProxy(MINIMAL_PDF)
     const extractTextSpy = mock((_data: Parameters<PdfDeps['extractText']>[0], _options: { mergePages: true }) =>
-      Promise.resolve({ text: 'Page one\n\nPage two', totalPages: 2 }),
+      Promise.resolve({ text: '\nPage one\n\nPage two\n', totalPages: 2 }),
     )
 
     function extractText(
@@ -70,10 +71,7 @@ describe('extractPdfText', () => {
     }
 
     const deps: PdfDeps = {
-      getDocumentProxy: mock(
-        (_data: Parameters<PdfDeps['getDocumentProxy']>[0], _options?: Parameters<PdfDeps['getDocumentProxy']>[1]) =>
-          Promise.resolve(document),
-      ),
+      getDocumentProxy: mock((_data: Parameters<PdfDeps['getDocumentProxy']>[0]) => Promise.resolve(document)),
       extractText,
     }
 

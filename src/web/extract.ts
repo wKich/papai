@@ -42,7 +42,13 @@ export async function extractHtmlContent(
   log.debug({ url, htmlLength: html.length }, 'extractHtmlContent')
 
   const { document } = deps.parseDocument(html)
-  const result = await deps.defuddle(document, url, { markdown: true })
+  let result: Awaited<ReturnType<ExtractHtmlDeps['defuddle']>>
+  try {
+    result = await deps.defuddle(document, url, { markdown: true })
+  } catch (error) {
+    log.error({ url, error: error instanceof Error ? error.message : String(error) }, 'HTML extraction failed')
+    throwExtractFailed()
+  }
 
   const title = result.title?.trim() || document.title?.trim() || new URL(url).hostname
   const content = result.content?.trim() ?? ''
