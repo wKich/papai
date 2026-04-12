@@ -54,7 +54,23 @@ describe('makeWebFetchTool', () => {
 
     expect(schemaValidates(tool, {})).toBe(false)
     expect(schemaValidates(tool, { url: 'notaurl' })).toBe(false)
+    expect(schemaValidates(tool, { url: 'ftp://example.com/file.txt' })).toBe(false)
+    expect(schemaValidates(tool, { url: 'file:///tmp/local.txt' })).toBe(false)
     expect(schemaValidates(tool, { url: 'https://example.com' })).toBe(true)
     expect(schemaValidates(tool, { url: 'https://example.com', goal: 'Find the pricing details' })).toBe(true)
+  })
+
+  test('rethrows fetchAndExtract failures', async () => {
+    const expectedError = new Error('fetch failed')
+    const fetchAndExtract = mock(() => Promise.reject(expectedError))
+
+    const tool = makeWebFetchTool('group-123', 'user-456', { fetchAndExtract })
+
+    await expect(
+      getToolExecutor(tool)(
+        { url: 'https://example.com/article' },
+        { toolCallId: '1', messages: [], abortSignal: undefined },
+      ),
+    ).rejects.toBe(expectedError)
   })
 })
