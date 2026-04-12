@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -41,18 +41,18 @@ describe('review-loop CLI bootstrap', () => {
     })
   })
 
-  test('loadReviewLoopConfig resolves repo and plan paths and creates workDir', async () => {
+  test('loadReviewLoopConfig resolves relative config paths from config and repo roots', async () => {
     const dir = makeTempDir()
-    const repoDir = realpathSync(dir)
-    const configPath = path.join(dir, 'review-loop.config.json')
-    const cwd = process.cwd()
-    process.chdir(dir)
+    const configDir = path.join(dir, 'config')
+    const repoDir = path.join(dir, 'repo')
+    const configPath = path.join(configDir, 'review-loop.config.json')
 
+    mkdirSync(configDir, { recursive: true })
     writeFileSync(
       configPath,
       JSON.stringify(
         {
-          repoRoot: '.',
+          repoRoot: '../repo',
           planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
           workDir: '.review-loop',
           maxRounds: 5,
@@ -76,22 +76,15 @@ describe('review-loop CLI bootstrap', () => {
       ),
     )
 
-    try {
-      const config = await loadReviewLoopConfig({
-        configPath,
-        planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
-      })
+    const config = await loadReviewLoopConfig({ configPath })
 
-      expect(config.repoRoot).toBe(repoDir)
-      expect(config.planPath).toBe(
-        path.join(repoDir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
-      )
-      expect(config.workDir).toBe(path.join(repoDir, '.review-loop'))
-      expect(existsSync(config.workDir)).toBe(true)
-      expect(config.reviewer.invocationPrefix).toBe('/review-code')
-      expect(config.fixer.verifyInvocationPrefix).toBe('/verify-issue')
-    } finally {
-      process.chdir(cwd)
-    }
+    expect(config.repoRoot).toBe(repoDir)
+    expect(config.planPath).toBe(
+      path.join(repoDir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
+    )
+    expect(config.workDir).toBe(path.join(repoDir, '.review-loop'))
+    expect(existsSync(config.workDir)).toBe(true)
+    expect(config.reviewer.invocationPrefix).toBe('/review-code')
+    expect(config.fixer.verifyInvocationPrefix).toBe('/verify-issue')
   })
 })

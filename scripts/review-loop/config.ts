@@ -41,12 +41,14 @@ export interface ConfigLoadInput {
 }
 
 export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<ReviewLoopConfig> {
-  const raw = JSON.parse(await readFile(input.configPath, 'utf8')) as unknown
+  const configPath = path.resolve(input.configPath)
+  const configDir = path.dirname(configPath)
+  const raw = JSON.parse(await readFile(configPath, 'utf8')) as unknown
   const parsed = ReviewLoopConfigSchema.parse(raw)
 
-  const repoRoot = path.resolve(input.repoRoot ?? parsed.repoRoot)
-  const planPath = path.resolve(input.planPath ?? parsed.planPath)
-  const workDir = path.resolve(parsed.workDir)
+  const repoRoot = path.resolve(configDir, input.repoRoot ?? parsed.repoRoot)
+  const planPath = path.resolve(repoRoot, input.planPath ?? parsed.planPath)
+  const workDir = path.resolve(repoRoot, parsed.workDir)
 
   await mkdir(workDir, { recursive: true })
 
