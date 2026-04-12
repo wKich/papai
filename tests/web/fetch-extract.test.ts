@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import { getUserMessage, webFetchError } from '../../src/errors.js'
+import { getUserMessage, systemError, webFetchError } from '../../src/errors.js'
 import type { RateLimitResult, SafeFetchResponse, WebFetchResult } from '../../src/web/types.js'
 import { expectAppError, mockLogger } from '../utils/test-helpers.js'
 
@@ -332,7 +332,180 @@ describe('fetchAndExtract', () => {
       expect(error).toMatchObject({
         type: 'web-fetch',
         code: 'rate-limited',
+        retryAfterSec: 42,
         appError: webFetchError.rateLimited(),
+      })
+    }
+  })
+
+  test('rejects invalid URLs before consuming quota', async () => {
+    const runFetchAndExtract = getFetchAndExtract(fetchAndExtract)
+    const consumeWebFetchQuota = mock(
+      (_actorId: string, _nowMs?: number): RateLimitResult => ({
+        allowed: true,
+        remaining: 19,
+      }),
+    )
+
+    try {
+      await runFetchAndExtract(
+        {
+          storageContextId: 'ctx-4',
+          url: 'not-a-url',
+        },
+        {
+          consumeWebFetchQuota,
+          normalizeWebUrl: () => {
+            throw new Error('bad url')
+          },
+          getCachedWebFetch: (_normalizedUrl: string, _nowMs?: number): WebFetchResult | null => null,
+          putCachedWebFetch: (_normalizedUrl: string, _result: WebFetchResult, _expiresAt: number): void => {
+            throw createUnexpectedCallError('putCachedWebFetch')
+          },
+          safeFetchContent: (): Promise<SafeFetchResponse> => {
+            throw createUnexpectedCallError('safeFetchContent')
+          },
+          extractHtmlContent: (): Promise<{ title: string; content: string }> => {
+            throw createUnexpectedCallError('extractHtmlContent')
+          },
+          extractPdfText: (): Promise<string> => {
+            throw createUnexpectedCallError('extractPdfText')
+          },
+          distillWebContent: (): Promise<{ summary: string; excerpt: string; truncated: boolean }> => {
+            throw createUnexpectedCallError('distillWebContent')
+          },
+          now: (): number => 9_000,
+        },
+      )
+      throw new Error('Expected fetchAndExtract to reject')
+    } catch (error) {
+      expect(consumeWebFetchQuota).not.toHaveBeenCalled()
+      expectAppError(error, getUserMessage(webFetchError.invalidUrl()))
+      if (!hasAppError(error)) {
+        throw new Error('Expected error with appError', { cause: error })
+      }
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'invalid-url',
+        appError: webFetchError.invalidUrl(),
+      })
+    }
+  })
+
+  test('routes PDF content through extractPdfText before distillation', async () => {
+    const runFetchAndExtract = getFetchAndExtract(fetchAndExtract)
+    const extractPdfText = mock((_bytes: Uint8Array): Promise<string> => Promise.resolve('Extracted PDF body'))
+    const distillWebContent = mock(
+      (input: {
+        storageContextId: string
+        title: string
+        content: string
+        goal?: string
+      }): Promise<{ summary: string; excerpt: string; truncated: boolean }> =>
+        Promise.resolve({
+          summary: `Summary for ${input.title}`,
+          excerpt: input.content,
+          truncated: false,
+        }),
+    )
+
+    const result = await runFetchAndExtract(
+      {
+        storageContextId: 'ctx-pdf',
+        url: 'https://example.com/report.pdf',
+      },
+      {
+        consumeWebFetchQuota: (_actorId: string, _nowMs?: number): RateLimitResult => ({
+          allowed: true,
+          remaining: 19,
+        }),
+        normalizeWebUrl: (_rawUrl: string): string => 'https://example.com/report.pdf',
+        getCachedWebFetch: (_normalizedUrl: string, _nowMs?: number): WebFetchResult | null => null,
+        putCachedWebFetch: (_normalizedUrl: string, _result: WebFetchResult, _expiresAt: number): void => {},
+        safeFetchContent: (_url: string, _options?: { abortSignal?: AbortSignal }): Promise<SafeFetchResponse> =>
+          Promise.resolve({
+            finalUrl: 'https://cdn.example.com/final-report.pdf',
+            contentType: 'application/pdf',
+            body: new Uint8Array([1, 2, 3]),
+          }),
+        extractHtmlContent: (): Promise<{ title: string; content: string }> => {
+          throw createUnexpectedCallError('extractHtmlContent')
+        },
+        extractPdfText,
+        distillWebContent,
+        now: (): number => 10_000,
+      },
+    )
+
+    expect(extractPdfText).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]))
+    expect(distillWebContent).toHaveBeenCalledWith({
+      storageContextId: 'ctx-pdf',
+      title: 'cdn.example.com',
+      content: 'Extracted PDF body',
+      goal: undefined,
+    })
+    expect(result).toEqual({
+      url: 'https://cdn.example.com/final-report.pdf',
+      title: 'cdn.example.com',
+      summary: 'Summary for cdn.example.com',
+      excerpt: 'Extracted PDF body',
+      truncated: false,
+      contentType: 'application/pdf',
+      source: 'fetch',
+      fetchedAt: 10_000,
+    })
+  })
+
+  test('classifies unexpected distillation failures', async () => {
+    const runFetchAndExtract = getFetchAndExtract(fetchAndExtract)
+
+    try {
+      await runFetchAndExtract(
+        {
+          storageContextId: 'ctx-5',
+          url: 'https://example.com/article',
+        },
+        {
+          consumeWebFetchQuota: (_actorId: string, _nowMs?: number): RateLimitResult => ({
+            allowed: true,
+            remaining: 19,
+          }),
+          normalizeWebUrl: (_rawUrl: string): string => 'https://example.com/article',
+          getCachedWebFetch: (_normalizedUrl: string, _nowMs?: number): WebFetchResult | null => null,
+          putCachedWebFetch: (_normalizedUrl: string, _result: WebFetchResult, _expiresAt: number): void => {
+            throw createUnexpectedCallError('putCachedWebFetch')
+          },
+          safeFetchContent: (_url: string, _options?: { abortSignal?: AbortSignal }): Promise<SafeFetchResponse> =>
+            Promise.resolve({
+              finalUrl: 'https://example.com/final',
+              contentType: 'text/plain',
+              body: new TextEncoder().encode('Plain body content'),
+            }),
+          extractHtmlContent: (): Promise<{ title: string; content: string }> => {
+            throw createUnexpectedCallError('extractHtmlContent')
+          },
+          extractPdfText: (): Promise<string> => {
+            throw createUnexpectedCallError('extractPdfText')
+          },
+          distillWebContent: (): Promise<{ summary: string; excerpt: string; truncated: boolean }> => {
+            throw new Error('llm exploded')
+          },
+          now: (): number => 11_000,
+        },
+      )
+      throw new Error('Expected fetchAndExtract to reject')
+    } catch (error) {
+      expectAppError(error, getUserMessage(systemError.unexpected(new Error('llm exploded'))))
+      if (!hasAppError(error)) {
+        throw new Error('Expected error with appError', { cause: error })
+      }
+      expect(error).toMatchObject({
+        type: 'system',
+        code: 'unexpected',
+        appError: {
+          type: 'system',
+          code: 'unexpected',
+        },
       })
     }
   })

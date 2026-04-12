@@ -1,4 +1,4 @@
-import { webFetchError, type WebFetchError } from '../errors.js'
+import { isAppError, systemError, type AppError, webFetchError } from '../errors.js'
 import { logger } from '../logger.js'
 import { getCachedWebFetch, putCachedWebFetch } from './cache.js'
 import { distillWebContent } from './distill.js'
@@ -28,17 +28,21 @@ type ProcessedWebContent = {
 }
 
 class FetchAndExtractClassifiedError extends Error {
-  readonly type = 'web-fetch' as const
-  readonly code: WebFetchError['code']
+  readonly type: AppError['type']
+  readonly code: AppError['code']
   readonly status?: number
+  readonly retryAfterSec?: number
 
   constructor(
     message: string,
-    public readonly appError: WebFetchError,
+    public readonly appError: AppError,
+    retryAfterSec?: number,
   ) {
     super(message)
     this.name = 'FetchAndExtractClassifiedError'
+    this.type = appError.type
     this.code = appError.code
+    this.retryAfterSec = retryAfterSec
     if ('status' in appError && appError.status !== undefined) {
       this.status = appError.status
     }
@@ -69,8 +73,8 @@ const defaultDeps: FetchAndExtractDeps = {
   now: () => Date.now(),
 }
 
-function throwWebFetchError(appError: WebFetchError, message: string): never {
-  throw new FetchAndExtractClassifiedError(message, appError)
+function throwClassifiedError(appError: AppError, message: string, retryAfterSec?: number): never {
+  throw new FetchAndExtractClassifiedError(message, appError, retryAfterSec)
 }
 
 function getDefaultTitle(finalUrl: string): string {
@@ -84,8 +88,12 @@ function decodeBody(body: Uint8Array): string {
 function normalizeUrl(rawUrl: string, deps: FetchAndExtractDeps): string {
   try {
     return deps.normalizeWebUrl(rawUrl)
-  } catch {
-    return throwWebFetchError(webFetchError.invalidUrl(), 'Invalid URL')
+  } catch (error) {
+    log.warn(
+      { rawUrl, error: error instanceof Error ? error.message : String(error) },
+      'Web fetch URL normalization failed',
+    )
+    return throwClassifiedError(webFetchError.invalidUrl(), 'Invalid URL')
   }
 }
 
@@ -105,7 +113,7 @@ function enforceQuota(actorId: string, requestStartedAt: number, deps: FetchAndE
   const quota = deps.consumeWebFetchQuota(actorId, requestStartedAt)
   if (!quota.allowed) {
     log.warn({ actorId, retryAfterSec: quota.retryAfterSec }, 'Web fetch quota exceeded')
-    throwWebFetchError(webFetchError.rateLimited(), 'Web fetch quota exceeded')
+    throwClassifiedError(webFetchError.rateLimited(), 'Web fetch quota exceeded', quota.retryAfterSec)
   }
 }
 
@@ -166,6 +174,36 @@ function buildResult(
   }
 }
 
+async function distillProcessedContent(
+  input: FetchAndExtractInput,
+  processed: ProcessedWebContent,
+  deps: FetchAndExtractDeps,
+): Promise<Awaited<ReturnType<FetchAndExtractDeps['distillWebContent']>>> {
+  try {
+    return await deps.distillWebContent({
+      storageContextId: input.storageContextId,
+      title: processed.title,
+      content: processed.content,
+      goal: input.goal,
+    })
+  } catch (error) {
+    if (isAppError(error)) {
+      throw error
+    }
+
+    const originalError = error instanceof Error ? error : new Error(String(error))
+    log.error(
+      {
+        storageContextId: input.storageContextId,
+        title: processed.title,
+        error: originalError.message,
+      },
+      'Web content distillation failed',
+    )
+    return throwClassifiedError(systemError.unexpected(originalError), 'Web content distillation failed')
+  }
+}
+
 export async function fetchAndExtract(
   input: FetchAndExtractInput,
   deps: FetchAndExtractDeps = defaultDeps,
@@ -174,9 +212,8 @@ export async function fetchAndExtract(
   const requestStartedAt = deps.now()
 
   logFetchStart(input, actorId)
-  enforceQuota(actorId, requestStartedAt, deps)
-
   const normalizedUrl = normalizeUrl(input.url, deps)
+  enforceQuota(actorId, requestStartedAt, deps)
   const cached = getCachedResult(input, actorId, normalizedUrl, requestStartedAt, deps)
   if (cached !== null) {
     return cached
@@ -185,13 +222,7 @@ export async function fetchAndExtract(
   const fetched = await deps.safeFetchContent(normalizedUrl, { abortSignal: input.abortSignal })
   const fetchedAt = deps.now()
   const processed = await resolveProcessedContent(fetched, deps)
-
-  const distilled = await deps.distillWebContent({
-    storageContextId: input.storageContextId,
-    title: processed.title,
-    content: processed.content,
-    goal: input.goal,
-  })
+  const distilled = await distillProcessedContent(input, processed, deps)
 
   const result = buildResult(fetched, fetchedAt, processed, distilled)
   deps.putCachedWebFetch(normalizedUrl, result, fetchedAt + DEFAULT_TTL_MS)
