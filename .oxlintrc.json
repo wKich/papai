@@ -64,6 +64,12 @@
         "typescript/await-thenable": "off",
         "eslint/no-empty-function": "off"
       }
+    },
+    {
+      "files": ["src/chat/discord/index.ts"],
+      "rules": {
+        "max-lines": "off"
+      }
     }
   ]
 }

@@ -1,9 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js'
 
-import { logger } from '../../logger.js'
 import type { ChatButton } from '../types.js'
-
-const log = logger.child({ scope: 'chat:discord:buttons' })
 
 export const DISCORD_CUSTOM_ID_MAX = 100
 export const DISCORD_BUTTONS_PER_ROW = 5
@@ -29,46 +26,6 @@ export type ButtonInteractionLike = {
   channel: ButtonChannelLike | null
   message: { id: string }
   deferUpdate(): Promise<void>
-}
-
-/** Handler callback type for button interactions. */
-export type ButtonCallbackHandler = (callbackData: string) => Promise<void>
-
-/**
- * Dispatch a Discord button interaction to the appropriate handler.
- * Routes cfg:-prefixed callbacks to config editor and wizard_-prefixed to wizard.
- */
-export async function dispatchButtonInteraction(
-  interaction: ButtonInteractionLike,
-  onConfigEditor: ButtonCallbackHandler,
-  onWizard: ButtonCallbackHandler,
-): Promise<void> {
-  const data = interaction.customId
-
-  // Always attempt to defer the update first
-  try {
-    await interaction.deferUpdate()
-  } catch (error) {
-    log.warn(
-      { error: error instanceof Error ? error.message : String(error), customId: data },
-      'Failed to deferUpdate Discord button interaction',
-    )
-  }
-
-  // Route to config editor handler
-  if (data.startsWith('cfg:')) {
-    await onConfigEditor(data)
-    return
-  }
-
-  // Route to wizard handler
-  if (data.startsWith('wizard_')) {
-    await onWizard(data)
-    return
-  }
-
-  // Unrecognized callback - log but don't error
-  log.debug({ customId: data }, 'Unrecognized button custom_id, ignoring')
 }
 
 // discord.js enum values: InteractionType.MessageComponent = 3, ComponentType.Button = 2

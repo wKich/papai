@@ -1,14 +1,16 @@
 import { logger } from '../../logger.js'
+import { routeInteraction } from '../interaction-router.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
+  IncomingInteraction,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
   ThreadCapabilities,
 } from '../types.js'
-import { type ButtonInteractionLike, dispatchButtonInteraction, isButtonInteraction } from './buttons.js'
+import { type ButtonInteractionLike, isButtonInteraction } from './buttons.js'
 import {
   type DiscordClientFactory,
   type DiscordClientLike,
@@ -17,7 +19,7 @@ import {
   defaultClientFactory,
 } from './client-factory.js'
 import { chunkForDiscord } from './format-chunking.js'
-import { handleConfigEditorCallback, handleWizardCallback } from './handlers.js'
+import { buildDiscordInteraction } from './interaction-helpers.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
@@ -29,7 +31,6 @@ export { defaultClientFactory }
 
 const log = logger.child({ scope: 'chat:discord' })
 const DISCORD_MAX_CONTENT_LEN = 2000
-const CHANNEL_TYPE_DM = 1
 
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
 
@@ -65,6 +66,7 @@ export class DiscordChatProvider implements ChatProvider {
   private readonly clientFactory: DiscordClientFactory
   private readonly commands = new Map<string, CommandHandler>()
   private messageHandler: OnMessageHandler | null = null
+  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
   private client: DiscordClientLike | null = null
 
   constructor(clientFactory?: DiscordClientFactory) {
@@ -84,6 +86,10 @@ export class DiscordChatProvider implements ChatProvider {
 
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
+  }
+
+  onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
+    this.interactionHandler = handler
   }
 
   async sendMessage(userId: string, markdown: string): Promise<void> {
@@ -143,7 +149,7 @@ export class DiscordChatProvider implements ChatProvider {
 
     client.on('interactionCreate', (rawInteraction) => {
       if (!isButtonInteraction(rawInteraction)) return
-      this.handleButtonInteraction(rawInteraction, adminUserId).catch((error: unknown) => {
+      this.dispatchButtonInteraction(rawInteraction, adminUserId).catch((error: unknown) => {
         log.error(
           { error: error instanceof Error ? error.message : String(error) },
           'interactionCreate dispatch failed',
@@ -185,30 +191,67 @@ export class DiscordChatProvider implements ChatProvider {
     _botId: string,
     adminUserId: string,
   ): Promise<void> {
-    await this.handleButtonInteraction(interaction, adminUserId)
+    await this.dispatchButtonInteraction(interaction, adminUserId)
   }
 
-  private async handleButtonInteraction(interaction: ButtonInteractionLike, adminUserId: string): Promise<void> {
+  private async tryDeferUpdate(interaction: ButtonInteractionLike): Promise<void> {
+    try {
+      await interaction.deferUpdate()
+    } catch (error) {
+      log.warn(
+        { error: error instanceof Error ? error.message : String(error), customId: interaction.customId },
+        'Failed to deferUpdate Discord button interaction',
+      )
+    }
+  }
+
+  private buildInteraction(
+    interaction: ButtonInteractionLike,
+    adminUserId: string,
+  ): {
+    incoming: IncomingInteraction
+    channel: NonNullable<ButtonInteractionLike['channel']>
+    reply: ReplyFn
+  } | null {
     const channel = interaction.channel
-    if (channel === null) {
-      log.warn({ channelId: interaction.channelId }, 'Button interaction: channel not available, skipping')
+    if (channel === null) return null
+
+    const isAdmin = interaction.user.id === adminUserId
+    const incomingInteraction = buildDiscordInteraction(
+      {
+        user: interaction.user,
+        customId: interaction.customId,
+        channelId: interaction.channelId,
+        channel,
+        message: interaction.message,
+      },
+      isAdmin,
+    )
+
+    if (incomingInteraction === null) return null
+
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+    return { incoming: incomingInteraction, channel, reply }
+  }
+
+  private async dispatchButtonInteraction(interaction: ButtonInteractionLike, adminUserId: string): Promise<void> {
+    await this.tryDeferUpdate(interaction)
+
+    const result = this.buildInteraction(interaction, adminUserId)
+    if (result === null) {
+      log.debug({ customId: interaction.customId }, 'Could not build incoming interaction, skipping')
       return
     }
 
-    const contextType = channel.type === CHANNEL_TYPE_DM ? ('dm' as const) : ('group' as const)
-    const contextId = contextType === 'dm' ? interaction.user.id : interaction.channelId
-    const userId = interaction.user.id
+    const { incoming, channel } = result
 
-    const onCfg = async (data: string): Promise<void> => {
-      await handleConfigEditorCallback(userId, contextId, data, channel)
+    if (this.interactionHandler === undefined) {
+      const handled = await routeInteraction(incoming, result.reply)
+      if (handled) return
+      await this.routeButtonFallback(interaction, channel, incoming.contextId, incoming.contextType, adminUserId)
+      return
     }
-    const onWizard = async (data: string): Promise<void> => {
-      await handleWizardCallback(userId, contextId, data, channel)
-    }
-
-    await dispatchButtonInteraction(interaction, onCfg, onWizard)
-
-    await this.routeButtonFallback(interaction, channel, contextId, contextType, adminUserId)
+    await this.interactionHandler(incoming, result.reply)
   }
 
   private async routeButtonFallback(
@@ -219,7 +262,10 @@ export class DiscordChatProvider implements ChatProvider {
     adminUserId: string,
   ): Promise<void> {
     const data = interaction.customId
-    if (data.startsWith('cfg:') || data.startsWith('wizard_')) return
+
+    // Note: cfg: and wizard_ prefixes are handled by routeInteraction
+    // This fallback is for other button types (if any)
+    log.debug({ customId: data }, 'Unhandled button interaction in routeButtonFallback')
 
     const mapped: IncomingMessage = {
       user: {
@@ -236,6 +282,7 @@ export class DiscordChatProvider implements ChatProvider {
 
     const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
 
+    // Route slash-prefixed commands to command handler
     const command = this.matchCommand(mapped.text)
     if (command !== null) {
       mapped.commandMatch = command.match
@@ -249,6 +296,7 @@ export class DiscordChatProvider implements ChatProvider {
       return
     }
 
+    // Route to message handler
     if (this.messageHandler !== null) {
       await this.messageHandler(mapped, reply)
     }
