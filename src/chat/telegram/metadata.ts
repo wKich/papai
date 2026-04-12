@@ -16,6 +16,6 @@ export const telegramTraits: ChatProviderTraits = {
   callbackDataMaxLength: 64,
 }
 
-export const telegramConfigRequirements: ChatProviderConfigRequirement[] = [
+export const telegramConfigRequirements: readonly ChatProviderConfigRequirement[] = [
   { key: 'TELEGRAM_BOT_TOKEN', label: 'Telegram Bot Token', required: true },
 ]

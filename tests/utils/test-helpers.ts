@@ -334,6 +334,20 @@ export const DEFAULT_CHAT_CAPABILITIES = new Set<ChatCapability>([
 ])
 
 /**
+ * Telegram-like capabilities (no users.resolve).
+ * Use when testing Telegram-specific behavior that should reject @username resolution.
+ */
+export const TELEGRAM_LIKE_CAPABILITIES = new Set<ChatCapability>([
+  'commands.menu',
+  'interactions.callbacks',
+  'messages.buttons',
+  'messages.files',
+  'messages.redact',
+  'files.receive',
+  'messages.reply-context',
+])
+
+/**
  * Create a mock chat provider with configurable behavior.
  * @param options - Optional configuration for the mock provider
  * @returns The mock ChatProvider and any captured state

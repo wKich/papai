@@ -134,4 +134,76 @@ describe('routeInteraction', () => {
     expect(handled).toBe(true)
     expect(replies).toEqual(['You are not authorized to use this bot.'])
   })
+
+  test('replies with no active session when wizard_cancel clicked without active wizard', async () => {
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'wizard_cancel' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replies).toEqual(['No active setup session. Type /setup to start.'])
+  })
+
+  test('replies with no active session when wizard_restart clicked without active wizard', async () => {
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'wizard_restart' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replies).toEqual(['No active setup session. Type /setup to start.'])
+  })
+
+  test('replies with error when unknown config callback data is received', async () => {
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'cfg:invalid:callback' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replies).toEqual(['This action is no longer valid. Please start over with /config.'])
+  })
+
+  test('replies with error when config editor callback cannot be handled', async () => {
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'cfg:save:timezone' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replies).toEqual(['This action is no longer valid. Please start over with /config.'])
+  })
 })

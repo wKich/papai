@@ -14,6 +14,6 @@ export const discordTraits: ChatProviderTraits = {
   callbackDataMaxLength: 100,
 }
 
-export const discordConfigRequirements: ChatProviderConfigRequirement[] = [
+export const discordConfigRequirements: readonly ChatProviderConfigRequirement[] = [
   { key: 'DISCORD_BOT_TOKEN', label: 'Discord Bot Token', required: true },
 ]
