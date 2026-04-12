@@ -88,6 +88,7 @@ describe('review-loop CLI bootstrap', () => {
     const dir = makeTempDir()
     const configDir = path.join(dir, 'config')
     const configPath = path.join(configDir, 'review-loop.config.json')
+    const previousCwd = process.cwd()
 
     mkdirSync(configDir, { recursive: true })
     writeFileSync(
@@ -117,9 +118,17 @@ describe('review-loop CLI bootstrap', () => {
       ),
     )
 
-    const config = await loadReviewLoopConfig({ configPath, repoRoot: '.' })
+    try {
+      process.chdir(dir)
+      const expectedRepoRoot = process.cwd()
 
-    expect(config.repoRoot).toBe(process.cwd())
-    expect(config.workDir).toBe(path.join(process.cwd(), '.review-loop'))
+      const config = await loadReviewLoopConfig({ configPath, repoRoot: '.' })
+
+      expect(config.repoRoot).toBe(expectedRepoRoot)
+      expect(config.workDir).toBe(path.join(expectedRepoRoot, '.review-loop'))
+      expect(existsSync(config.workDir)).toBe(true)
+    } finally {
+      process.chdir(previousCwd)
+    }
   })
 })
