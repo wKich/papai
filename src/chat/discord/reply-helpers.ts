@@ -1,5 +1,5 @@
 import { logger } from '../../logger.js'
-import type { ButtonReplyOptions, ChatFile, ReplyFn, ReplyOptions } from '../types.js'
+import type { ButtonReplyOptions, ReplyFn, ReplyOptions } from '../types.js'
 import { toActionRows } from './buttons.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { formatLlmOutput } from './format.js'
@@ -61,9 +61,7 @@ export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyF
       const chunks = formatLlmOutput(markdown)
       lastBotMessage = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
     },
-    file: (_file: ChatFile, _options?: ReplyOptions): Promise<void> => {
-      return Promise.reject(new Error('Discord file send not implemented — deferred'))
-    },
+
     typing: (): void => {
       channel.sendTyping().catch(() => undefined)
     },

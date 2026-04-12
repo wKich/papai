@@ -139,6 +139,10 @@ export function registerContextCommand(chat: ChatProvider, adminUserId: string):
       },
       '/context command executed',
     )
+    if (reply.file === undefined) {
+      await reply.text('File replies are not supported in this chat. Context export is unavailable.')
+      return
+    }
     await reply.file({ content: Buffer.from(report, 'utf-8'), filename: 'context.txt' })
   })
 }

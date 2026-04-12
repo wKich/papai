@@ -99,6 +99,7 @@ describe('ChatProvider interface', () => {
       user: { id: 'user123', username: 'alice', isAdmin: false },
       contextId: 'ctx-1',
       contextType: 'dm',
+      storageContextId: 'ctx-1',
       callbackData: 'cfg:setup',
     }
 

@@ -87,11 +87,10 @@ async function handleWizardSkip(
 }
 
 async function defaultHandleWizardInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
-  const { callbackData, user, contextId } = interaction
+  const { callbackData, user, storageContextId } = interaction
   if (!callbackData.startsWith('wizard_')) return false
 
   const userId = user.id
-  const storageContextId = contextId
 
   switch (callbackData) {
     case 'wizard_confirm': {

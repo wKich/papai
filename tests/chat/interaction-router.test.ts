@@ -9,6 +9,7 @@ const interaction: IncomingInteraction = {
   user: { id: 'user-1', username: 'alice', isAdmin: false },
   contextId: 'ctx-1',
   contextType: 'dm',
+  storageContextId: 'ctx-1',
   callbackData: 'cfg:edit:timezone',
 }
 

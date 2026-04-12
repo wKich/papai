@@ -67,12 +67,10 @@ describe('createDiscordReplyFn', () => {
     expect(typingCalls.length).toBeGreaterThanOrEqual(1)
   })
 
-  test('file() throws a clear deferral error', async () => {
+  test('file() is not exposed since messages.files is not supported', () => {
     const { channel } = makeChannel()
     const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
-    await expect(reply.file({ content: Buffer.from('data'), filename: 'x.txt' })).rejects.toThrow(
-      /Discord file send not implemented/,
-    )
+    expect(reply.file).toBeUndefined()
   })
 
   test('redactMessage() edits the last bot-authored message', async () => {

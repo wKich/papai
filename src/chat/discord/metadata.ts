@@ -3,9 +3,8 @@ import type { ChatCapability, ChatProviderConfigRequirement, ChatProviderTraits 
 export const discordCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCapability>([
   'interactions.callbacks',
   'messages.buttons',
-  'messages.files',
+  'messages.redact',
   'messages.reply-context',
-  'files.receive',
   'users.resolve',
 ])
 

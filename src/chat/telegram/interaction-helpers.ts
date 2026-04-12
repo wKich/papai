@@ -1,4 +1,4 @@
-import type { IncomingInteraction } from '../types.js'
+import type { ContextType, IncomingInteraction } from '../types.js'
 
 export type TelegramInteractionContext = {
   from?: { id?: number; username?: string }
@@ -16,6 +16,18 @@ function callbackThreadId(ctx: TelegramInteractionContext): string | undefined {
   return threadId === undefined ? undefined : String(threadId)
 }
 
+/**
+ * Computes thread-scoped storage context ID matching getThreadScopedStorageContextId.
+ * - DMs: userId
+ * - Main chat: groupId
+ * - Thread: groupId:threadId
+ */
+function computeStorageContextId(contextId: string, contextType: ContextType, threadId: string | undefined): string {
+  if (contextType === 'dm') return contextId
+  if (threadId === undefined) return contextId
+  return `${contextId}:${threadId}`
+}
+
 export function buildTelegramInteraction(
   ctx: TelegramInteractionContext,
   isAdmin: boolean,
@@ -27,13 +39,18 @@ export function buildTelegramInteraction(
   if (fromId === undefined) return null
 
   const userId = String(fromId)
+  const contextId = String(ctx.chat?.id ?? userId)
+  const contextType: ContextType = ctx.chat?.type === 'private' ? 'dm' : 'group'
+  const threadId = callbackThreadId(ctx)
+
   return {
     kind: 'button',
     user: { id: userId, username: ctx.from?.username ?? null, isAdmin },
-    contextId: String(ctx.chat?.id ?? userId),
-    contextType: ctx.chat?.type === 'private' ? 'dm' : 'group',
+    contextId,
+    contextType,
+    storageContextId: computeStorageContextId(contextId, contextType, threadId),
     callbackData,
     messageId: callbackMessageId(ctx),
-    threadId: callbackThreadId(ctx),
+    threadId,
   }
 }

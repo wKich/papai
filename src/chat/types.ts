@@ -123,6 +123,11 @@ export type IncomingInteraction = {
   user: ChatUser
   contextId: string
   contextType: ContextType
+  /**
+   * Thread-scoped storage key for session/config lookup.
+   * Same as contextId in DMs, groupId:threadId in forum topics.
+   */
+  storageContextId: string
   callbackData: string
   /** Platform-specific message ID of the interactive message */
   messageId?: string
@@ -165,7 +170,7 @@ export interface ButtonReplyOptions extends ReplyOptions {
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
   formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
-  file: (file: ChatFile, options?: ReplyOptions) => Promise<void>
+  file?: (file: ChatFile, options?: ReplyOptions) => Promise<void>
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
   buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
