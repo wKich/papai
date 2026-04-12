@@ -1,0 +1,60 @@
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
+
+import { makeWebFetchTool } from '../../src/tools/web-fetch.js'
+import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
+
+describe('makeWebFetchTool', () => {
+  beforeEach(() => {
+    mockLogger()
+    mock.restore()
+  })
+
+  test('forwards storage context, actor user, url, goal, and abortSignal', async () => {
+    const abortController = new AbortController()
+    const fetchAndExtract = mock(() =>
+      Promise.resolve({
+        url: 'https://example.com/article',
+        title: 'Example',
+        summary: 'Summary',
+        excerpt: 'Excerpt',
+        truncated: false,
+        contentType: 'text/html',
+        source: 'fetch' as const,
+        fetchedAt: 1,
+      }),
+    )
+
+    const tool = makeWebFetchTool('group-123', 'user-456', { fetchAndExtract })
+    const result = await getToolExecutor(tool)(
+      { url: 'https://example.com/article', goal: 'Summarize the release notes' },
+      { toolCallId: '1', messages: [], abortSignal: abortController.signal },
+    )
+
+    expect(fetchAndExtract).toHaveBeenCalledWith({
+      storageContextId: 'group-123',
+      actorUserId: 'user-456',
+      url: 'https://example.com/article',
+      goal: 'Summarize the release notes',
+      abortSignal: abortController.signal,
+    })
+    expect(result).toEqual({
+      url: 'https://example.com/article',
+      title: 'Example',
+      summary: 'Summary',
+      excerpt: 'Excerpt',
+      truncated: false,
+      contentType: 'text/html',
+      source: 'fetch',
+      fetchedAt: 1,
+    })
+  })
+
+  test('validates required url and optional goal', () => {
+    const tool = makeWebFetchTool('group-123')
+
+    expect(schemaValidates(tool, {})).toBe(false)
+    expect(schemaValidates(tool, { url: 'notaurl' })).toBe(false)
+    expect(schemaValidates(tool, { url: 'https://example.com' })).toBe(true)
+    expect(schemaValidates(tool, { url: 'https://example.com', goal: 'Find the pricing details' })).toBe(true)
+  })
+})

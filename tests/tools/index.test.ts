@@ -17,6 +17,16 @@ describe('makeTools', () => {
     expect(tools).toHaveProperty('get_current_time')
   })
 
+  test('includes web_fetch when storageContextId is defined', () => {
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
+    expect(tools).toHaveProperty('web_fetch')
+  })
+
+  test('excludes web_fetch when storageContextId is undefined', () => {
+    const tools = makeTools(provider, { chatUserId: 'user-1' })
+    expect(tools).not.toHaveProperty('web_fetch')
+  })
+
   test('get_current_time tool has correct structure', () => {
     const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools['get_current_time']?.description).toContain('current date and time')
