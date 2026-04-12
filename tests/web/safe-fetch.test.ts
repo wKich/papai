@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { getUserMessage, webFetchError } from '../../src/errors.js'
-import { safeFetchContent, type SafeFetchDeps } from '../../src/web/safe-fetch.js'
+import { assertPublicUrl, safeFetchContent, type SafeFetchDeps } from '../../src/web/safe-fetch.js'
 import { expectAppError, mockLogger } from '../utils/test-helpers.js'
 
 function createFetchMock(impl: (...args: Parameters<typeof fetch>) => Promise<Response>): typeof fetch {
@@ -18,7 +18,7 @@ describe('safeFetchContent', () => {
   })
 
   test('validates the initial URL and each redirect target', async () => {
-    const assertPublicUrl = mock((_url: URL): Promise<void> => Promise.resolve())
+    const assertPublicUrlMock = mock((_url: URL): Promise<void> => Promise.resolve())
     let fetchCount = 0
     const fetchMock = createFetchMock((..._args: Parameters<typeof fetch>): Promise<Response> => {
       fetchCount += 1
@@ -42,13 +42,13 @@ describe('safeFetchContent', () => {
     const result = await safeFetchContent(
       'https://example.com/start',
       { abortSignal: AbortSignal.timeout(1000) },
-      { fetch: fetchMock, assertPublicUrl },
+      { fetch: fetchMock, assertPublicUrl: assertPublicUrlMock },
     )
 
     expect(result.finalUrl).toBe('https://example.com/final')
     expect(result.contentType).toBe('text/html')
     expect(new TextDecoder().decode(result.body)).toContain('Hello')
-    expect(assertPublicUrl).toHaveBeenCalledTimes(2)
+    expect(assertPublicUrlMock).toHaveBeenCalledTimes(2)
   })
 
   test('rejects unsupported content types', async () => {
@@ -159,6 +159,25 @@ describe('safeFetchContent', () => {
         code: 'timeout',
         appError: webFetchError.timeout(),
       })
+    }
+  })
+
+  test('blocks IPv4-mapped and NAT64 loopback literals', async () => {
+    for (const rawUrl of ['http://[::ffff:127.0.0.1]/', 'http://[64:ff9b::7f00:1]/']) {
+      try {
+        await assertPublicUrl(new URL(rawUrl))
+        throw new Error('Expected assertPublicUrl to reject')
+      } catch (error) {
+        expectAppError(error, getUserMessage(webFetchError.blockedHost()))
+        if (!hasAppError(error)) {
+          throw new Error('Expected error with appError', { cause: error })
+        }
+        expect(error).toMatchObject({
+          type: 'web-fetch',
+          code: 'blocked-host',
+          appError: webFetchError.blockedHost(),
+        })
+      }
     }
   })
 

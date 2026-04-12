@@ -48,8 +48,7 @@ function throwWebFetchError(appError: WebFetchError, message: string): never {
   throw new SafeFetchClassifiedError(message, appError)
 }
 
-function isBlockedAddress(address: string): boolean {
-  const range = ipaddr.parse(address).range()
+function isBlockedRange(range: string): boolean {
   return (
     range === 'loopback' ||
     range === 'private' ||
@@ -59,8 +58,17 @@ function isBlockedAddress(address: string): boolean {
     range === 'multicast' ||
     range === 'reserved' ||
     range === 'broadcast' ||
-    range === 'unspecified'
+    range === 'unspecified' ||
+    range === 'rfc6052'
   )
+}
+
+function isBlockedAddress(address: string): boolean {
+  const parsed = ipaddr.parse(address)
+  if (parsed instanceof ipaddr.IPv6 && parsed.isIPv4MappedAddress()) {
+    return isBlockedRange(parsed.toIPv4Address().range())
+  }
+  return isBlockedRange(parsed.range())
 }
 
 export async function assertPublicUrl(url: URL): Promise<void> {
@@ -95,42 +103,22 @@ async function lookupPublicAddresses(hostname: string): Promise<LookupAddress[]>
 }
 
 async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const reader = response.body?.getReader()
-  if (reader === undefined) {
+  if (response.body === null) {
     return new Uint8Array()
   }
 
   const chunks: Uint8Array[] = []
-  const totalBytes = await readChunks(reader, maxBytes, chunks, 0)
-  return concatenateChunks(chunks, totalBytes)
-}
+  let totalBytes = 0
 
-async function readChunks(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  maxBytes: number,
-  chunks: Uint8Array[],
-  totalBytes: number,
-): Promise<number> {
-  const { done, value } = await reader.read()
-  if (done) {
-    return totalBytes
-  }
-
-  if (value === undefined) {
-    return readChunks(reader, maxBytes, chunks, totalBytes)
-  }
-
-  const nextTotal = totalBytes + value.byteLength
-  if (nextTotal > maxBytes) {
-    try {
-      await reader.cancel()
-    } finally {
+  for await (const chunk of response.body) {
+    totalBytes += chunk.byteLength
+    if (totalBytes > maxBytes) {
       throwWebFetchError(webFetchError.tooLarge(), 'Response body exceeded size limit')
     }
+    chunks.push(chunk)
   }
 
-  chunks.push(value)
-  return readChunks(reader, maxBytes, chunks, nextTotal)
+  return concatenateChunks(chunks, totalBytes)
 }
 
 function concatenateChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
