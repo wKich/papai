@@ -53,7 +53,6 @@ describe('review-loop CLI bootstrap', () => {
       JSON.stringify(
         {
           repoRoot: '../repo',
-          planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
           workDir: '.review-loop',
           maxRounds: 5,
           maxNoProgressRounds: 2,
@@ -79,9 +78,6 @@ describe('review-loop CLI bootstrap', () => {
     const config = await loadReviewLoopConfig({ configPath })
 
     expect(config.repoRoot).toBe(repoDir)
-    expect(config.planPath).toBe(
-      path.join(repoDir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
-    )
     expect(config.workDir).toBe(path.join(repoDir, '.review-loop'))
     expect(existsSync(config.workDir)).toBe(true)
     expect(config.reviewer.invocationPrefix).toBe('/review-code')
@@ -99,7 +95,6 @@ describe('review-loop CLI bootstrap', () => {
       JSON.stringify(
         {
           repoRoot: '../repo',
-          planPath: 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md',
           workDir: '.review-loop',
           maxRounds: 5,
           maxNoProgressRounds: 2,
@@ -125,9 +120,6 @@ describe('review-loop CLI bootstrap', () => {
     const config = await loadReviewLoopConfig({ configPath, repoRoot: '.' })
 
     expect(config.repoRoot).toBe(process.cwd())
-    expect(config.planPath).toBe(
-      path.join(process.cwd(), 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
-    )
     expect(config.workDir).toBe(path.join(process.cwd(), '.review-loop'))
   })
 })

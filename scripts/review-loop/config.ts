@@ -24,7 +24,6 @@ const FixerConfigSchema = z.object({
 
 export const ReviewLoopConfigSchema = z.object({
   repoRoot: z.string().min(1),
-  planPath: z.string().min(1),
   workDir: z.string().min(1),
   maxRounds: z.number().int().positive().default(5),
   maxNoProgressRounds: z.number().int().positive().default(2),
@@ -37,7 +36,6 @@ export type ReviewLoopConfig = z.infer<typeof ReviewLoopConfigSchema>
 export interface ConfigLoadInput {
   configPath: string
   repoRoot?: string
-  planPath?: string
 }
 
 export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<ReviewLoopConfig> {
@@ -48,7 +46,6 @@ export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<Revi
 
   const repoRoot =
     input.repoRoot === undefined ? path.resolve(configDir, parsed.repoRoot) : path.resolve(input.repoRoot)
-  const planPath = path.resolve(repoRoot, input.planPath ?? parsed.planPath)
   const workDir = path.resolve(repoRoot, parsed.workDir)
 
   await mkdir(workDir, { recursive: true })
@@ -56,7 +53,6 @@ export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<Revi
   return {
     ...parsed,
     repoRoot,
-    planPath,
     workDir,
   }
 }

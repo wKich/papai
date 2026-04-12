@@ -62,7 +62,6 @@ export async function runCli(argv: readonly string[]): Promise<ReviewLoopConfig>
   const config = await loadReviewLoopConfig({
     configPath: args.configPath,
     repoRoot: args.repoRoot,
-    planPath: args.planPath,
   })
   console.log(`Loaded ACP review loop config for ${config.repoRoot}`)
   return config
