@@ -56,6 +56,9 @@ function isBlockedAddress(address: string): boolean {
     range === 'linkLocal' ||
     range === 'uniqueLocal' ||
     range === 'carrierGradeNat' ||
+    range === 'multicast' ||
+    range === 'reserved' ||
+    range === 'broadcast' ||
     range === 'unspecified'
   )
 }
@@ -119,7 +122,11 @@ async function readChunks(
 
   const nextTotal = totalBytes + value.byteLength
   if (nextTotal > maxBytes) {
-    throwWebFetchError(webFetchError.tooLarge(), 'Response body exceeded size limit')
+    try {
+      await reader.cancel()
+    } finally {
+      throwWebFetchError(webFetchError.tooLarge(), 'Response body exceeded size limit')
+    }
   }
 
   chunks.push(value)
@@ -156,6 +163,28 @@ function composeAbortSignal(options?: { abortSignal?: AbortSignal }): AbortSigna
   return options?.abortSignal === undefined
     ? AbortSignal.timeout(TOTAL_TIMEOUT_MS)
     : AbortSignal.any([options.abortSignal, AbortSignal.timeout(TOTAL_TIMEOUT_MS)])
+}
+
+function getAbortReason(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+  return new DOMException('The operation was aborted.', 'AbortError')
+}
+
+function waitForAbort(signal: AbortSignal): Promise<never> {
+  if (signal.aborted) {
+    return Promise.reject(getAbortReason(signal))
+  }
+
+  return new Promise((_, reject: (reason: Error) => void) => {
+    const onAbort = (): void => {
+      signal.removeEventListener('abort', onAbort)
+      reject(getAbortReason(signal))
+    }
+
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function getRequestHeaders(): HeadersInit {
@@ -217,9 +246,10 @@ export async function safeFetchContent(
   const abortSignal = composeAbortSignal(options)
 
   log.debug({ rawUrl, redirectCount }, 'safeFetchContent')
-  await deps.assertPublicUrl(url)
 
   try {
+    await Promise.race([deps.assertPublicUrl(url), waitForAbort(abortSignal)])
+
     const response = await deps.fetch(url.toString(), {
       method: 'GET',
       redirect: 'manual',

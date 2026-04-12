@@ -134,4 +134,31 @@ describe('safeFetchContent', () => {
       })
     }
   })
+
+  test('maps URL-validation timeouts to the web-fetch timeout shape', async () => {
+    const abortController = new AbortController()
+    abortController.abort(new DOMException('Timed out', 'TimeoutError'))
+
+    const deps: SafeFetchDeps = {
+      fetch: createFetchMock((_input: Parameters<typeof fetch>[0]): Promise<Response> => {
+        throw new Error('fetch should not be called when validation times out')
+      }),
+      assertPublicUrl: (): Promise<void> => new Promise(() => {}),
+    }
+
+    try {
+      await safeFetchContent('https://example.com/slow', { abortSignal: abortController.signal }, deps)
+      throw new Error('Expected safeFetchContent to reject')
+    } catch (error) {
+      expectAppError(error, getUserMessage(webFetchError.timeout()))
+      if (!hasAppError(error)) {
+        throw new Error('Expected error with appError', { cause: error })
+      }
+      expect(error).toMatchObject({
+        type: 'web-fetch',
+        code: 'timeout',
+        appError: webFetchError.timeout(),
+      })
+    }
+  })
 })
