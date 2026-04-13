@@ -31,38 +31,72 @@ export interface AcpProcessClient {
 const FORCE_KILL_DELAY_MS = 100
 const SHUTDOWN_TIMEOUT_MS = 1000
 
-function handlePermissionRequest(
-  spec: AcpProcessSpec,
-  params: acp.RequestPermissionRequest,
-): acp.RequestPermissionResponse {
-  if (spec.selectPermissionOptionId === undefined) {
-    throw new Error('No ACP permission handler configured')
-  }
+function findRejectOption(params: acp.RequestPermissionRequest): acp.PermissionOption | undefined {
+  return (
+    params.options.find((option) => option.kind === 'reject_once') ??
+    params.options.find((option) => option.kind === 'reject_always')
+  )
+}
 
-  const rawInput = params.toolCall.rawInput
+function createSelectedPermissionResponse(optionId: string): acp.RequestPermissionResponse {
+  return {
+    outcome: {
+      outcome: 'selected',
+      optionId,
+    },
+  }
+}
+
+function createPermissionInputRecord(rawInput: unknown): Record<string, unknown> {
   const inputRecord: Record<string, unknown> = {}
   if (rawInput !== null && typeof rawInput === 'object' && !Array.isArray(rawInput)) {
     for (const [key, value] of Object.entries(rawInput)) {
       inputRecord[key] = value
     }
   }
+  return inputRecord
+}
+
+function resolvePermissionOptionId(spec: AcpProcessSpec, params: acp.RequestPermissionRequest): string {
+  if (spec.selectPermissionOptionId === undefined) {
+    throw new Error('No ACP permission handler configured')
+  }
 
   const optionId = spec.selectPermissionOptionId({
     title: params.toolCall.title ?? '',
     kind: params.toolCall.kind ?? 'other',
     locations: (params.toolCall.locations ?? []).map((location) => ({ path: location.path })),
-    rawInput: inputRecord,
+    rawInput: createPermissionInputRecord(params.toolCall.rawInput),
     options: params.options.map((option) => ({
       optionId: option.optionId,
       kind: option.kind,
     })),
   })
 
-  return {
-    outcome: {
-      outcome: 'selected',
-      optionId,
-    },
+  const isKnownOption = params.options.some((option) => option.optionId === optionId)
+  if (!isKnownOption) {
+    throw new Error(`Permission handler returned invalid optionId "${optionId}"`)
+  }
+
+  return optionId
+}
+
+export function handlePermissionRequest(
+  spec: AcpProcessSpec,
+  params: acp.RequestPermissionRequest,
+): acp.RequestPermissionResponse {
+  const rejectOption = findRejectOption(params)
+
+  try {
+    return createSelectedPermissionResponse(resolvePermissionOptionId(spec, params))
+  } catch (error) {
+    if (rejectOption === undefined) {
+      throw new Error('Permission request could not be resolved and no reject option was provided', {
+        cause: error,
+      })
+    }
+
+    return createSelectedPermissionResponse(rejectOption.optionId)
   }
 }
 

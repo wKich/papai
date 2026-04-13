@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { createAcpProcessClient } from '../../scripts/review-loop/acp-process-client.js'
+import { handlePermissionRequest } from '../../scripts/review-loop/acp-process-client.js'
 import { bootstrapAgentSession } from '../../scripts/review-loop/agent-session.js'
 
 const tempDirs: string[] = []
@@ -53,6 +54,73 @@ async function waitForAvailableCommand(
 }
 
 describe('ACP process client', () => {
+  test('defaults permission requests to reject when no handler is configured', () => {
+    const response = handlePermissionRequest(
+      {
+        command: 'bun',
+        args: [],
+        cwd: '/repo',
+        transcriptPath: '/tmp/transcript.ndjson',
+      },
+      {
+        sessionId: 'sess_fake',
+        toolCall: {
+          toolCallId: 'call_1',
+          title: 'Edit queue.ts',
+          kind: 'edit',
+          status: 'pending',
+          locations: [{ path: '/repo/src/queue.ts' }],
+          rawInput: { path: '/repo/src/queue.ts' },
+        },
+        options: [
+          { optionId: 'allow', kind: 'allow_once', name: 'Allow' },
+          { optionId: 'reject', kind: 'reject_once', name: 'Reject' },
+        ],
+      },
+    )
+
+    expect(response).toEqual({
+      outcome: {
+        outcome: 'selected',
+        optionId: 'reject',
+      },
+    })
+  })
+
+  test('falls back to reject when the permission handler returns an invalid option', () => {
+    const response = handlePermissionRequest(
+      {
+        command: 'bun',
+        args: [],
+        cwd: '/repo',
+        transcriptPath: '/tmp/transcript.ndjson',
+        selectPermissionOptionId: () => 'not-an-option',
+      },
+      {
+        sessionId: 'sess_fake',
+        toolCall: {
+          toolCallId: 'call_1',
+          title: 'Edit queue.ts',
+          kind: 'edit',
+          status: 'pending',
+          locations: [{ path: '/repo/src/queue.ts' }],
+          rawInput: { path: '/repo/src/queue.ts' },
+        },
+        options: [
+          { optionId: 'allow', kind: 'allow_once', name: 'Allow' },
+          { optionId: 'reject', kind: 'reject_once', name: 'Reject' },
+        ],
+      },
+    )
+
+    expect(response).toEqual({
+      outcome: {
+        outcome: 'selected',
+        optionId: 'reject',
+      },
+    })
+  })
+
   test('initializes the subprocess, creates a session, and collects text replies', async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'review-loop-acp-'))
     tempDirs.push(tempDir)
