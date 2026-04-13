@@ -1,12 +1,8 @@
+import type { ToolExecutionOptions } from 'ai'
+
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'tool-wrapper' })
-
-export interface ToolExecutionOptions {
-  toolCallId: string
-  messages: unknown[]
-  abortSignal?: AbortSignal
-}
 
 export interface ToolErrorResult {
   success: false
@@ -16,18 +12,28 @@ export interface ToolErrorResult {
   timestamp: string
 }
 
-export type ToolExecuteFunction<TInput, TOutput> = (input: TInput, options: ToolExecutionOptions) => Promise<TOutput>
+export function isToolErrorResult(value: unknown): value is ToolErrorResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    value.success === false &&
+    'error' in value &&
+    typeof value.error === 'string' &&
+    'toolName' in value &&
+    typeof value.toolName === 'string' &&
+    'toolCallId' in value &&
+    typeof value.toolCallId === 'string' &&
+    'timestamp' in value &&
+    typeof value.timestamp === 'string'
+  )
+}
 
-export type WrappedToolExecuteFunction<TInput, TOutput> = (
-  input: TInput,
-  options: ToolExecutionOptions,
-) => Promise<TOutput | ToolErrorResult>
-
-export function wrapToolExecution<TInput, TOutput>(
-  execute: ToolExecuteFunction<TInput, TOutput>,
+export function wrapToolExecution(
+  execute: (input: unknown, options: ToolExecutionOptions) => Promise<unknown>,
   toolName: string,
-): WrappedToolExecuteFunction<TInput, TOutput> {
-  return async (input: TInput, options: ToolExecutionOptions): Promise<TOutput | ToolErrorResult> => {
+): (input: unknown, options: ToolExecutionOptions) => Promise<unknown> {
+  return async (input: unknown, options: ToolExecutionOptions) => {
     try {
       return await execute(input, options)
     } catch (error) {
