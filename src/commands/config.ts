@@ -46,15 +46,15 @@ function formatConfigLine(key: ConfigKey, value: string | undefined): string {
   return `${emoji} ${displayName}: ${maskValue(key, value)}`
 }
 
-function buildConfigButtons(config: Partial<Record<ConfigKey, string>>): ChatButton[] {
+function buildConfigButtons(config: Partial<Record<ConfigKey, string>>, targetContextId: string): ChatButton[] {
   const buttons: ChatButton[] = CONFIG_KEYS.map((key) => ({
     text: `${getFieldEmoji(key)} ${FIELD_DISPLAY_NAMES[key]}`,
-    callbackData: serializeCallbackData({ action: 'edit', key }),
+    callbackData: serializeCallbackData({ action: 'edit', key }, targetContextId),
     style: config[key] === undefined ? 'secondary' : 'primary',
   }))
   buttons.push({
     text: '🔄 Full Setup',
-    callbackData: serializeCallbackData({ action: 'setup' }),
+    callbackData: serializeCallbackData({ action: 'setup' }, targetContextId),
     style: 'primary',
   })
   return buttons
@@ -79,7 +79,7 @@ export async function renderConfigForTarget(
   }
 
   lines.push('\n💡 Click a field below to edit it, or use `/setup` to configure everything.')
-  await reply.buttons(lines.join('\n'), { buttons: buildConfigButtons(config) })
+  await reply.buttons(lines.join('\n'), { buttons: buildConfigButtons(config, targetContextId) })
 }
 
 async function replyWithConfigSelection(reply: ReplyFn, userId: string, interactiveButtons: boolean): Promise<void> {

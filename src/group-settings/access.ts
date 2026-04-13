@@ -1,5 +1,5 @@
 import { logger } from '../logger.js'
-import { getGroupAdminObservation, listKnownGroupContexts } from './registry.js'
+import { getGroupAdminObservation, listAdminGroupContextsForUser } from './registry.js'
 import type { KnownGroupContext } from './types.js'
 
 const log = logger.child({ scope: 'group-settings:access' })
@@ -28,7 +28,7 @@ export function canManageGroupSettings(userId: string, groupId: string): boolean
 export function listManageableGroups(userId: string): KnownGroupContext[] {
   log.debug({ userId }, 'listManageableGroups called')
 
-  const groups = listKnownGroupContexts().filter((group) => canManageGroupSettings(userId, group.contextId))
+  const groups = listAdminGroupContextsForUser(userId)
 
   log.debug({ userId, groupCount: groups.length }, 'Listed manageable groups')
   return groups
