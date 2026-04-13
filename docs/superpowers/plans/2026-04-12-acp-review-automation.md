@@ -664,9 +664,12 @@ export interface RunState {
   noProgressRounds: number
 }
 
-const PersistedRunStateSchema = RunStateSchema.omit({
-  reviewerSessionId: true,
-  fixerSessionId: true,
+const PersistedRunStateSchema = RunStateSchema.pick({
+  runId: true,
+  repoRoot: true,
+  planPath: true,
+  currentRound: true,
+  noProgressRounds: true,
 })
 
 function makeRunId(): string {
@@ -718,8 +721,8 @@ export async function loadRunState(workDir: string, runId: string): Promise<RunS
     statePath,
     reviewerSessionPath,
     fixerSessionPath,
-    reviewerSessionId: JSON.parse(await readFile(reviewerSessionPath, 'utf8')).sessionId,
-    fixerSessionId: JSON.parse(await readFile(fixerSessionPath, 'utf8')).sessionId,
+    reviewerSessionId: await readSessionPointer(reviewerSessionPath),
+    fixerSessionId: await readSessionPointer(fixerSessionPath),
   }
 }
 
@@ -728,6 +731,10 @@ export async function saveRunState(state: RunState): Promise<void> {
   await writeFile(state.statePath, JSON.stringify(persistedState, null, 2))
   await writeFile(state.reviewerSessionPath, JSON.stringify({ sessionId: state.reviewerSessionId }, null, 2))
   await writeFile(state.fixerSessionPath, JSON.stringify({ sessionId: state.fixerSessionId }, null, 2))
+}
+
+async function readSessionPointer(pointerPath: string): Promise<string | null> {
+  return SessionPointerSchema.parse(JSON.parse(await readFile(pointerPath, 'utf8'))).sessionId
 }
 ```
 

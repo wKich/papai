@@ -20,9 +20,12 @@ export const RunStateSchema = z.object({
   noProgressRounds: z.number().int().nonnegative(),
 })
 
-const PersistedRunStateSchema = RunStateSchema.omit({
-  reviewerSessionId: true,
-  fixerSessionId: true,
+const PersistedRunStateSchema = RunStateSchema.pick({
+  runId: true,
+  repoRoot: true,
+  planPath: true,
+  currentRound: true,
+  noProgressRounds: true,
 })
 
 export interface RunState {
