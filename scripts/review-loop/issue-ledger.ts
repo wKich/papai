@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+
 import { z } from 'zod'
 
 import { computeIssueFingerprint } from './issue-fingerprint.js'
@@ -71,8 +72,16 @@ export function applyReviewRound(
   round: number,
   issues: readonly ReviewerIssue[],
 ): readonly LedgerIssueRecord[] {
-  return issues.map((issue) => {
+  const seenFingerprints = new Set<string>()
+  const roundRecords: LedgerIssueRecord[] = []
+
+  for (const issue of issues) {
     const fingerprint = computeIssueFingerprint(issue)
+    if (seenFingerprints.has(fingerprint)) {
+      continue
+    }
+    seenFingerprints.add(fingerprint)
+
     const existing = ledger.snapshot.issues[fingerprint]
 
     const next: LedgerIssueRecord =
@@ -94,8 +103,10 @@ export function applyReviewRound(
           }
 
     ledger.snapshot.issues[fingerprint] = next
-    return next
-  })
+    roundRecords.push(next)
+  }
+
+  return roundRecords
 }
 
 export function recordVerification(ledger: IssueLedger, fingerprint: string, decision: VerifierDecision): void {

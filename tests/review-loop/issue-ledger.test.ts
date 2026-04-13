@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+
 import { z } from 'zod'
 
 import {
@@ -35,6 +36,20 @@ afterEach(() => {
 })
 
 describe('issue ledger', () => {
+  test('deduplicates repeated issues within the same review round', async () => {
+    const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
+    tempDirs.push(runDir)
+
+    const ledger = await createIssueLedger(runDir)
+    const duplicateIssues = [issue, { ...issue }]
+
+    const records = applyReviewRound(ledger, 1, duplicateIssues)
+
+    expect(records).toHaveLength(1)
+    expect(records[0]?.fingerprint).toBeDefined()
+    expect(Object.keys(ledger.snapshot.issues)).toHaveLength(1)
+  })
+
   test('reopens closed issues when the reviewer reports them again', async () => {
     const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
     tempDirs.push(runDir)
