@@ -1,7 +1,7 @@
 import pLimit from 'p-limit'
 
 import { logger } from '../../logger.js'
-import type { ButtonReplyOptions, ReplyFn, ReplyOptions } from '../types.js'
+import type { ButtonReplyOptions, EmbedOptions, ReplyFn, ReplyOptions } from '../types.js'
 import { toActionRows } from './buttons.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { formatLlmOutput } from './format.js'
@@ -14,6 +14,7 @@ export type SendableChannel = {
   send: (arg: {
     content?: string
     components?: unknown[]
+    embeds?: unknown[]
     reply?: { messageReference: string; failIfNotExists: boolean }
   }) => Promise<{ id: string; edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown> }>
   sendTyping: () => Promise<void>
@@ -59,6 +60,23 @@ async function sendChunksSequentially(
   return sent
 }
 
+function createEmbedPayload(options: EmbedOptions): Record<string, unknown> {
+  const embed: Record<string, unknown> = {
+    title: options.title,
+    description: options.description,
+  }
+  if (options.fields !== undefined) {
+    embed['fields'] = options.fields
+  }
+  if (options.footer !== undefined) {
+    embed['footer'] = { text: options.footer }
+  }
+  if (options.color !== undefined) {
+    embed['color'] = options.color
+  }
+  return embed
+}
+
 export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyFn {
   const { channel, replyToMessageId } = params
   const sentMessages: BotMessage[] = []
@@ -91,6 +109,11 @@ export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyF
     buttons: async (content: string, options: ButtonReplyOptions): Promise<void> => {
       const rows = options.buttons === undefined ? [] : toActionRows(options.buttons)
       const sent = await channel.send({ content, components: rows, reply: buildReply(replyToMessageId, options) })
+      sentMessages.push(sent)
+    },
+    embed: async (options: EmbedOptions): Promise<void> => {
+      const embed = createEmbedPayload(options)
+      const sent = await channel.send({ embeds: [embed], reply: buildReply(replyToMessageId, undefined) })
       sentMessages.push(sent)
     },
   }

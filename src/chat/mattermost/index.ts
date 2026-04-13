@@ -4,16 +4,20 @@ import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
   ContextType,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
+import { renderMattermostContext } from './context-renderer.js'
 import {
   cacheIncomingPost,
   downloadMattermostFile,
   fetchMattermostFiles,
   parsePostedEvent,
+  resolveMattermostUserId,
   uploadMattermostFile,
 } from './file-helpers.js'
 import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
@@ -267,18 +271,8 @@ export class MattermostChatProvider implements ChatProvider {
     return ChannelSchema.parse(data).id
   }
 
-  async resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
-    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
-    try {
-      const data = await this.apiFetch('GET', `/api/v4/users/username/${encodeURIComponent(cleanUsername)}`, undefined)
-      const parsed = UserMeSchema.safeParse(data)
-      if (parsed.success) {
-        return parsed.data.id
-      }
-      return null
-    } catch {
-      return null
-    }
+  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
+    return resolveMattermostUserId(username, this.apiFetch.bind(this))
   }
 
   private wsSend(data: unknown): void {
@@ -296,5 +290,9 @@ export class MattermostChatProvider implements ChatProvider {
     if (!res.ok) throw new Error(`Mattermost API ${method} ${path} failed: ${res.status}`)
     const data: unknown = await res.json()
     return data
+  }
+
+  renderContext(snapshot: ContextSnapshot): ContextRendered {
+    return renderMattermostContext(snapshot)
   }
 }

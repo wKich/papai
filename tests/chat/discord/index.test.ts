@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
-import type { IncomingMessage } from '../../../src/chat/types.js'
+import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
 import { addUser } from '../../../src/users.js'
 import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
@@ -217,6 +217,35 @@ describe('DiscordChatProvider', () => {
 
     const result = await provider.resolveUserId('@alice', { contextId: 'chan-7', contextType: 'group' })
     expect(result).toBe('u-9')
+  })
+
+  describe('renderContext', () => {
+    test('returns embed method result with context snapshot', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const snapshot: ContextSnapshot = {
+        modelName: 'gpt-4o',
+        totalTokens: 1500,
+        maxTokens: 128_000,
+        approximate: false,
+        sections: [
+          { label: 'System prompt', tokens: 500 },
+          { label: 'Tools', tokens: 1000 },
+        ],
+      }
+
+      const result = provider.renderContext(snapshot)
+
+      expect(result.method).toBe('embed')
+      if (result.method === 'embed') {
+        expect(result.embed.title).toBe('Context · gpt-4o')
+        expect(result.embed.description).toContain('🟦')
+        expect(result.embed.footer).toContain('1,500')
+        expect(result.embed.footer).toContain('128,000')
+        expect(result.embed.color).toBe(0x2ecc71)
+      }
+    })
   })
 
   describe('defaultClientFactory', () => {

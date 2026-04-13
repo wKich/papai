@@ -3,12 +3,12 @@ import { Bot, type Context } from 'grammy'
 
 import { getThreadScopedStorageContextId } from '../../auth.js'
 import { logger } from '../../logger.js'
-import { cacheMessage } from '../../message-cache/index.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
-  ContextType,
+  ContextRendered,
+  ContextSnapshot,
   IncomingFile,
   IncomingInteraction,
   IncomingMessage,
@@ -16,12 +16,19 @@ import type {
   ReplyOptions,
   ResolveUserContext,
 } from '../types.js'
+import { renderTelegramContext } from './context-renderer.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
-import { createForumTopicIfNeeded } from './forum-topic-helpers.js'
 import { buildTelegramInteraction } from './interaction-helpers.js'
+import {
+  cacheTelegramMessage,
+  extractContextInfo,
+  extractMessageIds,
+  extractReplyContext,
+  logMessageExtraction,
+  resolveThreadId,
+} from './message-extraction.js'
 import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
-import { extractReplyContext } from './reply-context-helpers.js'
 import {
   createReplyParamsBuilder,
   sendButtonReply,
@@ -29,7 +36,7 @@ import {
   sendFormattedReply,
   sendTextReply,
 } from './reply-helpers.js'
-export { extractReplyContext } from './reply-context-helpers.js'
+export { extractReplyContext } from './message-extraction.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
 
@@ -138,10 +145,10 @@ export class TelegramChatProvider implements ChatProvider {
       { command: 'setup', description: 'Interactive configuration wizard' },
       { command: 'config', description: 'View current configuration' },
       { command: 'clear', description: 'Clear conversation history and memory' },
+      { command: 'context', description: 'Show current LLM context usage' },
     ]
     const adminCmds = [
       ...userCmds,
-      { command: 'context', description: 'Show current memory context' },
       { command: 'user', description: 'Manage users — /user add|remove <id|@username>' },
       { command: 'users', description: 'List authorized users' },
     ]
@@ -150,37 +157,22 @@ export class TelegramChatProvider implements ChatProvider {
     log.info({ adminUserId }, 'Telegram command menu registered')
   }
 
+  renderContext(snapshot: ContextSnapshot): ContextRendered {
+    return renderTelegramContext(snapshot)
+  }
+
   private async extractMessage(ctx: Context, isAdmin: boolean): Promise<IncomingMessage | null> {
-    const id = ctx.from?.id
-    if (id === undefined) return null
+    const contextInfo = extractContextInfo(ctx, (text, entities) => this.isBotMentioned(text, entities))
+    if (contextInfo === null) return null
 
-    const chatType = ctx.chat?.type
-    const isGroup = chatType === 'group' || chatType === 'supergroup' || chatType === 'channel'
-    const contextId = String(ctx.chat?.id ?? id)
-    const contextType: ContextType = isGroup ? 'group' : 'dm'
-    const text = ctx.message?.text ?? ctx.message?.caption ?? ''
-    const entities = ctx.message?.entities ?? ctx.message?.caption_entities
-    const isMentioned = this.isBotMentioned(text, entities)
+    const { id, contextId, contextType, text, isMentioned } = contextInfo
+    const { messageIdStr, replyToMessageIdStr, replyToMessageText, quoteText } = extractMessageIds(ctx)
 
-    const messageId = ctx.message?.message_id
-    const messageIdStr = messageId === undefined ? undefined : String(messageId)
-    const replyToMessageId = ctx.message?.reply_to_message?.message_id
-    const replyToMessageIdStr = replyToMessageId === undefined ? undefined : String(replyToMessageId)
-
-    if (messageIdStr !== undefined) {
-      cacheMessage({
-        messageId: messageIdStr,
-        contextId,
-        authorId: String(id),
-        authorUsername: ctx.from?.username ?? undefined,
-        text,
-        replyToMessageId: replyToMessageIdStr,
-        timestamp: Date.now(),
-      })
-    }
+    logMessageExtraction(id, contextId, messageIdStr, replyToMessageIdStr, replyToMessageText, quoteText)
+    cacheTelegramMessage(ctx, id, contextId, messageIdStr, text, replyToMessageIdStr)
 
     const replyContext = extractReplyContext(ctx, contextId)
-    const threadId = await this.resolveThreadId(ctx, isMentioned, contextType)
+    const threadId = await resolveThreadId(ctx, isMentioned, contextType, this.bot.api)
 
     return {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
@@ -193,42 +185,6 @@ export class TelegramChatProvider implements ChatProvider {
       replyContext,
       threadId,
     }
-  }
-
-  private resolveThreadId(
-    ctx: Context,
-    isMentioned: boolean,
-    contextType: ContextType,
-  ): Promise<string | undefined> | string | undefined {
-    if (isMentioned && contextType === 'group') {
-      return createForumTopicIfNeeded(ctx, this.bot.api)
-    }
-    if (ctx.message?.message_thread_id !== undefined) {
-      return String(ctx.message.message_thread_id)
-    }
-    return undefined
-  }
-  /** Fetch all attached files from a grammy Context, downloading their content. */
-  private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
-    const token = process.env['TELEGRAM_BOT_TOKEN'] ?? ''
-    const fetcher: TelegramFileFetcher = async (fileId: string) => {
-      try {
-        const fileInfo = await this.bot.api.getFile(fileId)
-        if (fileInfo.file_path === undefined) return null
-        const url = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`
-        const response = await fetch(url)
-        if (!response.ok) {
-          log.warn({ fileId, status: response.status }, 'Telegram file download failed')
-          return null
-        }
-        return Buffer.from(await response.arrayBuffer())
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error)
-        log.error({ fileId, error: errMsg }, 'Failed to fetch Telegram file')
-        return null
-      }
-    }
-    return extractFilesFromContext(ctx, fetcher)
   }
 
   private isBotMentioned(text: string, entities?: MessageEntity[]): boolean {
@@ -285,6 +241,7 @@ export class TelegramChatProvider implements ChatProvider {
       clearInterval(interval)
     }
   }
+
   private async dispatchCallbackQuery(ctx: Context): Promise<void> {
     await ctx.answerCallbackQuery()
     const interaction = buildTelegramInteraction(ctx, await this.checkAdminStatus(ctx))
@@ -295,5 +252,27 @@ export class TelegramChatProvider implements ChatProvider {
       return
     }
     await this.interactionHandler(interaction, reply)
+  }
+
+  private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
+    const token = process.env['TELEGRAM_BOT_TOKEN'] ?? ''
+    const fetcher: TelegramFileFetcher = async (fileId: string) => {
+      try {
+        const fileInfo = await this.bot.api.getFile(fileId)
+        if (fileInfo.file_path === undefined) return null
+        const url = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`
+        const response = await fetch(url)
+        if (!response.ok) {
+          log.warn({ fileId, status: response.status }, 'Telegram file download failed')
+          return null
+        }
+        return Buffer.from(await response.arrayBuffer())
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error)
+        log.error({ fileId, error: errMsg }, 'Failed to fetch Telegram file')
+        return null
+      }
+    }
+    return extractFilesFromContext(ctx, fetcher)
   }
 }

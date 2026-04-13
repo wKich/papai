@@ -4,6 +4,7 @@ import { fetchMattermostFiles } from '../../../src/chat/mattermost/file-helpers.
 import { MattermostChatProvider } from '../../../src/chat/mattermost/index.js'
 import { mattermostCapabilities } from '../../../src/chat/mattermost/metadata.js'
 import type { MattermostPost } from '../../../src/chat/mattermost/schema.js'
+import type { ContextSnapshot } from '../../../src/chat/types.js'
 import { restoreFetch, setMockFetch } from '../../utils/test-helpers.js'
 
 // Mock the auth module to provide getThreadScopedStorageContextId
@@ -91,6 +92,31 @@ describe('MattermostChatProvider', () => {
 
     test('does NOT advertise commands.menu', () => {
       expect(mattermostCapabilities.has('commands.menu')).toBe(false)
+    })
+  })
+
+  describe('renderContext', () => {
+    test('returns formatted method result with context snapshot', () => {
+      const mmProvider = new MattermostChatProvider()
+      const snapshot: ContextSnapshot = {
+        modelName: 'gpt-4o',
+        totalTokens: 1500,
+        maxTokens: 128_000,
+        approximate: false,
+        sections: [
+          { label: 'System prompt', tokens: 500 },
+          { label: 'Tools', tokens: 1000 },
+        ],
+      }
+
+      const result = mmProvider.renderContext(snapshot)
+
+      expect(result.method).toBe('formatted')
+      if (result.method === 'formatted') {
+        expect(result.content).toContain('gpt-4o')
+        expect(result.content).toContain('1,500')
+        expect(result.content).toContain('128,000')
+      }
     })
   })
 

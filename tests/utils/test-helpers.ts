@@ -11,6 +11,9 @@ import type {
   ChatProviderConfigRequirement,
   ChatProviderTraits,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
+  EmbedOptions,
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
@@ -203,8 +206,10 @@ export interface MockReplyResult {
   buttonCalls: string[]
   redactCalls: string[]
   fileCalls: ChatFile[]
+  embedCalls: EmbedOptions[]
   getReplies: () => string[]
   getRedactions: () => string[]
+  getEmbeds: () => EmbedOptions[]
 }
 
 /**
@@ -215,12 +220,16 @@ export function createMockReply(): MockReplyResult {
   const buttonCalls: string[] = []
   const redactCalls: string[] = []
   const fileCalls: ChatFile[] = []
+  const embedCalls: EmbedOptions[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
       textCalls.push(content)
       return Promise.resolve()
     },
-    formatted: (): Promise<void> => Promise.resolve(),
+    formatted: (content: string): Promise<void> => {
+      textCalls.push(content)
+      return Promise.resolve()
+    },
     file: (file: ChatFile): Promise<void> => {
       fileCalls.push(file)
       return Promise.resolve()
@@ -234,6 +243,10 @@ export function createMockReply(): MockReplyResult {
       buttonCalls.push(content)
       return Promise.resolve()
     },
+    embed: (options: EmbedOptions): Promise<void> => {
+      embedCalls.push(options)
+      return Promise.resolve()
+    },
   }
   return {
     reply,
@@ -241,8 +254,10 @@ export function createMockReply(): MockReplyResult {
     buttonCalls,
     redactCalls,
     fileCalls,
+    embedCalls,
     getReplies: () => textCalls,
     getRedactions: () => redactCalls,
+    getEmbeds: () => embedCalls,
   }
 }
 
@@ -410,6 +425,10 @@ export function createMockChat(
         return Promise.resolve(clean)
       }),
     setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
+    renderContext: (snapshot: ContextSnapshot): ContextRendered => ({
+      method: 'text',
+      content: `mock renderContext: ${snapshot.modelName} total=${String(snapshot.totalTokens)}`,
+    }),
     start: (): Promise<void> => Promise.resolve(),
     stop: (): Promise<void> => Promise.resolve(),
   }

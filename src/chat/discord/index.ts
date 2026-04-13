@@ -4,6 +4,8 @@ import { routeInteraction } from '../interaction-router.js'
 import type {
   ChatProvider,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
@@ -22,6 +24,7 @@ import {
   type DispatchableMessage,
   defaultClientFactory,
 } from './client-factory.js'
+import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
@@ -261,5 +264,9 @@ export class DiscordChatProvider implements ChatProvider {
       }
     }
     return null
+  }
+
+  renderContext(snapshot: ContextSnapshot): ContextRendered {
+    return renderDiscordContext(snapshot)
   }
 }

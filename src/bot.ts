@@ -58,7 +58,7 @@ function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerStartCommand(chat)
   registerSetupCommand(chat, checkAuthorization)
   registerConfigCommand(chat, checkAuthorization)
-  registerContextCommand(chat, adminUserId)
+  registerContextCommand(chat)
   registerClearCommand(chat, checkAuthorization, adminUserId)
   registerAdminCommands(chat, adminUserId)
   registerGroupCommand(chat)

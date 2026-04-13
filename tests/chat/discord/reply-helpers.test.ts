@@ -7,6 +7,7 @@ type SendArg = {
   content?: string
   components?: unknown[]
   reply?: { messageReference: string; failIfNotExists: boolean }
+  embeds?: unknown[]
 }
 
 describe('createDiscordReplyFn', () => {
@@ -132,5 +133,48 @@ describe('createDiscordReplyFn', () => {
     expect(sends[0]!.content).toBe('choose')
     expect(Array.isArray(sends[0]!.components)).toBe(true)
     expect((sends[0]!.components ?? []).length).toBe(1)
+  })
+
+  test('embed() sends an embed via channel.send', async () => {
+    const { channel, sends } = makeChannel()
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+
+    expect(reply.embed).toBeDefined()
+    await reply.embed!({
+      title: 'Context · gpt-4o',
+      description: '🟦🟦⬜',
+      fields: [{ name: 'System prompt', value: '820 tk' }],
+      footer: '6,770 / 128,000 tokens',
+      color: 0x2ecc71,
+    })
+
+    expect(sends).toHaveLength(1)
+    const payload = sends[0]
+    expect(typeof payload).toBe('object')
+    expect(payload).not.toBeNull()
+    if (typeof payload === 'object' && payload !== null) {
+      const embeds = payload.embeds
+      expect(Array.isArray(embeds)).toBe(true)
+      expect(embeds).toHaveLength(1)
+    }
+  })
+
+  test('embed() handles embeds without optional fields', async () => {
+    const { channel, sends } = makeChannel()
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+
+    await reply.embed!({
+      title: 'Minimal',
+      description: 'Just the basics',
+    })
+    expect(sends).toHaveLength(1)
+    const payload = sends[0]
+    expect(typeof payload).toBe('object')
+    expect(payload).not.toBeNull()
+    if (typeof payload === 'object' && payload !== null) {
+      const embeds = payload.embeds
+      expect(Array.isArray(embeds)).toBe(true)
+      expect(embeds).toHaveLength(1)
+    }
   })
 })

@@ -42,48 +42,98 @@ export function buildReplyContextChain(
  * - Telegram: reply_to_message fields + message cache chain
  * - Mattermost: cached parent or API fetch + message cache chain
  */
-export function buildPromptWithReplyContext(msg: IncomingMessage): string {
+function hasContextData(msg: IncomingMessage): boolean {
   const hasReplyContext = msg.replyContext !== undefined
   const hasFiles = msg.files !== undefined && msg.files.length > 0
+  return hasReplyContext || hasFiles
+}
 
-  if (!hasReplyContext && !hasFiles) {
+function logReplyContextDebug(msg: IncomingMessage): void {
+  if (msg.replyContext === undefined) return
+  const replyTextLength = msg.replyContext.text?.length ?? 0
+  const quotedTextLength = msg.replyContext.quotedText?.length ?? 0
+  const hasChainSummary = msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== ''
+
+  log.debug(
+    {
+      messageId: msg.messageId,
+      replyToMessageId: msg.replyContext.messageId,
+      replyTextLength,
+      quotedTextLength,
+      hasChainSummary,
+      replyTextPreview: msg.replyContext.text?.slice(0, 100),
+      quotedTextPreview: msg.replyContext.quotedText?.slice(0, 100),
+    },
+    'Building prompt with reply context',
+  )
+}
+
+function buildReplyContextLines(msg: IncomingMessage): string[] {
+  const lines: string[] = []
+  if (msg.replyContext === undefined) return lines
+
+  if (msg.replyContext.text !== undefined) {
+    const author = msg.replyContext.authorUsername ?? 'user'
+    lines.push(`[Replying to message from ${author}: "${msg.replyContext.text}"]`)
+  }
+
+  if (msg.replyContext.quotedText !== undefined) {
+    lines.push(`[Quoted text: "${msg.replyContext.quotedText}"]`)
+  }
+
+  if (msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== '') {
+    lines.push(`[Earlier context: ${msg.replyContext.chainSummary}]`)
+  }
+  return lines
+}
+
+function buildFileContextLine(msg: IncomingMessage): string | null {
+  if (msg.files === undefined || msg.files.length === 0) return null
+  const fileList = msg.files
+    .map((f) => {
+      const meta: string[] = []
+      if (f.mimeType !== undefined) meta.push(f.mimeType)
+      if (f.size !== undefined) meta.push(`${f.size} bytes`)
+      const fileLabel = meta.length > 0 ? `${f.filename} (${meta.join(', ')})` : f.filename
+      return `fileId=${f.fileId}: ${fileLabel}`
+    })
+    .join('; ')
+  return `[Attached files available for upload_attachment (use fileId): ${fileList}]`
+}
+
+function logPromptBuilt(contextLength: number, finalPrompt: string, originalText: string): void {
+  log.debug(
+    {
+      contextParts: contextLength,
+      finalPromptLength: finalPrompt.length,
+      originalMessageLength: originalText.length,
+    },
+    'Built prompt with reply context',
+  )
+}
+
+export function buildPromptWithReplyContext(msg: IncomingMessage): string {
+  if (!hasContextData(msg)) {
     return msg.text
   }
 
   const context: string[] = []
 
   if (msg.replyContext !== undefined) {
-    if (msg.replyContext.text !== undefined) {
-      const author = msg.replyContext.authorUsername ?? 'user'
-      context.push(`[Replying to message from ${author}: "${msg.replyContext.text}"]`)
-    }
-
-    if (msg.replyContext.quotedText !== undefined) {
-      context.push(`[Quoted text: "${msg.replyContext.quotedText}"]`)
-    }
-
-    if (msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== '') {
-      context.push(`[Earlier context: ${msg.replyContext.chainSummary}]`)
-    }
+    logReplyContextDebug(msg)
+    context.push(...buildReplyContextLines(msg))
   }
 
-  if (msg.files !== undefined && msg.files.length > 0) {
-    const fileList = msg.files
-      .map((f) => {
-        const meta: string[] = []
-        if (f.mimeType !== undefined) meta.push(f.mimeType)
-        if (f.size !== undefined) meta.push(`${f.size} bytes`)
-        const fileLabel = meta.length > 0 ? `${f.filename} (${meta.join(', ')})` : f.filename
-        return `fileId=${f.fileId}: ${fileLabel}`
-      })
-      .join('; ')
-    context.push(`[Attached files available for upload_attachment (use fileId): ${fileList}]`)
+  const fileLine = buildFileContextLine(msg)
+  if (fileLine !== null) {
+    context.push(fileLine)
   }
 
   if (context.length === 0) {
     return msg.text
   }
 
-  log.debug({ contextParts: context.length }, 'Built prompt with reply context')
-  return context.join('\n') + '\n\n' + msg.text
+  const finalPrompt = context.join('\n') + '\n\n' + msg.text
+  logPromptBuilt(context.length, finalPrompt, msg.text)
+  return finalPrompt
 }
