@@ -7,11 +7,13 @@ import type {
   ContextRendered,
   ContextSnapshot,
   ContextType,
+  IncomingFile,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
-import { checkChannelAdmin, fetchChannelInfo } from './channel-helpers.js'
+import { checkChannelAdmin } from './channel-helpers.js'
+import { fetchMattermostChannelInfo, fetchMattermostTeamInfo, type MattermostChannelInfo } from './context-metadata.js'
 import { renderMattermostContext } from './context-renderer.js'
 import {
   cacheIncomingPost,
@@ -137,6 +139,13 @@ export class MattermostChatProvider implements ChatProvider {
     await this.dispatchMsg(msg, reply, command, isAdmin)
   }
 
+  private fetchFilesForPost(post: MattermostPost): Promise<IncomingFile[] | undefined> {
+    if (post.file_ids === undefined || post.file_ids.length === 0) return Promise.resolve(undefined)
+    return fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
+      downloadMattermostFile(this.baseUrl, this.token, fileId),
+    )
+  }
+
   /** @package Visible for testing */
   async buildPostedMessage(
     post: MattermostPost,
@@ -152,26 +161,31 @@ export class MattermostChatProvider implements ChatProvider {
       replyToMessageId === undefined
         ? undefined
         : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
-    const channelInfo = await fetchChannelInfo(post.channel_id, this.apiFetch.bind(this))
+    const channelInfo: MattermostChannelInfo = await fetchMattermostChannelInfo(
+      this.apiFetch.bind(this),
+      post.channel_id,
+    )
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
+    const teamInfo =
+      contextType === 'group' && channelInfo.team_id !== undefined
+        ? await fetchMattermostTeamInfo(this.apiFetch.bind(this), channelInfo.team_id)
+        : null
     const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, this.apiFetch.bind(this))
     const isMentioned = this.isBotMentioned(post.message)
     const threadId = this.determineThreadId(post, isMentioned, contextType, replyToMessageId)
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const username = post.user_name ?? senderName ?? null
-
-    const files =
-      post.file_ids !== undefined && post.file_ids.length > 0
-        ? await fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
-            downloadMattermostFile(this.baseUrl, this.token, fileId),
-          )
-        : undefined
-
+    const contextName =
+      contextType === 'group' ? (channelInfo.display_name ?? channelInfo.name ?? post.channel_id) : undefined
+    const contextParentName = contextType === 'group' ? (teamInfo?.display_name ?? teamInfo?.name) : undefined
+    const files = await this.fetchFilesForPost(post)
     const msg: IncomingMessage = {
       user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
       contextType,
+      contextName,
+      contextParentName,
       isMentioned,
       text: post.message,
       commandMatch: command?.match,

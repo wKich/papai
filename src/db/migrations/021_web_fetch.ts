@@ -31,8 +31,8 @@ function createWebRateLimitTable(db: Database): void {
   `)
 }
 
-export const migration020WebFetch: Migration = {
-  id: '020_web_fetch',
+export const migration021WebFetch: Migration = {
+  id: '021_web_fetch',
   up(db: Database): void {
     createWebCacheTable(db)
     createWebRateLimitTable(db)

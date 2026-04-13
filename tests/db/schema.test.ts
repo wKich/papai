@@ -3,7 +3,13 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { eq, and } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../../src/db/drizzle.js'
-import { userIdentityMappings, webCache, webRateLimit } from '../../src/db/schema.js'
+import {
+  groupAdminObservations,
+  knownGroupContexts,
+  userIdentityMappings,
+  webCache,
+  webRateLimit,
+} from '../../src/db/schema.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('userIdentityMappings', () => {
@@ -53,6 +59,36 @@ describe('userIdentityMappings', () => {
 
     // Cleanup
     db.delete(userIdentityMappings).where(eq(userIdentityMappings.contextId, 'test-user-123')).run()
+  })
+})
+
+describe('knownGroupContexts', () => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  it('should expose the expected columns', () => {
+    expect(knownGroupContexts.contextId).toBeDefined()
+    expect(knownGroupContexts.provider).toBeDefined()
+    expect(knownGroupContexts.displayName).toBeDefined()
+    expect(knownGroupContexts.parentName).toBeDefined()
+    expect(knownGroupContexts.firstSeenAt).toBeDefined()
+    expect(knownGroupContexts.lastSeenAt).toBeDefined()
+  })
+})
+
+describe('groupAdminObservations', () => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  it('should expose a composite key over contextId and userId', () => {
+    expect(groupAdminObservations.contextId).toBeDefined()
+    expect(groupAdminObservations.userId).toBeDefined()
+    expect(groupAdminObservations.isAdmin).toBeDefined()
+    expect(groupAdminObservations.lastSeenAt).toBeDefined()
   })
 })
 

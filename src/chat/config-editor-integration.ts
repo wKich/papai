@@ -27,7 +27,7 @@ export async function handleConfigEditorMessage(
     if (buttons !== undefined && buttons.length > 0) {
       const chatButtons: ChatButton[] = buttons.map((btn) => ({
         text: btn.text,
-        callbackData: serializeCallbackData(btn),
+        callbackData: serializeCallbackData(btn, storageContextId),
         style: btn.style ?? 'primary',
       }))
       await reply.buttons(result.response ?? '', { buttons: chatButtons })

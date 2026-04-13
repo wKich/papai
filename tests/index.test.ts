@@ -25,6 +25,6 @@ describe('index.ts - graceful shutdown', () => {
 
     expect(source).toContain("process.on('SIGTERM'")
     expect(source).toContain("process.on('SIGINT'")
-    expect(source.match(/flushOnShutdown\(\{ timeoutMs: 5000 \}\)/g)?.length).toBe(1)
+    expect(source.match(/flushOnShutdown\(\s*\{\s*timeoutMs:\s*5000\s*\}\s*\)/g)?.length).toBe(1)
   })
 })

@@ -1,0 +1,25 @@
+export type KnownGroupContext = {
+  readonly contextId: string
+  readonly provider: string
+  readonly displayName: string
+  readonly parentName: string | null
+  readonly firstSeenAt: string
+  readonly lastSeenAt: string
+}
+
+export type GroupSettingsCommand = 'config' | 'setup'
+
+export type GroupSettingsSessionStage = 'choose_scope' | 'choose_group' | 'active'
+
+export type GroupSettingsSession = {
+  userId: string
+  command: GroupSettingsCommand
+  stage: GroupSettingsSessionStage
+  startedAt: Date
+  targetContextId?: string
+}
+
+export type GroupSettingsSelectorResult =
+  | { handled: false }
+  | { handled: true; response: string; buttons?: import('../chat/types.js').ChatButton[] }
+  | { handled: true; continueWith: { command: GroupSettingsCommand; targetContextId: string } }

@@ -250,7 +250,6 @@ export const memoLinks = sqliteTable(
     index('idx_memo_links_target_memo').on(table.targetMemoId),
   ],
 )
-
 export const userIdentityMappings = sqliteTable(
   'user_identity_mappings',
   {
@@ -268,33 +267,31 @@ export const userIdentityMappings = sqliteTable(
     index('idx_identity_mappings_provider_user').on(table.providerName, table.providerUserId),
   ],
 )
-
-export const webCache = sqliteTable(
-  'web_cache',
+export const knownGroupContexts = sqliteTable(
+  'known_group_contexts',
   {
-    urlHash: text('url_hash').primaryKey(),
-    url: text('url').notNull(),
-    finalUrl: text('final_url').notNull(),
-    title: text('title').notNull(),
-    summary: text('summary').notNull(),
-    excerpt: text('excerpt').notNull(),
-    truncated: integer('truncated', { mode: 'boolean' }).notNull().default(false),
-    contentType: text('content_type').notNull(),
-    fetchedAt: integer('fetched_at').notNull(),
-    expiresAt: integer('expires_at').notNull(),
+    contextId: text('context_id').primaryKey(),
+    provider: text('provider').notNull(),
+    displayName: text('display_name').notNull(),
+    parentName: text('parent_name'),
+    firstSeenAt: text('first_seen_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
   },
-  (table) => [index('idx_web_cache_expires').on(table.expiresAt)],
+  (table) => [index('idx_known_group_contexts_provider').on(table.provider)],
+)
+export const groupAdminObservations = sqliteTable(
+  'group_admin_observations',
+  {
+    contextId: text('context_id').notNull(),
+    userId: text('user_id').notNull(),
+    username: text('username'),
+    isAdmin: integer('is_admin', { mode: 'boolean' }).notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contextId, table.userId] }),
+    index('idx_group_admin_observations_user_admin').on(table.userId, table.isAdmin),
+  ],
 )
 
-export const webRateLimit = sqliteTable(
-  'web_rate_limit',
-  {
-    actorId: text('actor_id').notNull(),
-    windowStart: integer('window_start').notNull(),
-    count: integer('count').notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.actorId, table.windowStart] })],
-)
-
-export type MemoRow = typeof memos.$inferSelect
-export type MemoLinkRow = typeof memoLinks.$inferSelect
+export { webCache, webRateLimit } from './web-schema.js'

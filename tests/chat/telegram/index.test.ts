@@ -14,8 +14,19 @@ import {
   type CacheContext,
   type MinimalContext,
 } from '../../../src/chat/telegram/message-extraction.js'
-import type { ReplyFn } from '../../../src/chat/types.js'
+import type { IncomingMessage, ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
+
+function isIncomingMessage(value: unknown): value is IncomingMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'contextId' in value &&
+    'contextType' in value &&
+    'isMentioned' in value &&
+    'text' in value
+  )
+}
 
 // Mock the auth module to provide getThreadScopedStorageContextId
 void mock.module('../../../src/auth.js', () => ({
@@ -52,6 +63,35 @@ describe('TelegramChatProvider', () => {
   })
 
   describe('forum topic creation', () => {
+    test('extractMessage includes Telegram chat title for group messages', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const extractMessage: unknown = Reflect.get(provider, 'extractMessage')
+      expect(extractMessage).toBeInstanceOf(Function)
+      if (!(extractMessage instanceof Function)) {
+        throw new TypeError('extractMessage not available')
+      }
+
+      const result: unknown = await Promise.resolve(
+        extractMessage.call(
+          provider,
+          {
+            from: { id: 1, username: 'alice' },
+            chat: { id: 99, type: 'supergroup', title: 'Operations' },
+            message: { text: '/help', message_id: 42 },
+          },
+          true,
+        ),
+      )
+
+      if (!isIncomingMessage(result)) {
+        throw new TypeError('Expected extractMessage to return an IncomingMessage')
+      }
+
+      expect(result.contextName).toBe('Operations')
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
     test('async extractMessage returns IncomingMessage with threadId when mentioned', () => {
       process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
       const provider = new TelegramChatProvider()

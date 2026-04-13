@@ -1,4 +1,7 @@
 import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
+import { dispatchGroupSelectorResult } from '../group-settings/dispatch.js'
+import { handleGroupSettingsSelectorCallback } from '../group-settings/selector.js'
+import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
 import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
@@ -8,28 +11,45 @@ import type { AuthorizationResult, IncomingInteraction, ReplyFn } from './types.
 const log = logger.child({ scope: 'chat:interaction-router' })
 
 export type InteractionRouteDeps = {
+  handleGroupSettingsInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleConfigInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleWizardInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
 }
 
+function defaultHandleGroupSettingsInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
+  const result = handleGroupSettingsSelectorCallback(interaction.user.id, interaction.callbackData)
+  return dispatchGroupSelectorResult(result, reply, interaction.user.id)
+}
+
+function getSettingsTargetContextId(interaction: IncomingInteraction): string {
+  if (interaction.contextType !== 'dm') {
+    return interaction.storageContextId
+  }
+  return getActiveGroupSettingsTarget(interaction.user.id) ?? interaction.storageContextId
+}
+
 async function defaultHandleConfigInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
-  const { callbackData, user, contextId } = interaction
+  const { callbackData, user } = interaction
   if (!callbackData.startsWith('cfg:')) return false
 
-  const { action, key } = parseCallbackData(callbackData)
+  const parsed = parseCallbackData(callbackData)
 
-  if (action === null) {
+  if (parsed.action === null) {
     log.warn({ callbackData }, 'Unknown config editor callback data')
     await reply.text('This action is no longer valid. Please start over with /config.')
     return true
   }
 
-  log.debug({ userId: user.id, contextId, action, key }, 'Handling config editor callback')
+  const targetContextId = parsed.targetContextId ?? getSettingsTargetContextId(interaction)
+  log.debug(
+    { userId: user.id, contextId: targetContextId, action: parsed.action, key: parsed.key },
+    'Handling config editor callback',
+  )
 
-  const result = handleEditorCallback(user.id, contextId, action, key ?? undefined)
+  const result = handleEditorCallback(user.id, targetContextId, parsed.action, parsed.key ?? undefined)
 
   if (!result.handled) {
-    log.warn({ action, key }, 'Config editor callback not handled')
+    log.warn({ action: parsed.action, key: parsed.key }, 'Config editor callback not handled')
     await reply.text('This action is no longer valid. Please start over with /config.')
     return true
   }
@@ -38,7 +58,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
     await reply.buttons(result.response ?? '', {
       buttons: result.buttons.map((btn) => ({
         text: btn.text,
-        callbackData: serializeCallbackData(btn),
+        callbackData: serializeCallbackData(btn, targetContextId),
       })),
     })
   } else {
@@ -52,10 +72,15 @@ async function replyWithWizardButtons(
   reply: ReplyFn,
   response: string | undefined,
   buttons: Array<{ text: string; action: string }> | undefined,
+  targetContextId?: string,
 ): Promise<void> {
+  const contextSuffix = targetContextId === undefined ? '' : `@${Buffer.from(targetContextId).toString('base64url')}`
   if (buttons !== undefined && buttons.length > 0) {
     await reply.buttons(response ?? '', {
-      buttons: buttons.map((button) => ({ text: button.text, callbackData: `wizard_${button.action}` })),
+      buttons: buttons.map((button) => ({
+        text: button.text,
+        callbackData: `wizard_${button.action}${contextSuffix}`,
+      })),
     })
     return
   }
@@ -75,29 +100,42 @@ async function handleWizardEdit(userId: string, storageContextId: string, reply:
   return true
 }
 
+function parseWizardContextId(callbackData: string): { action: string; targetContextId: string | undefined } {
+  const atIdx = callbackData.indexOf('@')
+  if (atIdx === -1) return { action: callbackData, targetContextId: undefined }
+  try {
+    const encoded = callbackData.slice(atIdx + 1)
+    return { action: callbackData.slice(0, atIdx), targetContextId: Buffer.from(encoded, 'base64url').toString('utf8') }
+  } catch {
+    return { action: callbackData, targetContextId: undefined }
+  }
+}
+
 async function handleWizardSkip(
-  callbackData: 'wizard_skip_small_model' | 'wizard_skip_embedding',
+  action: 'wizard_skip_small_model' | 'wizard_skip_embedding',
   userId: string,
   storageContextId: string,
   reply: ReplyFn,
 ): Promise<boolean> {
-  const skipValue = callbackData === 'wizard_skip_small_model' ? 'same' : 'skip'
+  const skipValue = action === 'wizard_skip_small_model' ? 'same' : 'skip'
   const result = await processWizardMessage(userId, storageContextId, skipValue)
   if (!result.handled) return true
-  await replyWithWizardButtons(reply, result.response, result.buttons)
+  await replyWithWizardButtons(reply, result.response, result.buttons, storageContextId)
   return true
 }
 
 async function defaultHandleWizardInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
-  const { callbackData, user, storageContextId } = interaction
+  const { callbackData, user } = interaction
   if (!callbackData.startsWith('wizard_')) return false
 
   const userId = user.id
+  const { action, targetContextId: callbackContextId } = parseWizardContextId(callbackData)
+  const storageContextId = callbackContextId ?? getSettingsTargetContextId(interaction)
 
-  switch (callbackData) {
+  switch (action) {
     case 'wizard_confirm': {
       const result = await validateAndSaveWizardConfig(userId, storageContextId)
-      await replyWithWizardButtons(reply, result.message, result.buttons)
+      await replyWithWizardButtons(reply, result.message, result.buttons, storageContextId)
       return true
     }
     case 'wizard_cancel': {
@@ -122,13 +160,14 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
       return handleWizardEdit(userId, storageContextId, reply)
     case 'wizard_skip_small_model':
     case 'wizard_skip_embedding':
-      return handleWizardSkip(callbackData, userId, storageContextId, reply)
+      return handleWizardSkip(action, userId, storageContextId, reply)
     default:
       return false
   }
 }
 
 const defaultDeps: InteractionRouteDeps = {
+  handleGroupSettingsInteraction: defaultHandleGroupSettingsInteraction,
   handleConfigInteraction: defaultHandleConfigInteraction,
   handleWizardInteraction: defaultHandleWizardInteraction,
 }
@@ -144,6 +183,10 @@ export function routeInteraction(
   }
 
   const { callbackData } = interaction
+
+  if (callbackData.startsWith('gsel:')) {
+    return deps.handleGroupSettingsInteraction(interaction, reply)
+  }
 
   if (callbackData.startsWith('cfg:')) {
     return deps.handleConfigInteraction(interaction, reply)

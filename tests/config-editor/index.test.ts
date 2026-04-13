@@ -61,4 +61,27 @@ describe('config-editor public API', () => {
     expect(serializeCallbackData({ action: 'edit', key: 'llm_apikey' })).toBe('cfg:edit:llm_apikey')
     expect(serializeCallbackData({ action: 'save', key: 'main_model' })).toBe('cfg:save:main_model')
   })
+
+  test('serializeCallbackData encodes targetContextId when provided', () => {
+    const data = serializeCallbackData({ action: 'edit', key: 'timezone' }, 'group-9')
+    expect(data).toContain('cfg:edit:timezone@')
+    expect(data).not.toBe('cfg:edit:timezone')
+
+    const parsed = parseCallbackData(data)
+    expect(parsed.action).toBe('edit')
+    expect(parsed.key).toBe('timezone')
+    expect(parsed.targetContextId).toBe('group-9')
+  })
+
+  test('parseCallbackData returns targetContextId from encoded callback', () => {
+    const encoded = serializeCallbackData({ action: 'cancel' }, 'group-42')
+    const parsed = parseCallbackData(encoded)
+    expect(parsed.action).toBe('cancel')
+    expect(parsed.targetContextId).toBe('group-42')
+  })
+
+  test('parseCallbackData returns undefined targetContextId for legacy callbacks', () => {
+    expect(parseCallbackData('cfg:edit:timezone').targetContextId).toBeUndefined()
+    expect(parseCallbackData('cfg:cancel').targetContextId).toBeUndefined()
+  })
 })

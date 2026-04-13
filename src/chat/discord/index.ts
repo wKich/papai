@@ -26,18 +26,16 @@ import {
 } from './client-factory.js'
 import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
+import { handleDiscordGroupSettingsSelection } from './group-settings.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
 import { isDispatchableMessage, isGuildLike, isReadyPayload } from './type-guards.js'
 import { withTypingIndicator } from './typing-indicator.js'
-
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
-
 const log = logger.child({ scope: 'chat:discord' })
-
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
 
 export class DiscordChatProvider implements ChatProvider {
@@ -71,7 +69,6 @@ export class DiscordChatProvider implements ChatProvider {
     this.commands.set(name, handler)
     log.debug({ command: name }, 'Discord command registered')
   }
-
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
   }
@@ -165,13 +162,11 @@ export class DiscordChatProvider implements ChatProvider {
     await this.client.destroy()
     this.client = null
   }
-
   testSetClient(c: DiscordClientLike): void {
     this.client = c
   }
-
-  async testDispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
-    await this.dispatchMessage(message, botId, adminUserId)
+  testDispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
+    return this.dispatchMessage(message, botId, adminUserId)
   }
 
   async testDispatchButtonInteraction(
@@ -192,6 +187,9 @@ export class DiscordChatProvider implements ChatProvider {
     }
 
     const { incoming, channel } = result
+
+    // Handle group-settings selector callbacks before standard routing
+    if (await handleDiscordGroupSettingsSelection(interaction, incoming.user.id, result.reply)) return
 
     if (this.interactionHandler === undefined) {
       const auth = checkAuthorizationExtended(

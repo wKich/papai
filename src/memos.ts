@@ -2,7 +2,6 @@ import { eq, and, sql, desc } from 'drizzle-orm'
 
 import { getDrizzleDb } from './db/drizzle.js'
 import { memos, memoLinks } from './db/schema.js'
-import type { MemoLinkRow } from './db/schema.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ scope: 'memos' })
@@ -32,6 +31,7 @@ export interface ArchiveFilter {
 }
 
 type DrizzleMemoRow = typeof memos.$inferSelect
+type MemoLinkRow = typeof memoLinks.$inferSelect
 
 const drizzleRowToMemo = (row: DrizzleMemoRow): Memo => ({
   id: row.id,

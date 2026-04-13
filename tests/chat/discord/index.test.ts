@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
+import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
+import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
 import { addUser } from '../../../src/users.js'
 import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
@@ -731,6 +733,106 @@ describe('DiscordChatProvider', () => {
       // No active wizard, should defer and return without error
       await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
       expect(deferred).toBe(true)
+    })
+
+    test('Discord DM group-settings callback opens config for the selected group', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+      await setupTestDb()
+
+      upsertKnownGroupContext({
+        contextId: 'group-1',
+        provider: 'discord',
+        displayName: 'Operations',
+        parentName: 'Platform',
+      })
+      upsertGroupAdminObservation({
+        contextId: 'group-1',
+        userId: 'user-1',
+        username: 'alice',
+        isAdmin: true,
+      })
+      startGroupSettingsSelection('user-1', 'config', true)
+
+      const sends: Array<{ content?: string }> = []
+      const interaction: ButtonInteractionLike = {
+        user: { id: 'user-1', username: 'alice' },
+        customId: 'gsel:scope:group',
+        channelId: 'dm-1',
+        channel: {
+          id: 'dm-1',
+          type: 1,
+          send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+            sends.push(arg)
+            return Promise.resolve({ id: 'out-1', edit: (): Promise<void> => Promise.resolve() })
+          },
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'm-1' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(interaction, 'bot-id', 'admin-id')
+
+      expect(sends[0]?.content).toContain('Choose a group to configure.')
+    })
+
+    test('Discord DM selector continues into setup when the selector command is setup', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+      await setupTestDb()
+
+      upsertKnownGroupContext({
+        contextId: 'group-1',
+        provider: 'discord',
+        displayName: 'Operations',
+        parentName: 'Platform',
+      })
+      upsertGroupAdminObservation({
+        contextId: 'group-1',
+        userId: 'user-1',
+        username: 'alice',
+        isAdmin: true,
+      })
+      startGroupSettingsSelection('user-1', 'setup', true)
+
+      const groupSelectorInteraction: ButtonInteractionLike = {
+        user: { id: 'user-1', username: 'alice' },
+        customId: 'gsel:scope:group',
+        channelId: 'dm-1',
+        channel: {
+          id: 'dm-1',
+          type: 1,
+          send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+            Promise.resolve({ id: 'out-0', edit: (): Promise<void> => Promise.resolve() }),
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'm-0' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+      await provider.testDispatchButtonInteraction(groupSelectorInteraction, 'bot-id', 'admin-id')
+
+      const sends: Array<{ content?: string }> = []
+      const interaction: ButtonInteractionLike = {
+        user: { id: 'user-1', username: 'alice' },
+        customId: 'gsel:group:group-1',
+        channelId: 'dm-1',
+        channel: {
+          id: 'dm-1',
+          type: 1,
+          send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+            sends.push(arg)
+            return Promise.resolve({ id: 'out-1', edit: (): Promise<void> => Promise.resolve() })
+          },
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: { id: 'm-1' },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(interaction, 'bot-id', 'admin-id')
+
+      expect(sends[0]?.content).toContain('Welcome to papai configuration wizard!')
     })
 
     test('handles deferUpdate failure gracefully', async () => {

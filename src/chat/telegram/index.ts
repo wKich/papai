@@ -178,6 +178,7 @@ export class TelegramChatProvider implements ChatProvider {
       user: { id: String(id), username: ctx.from?.username ?? null, isAdmin },
       contextId,
       contextType,
+      contextName: contextType === 'group' ? ctx.chat?.title : undefined,
       isMentioned,
       text,
       messageId: messageIdStr,

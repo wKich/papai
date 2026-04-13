@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { routeInteraction } from '../../src/chat/interaction-router.js'
 import type { AuthorizationResult, IncomingInteraction, ReplyFn } from '../../src/chat/types.js'
+import { handleEditorMessage } from '../../src/config-editor/handlers.js'
+import { createEditorSession, deleteEditorSession } from '../../src/config-editor/state.js'
+import { getConfig } from '../../src/config.js'
+import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../src/group-settings/registry.js'
+import { createGroupSettingsSession, deleteGroupSettingsSession } from '../../src/group-settings/state.js'
 import { deleteWizardSession } from '../../src/wizard/state.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const interaction: IncomingInteraction = {
   kind: 'button',
@@ -30,13 +36,39 @@ const createMockAuth = (allowed: boolean): AuthorizationResult => ({
 })
 
 describe('routeInteraction', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
     deleteWizardSession(interaction.user.id, interaction.contextId)
+    deleteEditorSession(interaction.user.id, interaction.contextId)
+    deleteEditorSession(interaction.user.id, 'group-9')
+    deleteGroupSettingsSession(interaction.user.id)
+  })
+
+  test('routes gsel callbacks through the group settings interaction dependency', async () => {
+    const calls: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'gsel:scope:group' },
+      reply,
+      createMockAuth(true),
+      {
+        handleGroupSettingsInteraction: () => {
+          calls.push('gsel')
+          return Promise.resolve(true)
+        },
+        handleConfigInteraction: () => Promise.resolve(false),
+        handleWizardInteraction: () => Promise.resolve(false),
+      },
+    )
+
+    expect(handled).toBe(true)
+    expect(calls).toEqual(['gsel'])
   })
 
   test('routes cfg callbacks through the config interaction dependency', async () => {
     const calls: string[] = []
     const handled = await routeInteraction(interaction, reply, createMockAuth(true), {
+      handleGroupSettingsInteraction: () => Promise.resolve(false),
       handleConfigInteraction: () => {
         calls.push('cfg')
         return Promise.resolve(true)
@@ -55,6 +87,7 @@ describe('routeInteraction', () => {
       reply,
       createMockAuth(true),
       {
+        handleGroupSettingsInteraction: () => Promise.resolve(false),
         handleConfigInteraction: () => Promise.resolve(false),
         handleWizardInteraction: () => {
           calls.push('wizard')
@@ -73,6 +106,7 @@ describe('routeInteraction', () => {
       reply,
       createMockAuth(true),
       {
+        handleGroupSettingsInteraction: () => Promise.resolve(false),
         handleConfigInteraction: () => Promise.resolve(false),
         handleWizardInteraction: () => Promise.resolve(false),
       },
@@ -97,6 +131,92 @@ describe('routeInteraction', () => {
 
     expect(handled).toBe(true)
     expect(replies).toEqual(['No active setup session. Type /setup to start.'])
+  })
+
+  test('uses the active group target for cfg callbacks received in DM', async () => {
+    createGroupSettingsSession({
+      userId: interaction.user.id,
+      command: 'config',
+      stage: 'active',
+      targetContextId: 'group-9',
+    })
+    createEditorSession({
+      userId: interaction.user.id,
+      storageContextId: 'group-9',
+      editingKey: 'timezone',
+    })
+
+    const buttonReplies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'cfg:cancel' },
+      {
+        ...reply,
+        buttons: (content: string): Promise<void> => {
+          buttonReplies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(buttonReplies[0]).toContain('Changes cancelled')
+  })
+
+  test('saves edited config into the selected group context instead of the DM user context', async () => {
+    createGroupSettingsSession({
+      userId: interaction.user.id,
+      command: 'config',
+      stage: 'active',
+      targetContextId: 'group-9',
+    })
+    createEditorSession({
+      userId: interaction.user.id,
+      storageContextId: 'group-9',
+      editingKey: 'timezone',
+    })
+    handleEditorMessage(interaction.user.id, 'group-9', 'Europe/Berlin')
+
+    await routeInteraction({ ...interaction, callbackData: 'cfg:save:timezone' }, reply, createMockAuth(true))
+
+    expect(getConfig('group-9', 'timezone')).toBe('Europe/Berlin')
+    expect(getConfig(interaction.user.id, 'timezone')).toBeNull()
+  })
+
+  test('starts setup for the selected group target', async () => {
+    upsertKnownGroupContext({
+      contextId: 'group-9',
+      provider: 'telegram',
+      displayName: 'Operations',
+      parentName: 'Platform',
+    })
+    upsertGroupAdminObservation({
+      contextId: 'group-9',
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      isAdmin: true,
+    })
+    createGroupSettingsSession({
+      userId: interaction.user.id,
+      command: 'setup',
+      stage: 'choose_group',
+    })
+
+    const replies: string[] = []
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'gsel:group:group-9' },
+      {
+        ...reply,
+        text: (content: string): Promise<void> => {
+          replies.push(content)
+          return Promise.resolve()
+        },
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replies[0]).toContain('Welcome to papai configuration wizard!')
   })
 
   test('blocks unauthorized users with unauthorized message', async () => {

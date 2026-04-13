@@ -101,6 +101,10 @@ export type IncomingMessage = {
   /** storage key: userId in DMs, groupId in groups */
   contextId: string
   contextType: ContextType
+  /** Human-readable channel/group name when the adapter knows it */
+  contextName?: string
+  /** Human-readable workspace/team/guild label when the adapter knows it */
+  contextParentName?: string
   /** bot was @mentioned */
   isMentioned: boolean
   text: string

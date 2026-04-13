@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { migration020WebFetch } from '../../../src/db/migrations/020_web_fetch.js'
+import { migration021WebFetch } from '../../../src/db/migrations/021_web_fetch.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 const getTableNames = (db: Database): string[] =>
@@ -16,7 +16,7 @@ const getIndexNames = (db: Database): string[] =>
     .all()
     .map((row) => row.name)
 
-describe('migration020WebFetch', () => {
+describe('migration021WebFetch', () => {
   let db: Database
 
   beforeEach(() => {
@@ -29,14 +29,14 @@ describe('migration020WebFetch', () => {
   })
 
   test('creates web_cache table', () => {
-    migration020WebFetch.up(db)
+    migration021WebFetch.up(db)
 
     const tableNames = getTableNames(db)
     expect(tableNames).toContain('web_cache')
   })
 
   test('web_cache applies the default truncated flag and enforces url_hash uniqueness', () => {
-    migration020WebFetch.up(db)
+    migration021WebFetch.up(db)
 
     db.run(`
       INSERT INTO web_cache (
@@ -100,14 +100,14 @@ describe('migration020WebFetch', () => {
   })
 
   test('creates web_rate_limit table', () => {
-    migration020WebFetch.up(db)
+    migration021WebFetch.up(db)
 
     const tableNames = getTableNames(db)
     expect(tableNames).toContain('web_rate_limit')
   })
 
   test('web_rate_limit enforces a composite primary key', () => {
-    migration020WebFetch.up(db)
+    migration021WebFetch.up(db)
 
     db.run(`
       INSERT INTO web_rate_limit (actor_id, window_start, count)
@@ -130,7 +130,7 @@ describe('migration020WebFetch', () => {
   })
 
   test('creates index on web_cache expires_at', () => {
-    migration020WebFetch.up(db)
+    migration021WebFetch.up(db)
 
     const indexNames = getIndexNames(db)
     expect(indexNames).toContain('idx_web_cache_expires')

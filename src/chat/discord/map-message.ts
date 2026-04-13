@@ -11,7 +11,8 @@ export type DiscordMessageLike = {
   id: string
   author: { id: string; username: string; bot: boolean }
   content: string
-  channel: { id: string; type: number }
+  channel: { id: string; type: number; name?: string }
+  guild?: { id: string; name: string } | null
   mentions: { has: (id: string) => boolean }
   reference: { messageId?: string } | null
   type: number
@@ -47,6 +48,8 @@ export function mapDiscordMessage(
   }
 
   const text = stripBotMention(message.content, botId)
+  const contextName = contextType === 'group' ? message.channel.name : undefined
+  const contextParentName = contextType === 'group' ? (message.guild?.name ?? undefined) : undefined
 
   return {
     user: {
@@ -56,6 +59,8 @@ export function mapDiscordMessage(
     },
     contextId,
     contextType,
+    contextName,
+    contextParentName,
     isMentioned: mentioned,
     text,
     messageId: message.id,
