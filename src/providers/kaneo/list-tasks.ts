@@ -1,7 +1,7 @@
 import { logger } from '../../logger.js'
 import type { ListTasksParams } from '../types.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 
 const log = logger.child({ scope: 'kaneo:list-tasks' })

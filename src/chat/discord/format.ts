@@ -1,6 +1,5 @@
 import { chunkForDiscord } from './format-chunking.js'
-
-const DISCORD_MAX_CONTENT_LEN = 2000
+import { discordTraits } from './metadata.js'
 
 /**
  * Normalize LLM markdown for Discord's dialect and chunk the result.
@@ -11,7 +10,7 @@ const DISCORD_MAX_CONTENT_LEN = 2000
 export function formatLlmOutput(markdown: string): string[] {
   const stepOne = flattenTables(markdown)
   const stepTwo = escapeMassMentions(stepOne)
-  return chunkForDiscord(stepTwo, DISCORD_MAX_CONTENT_LEN)
+  return chunkForDiscord(stepTwo, discordTraits.maxMessageLength!)
 }
 
 function flattenTables(text: string): string {

@@ -11,11 +11,11 @@ export const telegramCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCap
 ])
 
 export const telegramTraits: ChatProviderTraits = {
-  observedGroupMessages: 'mentions_only',
+  observedGroupMessages: 'all',
   maxMessageLength: 4096,
   callbackDataMaxLength: 64,
 }
 
-export const telegramConfigRequirements: ChatProviderConfigRequirement[] = [
+export const telegramConfigRequirements: readonly ChatProviderConfigRequirement[] = [
   { key: 'TELEGRAM_BOT_TOKEN', label: 'Telegram Bot Token', required: true },
 ]

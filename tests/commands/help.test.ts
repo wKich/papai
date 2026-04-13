@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { CommandHandler } from '../../src/chat/types.js'
+import type { ChatCapability, CommandHandler } from '../../src/chat/types.js'
 import { registerHelpCommand } from '../../src/commands/help.js'
 import {
   createDmMessage,
@@ -117,23 +117,26 @@ describe('help command', () => {
 })
 
 describe('buildHelpText', () => {
-  test('/help on Discord admin appends a /context deferral note', async () => {
+  test('/help on provider without file support appends a /context deferral note for admin', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
-    const discordHelp = buildHelpText('discord', 'dm', { isBotAdmin: true, isGroupAdmin: false })
+    const noFileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons', 'users.resolve'])
+    const noFileHelp = buildHelpText(noFileCapabilities, 'dm', { isBotAdmin: true, isGroupAdmin: false })
 
-    expect(discordHelp).toContain('/context')
-    expect(discordHelp).toContain('deferred')
+    expect(noFileHelp).toContain('/context')
+    expect(noFileHelp).toContain('deferred')
   })
 
-  test('/help on Discord for non-admin does NOT mention /context', async () => {
+  test('/help on provider without file support does NOT mention /context for non-admin', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
-    const discordHelp = buildHelpText('discord', 'dm', { isBotAdmin: false, isGroupAdmin: false })
-    expect(discordHelp).not.toContain('/context')
+    const noFileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons'])
+    const noFileHelp = buildHelpText(noFileCapabilities, 'dm', { isBotAdmin: false, isGroupAdmin: false })
+    expect(noFileHelp).not.toContain('/context')
   })
 
-  test('/help on telegram does not contain deferral note', async () => {
+  test('/help on provider with file support does not contain deferral note', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
-    const telegramHelp = buildHelpText('telegram', 'dm', { isBotAdmin: true, isGroupAdmin: false })
-    expect(telegramHelp).not.toContain('deferred')
+    const fileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons', 'messages.files'])
+    const fileHelp = buildHelpText(fileCapabilities, 'dm', { isBotAdmin: true, isGroupAdmin: false })
+    expect(fileHelp).not.toContain('deferred')
   })
 })

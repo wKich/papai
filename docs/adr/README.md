@@ -52,6 +52,12 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0045](0045-wizard-validation-approach.md)                     | End-of-Wizard Validation Instead of Per-Step Live Validation   | 2026-03-28 | Implemented                           |
 | [0046](0046-demo-auto-provisioning.md)                         | Demo Mode Auto-Provisioning                                    | 2026-04-04 | Implemented                           |
 | [0047](0047-session-level-mutation-testing.md)                 | Session-Level Mutation Testing via OpenCode Plugin Events      | 2026-04-04 | Rejected (Research Error)             |
+| [0049](0049-client-build-pipeline.md)                          | Client Build Pipeline for Debug Dashboard                      | 2026-04-06 | Implemented                           |
+| [0050](0050-e2e-planning-workflow.md)                          | E2E Planning Workflow with Realism Tiers                       | 2026-04-10 | Implemented                           |
+| [0051](0051-discord-chat-provider.md)                          | Discord Chat Provider                                          | 2026-04-09 | Implemented                           |
+| [0052](0052-youtrack-full-api-implementation.md)               | YouTrack Full API Implementation                               | 2026-04-08 | Implemented                           |
+| [0053](0053-llm-trace-detail-modal.md)                         | LLM Trace Detail Modal                                         | 2026-04-05 | Implemented                           |
+| [0054](0054-mock-isolation-guardrails.md)                      | Guardrail-First Mock Isolation for Bun Tests                   | 2026-04-11 | Partially Implemented                 |
 
 ## Skipped / Not Written
 

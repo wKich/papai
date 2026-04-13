@@ -1,4 +1,4 @@
-import { beforeEach, describe, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ReplyFn } from '../../src/chat/types.js'
 import type { QueueItem } from '../../src/message-queue/types.js'
@@ -59,5 +59,48 @@ describe('flushOnShutdown', () => {
     const { flushOnShutdown } = await loadMessageQueueModule()
 
     await flushOnShutdown({ timeoutMs: 1000 })
+  })
+
+  test('should respect timeout even when handlers hang', async () => {
+    const module: unknown = await import(`../../src/message-queue/index.js?hang-test=${crypto.randomUUID()}`)
+    if (!isMessageQueueModule(module)) {
+      throw new Error('Invalid module')
+    }
+    const { enqueueMessage, flushOnShutdown } = module
+
+    const mockReply: ReplyFn = {
+      text: async () => {},
+      formatted: async () => {},
+      file: async () => {},
+      typing: () => {},
+      buttons: async () => {},
+    }
+
+    // Handler that never resolves
+    const hangingHandler = async (): Promise<void> => {
+      // Never resolves - intentionally hanging to test timeout
+      await new Promise(() => {})
+    }
+
+    const item: QueueItem = {
+      text: 'Test message',
+      userId: '123',
+      username: 'alice',
+      storageContextId: `hang-test-ctx-${crypto.randomUUID()}`,
+      contextType: 'dm',
+      files: [],
+    }
+
+    enqueueMessage(item, mockReply, hangingHandler)
+
+    // Flush should complete within timeout despite hanging handler
+    const startTime = Date.now()
+    const timeoutMs = 200
+    await flushOnShutdown({ timeoutMs })
+    const elapsed = Date.now() - startTime
+
+    // Should complete close to timeout, not hang indefinitely
+    expect(elapsed).toBeLessThan(timeoutMs + 100)
+    expect(elapsed).toBeGreaterThanOrEqual(timeoutMs - 50)
   })
 })

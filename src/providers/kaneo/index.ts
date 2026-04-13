@@ -13,7 +13,7 @@ import type {
   TaskSearchResult,
 } from '../types.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { ALL_CAPABILITIES, CONFIG_REQUIREMENTS } from './constants.js'
 import { createKaneoIdentityResolver } from './identity-resolver.js'
 import { kaneoAddComment, kaneoGetComments, kaneoRemoveComment, kaneoUpdateComment } from './operations/comments.js'
@@ -51,6 +51,7 @@ export class KaneoProvider implements TaskProvider {
   readonly name = 'kaneo'
   readonly capabilities = ALL_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly preferredUserIdentifier = 'id' as const
   readonly identityResolver
 
   constructor(
@@ -96,7 +97,12 @@ export class KaneoProvider implements TaskProvider {
     return kaneoListTasks(this.config, this.workspaceId, projectId, params)
   }
 
-  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
+  searchTasks(params: {
+    query: string
+    projectId?: string
+    assigneeId?: string
+    limit?: number
+  }): Promise<TaskSearchResult[]> {
     return kaneoSearchTasks(this.config, this.workspaceId, params)
   }
 

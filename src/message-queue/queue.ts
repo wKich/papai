@@ -17,6 +17,7 @@ export class MessageQueue {
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastUserId: string | null = null
   private handler: ((coalesced: CoalescedItem) => Promise<void>) | null = null
+  private handlerChain: Promise<void> = Promise.resolve()
 
   constructor(storageContextId: string) {
     this.storageContextId = storageContextId
@@ -34,11 +35,11 @@ export class MessageQueue {
   enqueue(item: QueueItem, reply: ReplyFn): CoalescedItem | null {
     reply.typing()
 
-    const isGroupMain = item.contextType === 'group' && !this.storageContextId.includes('thread')
+    const isGroup = item.contextType === 'group'
     const hasBufferedItems = this.messages.length > 0
     const isDifferentUser = this.lastUserId !== null && this.lastUserId !== item.userId
 
-    if (isGroupMain && hasBufferedItems && isDifferentUser) {
+    if (isGroup && hasBufferedItems && isDifferentUser) {
       const flushed = this.forceFlush()
       this.messages.push({ item, reply })
       this.lastUserId = item.userId
@@ -72,7 +73,8 @@ export class MessageQueue {
       clearTimeout(this.timer)
     }
     this.timer = setTimeout(() => {
-      void this.flushAndHandle()
+      this.timer = null
+      this.handlerChain = this.handlerChain.then(() => this.flushAndHandle())
     }, DEBOUNCE_MS)
   }
 
@@ -98,12 +100,9 @@ export class MessageQueue {
     const fileCount = this.messages.reduce((count, msg) => count + msg.item.files.length, 0)
     log.debug({ storageContextId: this.storageContextId, itemCount: this.messages.length, fileCount }, 'Flushing queue')
 
-    const firstMessage = this.messages[0]
-    if (firstMessage === undefined) {
-      return null
-    }
+    const firstMessage = this.messages[0]!
 
-    const isThread = firstMessage.item.contextType === 'group' && this.storageContextId.includes('thread')
+    const isThread = firstMessage.item.contextType === 'group' && this.storageContextId.includes(':')
     const isDm = firstMessage.item.contextType === 'dm'
 
     const texts: string[] = []
@@ -124,15 +123,15 @@ export class MessageQueue {
 
     const result: CoalescedItem = {
       text,
-      userId: firstMessage.item.userId,
-      username: firstMessage.item.username,
+      userId: lastMessage.item.userId,
+      username: lastMessage.item.username,
       storageContextId: this.storageContextId,
+      contextType: lastMessage.item.contextType,
       files: allFiles,
       reply,
     }
 
     this.messages = []
-    this.timer = null
     this.lastUserId = null
 
     return result

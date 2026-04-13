@@ -41,7 +41,7 @@ export function mapDiscordMessage(
 
   const contextType: ContextType = message.channel.type === CHANNEL_TYPE_DM ? 'dm' : 'group'
   const contextId = contextType === 'dm' ? message.author.id : message.channel.id
-  const mentioned = isBotMentioned(message.content, botId, contextType)
+  const mentioned = isBotMentioned(message.mentions, botId, contextType)
 
   if (contextType === 'group' && !mentioned) {
     return null

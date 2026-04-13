@@ -15,7 +15,7 @@ import type {
   UpdateWorkItemParams,
   WorkItem,
 } from '../types.js'
-import { type YouTrackConfig } from './client.js'
+import type { YouTrackConfig } from './client.js'
 import { CONFIG_REQUIREMENTS, YOUTRACK_CAPABILITIES } from './constants.js'
 import { createYouTrackIdentityResolver } from './identity-resolver.js'
 import {
@@ -75,6 +75,7 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   readonly name = 'youtrack'
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
+  readonly preferredUserIdentifier = 'login' as const
   readonly identityResolver
 
   constructor(config: YouTrackConfig) {
@@ -118,7 +119,12 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
     return listYouTrackTasks(this.config, projectId, params)
   }
 
-  searchTasks(params: { query: string; projectId?: string; limit?: number }): Promise<TaskSearchResult[]> {
+  searchTasks(params: {
+    query: string
+    projectId?: string
+    assigneeId?: string
+    limit?: number
+  }): Promise<TaskSearchResult[]> {
     return searchYouTrackTasks(this.config, params)
   }
 

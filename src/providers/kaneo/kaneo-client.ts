@@ -1,5 +1,5 @@
 import { logger } from '../../logger.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { ColumnResource } from './column-resource.js'
 import { CommentResource } from './comment-resource.js'
 import { LabelResource } from './label-resource.js'

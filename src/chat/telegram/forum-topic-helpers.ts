@@ -2,6 +2,17 @@ import { logger } from '../../logger.js'
 
 const log = logger.child({ scope: 'chat:telegram' })
 
+/** Cache for forum status per chatId (in-memory, session-scoped) */
+const forumStatusCache = new Map<number, boolean>()
+
+/**
+ * Clear the forum status cache. Used for testing.
+ * @internal
+ */
+export function _clearForumStatusCache(): void {
+  forumStatusCache.clear()
+}
+
 /** Subset of Context properties that createForumTopicIfNeeded uses */
 export type ForumTopicContext = {
   chat?: { type: string; id: number }
@@ -29,10 +40,15 @@ export async function createForumTopicIfNeeded(
   const chat = ctx.chat
   if (chat?.type !== 'supergroup') return undefined
 
-  // Check if chat is a forum
-  const rawChatInfo = await api.getChat(chat.id)
-  const chatInfo = typeof rawChatInfo === 'object' && rawChatInfo !== null ? rawChatInfo : {}
-  const isForum = 'is_forum' in chatInfo && chatInfo.is_forum === true
+  // Check cache first, then API if needed
+  let isForum = forumStatusCache.get(chat.id)
+  if (isForum === undefined) {
+    const rawChatInfo = await api.getChat(chat.id)
+    const chatInfo = typeof rawChatInfo === 'object' && rawChatInfo !== null ? rawChatInfo : {}
+    isForum = 'is_forum' in chatInfo && chatInfo.is_forum === true
+    forumStatusCache.set(chat.id, isForum)
+  }
+
   if (!isForum) return undefined
 
   try {

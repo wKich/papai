@@ -6,7 +6,7 @@ import { classifyKaneoError } from './classify-error.js'
 import { type KaneoConfig, kaneoFetch } from './client.js'
 import { parseRelationsFromDescription, type TaskRelation } from './frontmatter.js'
 import { buildListTasksQuery } from './list-tasks-query.js'
-import { type KaneoTaskListItem } from './list-tasks.js'
+import type { KaneoTaskListItem } from './list-tasks.js'
 import { TaskSchema as KaneoTaskResponseSchema } from './schemas/create-task.js'
 import { type TaskResult, KaneoSearchResponseSchema, TaskResultSchema } from './search-tasks.js'
 import { GetTasksResponseSchema } from './task-list-schema.js'
@@ -187,6 +187,7 @@ export class TaskResource {
     query: string
     workspaceId: string
     projectId?: string
+    assigneeId?: string
     limit?: number
   }): Promise<TaskResult[]> {
     this.log.debug(params, 'Searching tasks')
@@ -201,7 +202,7 @@ export class TaskResource {
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
       // API returns a flat results array — filter to tasks only and remap taskNumber → number.
       // See: https://github.com/usekaneo/kaneo/blob/main/apps/api/src/search/controllers/global-search.ts
-      const tasks: TaskResult[] = result.results
+      let tasks: TaskResult[] = result.results
         .filter((r) => r.type === 'task')
         .map((r) => {
           const priorityParsed = TaskResultSchema.shape.priority.safeParse(r.priority)
@@ -212,9 +213,14 @@ export class TaskResource {
             status: r.status ?? '',
             priority: priorityParsed.success ? priorityParsed.data : 'no-priority',
             projectId: r.projectId ?? '',
+            userId: r.userId ?? '',
           }
         })
-      this.log.info({ count: tasks.length }, 'Tasks searched')
+      // Client-side filter by assignee since API doesn't support it
+      if (params.assigneeId !== undefined) {
+        tasks = tasks.filter((t) => t.userId === params.assigneeId)
+      }
+      this.log.info({ count: tasks.length, assigneeId: params.assigneeId }, 'Tasks searched')
       return tasks
     } catch (error) {
       this.log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to search tasks')

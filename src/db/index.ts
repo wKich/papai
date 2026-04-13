@@ -25,6 +25,7 @@ import { migration017MessageMetadata } from './migrations/017_message_metadata.j
 import { migration018Memos } from './migrations/018_memos.js'
 import { migration019UserIdentityMappings } from './migrations/019_user_identity_mappings.js'
 import { migration020GroupSettingsRegistry } from './migrations/020_group_settings_registry.js'
+import { migration021WebFetch } from './migrations/021_web_fetch.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -72,6 +73,7 @@ const MIGRATIONS = [
   migration018Memos,
   migration019UserIdentityMappings,
   migration020GroupSettingsRegistry,
+  migration021WebFetch,
 ] as const
 
 export const initDb = (): void => {

@@ -1,15 +1,16 @@
 import { logger } from '../../logger.js'
+import type { IdentityUser, UserIdentityResolver } from '../types.js'
 import type { YouTrackConfig } from './client.js'
 import { listYouTrackUsers, resolveYouTrackUserRingId } from './operations/users.js'
 
 const log = logger.child({ scope: 'provider:youtrack:identity' })
 
-export interface UserIdentityResolver {
-  searchUsers(query: string, limit?: number): Promise<Array<{ id: string; login: string; name?: string }>>
-  getUserByLogin(login: string): Promise<{ id: string; login: string; name?: string } | null>
+/** Extended identity resolver with YouTrack-specific user lookup. */
+export interface YouTrackIdentityResolver extends UserIdentityResolver {
+  getUserByLogin(login: string): Promise<IdentityUser | null>
 }
 
-export function createYouTrackIdentityResolver(config: YouTrackConfig): UserIdentityResolver {
+export function createYouTrackIdentityResolver(config: YouTrackConfig): YouTrackIdentityResolver {
   log.debug('createYouTrackIdentityResolver called')
 
   return {
@@ -18,11 +19,13 @@ export function createYouTrackIdentityResolver(config: YouTrackConfig): UserIden
 
       try {
         const users = await listYouTrackUsers(config, query, limit ?? 10)
-        return users.map((u) => ({
-          id: u.id,
-          login: u.login ?? u.id,
-          name: u.name ?? u.login ?? u.id,
-        }))
+        return users.map(
+          (u): IdentityUser => ({
+            id: u.id,
+            login: u.login ?? u.id,
+            name: u.name ?? u.login ?? u.id,
+          }),
+        )
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), query },
@@ -37,11 +40,12 @@ export function createYouTrackIdentityResolver(config: YouTrackConfig): UserIden
 
       try {
         const ringId = await resolveYouTrackUserRingId(config, login)
-        return {
+        const result: IdentityUser = {
           id: ringId,
           login,
           name: login,
         }
+        return result
       } catch (error) {
         log.warn({ login, error: error instanceof Error ? error.message : String(error) }, 'User not found')
         return null

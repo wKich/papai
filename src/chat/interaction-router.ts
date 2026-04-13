@@ -6,8 +6,8 @@ import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
 import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
-import { getWizardSession, resetWizardSession } from '../wizard/state.js'
-import type { IncomingInteraction, ReplyFn } from './types.js'
+import { getWizardSession, hasActiveWizard, resetWizardSession } from '../wizard/state.js'
+import type { AuthorizationResult, IncomingInteraction, ReplyFn } from './types.js'
 
 const log = logger.child({ scope: 'chat:interaction-router' })
 
@@ -57,6 +57,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
 
   if (action === null) {
     log.warn({ callbackData }, 'Unknown config editor callback data')
+    await reply.text('This action is no longer valid. Please start over with /config.')
     return true
   }
 
@@ -67,6 +68,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
 
   if (!result.handled) {
     log.warn({ action, key }, 'Config editor callback not handled')
+    await reply.text('This action is no longer valid. Please start over with /config.')
     return true
   }
 
@@ -138,11 +140,19 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
       return true
     }
     case 'wizard_cancel': {
+      if (!hasActiveWizard(userId, storageContextId)) {
+        await reply.text('No active setup session. Type /setup to start.')
+        return true
+      }
       cancelWizard(userId, storageContextId)
       await reply.text('❌ Wizard cancelled. Type /setup to restart.')
       return true
     }
     case 'wizard_restart': {
+      if (!hasActiveWizard(userId, storageContextId)) {
+        await reply.text('No active setup session. Type /setup to start.')
+        return true
+      }
       cancelWizard(userId, storageContextId)
       await reply.text('Restarting wizard... Type /setup to begin.')
       return true
@@ -166,8 +176,13 @@ const defaultDeps: InteractionRouteDeps = {
 export function routeInteraction(
   interaction: IncomingInteraction,
   reply: ReplyFn,
+  auth: AuthorizationResult,
   deps: InteractionRouteDeps = defaultDeps,
 ): Promise<boolean> {
+  if (!auth.allowed) {
+    return reply.text('You are not authorized to use this bot.').then(() => true)
+  }
+
   const { callbackData } = interaction
 
   if (callbackData.startsWith('gsel:')) {

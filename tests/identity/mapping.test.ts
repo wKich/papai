@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 
-import { clearIdentityMapping, getIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
+import {
+  clearIdentityMapping,
+  getIdentityMapping,
+  setIdentityMapping,
+  type IdentityMappingDeps,
+} from '../../src/identity/mapping.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('identity mapping CRUD', () => {
@@ -51,5 +56,69 @@ describe('identity mapping CRUD', () => {
     expect(result).not.toBeNull()
     expect(result?.providerUserId).toBeNull()
     expect(result?.matchMethod).toBe('unmatched')
+  })
+})
+
+describe('identity mapping DI', () => {
+  const testContextId = 'test-context-di'
+  const testProvider = 'youtrack'
+
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  it('should use injected deps for getIdentityMapping', async () => {
+    const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+    let getDbCalled = false
+
+    const mockGetDrizzleDb = (): ReturnType<IdentityMappingDeps['getDrizzleDb']> => {
+      getDbCalled = true
+      return getDrizzleDb()
+    }
+
+    const deps: IdentityMappingDeps = { getDrizzleDb: mockGetDrizzleDb }
+    const result = getIdentityMapping(testContextId, testProvider, deps)
+    expect(getDbCalled).toBe(true)
+    expect(result).toBeNull()
+  })
+
+  it('should use injected deps for setIdentityMapping', async () => {
+    const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+    let getDbCalled = false
+
+    const mockGetDrizzleDb = (): ReturnType<IdentityMappingDeps['getDrizzleDb']> => {
+      getDbCalled = true
+      return getDrizzleDb()
+    }
+
+    const deps: IdentityMappingDeps = { getDrizzleDb: mockGetDrizzleDb }
+    setIdentityMapping(
+      {
+        contextId: testContextId,
+        providerName: testProvider,
+        providerUserId: 'yt-123',
+        providerUserLogin: 'jsmith',
+        displayName: 'John Smith',
+        matchMethod: 'auto',
+        confidence: 100,
+      },
+      deps,
+    )
+    expect(getDbCalled).toBe(true)
+  })
+
+  it('should use injected deps for clearIdentityMapping', async () => {
+    const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+    let getDbCalled = false
+
+    const mockGetDrizzleDb = (): ReturnType<IdentityMappingDeps['getDrizzleDb']> => {
+      getDbCalled = true
+      return getDrizzleDb()
+    }
+
+    const deps: IdentityMappingDeps = { getDrizzleDb: mockGetDrizzleDb }
+    clearIdentityMapping(testContextId, testProvider, deps)
+    expect(getDbCalled).toBe(true)
   })
 })

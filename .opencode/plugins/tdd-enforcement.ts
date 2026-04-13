@@ -5,6 +5,7 @@
 import type { Plugin } from '@opencode-ai/plugin'
 
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
+import { enforceWritePolicy } from '../../.hooks/tdd/checks/enforce-write-policy.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
 import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
@@ -22,19 +23,26 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       // Only process edit tools
       if (!EDIT_TOOLS.has(input.tool)) return
 
-      const filePath = output.args.filePath as string
+      const toolArgs = output.args as Record<string, unknown>
+      const filePath = toolArgs.filePath as string
       if (!filePath) return
+
+      const ctx = {
+        tool_name: input.tool,
+        tool_input: { ...toolArgs, file_path: filePath },
+        session_id: input.sessionID,
+        cwd: directory,
+      }
+
+      // [0] enforceWritePolicy - Block protected config edits and inline suppressions
+      const writePolicyResult = enforceWritePolicy(ctx)
+      if (writePolicyResult) {
+        throw new Error(writePolicyResult.reason)
+      }
 
       // Capture coverage baseline BEFORE any edits to ensure it reflects the
       // pre-edit state, not the state after the first edit (fixes lazy capture bug)
       getSessionBaseline(input.sessionID, directory)
-
-      // Delegate to hook checks with OpenCode-compatible context shape
-      const ctx = {
-        tool_input: { file_path: filePath },
-        session_id: input.sessionID,
-        cwd: directory,
-      }
 
       // [1] enforceTdd - Block impl writes without test
       const tddResult = enforceTdd(ctx)

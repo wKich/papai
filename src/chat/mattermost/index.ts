@@ -1,19 +1,24 @@
+import { getThreadScopedStorageContextId } from '../../auth.js'
 import { logger } from '../../logger.js'
 import type {
   AuthorizationResult,
   ChatProvider,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
   ContextType,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
 import { fetchMattermostChannelInfo, fetchMattermostTeamInfo } from './context-metadata.js'
+import { renderMattermostContext } from './context-renderer.js'
 import {
   cacheIncomingPost,
   downloadMattermostFile,
   fetchMattermostFiles,
   parsePostedEvent,
+  resolveMattermostUserId,
   uploadMattermostFile,
 } from './file-helpers.js'
 import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
@@ -137,7 +142,6 @@ export class MattermostChatProvider implements ChatProvider {
   private async handlePostedEvent(data: Record<string, unknown>): Promise<void> {
     const parsed = parsePostedEvent(data)
     if (parsed === null) return
-
     const { post, senderName } = parsed
     if (post.user_id === this.botUserId) return
 
@@ -147,7 +151,8 @@ export class MattermostChatProvider implements ChatProvider {
     await this.dispatchMsg(msg, reply, command, isAdmin)
   }
 
-  private async buildPostedMessage(
+  /** @package Visible for testing */
+  async buildPostedMessage(
     post: MattermostPost,
     senderName: string | undefined,
     replyToMessageId: string | undefined,
@@ -190,6 +195,7 @@ export class MattermostChatProvider implements ChatProvider {
       messageId: post.id,
       replyToMessageId,
       replyContext,
+      threadId,
       ...(files !== undefined && files.length > 0 ? { files } : {}),
     }
     return { msg, reply, command, isAdmin }
@@ -206,7 +212,7 @@ export class MattermostChatProvider implements ChatProvider {
         allowed: true,
         isBotAdmin: isAdmin,
         isGroupAdmin: isAdmin,
-        storageContextId: msg.contextId,
+        storageContextId: getThreadScopedStorageContextId(msg.contextId, msg.contextType, msg.threadId),
       }
       await command.handler(msg, reply, auth)
       return
@@ -267,18 +273,8 @@ export class MattermostChatProvider implements ChatProvider {
     return ChannelSchema.parse(data).id
   }
 
-  async resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
-    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
-    try {
-      const data = await this.apiFetch('GET', `/api/v4/users/username/${encodeURIComponent(cleanUsername)}`, undefined)
-      const parsed = UserMeSchema.safeParse(data)
-      if (parsed.success) {
-        return parsed.data.id
-      }
-      return null
-    } catch {
-      return null
-    }
+  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
+    return resolveMattermostUserId(username, this.apiFetch.bind(this))
   }
 
   private wsSend(data: unknown): void {
@@ -296,5 +292,9 @@ export class MattermostChatProvider implements ChatProvider {
     if (!res.ok) throw new Error(`Mattermost API ${method} ${path} failed: ${res.status}`)
     const data: unknown = await res.json()
     return data
+  }
+
+  renderContext(snapshot: ContextSnapshot): ContextRendered {
+    return renderMattermostContext(snapshot)
   }
 }

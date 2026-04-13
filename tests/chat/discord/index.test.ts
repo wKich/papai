@@ -2,18 +2,21 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
-import type { IncomingMessage } from '../../../src/chat/types.js'
+import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
 import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
+import { addUser } from '../../../src/users.js'
 import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
 describe('DiscordChatProvider', () => {
   const originalToken = process.env['DISCORD_BOT_TOKEN']
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLogger()
     mockMessageCache()
+    await setupTestDb()
     process.env['DISCORD_BOT_TOKEN'] = 'fake-token-123'
+    process.env['ADMIN_USER_ID'] = 'admin-id'
   })
 
   afterEach(() => {
@@ -218,6 +221,35 @@ describe('DiscordChatProvider', () => {
     expect(result).toBe('u-9')
   })
 
+  describe('renderContext', () => {
+    test('returns embed method result with context snapshot', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const snapshot: ContextSnapshot = {
+        modelName: 'gpt-4o',
+        totalTokens: 1500,
+        maxTokens: 128_000,
+        approximate: false,
+        sections: [
+          { label: 'System prompt', tokens: 500 },
+          { label: 'Tools', tokens: 1000 },
+        ],
+      }
+
+      const result = provider.renderContext(snapshot)
+
+      expect(result.method).toBe('embed')
+      if (result.method === 'embed') {
+        expect(result.embed.title).toBe('Context · gpt-4o')
+        expect(result.embed.description).toContain('🟦')
+        expect(result.embed.footer).toContain('1,500')
+        expect(result.embed.footer).toContain('128,000')
+        expect(result.embed.color).toBe(0x2ecc71)
+      }
+    })
+  })
+
   describe('defaultClientFactory', () => {
     test('creates a discord.js Client instance with the required interface', async () => {
       const { defaultClientFactory } = await import('../../../src/chat/discord/index.js')
@@ -419,6 +451,9 @@ describe('DiscordChatProvider', () => {
     test('button interactionCreate dispatches to message handler via start()', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
 
+      // Authorize the user
+      addUser('u5', 'admin-id', 'eve')
+
       const interactionListeners: Array<(...args: unknown[]) => void> = []
       const readyListeners: Array<(arg: { user: { id: string; username: string } }) => void> = []
 
@@ -481,6 +516,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('u1', 'admin-id', 'alice')
+
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
         seen.push(msg)
@@ -517,6 +555,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('u2', 'admin-id', 'bob')
+
       const captured: IncomingMessage[] = []
       provider.registerCommand('help', (msg): Promise<void> => {
         captured.push(msg)
@@ -548,6 +589,9 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
+      // Authorize the user
+      addUser('user-77', 'admin-id', 'carol')
+
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
         seen.push(msg)
@@ -578,6 +622,9 @@ describe('DiscordChatProvider', () => {
     test('uses channelId as contextId in guild channels (type=0)', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
+
+      // Authorize the user
+      addUser('user-88', 'admin-id', 'dave')
 
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
@@ -791,6 +838,9 @@ describe('DiscordChatProvider', () => {
     test('handles deferUpdate failure gracefully', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
+
+      // Authorize the user
+      addUser('u-def', 'admin-id', 'defer-fail')
 
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {

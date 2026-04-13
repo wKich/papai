@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
+import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { resolveMeReference } from '../../src/identity/resolver.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
@@ -18,7 +19,7 @@ describe('create_task identity resolution', () => {
     mock.restore()
   })
 
-  test('should resolve "me" assignee to identity', () => {
+  test('should resolve "me" assignee to identity', async () => {
     // Setup identity mapping
     setIdentityMapping({
       contextId: 'test-user-456',
@@ -30,22 +31,22 @@ describe('create_task identity resolution', () => {
       confidence: 100,
     })
 
-    const result = resolveMeReference('test-user-456', createMockProvider())
+    const result = await resolveMeReference('test-user-456', createMockProvider())
     expect(result.type).toBe('found')
     if (result.type === 'found') {
       expect(result.identity.userId).toBe('resolved-user-789')
     }
   })
 
-  test('should return not_found when no identity mapping exists', () => {
-    const result = resolveMeReference('unknown-user', createMockProvider())
+  test('should return not_found when no identity mapping exists', async () => {
+    const result = await resolveMeReference('unknown-user', createMockProvider())
     expect(result.type).toBe('not_found')
     if (result.type === 'not_found') {
       expect(result.message).toContain("don't know who you are")
     }
   })
 
-  test('should return unmatched when identity was previously unmatched', () => {
+  test('should return unmatched when identity was previously unmatched', async () => {
     // Set an unmatched mapping using null for providerUserId
     setIdentityMapping({
       contextId: 'unmatched-user',
@@ -60,7 +61,7 @@ describe('create_task identity resolution', () => {
     // Clear it first to set providerUserId to null (the actual unmatched state)
     clearIdentityMapping('unmatched-user', 'mock')
 
-    const result = resolveMeReference('unmatched-user', createMockProvider())
+    const result = await resolveMeReference('unmatched-user', createMockProvider())
     expect(result.type).toBe('unmatched')
     if (result.type === 'unmatched') {
       expect(result.message).toContain("couldn't automatically match")
@@ -192,5 +193,149 @@ describe('create_task identity resolution', () => {
     await tool.execute({ title: 'Test Task', projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
 
     expect(capturedAssignee).toBeUndefined()
+  })
+
+  test('create_task tool should use login when provider prefers login identifier', async () => {
+    // Setup identity mapping
+    setIdentityMapping({
+      contextId: 'test-user-456',
+      providerName: 'mock',
+      providerUserId: 'resolved-user-789',
+      providerUserLogin: 'jsmith',
+      displayName: 'John Smith',
+      matchMethod: 'manual_nl',
+      confidence: 100,
+    })
+
+    let capturedAssignee: string | undefined
+    const createTask = mock((params: { title: string; assignee?: string }) => {
+      capturedAssignee = params.assignee
+      return Promise.resolve({
+        id: 'task-1',
+        title: params.title,
+        status: 'todo',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ createTask, preferredUserIdentifier: 'login' })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute({ title: 'Test Task', projectId: 'proj-1', assignee: 'me' }, { toolCallId: '1', messages: [] })
+
+    expect(createTask).toHaveBeenCalledTimes(1)
+    expect(capturedAssignee).toBe('jsmith')
+  })
+
+  test('create_task tool should throw error when provider fails', async () => {
+    const createTask = mock(() => {
+      return Promise.reject(new Error('Database connection failed'))
+    })
+
+    const provider = createMockProvider({ createTask })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await expect(
+      tool.execute({ title: 'Test Task', projectId: 'proj-1' }, { toolCallId: '1', messages: [] }),
+    ).rejects.toThrow('Database connection failed')
+  })
+
+  describe('timezone config lookup (NI2 fix)', () => {
+    test('should use storageContextId for timezone in group chats', async () => {
+      const chatUserId = 'user-123'
+      const storageContextId = 'group-456'
+      // Config stored under group context
+      setConfig(storageContextId, 'timezone', 'America/New_York')
+
+      // Verify the bug: config NOT under chatUserId
+      expect(getConfig(chatUserId, 'timezone')).toBeNull()
+
+      const createTask = mock((params: { title: string; dueDate?: string }) => {
+        return Promise.resolve({
+          id: 'task-1',
+          title: params.title,
+          status: 'todo',
+          url: 'https://test.com/task/1',
+          dueDate: params.dueDate,
+        })
+      })
+
+      const provider = createMockProvider({ createTask })
+      // Pass storageContextId as third parameter
+      const tool = makeCreateTaskTool(provider, chatUserId, storageContextId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { title: 'Test Task', projectId: 'proj-1', dueDate: { date: '2024-06-15', time: '14:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // 14:00 EDT (America/New_York in June) = 18:00 UTC
+      const callArgs = createTask.mock.calls[0]?.[0] as { dueDate?: string } | undefined
+      expect(callArgs).toBeDefined()
+      expect(callArgs?.dueDate).toContain('18:00')
+    })
+
+    test('should fallback to UTC when storageContextId has no timezone', async () => {
+      const chatUserId = 'user-123'
+      const storageContextId = 'group-456'
+      // No timezone set
+
+      const createTask = mock((params: { title: string; dueDate?: string }) => {
+        return Promise.resolve({
+          id: 'task-1',
+          title: params.title,
+          status: 'todo',
+          url: 'https://test.com/task/1',
+          dueDate: params.dueDate,
+        })
+      })
+
+      const provider = createMockProvider({ createTask })
+      const tool = makeCreateTaskTool(provider, chatUserId, storageContextId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { title: 'Test Task', projectId: 'proj-1', dueDate: { date: '2024-06-15', time: '14:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // With UTC fallback, 14:00 stays 14:00
+      const callArgs = createTask.mock.calls[0]?.[0] as { dueDate?: string } | undefined
+      expect(callArgs).toBeDefined()
+      expect(callArgs?.dueDate).toContain('14:00')
+    })
+
+    test('should work with same userId and storageContextId in DMs', async () => {
+      const userId = 'user-123'
+      setConfig(userId, 'timezone', 'America/Los_Angeles')
+
+      const createTask = mock((params: { title: string; dueDate?: string }) => {
+        return Promise.resolve({
+          id: 'task-1',
+          title: params.title,
+          status: 'todo',
+          url: 'https://test.com/task/1',
+          dueDate: params.dueDate,
+        })
+      })
+
+      const provider = createMockProvider({ createTask })
+      // In DMs, both IDs are the same
+      const tool = makeCreateTaskTool(provider, userId, userId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { title: 'Test Task', projectId: 'proj-1', dueDate: { date: '2024-06-15', time: '14:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // 14:00 PDT (America/Los_Angeles in June) = 21:00 UTC
+      const callArgs = createTask.mock.calls[0]?.[0] as { dueDate?: string } | undefined
+      expect(callArgs).toBeDefined()
+      expect(callArgs?.dueDate).toContain('21:00')
+    })
   })
 })

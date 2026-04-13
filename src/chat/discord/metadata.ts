@@ -3,9 +3,8 @@ import type { ChatCapability, ChatProviderConfigRequirement, ChatProviderTraits 
 export const discordCapabilities: ReadonlySet<ChatCapability> = new Set<ChatCapability>([
   'interactions.callbacks',
   'messages.buttons',
-  'messages.files',
+  'messages.redact',
   'messages.reply-context',
-  'files.receive',
   'users.resolve',
 ])
 
@@ -15,6 +14,6 @@ export const discordTraits: ChatProviderTraits = {
   callbackDataMaxLength: 100,
 }
 
-export const discordConfigRequirements: ChatProviderConfigRequirement[] = [
+export const discordConfigRequirements: readonly ChatProviderConfigRequirement[] = [
   { key: 'DISCORD_BOT_TOKEN', label: 'Discord Bot Token', required: true },
 ]

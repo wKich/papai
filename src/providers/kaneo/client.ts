@@ -1,4 +1,4 @@
-import { type ZodType } from 'zod'
+import type { ZodType } from 'zod'
 
 import { logger } from '../../logger.js'
 import { KaneoApiError, KaneoValidationError } from './errors.js'

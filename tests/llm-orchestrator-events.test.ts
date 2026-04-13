@@ -27,7 +27,7 @@ describe('llm-orchestrator-events', () => {
 
       try {
         const provider = createMockProvider()
-        const tools = makeTools(provider, 'ctx-1')
+        const tools = makeTools(provider, { storageContextId: 'ctx-1', chatUserId: 'user-1' })
         emitLlmStart('ctx-1', 'gpt-4', [{ role: 'user', content: 'hi' }], tools)
 
         expect(capturedEvent).toEqual({
@@ -71,7 +71,7 @@ describe('llm-orchestrator-events', () => {
           finishReason: 'stop',
         }
         const provider = createMockProvider()
-        const tools = makeTools(provider, 'ctx-1')
+        const tools = makeTools(provider, { storageContextId: 'ctx-1', chatUserId: 'user-1' })
         const startTime = Date.now() - 1000
 
         emitLlmEnd('ctx-1', 'gpt-4', result, startTime, [{ role: 'user', content: 'hi' }], tools)

@@ -36,7 +36,7 @@ Use this guide when you are:
 | ------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | Tier 1: Provider-Real E2E       | Real task provider, controlled outer layers                                        | Kaneo or YouTrack provider operations and normalized task behavior           |
 | Tier 2: Runtime E2E             | Real papai runtime with controlled chat injection and deterministic model boundary | setup, auth, wizard, routing, tool capability behavior                       |
-| Tier 3: Platform-Integrated E2E | Real chat platform plus runtime                                                    | Telegram or Mattermost command, mention, button, and file behavior           |
+| Tier 3: Platform-Integrated E2E | Real chat platform plus runtime                                                    | Telegram, Mattermost, or Discord command, mention, button, and file behavior |
 | Tier 4: Operational E2E         | Runtime plus schedulers or background delivery surfaces                            | recurring tasks, deferred prompts, proactive delivery, debug instrumentation |
 
 ## papai Priority Order
@@ -69,8 +69,10 @@ Every E2E plan must contain:
 
 - objective
 - regression boundary
+- owners or audience
 - chosen realism tier and rationale
 - included providers and platforms
+- excluded scope
 - architecture path
 - environment and fixtures
 - scenario matrix

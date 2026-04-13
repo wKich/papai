@@ -15,23 +15,61 @@ interface ResolveAssigneeResult {
   identityRequired?: { status: 'identity_required'; message: string }
 }
 
-function resolveAssignee(
+async function resolveAssignee(
   assignee: string | undefined,
   userId: string | undefined,
   provider: TaskProvider,
-): ResolveAssigneeResult {
+): Promise<ResolveAssigneeResult> {
   if (assignee === undefined || assignee.toLowerCase() !== 'me' || userId === undefined) {
     return { assignee }
   }
 
-  const identity = resolveMeReference(userId, provider)
+  const identity = await resolveMeReference(userId, provider)
   if (identity.type === 'found') {
-    return { assignee: identity.identity.userId }
+    const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
+    return { assignee: identifier }
   }
   return { identityRequired: { status: 'identity_required', message: identity.message } }
 }
 
-export function makeCreateTaskTool(provider: TaskProvider, userId?: string): ToolSet[string] {
+async function executeCreateTask(
+  params: {
+    title: string
+    description?: string
+    priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
+    projectId: string
+    dueDate?: { date: string; time?: string }
+    status?: string
+    assignee?: string
+  },
+  userId: string | undefined,
+  storageContextId: string | undefined,
+  provider: TaskProvider,
+): Promise<unknown> {
+  const { title, description, priority, projectId, dueDate, status, assignee } = params
+  const configKey = storageContextId ?? userId
+  const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
+  const resolvedDueDate = dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+  const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
+  if (identityRequired !== undefined) return identityRequired
+  const task = await provider.createTask({
+    projectId,
+    title,
+    description,
+    priority,
+    status,
+    dueDate: resolvedDueDate,
+    assignee: resolvedAssignee,
+  })
+  log.info({ taskId: task.id, title }, 'Task created via tool')
+  return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
+}
+
+export function makeCreateTaskTool(
+  provider: TaskProvider,
+  userId?: string,
+  storageContextId?: string,
+): ToolSet[string] {
   return tool({
     description: 'Create a new task. Call list_projects first to get a valid projectId.',
     inputSchema: z.object({
@@ -49,31 +87,12 @@ export function makeCreateTaskTool(provider: TaskProvider, userId?: string): Too
       status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
       assignee: z.string().optional().describe("User ID to assign the task to, or 'me' to assign to yourself"),
     }),
-    execute: async ({ title, description, priority, projectId, dueDate, status, assignee }) => {
+    execute: async (params) => {
       try {
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
-        const resolvedDueDate =
-          dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
-
-        const { assignee: resolvedAssignee, identityRequired } = resolveAssignee(assignee, userId, provider)
-        if (identityRequired !== undefined) {
-          return identityRequired
-        }
-
-        const task = await provider.createTask({
-          projectId,
-          title,
-          description,
-          priority,
-          status,
-          dueDate: resolvedDueDate,
-          assignee: resolvedAssignee,
-        })
-        log.info({ taskId: task.id, title }, 'Task created via tool')
-        return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
+        return await executeCreateTask(params, userId, storageContextId, provider)
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), title, tool: 'create_task' },
+          { error: error instanceof Error ? error.message : String(error), title: params.title, tool: 'create_task' },
           'Tool execution failed',
         )
         throw error

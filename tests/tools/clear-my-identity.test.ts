@@ -9,6 +9,7 @@ const mockProvider: TaskProvider = {
   name: 'mock',
   capabilities: new Set(),
   configRequirements: [],
+  preferredUserIdentifier: 'id',
   buildTaskUrl: () => '',
   buildProjectUrl: () => '',
   classifyError: (e) => {
@@ -75,5 +76,63 @@ describe('clear_my_identity tool', () => {
 
     expect(result).toHaveProperty('status', 'info')
     expect(result).toHaveProperty('message', 'No identity mapping to clear.')
+  })
+
+  test('should isolate clear operations by chatUserId', async () => {
+    // Setup another user's identity
+    const otherUserId = 'user-other'
+    setIdentityMapping({
+      contextId: otherUserId,
+      providerName: 'mock',
+      providerUserId: 'user-999',
+      providerUserLogin: 'otheruser',
+      displayName: 'Other User',
+      matchMethod: 'auto',
+      confidence: 100,
+    })
+
+    // Clear first user's identity
+    const tool = makeClearMyIdentityTool(mockProvider, testUserId)
+    await getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
+
+    // First user's identity should be cleared
+    const clearedMapping = getIdentityMapping(testUserId, 'mock')
+    expect(clearedMapping?.providerUserId).toBeNull()
+
+    // Other user's identity should remain intact
+    const otherMapping = getIdentityMapping(otherUserId, 'mock')
+    expect(otherMapping?.providerUserId).toBe('user-999')
+  })
+
+  test('should use injected deps', async () => {
+    const { getDrizzleDb } = await import('../../src/db/drizzle.js')
+    let getDbCalled = false
+    let clearCalled = false
+
+    const mockGetDrizzleDb = (): ReturnType<typeof getDrizzleDb> => {
+      getDbCalled = true
+      return getDrizzleDb()
+    }
+
+    const mockClearIdentityMapping = (contextId: string, providerName: string): void => {
+      clearCalled = true
+      clearIdentityMapping(contextId, providerName)
+    }
+
+    const deps = {
+      getIdentityMapping: (ctxId: string, provName: string): ReturnType<typeof getIdentityMapping> => {
+        getDbCalled = true
+        return getIdentityMapping(ctxId, provName)
+      },
+      clearIdentityMapping: mockClearIdentityMapping,
+      getDrizzleDb: mockGetDrizzleDb,
+    }
+
+    const tool = makeClearMyIdentityTool(mockProvider, testUserId, deps)
+    const result: unknown = await getToolExecutor(tool)({}, { toolCallId: '1', messages: [] })
+
+    expect(result).toHaveProperty('status', 'success')
+    expect(getDbCalled).toBe(true)
+    expect(clearCalled).toBe(true)
   })
 })

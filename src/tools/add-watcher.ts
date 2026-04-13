@@ -19,9 +19,10 @@ export function makeAddWatcherTool(provider: TaskProvider, contextUserId?: strin
       try {
         let resolvedUserId = userIdParam
         if (userIdParam.toLowerCase() === 'me' && contextUserId !== undefined) {
-          const identity = resolveMeReference(contextUserId, provider)
+          const identity = await resolveMeReference(contextUserId, provider)
           if (identity.type === 'found') {
-            resolvedUserId = identity.identity.userId
+            resolvedUserId =
+              provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
           } else {
             return {
               status: 'identity_required',
@@ -30,7 +31,11 @@ export function makeAddWatcherTool(provider: TaskProvider, contextUserId?: strin
           }
         }
 
-        const result = await provider.addWatcher!(taskId, resolvedUserId)
+        if (provider.addWatcher === undefined) {
+          return { status: 'error', message: 'Provider does not support adding watchers' }
+        }
+
+        const result = await provider.addWatcher(taskId, resolvedUserId)
         log.info({ taskId, userId: userIdParam, resolvedUserId }, 'Watcher added via tool')
         return result
       } catch (error) {

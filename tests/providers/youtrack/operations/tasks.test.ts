@@ -940,6 +940,44 @@ describe('searchYouTrackTasks', () => {
       YouTrackClassifiedError,
     )
   })
+
+  test('prepends assignee filter when assigneeId is provided', async () => {
+    mockFetchResponse([])
+
+    await searchYouTrackTasks(config, { query: 'bug fix', assigneeId: 'john.doe' })
+
+    const url = getLastFetchUrl()
+    expect(url.searchParams.get('query')).toBe('assignee: {john.doe} bug fix')
+  })
+
+  test('prepends both assignee and project filters when both are provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'MY-PROJ', name: 'My Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await searchYouTrackTasks(config, { query: 'bug', projectId: '39-883', assigneeId: 'john.doe' })
+
+    // Get the second call (issues search)
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    // Assignee filter comes first (prepended last), then project filter
+    expect(urlObj.searchParams.get('query')).toBe('assignee: {john.doe} project: {MY-PROJ} bug')
+  })
 })
 
 describe('deleteYouTrackTask', () => {

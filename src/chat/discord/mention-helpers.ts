@@ -6,12 +6,17 @@ export function stripBotMention(content: string, botId: string): string {
   return content.replace(pattern, '').trim()
 }
 
+/** Minimal type for Discord.js MessageMentions.has() method. */
+export type MentionsLike = {
+  has: (id: string) => boolean
+}
+
 /**
  * Returns true if the Discord message should be treated as an @mention of the bot.
  * DMs are always considered mentions (parity with Telegram/Mattermost DM semantics).
- * Group channels match `<@botId>` or `<@!botId>` substrings.
+ * Group channels use Discord's mentions.has() API for accurate mention detection.
  */
-export function isBotMentioned(content: string, botId: string, contextType: ContextType): boolean {
+export function isBotMentioned(mentions: MentionsLike, botId: string, contextType: ContextType): boolean {
   if (contextType === 'dm') return true
-  return content.includes(`<@${botId}>`) || content.includes(`<@!${botId}>`)
+  return mentions.has(botId)
 }

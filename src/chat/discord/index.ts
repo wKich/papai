@@ -1,49 +1,42 @@
+import { checkAuthorizationExtended } from '../../auth.js'
 import { logger } from '../../logger.js'
+import { routeInteraction } from '../interaction-router.js'
 import type {
-  AuthorizationResult,
   ChatProvider,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
+  IncomingInteraction,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
   ThreadCapabilities,
 } from '../types.js'
-import { type ButtonInteractionLike, dispatchButtonInteraction, isButtonInteraction } from './buttons.js'
+import {
+  buildInteraction,
+  routeButtonFallback as routeButtonFallbackExternal,
+  tryDeferUpdate,
+} from './button-dispatch.js'
+import { type ButtonInteractionLike, isButtonInteraction } from './buttons.js'
 import {
   type DiscordClientFactory,
   type DiscordClientLike,
   type DispatchableMessage,
-  type GuildLike,
   defaultClientFactory,
 } from './client-factory.js'
+import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
-import { getDiscordSettingsTargetContextId, handleDiscordGroupSettingsSelection } from './group-settings.js'
-import { handleConfigEditorCallback, handleWizardCallback } from './handlers.js'
+import { handleDiscordGroupSettingsSelection } from './group-settings.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
+import { isDispatchableMessage, isGuildLike, isReadyPayload } from './type-guards.js'
 import { withTypingIndicator } from './typing-indicator.js'
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
-const DISCORD_MAX_CONTENT_LEN = 2000
-const CHANNEL_TYPE_DM = 1
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
-type ReadyPayload = { user: { id: string; username: string } }
-function isDispatchableMessage(v: unknown): v is DispatchableMessage {
-  return typeof v === 'object' && v !== null && 'id' in v && 'author' in v && 'channel' in v
-}
-function isGuildLike(v: unknown): v is GuildLike {
-  if (typeof v !== 'object' || v === null || !('members' in v)) return false
-  const m = v.members
-  return typeof m === 'object' && m !== null && 'search' in m && typeof m.search === 'function'
-}
-function isReadyPayload(v: unknown): v is ReadyPayload {
-  if (typeof v !== 'object' || v === null || !('user' in v)) return false
-  const u = v.user
-  return typeof u === 'object' && u !== null && 'id' in u && 'username' in u
-}
 
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
@@ -59,6 +52,7 @@ export class DiscordChatProvider implements ChatProvider {
   private readonly clientFactory: DiscordClientFactory
   private readonly commands = new Map<string, CommandHandler>()
   private messageHandler: OnMessageHandler | null = null
+  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
   private client: DiscordClientLike | null = null
 
   constructor(clientFactory?: DiscordClientFactory) {
@@ -78,13 +72,18 @@ export class DiscordChatProvider implements ChatProvider {
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
   }
+
+  onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
+    this.interactionHandler = handler
+  }
+
   async sendMessage(userId: string, markdown: string): Promise<void> {
     if (this.client === null || this.client.users === undefined) {
       throw new Error('DiscordChatProvider.sendMessage called before start()')
     }
     const user = await this.client.users.fetch(userId)
     const dm = await user.createDM()
-    const chunks = chunkForDiscord(markdown, DISCORD_MAX_CONTENT_LEN)
+    const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
     await chunks.reduce<Promise<unknown>>(
       (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
       Promise.resolve(null),
@@ -135,7 +134,7 @@ export class DiscordChatProvider implements ChatProvider {
 
     client.on('interactionCreate', (rawInteraction) => {
       if (!isButtonInteraction(rawInteraction)) return
-      this.handleButtonInteraction(rawInteraction, adminUserId).catch((error: unknown) => {
+      this.dispatchButtonInteraction(rawInteraction, adminUserId).catch((error: unknown) => {
         log.error(
           { error: error instanceof Error ? error.message : String(error) },
           'interactionCreate dispatch failed',
@@ -170,81 +169,51 @@ export class DiscordChatProvider implements ChatProvider {
     return this.dispatchMessage(message, botId, adminUserId)
   }
 
-  testDispatchButtonInteraction(
+  async testDispatchButtonInteraction(
     interaction: ButtonInteractionLike,
     _botId: string,
     adminUserId: string,
   ): Promise<void> {
-    return this.handleButtonInteraction(interaction, adminUserId)
+    await this.dispatchButtonInteraction(interaction, adminUserId)
   }
 
-  private async handleButtonInteraction(interaction: ButtonInteractionLike, adminUserId: string): Promise<void> {
-    const channel = interaction.channel
-    if (channel === null) {
-      log.warn({ channelId: interaction.channelId }, 'Button interaction: channel not available, skipping')
+  private async dispatchButtonInteraction(interaction: ButtonInteractionLike, adminUserId: string): Promise<void> {
+    await tryDeferUpdate(interaction)
+
+    const result = buildInteraction(interaction, adminUserId)
+    if (result === null) {
+      log.debug({ customId: interaction.customId }, 'Could not build incoming interaction, skipping')
       return
     }
 
-    const contextType = channel.type === CHANNEL_TYPE_DM ? ('dm' as const) : ('group' as const)
-    const contextId = contextType === 'dm' ? interaction.user.id : interaction.channelId
-    const userId = interaction.user.id
-    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
-    if (await handleDiscordGroupSettingsSelection(interaction, userId, reply)) return
-    const settingsTargetContextId = getDiscordSettingsTargetContextId(contextType, contextId, userId)
+    const { incoming, channel } = result
 
-    const onCfg = async (data: string): Promise<void> => {
-      await handleConfigEditorCallback(userId, settingsTargetContextId, data, channel)
-    }
-    const onWizard = async (data: string): Promise<void> => {
-      await handleWizardCallback(userId, settingsTargetContextId, data, channel)
-    }
+    // Handle group-settings selector callbacks before standard routing
+    if (await handleDiscordGroupSettingsSelection(interaction, incoming.user.id, result.reply)) return
 
-    await dispatchButtonInteraction(interaction, onCfg, onWizard)
-
-    await this.routeButtonFallback(interaction, channel, contextId, contextType, adminUserId)
-  }
-
-  private async routeButtonFallback(
-    interaction: ButtonInteractionLike,
-    channel: NonNullable<ButtonInteractionLike['channel']>,
-    contextId: string,
-    contextType: 'dm' | 'group',
-    adminUserId: string,
-  ): Promise<void> {
-    const data = interaction.customId
-    if (data.startsWith('cfg:') || data.startsWith('wizard_')) return
-
-    const mapped: IncomingMessage = {
-      user: {
-        id: interaction.user.id,
-        username: interaction.user.username.length > 0 ? interaction.user.username : null,
-        isAdmin: interaction.user.id === adminUserId,
-      },
-      contextId,
-      contextType,
-      isMentioned: true,
-      text: data,
-      messageId: interaction.message.id,
-    }
-
-    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
-
-    const command = this.matchCommand(mapped.text)
-    if (command !== null) {
-      mapped.commandMatch = command.match
-      const auth: AuthorizationResult = {
-        allowed: true,
-        isBotAdmin: mapped.user.isAdmin,
-        isGroupAdmin: mapped.user.isAdmin,
-        storageContextId: mapped.contextId,
-      }
-      await command.handler(mapped, reply, auth)
+    if (this.interactionHandler === undefined) {
+      const auth = checkAuthorizationExtended(
+        incoming.user.id,
+        incoming.user.username,
+        incoming.contextId,
+        incoming.contextType,
+        incoming.threadId,
+        incoming.user.isAdmin,
+      )
+      const handled = await routeInteraction(incoming, result.reply, auth)
+      if (handled) return
+      await routeButtonFallbackExternal(
+        interaction,
+        channel,
+        incoming.contextId,
+        incoming.contextType,
+        adminUserId,
+        this.commands,
+        this.messageHandler,
+      )
       return
     }
-
-    if (this.messageHandler !== null) {
-      await this.messageHandler(mapped, reply)
-    }
+    await this.interactionHandler(incoming, result.reply)
   }
 
   private async dispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
@@ -256,15 +225,19 @@ export class DiscordChatProvider implements ChatProvider {
       replyToMessageId: mapped.messageId,
     })
 
+    const auth = checkAuthorizationExtended(
+      mapped.user.id,
+      mapped.user.username,
+      mapped.contextId,
+      mapped.contextType,
+      mapped.threadId,
+      mapped.user.isAdmin,
+    )
+
     const command = this.matchCommand(mapped.text)
     if (command !== null) {
       mapped.commandMatch = command.match
-      await command.handler(mapped, reply, {
-        allowed: true,
-        isBotAdmin: mapped.user.isAdmin,
-        isGroupAdmin: mapped.user.isAdmin,
-        storageContextId: mapped.contextId,
-      })
+      await command.handler(mapped, reply, auth)
       return
     }
 
@@ -289,5 +262,9 @@ export class DiscordChatProvider implements ChatProvider {
       }
     }
     return null
+  }
+
+  renderContext(snapshot: ContextSnapshot): ContextRendered {
+    return renderDiscordContext(snapshot)
   }
 }

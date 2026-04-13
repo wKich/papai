@@ -11,14 +11,30 @@ import type { SessionDetail } from './types.js'
 
 // Build dashboard API object with stub implementations
 const dashboard: DashboardAPI = {
-  renderConnection: () => {},
-  renderStats: () => {},
-  renderInfra: () => {},
-  renderSessions: () => {},
-  renderTraces: () => {},
-  renderLogs: () => {},
-  updateScopeFilter: () => {},
-  clearLogs: () => {},
+  renderConnection: () => {
+    // no-op - implemented below
+  },
+  renderStats: () => {
+    // no-op - implemented below
+  },
+  renderInfra: () => {
+    // no-op - implemented below
+  },
+  renderSessions: () => {
+    // no-op - implemented below
+  },
+  renderTraces: () => {
+    // no-op - implemented below
+  },
+  renderLogs: () => {
+    // no-op - implemented below
+  },
+  updateScopeFilter: () => {
+    // no-op - implemented below
+  },
+  clearLogs: () => {
+    // no-op - implemented below
+  },
   __state: {
     connected: false,
     stats: { startedAt: Date.now(), totalMessages: 0, totalLlmCalls: 0, totalToolCalls: 0 },

@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, stepCountIs, type ModelMessage } from 'ai'
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory } from '../cache.js'
 import { getConfig } from '../config.js'
@@ -173,6 +173,37 @@ async function invokeWithContext(
   return result.text ?? 'Done.'
 }
 
+function buildFullToolSet(provider: TaskProvider, userId: string): ToolSet {
+  return makeTools(provider, {
+    storageContextId: userId,
+    chatUserId: userId,
+    mode: 'proactive',
+    contextType: 'dm',
+  })
+}
+
+function buildFullMessages(
+  userId: string,
+  type: 'scheduled' | 'alert',
+  prompt: string,
+  matchedTasksSummary: string | undefined,
+  metadata: ExecutionMetadata,
+): { messages: ModelMessage[]; systemPrompt: string } {
+  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
+  const history = getCachedHistory(userId)
+  const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
+  return {
+    messages: [
+      ...messagesWithMemory,
+      { role: 'system', content: trigger.systemContext },
+      ...buildMetadataMessages(metadata),
+      { role: 'user', content: trigger.userContent },
+    ],
+    systemPrompt: trigger.systemContext,
+  }
+}
+
 async function invokeFull(
   userId: string,
   type: 'scheduled' | 'alert',
@@ -193,29 +224,20 @@ async function invokeFull(
   }
 
   const model = deps.buildModel(config, config.mainModel)
-  const tools = makeTools(provider, userId, 'proactive')
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const tools = buildFullToolSet(provider, userId)
   const systemPrompt = buildSystemPrompt(provider, userId)
-  const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
-  const history = getCachedHistory(userId)
-  const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
-  const finalMessages: ModelMessage[] = [
-    ...messagesWithMemory,
-    { role: 'system', content: trigger.systemContext },
-    ...buildMetadataMessages(metadata),
-    { role: 'user', content: trigger.userContent },
-  ]
+  const { messages } = buildFullMessages(userId, type, prompt, matchedTasksSummary, metadata)
 
-  log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'full' }, 'generateText')
+  log.debug({ userId, mainModel: config.mainModel, historyLength: messages.length, mode: 'full' }, 'generateText')
   const result = await deps.generateText({
     model,
     system: systemPrompt,
-    messages: finalMessages,
+    messages,
     tools,
     stopWhen: deps.stepCountIs(25),
     timeout: 1_200_000,
   })
-  persistProactiveResults(userId, result, history)
+  persistProactiveResults(userId, result, getCachedHistory(userId))
   return result.text ?? 'Done.'
 }
 

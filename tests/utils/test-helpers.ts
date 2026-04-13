@@ -11,6 +11,9 @@ import type {
   ChatProviderConfigRequirement,
   ChatProviderTraits,
   CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
+  EmbedOptions,
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
@@ -38,6 +41,7 @@ import { migration017MessageMetadata } from '../../src/db/migrations/017_message
 import { migration018Memos } from '../../src/db/migrations/018_memos.js'
 import { migration019UserIdentityMappings } from '../../src/db/migrations/019_user_identity_mappings.js'
 import { migration020GroupSettingsRegistry } from '../../src/db/migrations/020_group_settings_registry.js'
+import { migration021WebFetch } from '../../src/db/migrations/021_web_fetch.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -64,6 +68,7 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration018Memos,
   migration019UserIdentityMappings,
   migration020GroupSettingsRegistry,
+  migration021WebFetch,
 ]
 
 // ============================================================================
@@ -203,8 +208,10 @@ export interface MockReplyResult {
   buttonCalls: string[]
   redactCalls: string[]
   fileCalls: ChatFile[]
+  embedCalls: EmbedOptions[]
   getReplies: () => string[]
   getRedactions: () => string[]
+  getEmbeds: () => EmbedOptions[]
 }
 
 /**
@@ -215,12 +222,16 @@ export function createMockReply(): MockReplyResult {
   const buttonCalls: string[] = []
   const redactCalls: string[] = []
   const fileCalls: ChatFile[] = []
+  const embedCalls: EmbedOptions[] = []
   const reply: ReplyFn = {
     text: (content: string): Promise<void> => {
       textCalls.push(content)
       return Promise.resolve()
     },
-    formatted: (): Promise<void> => Promise.resolve(),
+    formatted: (content: string): Promise<void> => {
+      textCalls.push(content)
+      return Promise.resolve()
+    },
     file: (file: ChatFile): Promise<void> => {
       fileCalls.push(file)
       return Promise.resolve()
@@ -234,6 +245,10 @@ export function createMockReply(): MockReplyResult {
       buttonCalls.push(content)
       return Promise.resolve()
     },
+    embed: (options: EmbedOptions): Promise<void> => {
+      embedCalls.push(options)
+      return Promise.resolve()
+    },
   }
   return {
     reply,
@@ -241,8 +256,10 @@ export function createMockReply(): MockReplyResult {
     buttonCalls,
     redactCalls,
     fileCalls,
+    embedCalls,
     getReplies: () => textCalls,
     getRedactions: () => redactCalls,
+    getEmbeds: () => embedCalls,
   }
 }
 
@@ -336,6 +353,20 @@ export const DEFAULT_CHAT_CAPABILITIES = new Set<ChatCapability>([
 ])
 
 /**
+ * Telegram-like capabilities (no users.resolve).
+ * Use when testing Telegram-specific behavior that should reject @username resolution.
+ */
+export const TELEGRAM_LIKE_CAPABILITIES = new Set<ChatCapability>([
+  'commands.menu',
+  'interactions.callbacks',
+  'messages.buttons',
+  'messages.files',
+  'messages.redact',
+  'files.receive',
+  'messages.reply-context',
+])
+
+/**
  * Create a mock chat provider with configurable behavior.
  * @param options - Optional configuration for the mock provider
  * @returns The mock ChatProvider and any captured state
@@ -396,6 +427,10 @@ export function createMockChat(
         return Promise.resolve(clean)
       }),
     setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
+    renderContext: (snapshot: ContextSnapshot): ContextRendered => ({
+      method: 'text',
+      content: `mock renderContext: ${snapshot.modelName} total=${String(snapshot.totalTokens)}`,
+    }),
     start: (): Promise<void> => Promise.resolve(),
     stop: (): Promise<void> => Promise.resolve(),
   }

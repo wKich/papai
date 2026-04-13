@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
+import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -158,5 +159,102 @@ describe('update_task identity resolution', () => {
     await tool.execute({ taskId: 'task-1', assignee: 'me' }, { toolCallId: '1', messages: [] })
 
     expect(capturedAssignee).toBe('me')
+  })
+
+  test('should use login when provider prefers login identifier', async () => {
+    // Setup identity mapping
+    setIdentityMapping({
+      contextId: 'test-update-identity',
+      providerName: 'mock',
+      providerUserId: 'resolved-user-789',
+      providerUserLogin: 'jsmith',
+      displayName: 'John Smith',
+      matchMethod: 'manual_nl',
+      confidence: 100,
+    })
+
+    let capturedAssignee: string | undefined
+    const updateTask = mock((taskId: string, params: { assignee?: string }) => {
+      capturedAssignee = params.assignee
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ updateTask, preferredUserIdentifier: 'login' })
+    const tool = makeUpdateTaskTool(provider, undefined, 'test-update-identity')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute({ taskId: 'task-1', assignee: 'me' }, { toolCallId: '1', messages: [] })
+
+    expect(updateTask).toHaveBeenCalledTimes(1)
+    expect(capturedAssignee).toBe('jsmith')
+  })
+
+  describe('timezone config lookup (NI2 fix)', () => {
+    test('should use storageContextId for timezone in group chats', async () => {
+      const chatUserId = 'user-123'
+      const storageContextId = 'group-456'
+      setConfig(storageContextId, 'timezone', 'Asia/Tokyo')
+
+      // Verify config NOT under chatUserId (the bug scenario)
+      expect(getConfig(chatUserId, 'timezone')).toBeNull()
+
+      const updateTask = mock((taskId: string, params: { dueDate?: string }) => {
+        return Promise.resolve({
+          id: taskId,
+          title: 'Updated Task',
+          status: 'todo',
+          dueDate: params.dueDate,
+          url: 'https://test.com/task/1',
+        })
+      })
+
+      const provider = createMockProvider({ updateTask })
+      // Pass storageContextId as 4th parameter
+      const tool = makeUpdateTaskTool(provider, undefined, chatUserId, storageContextId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2024-06-15', time: '09:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // 09:00 JST (Asia/Tokyo) = 00:00 UTC
+      const callArgs = updateTask.mock.calls[0] as [string, { dueDate?: string }] | undefined
+      expect(callArgs?.[1]?.dueDate).toContain('00:00')
+    })
+
+    test('should fallback to UTC when no timezone configured', async () => {
+      const chatUserId = 'user-123'
+      const storageContextId = 'group-456'
+      // No timezone set
+
+      const updateTask = mock((taskId: string, params: { dueDate?: string }) => {
+        return Promise.resolve({
+          id: taskId,
+          title: 'Updated Task',
+          status: 'todo',
+          dueDate: params.dueDate,
+          url: 'https://test.com/task/1',
+        })
+      })
+
+      const provider = createMockProvider({ updateTask })
+      const tool = makeUpdateTaskTool(provider, undefined, chatUserId, storageContextId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2024-06-15', time: '14:00' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      // With UTC fallback, 14:00 stays 14:00
+      const callArgs = updateTask.mock.calls[0] as [string, { dueDate?: string }] | undefined
+      expect(callArgs?.[1]?.dueDate).toContain('14:00')
+    })
   })
 })

@@ -31,11 +31,17 @@ import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
 
 export interface BotDeps {
-  processMessage: (reply: ReplyFn, contextId: string, username: string | null, userText: string) => Promise<void>
+  processMessage: (
+    reply: ReplyFn,
+    contextId: string,
+    chatUserId: string,
+    username: string | null,
+    userText: string,
+    contextType: 'dm' | 'group',
+  ) => Promise<void>
 }
 
 const defaultBotDeps: BotDeps = { processMessage: defaultProcessMessage }
-
 const log = logger.child({ scope: 'bot' })
 
 const checkAuthorization = (userId: string, username?: string | null): boolean => {
@@ -53,7 +59,7 @@ function registerCommands(chat: ChatProvider, adminUserId: string): void {
   registerStartCommand(chat)
   registerSetupCommand(chat, checkAuthorization)
   registerConfigCommand(chat, checkAuthorization)
-  registerContextCommand(chat, adminUserId)
+  registerContextCommand(chat)
   registerClearCommand(chat, checkAuthorization, adminUserId)
   registerAdminCommands(chat, adminUserId)
   registerGroupCommand(chat)
@@ -72,22 +78,14 @@ function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtr
 
 async function autoStartWizardIfNeeded(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   if (hasActiveWizard(userId, storageContextId)) return false
-
   if (process.env['DEMO_MODE'] === 'true' && isDemoUser(userId)) return false
-
   const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
-
-  if (!userNeedsSetup(storageContextId, taskProvider)) {
-    return false
-  }
-
+  if (!userNeedsSetup(storageContextId, taskProvider)) return false
   const result = createWizard(userId, storageContextId, taskProvider)
-
   if (result.success) {
     await reply.text(result.prompt)
     return true
   }
-
   return false
 }
 
@@ -97,15 +95,14 @@ async function processCoalescedMessage(
     userId: string
     username: string | null
     storageContextId: string
+    contextType: 'dm' | 'group'
     files: readonly IncomingFile[]
     reply: ReplyFn
   },
   deps: BotDeps,
 ): Promise<void> {
   const start = Date.now()
-
   coalescedItem.reply.typing()
-
   if (coalescedItem.files.length > 0) {
     storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
   } else {
@@ -116,8 +113,10 @@ async function processCoalescedMessage(
     await deps.processMessage(
       coalescedItem.reply,
       coalescedItem.storageContextId,
+      coalescedItem.userId,
       coalescedItem.username,
       coalescedItem.text,
+      coalescedItem.contextType,
     )
   } finally {
     clearIncomingFiles(coalescedItem.storageContextId)
@@ -146,9 +145,7 @@ async function handleMessage(
 
   const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
   const isNaturalLanguage = !hasCommand
-  if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) {
-    return
-  }
+  if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) return
 
   const queueItem = {
     text: buildPromptWithReplyContext(msg),
@@ -214,7 +211,6 @@ async function maybeInterceptWizard(
 
 function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void {
   if (msg.contextType !== 'group') return
-
   upsertKnownGroupContext({
     contextId: msg.contextId,
     provider: chat.name,
@@ -243,9 +239,7 @@ async function onIncomingMessage(
     textLength: msg.text.length,
     isCommand: msg.text.startsWith('/'),
   })
-
   recordGroupObservation(chat, msg)
-
   const auth = checkAuthorizationExtended(
     msg.user.id,
     msg.user.username,
@@ -262,7 +256,6 @@ async function onIncomingMessage(
     isGroupAdmin: auth.isGroupAdmin,
     storageContextId: auth.storageContextId,
   })
-
   const interactiveButtons = supportsInteractiveButtons(chat)
   if (await maybeInterceptWizard(msg, reply, auth, interactiveButtons)) return
 
@@ -283,16 +276,25 @@ export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps 
   chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
   chat.onInteraction?.(async (interaction, reply) => {
     try {
-      await routeInteraction(interaction, reply)
+      const auth = checkAuthorizationExtended(
+        interaction.user.id,
+        interaction.user.username,
+        interaction.contextId,
+        interaction.contextType,
+        interaction.threadId,
+        interaction.user.isAdmin,
+      )
+      await routeInteraction(interaction, reply, auth)
     } catch (error) {
       logger.error(
         {
           callbackData: interaction.callbackData,
-          userId: interaction.user?.id,
+          userId: interaction.user.id,
           error: error instanceof Error ? error.message : String(error),
         },
         'Interaction routing failed',
       )
+      await reply.text('❌ Something went wrong processing your action. Please try again.')
     }
   })
 }

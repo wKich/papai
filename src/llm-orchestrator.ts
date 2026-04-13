@@ -9,8 +9,11 @@ import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from 
 import { emit } from './debug/event-bus.js'
 import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
+import { getIdentityMapping } from './identity/mapping.js'
+import { attemptAutoLink } from './identity/resolver.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
+import { validateToolResults } from './llm-orchestrator-validation.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
@@ -42,6 +45,18 @@ const checkRequiredConfig = (contextId: string): string[] => {
   return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
 }
 
+interface LlmConfig {
+  llmApiKey: string
+  llmBaseUrl: string
+  mainModel: string
+}
+
+const getLlmConfig = (contextId: string): LlmConfig => ({
+  llmApiKey: getConfig(contextId, 'llm_apikey')!,
+  llmBaseUrl: getConfig(contextId, 'llm_baseurl')!,
+  mainModel: getConfig(contextId, 'main_model')!,
+})
+
 const persistFactsFromResults = (
   contextId: string,
   toolCalls: Array<{ toolName: string; input: unknown }>,
@@ -59,15 +74,23 @@ const persistFactsFromResults = (
 const isToolSet = (value: unknown): value is ToolSet =>
   typeof value === 'object' && value !== null && Object.keys(value).length > 0
 
-const getOrCreateTools = (contextId: string, provider: TaskProvider): ToolSet => {
-  const cachedTools = getCachedTools(contextId)
+const getOrCreateTools = (
+  contextId: string,
+  chatUserId: string,
+  provider: TaskProvider,
+  contextType: 'dm' | 'group' | undefined,
+): ToolSet => {
+  // Security fix: In group chats, tools embed chatUserId-specific closures for "me" resolution.
+  // The cache key must include chatUserId to prevent cross-user contamination.
+  const cacheKey = contextType === 'group' ? `${contextId}:${chatUserId}` : contextId
+  const cachedTools = getCachedTools(cacheKey)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
-    log.debug({ contextId }, 'Using cached tools')
+    log.debug({ contextId, chatUserId }, 'Using cached tools')
     return cachedTools
   }
-  log.debug({ contextId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider, contextId)
-  setCachedTools(contextId, tools)
+  log.debug({ contextId, chatUserId }, 'Building tools (cache miss)')
+  const tools = makeTools(provider, { storageContextId: contextId, chatUserId, contextType })
+  setCachedTools(cacheKey, tools)
   return tools
 }
 
@@ -127,11 +150,30 @@ const invokeModel = async (
   return result
 }
 
+const maybeAutoLinkIdentity = async (
+  chatUserId: string,
+  username: string | null,
+  provider: TaskProvider,
+): Promise<void> => {
+  if (username === null || provider.identityResolver === undefined) return
+  const existingMapping = getIdentityMapping(chatUserId, provider.name)
+  if (existingMapping !== null) return
+  log.debug({ chatUserId, username }, 'Attempting auto-link for first group interaction')
+  const autoLinkResult = await attemptAutoLink(chatUserId, username, provider)
+  if (autoLinkResult.type === 'found') {
+    log.info({ chatUserId, login: autoLinkResult.identity.login }, 'Auto-linked user on first interaction')
+  } else {
+    log.debug({ chatUserId, username, result: autoLinkResult.type }, 'Auto-link did not find match')
+  }
+}
+
 const callLlm = async (
   reply: ReplyFn,
   contextId: string,
+  chatUserId: string,
   username: string | null,
   history: readonly ModelMessage[],
+  contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
   await deps.maybeProvisionKaneo(reply, contextId, username)
@@ -141,14 +183,14 @@ const callLlm = async (
     await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /setup to configure.`)
     throw new Error('Missing configuration')
   }
-  const llmApiKey = getConfig(contextId, 'llm_apikey')!
-  const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
-  const mainModel = getConfig(contextId, 'main_model')!
+  const { llmApiKey, llmBaseUrl, mainModel } = getLlmConfig(contextId)
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(contextId)
-  const tools = getOrCreateTools(contextId, provider)
+  await maybeAutoLinkIdentity(chatUserId, username, provider)
+  const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
+  const validatedMessages = validateToolResults(messagesWithMemory)
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -159,7 +201,7 @@ const callLlm = async (
     model,
     provider,
     tools,
-    messages: messagesWithMemory,
+    messages: validatedMessages,
     deps,
     reply,
   })
@@ -209,19 +251,21 @@ const handleMessageError = async (reply: ReplyFn, contextId: string, error: unkn
 export const processMessage = async (
   reply: ReplyFn,
   contextId: string,
+  chatUserId: string,
   username: string | null,
   userText: string,
+  contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps = defaultDeps,
 ): Promise<void> => {
-  log.debug({ contextId, userText }, 'processMessage called')
-  log.info({ contextId, messageLength: userText.length }, 'Message received from user')
+  log.debug({ contextId, chatUserId, userText }, 'processMessage called')
+  log.info({ contextId, chatUserId, messageLength: userText.length }, 'Message received from user')
 
   const baseHistory = getCachedHistory(contextId)
   const newMessage: ModelMessage = { role: 'user', content: userText }
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, username, history, deps)
+    const result = await callLlm(reply, contextId, chatUserId, username, history, contextType, deps)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)

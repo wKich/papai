@@ -3,7 +3,13 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { eq, and } from 'drizzle-orm'
 
 import { getDrizzleDb } from '../../src/db/drizzle.js'
-import { groupAdminObservations, knownGroupContexts, userIdentityMappings } from '../../src/db/schema.js'
+import {
+  groupAdminObservations,
+  knownGroupContexts,
+  userIdentityMappings,
+  webCache,
+  webRateLimit,
+} from '../../src/db/schema.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 describe('userIdentityMappings', () => {
@@ -83,5 +89,58 @@ describe('groupAdminObservations', () => {
     expect(groupAdminObservations.userId).toBeDefined()
     expect(groupAdminObservations.isAdmin).toBeDefined()
     expect(groupAdminObservations.lastSeenAt).toBeDefined()
+  })
+})
+
+describe('web fetch schema', () => {
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  it('exports the web fetch tables', () => {
+    expect(getDrizzleDb()).toBeDefined()
+    expect(webCache.urlHash).toBeDefined()
+    expect(webRateLimit.actorId).toBeDefined()
+  })
+
+  it('supports inserting cached pages and reading back the mapped fields', () => {
+    const db = getDrizzleDb()
+
+    db.insert(webCache)
+      .values({
+        urlHash: 'hash-1',
+        url: 'https://example.com/article',
+        finalUrl: 'https://example.com/article',
+        title: 'Example title',
+        summary: 'Example summary',
+        excerpt: 'Example excerpt',
+        contentType: 'text/html',
+        fetchedAt: 1,
+        expiresAt: 2,
+      })
+      .run()
+
+    const row = db.select().from(webCache).where(eq(webCache.urlHash, 'hash-1')).get()
+
+    expect(row).toBeDefined()
+    if (row !== undefined) {
+      expect(row.truncated).toBe(false)
+      expect(row.finalUrl).toBe('https://example.com/article')
+    }
+  })
+
+  it('enforces the webRateLimit composite primary key', () => {
+    const db = getDrizzleDb()
+
+    db.insert(webRateLimit).values({ actorId: 'actor-1', windowStart: 0, count: 1 }).run()
+    db.insert(webRateLimit).values({ actorId: 'actor-1', windowStart: 300000, count: 1 }).run()
+
+    expect(() => {
+      db.insert(webRateLimit).values({ actorId: 'actor-1', windowStart: 0, count: 2 }).run()
+    }).toThrow()
+
+    const rows = db.select().from(webRateLimit).where(eq(webRateLimit.actorId, 'actor-1')).all()
+    expect(rows).toHaveLength(2)
   })
 })

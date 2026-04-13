@@ -15,8 +15,16 @@ export type { ReplyFn } from '../chat/types.js'
 // Export registry for testing
 export { registry }
 
-// Store handlers separately for shutdown flush
-const handlers = new Map<string, (coalesced: CoalescedItem) => Promise<void>>()
+/**
+ * Clean up expired queues and their associated handlers.
+ * Should be called periodically by the scheduler.
+ */
+export function cleanupExpiredQueues(): void {
+  const expired = registry.cleanupExpired()
+  if (expired.length > 0) {
+    log.debug({ expiredCount: expired.length }, 'Cleaned up expired queue handlers')
+  }
+}
 
 /**
  * Enqueue a message for processing.
@@ -40,12 +48,49 @@ export function enqueueMessage(
     'Enqueuing message',
   )
 
-  // Store handler for this context
-  handlers.set(item.storageContextId, handler)
-
   const queue = registry.getOrCreate(item.storageContextId)
   queue.setHandler(handler)
-  queue.enqueue(item, reply)
+  const coalesced = queue.enqueue(item, reply)
+
+  // Handle different-user flush in group main - the returned item needs immediate processing
+  if (coalesced !== null) {
+    void handler(coalesced).catch((error: unknown) => {
+      log.error(
+        { storageContextId: item.storageContextId, error: error instanceof Error ? error.message : String(error) },
+        'Handler error during different-user flush',
+      )
+    })
+  }
+}
+
+/**
+ * Race promises against a timeout.
+ * Resolves when all promises complete, or rejects if timeout expires first.
+ */
+function raceWithTimeout<T>(promises: Promise<T>[], timeoutMs: number): Promise<{ completed: boolean }> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error('Handler timeout'))
+    }, timeoutMs)
+  })
+
+  const cleanup = (): void => {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle)
+    }
+  }
+
+  return Promise.race([Promise.all(promises).then(() => ({ completed: true })), timeoutPromise])
+    .then((result) => {
+      cleanup()
+      return result
+    })
+    .catch((error: unknown) => {
+      cleanup()
+      throw error
+    })
 }
 
 /**
@@ -68,8 +113,8 @@ export async function flushOnShutdown(options: { timeoutMs?: number } = {}): Pro
     const coalesced = queue.forceFlush()
     if (coalesced !== null) {
       log.debug({ storageContextId, textLength: coalesced.text.length }, 'Flushing queue')
-      const handler = handlers.get(storageContextId)
-      if (handler !== undefined) {
+      const handler = queue.getHandler()
+      if (handler !== null) {
         flushPromises.push(
           handler(coalesced).catch((error: unknown) => {
             log.error(
@@ -87,8 +132,12 @@ export async function flushOnShutdown(options: { timeoutMs?: number } = {}): Pro
     }
   }
 
-  // Wait for all flushes to complete (or timeout)
-  await Promise.all(flushPromises)
+  // Wait for all flushes to complete (with timeout)
+  const remainingTimeout = Math.max(0, timeout - (Date.now() - startTime))
+  await raceWithTimeout(flushPromises, remainingTimeout).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    log.warn({ error: message }, 'Some handlers did not complete within timeout')
+  })
 
   log.info({ queueCount: queues.size }, 'Shutdown flush complete')
 }

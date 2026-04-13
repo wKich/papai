@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type {
-  ChatCapability,
-  ChatProvider,
-  CommandHandler,
-  IncomingMessage,
-  ResolveUserContext,
-} from '../../src/chat/types.js'
+import type { ChatProvider, CommandHandler, IncomingMessage, ResolveUserContext } from '../../src/chat/types.js'
 import { registerGroupCommand } from '../../src/commands/group.js'
 import {
   createAuth,
@@ -15,6 +9,7 @@ import {
   createMockReply,
   mockLogger,
   setupTestDb,
+  TELEGRAM_LIKE_CAPABILITIES,
 } from '../utils/test-helpers.js'
 
 describe('group commands', () => {
@@ -383,15 +378,10 @@ describe('group commands', () => {
       await setupTestDb()
 
       noResolveHandlers = new Map()
-      const capabilities = new Set<ChatCapability>([
-        'messages.buttons',
-        'messages.files',
-        'messages.redact',
-        'files.receive',
-        'messages.reply-context',
-        // users.resolve intentionally omitted
-      ])
-      noResolveChat = createMockChat({ commandHandlers: noResolveHandlers, capabilities })
+      noResolveChat = createMockChat({
+        commandHandlers: noResolveHandlers,
+        capabilities: TELEGRAM_LIKE_CAPABILITIES,
+      })
       registerGroupCommand(noResolveChat)
     })
 

@@ -1,0 +1,33 @@
+import type { IncomingInteraction } from '../types.js'
+
+const CHANNEL_TYPE_DM = 1
+
+export type DiscordInteractionContext = {
+  user: { id: string; username: string }
+  customId: string
+  channelId: string
+  channel: { type: number } | null
+  message: { id: string }
+}
+
+export function buildDiscordInteraction(ctx: DiscordInteractionContext, isAdmin: boolean): IncomingInteraction | null {
+  const callbackData = ctx.customId
+  if (callbackData === '') return null
+
+  const contextType = ctx.channel?.type === CHANNEL_TYPE_DM ? 'dm' : 'group'
+  const contextId = contextType === 'dm' ? ctx.user.id : ctx.channelId
+
+  return {
+    kind: 'button',
+    user: {
+      id: ctx.user.id,
+      username: ctx.user.username.length > 0 ? ctx.user.username : null,
+      isAdmin,
+    },
+    contextId,
+    contextType,
+    storageContextId: contextId,
+    callbackData,
+    messageId: ctx.message.id,
+  }
+}

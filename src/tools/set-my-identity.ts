@@ -2,7 +2,8 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { setIdentityMapping } from '../identity/mapping.js'
+import { getDrizzleDb as defaultGetDrizzleDb } from '../db/drizzle.js'
+import { setIdentityMapping as defaultSetIdentityMapping, type IdentityMappingDeps } from '../identity/mapping.js'
 import { extractIdentityClaim } from '../identity/nl-detection.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
@@ -55,16 +56,43 @@ async function findUser(
   _providerName: string,
 ): Promise<{ id: string; login: string; name?: string } | null> {
   const users = await resolver.searchUsers(claimedLogin, 5)
-  return users.find((u) => u.login.toLowerCase() === claimedLogin.toLowerCase()) ?? null
+  const normalizedClaim = claimedLogin.toLowerCase()
+
+  return (
+    users.find((u) => {
+      const normalizedLogin = u.login.toLowerCase()
+      // Exact match
+      if (normalizedLogin === normalizedClaim) {
+        return true
+      }
+      // Email prefix match: if login is email and claim matches local part
+      if (normalizedLogin.includes('@')) {
+        const localPart = normalizedLogin.split('@')[0]
+        if (localPart === normalizedClaim) {
+          return true
+        }
+      }
+      return false
+    }) ?? null
+  )
 }
 
 function storeIdentity(
-  userId: string,
+  chatUserId: string,
   providerName: string,
   matched: { id: string; login: string; name?: string },
+  setIdentityMappingFn: (params: {
+    contextId: string
+    providerName: string
+    providerUserId: string
+    providerUserLogin: string
+    displayName: string
+    matchMethod: 'auto' | 'manual_nl' | 'unmatched'
+    confidence: number
+  }) => void,
 ): SuccessResult {
-  setIdentityMapping({
-    contextId: userId,
+  setIdentityMappingFn({
+    contextId: chatUserId,
     providerName,
     providerUserId: matched.id,
     providerUserLogin: matched.login,
@@ -73,7 +101,7 @@ function storeIdentity(
     confidence: 100,
   })
 
-  log.info({ userId, login: matched.login }, 'Identity set via NL')
+  log.info({ chatUserId, login: matched.login }, 'Identity set via NL')
   return {
     status: 'success',
     message: `Linked you to ${matched.login} (${matched.name ?? matched.login}) in ${providerName}.`,
@@ -84,7 +112,20 @@ function storeIdentity(
   }
 }
 
-export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): ToolSet[string] {
+export interface SetMyIdentityDeps extends IdentityMappingDeps {
+  setIdentityMapping: typeof defaultSetIdentityMapping
+}
+
+const defaultDeps: SetMyIdentityDeps = {
+  setIdentityMapping: defaultSetIdentityMapping,
+  getDrizzleDb: defaultGetDrizzleDb,
+}
+
+export function makeSetMyIdentityTool(
+  provider: TaskProvider,
+  chatUserId: string,
+  deps: SetMyIdentityDeps = defaultDeps,
+): ToolSet[string] {
   return tool({
     description:
       "Set or correct the user's task tracker identity. Use when user says things like 'I'm jsmith', 'My login is john.smith', or 'Link me to user jsmith'.",
@@ -92,7 +133,7 @@ export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): T
       claim: z.string().describe("The user's natural language claim about their identity"),
     }),
     execute: async ({ claim }) => {
-      log.debug({ userId, claim }, 'set_my_identity called')
+      log.debug({ chatUserId, claim }, 'set_my_identity called')
 
       const resolverError = validateResolver(provider)
       if (resolverError !== null) return resolverError
@@ -113,10 +154,12 @@ export function makeSetMyIdentityTool(provider: TaskProvider, userId: string): T
           }
         }
 
-        return storeIdentity(userId, provider.name, matched)
+        return storeIdentity(chatUserId, provider.name, matched, (params): void => {
+          deps.setIdentityMapping(params, deps)
+        })
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), userId, claimedLogin: login },
+          { error: error instanceof Error ? error.message : String(error), chatUserId, claimedLogin: login },
           'Failed to set identity',
         )
         return {

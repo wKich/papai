@@ -14,8 +14,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
+import { getIdentityMapping, clearIdentityMapping } from '../src/identity/mapping.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
+import type { TaskProvider } from '../src/providers/types.js'
+import type { MakeToolsOptions } from '../src/tools/index.js'
 import { setKaneoWorkspace } from '../src/users.js'
 
 const CTX_ID = 'ctx-1'
@@ -148,7 +151,7 @@ describe('processMessage', () => {
       // llm_apikey deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -164,7 +167,7 @@ describe('processMessage', () => {
       // llm_apikey and main_model deliberately NOT set
 
       const { reply, textCalls } = createMockReply()
-      await processMessage(reply, freshCtx, null, 'hello')
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls.length).toBeGreaterThanOrEqual(1)
       expect(textCalls[0]).toContain('llm_apikey')
@@ -191,7 +194,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -205,7 +208,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('T-1')
@@ -218,7 +221,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toContain('P-1')
@@ -231,7 +234,7 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
@@ -249,21 +252,17 @@ describe('processMessage', () => {
       }
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, rollbackCtx, null, 'new message')
+      await processMessage(reply, rollbackCtx, 'user-1', null, 'new message', 'dm')
 
       // processMessage should have caught the error and replied with an error message
       expect(textCalls).toHaveLength(1)
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
 
       // The catch block calls saveHistory(contextId, baseHistory) to roll back.
-      // Since baseHistory was empty (no prior messages), the history after rollback
-      // includes the user message that was appended before callLlm (because
-      // getCachedHistory returns a reference, not a copy — so baseHistory and the
-      // cached array are the same object after appendHistory mutates it).
-      // This documents the actual behavior.
+      // baseHistory was a snapshot taken before callLlm (getCachedHistory returns a copy),
+      // so it was empty. The rollback correctly resets history to that empty snapshot.
       const history = getCachedHistory(rollbackCtx)
-      expect(history).toHaveLength(1)
-      expect(history[0]!.content).toBe('new message')
+      expect(history).toHaveLength(0)
     })
   })
 
@@ -305,7 +304,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-ctx', null, 'hello')
+        await processMessage(reply, 'steps-detail-ctx', 'user-1', null, 'hello', 'dm')
       } finally {
         unsubscribe(listener)
       }
@@ -365,7 +364,7 @@ describe('processMessage', () => {
       subscribe(listener)
       try {
         const { reply } = createMockReply()
-        await processMessage(reply, 'steps-detail-empty-ctx', null, 'hello')
+        await processMessage(reply, 'steps-detail-empty-ctx', 'user-1', null, 'hello', 'dm')
       } finally {
         unsubscribe(listener)
       }
@@ -424,7 +423,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-ctx', null, 'create a task')
+      await processMessage(reply, 'tool-fail-ctx', 'user-1', null, 'create a task', 'dm')
 
       // Simulate a tool failure by calling the captured callback
       if (capturedOnToolCallFinish !== undefined) {
@@ -459,7 +458,7 @@ describe('processMessage', () => {
 
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-fail-string-ctx', null, 'do something')
+      await processMessage(reply, 'tool-fail-string-ctx', 'user-1', null, 'do something', 'dm')
 
       // Simulate a tool failure with a string error
       if (capturedOnToolCallFinish !== undefined) {
@@ -494,7 +493,7 @@ describe('processMessage', () => {
         })
       const { reply } = createMockReply()
 
-      await processMessage(reply, CTX_ID, null, 'hello')
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
       // History should contain: user message + assistant message
       const history = getCachedHistory(CTX_ID)
@@ -535,7 +534,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-ctx', null, 'create a test task')
+      await processMessage(reply, 'tool-results-ctx', 'user-1', null, 'create a test task', 'dm')
 
       // Should complete without error - tool results passed directly to fact extraction
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -565,7 +564,7 @@ describe('processMessage', () => {
         })
       const { reply, textCalls } = createMockReply()
 
-      await processMessage(reply, 'tool-results-missing-ctx', null, 'do something')
+      await processMessage(reply, 'tool-results-missing-ctx', 'user-1', null, 'do something', 'dm')
 
       // Should complete without error
       expect(textCalls.length).toBeGreaterThanOrEqual(0)
@@ -588,7 +587,7 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello', 'dm')
 
       // Verify admin's LLM config was copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBe('test-key')
@@ -606,10 +605,221 @@ describe('processMessage', () => {
       setKaneoWorkspace(DEMO_CTX, 'demo-workspace')
 
       const { reply } = createMockReply()
-      await processMessage(reply, DEMO_CTX, null, 'hello')
+      await processMessage(reply, DEMO_CTX, 'user-1', null, 'hello', 'dm')
 
       // LLM config should NOT be copied
       expect(getCachedConfig(DEMO_CTX, 'llm_apikey')).toBeNull()
+    })
+  })
+
+  describe('auto-link flow', () => {
+    const GROUP_CTX = 'group-123'
+    const USER_ID = 'user-456'
+    const USERNAME = 'jsmith'
+
+    beforeEach(() => {
+      // Clear any existing identity mapping for the user (not group)
+      // Identity mappings are per-user, stored under chatUserId
+      clearIdentityMapping(USER_ID, 'mock')
+    })
+
+    test('skips auto-link when username is null', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      // Pass null for username - should skip auto-link
+      await processMessage(reply, GROUP_CTX, USER_ID, null, 'hello', 'group')
+
+      // No mapping should be created
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).toBeNull()
+    })
+
+    test('skips auto-link when provider has no identity resolver', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Use mockProvider without identityResolver
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof mockProvider => mockProvider,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
+
+      // No mapping should be created
+      const mapping = getIdentityMapping(GROUP_CTX, 'mock')
+      expect(mapping).toBeNull()
+    })
+
+    test('skips auto-link when mapping already exists', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Pre-set a mapping under the user ID (not group context)
+      const { setIdentityMapping } = await import('../src/identity/mapping.js')
+      setIdentityMapping({
+        contextId: USER_ID,
+        providerName: 'mock',
+        providerUserId: 'existing-user',
+        providerUserLogin: 'existing',
+        displayName: 'Existing User',
+        matchMethod: 'manual_nl',
+        confidence: 100,
+      })
+
+      // Create provider with identity resolver that would match if called
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: USERNAME, name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
+
+      // Existing mapping should be preserved (stored under user ID)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
+      expect(mapping?.providerUserLogin).toBe('existing')
+      expect(mapping?.matchMethod).toBe('manual_nl')
+    })
+
+    test('attempts auto-link when username provided and no mapping exists', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver that finds a match
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([{ id: 'user-123', login: USERNAME, name: 'John Smith' }])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, USERNAME, 'hello', 'group')
+
+      // Auto-link should have created a mapping under the user ID (not group context)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
+      expect(mapping).not.toBeNull()
+      expect(mapping?.providerUserLogin).toBe(USERNAME)
+      expect(mapping?.matchMethod).toBe('auto')
+      expect(mapping?.confidence).toBe(100)
+    })
+
+    test('stores unmatched when auto-link finds no match', async () => {
+      seedConfigForContext(GROUP_CTX)
+
+      // Create provider with identity resolver that finds no match
+      const providerWithResolver = {
+        ...mockProvider,
+        identityResolver: {
+          searchUsers: mock(() => Promise.resolve([])),
+        },
+      }
+
+      void mock.module('../src/providers/factory.js', () => ({
+        buildProviderForUser: (): typeof providerWithResolver => providerWithResolver,
+      }))
+
+      const { reply } = createMockReply()
+      await processMessage(reply, GROUP_CTX, USER_ID, 'unknownuser', 'hello', 'group')
+
+      // Should store unmatched mapping under the user ID (not group context)
+      const mapping = getIdentityMapping(USER_ID, 'mock')
+      expect(mapping).not.toBeNull()
+      expect(mapping?.providerUserId).toBeNull()
+      expect(mapping?.matchMethod).toBe('unmatched')
+    })
+  })
+
+  describe('tool cache isolation in group chats', () => {
+    const GROUP_CTX = 'group-shared-ctx'
+    const USER_A = 'user-a-123'
+    const USER_B = 'user-b-456'
+
+    test('group chat tools are cached per-user to prevent cross-user contamination', async () => {
+      // Seed config for the group context
+      seedConfigForContext(GROUP_CTX)
+
+      // Track how many times tools are built by capturing makeTools calls
+      let toolBuildCount = 0
+      const { makeTools: realMakeTools } = await import('../src/tools/index.js')
+
+      void mock.module('../src/tools/index.js', () => ({
+        makeTools: (provider: TaskProvider, options: MakeToolsOptions): unknown => {
+          toolBuildCount++
+          return realMakeTools(provider, options)
+        },
+      }))
+
+      const { reply: replyA } = createMockReply()
+      const { reply: replyB } = createMockReply()
+
+      // User A speaks first in group
+      await processMessage(replyA, GROUP_CTX, USER_A, null, 'hello from A', 'group')
+      expect(toolBuildCount).toBe(1)
+
+      // User B speaks in same group - should trigger NEW tool build with different user ID
+      await processMessage(replyB, GROUP_CTX, USER_B, null, 'hello from B', 'group')
+      expect(toolBuildCount).toBe(2)
+
+      // User A speaks again - should use cached tools
+      await processMessage(replyA, GROUP_CTX, USER_A, null, 'hello again A', 'group')
+      expect(toolBuildCount).toBe(2)
+
+      // User B speaks again - should use cached tools
+      await processMessage(replyB, GROUP_CTX, USER_B, null, 'hello again B', 'group')
+      expect(toolBuildCount).toBe(2)
+    })
+
+    test('DM tools are cached per-context without user suffix', async () => {
+      // In DMs, contextId === chatUserId, so caching by contextId is sufficient
+      seedConfigForContext('dm-ctx-1')
+      seedConfigForContext('dm-ctx-2')
+
+      let toolBuildCount = 0
+      const { makeTools: realMakeTools } = await import('../src/tools/index.js')
+
+      void mock.module('../src/tools/index.js', () => ({
+        makeTools: (provider: TaskProvider, options: MakeToolsOptions): unknown => {
+          toolBuildCount++
+          return realMakeTools(provider, options)
+        },
+      }))
+
+      const { reply: reply1 } = createMockReply()
+      const { reply: reply2 } = createMockReply()
+
+      // First DM user
+      await processMessage(reply1, 'dm-ctx-1', 'user-1', null, 'hello', 'dm')
+      expect(toolBuildCount).toBe(1)
+
+      // Second DM user - different context, should build new tools
+      await processMessage(reply2, 'dm-ctx-2', 'user-2', null, 'hello', 'dm')
+      expect(toolBuildCount).toBe(2)
+
+      // First DM user again - should use cache
+      await processMessage(reply1, 'dm-ctx-1', 'user-1', null, 'hello again', 'dm')
+      expect(toolBuildCount).toBe(2)
     })
   })
 })

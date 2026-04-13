@@ -77,6 +77,8 @@ DEFERRED PROMPTS — The user can set up automated tasks and alerts:
 
 PROACTIVE MODE — When you receive a [PROACTIVE EXECUTION] system message at the end of the conversation, a deferred prompt has fired. You are delivering a previously scheduled result to the user. The user message marked with ===DEFERRED_TASK=== is the stored prompt — fulfill it directly. For reminders, deliver the message conversationally. For actions, execute them with tools and report the result. Never create new deferred prompts during proactive execution. Never mention triggers, cron jobs, or scheduling internals. Be warm and concise.
 
+WEB FETCH — When the user shares or refers back to a public URL and you need the page contents, call web_fetch. Use its returned summary/excerpt as source material for your answer. Only save the result via memo/task tools if the user explicitly asks you to persist it.
+
 ${STATIC_RULES}`
 
 export const buildSystemPrompt = (provider: TaskProvider, contextId: string): string => {

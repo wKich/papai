@@ -1,5 +1,13 @@
 # E2E Test Isolation Issue: Mock Leakage Analysis
 
+**Archive status:** Historical research note. Parts of this diagnosis no longer
+match the current repository. `bunfig.toml` now excludes E2E and client tests
+from default discovery, current `bun test` runs are green, and the active risk
+is top-level unit-test `mock.module()` regression rather than default E2E
+preload breakage. The canonical decision record is
+`docs/adr/0054-mock-isolation-guardrails.md`. The pre-ADR design exploration is
+archived at `docs/archive/mock-isolation-guardrails-design-2026-04-11.md`.
+
 ## Problem Summary
 
 When running all tests together (`bun test`), E2E tests fail due to mock leakage from unit tests. The mocks in `tests/kaneo/*.test.ts` persist and affect E2E test execution.

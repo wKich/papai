@@ -19,9 +19,10 @@ export function makeRemoveWatcherTool(provider: TaskProvider, contextUserId?: st
       try {
         let resolvedUserId = userIdParam
         if (userIdParam.toLowerCase() === 'me' && contextUserId !== undefined) {
-          const identity = resolveMeReference(contextUserId, provider)
+          const identity = await resolveMeReference(contextUserId, provider)
           if (identity.type === 'found') {
-            resolvedUserId = identity.identity.userId
+            resolvedUserId =
+              provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
           } else {
             return {
               status: 'identity_required',
@@ -30,7 +31,11 @@ export function makeRemoveWatcherTool(provider: TaskProvider, contextUserId?: st
           }
         }
 
-        const result = await provider.removeWatcher!(taskId, resolvedUserId)
+        if (provider.removeWatcher === undefined) {
+          return { status: 'error', message: 'Provider does not support removing watchers' }
+        }
+
+        const result = await provider.removeWatcher(taskId, resolvedUserId)
         log.info({ taskId, userId: userIdParam, resolvedUserId }, 'Watcher removed via tool')
         return result
       } catch (error) {

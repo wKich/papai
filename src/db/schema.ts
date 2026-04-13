@@ -193,9 +193,7 @@ export const userInstructions = sqliteTable(
 )
 
 export type UserInstruction = typeof userInstructions.$inferSelect
-
 export type GroupMember = typeof groupMembers.$inferSelect
-
 export const messageMetadata = sqliteTable(
   'message_metadata',
   {
@@ -298,3 +296,5 @@ export const groupAdminObservations = sqliteTable(
     index('idx_group_admin_observations_user_admin').on(table.userId, table.isAdmin),
   ],
 )
+
+export { webCache, webRateLimit } from './web-schema.js'

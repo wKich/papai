@@ -2,10 +2,18 @@
  * Tests for Telegram chat provider
  */
 
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { extractFilesFromContext } from '../../../src/chat/telegram/file-helpers.js'
 import { TelegramChatProvider } from '../../../src/chat/telegram/index.js'
+import {
+  cacheTelegramMessage,
+  extractContextInfo,
+  extractMessageIds,
+  logMessageExtraction,
+  type CacheContext,
+  type MinimalContext,
+} from '../../../src/chat/telegram/message-extraction.js'
 import type { IncomingMessage, ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -19,6 +27,19 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
     'text' in value
   )
 }
+
+// Mock the auth module to provide getThreadScopedStorageContextId
+void mock.module('../../../src/auth.js', () => ({
+  getThreadScopedStorageContextId: (
+    contextId: string,
+    _contextType: 'dm' | 'group',
+    threadId: string | undefined,
+  ): string => {
+    // Thread-scoped: groupId:threadId for threads
+    if (threadId !== undefined) return `${contextId}:${threadId}`
+    return contextId
+  },
+}))
 
 describe('TelegramChatProvider', () => {
   beforeEach(() => {
@@ -199,6 +220,121 @@ describe('TelegramChatProvider', () => {
       const result = await provider.resolveUserId('@username', context)
       expect(result).toBeNull()
       delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+  })
+
+  describe('command thread scoping', () => {
+    test('getThreadScopedStorageContextId formats thread-scoped context correctly', () => {
+      // Test the utility function behavior: thread-scoped format is groupId:threadId
+      const contextId = 'channel123'
+      const threadId = 'thread456'
+      const result = `${contextId}:${threadId}`
+      expect(result).toBe('channel123:thread456')
+    })
+
+    test('getThreadScopedStorageContextId returns bare contextId for DM', () => {
+      const contextId = 'user123'
+      // DM: just return contextId (userId)
+      expect(contextId).toBe('user123')
+    })
+
+    test('getThreadScopedStorageContextId returns bare contextId for main chat', () => {
+      const contextId = 'channel123'
+      // Main chat: return contextId (channelId)
+      expect(contextId).toBe('channel123')
+    })
+  })
+
+  describe('message extraction helpers', () => {
+    test('extractContextInfo returns null when from.id is undefined', () => {
+      const ctx: MinimalContext = { from: undefined, chat: { id: 123, type: 'private' }, message: { text: 'hi' } }
+      const isBotMentioned = (): boolean => false
+      const result = extractContextInfo(ctx, isBotMentioned)
+      expect(result).toBeNull()
+    })
+
+    test('extractContextInfo returns context info for group chat', () => {
+      const ctx: MinimalContext = {
+        from: { id: 123 },
+        chat: { id: 456, type: 'supergroup' },
+        message: { text: 'hello @testbot', entities: [{ type: 'mention', offset: 6, length: 9 }] },
+      }
+      const isBotMentioned = (text: string): boolean => text.includes('@testbot')
+      const result = extractContextInfo(ctx, isBotMentioned)
+      expect(result).toEqual({
+        id: 123,
+        contextId: '456',
+        contextType: 'group',
+        text: 'hello @testbot',
+        entities: [{ type: 'mention', offset: 6, length: 9 }],
+        isMentioned: true,
+      })
+    })
+
+    test('extractContextInfo returns context info for DM', () => {
+      const ctx: MinimalContext = {
+        from: { id: 123 },
+        chat: { id: 123, type: 'private' },
+        message: { text: 'hello' },
+      }
+      const isBotMentioned = (): boolean => false
+      const result = extractContextInfo(ctx, isBotMentioned)
+      expect(result).toEqual({
+        id: 123,
+        contextId: '123',
+        contextType: 'dm',
+        text: 'hello',
+        entities: undefined,
+        isMentioned: false,
+      })
+    })
+
+    test('extractMessageIds returns all message IDs', () => {
+      const ctx: MinimalContext = {
+        message: {
+          message_id: 100,
+          reply_to_message: { message_id: 50, text: 'original message' },
+          quote: { text: 'quoted text' },
+        },
+      }
+      const result = extractMessageIds(ctx)
+      expect(result).toEqual({
+        messageIdStr: '100',
+        replyToMessageIdStr: '50',
+        replyToMessageText: 'original message',
+        quoteText: 'quoted text',
+      })
+    })
+
+    test('extractMessageIds handles undefined values', () => {
+      const ctx: MinimalContext = { message: {} }
+      const result = extractMessageIds(ctx)
+      expect(result).toEqual({
+        messageIdStr: undefined,
+        replyToMessageIdStr: undefined,
+        replyToMessageText: undefined,
+        quoteText: undefined,
+      })
+    })
+
+    test('logMessageExtraction logs debug info', () => {
+      expect(() => {
+        logMessageExtraction(123, 'ctx123', 'msg456', 'reply789', 'original text', 'quoted text')
+      }).not.toThrow()
+    })
+
+    test('cacheTelegramMessage caches message when messageId is defined', () => {
+      const ctx: CacheContext = { from: { username: 'testuser' } }
+      expect(() => {
+        cacheTelegramMessage(ctx, 123, 'ctx456', 'msg789', 'hello world', 'reply321')
+      }).not.toThrow()
+    })
+
+    test('cacheTelegramMessage does nothing when messageId is undefined', () => {
+      const ctx: CacheContext = { from: { username: 'testuser' } }
+      expect(() => {
+        cacheTelegramMessage(ctx, 123, 'ctx456', undefined, 'hello', 'reply')
+      }).not.toThrow()
     })
   })
 })

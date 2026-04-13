@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { type LanguageModel, type ModelMessage } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 
 import { getCachedConfig, getCachedHistory, setCachedHistory } from './cache.js'
 import { emit } from './debug/event-bus.js'

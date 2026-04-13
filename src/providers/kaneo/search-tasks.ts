@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 // GlobalSearchResponseCompatSchema matches the real flat API response — see api-compat.ts.
 import { GlobalSearchResponseCompatSchema } from './schemas/api-compat.js'
@@ -18,6 +18,8 @@ export const TaskResultSchema = SearchTaskSchema.pick({
   status: true,
   priority: true,
   projectId: true,
+}).extend({
+  userId: z.string(),
 })
 
 // Real API returns flat { results, totalCount, searchQuery } — not per-type arrays.
@@ -30,20 +32,22 @@ export async function searchTasks({
   query,
   workspaceId,
   projectId,
+  assigneeId,
   limit,
 }: {
   config: KaneoConfig
   query: string
   workspaceId: string
   projectId?: string
+  assigneeId?: string
   limit?: number
 }): Promise<TaskResult[]> {
-  log.debug({ query, workspaceId, projectId }, 'searchTasks called')
+  log.debug({ query, workspaceId, projectId, assigneeId }, 'searchTasks called')
 
   try {
     const client = new KaneoClient(config)
-    const tasks = await client.tasks.search({ query, workspaceId, projectId, limit })
-    log.info({ query, resultCount: tasks.length }, 'Tasks searched')
+    const tasks = await client.tasks.search({ query, workspaceId, projectId, assigneeId, limit })
+    log.info({ query, resultCount: tasks.length, assigneeId }, 'Tasks searched')
     return tasks
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), query }, 'searchTasks failed')

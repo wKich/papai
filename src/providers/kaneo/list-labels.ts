@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { logger } from '../../logger.js'
 import { classifyKaneoError } from './classify-error.js'
-import { type KaneoConfig } from './client.js'
+import type { KaneoConfig } from './client.js'
 import { KaneoClient } from './kaneo-client.js'
 import { CreateLabelResponseSchema } from './schemas/create-label.js'
 

@@ -16,18 +16,19 @@ interface ResolveAssigneeResult {
   identityRequired?: { status: 'identity_required'; message: string }
 }
 
-function resolveAssignee(
+async function resolveAssignee(
   assignee: string | undefined,
   userId: string | undefined,
   provider: TaskProvider,
-): ResolveAssigneeResult {
+): Promise<ResolveAssigneeResult> {
   if (assignee === undefined || assignee.toLowerCase() !== 'me' || userId === undefined) {
     return { assignee }
   }
 
-  const identity = resolveMeReference(userId, provider)
+  const identity = await resolveMeReference(userId, provider)
   if (identity.type === 'found') {
-    return { assignee: identity.identity.userId }
+    const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
+    return { assignee: identifier }
   }
   return { identityRequired: { status: 'identity_required', message: identity.message } }
 }
@@ -53,17 +54,21 @@ export function makeUpdateTaskTool(
   provider: TaskProvider,
   completionHook?: CompletionHookFn,
   userId?: string,
+  storageContextId?: string,
 ): ToolSet[string] {
   return tool({
     description: "Update an existing task's status, priority, assignee, due date, title, description, or project.",
     inputSchema,
     execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId }) => {
       try {
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
+        // Falls back to userId for backwards compatibility, then UTC
+        const configKey = storageContextId ?? userId
+        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
         const resolvedDueDate =
           dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
 
-        const { assignee: resolvedAssignee, identityRequired } = resolveAssignee(assignee, userId, provider)
+        const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
         if (identityRequired !== undefined) {
           return identityRequired
         }

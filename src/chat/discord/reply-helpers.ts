@@ -1,17 +1,20 @@
+import pLimit from 'p-limit'
+
 import { logger } from '../../logger.js'
-import type { ButtonReplyOptions, ChatFile, ReplyFn, ReplyOptions } from '../types.js'
+import type { ButtonReplyOptions, EmbedOptions, ReplyFn, ReplyOptions } from '../types.js'
 import { toActionRows } from './buttons.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { formatLlmOutput } from './format.js'
+import { discordTraits } from './metadata.js'
 
 const log = logger.child({ scope: 'chat:discord:reply' })
-const DISCORD_MAX_CONTENT_LEN = 2000
 
 export type SendableChannel = {
   id: string
   send: (arg: {
     content?: string
     components?: unknown[]
+    embeds?: unknown[]
     reply?: { messageReference: string; failIfNotExists: boolean }
   }) => Promise<{ id: string; edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown> }>
   sendTyping: () => Promise<void>
@@ -34,54 +37,84 @@ function buildReply(replyToMessageId: string | undefined, options?: ReplyOptions
   return target === undefined ? undefined : { messageReference: target, failIfNotExists: false }
 }
 
-function sendChunksSequentially(
+async function sendChunksSequentially(
   channel: SendableChannel,
   chunks: string[],
   replyToMessageId: string | undefined,
   options?: ReplyOptions,
-): Promise<BotMessage | null> {
+): Promise<BotMessage[]> {
   // Chunks must be sent sequentially to preserve message ordering.
-  // Using reduce to chain promises instead of await-in-loop.
-  return chunks.reduce<Promise<BotMessage | null>>(
-    (prev, chunk) => prev.then(() => channel.send({ content: chunk, reply: buildReply(replyToMessageId, options) })),
-    Promise.resolve(null),
+  // Use p-limit with concurrency=1 to enforce sequential execution without await-in-loop.
+  const limit = pLimit(1)
+  const sent: BotMessage[] = []
+
+  await Promise.all(
+    chunks.map((chunk) =>
+      limit(async () => {
+        const msg = await channel.send({ content: chunk, reply: buildReply(replyToMessageId, options) })
+        sent.push(msg)
+      }),
+    ),
   )
+
+  return sent
+}
+
+function createEmbedPayload(options: EmbedOptions): Record<string, unknown> {
+  const embed: Record<string, unknown> = {
+    title: options.title,
+    description: options.description,
+  }
+  if (options.fields !== undefined) {
+    embed['fields'] = options.fields
+  }
+  if (options.footer !== undefined) {
+    embed['footer'] = { text: options.footer }
+  }
+  if (options.color !== undefined) {
+    embed['color'] = options.color
+  }
+  return embed
 }
 
 export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyFn {
   const { channel, replyToMessageId } = params
-  let lastBotMessage: BotMessage | null = null
+  const sentMessages: BotMessage[] = []
 
   return {
     text: async (content: string, options?: ReplyOptions): Promise<void> => {
-      const chunks = chunkForDiscord(content, DISCORD_MAX_CONTENT_LEN)
-      lastBotMessage = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+      const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
+      const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+      sentMessages.push(...messages)
     },
     formatted: async (markdown: string, options?: ReplyOptions): Promise<void> => {
       const chunks = formatLlmOutput(markdown)
-      lastBotMessage = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+      const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+      sentMessages.push(...messages)
     },
-    file: (_file: ChatFile, _options?: ReplyOptions): Promise<void> => {
-      return Promise.reject(new Error('Discord file send not implemented — deferred'))
-    },
+
     typing: (): void => {
       channel.sendTyping().catch(() => undefined)
     },
     redactMessage: async (replacementText: string): Promise<void> => {
-      if (lastBotMessage === null) return
-      try {
-        await lastBotMessage.edit({ content: replacementText, components: [] })
-      } catch (error) {
-        log.warn(
-          { channelId: channel.id, error: error instanceof Error ? error.message : String(error) },
-          'Failed to redact Discord message',
-        )
+      if (sentMessages.length === 0) return
+      const results = await Promise.allSettled(
+        sentMessages.map((msg) => msg.edit({ content: replacementText, components: [] })),
+      )
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (failures.length > 0) {
+        log.warn({ channelId: channel.id, failureCount: failures.length }, 'Failed to redact some Discord messages')
       }
     },
     buttons: async (content: string, options: ButtonReplyOptions): Promise<void> => {
       const rows = options.buttons === undefined ? [] : toActionRows(options.buttons)
       const sent = await channel.send({ content, components: rows, reply: buildReply(replyToMessageId, options) })
-      lastBotMessage = sent
+      sentMessages.push(sent)
+    },
+    embed: async (options: EmbedOptions): Promise<void> => {
+      const embed = createEmbedPayload(options)
+      const sent = await channel.send({ embeds: [embed], reply: buildReply(replyToMessageId, undefined) })
+      sentMessages.push(sent)
     },
   }
 }

@@ -1,144 +1,176 @@
 import type { ModelMessage } from 'ai'
 
-import { supportsFileReplies } from '../chat/capabilities.js'
-import type { ChatProvider } from '../chat/types.js'
+import { getCachedTools } from '../cache.js'
+import type { ChatProvider, ContextRendered, ContextSnapshot } from '../chat/types.js'
+import { getConfig } from '../config.js'
+import { buildMessagesWithMemory } from '../conversation.js'
 import { loadHistory } from '../history.js'
+import { buildInstructionsBlock } from '../instructions.js'
 import { logger } from '../logger.js'
 import { loadFacts, loadSummary } from '../memory.js'
+import { buildProviderForUser } from '../providers/factory.js'
+import type { TaskProvider } from '../providers/types.js'
+import { buildSystemPrompt as buildSystemPromptImpl } from '../system-prompt.js'
+import { makeTools } from '../tools/index.js'
+import {
+  collectContext,
+  type ContextCollectorDeps,
+  defaultCountTokens,
+  prepareDefaultCountTokens,
+  resolveEncodingName,
+} from './context-collector.js'
 
 const log = logger.child({ scope: 'commands:context' })
 
-type Fact = { identifier: string; title: string; url: string; last_seen: string }
-
-function getTextFromPart(part: unknown): string | null {
-  if (typeof part !== 'object' || part === null) {
-    return null
-  }
-  if (!('text' in part)) {
-    return null
-  }
-  const text = (part as { text: unknown })['text']
-  return typeof text === 'string' ? text : null
+export interface ContextCommandDeps {
+  collectContext: (contextId: string, collectorDeps: ContextCollectorDeps) => ContextSnapshot
 }
 
-function formatMessageContent(content: unknown): string {
-  if (typeof content === 'string') {
-    return content
-  }
+const defaultDeps: ContextCommandDeps = {
+  collectContext,
+}
 
-  if (Array.isArray(content)) {
-    const texts: string[] = []
-    for (const part of content) {
-      const text = getTextFromPart(part)
-      if (text !== null) {
-        texts.push(text)
+function safeBuildProvider(contextId: string): TaskProvider | null {
+  try {
+    return buildProviderForUser(contextId, false)
+  } catch (error) {
+    log.warn(
+      { contextId, error: error instanceof Error ? error.message : String(error) },
+      'Provider unavailable while building context view',
+    )
+    return null
+  }
+}
+
+function buildMemoryMessageText(contextId: string, history: readonly ModelMessage[]): string | null {
+  const { memoryMsg } = buildMessagesWithMemory(contextId, history)
+  return memoryMsg === null ? null : memoryMsg.content
+}
+
+async function buildCollectorDeps(contextId: string, provider: TaskProvider | null): Promise<ContextCollectorDeps> {
+  const modelName = getConfig(contextId, 'main_model')
+  const encoding = resolveEncodingName(modelName ?? 'unknown')
+
+  // Preload tokenizer for the encoding
+  await prepareDefaultCountTokens(encoding ?? 'cl100k_base')
+
+  return {
+    getMainModel: () => modelName,
+    buildSystemPrompt: () =>
+      provider === null ? buildInstructionsBlock(contextId) : buildSystemPromptImpl(provider, contextId),
+    buildInstructionsBlock: () => buildInstructionsBlock(contextId),
+    getProviderAddendum: () => (provider === null ? '' : provider.getPromptAddendum()),
+    getHistory: () => loadHistory(contextId),
+    getMemoryMessage: () => buildMemoryMessageText(contextId, loadHistory(contextId)),
+    getSummary: () => loadSummary(contextId),
+    getFacts: () => loadFacts(contextId),
+    getActiveToolDefinitions: (): Record<string, unknown> => {
+      const cached = getCachedTools(contextId)
+      if (cached !== undefined && cached !== null && typeof cached === 'object') {
+        return Object.fromEntries(Object.entries(cached).map(([key, value]) => [key, value as unknown]))
       }
-    }
-    return texts.join('')
+      if (provider === null) return {}
+      const tools = makeTools(provider, {
+        storageContextId: contextId,
+        chatUserId: contextId,
+        mode: 'normal',
+        contextType: 'dm',
+      })
+      return Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, value as unknown]))
+    },
+    getProviderName: () => provider?.name ?? 'none',
+    countTokens: (text: string): number => defaultCountTokens(text, encoding ?? 'cl100k_base'),
   }
-
-  return ''
 }
 
-function formatHistorySection(history: readonly ModelMessage[]): string {
-  if (history.length === 0) {
-    return '(no messages)'
-  }
-
+function renderFallback(rendered: ContextRendered & { method: 'embed' }): string {
   const lines: string[] = []
-  for (let i = 0; i < history.length; i++) {
-    const msg = history[i]
-    if (msg === undefined) continue
-    lines.push(`[${i + 1}] ${msg.role}:`)
-    lines.push(formatMessageContent(msg.content))
+  lines.push(rendered.embed.title)
+  lines.push('')
+  lines.push(rendered.embed.description)
+  if (rendered.embed.fields !== undefined) {
     lines.push('')
+    for (const field of rendered.embed.fields) {
+      lines.push(`${field.name}: ${field.value}`)
+    }
   }
-  return lines.join('\n')
-}
-
-function formatSummarySection(summary: string | null): string {
-  if (summary === null || summary.length === 0) {
-    return '(none)'
-  }
-  return summary
-}
-
-function formatFactsSection(facts: readonly Fact[]): string {
-  if (facts.length === 0) {
-    return '(none)'
-  }
-
-  const lines: string[] = []
-  for (const f of facts) {
-    const date = f.last_seen.slice(0, 10)
-    lines.push(`- ${f.identifier}: "${f.title}"`)
-    lines.push(`  URL: ${f.url}`)
-    lines.push(`  Last seen: ${date}`)
+  if (rendered.embed.footer !== undefined) {
     lines.push('')
+    lines.push(rendered.embed.footer)
   }
   return lines.join('\n')
 }
 
-function generateContextReport(
-  history: readonly ModelMessage[],
-  summary: string | null,
-  facts: readonly Fact[],
-): string {
-  const lines: string[] = []
-
-  lines.push('='.repeat(80))
-  lines.push('HISTORY')
-  lines.push('='.repeat(80))
-  lines.push('')
-  lines.push(formatHistorySection(history))
-
-  lines.push('='.repeat(80))
-  lines.push('SUMMARY')
-  lines.push('='.repeat(80))
-  lines.push('')
-  lines.push(formatSummarySection(summary))
-  lines.push('')
-
-  lines.push('='.repeat(80))
-  lines.push('KNOWN ENTITIES')
-  lines.push('='.repeat(80))
-  lines.push('')
-  lines.push(formatFactsSection(facts))
-
-  return lines.join('\n')
+async function sendContextResponse(
+  reply: Parameters<Parameters<ChatProvider['registerCommand']>[1]>[1],
+  rendered: ContextRendered,
+): Promise<void> {
+  if (rendered.method === 'embed') {
+    if (reply.embed === undefined) {
+      await reply.formatted(renderFallback(rendered))
+    } else {
+      await reply.embed(rendered.embed)
+    }
+  } else if (rendered.method === 'formatted') {
+    await reply.formatted(rendered.content)
+  } else {
+    await reply.text(rendered.content)
+  }
 }
 
-export function registerContextCommand(chat: ChatProvider, adminUserId: string): void {
-  chat.registerCommand('context', async (msg, reply, auth) => {
-    if (msg.user.id !== adminUserId) {
-      await reply.text('Only the admin can use this command.')
-      return
-    }
+async function buildContextSnapshot(contextId: string, deps: ContextCommandDeps): Promise<ContextSnapshot> {
+  const provider = safeBuildProvider(contextId)
+  const collectorDeps = await buildCollectorDeps(contextId, provider)
+  return deps.collectContext(contextId, collectorDeps)
+}
 
-    if (!supportsFileReplies(chat)) {
-      await reply.text('File replies are not supported in this chat. Context export is unavailable.')
-      return
-    }
+function logContextExecuted(userId: string, contextId: string, snapshot: ContextSnapshot, method: string): void {
+  log.info(
+    {
+      userId,
+      storageContextId: contextId,
+      totalTokens: snapshot.totalTokens,
+      maxTokens: snapshot.maxTokens,
+      method,
+      approximate: snapshot.approximate,
+    },
+    '/context command executed',
+  )
+}
 
-    log.debug({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/context command called')
+async function handleContextCommand(
+  msg: Parameters<Parameters<ChatProvider['registerCommand']>[1]>[0],
+  reply: Parameters<Parameters<ChatProvider['registerCommand']>[1]>[1],
+  auth: Parameters<Parameters<ChatProvider['registerCommand']>[1]>[2],
+  chat: ChatProvider,
+  deps: ContextCommandDeps,
+): Promise<void> {
+  log.debug({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/context command called')
 
-    const history = loadHistory(auth.storageContextId)
-    const summary = loadSummary(auth.storageContextId)
-    const facts = loadFacts(auth.storageContextId)
-
-    const report = generateContextReport(history, summary, facts)
-
-    const hasSummary = summary !== null && summary.length > 0
-    log.info(
+  let snapshot: ContextSnapshot
+  try {
+    snapshot = await buildContextSnapshot(auth.storageContextId, deps)
+  } catch (error) {
+    log.warn(
       {
         userId: msg.user.id,
         storageContextId: auth.storageContextId,
-        historyLength: history.length,
-        factsCount: facts.length,
-        hasSummary,
+        error: error instanceof Error ? error.message : String(error),
       },
-      '/context command executed',
+      '/context collector failed',
     )
-    await reply.file({ content: Buffer.from(report, 'utf-8'), filename: 'context.txt' })
+    await reply.text('Sorry — could not build context view right now.')
+    return
+  }
+
+  const rendered = chat.renderContext(snapshot)
+  await sendContextResponse(reply, rendered)
+  logContextExecuted(msg.user.id, auth.storageContextId, snapshot, rendered.method)
+}
+
+export function registerContextCommand(chat: ChatProvider, deps: ContextCommandDeps = defaultDeps): void {
+  chat.registerCommand('context', async (msg, reply, auth) => {
+    if (!auth.allowed) return
+    await handleContextCommand(msg, reply, auth, chat, deps)
   })
 }

@@ -4,12 +4,14 @@ import type {
   Attachment,
   Comment,
   CommentReaction,
+  IdentityUser,
   SetTaskVisibilityParams,
   Task,
   TaskCapability,
   TaskListItem,
   TaskProvider,
   TaskVisibility,
+  UserIdentityResolver,
   UserRef,
 } from '../../src/providers/types.js'
 import { createMockProvider } from '../tools/mock-provider.js'
@@ -143,5 +145,56 @@ describe('TaskProvider collaboration methods', () => {
     expect(currentUser?.id).toBe('user-1')
     expect(visibility).toEqual({ taskId: 'PROJ-1', visibility: { kind: 'public' } })
     expect(team?.[0]?.id).toBe('user-1')
+  })
+})
+
+describe('Identity types', () => {
+  test('IdentityUser accepts required and optional fields', () => {
+    const user: IdentityUser = {
+      id: 'u-1',
+      login: 'alice',
+      name: 'Alice Smith',
+    }
+    expect(user.id).toBe('u-1')
+    expect(user.login).toBe('alice')
+    expect(user.name).toBe('Alice Smith')
+  })
+
+  test('IdentityUser works without optional name', () => {
+    const user: IdentityUser = {
+      id: 'u-2',
+      login: 'bob',
+    }
+    expect(user.id).toBe('u-2')
+    expect(user.login).toBe('bob')
+    expect(user.name).toBeUndefined()
+  })
+
+  test('UserIdentityResolver interface is implemented correctly', async () => {
+    const mockResolver: UserIdentityResolver = {
+      searchUsers(query: string, limit?: number): Promise<IdentityUser[]> {
+        const users: IdentityUser[] = [
+          { id: 'u-1', login: 'alice', name: 'Alice Smith' },
+          { id: 'u-2', login: 'bob', name: 'Bob Jones' },
+        ]
+        return Promise.resolve(users.filter((u) => u.login.includes(query)).slice(0, limit ?? 10))
+      },
+    }
+
+    const results = await mockResolver.searchUsers('ali', 5)
+    expect(results).toHaveLength(1)
+    expect(results[0]?.login).toBe('alice')
+  })
+
+  test('TaskProvider accepts optional identityResolver', () => {
+    const resolver: UserIdentityResolver = {
+      searchUsers(query: string): Promise<IdentityUser[]> {
+        return Promise.resolve([{ id: 'u-1', login: query }])
+      },
+    }
+
+    const provider: TaskProvider = createMockProvider({ identityResolver: resolver })
+    expect(provider.identityResolver).toBeDefined()
+    expect(typeof provider.identityResolver?.searchUsers).toBe('function')
   })
 })

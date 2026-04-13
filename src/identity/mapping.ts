@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import { getDrizzleDb } from '../db/drizzle.js'
+import { getDrizzleDb as defaultGetDrizzleDb } from '../db/drizzle.js'
 import { userIdentityMappings } from '../db/schema.js'
 import { logger } from '../logger.js'
 import { isMatchMethod } from './types.js'
@@ -11,11 +11,19 @@ const log = logger.child({ scope: 'identity:mapping' })
 export interface SetIdentityMappingParams {
   contextId: string
   providerName: string
-  providerUserId: string
-  providerUserLogin: string
-  displayName: string
+  providerUserId: string | null
+  providerUserLogin: string | null
+  displayName: string | null
   matchMethod: MatchMethod
   confidence: number
+}
+
+export interface IdentityMappingDeps {
+  getDrizzleDb: typeof defaultGetDrizzleDb
+}
+
+const defaultDeps: IdentityMappingDeps = {
+  getDrizzleDb: defaultGetDrizzleDb,
 }
 
 /**
@@ -23,10 +31,14 @@ export interface SetIdentityMappingParams {
  * Returns null if no mapping exists (not yet attempted).
  * Returns mapping with null providerUserId if previously unmatched.
  */
-export function getIdentityMapping(contextId: string, providerName: string): IdentityMapping | null {
+export function getIdentityMapping(
+  contextId: string,
+  providerName: string,
+  deps: IdentityMappingDeps = defaultDeps,
+): IdentityMapping | null {
   log.debug({ contextId, providerName }, 'getIdentityMapping called')
 
-  const db = getDrizzleDb()
+  const db = deps.getDrizzleDb()
   const row = db
     .select()
     .from(userIdentityMappings)
@@ -52,13 +64,13 @@ export function getIdentityMapping(contextId: string, providerName: string): Ide
 /**
  * Store or update identity mapping.
  */
-export function setIdentityMapping(params: SetIdentityMappingParams): void {
+export function setIdentityMapping(params: SetIdentityMappingParams, deps: IdentityMappingDeps = defaultDeps): void {
   log.debug(
     { contextId: params.contextId, providerName: params.providerName, login: params.providerUserLogin },
     'setIdentityMapping called',
   )
 
-  const db = getDrizzleDb()
+  const db = deps.getDrizzleDb()
   db.insert(userIdentityMappings)
     .values({
       contextId: params.contextId,
@@ -93,10 +105,14 @@ export function setIdentityMapping(params: SetIdentityMappingParams): void {
  * Clear identity mapping by setting providerUserId to null.
  * Preserves the record to avoid re-attempting auto-link.
  */
-export function clearIdentityMapping(contextId: string, providerName: string): void {
+export function clearIdentityMapping(
+  contextId: string,
+  providerName: string,
+  deps: IdentityMappingDeps = defaultDeps,
+): void {
   log.debug({ contextId, providerName }, 'clearIdentityMapping called')
 
-  const db = getDrizzleDb()
+  const db = deps.getDrizzleDb()
   db.update(userIdentityMappings)
     .set({
       providerUserId: null,

@@ -9,7 +9,7 @@ import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:get-task' })
 
-export function makeGetTaskTool(provider: TaskProvider, userId?: string): ToolSet[string] {
+export function makeGetTaskTool(provider: TaskProvider, userId?: string, storageContextId?: string): ToolSet[string] {
   return tool({
     description:
       'Fetch complete details of a single task including description, status, priority, assignee, due date, and relations. For a full picture including comments, also call get_comments with the same task ID.',
@@ -18,7 +18,10 @@ export function makeGetTaskTool(provider: TaskProvider, userId?: string): ToolSe
       try {
         const task = await provider.getTask(taskId)
         log.info({ taskId }, 'Task fetched via tool')
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
+        // Falls back to userId for backwards compatibility, then UTC
+        const configKey = storageContextId ?? userId
+        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
         return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
       } catch (error) {
         log.error(

@@ -1,5 +1,5 @@
 import { logger } from '../../src/logger.js'
-import { type KaneoConfig } from '../../src/providers/kaneo/client.js'
+import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
 import { createProject } from '../../src/providers/kaneo/create-project.js'
 import { deleteProject } from '../../src/providers/kaneo/delete-project.js'
 import { deleteTask } from '../../src/providers/kaneo/delete-task.js'

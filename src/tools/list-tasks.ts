@@ -15,22 +15,23 @@ interface ResolveAssigneeFilterResult {
   identityRequired?: { status: 'identity_required'; message: string }
 }
 
-function resolveAssigneeFilter(
+async function resolveAssigneeFilter(
   params: ListTasksParams,
   userId: string | undefined,
   provider: TaskProvider,
-): ResolveAssigneeFilterResult {
+): Promise<ResolveAssigneeFilterResult> {
   const assigneeId = params.assigneeId
   if (assigneeId === undefined || assigneeId.toLowerCase() !== 'me' || userId === undefined) {
     return { params }
   }
 
-  const identity = resolveMeReference(userId, provider)
+  const identity = await resolveMeReference(userId, provider)
   if (identity.type === 'found') {
+    const identifier = provider.preferredUserIdentifier === 'login' ? identity.identity.login : identity.identity.userId
     return {
       params: {
         ...params,
-        assigneeId: identity.identity.userId,
+        assigneeId: identifier,
       },
     }
   }
@@ -40,7 +41,7 @@ function resolveAssigneeFilter(
   }
 }
 
-export function makeListTasksTool(provider: TaskProvider, userId?: string): ToolSet[string] {
+export function makeListTasksTool(provider: TaskProvider, userId?: string, storageContextId?: string): ToolSet[string] {
   return tool({
     description:
       'List tasks in a project. Optional filters match the upstream @kaneo/mcp list_tasks tool (status, priority, assignee, pagination, sort, due-date range).',
@@ -62,14 +63,17 @@ export function makeListTasksTool(provider: TaskProvider, userId?: string): Tool
     execute: async ({ projectId, ...rest }) => {
       const params: ListTasksParams = rest
       try {
-        const { params: resolvedParams, identityRequired } = resolveAssigneeFilter(params, userId, provider)
+        const { params: resolvedParams, identityRequired } = await resolveAssigneeFilter(params, userId, provider)
         if (identityRequired !== undefined) {
           return identityRequired
         }
 
         const tasks = await provider.listTasks(projectId, resolvedParams)
         log.info({ projectId, taskCount: tasks.length, filters: rest }, 'Tasks listed via tool')
-        const timezone = userId === undefined ? 'UTC' : (getConfig(userId, 'timezone') ?? 'UTC')
+        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
+        // Falls back to userId for backwards compatibility, then UTC
+        const configKey = storageContextId ?? userId
+        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
         return tasks.map((task) => ({ ...task, dueDate: utcToLocal(task.dueDate, timezone) }))
       } catch (error) {
         log.error(

@@ -1,4 +1,5 @@
-import type { ChatProvider, CommandHandler, ContextType } from '../chat/types.js'
+import { supportsFileReplies } from '../chat/capabilities.js'
+import type { ChatCapability, ChatProvider, CommandHandler, ContextType } from '../chat/types.js'
 import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:help' })
@@ -58,14 +59,14 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
 }
 
 export function buildHelpText(
-  providerName: string,
+  capabilities: ReadonlySet<ChatCapability>,
   contextType: ContextType,
   opts: { isBotAdmin: boolean; isGroupAdmin: boolean },
 ): string {
   let helpText = contextType === 'dm' ? getDmHelpText(opts.isBotAdmin) : getGroupHelpText(opts.isGroupAdmin)
 
-  if (providerName === 'discord' && opts.isBotAdmin) {
-    helpText += '\n\nNote: `/context` export is deferred on Discord.'
+  if (!supportsFileReplies({ capabilities }) && opts.isBotAdmin) {
+    helpText += '\n\nNote: `/context` export is deferred on this platform.'
   }
 
   return helpText
@@ -75,7 +76,7 @@ export function registerHelpCommand(chat: ChatProvider): void {
   const handler: CommandHandler = async (msg, reply, auth) => {
     log.info({ userId: msg.user.id, contextType: msg.contextType }, '/help command executed')
 
-    const helpText = buildHelpText(chat.name, msg.contextType, {
+    const helpText = buildHelpText(chat.capabilities, msg.contextType, {
       isBotAdmin: auth.isBotAdmin,
       isGroupAdmin: auth.isGroupAdmin,
     })

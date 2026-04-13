@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { clearIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
+import type { TaskProvider } from '../../src/providers/types.js'
 import { makeRemoveWatcherTool } from '../../src/tools/remove-watcher.js'
 import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
@@ -118,6 +119,43 @@ describe('Remove Watcher Tool', () => {
       if (!isTaskUserResult(result)) throw new Error('Invalid result')
       expect(result).toEqual({ taskId: 'task-123', userId: 'other-user' })
       expect(removeWatcher).toHaveBeenCalledWith('task-123', 'other-user')
+    })
+
+    test('uses login when provider prefers login identifier', async () => {
+      const removeWatcher = mock((taskId: string, userId: string) => Promise.resolve({ taskId, userId }))
+      const tool = makeRemoveWatcherTool(
+        createMockProvider({ removeWatcher, preferredUserIdentifier: 'login' }),
+        testUserId,
+      )
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'me' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      if (!isTaskUserResult(result)) throw new Error('Invalid result')
+      expect(result).toEqual({ taskId: 'task-123', userId: 'jsmith' })
+      expect(removeWatcher).toHaveBeenCalledWith('task-123', 'jsmith')
+    })
+
+    test('returns error when removeWatcher is not supported', async () => {
+      const baseProvider = createMockProvider()
+      const providerWithoutWatcher: TaskProvider = {
+        ...baseProvider,
+        removeWatcher: undefined,
+      }
+
+      const tool = makeRemoveWatcherTool(providerWithoutWatcher)
+
+      const result: unknown = await getToolExecutor(tool)(
+        { taskId: 'task-123', userId: 'user-1' },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(result).toEqual({
+        status: 'error',
+        message: 'Provider does not support removing watchers',
+      })
     })
   })
 })
