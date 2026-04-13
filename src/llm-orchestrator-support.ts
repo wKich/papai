@@ -1,0 +1,139 @@
+import { APICallError } from '@ai-sdk/provider'
+
+import type { ReplyFn } from './chat/types.js'
+import { emit } from './debug/event-bus.js'
+import { extractAppError, getAppErrorDetails, getUserMessage } from './errors.js'
+import { logger } from './logger.js'
+import { buildToolFailureResult, isToolFailureResult, type ToolFailureResult } from './tool-failure.js'
+
+const log = logger.child({ scope: 'llm-orchestrator:support' })
+
+type LogContext = Record<string, unknown>
+
+type ToolCallFinishEvent = {
+  toolCall: { toolName: string; toolCallId: string }
+  success?: boolean
+  output?: unknown
+  error?: unknown
+  durationMs?: number
+}
+
+export interface LlmOrchestratorSupportDeps {
+  emit: (event: string, payload: Record<string, unknown>) => void
+  log: {
+    warn: (context: LogContext, message: string) => void
+    error: (context: LogContext, message: string) => void
+  }
+}
+
+const defaultDeps: LlmOrchestratorSupportDeps = { emit, log }
+
+const getToolFailureResult = (event: ToolCallFinishEvent): ToolFailureResult | null => {
+  if (event.success === true) return isToolFailureResult(event.output) ? event.output : null
+  if (event.success !== false) return null
+  return buildToolFailureResult(event.error, event.toolCall.toolName, event.toolCall.toolCallId)
+}
+
+const emitToolFailure = (
+  contextId: string,
+  reply: ReplyFn | undefined,
+  event: ToolCallFinishEvent,
+  toolFailure: ToolFailureResult,
+  deps: LlmOrchestratorSupportDeps,
+): void => {
+  const { toolName, toolCallId } = event.toolCall
+  deps.emit('llm:tool_result', {
+    userId: contextId,
+    toolName,
+    toolCallId,
+    durationMs: event.durationMs,
+    success: false,
+    result: toolFailure,
+    error: toolFailure.error,
+  })
+  if (reply === undefined) return
+  deps.log.warn(
+    {
+      contextId,
+      toolName,
+      error: toolFailure.error,
+      errorType: toolFailure.errorType,
+      errorCode: toolFailure.errorCode,
+    },
+    'Tool execution failed',
+  )
+  void reply.text(`⚠️ Tool "${toolName}" failed: ${toolFailure.userMessage}`)
+}
+
+const emitToolSuccess = (contextId: string, event: ToolCallFinishEvent, deps: LlmOrchestratorSupportDeps): void => {
+  const { toolName, toolCallId } = event.toolCall
+  deps.emit('llm:tool_result', {
+    userId: contextId,
+    toolName,
+    toolCallId,
+    durationMs: event.durationMs,
+    success: true,
+    result: event.output,
+  })
+}
+
+export const handleToolCallFinish = (
+  contextId: string,
+  reply: ReplyFn | undefined,
+  event: ToolCallFinishEvent,
+  deps: LlmOrchestratorSupportDeps = defaultDeps,
+): void => {
+  const toolFailure = getToolFailureResult(event)
+  if (toolFailure !== null) {
+    emitToolFailure(contextId, reply, event, toolFailure, deps)
+    return
+  }
+  if (event.success !== true) return
+  emitToolSuccess(contextId, event, deps)
+}
+
+export const extractOrchestratorErrorDetails = (error: unknown): Record<string, unknown> => {
+  if (APICallError.isInstance(error)) {
+    return {
+      type: 'APICallError',
+      message: error.message,
+      statusCode: error.statusCode,
+      url: error.url,
+      responseBody: error.responseBody,
+      responseHeaders: error.responseHeaders,
+      isRetryable: error.isRetryable,
+      data: error.data,
+    }
+  }
+  const appError = extractAppError(error)
+  if (appError !== null) {
+    return {
+      type: 'AppError',
+      errorType: appError.type,
+      code: appError.code,
+      userMessage: getUserMessage(appError),
+      details: getAppErrorDetails(appError),
+    }
+  }
+  if (error instanceof Error) return { type: error.name, message: error.message }
+  return { type: 'unknown', value: String(error) }
+}
+
+export const handleOrchestratorMessageError = async (
+  reply: ReplyFn,
+  contextId: string,
+  error: unknown,
+  deps: LlmOrchestratorSupportDeps = defaultDeps,
+): Promise<void> => {
+  deps.log.error({ contextId, error: extractOrchestratorErrorDetails(error) }, 'Message handling failed')
+  const appError = extractAppError(error)
+  if (appError === null) {
+    await reply.text(
+      APICallError.isInstance(error)
+        ? 'API call failed. Please try again.'
+        : 'An unexpected error occurred. Please try again later.',
+    )
+    return
+  }
+  await reply.text(getUserMessage(appError))
+}

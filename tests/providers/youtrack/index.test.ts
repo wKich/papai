@@ -226,7 +226,9 @@ describe('YouTrackProvider', () => {
       mockFetchSequence([
         // First: project lookup
         { data: { id: '0-1', shortName: 'TEST' } },
-        // Second: issue creation response
+        // Second: project custom fields lookup
+        { data: [] },
+        // Third: issue creation response
         {
           data: {
             id: '2-1',
@@ -260,7 +262,9 @@ describe('YouTrackProvider', () => {
       mockFetchSequence([
         // First: project lookup
         { data: { id: '0-1', shortName: 'TEST' } },
-        // Second: issue creation response
+        // Second: project custom fields lookup
+        { data: [] },
+        // Third: issue creation response
         {
           data: {
             id: '2-2',

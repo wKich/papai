@@ -65,6 +65,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'admin-1',
+        configContextId: 'admin-1',
       })
     })
 
@@ -77,6 +78,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -89,6 +91,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: true,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -103,6 +106,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -115,6 +119,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: true,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -125,6 +130,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -139,6 +145,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'real-alice-id',
+        configContextId: 'real-alice-id',
       })
     })
 
@@ -149,6 +156,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'unknown-id',
+        configContextId: 'unknown-id',
       })
     })
   })
@@ -164,6 +172,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -190,6 +199,7 @@ describe('Demo Mode Auto-Provision', () => {
       isBotAdmin: false,
       isGroupAdmin: false,
       storageContextId: DEMO_USER_ID,
+      configContextId: DEMO_USER_ID,
     })
     expect(isAuthorized(DEMO_USER_ID)).toBe(true)
   })
@@ -205,6 +215,7 @@ describe('Demo Mode Auto-Provision', () => {
       isBotAdmin: false,
       isGroupAdmin: false,
       storageContextId: DEMO_USER_ID,
+      configContextId: DEMO_USER_ID,
     })
   })
 

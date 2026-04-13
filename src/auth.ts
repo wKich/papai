@@ -33,6 +33,7 @@ const getBotAdminAuth = (
   isBotAdmin: true,
   isGroupAdmin: isPlatformAdmin,
   storageContextId: getThreadScopedStorageContextId(contextId, contextType, threadId),
+  configContextId: contextId,
 })
 
 const getGroupMemberAuth = (
@@ -45,6 +46,7 @@ const getGroupMemberAuth = (
   isBotAdmin: false,
   isGroupAdmin: isPlatformAdmin,
   storageContextId: getThreadScopedStorageContextId(contextId, contextType, threadId),
+  configContextId: contextId,
 })
 
 const getUnauthorizedGroupAuth = (contextId: string): AuthorizationResult => ({
@@ -52,6 +54,7 @@ const getUnauthorizedGroupAuth = (contextId: string): AuthorizationResult => ({
   isBotAdmin: false,
   isGroupAdmin: false,
   storageContextId: contextId,
+  configContextId: contextId,
 })
 
 const getDmUserAuth = (userId: string): AuthorizationResult => ({
@@ -59,6 +62,7 @@ const getDmUserAuth = (userId: string): AuthorizationResult => ({
   isBotAdmin: true,
   isGroupAdmin: false,
   storageContextId: userId,
+  configContextId: userId,
 })
 
 const getUnauthorizedDmAuth = (userId: string): AuthorizationResult => ({
@@ -66,6 +70,7 @@ const getUnauthorizedDmAuth = (userId: string): AuthorizationResult => ({
   isBotAdmin: false,
   isGroupAdmin: false,
   storageContextId: userId,
+  configContextId: userId,
 })
 
 export const checkAuthorizationExtended = (
