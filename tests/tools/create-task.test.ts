@@ -242,6 +242,43 @@ describe('create_task identity resolution', () => {
     ).rejects.toThrow('Database connection failed')
   })
 
+  test('create_task tool should pass customFields to provider', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const createTask = mock((params: { title: string; customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({
+        id: 'task-1',
+        title: params.title,
+        status: 'todo',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ createTask })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute(
+      {
+        title: 'Test Task',
+        projectId: 'proj-1',
+        customFields: [
+          { name: 'URL адеса где будет размещаться приложени', value: 'stream://myapp' },
+          { name: 'Environment', value: 'production' },
+        ],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(createTask).toHaveBeenCalledTimes(1)
+    expect(capturedCustomFields).toHaveLength(2)
+    expect(capturedCustomFields?.[0]).toEqual({
+      name: 'URL адеса где будет размещаться приложени',
+      value: 'stream://myapp',
+    })
+    expect(capturedCustomFields?.[1]).toEqual({ name: 'Environment', value: 'production' })
+  })
+
   describe('timezone config lookup (NI2 fix)', () => {
     test('should use storageContextId for timezone in group chats', async () => {
       const chatUserId = 'user-123'

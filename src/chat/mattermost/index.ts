@@ -33,7 +33,7 @@ export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
   readonly threadCapabilities = {
     supportsThreads: true,
-    canCreateThreads: false,
+    canCreateThreads: true,
     threadScope: 'post' as const,
   }
   readonly capabilities = mattermostCapabilities
@@ -155,7 +155,8 @@ export class MattermostChatProvider implements ChatProvider {
     const channelInfo = await fetchChannelInfo(post.channel_id, this.apiFetch.bind(this))
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
     const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, this.apiFetch.bind(this))
-    const threadId = post.root_id === undefined || post.root_id === '' ? replyToMessageId : post.root_id
+    const isMentioned = this.isBotMentioned(post.message)
+    const threadId = this.determineThreadId(post, isMentioned, contextType, replyToMessageId)
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const username = post.user_name ?? senderName ?? null
@@ -171,7 +172,7 @@ export class MattermostChatProvider implements ChatProvider {
       user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
       contextType,
-      isMentioned: this.isBotMentioned(post.message),
+      isMentioned,
       text: post.message,
       commandMatch: command?.match,
       messageId: post.id,
@@ -209,6 +210,21 @@ export class MattermostChatProvider implements ChatProvider {
   private isBotMentioned(message: string): boolean {
     if (this.botUsername === null) return false
     return message.includes(`@${this.botUsername}`)
+  }
+
+  private determineThreadId(
+    post: MattermostPost,
+    isMentioned: boolean,
+    contextType: ContextType,
+    replyToMessageId: string | undefined,
+  ): string | undefined {
+    if (post.root_id !== undefined && post.root_id !== '') {
+      return post.root_id
+    }
+    if (isMentioned && contextType === 'group') {
+      return post.id
+    }
+    return replyToMessageId
   }
 
   private matchCommand(text: string): { handler: CommandHandler; match: string } | null {

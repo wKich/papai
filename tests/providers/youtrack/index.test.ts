@@ -226,9 +226,7 @@ describe('YouTrackProvider', () => {
       mockFetchSequence([
         // First: project lookup
         { data: { id: '0-1', shortName: 'TEST' } },
-        // Second: custom fields lookup
-        { data: [] },
-        // Third: issue creation response
+        // Second: issue creation response
         {
           data: {
             id: '2-1',
@@ -262,9 +260,7 @@ describe('YouTrackProvider', () => {
       mockFetchSequence([
         // First: project lookup
         { data: { id: '0-1', shortName: 'TEST' } },
-        // Second: custom fields lookup
-        { data: [] },
-        // Third: issue creation response
+        // Second: issue creation response
         {
           data: {
             id: '2-2',
@@ -287,7 +283,7 @@ describe('YouTrackProvider', () => {
         status: 'In Progress',
       })
 
-      // Get the third call (issue creation)
+      // Get the second call (issue creation)
       const calls = fetchMock?.mock.calls ?? []
       const lastCall = calls[calls.length - 1]
       const parsed = FetchCallSchema.safeParse(lastCall)

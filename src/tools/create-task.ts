@@ -41,12 +41,13 @@ async function executeCreateTask(
     dueDate?: { date: string; time?: string }
     status?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   },
   userId: string | undefined,
   storageContextId: string | undefined,
   provider: TaskProvider,
 ): Promise<unknown> {
-  const { title, description, priority, projectId, dueDate, status, assignee } = params
+  const { title, description, priority, projectId, dueDate, status, assignee, customFields } = params
   const configKey = storageContextId ?? userId
   const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
   const resolvedDueDate = dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
@@ -60,8 +61,12 @@ async function executeCreateTask(
     status,
     dueDate: resolvedDueDate,
     assignee: resolvedAssignee,
+    customFields,
   })
-  log.info({ taskId: task.id, title }, 'Task created via tool')
+  log.info(
+    { taskId: task.id, title, hasCustomFields: customFields !== undefined && customFields.length > 0 },
+    'Task created via tool',
+  )
   return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
 }
 
@@ -86,6 +91,10 @@ export function makeCreateTaskTool(
         .describe("Due date in the user's local time — tool converts to UTC"),
       status: z.string().optional().describe("Status column slug (e.g. 'to-do', 'in-progress', 'done')"),
       assignee: z.string().optional().describe("User ID to assign the task to, or 'me' to assign to yourself"),
+      customFields: z
+        .array(z.object({ name: z.string(), value: z.string() }))
+        .optional()
+        .describe('Project-specific custom fields required by workflow rules (e.g., URL, Environment)'),
     }),
     execute: async (params) => {
       try {

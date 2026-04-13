@@ -599,4 +599,42 @@ describe('mapComment', () => {
     const result = buildCustomFields({})
     expect(result).toHaveLength(0)
   })
+
+  test('includes custom fields when provided', () => {
+    const result = buildCustomFields({
+      customFields: [
+        { name: 'URL адеса где будет размещаться приложени', value: 'stream://myapp' },
+        { name: 'Environment', value: 'production' },
+      ],
+    })
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({
+      name: 'URL адеса где будет размещаться приложени',
+      $type: 'SimpleIssueCustomField',
+      value: { text: 'stream://myapp' },
+    })
+    expect(result[1]).toEqual({
+      name: 'Environment',
+      $type: 'SimpleIssueCustomField',
+      value: { text: 'production' },
+    })
+  })
+
+  test('combines standard and custom fields', () => {
+    const result = buildCustomFields({
+      priority: 'High',
+      customFields: [{ name: 'URL', value: 'stream://test' }],
+    })
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({
+      name: 'Priority',
+      $type: 'SingleEnumIssueCustomField',
+      value: { name: 'High' },
+    })
+    expect(result[1]).toEqual({
+      name: 'URL',
+      $type: 'SimpleIssueCustomField',
+      value: { text: 'stream://test' },
+    })
+  })
 })

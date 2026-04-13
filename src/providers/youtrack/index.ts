@@ -92,6 +92,7 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
     status?: string
     dueDate?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   }): Promise<Task> {
     return createYouTrackTask(this.config, params)
   }

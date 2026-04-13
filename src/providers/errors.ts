@@ -4,6 +4,11 @@
  * Each provider maps its native errors to these codes via its classifyError() method.
  * The codes mirror the current KaneoError codes but are provider-neutral.
  */
+export type CustomFieldRequirement = {
+  name: string
+  description?: string
+}
+
 export type ProviderError =
   | { type: 'provider'; code: 'task-not-found'; taskId: string }
   | { type: 'provider'; code: 'project-not-found'; projectId: string }
@@ -15,6 +20,13 @@ export type ProviderError =
   | { type: 'provider'; code: 'auth-failed' }
   | { type: 'provider'; code: 'rate-limited' }
   | { type: 'provider'; code: 'validation-failed'; field: string; reason: string }
+  | {
+      type: 'provider'
+      code: 'workflow-validation-failed'
+      projectId: string
+      message: string
+      requiredFields: CustomFieldRequirement[]
+    }
   | { type: 'provider'; code: 'unsupported-operation'; operation: string }
   | { type: 'provider'; code: 'status-not-found'; statusName: string; available: string[] }
   | { type: 'provider'; code: 'invalid-response' }
@@ -50,6 +62,17 @@ export const providerError = {
     code: 'validation-failed',
     field,
     reason,
+  }),
+  workflowValidationFailed: (
+    projectId: string,
+    message: string,
+    requiredFields: CustomFieldRequirement[],
+  ): ProviderError => ({
+    type: 'provider',
+    code: 'workflow-validation-failed',
+    projectId,
+    message,
+    requiredFields,
   }),
   unsupportedOperation: (operation: string): ProviderError => ({
     type: 'provider',
@@ -89,6 +112,10 @@ export const getProviderMessage = (error: ProviderError): string => {
       return `API rate limit reached. Please wait a moment and try again.`
     case 'validation-failed':
       return `Invalid ${error.field}: ${error.reason}`
+    case 'workflow-validation-failed': {
+      const fields = error.requiredFields.map((f) => `"${f.name}"`).join(', ')
+      return `Cannot create task in project "${error.projectId}": ${error.message}. Required fields: ${fields}. Please provide these fields using the customFields parameter.`
+    }
     case 'unsupported-operation':
       return `Operation "${error.operation}" is not supported by this provider.`
     case 'status-not-found':

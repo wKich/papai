@@ -45,11 +45,10 @@ const mockFetchError = (status: number, body: unknown = { error: 'Something went
   )
 }
 
-// Helper for createYouTrackTask tests - resolves project, fetches custom fields, then creates issue
+// Helper for createYouTrackTask tests - resolves project, then creates issue
 const mockCreateTaskResponse = (
   issueResponse: unknown,
   projectResponse: unknown = { id: '0-1', shortName: 'TEST' },
-  customFieldsResponse: unknown = [],
 ): void => {
   let callCount = 0
   installFetchMock(() => {
@@ -58,15 +57,6 @@ const mockCreateTaskResponse = (
       // Project lookup response
       return Promise.resolve(
         new Response(JSON.stringify(projectResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-      )
-    }
-    if (callCount === 2) {
-      // Custom fields lookup response
-      return Promise.resolve(
-        new Response(JSON.stringify(customFieldsResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
       )
     }
     // Issue creation response
@@ -288,7 +278,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('throws YouTrackClassifiedError on auth error', async () => {
-    // For error tests, project lookup and custom fields succeed, but issue creation fails with 401
+    // For error tests, project lookup succeeds, but issue creation fails with 401
     let callCount = 0
     installFetchMock(() => {
       callCount++
@@ -299,12 +289,6 @@ describe('createYouTrackTask', () => {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
-        )
-      }
-      if (callCount === 2) {
-        // Custom fields lookup succeeds
-        return Promise.resolve(
-          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
         )
       }
       // Issue creation fails with auth error
@@ -328,8 +312,7 @@ describe('createYouTrackTask', () => {
 
   test('resolves project shortName to internal ID before creating task', async () => {
     // First call: get project by shortName to resolve internal ID
-    // Second call: get custom fields to check required fields
-    // Third call: create issue with internal ID
+    // Second call: create issue with internal ID
     let callCount = 0
     installFetchMock(() => {
       callCount++
@@ -340,12 +323,6 @@ describe('createYouTrackTask', () => {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
-        )
-      }
-      if (callCount === 2) {
-        // Custom fields lookup - return empty (no required fields)
-        return Promise.resolve(
-          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
         )
       }
       // Issue creation response
@@ -376,75 +353,17 @@ describe('createYouTrackTask', () => {
     expect(firstUrl.pathname).toBe('/api/admin/projects/AUDIT')
     expect(firstParsed.data[1].method).toBe('GET')
 
-    // Verify second call was to get custom fields
+    // Verify second call created issue with internal ID
     const secondParsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
     expect(secondParsed.success).toBe(true)
     if (!secondParsed.success) return
     const secondUrl = new URL(secondParsed.data[0])
-    expect(secondUrl.pathname).toBe('/api/admin/projects/AUDIT/customFields')
-    expect(secondParsed.data[1].method).toBe('GET')
+    expect(secondUrl.pathname).toBe('/api/issues')
+    expect(secondParsed.data[1].method).toBe('POST')
 
-    // Verify third call created issue with internal ID
-    const thirdParsed = FetchCallSchema.safeParse(fetchMock.mock.calls[2])
-    expect(thirdParsed.success).toBe(true)
-    if (!thirdParsed.success) return
-    const thirdUrl = new URL(thirdParsed.data[0])
-    expect(thirdUrl.pathname).toBe('/api/issues')
-    expect(thirdParsed.data[1].method).toBe('POST')
-
-    const responseBody: string = thirdParsed.data[1].body ?? '{}'
+    const responseBody: string = secondParsed.data[1].body ?? '{}'
     const parsedBody: unknown = JSON.parse(responseBody)
     expect(parsedBody).toMatchObject({ project: { id: '0-1' } })
-  })
-
-  test('throws error when project has unhandled required custom fields', async () => {
-    // First call: project lookup
-    // Second call: custom fields with required Type field
-    let callCount = 0
-    installFetchMock(() => {
-      callCount++
-      if (callCount === 1) {
-        // Project lookup succeeds
-        return Promise.resolve(
-          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-      // Custom fields lookup returns required Type field
-      return Promise.resolve(
-        new Response(
-          JSON.stringify([
-            {
-              id: '82-10',
-              $type: 'EnumProjectCustomField',
-              field: { id: '58-2', name: 'Type', $type: 'CustomField' },
-              canBeEmpty: false,
-              isPublic: true,
-            },
-            {
-              id: '82-9',
-              $type: 'EnumProjectCustomField',
-              field: { id: '58-1', name: 'Priority', $type: 'CustomField' },
-              canBeEmpty: true,
-              isPublic: true,
-            },
-          ]),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-    })
-
-    try {
-      await createYouTrackTask(config, { projectId: 'TEST', title: 'Test task' })
-      expect.unreachable('Should have thrown')
-    } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (!(error instanceof YouTrackClassifiedError)) throw error
-      expect(error.appError.code).toBe('validation-failed')
-      expect(error.message).toContain('Type')
-    }
   })
 })
 

@@ -70,6 +70,7 @@ export class KaneoProvider implements TaskProvider {
     status?: string
     dueDate?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   }): Promise<Task> {
     return kaneoCreateTask(this.config, this.workspaceId, params)
   }
