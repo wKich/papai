@@ -66,6 +66,13 @@
       }
     },
     {
+      "files": ["scripts/review-loop/loop-controller.ts"],
+      "rules": {
+        "no-await-in-loop": "off",
+        "max-lines-per-function": "off"
+      }
+    },
+    {
       "files": ["src/chat/discord/index.ts"],
       "rules": {
         "max-lines": "off"

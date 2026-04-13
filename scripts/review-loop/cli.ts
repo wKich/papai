@@ -1,5 +1,14 @@
-import type { ReviewLoopConfig } from './config.js'
-import { loadReviewLoopConfig } from './config.js'
+import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
+
+import { createAcpProcessClient, type AcpProcessClient } from './acp-process-client.js'
+import { bootstrapAgentSession, type BootstrappedAgentSession } from './agent-session.js'
+import { loadReviewLoopConfig, type ReviewLoopConfig } from './config.js'
+import { createIssueLedger, loadIssueLedger, type IssueLedger } from './issue-ledger.js'
+import { runReviewLoop } from './loop-controller.js'
+import { decidePermissionOptionId } from './permission-policy.js'
+import { createRunState, loadRunState, saveRunState, type RunState } from './run-state.js'
+import { formatSummary } from './summary.js'
 
 export interface CliArgs {
   configPath: string
@@ -57,12 +66,94 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
   return { configPath, planPath, repoRoot, resumeRunId }
 }
 
-export async function runCli(argv: readonly string[]): Promise<ReviewLoopConfig> {
+async function bootstrapClients(
+  config: ReviewLoopConfig,
+  runState: RunState,
+): Promise<{ reviewerClient: AcpProcessClient; fixerClient: AcpProcessClient }> {
+  const reviewerClient = await createAcpProcessClient({
+    command: config.reviewer.command,
+    args: config.reviewer.args,
+    cwd: config.repoRoot,
+    env: { ...process.env, ...config.reviewer.env },
+    transcriptPath: path.join(runState.transcriptDir, 'reviewer.ndjson'),
+    selectPermissionOptionId: (request) => decidePermissionOptionId(request, config.repoRoot),
+  })
+  const fixerClient = await createAcpProcessClient({
+    command: config.fixer.command,
+    args: config.fixer.args,
+    cwd: config.repoRoot,
+    env: { ...process.env, ...config.fixer.env },
+    transcriptPath: path.join(runState.transcriptDir, 'fixer.ndjson'),
+    selectPermissionOptionId: (request) => decidePermissionOptionId(request, config.repoRoot),
+  })
+  return { reviewerClient, fixerClient }
+}
+
+async function bootstrapSessions(
+  config: ReviewLoopConfig,
+  runState: RunState,
+  reviewerClient: AcpProcessClient,
+  fixerClient: AcpProcessClient,
+): Promise<{ reviewerSession: BootstrappedAgentSession; fixerSession: BootstrappedAgentSession }> {
+  const reviewerSession = await bootstrapAgentSession(reviewerClient, {
+    cwd: config.repoRoot,
+    previousSessionId: runState.reviewerSessionId,
+    sessionConfig: config.reviewer.sessionConfig,
+  })
+  const fixerSession = await bootstrapAgentSession(fixerClient, {
+    cwd: config.repoRoot,
+    previousSessionId: runState.fixerSessionId,
+    sessionConfig: config.fixer.sessionConfig,
+  })
+  return { reviewerSession, fixerSession }
+}
+
+async function persistSessionIds(
+  runState: RunState,
+  reviewerSession: BootstrappedAgentSession,
+  fixerSession: BootstrappedAgentSession,
+): Promise<void> {
+  runState.reviewerSessionId = reviewerSession.sessionId
+  runState.fixerSessionId = fixerSession.sessionId
+  await writeFile(runState.reviewerSessionPath, JSON.stringify({ sessionId: reviewerSession.sessionId }, null, 2))
+  await writeFile(runState.fixerSessionPath, JSON.stringify({ sessionId: fixerSession.sessionId }, null, 2))
+  await saveRunState(runState)
+}
+
+export async function runCli(argv: readonly string[]): Promise<void> {
   const args = parseCliArgs(argv)
   const config = await loadReviewLoopConfig({
     configPath: args.configPath,
     repoRoot: args.repoRoot,
   })
-  console.log(`Loaded ACP review loop config for ${config.repoRoot}`)
-  return config
+
+  const runState: RunState =
+    args.resumeRunId === undefined
+      ? await createRunState(config, args.planPath)
+      : await loadRunState(config.workDir, args.resumeRunId)
+
+  const ledger: IssueLedger =
+    args.resumeRunId === undefined ? await createIssueLedger(runState.runDir) : await loadIssueLedger(runState.runDir)
+
+  const { reviewerClient, fixerClient } = await bootstrapClients(config, runState)
+  const { reviewerSession, fixerSession } = await bootstrapSessions(config, runState, reviewerClient, fixerClient)
+
+  await persistSessionIds(runState, reviewerSession, fixerSession)
+
+  try {
+    const result = await runReviewLoop({
+      config,
+      runState,
+      ledger,
+      reviewer: reviewerSession,
+      fixer: fixerSession,
+    })
+
+    const summary = formatSummary(result)
+    await writeFile(path.join(runState.runDir, 'summary.txt'), `${summary}\n`)
+    console.log(summary)
+  } finally {
+    await reviewerClient.close()
+    await fixerClient.close()
+  }
 }
