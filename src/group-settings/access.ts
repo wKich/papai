@@ -1,5 +1,5 @@
 import { logger } from '../logger.js'
-import { getGroupAdminObservation, listAdminGroupContextsForUser } from './registry.js'
+import { listAdminGroupContextsForUser } from './registry.js'
 import type { KnownGroupContext } from './types.js'
 
 const log = logger.child({ scope: 'group-settings:access' })
@@ -14,16 +14,6 @@ const getMatchCandidates = (group: KnownGroupContext): readonly string[] => [
   group.parentName ?? '',
   group.parentName === null ? group.displayName : `${group.parentName} / ${group.displayName}`,
 ]
-
-export function canManageGroupSettings(userId: string, groupId: string): boolean {
-  log.debug({ userId, groupId }, 'canManageGroupSettings called')
-
-  const observation = getGroupAdminObservation(groupId, userId)
-  const allowed = observation?.isAdmin === true
-
-  log.debug({ userId, groupId, allowed }, 'Evaluated group settings access')
-  return allowed
-}
 
 export function listManageableGroups(userId: string): KnownGroupContext[] {
   log.debug({ userId }, 'listManageableGroups called')

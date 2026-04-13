@@ -7,14 +7,6 @@ export type KnownGroupContext = {
   readonly lastSeenAt: string
 }
 
-export type GroupAdminObservation = {
-  readonly contextId: string
-  readonly userId: string
-  readonly username: string | null
-  readonly isAdmin: boolean
-  readonly lastSeenAt: string
-}
-
 export type GroupSettingsCommand = 'config' | 'setup'
 
 export type GroupSettingsSessionStage = 'choose_scope' | 'choose_group' | 'active'

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { canManageGroupSettings, listManageableGroups, matchManageableGroup } from '../../src/group-settings/access.js'
+import { listManageableGroups, matchManageableGroup } from '../../src/group-settings/access.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../src/group-settings/registry.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
@@ -37,8 +37,6 @@ describe('group settings access', () => {
     })
 
     expect(listManageableGroups('user-1').map((group) => group.contextId)).toEqual(['group-1'])
-    expect(canManageGroupSettings('user-1', 'group-1')).toBe(true)
-    expect(canManageGroupSettings('user-1', 'group-2')).toBe(false)
   })
 
   test('matches by context id and display name and reports ambiguity', () => {

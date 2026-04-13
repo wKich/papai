@@ -1,23 +1,11 @@
 import { renderConfigForTarget } from '../../commands/config.js'
 import { startSetupForTarget } from '../../commands/setup.js'
 import { handleGroupSettingsSelectorCallback } from '../../group-settings/selector.js'
-import { getActiveGroupSettingsTarget } from '../../group-settings/state.js'
 import { logger } from '../../logger.js'
 import type { ReplyFn } from '../types.js'
 import type { ButtonInteractionLike } from './buttons.js'
 
 const log = logger.child({ scope: 'chat:discord:group-settings' })
-
-export function getDiscordSettingsTargetContextId(
-  contextType: 'dm' | 'group',
-  contextId: string,
-  userId: string,
-): string {
-  if (contextType !== 'dm') {
-    return contextId
-  }
-  return getActiveGroupSettingsTarget(userId) ?? contextId
-}
 
 export async function handleDiscordGroupSettingsSelection(
   interaction: ButtonInteractionLike,

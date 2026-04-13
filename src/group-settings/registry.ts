@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { groupAdminObservations, knownGroupContexts } from '../db/schema.js'
 import { logger } from '../logger.js'
-import type { GroupAdminObservation, KnownGroupContext } from './types.js'
+import type { KnownGroupContext } from './types.js'
 
 const log = logger.child({ scope: 'group-settings:registry' })
 
@@ -14,7 +14,6 @@ function isWithinThrottleWindow(lastSeenAtIso: string): boolean {
 }
 
 type KnownGroupContextRow = typeof knownGroupContexts.$inferSelect
-type GroupAdminObservationRow = typeof groupAdminObservations.$inferSelect
 
 export interface UpsertKnownGroupContextInput {
   readonly contextId: string
@@ -36,14 +35,6 @@ const toKnownGroupContext = (row: KnownGroupContextRow): KnownGroupContext => ({
   displayName: row.displayName,
   parentName: row.parentName ?? null,
   firstSeenAt: row.firstSeenAt,
-  lastSeenAt: row.lastSeenAt,
-})
-
-const toGroupAdminObservation = (row: GroupAdminObservationRow): GroupAdminObservation => ({
-  contextId: row.contextId,
-  userId: row.userId,
-  username: row.username ?? null,
-  isAdmin: row.isAdmin,
   lastSeenAt: row.lastSeenAt,
 })
 
@@ -133,20 +124,6 @@ export function upsertGroupAdminObservation(input: UpsertGroupAdminObservationIn
   )
 }
 
-export function listKnownGroupContexts(): KnownGroupContext[] {
-  log.debug('listKnownGroupContexts called')
-
-  const groups = getDrizzleDb()
-    .select()
-    .from(knownGroupContexts)
-    .all()
-    .map(toKnownGroupContext)
-    .toSorted((left, right) => left.displayName.localeCompare(right.displayName))
-
-  log.debug({ count: groups.length }, 'Listed known group contexts')
-  return groups
-}
-
 export function listAdminGroupContextsForUser(userId: string): KnownGroupContext[] {
   log.debug({ userId }, 'listAdminGroupContextsForUser called')
 
@@ -174,16 +151,4 @@ export function listAdminGroupContextsForUser(userId: string): KnownGroupContext
 
   log.debug({ userId, count: groups.length }, 'Listed admin group contexts for user')
   return groups
-}
-
-export function getGroupAdminObservation(contextId: string, userId: string): GroupAdminObservation | null {
-  log.debug({ contextId, userId }, 'getGroupAdminObservation called')
-
-  const row = getDrizzleDb()
-    .select()
-    .from(groupAdminObservations)
-    .where(and(eq(groupAdminObservations.contextId, contextId), eq(groupAdminObservations.userId, userId)))
-    .get()
-
-  return row === undefined ? null : toGroupAdminObservation(row)
 }
