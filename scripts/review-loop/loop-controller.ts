@@ -32,6 +32,19 @@ export interface ReviewLoopResult {
   ledger: IssueLedger['snapshot']
 }
 
+async function promptReviewerForIssues(
+  promptBody: string,
+  deps: ReviewLoopDeps,
+): Promise<ReturnType<typeof parseReviewerIssues>> {
+  const prompt = resolveInvocationText(
+    deps.config.reviewer.invocationPrefix,
+    deps.reviewer.availableCommands,
+    promptBody,
+    deps.config.reviewer.requireInvocationPrefix,
+  )
+  return parseReviewerIssues((await deps.reviewer.promptText(prompt)).text)
+}
+
 async function processIssueVerifyFix(
   record: LedgerIssueRecord,
   deps: ReviewLoopDeps,
@@ -46,11 +59,46 @@ async function processIssueVerifyFix(
   recordVerification(deps.ledger, record.fingerprint, verifyDecision)
 
   if (verifyDecision.verdict === 'valid' && verifyDecision.fixability === 'auto') {
-    await deps.fixer.promptText(buildFixPrompt(record.issue, verifyDecision))
+    const fixPrompt = resolveInvocationText(
+      deps.config.fixer.fixInvocationPrefix,
+      deps.fixer.availableCommands,
+      buildFixPrompt(record.issue, verifyDecision),
+      false,
+    )
+    await deps.fixer.promptText(fixPrompt)
     recordFixAttempt(deps.ledger, record.fingerprint)
     return { fixedThisIssue: true }
   }
   return { fixedThisIssue: false }
+}
+
+async function rereviewRound(round: number, deps: ReviewLoopDeps): Promise<ReturnType<typeof parseReviewerIssues>> {
+  const rereviewResponse = await promptReviewerForIssues(
+    buildRereviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
+    deps,
+  )
+
+  const unresolvedFingerprints = new Set(rereviewResponse.issues.map((issue) => computeIssueFingerprint(issue)))
+  applyReviewRound(deps.ledger, round, rereviewResponse.issues)
+
+  for (const record of Object.values(deps.ledger.snapshot.issues)) {
+    if (record.status === 'fixed_pending_review' && !unresolvedFingerprints.has(record.fingerprint)) {
+      record.status = 'closed'
+    }
+  }
+
+  return rereviewResponse
+}
+
+async function processReviewRecords(records: readonly LedgerIssueRecord[], deps: ReviewLoopDeps): Promise<number> {
+  let fixedThisRound = 0
+  for (const record of records) {
+    const { fixedThisIssue } = await processIssueVerifyFix(record, deps)
+    if (fixedThisIssue) {
+      fixedThisRound += 1
+    }
+  }
+  return fixedThisRound
 }
 
 export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopResult> {
@@ -60,13 +108,10 @@ export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopRes
     deps.runState.currentRound += 1
     const round = deps.runState.currentRound
 
-    const reviewPrompt = resolveInvocationText(
-      deps.config.reviewer.invocationPrefix,
-      deps.reviewer.availableCommands,
+    const reviewResponse = await promptReviewerForIssues(
       buildReviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
-      deps.config.reviewer.requireInvocationPrefix,
+      deps,
     )
-    const reviewResponse = parseReviewerIssues((await deps.reviewer.promptText(reviewPrompt)).text)
     const records = [...applyReviewRound(deps.ledger, round, reviewResponse.issues)]
     await saveIssueLedger(deps.ledger)
 
@@ -75,30 +120,8 @@ export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopRes
       return { doneReason: 'clean', rounds: round, ledger: deps.ledger.snapshot }
     }
 
-    let fixedThisRound = 0
-    for (const record of records) {
-      const { fixedThisIssue } = await processIssueVerifyFix(record, deps)
-      if (fixedThisIssue) {
-        fixedThisRound += 1
-      }
-    }
-
-    const rereviewResponse = parseReviewerIssues(
-      (
-        await deps.reviewer.promptText(
-          buildRereviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
-        )
-      ).text,
-    )
-
-    const unresolvedFingerprints = new Set(rereviewResponse.issues.map((issue) => computeIssueFingerprint(issue)))
-    applyReviewRound(deps.ledger, round, rereviewResponse.issues)
-
-    for (const record of Object.values(deps.ledger.snapshot.issues)) {
-      if (record.status === 'fixed_pending_review' && !unresolvedFingerprints.has(record.fingerprint)) {
-        record.status = 'closed'
-      }
-    }
+    const fixedThisRound = await processReviewRecords(records, deps)
+    const rereviewResponse = await rereviewRound(round, deps)
 
     if (rereviewResponse.issues.length === 0) {
       await saveIssueLedger(deps.ledger)

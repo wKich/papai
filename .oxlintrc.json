@@ -68,8 +68,7 @@
     {
       "files": ["scripts/review-loop/loop-controller.ts"],
       "rules": {
-        "no-await-in-loop": "off",
-        "max-lines-per-function": "off"
+        "no-await-in-loop": "off"
       }
     },
     {

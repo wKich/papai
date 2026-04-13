@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { parseCliArgs } from '../../scripts/review-loop/cli.js'
+import { closeClients, parseCliArgs } from '../../scripts/review-loop/cli.js'
 import { loadReviewLoopConfig } from '../../scripts/review-loop/config.js'
 
 const tempDirs: string[] = []
@@ -130,5 +130,35 @@ describe('review-loop CLI bootstrap', () => {
     } finally {
       process.chdir(previousCwd)
     }
+  })
+
+  test('closeClients aggregates multiple close errors after attempting both closes', async () => {
+    let reviewerClosed = false
+    let fixerClosed = false
+    const reviewerError = new Error('reviewer close failed')
+    const fixerError = new Error('fixer close failed')
+
+    const thrown = await closeClients(
+      {
+        close: () => {
+          reviewerClosed = true
+          return Promise.reject(reviewerError)
+        },
+      },
+      {
+        close: () => {
+          fixerClosed = true
+          return Promise.reject(fixerError)
+        },
+      },
+    ).catch((error: unknown) => error)
+
+    expect(thrown).toBeInstanceOf(AggregateError)
+    expect(thrown).toMatchObject({
+      errors: [reviewerError, fixerError],
+      message: 'Failed to close ACP clients',
+    })
+    expect(reviewerClosed).toBe(true)
+    expect(fixerClosed).toBe(true)
   })
 })

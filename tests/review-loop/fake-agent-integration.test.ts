@@ -44,7 +44,10 @@ describe('review-loop fake integration', () => {
       fixerScenarioPath,
       JSON.stringify(
         {
-          availableCommands: [{ name: 'verify-issue', description: 'Verify issue' }],
+          availableCommands: [
+            { name: 'verify-issue', description: 'Verify issue' },
+            { name: 'fix-issue', description: 'Fix issue' },
+          ],
           promptReplies: [
             {
               text: '{"verdict":"valid","fixability":"auto","reasoning":"The control flow is actually unsafe.","targetFiles":["src/message-queue/queue.ts"],"fixPlan":"Take the lock before the flush branch."}',
@@ -70,7 +73,7 @@ describe('review-loop fake integration', () => {
             env: { ACP_SCENARIO_FILE: reviewerScenarioPath },
             sessionConfig: {},
             invocationPrefix: '/review-code',
-            requireInvocationPrefix: false,
+            requireInvocationPrefix: true,
           },
           fixer: {
             command: 'bun',
@@ -78,8 +81,8 @@ describe('review-loop fake integration', () => {
             env: { ACP_SCENARIO_FILE: fixerScenarioPath },
             sessionConfig: {},
             verifyInvocationPrefix: '/verify-issue',
-            fixInvocationPrefix: null,
-            requireVerifyInvocation: false,
+            fixInvocationPrefix: '/fix-issue',
+            requireVerifyInvocation: true,
           },
         },
         null,
@@ -96,10 +99,19 @@ describe('review-loop fake integration', () => {
     }
     const summary = readFileSync(path.join(runRoot, runId, 'summary.txt'), 'utf8')
     const reviewerTranscript = readFileSync(path.join(runRoot, runId, 'transcripts', 'reviewer.ndjson'), 'utf8')
+    const fixerTranscript = readFileSync(path.join(runRoot, runId, 'transcripts', 'fixer.ndjson'), 'utf8')
     const reviewerSession = readFileSync(path.join(runRoot, runId, 'reviewer-session.json'), 'utf8')
 
     expect(summary).toContain('Done reason: clean')
     expect(reviewerTranscript).toContain('"sessionUpdate":"agent_message_chunk"')
+    expect(reviewerTranscript).toContain(
+      '/review-code Review the current implementation against the implementation plan at:',
+    )
+    expect(reviewerTranscript).toContain(
+      '/review-code Re-review the current implementation against the implementation plan at:',
+    )
+    expect(fixerTranscript).toContain('/verify-issue Verify this issue against the implementation plan at:')
+    expect(fixerTranscript).toContain('/fix-issue Fix exactly the verified issue below.')
     expect(reviewerSession).toContain('"sessionId"')
   })
 })

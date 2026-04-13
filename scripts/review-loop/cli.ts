@@ -17,6 +17,12 @@ export interface CliArgs {
   resumeRunId?: string
 }
 
+type ClosableClient = Pick<AcpProcessClient, 'close'>
+
+function isRejectedCloseResult(result: PromiseSettledResult<unknown>): result is PromiseRejectedResult {
+  return result.status === 'rejected'
+}
+
 export function parseCliArgs(argv: readonly string[]): CliArgs {
   let configPath = '.review-loop/config.json'
   let planPath: string | undefined
@@ -78,15 +84,20 @@ async function bootstrapClients(
     transcriptPath: path.join(runState.transcriptDir, 'reviewer.ndjson'),
     selectPermissionOptionId: (request) => decidePermissionOptionId(request, config.repoRoot),
   })
-  const fixerClient = await createAcpProcessClient({
-    command: config.fixer.command,
-    args: config.fixer.args,
-    cwd: config.repoRoot,
-    env: { ...process.env, ...config.fixer.env },
-    transcriptPath: path.join(runState.transcriptDir, 'fixer.ndjson'),
-    selectPermissionOptionId: (request) => decidePermissionOptionId(request, config.repoRoot),
-  })
-  return { reviewerClient, fixerClient }
+  try {
+    const fixerClient = await createAcpProcessClient({
+      command: config.fixer.command,
+      args: config.fixer.args,
+      cwd: config.repoRoot,
+      env: { ...process.env, ...config.fixer.env },
+      transcriptPath: path.join(runState.transcriptDir, 'fixer.ndjson'),
+      selectPermissionOptionId: (request) => decidePermissionOptionId(request, config.repoRoot),
+    })
+    return { reviewerClient, fixerClient }
+  } catch (error) {
+    await reviewerClient.close()
+    throw error
+  }
 }
 
 async function bootstrapSessions(
@@ -120,6 +131,26 @@ async function persistSessionIds(
   await saveRunState(runState)
 }
 
+export async function closeClients(
+  reviewerClient: ClosableClient | null,
+  fixerClient: ClosableClient | null,
+): Promise<void> {
+  const closeResults = await Promise.allSettled([reviewerClient?.close(), fixerClient?.close()])
+  const rejections = closeResults.filter(isRejectedCloseResult)
+  if (rejections.length === 1) {
+    const [rejection] = rejections
+    if (rejection !== undefined) {
+      throw rejection.reason
+    }
+  }
+  if (rejections.length > 1) {
+    throw new AggregateError(
+      rejections.map((result): unknown => result.reason),
+      'Failed to close ACP clients',
+    )
+  }
+}
+
 export async function runCli(argv: readonly string[]): Promise<void> {
   const args = parseCliArgs(argv)
   const config = await loadReviewLoopConfig({
@@ -135,12 +166,18 @@ export async function runCli(argv: readonly string[]): Promise<void> {
   const ledger: IssueLedger =
     args.resumeRunId === undefined ? await createIssueLedger(runState.runDir) : await loadIssueLedger(runState.runDir)
 
-  const { reviewerClient, fixerClient } = await bootstrapClients(config, runState)
-  const { reviewerSession, fixerSession } = await bootstrapSessions(config, runState, reviewerClient, fixerClient)
-
-  await persistSessionIds(runState, reviewerSession, fixerSession)
+  let reviewerClient: AcpProcessClient | null = null
+  let fixerClient: AcpProcessClient | null = null
 
   try {
+    const clients = await bootstrapClients(config, runState)
+    reviewerClient = clients.reviewerClient
+    fixerClient = clients.fixerClient
+
+    const { reviewerSession, fixerSession } = await bootstrapSessions(config, runState, reviewerClient, fixerClient)
+
+    await persistSessionIds(runState, reviewerSession, fixerSession)
+
     const result = await runReviewLoop({
       config,
       runState,
@@ -153,7 +190,6 @@ export async function runCli(argv: readonly string[]): Promise<void> {
     await writeFile(path.join(runState.runDir, 'summary.txt'), `${summary}\n`)
     console.log(summary)
   } finally {
-    await reviewerClient.close()
-    await fixerClient.close()
+    await closeClients(reviewerClient, fixerClient)
   }
 }
