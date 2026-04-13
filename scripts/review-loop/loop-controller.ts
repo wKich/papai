@@ -1,3 +1,5 @@
+import pLimit from 'p-limit'
+
 import { resolveInvocationText } from './available-commands.js'
 import type { ReviewLoopConfig } from './config.js'
 import { computeIssueFingerprint } from './issue-fingerprint.js'
@@ -91,57 +93,59 @@ async function rereviewRound(round: number, deps: ReviewLoopDeps): Promise<Retur
 }
 
 async function processReviewRecords(records: readonly LedgerIssueRecord[], deps: ReviewLoopDeps): Promise<number> {
-  let fixedThisRound = 0
-  for (const record of records) {
-    const { fixedThisIssue } = await processIssueVerifyFix(record, deps)
-    if (fixedThisIssue) {
-      fixedThisRound += 1
-    }
-  }
-  return fixedThisRound
+  const limit = pLimit(1)
+  const results = await Promise.all(records.map((record) => limit(() => processIssueVerifyFix(record, deps))))
+  return results.filter(({ fixedThisIssue }) => fixedThisIssue).length
 }
 
-export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopResult> {
-  let noProgressRounds = deps.runState.noProgressRounds
+async function runRound(round: number, noProgressRounds: number, deps: ReviewLoopDeps): Promise<ReviewLoopResult> {
+  deps.runState.currentRound = round
 
-  while (deps.runState.currentRound < deps.config.maxRounds) {
-    deps.runState.currentRound += 1
-    const round = deps.runState.currentRound
+  const reviewResponse = await promptReviewerForIssues(
+    buildReviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
+    deps,
+  )
+  const records = [...applyReviewRound(deps.ledger, round, reviewResponse.issues)]
+  await saveIssueLedger(deps.ledger)
 
-    const reviewResponse = await promptReviewerForIssues(
-      buildReviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
-      deps,
-    )
-    const records = [...applyReviewRound(deps.ledger, round, reviewResponse.issues)]
-    await saveIssueLedger(deps.ledger)
-
-    if (records.length === 0) {
-      await saveRunState(deps.runState)
-      return { doneReason: 'clean', rounds: round, ledger: deps.ledger.snapshot }
-    }
-
-    const fixedThisRound = await processReviewRecords(records, deps)
-    const rereviewResponse = await rereviewRound(round, deps)
-
-    if (rereviewResponse.issues.length === 0) {
-      await saveIssueLedger(deps.ledger)
-      await saveRunState(deps.runState)
-      return { doneReason: 'clean', rounds: round, ledger: deps.ledger.snapshot }
-    }
-
-    noProgressRounds = fixedThisRound === 0 ? noProgressRounds + 1 : 0
-    deps.runState.noProgressRounds = noProgressRounds
+  if (records.length === 0) {
     await saveRunState(deps.runState)
+    return { doneReason: 'clean', rounds: round, ledger: deps.ledger.snapshot }
+  }
+
+  const fixedThisRound = await processReviewRecords(records, deps)
+  const rereviewResponse = await rereviewRound(round, deps)
+
+  if (rereviewResponse.issues.length === 0) {
     await saveIssueLedger(deps.ledger)
-
-    if (noProgressRounds >= deps.config.maxNoProgressRounds) {
-      return { doneReason: 'no_progress', rounds: round, ledger: deps.ledger.snapshot }
-    }
+    await saveRunState(deps.runState)
+    return { doneReason: 'clean', rounds: round, ledger: deps.ledger.snapshot }
   }
 
-  return {
-    doneReason: 'max_rounds',
-    rounds: deps.runState.currentRound,
-    ledger: deps.ledger.snapshot,
+  const newNoProgressRounds = fixedThisRound === 0 ? noProgressRounds + 1 : 0
+  deps.runState.noProgressRounds = newNoProgressRounds
+  await saveRunState(deps.runState)
+  await saveIssueLedger(deps.ledger)
+
+  if (newNoProgressRounds >= deps.config.maxNoProgressRounds) {
+    return { doneReason: 'no_progress', rounds: round, ledger: deps.ledger.snapshot }
   }
+
+  if (round >= deps.config.maxRounds) {
+    return { doneReason: 'max_rounds', rounds: round, ledger: deps.ledger.snapshot }
+  }
+
+  return runRound(round + 1, newNoProgressRounds, deps)
+}
+
+export function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopResult> {
+  const nextRound = deps.runState.currentRound + 1
+  if (nextRound > deps.config.maxRounds) {
+    return Promise.resolve({
+      doneReason: 'max_rounds',
+      rounds: deps.runState.currentRound,
+      ledger: deps.ledger.snapshot,
+    })
+  }
+  return runRound(nextRound, deps.runState.noProgressRounds, deps)
 }
