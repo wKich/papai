@@ -708,11 +708,19 @@ export async function loadRunState(workDir: string, runId: string): Promise<RunS
   const statePath = path.join(workDir, 'runs', runId, 'state.json')
   const runDir = path.dirname(statePath)
   const state = PersistedRunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  const transcriptDir = path.join(runDir, 'transcripts')
+  const reviewerSessionPath = path.join(runDir, 'reviewer-session.json')
+  const fixerSessionPath = path.join(runDir, 'fixer-session.json')
   return {
     ...state,
-    reviewerSessionId: JSON.parse(await readFile(path.join(runDir, 'reviewer-session.json'), 'utf8')).sessionId,
-    fixerSessionId: JSON.parse(await readFile(path.join(runDir, 'fixer-session.json'), 'utf8')).sessionId,
-  } as RunState
+    runDir,
+    transcriptDir,
+    statePath,
+    reviewerSessionPath,
+    fixerSessionPath,
+    reviewerSessionId: JSON.parse(await readFile(reviewerSessionPath, 'utf8')).sessionId,
+    fixerSessionId: JSON.parse(await readFile(fixerSessionPath, 'utf8')).sessionId,
+  }
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
@@ -812,7 +820,8 @@ export function applyReviewRound(
             ...existing,
             issue,
             latestSeenRound: round,
-            status: existing.status === 'closed' ? 'reopened' : existing.status,
+            status:
+              existing.status === 'closed' || existing.status === 'fixed_pending_review' ? 'reopened' : existing.status,
           }
 
     ledger.snapshot.issues[fingerprint] = next

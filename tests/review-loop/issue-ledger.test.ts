@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
   createIssueLedger,
   applyReviewRound,
+  IssueLedgerSnapshotSchema,
   loadIssueLedger,
   recordVerification,
   recordFixAttempt,
@@ -118,5 +119,34 @@ describe('issue ledger', () => {
 
     expect(persisted.snapshot.issues[record.fingerprint]?.status).toBe('reopened')
     expect(persisted.snapshot.issues[record.fingerprint]?.fixAttempts).toBe(1)
+  })
+
+  test('reopens fixed pending review issues when the reviewer reports them again', async () => {
+    const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
+    tempDirs.push(runDir)
+
+    const ledger = await createIssueLedger(runDir)
+    const record = applyReviewRound(ledger, 1, [issue])[0]
+    if (record === undefined) {
+      throw new Error('Expected a ledger record')
+    }
+
+    const decision: VerifierDecision = {
+      verdict: 'valid',
+      fixability: 'auto',
+      reasoning: 'The control flow is actually unsafe.',
+      targetFiles: ['src/message-queue/queue.ts'],
+      fixPlan: 'Take the lock before the flush branch.',
+    }
+
+    recordVerification(ledger, record.fingerprint, decision)
+    recordFixAttempt(ledger, record.fingerprint)
+    applyReviewRound(ledger, 2, [issue])
+    await saveIssueLedger(ledger)
+
+    const persisted = IssueLedgerSnapshotSchema.parse(JSON.parse(readFileSync(ledger.path, 'utf8')))
+
+    expect(persisted.issues[record.fingerprint]?.status).toBe('reopened')
+    expect(persisted.issues[record.fingerprint]?.fixAttempts).toBe(1)
   })
 })

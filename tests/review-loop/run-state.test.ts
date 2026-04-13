@@ -86,6 +86,11 @@ test('run state persists session ids through pointer files', async () => {
     JSON.stringify(
       {
         ...JSON.parse(readFileSync(state.statePath, 'utf8')),
+        runDir: path.join(repoRoot, 'stale-run-dir'),
+        transcriptDir: path.join(repoRoot, 'stale-transcripts'),
+        statePath: path.join(repoRoot, 'stale-state.json'),
+        reviewerSessionPath: path.join(repoRoot, 'stale-reviewer-session.json'),
+        fixerSessionPath: path.join(repoRoot, 'stale-fixer-session.json'),
         reviewerSessionId: 'stale-reviewer-session',
         fixerSessionId: 'stale-fixer-session',
       },
@@ -101,8 +106,14 @@ test('run state persists session ids through pointer files', async () => {
     JSON.parse(readFileSync(state.reviewerSessionPath, 'utf8')),
   )
   const savedFixerSessionPointer = SessionPointerSchema.parse(JSON.parse(readFileSync(state.fixerSessionPath, 'utf8')))
+  const canonicalRunDir = path.join(config.workDir, 'runs', state.runId)
 
   expect(reloaded.planPath).toBe(state.planPath)
+  expect(reloaded.runDir).toBe(canonicalRunDir)
+  expect(reloaded.transcriptDir).toBe(path.join(canonicalRunDir, 'transcripts'))
+  expect(reloaded.statePath).toBe(path.join(canonicalRunDir, 'state.json'))
+  expect(reloaded.reviewerSessionPath).toBe(path.join(canonicalRunDir, 'reviewer-session.json'))
+  expect(reloaded.fixerSessionPath).toBe(path.join(canonicalRunDir, 'fixer-session.json'))
   expect(reloaded.reviewerSessionId).toBe('reviewer-session-123')
   expect(reloaded.fixerSessionId).toBe('fixer-session-456')
   expect(savedReviewerSessionPointer.sessionId).toBe('reviewer-session-123')

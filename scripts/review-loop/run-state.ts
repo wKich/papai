@@ -88,6 +88,11 @@ export async function loadRunState(workDir: string, runId: string): Promise<RunS
 
   return {
     ...state,
+    runDir,
+    transcriptDir: path.join(runDir, 'transcripts'),
+    statePath,
+    reviewerSessionPath,
+    fixerSessionPath,
     reviewerSessionId: await readSessionPointer(reviewerSessionPath),
     fixerSessionId: await readSessionPointer(fixerSessionPath),
   }

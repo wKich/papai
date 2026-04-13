@@ -109,7 +109,8 @@ export function applyReviewRound(
             ...existing,
             issue,
             latestSeenRound: round,
-            status: existing.status === 'closed' ? 'reopened' : existing.status,
+            status:
+              existing.status === 'closed' || existing.status === 'fixed_pending_review' ? 'reopened' : existing.status,
           }
 
     ledger.snapshot.issues[fingerprint] = next
