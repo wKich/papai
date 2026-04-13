@@ -5,6 +5,7 @@ import { Readable, Writable } from 'node:stream'
 
 import * as acp from '@agentclientprotocol/sdk'
 
+import type { PermissionRequestLike } from './permission-policy.js'
 import { callConnection, waitForProcessSpawn } from './process-lifecycle.js'
 
 export interface AcpProcessSpec {
@@ -13,6 +14,7 @@ export interface AcpProcessSpec {
   cwd: string
   env?: NodeJS.ProcessEnv
   transcriptPath: string
+  selectPermissionOptionId?: (request: PermissionRequestLike) => string
 }
 
 export interface AcpProcessClient {
@@ -29,7 +31,43 @@ export interface AcpProcessClient {
 const FORCE_KILL_DELAY_MS = 100
 const SHUTDOWN_TIMEOUT_MS = 1000
 
+function handlePermissionRequest(
+  spec: AcpProcessSpec,
+  params: acp.RequestPermissionRequest,
+): acp.RequestPermissionResponse {
+  if (spec.selectPermissionOptionId === undefined) {
+    throw new Error('No ACP permission handler configured')
+  }
+
+  const rawInput = params.toolCall.rawInput
+  const inputRecord: Record<string, unknown> = {}
+  if (rawInput !== null && typeof rawInput === 'object' && !Array.isArray(rawInput)) {
+    for (const [key, value] of Object.entries(rawInput)) {
+      inputRecord[key] = value
+    }
+  }
+
+  const optionId = spec.selectPermissionOptionId({
+    title: params.toolCall.title ?? '',
+    kind: params.toolCall.kind ?? 'other',
+    locations: (params.toolCall.locations ?? []).map((location) => ({ path: location.path })),
+    rawInput: inputRecord,
+    options: params.options.map((option) => ({
+      optionId: option.optionId,
+      kind: option.kind,
+    })),
+  })
+
+  return {
+    outcome: {
+      outcome: 'selected',
+      optionId,
+    },
+  }
+}
+
 function createRuntimeClient(
+  spec: AcpProcessSpec,
   listeners: Array<(params: acp.SessionNotification) => void>,
   pendingSessionUpdates: Set<Promise<void>>,
   appendTranscript: (direction: 'in' | 'out', payload: unknown) => Promise<void>,
@@ -55,8 +93,8 @@ function createRuntimeClient(
         pendingSessionUpdates.delete(pendingUpdate)
       }
     },
-    requestPermission(): Promise<acp.RequestPermissionResponse> {
-      throw new Error('Permission handling is wired in Task 4')
+    requestPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+      return Promise.resolve(handlePermissionRequest(spec, params))
     },
   }
 }
@@ -203,7 +241,7 @@ export async function createAcpProcessClient(spec: AcpProcessSpec): Promise<AcpP
     await appendFile(spec.transcriptPath, `${JSON.stringify({ direction, payload })}\n`)
   }
   await waitForProcessSpawn(processHandle, () => processError)
-  const runtimeClient = createRuntimeClient(listeners, pendingSessionUpdates, appendTranscript)
+  const runtimeClient = createRuntimeClient(spec, listeners, pendingSessionUpdates, appendTranscript)
   const stream = createAcpStream(processHandle.stdin, processHandle.stdout)
   const connection = new acp.ClientSideConnection(() => runtimeClient, stream)
   const waitForSessionUpdates = createWaitForSessionUpdatesMethod(pendingSessionUpdates)
