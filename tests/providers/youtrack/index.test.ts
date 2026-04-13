@@ -68,17 +68,6 @@ const RequestBodySchema = z.object({
   customFields: z.array(z.unknown()).optional(),
 })
 
-/** Helper to extract the request body sent to the mocked fetch. */
-const getLastFetchBody = (): unknown => {
-  if (fetchMock === undefined) return undefined
-  const lastCall = fetchMock.mock.calls[0]
-  const parsed = FetchCallSchema.safeParse(lastCall)
-  if (!parsed.success) return undefined
-  const [, init] = parsed.data
-  if (init.body === undefined) return undefined
-  return JSON.parse(init.body) as unknown
-}
-
 /** Helper to extract the URL of the last fetch call. */
 const getLastFetchUrl = (): URL => {
   if (fetchMock === undefined) return new URL('')
@@ -234,18 +223,27 @@ describe('YouTrackProvider', () => {
 
   describe('createTask', () => {
     test('creates issue and returns mapped task', async () => {
-      mockFetchResponse({
-        id: '2-1',
-        idReadable: 'TEST-1',
-        summary: 'New task',
-        description: 'A description',
-        project: { id: '0-1', shortName: 'TEST' },
-        created: 1700000000000,
-        updated: 1700000000000,
-        customFields: [{ $type: 'SingleEnumIssueCustomField', name: 'Priority', value: { name: 'Normal' } }],
-        tags: [],
-        links: [],
-      })
+      mockFetchSequence([
+        // First: project lookup
+        { data: { id: '0-1', shortName: 'TEST' } },
+        // Second: project custom fields lookup
+        { data: [] },
+        // Third: issue creation response
+        {
+          data: {
+            id: '2-1',
+            idReadable: 'TEST-1',
+            summary: 'New task',
+            description: 'A description',
+            project: { id: '0-1', shortName: 'TEST' },
+            created: 1700000000000,
+            updated: 1700000000000,
+            customFields: [{ $type: 'SingleEnumIssueCustomField', name: 'Priority', value: { name: 'Normal' } }],
+            tags: [],
+            links: [],
+          },
+        },
+      ])
 
       const task = await provider.createTask({
         projectId: '0-1',
@@ -261,17 +259,26 @@ describe('YouTrackProvider', () => {
     })
 
     test('sends custom fields for priority and status', async () => {
-      mockFetchResponse({
-        id: '2-2',
-        idReadable: 'TEST-2',
-        summary: 'Task with fields',
-        project: { id: '0-1' },
-        created: 1700000000000,
-        updated: 1700000000000,
-        customFields: [],
-        tags: [],
-        links: [],
-      })
+      mockFetchSequence([
+        // First: project lookup
+        { data: { id: '0-1', shortName: 'TEST' } },
+        // Second: project custom fields lookup
+        { data: [] },
+        // Third: issue creation response
+        {
+          data: {
+            id: '2-2',
+            idReadable: 'TEST-2',
+            summary: 'Task with fields',
+            project: { id: '0-1', shortName: 'TEST' },
+            created: 1700000000000,
+            updated: 1700000000000,
+            customFields: [],
+            tags: [],
+            links: [],
+          },
+        },
+      ])
 
       await provider.createTask({
         projectId: '0-1',
@@ -280,7 +287,16 @@ describe('YouTrackProvider', () => {
         status: 'In Progress',
       })
 
-      const customFields = parseCustomFields(getLastFetchBody())
+      // Get the second call (issue creation)
+      const calls = fetchMock?.mock.calls ?? []
+      const lastCall = calls[calls.length - 1]
+      const parsed = FetchCallSchema.safeParse(lastCall)
+      expect(parsed.success).toBe(true)
+      if (!parsed.success) return
+
+      const [, init] = parsed.data
+      const body = init.body === undefined ? undefined : (JSON.parse(init.body) as unknown)
+      const customFields = parseCustomFields(body)
       expect(customFields).toEqual([
         { name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } },
         { name: 'State', $type: 'StateIssueCustomField', value: { name: 'In Progress' } },

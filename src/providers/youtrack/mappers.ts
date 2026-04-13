@@ -229,6 +229,7 @@ export const buildCustomFields = (params: {
   status?: string
   priority?: string
   assignee?: string
+  customFields?: Array<{ name: string; value: string }>
 }): Array<{ name: string; $type: string; value: Record<string, string> }> => {
   const fields: Array<{ name: string; $type: string; value: Record<string, string> }> = []
   if (params.priority !== undefined) {
@@ -239,6 +240,11 @@ export const buildCustomFields = (params: {
   }
   if (params.assignee !== undefined) {
     fields.push({ name: 'Assignee', $type: 'SingleUserIssueCustomField', value: { login: params.assignee } })
+  }
+  if (params.customFields !== undefined) {
+    for (const field of params.customFields) {
+      fields.push({ name: field.name, $type: 'SimpleIssueCustomField', value: { text: field.value } })
+    }
   }
   return fields
 }

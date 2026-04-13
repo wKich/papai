@@ -1,6 +1,7 @@
 import type { ToolExecutionOptions } from 'ai'
 
 import { logger } from '../logger.js'
+import { buildToolFailureResult } from '../tool-failure.js'
 
 const log = logger.child({ scope: 'tool-wrapper' })
 
@@ -12,15 +13,18 @@ export function wrapToolExecution(
     try {
       return await execute(input, options)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      log.error({ tool: toolName, toolCallId: options.toolCallId, error: errorMessage }, 'Tool execution failed')
-      return {
-        success: false,
-        error: errorMessage,
-        toolName,
-        toolCallId: options.toolCallId,
-        timestamp: new Date().toISOString(),
-      }
+      const failure = buildToolFailureResult(error, toolName, options.toolCallId)
+      log.error(
+        {
+          tool: toolName,
+          toolCallId: options.toolCallId,
+          error: failure.error,
+          errorType: failure.errorType,
+          errorCode: failure.errorCode,
+        },
+        'Tool execution failed',
+      )
+      return failure
     }
   }
 }

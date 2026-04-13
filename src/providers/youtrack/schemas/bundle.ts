@@ -19,13 +19,19 @@ export const StateBundleSchema = z.object({
 })
 
 export const ProjectCustomFieldSchema = z.object({
+  id: z.string().optional(),
   $type: z.string(),
   field: z
     .object({
+      id: z.string().optional(),
       name: z.string(),
       localizedName: z.string().optional(),
+      $type: z.string().optional(),
     })
     .optional(),
+  canBeEmpty: z.boolean().optional(),
+  emptyFieldText: z.string().nullable().optional(),
+  isPublic: z.boolean().optional(),
   bundle: z
     .object({
       id: z.string(),

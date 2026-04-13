@@ -58,6 +58,15 @@ describe('getProviderMessage', () => {
     expect(getProviderMessage(error)).toContain('too short')
   })
 
+  test('returns message for workflow-validation-failed', () => {
+    const error = providerError.workflowValidationFailed('proj-123', 'Missing URL field', [
+      { name: 'URL адеса где будет размещаться приложени', description: 'Must include stream:// protocol' },
+    ])
+    expect(getProviderMessage(error)).toContain('proj-123')
+    expect(getProviderMessage(error)).toContain('Missing URL field')
+    expect(getProviderMessage(error)).toContain('URL адеса где будет размещаться приложени')
+  })
+
   test('returns message for unsupported-operation', () => {
     const error = providerError.unsupportedOperation('deleteTask')
     expect(getProviderMessage(error)).toContain('deleteTask')

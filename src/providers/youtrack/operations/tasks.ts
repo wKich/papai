@@ -1,33 +1,84 @@
 import { z } from 'zod'
 
+import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
 import type { ListTasksParams, Task, TaskListItem, TaskSearchResult } from '../../types.js'
-import { classifyYouTrackError } from '../classify-error.js'
+import { classifyYouTrackError, YouTrackClassifiedError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { paginate } from '../helpers.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
+import { ProjectCustomFieldSchema } from '../schemas/bundle.js'
 import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
+const KNOWN_CUSTOM_FIELDS = new Set(['State', 'Priority', 'Assignee'])
 
-export async function createYouTrackTask(
+type CreateTaskParams = {
+  projectId: string
+  title: string
+  description?: string
+  priority?: string
+  status?: string
+  dueDate?: string
+  assignee?: string
+  customFields?: Array<{ name: string; value: string }>
+}
+
+async function validateRequiredFields(
   config: YouTrackConfig,
-  params: {
-    projectId: string
-    title: string
-    description?: string
-    priority?: string
-    status?: string
-    dueDate?: string
-    assignee?: string
-  },
-): Promise<Task> {
-  log.debug({ projectId: params.projectId, title: params.title }, 'createTask')
+  projectId: string,
+  projectShortName: string,
+  customFields: Array<{ name: string; value: string }> | undefined,
+): Promise<void> {
+  const raw = await youtrackFetch(config, 'GET', `/api/admin/projects/${projectId}/customFields`)
+  const projectCustomFields = ProjectCustomFieldSchema.array().parse(raw)
+  const handledFields = new Set(KNOWN_CUSTOM_FIELDS)
+
+  if (customFields !== undefined) {
+    for (const field of customFields) {
+      handledFields.add(field.name)
+    }
+  }
+
+  const requiredFields = projectCustomFields
+    .filter((field) => field.canBeEmpty === false)
+    .map((field) => field.field?.name)
+    .filter((fieldName): fieldName is string => fieldName !== undefined && !handledFields.has(fieldName))
+
+  if (requiredFields.length === 0) return
+
+  const errorMessage = `Project ${projectShortName} requires these custom fields: ${requiredFields.join(', ')}`
+  log.warn({ projectId, requiredFields }, 'Missing required custom fields')
+  throw new YouTrackClassifiedError(
+    errorMessage,
+    providerError.workflowValidationFailed(
+      projectId,
+      'The project workflow requires additional custom fields before the task can be created.',
+      requiredFields.map((name) => ({ name })),
+    ),
+  )
+}
+
+export async function createYouTrackTask(config: YouTrackConfig, params: CreateTaskParams): Promise<Task> {
+  log.debug(
+    {
+      projectId: params.projectId,
+      title: params.title,
+      hasCustomFields: params.customFields !== undefined && params.customFields.length > 0,
+    },
+    'createTask',
+  )
   try {
+    const projectRaw = await youtrackFetch(config, 'GET', `/api/admin/projects/${params.projectId}`, {
+      query: { fields: 'id,shortName' },
+    })
+    const project = z.object({ id: z.string(), shortName: z.string() }).parse(projectRaw)
+    await validateRequiredFields(config, project.id, project.shortName, params.customFields)
+
     const body: Record<string, unknown> = {
-      project: { id: params.projectId },
+      project: { id: project.id },
       summary: params.title,
     }
     if (params.description !== undefined) body['description'] = params.description

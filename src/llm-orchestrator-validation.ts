@@ -1,6 +1,7 @@
 import type { ModelMessage, ToolResultPart } from 'ai'
 
 import { logger } from './logger.js'
+import { createInterruptedToolFailureResult } from './tool-failure.js'
 
 const log = logger.child({ scope: 'llm-validation' })
 
@@ -59,10 +60,7 @@ function createSyntheticResult(toolCall: ToolCallPart): ToolResultPart {
     toolName: toolCall.toolName,
     output: {
       type: 'json',
-      value: {
-        error: 'Tool execution incomplete or interrupted',
-        recovered: true,
-      },
+      value: createInterruptedToolFailureResult(toolCall.toolName, toolCall.toolCallId),
     },
   }
 }

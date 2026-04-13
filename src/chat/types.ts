@@ -145,6 +145,7 @@ export type AuthorizationResult = {
   isBotAdmin: boolean
   isGroupAdmin: boolean
   storageContextId: string
+  configContextId?: string
 }
 
 /** Command handler signature. */

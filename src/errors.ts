@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { type ProviderError, getProviderMessage, providerError } from './providers/errors.js'
+import { ProviderClassifiedError, type ProviderError, getProviderMessage, providerError } from './providers/errors.js'
 
 // Re-export ProviderError and its constructors for backward compatibility
 export type { ProviderError }
@@ -59,6 +59,15 @@ const appErrorTypeSchema = z.object({
 
 // Type guard to check if error is an AppError
 export const isAppError = (error: unknown): error is AppError => appErrorTypeSchema.safeParse(error).success
+
+export const extractAppError = (error: unknown): AppError | null => {
+  if (isAppError(error)) return error
+  if (error instanceof ProviderClassifiedError) return error.error
+  if (typeof error !== 'object' || error === null) return null
+  if ('appError' in error && isAppError(error.appError)) return error.appError
+  if ('error' in error && isAppError(error.error)) return error.error
+  return null
+}
 
 const getLlmMessage = (error: LlmError): string => {
   switch (error.code) {
@@ -121,6 +130,8 @@ const getWebFetchMessage = (error: WebFetchError): string => {
       return `I couldn't fetch that page.`
   }
 }
+
+export { getAgentGuidance, getAppErrorDetails, isRetryableAppError } from './error-analysis.js'
 
 export const getUserMessage = (error: AppError): string => {
   switch (error.type) {

@@ -7,11 +7,13 @@ import type {
   ContextRendered,
   ContextSnapshot,
   ContextType,
+  IncomingFile,
   IncomingMessage,
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
-import { fetchMattermostChannelInfo, fetchMattermostTeamInfo } from './context-metadata.js'
+import { checkChannelAdmin } from './channel-helpers.js'
+import { fetchMattermostChannelInfo, fetchMattermostTeamInfo, type MattermostChannelInfo } from './context-metadata.js'
 import { renderMattermostContext } from './context-renderer.js'
 import {
   cacheIncomingPost,
@@ -24,30 +26,16 @@ import {
 import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
-import {
-  ChannelMemberSchema,
-  ChannelSchema,
-  extractReplyId,
-  type MattermostPost,
-  MattermostWsEventSchema,
-  UserMeSchema,
-} from './schema.js'
+import { ChannelSchema, extractReplyId, MattermostWsEventSchema, type MattermostPost, UserMeSchema } from './schema.js'
+import { withTypingIndicator } from './typing-indicator.js'
 
-export { extractReplyId, MattermostPostSchema } from './schema.js'
 const log = logger.child({ scope: 'chat:mattermost' })
-type MattermostCommandMatch = { handler: CommandHandler; match: string }
-type BuiltPostedMessage = {
-  msg: IncomingMessage
-  reply: ReplyFn
-  command: MattermostCommandMatch | null
-  isAdmin: boolean
-}
 
 export class MattermostChatProvider implements ChatProvider {
   readonly name = 'mattermost'
   readonly threadCapabilities = {
     supportsThreads: true,
-    canCreateThreads: false,
+    canCreateThreads: true,
     threadScope: 'post' as const,
   }
   readonly capabilities = mattermostCapabilities
@@ -151,45 +139,54 @@ export class MattermostChatProvider implements ChatProvider {
     await this.dispatchMsg(msg, reply, command, isAdmin)
   }
 
+  private fetchFilesForPost(post: MattermostPost): Promise<IncomingFile[] | undefined> {
+    if (post.file_ids === undefined || post.file_ids.length === 0) return Promise.resolve(undefined)
+    return fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
+      downloadMattermostFile(this.baseUrl, this.token, fileId),
+    )
+  }
+
   /** @package Visible for testing */
   async buildPostedMessage(
     post: MattermostPost,
     senderName: string | undefined,
     replyToMessageId: string | undefined,
-  ): Promise<BuiltPostedMessage> {
+  ): Promise<{
+    msg: IncomingMessage
+    reply: ReplyFn
+    command: { handler: CommandHandler; match: string } | null
+    isAdmin: boolean
+  }> {
     const replyContext =
       replyToMessageId === undefined
         ? undefined
         : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
-    const channelInfo = await fetchMattermostChannelInfo(this.apiFetch.bind(this), post.channel_id)
+    const channelInfo: MattermostChannelInfo = await fetchMattermostChannelInfo(
+      this.apiFetch.bind(this),
+      post.channel_id,
+    )
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
     const teamInfo =
       contextType === 'group' && channelInfo.team_id !== undefined
         ? await fetchMattermostTeamInfo(this.apiFetch.bind(this), channelInfo.team_id)
         : null
-    const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
-    const threadId = post.root_id === undefined || post.root_id === '' ? replyToMessageId : post.root_id
+    const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, this.apiFetch.bind(this))
+    const isMentioned = this.isBotMentioned(post.message)
+    const threadId = this.determineThreadId(post, isMentioned, contextType, replyToMessageId)
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
     const username = post.user_name ?? senderName ?? null
     const contextName =
       contextType === 'group' ? (channelInfo.display_name ?? channelInfo.name ?? post.channel_id) : undefined
     const contextParentName = contextType === 'group' ? (teamInfo?.display_name ?? teamInfo?.name) : undefined
-
-    const files =
-      post.file_ids !== undefined && post.file_ids.length > 0
-        ? await fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
-            downloadMattermostFile(this.baseUrl, this.token, fileId),
-          )
-        : undefined
-
+    const files = await this.fetchFilesForPost(post)
     const msg: IncomingMessage = {
       user: { id: post.user_id, username, isAdmin },
       contextId: post.channel_id,
       contextType,
       contextName,
       contextParentName,
-      isMentioned: this.isBotMentioned(post.message),
+      isMentioned,
       text: post.message,
       commandMatch: command?.match,
       messageId: post.id,
@@ -204,7 +201,7 @@ export class MattermostChatProvider implements ChatProvider {
   private async dispatchMsg(
     msg: IncomingMessage,
     reply: ReplyFn,
-    command: MattermostCommandMatch | null,
+    command: { handler: CommandHandler; match: string } | null,
     isAdmin: boolean,
   ): Promise<void> {
     if (command !== null) {
@@ -218,7 +215,9 @@ export class MattermostChatProvider implements ChatProvider {
       return
     }
     if (this.messageHandler !== null) {
-      await this.messageHandler(msg, reply)
+      const getSeq = (): number => this.wsSeq++
+      const send = this.wsSend.bind(this)
+      await withTypingIndicator(msg.contextId, getSeq, send, () => this.messageHandler!(msg, reply))
     }
   }
 
@@ -227,21 +226,22 @@ export class MattermostChatProvider implements ChatProvider {
     return message.includes(`@${this.botUsername}`)
   }
 
-  private async checkChannelAdmin(channelId: string, userId: string): Promise<boolean> {
-    try {
-      const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}/members/${userId}`, undefined)
-      const parsed = ChannelMemberSchema.safeParse(data)
-      if (!parsed.success) {
-        log.warn({ channelId, userId, error: parsed.error }, 'Failed to parse channel member')
-        return false
-      }
-      return parsed.data.roles.includes('channel_admin')
-    } catch {
-      return false
+  private determineThreadId(
+    post: MattermostPost,
+    isMentioned: boolean,
+    contextType: ContextType,
+    replyToMessageId: string | undefined,
+  ): string | undefined {
+    if (post.root_id !== undefined && post.root_id !== '') {
+      return post.root_id
     }
+    if (isMentioned && contextType === 'group') {
+      return post.id
+    }
+    return replyToMessageId
   }
 
-  private matchCommand(text: string): MattermostCommandMatch | null {
+  private matchCommand(text: string): { handler: CommandHandler; match: string } | null {
     const trimmed = text.trim()
     if (!trimmed.startsWith('/')) return null
     for (const [name, handler] of this.commands) {

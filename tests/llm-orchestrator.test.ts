@@ -18,6 +18,7 @@ import { getIdentityMapping, clearIdentityMapping } from '../src/identity/mappin
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
 import type { TaskProvider } from '../src/providers/types.js'
+import { buildToolFailureResult } from '../src/tool-failure.js'
 import type { MakeToolsOptions } from '../src/tools/index.js'
 import { setKaneoWorkspace } from '../src/users.js'
 
@@ -384,6 +385,7 @@ describe('processMessage', () => {
           toolCall: { toolName: string; toolCallId: string; input: unknown }
           durationMs: number
           success: boolean
+          output?: unknown
           error?: unknown
         }) => void)
       | undefined
@@ -473,6 +475,43 @@ describe('processMessage', () => {
       expect(textCalls.some((call) => call.includes('search_tasks') && call.includes('String error message'))).toBe(
         true,
       )
+    })
+
+    test('sends immediate user feedback when a tool returns a structured failure result', async () => {
+      seedConfigForContext('tool-fail-structured-ctx')
+
+      generateTextImpl = (): Promise<GenerateTextResult> =>
+        Promise.resolve({
+          text: 'Done!',
+          toolCalls: [],
+          toolResults: [],
+          steps: [],
+          response: { messages: [{ role: 'assistant' as const, content: 'Done!' }] },
+          usage: {},
+          finishReason: 'stop',
+          warnings: undefined,
+          request: {},
+          providerMetadata: undefined,
+        })
+
+      const { reply, textCalls } = createMockReply()
+
+      await processMessage(reply, 'tool-fail-structured-ctx', 'user-1', null, 'create a task', 'dm')
+
+      if (capturedOnToolCallFinish !== undefined) {
+        capturedOnToolCallFinish({
+          toolCall: { toolName: 'create_task', toolCallId: 'call-3', input: { title: 'Test' } },
+          durationMs: 42,
+          success: true,
+          output: buildToolFailureResult(
+            new ProviderClassifiedError('Task lookup failed', providerError.taskNotFound('TASK-9')),
+            'create_task',
+            'call-3',
+          ),
+        })
+      }
+
+      expect(textCalls.some((call) => call.includes('create_task') && call.includes('TASK-9'))).toBe(true)
     })
   })
 

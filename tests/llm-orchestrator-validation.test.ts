@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
 import { validateToolResults } from '../src/llm-orchestrator-validation.js'
+import { isToolFailureResult } from '../src/tool-failure.js'
 
 function getToolContent(message: ModelMessage): ToolResultPart[] {
   if (message.role !== 'tool') return []
@@ -69,10 +70,17 @@ describe('validateToolResults', () => {
     const output = toolContent[0]!.output
     expect(output.type).toBe('json')
     if (output.type === 'json') {
-      expect(output.value).toEqual({
-        error: 'Tool execution incomplete or interrupted',
-        recovered: true,
-      })
+      expect(isToolFailureResult(output.value)).toBe(true)
+      if (isToolFailureResult(output.value)) {
+        expect(output.value).toMatchObject({
+          toolName: 'create_task',
+          toolCallId: 'call-1',
+          errorType: 'tool-execution',
+          errorCode: 'interrupted',
+          recovered: true,
+          retryable: true,
+        })
+      }
     }
   })
 

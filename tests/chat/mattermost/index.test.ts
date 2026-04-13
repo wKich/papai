@@ -340,6 +340,211 @@ describe('MattermostChatProvider', () => {
 
       restoreFetch()
     })
+
+    test('creates threadId from post.id when mentioned in group (not already threaded)', async () => {
+      setMockFetch((url: string) => {
+        if (url.includes('/api/v4/channels/')) {
+          return Promise.resolve(new Response(JSON.stringify({ type: 'O' }), { status: 200 }))
+        }
+        if (url.includes('/api/v4/channels/') && url.includes('/members/')) {
+          return Promise.resolve(new Response(JSON.stringify({ roles: '' }), { status: 200 }))
+        }
+        return Promise.resolve(new Response(null, { status: 404 }))
+      })
+
+      provider = new MattermostChatProvider()
+      // Manually set bot username for mention detection
+      // @ts-expect-error - accessing private field for testing
+      provider.botUsername = 'testbot'
+
+      const post: MattermostPost = {
+        id: 'post123',
+        user_id: 'user456',
+        channel_id: 'channel789',
+        message: '@testbot help me with this',
+        root_id: '',
+        parent_id: undefined,
+      }
+
+      const result = await provider.buildPostedMessage(post, 'testuser', undefined)
+
+      // When mentioned in group without existing thread, threadId = post.id
+      expect(result.msg.isMentioned).toBe(true)
+      expect(result.msg.threadId).toBe('post123')
+
+      restoreFetch()
+    })
+
+    test('does NOT create thread when mentioned in DM', async () => {
+      setMockFetch((url: string) => {
+        if (url.includes('/api/v4/channels/')) {
+          return Promise.resolve(new Response(JSON.stringify({ type: 'D' }), { status: 200 }))
+        }
+        if (url.includes('/api/v4/channels/') && url.includes('/members/')) {
+          return Promise.resolve(new Response(JSON.stringify({ roles: '' }), { status: 200 }))
+        }
+        return Promise.resolve(new Response(null, { status: 404 }))
+      })
+
+      provider = new MattermostChatProvider()
+      // @ts-expect-error - accessing private field for testing
+      provider.botUsername = 'testbot'
+
+      const post: MattermostPost = {
+        id: 'post123',
+        user_id: 'user456',
+        channel_id: 'dm-channel',
+        message: '@testbot help me',
+        root_id: '',
+        parent_id: undefined,
+      }
+
+      const result = await provider.buildPostedMessage(post, 'testuser', undefined)
+
+      // In DMs, even when mentioned, don't create threads
+      expect(result.msg.isMentioned).toBe(true)
+      expect(result.msg.contextType).toBe('dm')
+      expect(result.msg.threadId).toBeUndefined()
+
+      restoreFetch()
+    })
+
+    test('thread capabilities advertise canCreateThreads=true', () => {
+      provider = new MattermostChatProvider()
+      expect(provider.threadCapabilities.supportsThreads).toBe(true)
+      expect(provider.threadCapabilities.canCreateThreads).toBe(true)
+      expect(provider.threadCapabilities.threadScope).toBe('post')
+    })
+
+    test('determineThreadId returns root_id when in existing thread', async () => {
+      setMockFetch((url: string) => {
+        if (url.includes('/api/v4/channels/')) {
+          return Promise.resolve(new Response(JSON.stringify({ type: 'O' }), { status: 200 }))
+        }
+        if (url.includes('/api/v4/channels/') && url.includes('/members/')) {
+          return Promise.resolve(new Response(JSON.stringify({ roles: '' }), { status: 200 }))
+        }
+        return Promise.resolve(new Response(null, { status: 404 }))
+      })
+
+      provider = new MattermostChatProvider()
+      // @ts-expect-error - accessing private field for testing
+      provider.botUsername = 'testbot'
+
+      const post: MattermostPost = {
+        id: 'reply456',
+        user_id: 'user789',
+        channel_id: 'channel789',
+        message: 'Following up in thread',
+        root_id: 'threadRoot123',
+        parent_id: 'parent789',
+      }
+
+      const result = await provider.buildPostedMessage(post, 'testuser', 'parent789')
+
+      // When already in a thread, use root_id
+      expect(result.msg.threadId).toBe('threadRoot123')
+
+      restoreFetch()
+    })
+
+    test('determineThreadId returns replyToMessageId when not mentioned and no root_id', async () => {
+      setMockFetch((url: string) => {
+        if (url.includes('/api/v4/channels/')) {
+          return Promise.resolve(new Response(JSON.stringify({ type: 'O' }), { status: 200 }))
+        }
+        if (url.includes('/api/v4/channels/') && url.includes('/members/')) {
+          return Promise.resolve(new Response(JSON.stringify({ roles: '' }), { status: 200 }))
+        }
+        return Promise.resolve(new Response(null, { status: 404 }))
+      })
+
+      provider = new MattermostChatProvider()
+      // @ts-expect-error - accessing private field for testing
+      provider.botUsername = 'testbot'
+
+      const post: MattermostPost = {
+        id: 'post123',
+        user_id: 'user456',
+        channel_id: 'channel789',
+        // No @testbot mention
+        message: 'Regular reply without mention',
+        root_id: '',
+        parent_id: 'parentMsg',
+      }
+
+      const result = await provider.buildPostedMessage(post, 'testuser', 'parentMsg')
+
+      // When not mentioned and not in thread, use replyToMessageId
+      expect(result.msg.isMentioned).toBe(false)
+      expect(result.msg.threadId).toBe('parentMsg')
+
+      restoreFetch()
+    })
+
+    test('determineThreadId method directly - mentioned in group creates thread', () => {
+      provider = new MattermostChatProvider()
+      const post: MattermostPost = {
+        id: 'post789',
+        user_id: 'user456',
+        channel_id: 'channel789',
+        message: '@testbot help',
+        root_id: '',
+        parent_id: undefined,
+      }
+
+      // @ts-expect-error - accessing private method for testing
+      const result = provider.determineThreadId(post, true, 'group', undefined)
+      expect(result).toBe('post789')
+    })
+
+    test('determineThreadId method directly - existing thread uses root_id', () => {
+      provider = new MattermostChatProvider()
+      const post: MattermostPost = {
+        id: 'reply456',
+        user_id: 'user456',
+        channel_id: 'channel789',
+        message: 'Reply in thread',
+        root_id: 'threadRoot',
+        parent_id: 'parent123',
+      }
+
+      // @ts-expect-error - accessing private method for testing
+      const result = provider.determineThreadId(post, false, 'group', 'parent123')
+      expect(result).toBe('threadRoot')
+    })
+
+    test('determineThreadId method directly - not mentioned uses replyToMessageId', () => {
+      provider = new MattermostChatProvider()
+      const post: MattermostPost = {
+        id: 'post789',
+        user_id: 'user456',
+        channel_id: 'channel789',
+        message: 'Regular message',
+        root_id: '',
+        parent_id: undefined,
+      }
+
+      // @ts-expect-error - accessing private method for testing
+      const result = provider.determineThreadId(post, false, 'group', 'fallbackId')
+      expect(result).toBe('fallbackId')
+    })
+
+    test('determineThreadId method directly - mentioned in DM does not create thread', () => {
+      provider = new MattermostChatProvider()
+      const post: MattermostPost = {
+        id: 'post789',
+        user_id: 'user456',
+        channel_id: 'dm-channel',
+        message: '@testbot help',
+        root_id: '',
+        parent_id: undefined,
+      }
+
+      // @ts-expect-error - accessing private method for testing
+      const result = provider.determineThreadId(post, true, 'dm', undefined)
+      expect(result).toBeUndefined()
+    })
   })
 })
 
