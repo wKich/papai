@@ -28,7 +28,7 @@ export class QueueRegistry {
     return queue
   }
 
-  cleanupExpired(): void {
+  cleanupExpired(): string[] {
     const now = Date.now()
     const expired: string[] = []
     for (const [id, lastAccess] of this.lastAccessed) {
@@ -44,6 +44,7 @@ export class QueueRegistry {
     if (expired.length > 0) {
       log.info({ expiredCount: expired.length }, 'Cleaned up expired queues')
     }
+    return expired
   }
 
   getAllQueues(): Map<string, MessageQueue> {

@@ -259,14 +259,10 @@ describe('processMessage', () => {
       expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
 
       // The catch block calls saveHistory(contextId, baseHistory) to roll back.
-      // Since baseHistory was empty (no prior messages), the history after rollback
-      // includes the user message that was appended before callLlm (because
-      // getCachedHistory returns a reference, not a copy — so baseHistory and the
-      // cached array are the same object after appendHistory mutates it).
-      // This documents the actual behavior.
+      // baseHistory was a snapshot taken before callLlm (getCachedHistory returns a copy),
+      // so it was empty. The rollback correctly resets history to that empty snapshot.
       const history = getCachedHistory(rollbackCtx)
-      expect(history).toHaveLength(1)
-      expect(history[0]!.content).toBe('new message')
+      expect(history).toHaveLength(0)
     })
   })
 
