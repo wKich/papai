@@ -277,10 +277,7 @@ export const knownGroupContexts = sqliteTable(
     firstSeenAt: text('first_seen_at').notNull(),
     lastSeenAt: text('last_seen_at').notNull(),
   },
-  (table) => [
-    index('idx_known_group_contexts_provider').on(table.provider),
-    index('idx_known_group_contexts_last_seen').on(table.lastSeenAt),
-  ],
+  (table) => [index('idx_known_group_contexts_provider').on(table.provider)],
 )
 export const groupAdminObservations = sqliteTable(
   'group_admin_observations',

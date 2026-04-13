@@ -3,7 +3,6 @@ import { supportsInteractiveButtons } from './chat/capabilities.js'
 import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
 import { routeInteraction } from './chat/interaction-router.js'
 import type { AuthorizationResult, ChatProvider, IncomingFile, IncomingMessage, ReplyFn } from './chat/types.js'
-import { renderConfigForTarget } from './commands/config.js'
 import {
   registerAdminCommands,
   registerClearCommand,
@@ -14,10 +13,10 @@ import {
   registerSetupCommand,
   registerStartCommand,
 } from './commands/index.js'
-import { startSetupForTarget } from './commands/setup.js'
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
+import { dispatchGroupSelectorResult } from './group-settings/dispatch.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
 import { handleGroupSettingsSelectorMessage } from './group-settings/selector.js'
 import { getActiveGroupSettingsTarget } from './group-settings/state.js'
@@ -168,18 +167,7 @@ async function maybeInterceptWizard(
 
   if (!isCommand && msg.contextType === 'dm') {
     const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
-    if (selection.handled) {
-      if ('continueWith' in selection) {
-        if (selection.continueWith.command === 'config') {
-          await renderConfigForTarget(reply, selection.continueWith.targetContextId, interactiveButtons)
-        } else {
-          await startSetupForTarget(msg.user.id, reply, selection.continueWith.targetContextId)
-        }
-      } else if ('buttons' in selection && selection.buttons !== undefined) {
-        await reply.buttons(selection.response, { buttons: selection.buttons })
-      } else if ('response' in selection) {
-        await reply.text(selection.response)
-      }
+    if (await dispatchGroupSelectorResult(selection, reply, msg.user.id, interactiveButtons)) {
       return true
     }
   }

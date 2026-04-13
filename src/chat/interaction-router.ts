@@ -1,6 +1,5 @@
-import { renderConfigForTarget } from '../commands/config.js'
-import { startSetupForTarget } from '../commands/setup.js'
 import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
+import { dispatchGroupSelectorResult } from '../group-settings/dispatch.js'
 import { handleGroupSettingsSelectorCallback } from '../group-settings/selector.js'
 import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
 import { logger } from '../logger.js'
@@ -17,29 +16,9 @@ export type InteractionRouteDeps = {
   handleWizardInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
 }
 
-async function defaultHandleGroupSettingsInteraction(
-  interaction: IncomingInteraction,
-  reply: ReplyFn,
-): Promise<boolean> {
+function defaultHandleGroupSettingsInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
   const result = handleGroupSettingsSelectorCallback(interaction.user.id, interaction.callbackData)
-  if (!result.handled) return false
-  if ('continueWith' in result) {
-    if (result.continueWith.command === 'config') {
-      await renderConfigForTarget(reply, result.continueWith.targetContextId, true)
-    } else {
-      await startSetupForTarget(interaction.user.id, reply, result.continueWith.targetContextId)
-    }
-    return true
-  }
-  if ('buttons' in result && result.buttons !== undefined) {
-    await reply.buttons(result.response, { buttons: result.buttons })
-    return true
-  }
-  if ('response' in result) {
-    await reply.text(result.response)
-    return true
-  }
-  return false
+  return dispatchGroupSelectorResult(result, reply, interaction.user.id)
 }
 
 function getSettingsTargetContextId(interaction: IncomingInteraction): string {

@@ -116,6 +116,17 @@ describe('group-settings registry', () => {
     expect(second.lastSeenAt).toBe(first.lastSeenAt)
   })
 
+  test('writes through throttle when isAdmin changes within throttle window', () => {
+    upsertGroupAdminObservation({ contextId: 'g-t', userId: 'u-1', username: 'alice', isAdmin: true })
+    const first = getAdminObservation('g-t', 'u-1')!
+
+    upsertGroupAdminObservation({ contextId: 'g-t', userId: 'u-1', username: 'alice', isAdmin: false })
+    const second = getAdminObservation('g-t', 'u-1')!
+
+    expect(second.isAdmin).toBe(false)
+    expect(second.lastSeenAt >= first.lastSeenAt).toBe(true)
+  })
+
   test('updates admin observation when lastSeenAt is outside throttle window', () => {
     upsertGroupAdminObservation({ contextId: 'g-e', userId: 'u-1', username: 'alice', isAdmin: true })
 

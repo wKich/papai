@@ -88,12 +88,13 @@ export function upsertGroupAdminObservation(input: UpsertGroupAdminObservationIn
   const db = getDrizzleDb()
 
   const existing = db
-    .select({ lastSeenAt: groupAdminObservations.lastSeenAt })
+    .select({ lastSeenAt: groupAdminObservations.lastSeenAt, isAdmin: groupAdminObservations.isAdmin })
     .from(groupAdminObservations)
     .where(and(eq(groupAdminObservations.contextId, input.contextId), eq(groupAdminObservations.userId, input.userId)))
     .get()
 
-  if (existing !== undefined && isWithinThrottleWindow(existing.lastSeenAt)) {
+  const adminStatusChanged = existing !== undefined && existing.isAdmin !== input.isAdmin
+  if (existing !== undefined && !adminStatusChanged && isWithinThrottleWindow(existing.lastSeenAt)) {
     log.debug({ contextId: input.contextId, userId: input.userId }, 'Skipping admin observation upsert (throttled)')
     return
   }
