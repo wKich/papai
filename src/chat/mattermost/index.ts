@@ -11,6 +11,7 @@ import type {
   ReplyFn,
   ResolveUserContext,
 } from '../types.js'
+import { checkChannelAdmin, fetchChannelInfo } from './channel-helpers.js'
 import { renderMattermostContext } from './context-renderer.js'
 import {
   cacheIncomingPost,
@@ -23,15 +24,8 @@ import {
 import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
-import {
-  ChannelInfoSchema,
-  ChannelMemberSchema,
-  ChannelSchema,
-  extractReplyId,
-  type MattermostPost,
-  MattermostWsEventSchema,
-  UserMeSchema,
-} from './schema.js'
+import { ChannelSchema, extractReplyId, MattermostWsEventSchema, type MattermostPost, UserMeSchema } from './schema.js'
+import { withTypingIndicator } from './typing-indicator.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
 
@@ -158,9 +152,9 @@ export class MattermostChatProvider implements ChatProvider {
       replyToMessageId === undefined
         ? undefined
         : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
-    const channelInfo = await this.fetchChannelInfo(post.channel_id)
+    const channelInfo = await fetchChannelInfo(post.channel_id, this.apiFetch.bind(this))
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
-    const isAdmin = await this.checkChannelAdmin(post.channel_id, post.user_id)
+    const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, this.apiFetch.bind(this))
     const threadId = post.root_id === undefined || post.root_id === '' ? replyToMessageId : post.root_id
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
@@ -206,37 +200,15 @@ export class MattermostChatProvider implements ChatProvider {
       return
     }
     if (this.messageHandler !== null) {
-      await this.messageHandler(msg, reply)
+      const getSeq = (): number => this.wsSeq++
+      const send = this.wsSend.bind(this)
+      await withTypingIndicator(msg.contextId, getSeq, send, () => this.messageHandler!(msg, reply))
     }
   }
 
   private isBotMentioned(message: string): boolean {
     if (this.botUsername === null) return false
     return message.includes(`@${this.botUsername}`)
-  }
-
-  private async fetchChannelInfo(channelId: string): Promise<{ type: string }> {
-    const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}`, undefined)
-    const parsed = ChannelInfoSchema.safeParse(data)
-    if (!parsed.success) {
-      log.warn({ channelId, error: parsed.error }, 'Failed to parse channel info')
-      return { type: '' }
-    }
-    return parsed.data
-  }
-
-  private async checkChannelAdmin(channelId: string, userId: string): Promise<boolean> {
-    try {
-      const data = await this.apiFetch('GET', `/api/v4/channels/${channelId}/members/${userId}`, undefined)
-      const parsed = ChannelMemberSchema.safeParse(data)
-      if (!parsed.success) {
-        log.warn({ channelId, userId, error: parsed.error }, 'Failed to parse channel member')
-        return false
-      }
-      return parsed.data.roles.includes('channel_admin')
-    } catch {
-      return false
-    }
   }
 
   private matchCommand(text: string): { handler: CommandHandler; match: string } | null {

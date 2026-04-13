@@ -4,13 +4,33 @@ import { logger } from '../../../logger.js'
 import type { ListTasksParams, Task, TaskListItem, TaskSearchResult } from '../../types.js'
 import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
-import { youtrackFetch } from '../client.js'
+import { YouTrackApiError, youtrackFetch } from '../client.js'
 import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
 import { paginate } from '../helpers.js'
 import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
 import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
+import { getProjectRequiredFields } from './custom-fields.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
+
+const KNOWN_CUSTOM_FIELDS = new Set(['State', 'Priority', 'Assignee'])
+
+async function validateRequiredFields(
+  config: YouTrackConfig,
+  projectId: string,
+  projectShortName: string,
+): Promise<void> {
+  const requiredFields = await getProjectRequiredFields(config, projectId)
+  const unhandled = requiredFields.filter((name) => !KNOWN_CUSTOM_FIELDS.has(name))
+  if (unhandled.length > 0) {
+    log.warn({ projectId, requiredFields: unhandled }, 'Missing required custom fields')
+    throw new YouTrackApiError(
+      `Project ${projectShortName} requires these custom fields: ${unhandled.join(', ')}`,
+      400,
+      {},
+    )
+  }
+}
 
 export async function createYouTrackTask(
   config: YouTrackConfig,
@@ -26,8 +46,14 @@ export async function createYouTrackTask(
 ): Promise<Task> {
   log.debug({ projectId: params.projectId, title: params.title }, 'createTask')
   try {
+    const projectRaw = await youtrackFetch(config, 'GET', `/api/admin/projects/${params.projectId}`, {
+      query: { fields: 'id,shortName' },
+    })
+    const project = z.object({ id: z.string(), shortName: z.string() }).parse(projectRaw)
+    await validateRequiredFields(config, params.projectId, project.shortName)
+
     const body: Record<string, unknown> = {
-      project: { id: params.projectId },
+      project: { id: project.id },
       summary: params.title,
     }
     if (params.description !== undefined) body['description'] = params.description

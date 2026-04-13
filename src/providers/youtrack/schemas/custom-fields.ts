@@ -62,3 +62,20 @@ export const CustomFieldValueSchema = z.union([
   SimpleIssueCustomFieldSchema,
   UnknownIssueCustomFieldSchema,
 ])
+
+// Schema for project-level custom field configuration
+const CustomFieldSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  $type: z.string(),
+})
+
+// Base schema for project custom fields (canBeEmpty indicates if field is required)
+export const ProjectCustomFieldSchema = z.object({
+  id: z.string(),
+  $type: z.string(),
+  field: CustomFieldSchema,
+  canBeEmpty: z.boolean(),
+  emptyFieldText: z.string().nullable().optional(),
+  isPublic: z.boolean().optional(),
+})
