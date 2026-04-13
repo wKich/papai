@@ -1174,7 +1174,7 @@ export async function createAcpProcessClient(spec: AcpProcessSpec): Promise<AcpP
     },
     async setConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
       await appendTranscript('out', { method: 'session/set_config_option', sessionId, configId, value })
-      await connection.setConfigOption({ sessionId, configId, value })
+      await connection.setSessionConfigOption({ sessionId, configId, value })
     },
     async prompt(sessionId: string, text: string): Promise<{ stopReason: string }> {
       await appendTranscript('out', { method: 'session/prompt', sessionId, text })

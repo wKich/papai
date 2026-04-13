@@ -16,7 +16,20 @@ export interface BootstrappedAgentSession {
 interface SessionState {
   availableCommands: string[]
   responseChunks: string[]
-  commandsResolve: (() => void) | null
+}
+
+function applySessionConfig(
+  client: AcpProcessClient,
+  sessionId: string,
+  sessionConfig: Record<string, string>,
+): Promise<void> {
+  return Object.entries(sessionConfig).reduce(
+    (previous, [configId, value]) =>
+      previous.then(async () => {
+        await client.setConfigOption(sessionId, configId, value)
+      }),
+    Promise.resolve(),
+  )
 }
 
 function setupSessionUpdateListener(client: AcpProcessClient, state: SessionState): void {
@@ -28,10 +41,6 @@ function setupSessionUpdateListener(client: AcpProcessClient, state: SessionStat
         state.availableCommands.length,
         ...update.availableCommands.map((command) => command.name),
       )
-      if (state.commandsResolve !== null) {
-        state.commandsResolve()
-        state.commandsResolve = null
-      }
       return
     }
     if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
@@ -65,24 +74,13 @@ export async function bootstrapAgentSession(
   const state: SessionState = {
     availableCommands: [],
     responseChunks: [],
-    commandsResolve: null,
   }
-
-  const commandsPromise = new Promise<void>((resolve) => {
-    state.commandsResolve = resolve
-  })
 
   setupSessionUpdateListener(client, state)
 
   const sessionId = await createOrLoadSession(client, options.cwd, options.previousSessionId)
 
-  await commandsPromise
-
-  await Promise.all(
-    Object.entries(options.sessionConfig).map(([configId, value]) =>
-      client.setConfigOption(sessionId, configId, value),
-    ),
-  )
+  await applySessionConfig(client, sessionId, options.sessionConfig)
 
   return {
     sessionId,
@@ -90,11 +88,7 @@ export async function bootstrapAgentSession(
     async promptText(text: string): Promise<AgentPromptReply> {
       state.responseChunks = []
       const result = await client.prompt(sessionId, text)
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          resolve()
-        }, 10)
-      })
+      await client.waitForSessionUpdates()
       return {
         text: state.responseChunks.join(''),
         stopReason: result.stopReason,
