@@ -74,7 +74,7 @@ export async function renderConfigForTarget(
 
   if (!interactiveButtons) {
     lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/setup` to configure everything.')
-    await reply.text(lines.join('\n'))
+    await reply.formatted(lines.join('\n'))
     return
   }
 

@@ -92,7 +92,9 @@ export async function sendButtonReply(
       keyboard.row()
     }
   }
-  await ctx.reply(content, {
+  const formatted = formatLlmOutput(content)
+  await ctx.reply(formatted.text, {
+    entities: formatted.entities,
     reply_markup: keyboard,
     reply_parameters: buildReplyParams(options),
   })
