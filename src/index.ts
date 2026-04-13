@@ -95,8 +95,8 @@ if (process.env['DEBUG_SERVER'] === 'true') {
 }
 
 // Graceful shutdown handlers
-process.on('SIGTERM', () => {
-  log.info('SIGTERM received, starting graceful shutdown...')
+const shutdown = (signal: string): void => {
+  log.info(`${signal} received, starting graceful shutdown...`)
   void flushOnShutdown({ timeoutMs: 5000 })
     .then(() => {
       stopScheduler()
@@ -110,21 +110,11 @@ process.on('SIGTERM', () => {
       closeMigrationDbInstance()
       process.exit(0)
     })
-})
+}
 
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM')
+})
 process.on('SIGINT', () => {
-  log.info('SIGINT received, starting graceful shutdown...')
-  void flushOnShutdown({ timeoutMs: 5000 })
-    .then(() => {
-      stopScheduler()
-      scheduler.stopAll()
-      stopPollers()
-      stopDebugServerFn?.()
-      return chatProvider.stop()
-    })
-    .then(() => {
-      closeDrizzleDb()
-      closeMigrationDbInstance()
-      process.exit(0)
-    })
+  shutdown('SIGINT')
 })

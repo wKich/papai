@@ -1,14 +1,19 @@
 import { describe, expect, mock, test, beforeEach, afterEach } from 'bun:test'
 
+import { and, eq } from 'drizzle-orm'
+
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
-import type { IncomingFile, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { IncomingFile, IncomingInteraction, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { setConfig } from '../src/config.js'
+import { getDrizzleDb } from '../src/db/drizzle.js'
+import { groupAdminObservations, knownGroupContexts } from '../src/db/schema.js'
 import { getIncomingFiles } from '../src/file-relay.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser, isAuthorized, removeUser } from '../src/users.js'
 import {
   createDmMessage,
+  createGroupMessage,
   createMockChatForBot,
   createMockReply,
   mockLogger,
@@ -65,6 +70,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'admin-1',
+        configContextId: 'admin-1',
       })
     })
 
@@ -77,6 +83,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -89,6 +96,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: true,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -103,6 +111,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -115,6 +124,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: true,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
 
@@ -125,6 +135,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -139,6 +150,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'real-alice-id',
+        configContextId: 'real-alice-id',
       })
     })
 
@@ -149,6 +161,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: false,
         isGroupAdmin: false,
         storageContextId: 'unknown-id',
+        configContextId: 'unknown-id',
       })
     })
   })
@@ -164,6 +177,7 @@ describe('Authorization Logic', () => {
         isBotAdmin: true,
         isGroupAdmin: false,
         storageContextId: 'group-1',
+        configContextId: 'group-1',
       })
     })
   })
@@ -190,6 +204,7 @@ describe('Demo Mode Auto-Provision', () => {
       isBotAdmin: false,
       isGroupAdmin: false,
       storageContextId: DEMO_USER_ID,
+      configContextId: DEMO_USER_ID,
     })
     expect(isAuthorized(DEMO_USER_ID)).toBe(true)
   })
@@ -205,6 +220,7 @@ describe('Demo Mode Auto-Provision', () => {
       isBotAdmin: false,
       isGroupAdmin: false,
       storageContextId: DEMO_USER_ID,
+      configContextId: DEMO_USER_ID,
     })
   })
 
@@ -310,6 +326,69 @@ describe('Bot Authorization Gate (setupBot)', () => {
     })
   })
 
+  test('records known group and admin observations before normal message handling', async () => {
+    addUser('group-admin', ADMIN_ID)
+    setupUserConfig('group-admin')
+
+    const messageHandler = getMessageHandler()
+    expect(messageHandler).not.toBeNull()
+
+    const groupMessage = createGroupMessage('group-admin', '@bot status', true, 'group-ops')
+    groupMessage.contextName = 'Operations'
+    groupMessage.contextParentName = 'Platform'
+    groupMessage.threadId = 'thread-1'
+
+    const { reply } = createMockReply()
+    await messageHandler!(groupMessage, reply)
+
+    const db = getDrizzleDb()
+    const knownGroup = db.select().from(knownGroupContexts).where(eq(knownGroupContexts.contextId, 'group-ops')).get()
+    const adminObservation = db
+      .select()
+      .from(groupAdminObservations)
+      .where(and(eq(groupAdminObservations.contextId, 'group-ops'), eq(groupAdminObservations.userId, 'group-admin')))
+      .get()
+
+    expect(knownGroup?.displayName).toBe('Operations')
+    expect(knownGroup?.parentName).toBe('Platform')
+    expect(adminObservation?.isAdmin).toBe(true)
+  })
+
+  test('does not record group observations for ignored non-mentioned natural language', async () => {
+    addGroupMember('group-noise', 'group-member', ADMIN_ID)
+    setupUserConfig('group-noise')
+
+    const messageHandler = getMessageHandler()
+    expect(messageHandler).not.toBeNull()
+
+    const groupMessage: IncomingMessage = {
+      user: { id: 'group-member', username: 'groupmember', isAdmin: false },
+      contextId: 'group-noise',
+      contextType: 'group',
+      contextName: 'Noise',
+      contextParentName: 'Platform',
+      isMentioned: false,
+      text: 'hello team',
+    }
+
+    const { reply } = createMockReply()
+    await messageHandler!(groupMessage, reply)
+
+    const db = getDrizzleDb()
+    const knownGroup = db.select().from(knownGroupContexts).where(eq(knownGroupContexts.contextId, 'group-noise')).get()
+    const adminObservation = db
+      .select()
+      .from(groupAdminObservations)
+      .where(
+        and(eq(groupAdminObservations.contextId, 'group-noise'), eq(groupAdminObservations.userId, 'group-member')),
+      )
+      .get()
+
+    expect(knownGroup).toBeUndefined()
+    expect(adminObservation).toBeUndefined()
+    expect(processMessageCallCount).toBe(0)
+  })
+
   test('setupBot registers chat interaction handler when supported', () => {
     addUser('auth-user', ADMIN_ID)
     setupUserConfig('auth-user')
@@ -325,6 +404,50 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
     expect(getRegisteredMessageHandler()).not.toBeNull()
     expect(getInteractionHandler()).not.toBeNull()
+  })
+
+  test('interaction handler replies with error message when routeInteraction throws', async () => {
+    // Import the real module first to restore later
+    const { routeInteraction: realRouteInteraction } = await import('../src/chat/interaction-router.js')
+
+    // Mock routeInteraction to throw an error
+    void mock.module('../src/chat/interaction-router.js', () => ({
+      routeInteraction: (): Promise<boolean> => {
+        throw new Error('Simulated routing failure')
+      },
+    }))
+
+    addUser('auth-user', ADMIN_ID)
+    setupUserConfig('auth-user')
+
+    const { provider: mockChat, getInteractionHandler } = createMockChatForBot()
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const interactionHandler = getInteractionHandler()
+    expect(interactionHandler).not.toBeNull()
+
+    const { reply, textCalls } = createMockReply()
+    const interaction: IncomingInteraction = {
+      kind: 'button',
+      user: { id: 'auth-user', username: 'authuser', isAdmin: false },
+      contextId: 'auth-user',
+      contextType: 'dm',
+      storageContextId: 'auth-user',
+      callbackData: 'wizard_confirm',
+    }
+
+    await interactionHandler!(interaction, reply)
+
+    // Should show user-visible error when routeInteraction fails
+    expect(textCalls.length).toBeGreaterThan(0)
+    expect(textCalls[0]).toContain('Something went wrong')
+
+    // Restore the real module to prevent mock pollution
+    void mock.module('../src/chat/interaction-router.js', () => ({
+      routeInteraction: realRouteInteraction,
+    }))
   })
 
   describe('Username resolution on first message', () => {

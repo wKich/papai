@@ -30,6 +30,9 @@ export type GuildLike = {
   members: { search: (arg: { query: string; limit: number }) => Promise<Map<string, { id: string }>> }
 }
 
+/** Payload type for Discord ready event. */
+export type ReadyPayload = { user: { id: string; username: string } }
+
 /** Minimal event-emitter + login surface used inside start(). */
 export type LiveDiscordClient = DiscordClientLike & {
   on(event: string, listener: EventListener): unknown

@@ -401,9 +401,10 @@ Tools are capability-gated: only tools supported by the active provider are expo
 
 #### Utility Tools
 
-| Tool               | Description                         |
-| ------------------ | ----------------------------------- |
-| `get_current_time` | Get current time in user's timezone |
+| Tool               | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `get_current_time` | Get current time in user's timezone                           |
+| `web_fetch`        | Fetch a public URL and return a bounded summary/excerpt of it |
 
 ## Logging
 

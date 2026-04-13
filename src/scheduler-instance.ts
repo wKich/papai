@@ -6,6 +6,7 @@
 import { cleanupExpiredCaches } from './cache.js'
 import { sweepExpiredMessages } from './message-cache/cache.js'
 import { cleanupExpiredMessages } from './message-cache/persistence.js'
+import { cleanupExpiredQueues } from './message-queue/index.js'
 import { createScheduler } from './utils/scheduler.js'
 import type { ErrorEvent, FatalErrorEvent } from './utils/scheduler.types.js'
 import { cleanupExpiredWizardSessions } from './wizard/state.js'
@@ -43,6 +44,13 @@ scheduler.register('wizard-session-cleanup', {
   // Every 10 minutes
   interval: 10 * 60 * 1000,
   handler: cleanupExpiredWizardSessions,
+  options: { immediate: true },
+})
+
+scheduler.register('message-queue-cleanup', {
+  // Every 5 minutes
+  interval: 5 * 60 * 1000,
+  handler: cleanupExpiredQueues,
   options: { immediate: true },
 })
 

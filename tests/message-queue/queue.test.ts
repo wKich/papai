@@ -197,7 +197,7 @@ describe('MessageQueue', () => {
     })
 
     it('should add username attribution in thread context', () => {
-      const threadQueue = new MessageQueue('thread_abc')
+      const threadQueue = new MessageQueue('group123:thread456')
       queue = threadQueue
 
       queue.enqueue(
@@ -205,7 +205,7 @@ describe('MessageQueue', () => {
           text: 'Hello from thread',
           userId: 'user123',
           username: 'alice',
-          storageContextId: 'thread_abc',
+          storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
         },
@@ -381,6 +381,126 @@ describe('MessageQueue', () => {
     })
   })
 
+  describe('sequential execution', () => {
+    it('should not start next handler until current one completes', async () => {
+      const order: string[] = []
+      let unblockA!: () => void
+
+      const handler = async (item: CoalescedItem): Promise<void> => {
+        order.push(`start:${item.text}`)
+        if (item.text === 'A') {
+          await new Promise<void>((resolve) => {
+            unblockA = resolve
+          })
+        }
+        order.push(`end:${item.text}`)
+      }
+
+      queue.setHandler(handler)
+
+      queue.enqueue(
+        {
+          text: 'A',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      // Wait for debounce timer to fire and handler A to start
+      await new Promise<void>((r) => {
+        setTimeout(r, 550)
+      })
+      expect(order).toEqual(['start:A'])
+
+      // Enqueue B while A is still running (unblockA not called yet)
+      queue.enqueue(
+        {
+          text: 'B',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      // Wait for B's debounce timer to fire
+      await new Promise<void>((r) => {
+        setTimeout(r, 550)
+      })
+
+      // B must NOT have started — handler A is still blocking the chain
+      expect(order).toEqual(['start:A'])
+
+      // Unblock A
+      unblockA()
+
+      // Give microtasks time to settle
+      await new Promise<void>((r) => {
+        setTimeout(r, 50)
+      })
+
+      // A and B ran in strict serial order, never concurrently
+      expect(order).toEqual(['start:A', 'end:A', 'start:B', 'end:B'])
+    }, 10000)
+
+    it('should remain functional after a handler throws', async () => {
+      const order: string[] = []
+
+      const handler = async (item: CoalescedItem): Promise<void> => {
+        order.push(`start:${item.text}`)
+        if (item.text === 'A') {
+          throw new Error('handler error')
+        }
+        order.push(`end:${item.text}`)
+        await Promise.resolve()
+      }
+
+      queue.setHandler(handler)
+
+      queue.enqueue(
+        {
+          text: 'A',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      await new Promise<void>((r) => {
+        setTimeout(r, 550)
+      })
+
+      queue.enqueue(
+        {
+          text: 'B',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+        },
+        mockReply,
+      )
+
+      await new Promise<void>((r) => {
+        setTimeout(r, 550)
+      })
+
+      // B should have run even though A threw
+      expect(order).toContain('start:B')
+      expect(order).toContain('end:B')
+    }, 10000)
+  })
+
   describe('different user in main group chat', () => {
     it('should flush immediately when different user sends message in group main', () => {
       const groupQueue = new MessageQueue('group123')
@@ -453,8 +573,8 @@ describe('MessageQueue', () => {
       expect(queue.getBufferedCount()).toBe(2)
     })
 
-    it('should not flush in thread even with different users', () => {
-      const threadQueue = new MessageQueue('thread_abc')
+    it('should flush in thread when different user sends message', () => {
+      const threadQueue = new MessageQueue('group123:thread456')
       queue = threadQueue
 
       queue.enqueue(
@@ -462,7 +582,7 @@ describe('MessageQueue', () => {
           text: 'First',
           userId: 'user1',
           username: 'alice',
-          storageContextId: 'thread_abc',
+          storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
         },
@@ -474,15 +594,61 @@ describe('MessageQueue', () => {
           text: 'Second',
           userId: 'user2',
           username: 'bob',
-          storageContextId: 'thread_abc',
+          storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
         },
         mockReply,
       )
 
-      expect(flushed).toBeNull()
-      expect(queue.getBufferedCount()).toBe(2)
+      // Different user in thread triggers flush (same as main group chat)
+      expect(flushed).not.toBeNull()
+      if (flushed === null) {
+        throw new Error('Expected flushed to not be null')
+      }
+      expect(flushed.text).toBe('[@alice]: First')
+      expect(flushed.userId).toBe('user1')
+      expect(flushed.username).toBe('alice')
+      expect(queue.getBufferedCount()).toBe(1)
+    })
+
+    it('should use last message userId and username for coalesced item in thread', () => {
+      const threadQueue = new MessageQueue('group123:thread456')
+      queue = threadQueue
+
+      queue.enqueue(
+        {
+          text: 'First',
+          userId: 'user1',
+          username: 'alice',
+          storageContextId: 'group123:thread456',
+          contextType: 'group',
+          files: [],
+        },
+        mockReply,
+      )
+
+      queue.enqueue(
+        {
+          text: 'Second',
+          userId: 'user2',
+          username: 'bob',
+          storageContextId: 'group123:thread456',
+          contextType: 'group',
+          files: [],
+        },
+        mockReply,
+      )
+
+      const flushed = queue.forceFlush()
+      expect(flushed).not.toBeNull()
+      if (flushed === null) {
+        throw new Error('Expected flushed to not be null')
+      }
+      // userId and username should be from the LAST message (user2/bob)
+      // not from the first message (user1/alice)
+      expect(flushed.userId).toBe('user2')
+      expect(flushed.username).toBe('bob')
     })
   })
 })

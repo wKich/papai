@@ -45,6 +45,36 @@ const mockFetchError = (status: number, body: unknown = { error: 'Something went
   )
 }
 
+// Helper for createYouTrackTask tests - resolves project, loads required custom fields, then creates issue
+const mockCreateTaskResponse = (
+  issueResponse: unknown,
+  projectResponse: unknown = { id: '0-1', shortName: 'TEST' },
+  customFieldsResponse: unknown = [],
+): void => {
+  let callCount = 0
+  installFetchMock(() => {
+    callCount++
+    if (callCount === 1) {
+      // Project lookup response
+      return Promise.resolve(
+        new Response(JSON.stringify(projectResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    }
+    if (callCount === 2) {
+      return Promise.resolve(
+        new Response(JSON.stringify(customFieldsResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+    // Issue creation response
+    return Promise.resolve(
+      new Response(JSON.stringify(issueResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+  })
+}
+
 const FetchCallSchema = z.tuple([
   z.string(),
   z.looseObject({ method: z.string().optional(), body: z.string().optional() }),
@@ -53,13 +83,15 @@ const FetchCallSchema = z.tuple([
 const BodySchema = z.looseObject({})
 
 const getLastFetchUrl = (): URL => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
+  const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+  const parsed = FetchCallSchema.safeParse(lastCall)
   if (!parsed.success) return new URL('https://empty')
   return new URL(parsed.data[0])
 }
 
 const getLastFetchBody = (): z.infer<typeof BodySchema> => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
+  const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+  const parsed = FetchCallSchema.safeParse(lastCall)
   if (!parsed.success) return {}
   const { body } = parsed.data[1]
   if (body === undefined) return {}
@@ -67,7 +99,8 @@ const getLastFetchBody = (): z.infer<typeof BodySchema> => {
 }
 
 const getLastFetchMethod = (): string => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
+  const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+  const parsed = FetchCallSchema.safeParse(lastCall)
   if (!parsed.success) return ''
   return parsed.data[1].method ?? ''
 }
@@ -121,7 +154,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('creates task and returns mapped result', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     const task = await createYouTrackTask(config, {
       projectId: '0-1',
@@ -139,7 +172,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('sends description when provided', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, {
       projectId: '0-1',
@@ -152,7 +185,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('does not send description when absent', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, {
       projectId: '0-1',
@@ -164,7 +197,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('sends custom fields for priority and status', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, {
       projectId: '0-1',
@@ -181,7 +214,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('sends assignee custom field when provided', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, {
       projectId: '0-1',
@@ -198,7 +231,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('does not send customFields when none provided', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, {
       projectId: '0-1',
@@ -210,7 +243,7 @@ describe('createYouTrackTask', () => {
   })
 
   test('uses POST method to /api/issues', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockCreateTaskResponse(makeIssueResponse())
 
     await createYouTrackTask(config, { projectId: '0-1', title: 'Test task' })
 
@@ -220,7 +253,33 @@ describe('createYouTrackTask', () => {
   })
 
   test('throws YouTrackClassifiedError on API error', async () => {
-    mockFetchError(400, { error: 'Bad request' })
+    // For error tests, project lookup and custom fields succeed, but issue creation fails
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        // Project lookup succeeds
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        // Custom fields lookup succeeds
+        return Promise.resolve(
+          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+      // Issue creation fails
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'Bad request' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
 
     await expect(createYouTrackTask(config, { projectId: '0-1', title: 'Test task' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
@@ -228,7 +287,32 @@ describe('createYouTrackTask', () => {
   })
 
   test('throws YouTrackClassifiedError on auth error', async () => {
-    mockFetchError(401, { error: 'Unauthorized' })
+    // For error tests, project lookup and custom fields succeed, but issue creation fails with 401
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        // Project lookup succeeds
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+      // Issue creation fails with auth error
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
 
     try {
       await createYouTrackTask(config, { projectId: '0-1', title: 'Test task' })
@@ -238,6 +322,150 @@ describe('createYouTrackTask', () => {
       if (!(error instanceof YouTrackClassifiedError)) throw error
       expect(error.appError.code).toBe('auth-failed')
     }
+  })
+
+  test('resolves project shortName to internal ID before creating task', async () => {
+    // First call: get project by shortName to resolve internal ID
+    // Second call: fetch project custom fields using the resolved internal ID
+    // Third call: create issue with internal ID
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        // Project lookup by shortName returns internal ID
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'AUDIT', name: 'Audit Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+      // Issue creation response
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            makeIssueResponse({ id: '2-1', idReadable: 'AUDIT-1', project: { id: '0-1', shortName: 'AUDIT' } }),
+          ),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    // Pass shortName "AUDIT" instead of internal ID
+    const task = await createYouTrackTask(config, {
+      projectId: 'AUDIT',
+      title: 'Test task',
+    })
+
+    expect(task.id).toBe('AUDIT-1')
+    expect(task.projectId).toBe('0-1')
+
+    // Verify first call was to resolve project
+    const firstParsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
+    expect(firstParsed.success).toBe(true)
+    if (!firstParsed.success) return
+    const firstUrl = new URL(firstParsed.data[0])
+    expect(firstUrl.pathname).toBe('/api/admin/projects/AUDIT')
+    expect(firstParsed.data[1].method).toBe('GET')
+
+    // Verify second call fetched custom fields with the resolved internal ID
+    const secondParsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(secondParsed.success).toBe(true)
+    if (!secondParsed.success) return
+    const secondUrl = new URL(secondParsed.data[0])
+    expect(secondUrl.pathname).toBe('/api/admin/projects/0-1/customFields')
+    expect(secondParsed.data[1].method).toBe('GET')
+
+    // Verify third call created issue with internal ID
+    const thirdParsed = FetchCallSchema.safeParse(fetchMock.mock.calls[2])
+    expect(thirdParsed.success).toBe(true)
+    if (!thirdParsed.success) return
+    const thirdUrl = new URL(thirdParsed.data[0])
+    expect(thirdUrl.pathname).toBe('/api/issues')
+    expect(thirdParsed.data[1].method).toBe('POST')
+
+    const responseBody: string = thirdParsed.data[1].body ?? '{}'
+    const parsedBody: unknown = JSON.parse(responseBody)
+    expect(parsedBody).toMatchObject({ project: { id: '0-1' } })
+  })
+
+  test('throws workflow validation error when project has unhandled required custom fields', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-10',
+              $type: 'EnumProjectCustomField',
+              field: { id: '58-2', name: 'Type', $type: 'CustomField' },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+            {
+              id: '82-11',
+              $type: 'SimpleProjectCustomField',
+              field: { id: '58-3', name: 'Priority', $type: 'CustomField' },
+              canBeEmpty: true,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    try {
+      await createYouTrackTask(config, { projectId: 'TEST', title: 'Test task' })
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) throw error
+      expect(error.appError.code).toBe('workflow-validation-failed')
+      if (error.appError.code === 'workflow-validation-failed') {
+        expect(error.appError.requiredFields).toEqual([{ name: 'Type' }])
+      }
+      expect(error.message).toContain('Type')
+    }
+  })
+
+  test('allows required custom fields when they are explicitly provided', async () => {
+    mockCreateTaskResponse(makeIssueResponse(), { id: '0-1', shortName: 'TEST' }, [
+      {
+        id: '82-10',
+        $type: 'EnumProjectCustomField',
+        field: { id: '58-2', name: 'Type', $type: 'CustomField' },
+        canBeEmpty: false,
+        isPublic: true,
+      },
+    ])
+
+    await createYouTrackTask(config, {
+      projectId: 'TEST',
+      title: 'Test task',
+      customFields: [{ name: 'Type', value: 'Bug' }],
+    })
+
+    const body = getLastFetchBody()
+    expect(body['customFields']).toContainEqual({
+      name: 'Type',
+      $type: 'SimpleIssueCustomField',
+      value: { text: 'Bug' },
+    })
   })
 })
 

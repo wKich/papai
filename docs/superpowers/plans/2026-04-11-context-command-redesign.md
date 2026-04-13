@@ -152,7 +152,7 @@ Still in `src/chat/types.ts`, replace the existing `ReplyFn` type (lines 124–1
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
   formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
-  file: (file: ChatFile, options?: ReplyOptions) => Promise<void>
+  file?: (file: ChatFile, options?: ReplyOptions) => Promise<void>
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
   buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
@@ -163,7 +163,14 @@ export type ReplyFn = {
 
 - [ ] **Step 3: Extend `ChatProvider` with `renderContext`**
 
-In the same file, replace the existing `ChatProvider` interface (lines 134–156) with:
+In the same file, add the `renderContext` method to the existing `ChatProvider` interface (after `setCommands`, around line 215):
+
+```typescript
+  /** Render a context snapshot into a platform-native representation. */
+  renderContext(snapshot: ContextSnapshot): ContextRendered
+```
+
+The complete interface should now read:
 
 ```typescript
 /** The core interface every chat platform provider must implement. */
@@ -171,6 +178,12 @@ export interface ChatProvider {
   readonly name: string
   /** Thread support capabilities */
   readonly threadCapabilities: ThreadCapabilities
+  /** Set of supported capability strings */
+  readonly capabilities: ReadonlySet<ChatCapability>
+  /** Behavioral traits for this platform */
+  readonly traits: ChatProviderTraits
+  /** Environment/config requirements for startup */
+  readonly configRequirements: readonly ChatProviderConfigRequirement[]
 
   /** Register a slash command handler (e.g., 'help' for /help). */
   registerCommand(name: string, handler: CommandHandler): void
@@ -178,11 +191,20 @@ export interface ChatProvider {
   /** Register the catch-all handler for non-command messages. */
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void
 
+  /** Register the handler for button/callback interactions (optional). */
+  onInteraction?(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void
+
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
 
-  /** Resolve a username to a user ID. Returns null if not found. `context` allows adapters like Discord to scope the lookup to the caller's guild. */
-  resolveUserId(username: string, context: ResolveUserContext): Promise<string | null>
+  /**
+   * Resolve a username to a user ID. Returns null if not found or not supported.
+   * The `users.resolve` capability signals full username-resolution support.
+   */
+  resolveUserId?(username: string, context: ResolveUserContext): Promise<string | null>
+
+  /** Register the bot's command list with the platform (for command menus). */
+  setCommands?(adminUserId: string): Promise<void>
 
   /** Render a context snapshot into a platform-native representation. */
   renderContext(snapshot: ContextSnapshot): ContextRendered
@@ -360,12 +382,25 @@ return {
     canCreateThreads: false,
     threadScope: 'message',
   },
+  capabilities: options.capabilities ?? DEFAULT_CHAT_CAPABILITIES,
+  traits: options.traits ?? { observedGroupMessages: 'all' },
+  configRequirements: options.configRequirements ?? [],
   registerCommand: (name: string, handler: CommandHandler): void => {
     options.commandHandlers?.set(name, handler)
   },
   onMessage: (handler): void => {
     options.onMessageHandler?.(handler)
   },
+  ...(options.onInteractionHandler === undefined
+    ? {}
+    : (() => {
+        const interactionHandler = options.onInteractionHandler
+        return {
+          onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
+            interactionHandler(handler)
+          },
+        }
+      })()),
   sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
   resolveUserId:
     options.resolveUserId ??
@@ -373,6 +408,7 @@ return {
       const clean = username.startsWith('@') ? username.slice(1) : username
       return Promise.resolve(clean)
     }),
+  setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
   renderContext: (snapshot: ContextSnapshot): ContextRendered => ({
     method: 'text',
     content: `mock renderContext: ${snapshot.modelName} total=${String(snapshot.totalTokens)}`,
@@ -975,6 +1011,8 @@ function buildSystemPromptSection(deps: ContextCollectorDeps, counter: SafeCount
   // Base instructions = the body after stripping custom instructions and addendum.
   // buildSystemPrompt composes as `${customInstructions}${BASE_PROMPT}${addendum}`,
   // so base-instructions tokens ≈ full - custom - addendum.
+  // Note: BPE tokenization is not strictly additive (count(A+B) != count(A) + count(B))
+  // due to token boundary effects. This is an approximation for display purposes.
   const totalTokens = counter.count(fullPrompt)
   const customTokens = counter.count(customInstructions)
   const addendumTokens = counter.count(addendum)
@@ -1146,9 +1184,9 @@ async function loadTokenizer(encoding: EncodingName): Promise<Tokenizer> {
   const { Tokenizer: TokenizerCtor } = await import('ai-tokenizer')
   const encodingModule =
     encoding === 'o200k_base'
-      ? ((await import('ai-tokenizer/encoding/o200k_base')) as { default: unknown })
-      : ((await import('ai-tokenizer/encoding/cl100k_base')) as { default: unknown })
-  const tokenizer = new TokenizerCtor(encodingModule.default)
+      ? await import('ai-tokenizer/encoding/o200k_base')
+      : await import('ai-tokenizer/encoding/cl100k_base')
+  const tokenizer = new TokenizerCtor(encodingModule)
   tokenizerCache.set(encoding, tokenizer)
   return tokenizer
 }
@@ -1506,7 +1544,10 @@ function buildCollectorDeps(contextId: string, provider: TaskProvider | null): C
       const cached = getCachedTools(contextId)
       if (cached !== undefined && cached !== null) return cached as Record<string, unknown>
       if (provider === null) return {}
-      return makeTools(provider, contextId, 'normal', contextId) as Record<string, unknown>
+      return makeTools(provider, { storageContextId: contextId, chatUserId: contextId, mode: 'normal' }) as Record<
+        string,
+        unknown
+      >
     },
     getProviderName: () => provider?.name ?? 'none',
     countTokens: (text: string): number => defaultCountTokens(text, encoding),

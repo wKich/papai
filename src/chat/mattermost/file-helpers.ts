@@ -7,9 +7,24 @@ import {
   type MattermostPost,
   MattermostPostSchema,
   MattermostPostedDataSchema,
+  UserMeSchema,
 } from './schema.js'
 
 const log = logger.child({ scope: 'chat:mattermost:files' })
+
+export type MattermostApiFetch = (method: string, path: string, body: unknown) => Promise<unknown>
+
+export async function resolveMattermostUserId(username: string, apiFetch: MattermostApiFetch): Promise<string | null> {
+  const cleanUsername = username.startsWith('@') ? username.slice(1) : username
+  try {
+    const data = await apiFetch('GET', `/api/v4/users/username/${encodeURIComponent(cleanUsername)}`, undefined)
+    const parsed = UserMeSchema.safeParse(data)
+    if (parsed.success) return parsed.data.id
+    return null
+  } catch {
+    return null
+  }
+}
 
 export async function fetchMattermostFiles(
   fileIds: string[],

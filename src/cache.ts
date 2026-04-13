@@ -96,7 +96,7 @@ export function getCachedHistory(userId: string): readonly ModelMessage[] {
     cache.config.set('history_loaded', 'true')
     emit('cache:load', { userId, field: 'history' })
   }
-  return cache.history
+  return [...cache.history]
 }
 
 export function setCachedHistory(userId: string, messages: readonly ModelMessage[]): void {

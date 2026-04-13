@@ -12,7 +12,7 @@ export const mattermostTraits: ChatProviderTraits = {
   maxMessageLength: 16383,
 }
 
-export const mattermostConfigRequirements: ChatProviderConfigRequirement[] = [
+export const mattermostConfigRequirements: readonly ChatProviderConfigRequirement[] = [
   { key: 'MATTERMOST_URL', label: 'Mattermost URL', required: true },
   { key: 'MATTERMOST_BOT_TOKEN', label: 'Mattermost Bot Token', required: true },
 ]

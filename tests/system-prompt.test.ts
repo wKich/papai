@@ -28,4 +28,13 @@ describe('buildSystemPrompt', () => {
     const prompt2 = buildSystemPrompt(provider, 'user-1')
     expect(prompt1).toBe(prompt2)
   })
+
+  test('includes web_fetch guidance for public URLs', () => {
+    const prompt = buildSystemPrompt(provider, 'user-1')
+
+    expect(prompt).toContain('web_fetch')
+    expect(prompt).toContain('public URL')
+    expect(prompt).toContain('memo')
+    expect(prompt).toContain('task')
+  })
 })

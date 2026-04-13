@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { providerError, systemError, isAppError, getUserMessage } from '../src/errors.js'
+import { providerError, systemError, isAppError, getUserMessage, webFetchError } from '../src/errors.js'
 import { llmError, validationError } from './utils/test-errors.js'
 
 describe('providerError basic constructors', () => {
@@ -156,12 +156,27 @@ describe('systemError constructors', () => {
   })
 })
 
+describe('webFetchError constructors', () => {
+  test('invalidUrl creates correct structure', () => {
+    expect(webFetchError.invalidUrl()).toEqual({ type: 'web-fetch', code: 'invalid-url' })
+  })
+
+  test('upstreamError captures optional status', () => {
+    expect(webFetchError.upstreamError(502)).toEqual({
+      type: 'web-fetch',
+      code: 'upstream-error',
+      status: 502,
+    })
+  })
+})
+
 describe('isAppError type guard', () => {
   test('returns true for all valid error types', () => {
     expect(isAppError(providerError.authFailed())).toBe(true)
     expect(isAppError(llmError.timeout())).toBe(true)
     expect(isAppError(validationError.missingRequired('field'))).toBe(true)
     expect(isAppError(systemError.configMissing('VAR'))).toBe(true)
+    expect(isAppError(webFetchError.blockedHost())).toBe(true)
   })
 
   test('returns false for non-AppError values', () => {
@@ -214,6 +229,19 @@ describe('getUserMessage for system errors', () => {
     expect(getUserMessage(systemError.configMissing('API_KEY'))).toContain('API_KEY')
     expect(getUserMessage(systemError.networkError('timeout'))).toContain('timeout')
     expect(getUserMessage(systemError.unexpected(new Error('oops')))).toContain('unexpected')
+  })
+})
+
+describe('getUserMessage for web fetch errors', () => {
+  test('returns appropriate message for each error code', () => {
+    expect(getUserMessage(webFetchError.invalidUrl())).toContain("doesn't look valid")
+    expect(getUserMessage(webFetchError.blockedHost())).toContain('public web')
+    expect(getUserMessage(webFetchError.blockedContentType())).toContain("isn't supported")
+    expect(getUserMessage(webFetchError.tooLarge())).toContain('too large')
+    expect(getUserMessage(webFetchError.timeout())).toContain('too long')
+    expect(getUserMessage(webFetchError.rateLimited())).toContain('too quickly')
+    expect(getUserMessage(webFetchError.extractFailed())).toContain("couldn't extract")
+    expect(getUserMessage(webFetchError.upstreamError(502))).toContain('returned an error')
   })
 })
 

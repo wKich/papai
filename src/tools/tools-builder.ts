@@ -67,6 +67,7 @@ import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateWorkTool } from './update-work.js'
 import { makeUploadAttachmentTool } from './upload-attachment.js'
+import { makeWebFetchTool } from './web-fetch.js'
 
 function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('projects.list')) {
@@ -197,8 +198,6 @@ function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, 
     tools['find_user'] = makeFindUserTool(provider)
   }
   if (provider.capabilities.has('tasks.watchers')) {
-    // NC1 Fix: Pass chatUserId (actual user ID) instead of contextId for identity resolution
-    // contextId may be a group ID, but identity mappings are keyed by user ID
     tools['list_watchers'] = makeListWatchersTool(provider)
     tools['add_watcher'] = makeAddWatcherTool(provider, chatUserId)
     tools['remove_watcher'] = makeRemoveWatcherTool(provider, chatUserId)
@@ -217,6 +216,10 @@ function addInstructionTools(tools: ToolSet, contextId: string | undefined): voi
   tools['save_instruction'] = makeSaveInstructionTool(contextId)
   tools['list_instructions'] = makeListInstructionsTool(contextId)
   tools['delete_instruction'] = makeDeleteInstructionTool(contextId)
+}
+function addWebFetchTool(tools: ToolSet, storageContextId: string | undefined, actorUserId: string | undefined): void {
+  if (storageContextId === undefined) return
+  tools['web_fetch'] = makeWebFetchTool(storageContextId, actorUserId)
 }
 
 function addMemoTools(tools: ToolSet, provider: TaskProvider, userId: string | undefined): void {
@@ -253,15 +256,12 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   if (!contextId.includes(':')) return
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
-
 function maybeAddIdentityTools(
   tools: ToolSet,
   provider: TaskProvider,
   chatUserId: string | undefined,
   contextType: ContextType | undefined,
 ): void {
-  // Identity tools are only available in group chats, not DMs
-  // Per spec: "Only add identity tools for group chats (contextId contains non-user context)"
   if (chatUserId === undefined || provider.identityResolver === undefined) return
   if (contextType !== 'group') return
 
@@ -276,7 +276,6 @@ export function buildTools(
   mode: ToolMode,
   contextType?: ContextType,
 ): ToolSet {
-  // NI2 Fix: Pass contextId as storageContextId for timezone config lookup
   const tools = makeCoreTools(provider, chatUserId, contextId)
   maybeAddProjectTools(tools, provider)
   maybeAddCommentTools(tools, provider)
@@ -292,6 +291,7 @@ export function buildTools(
   addMemoTools(tools, provider, chatUserId)
   addInstructionTools(tools, contextId)
   addLookupGroupHistoryTool(tools, chatUserId, contextId)
+  addWebFetchTool(tools, contextId, chatUserId)
   maybeAddIdentityTools(tools, provider, chatUserId, contextType)
   if (mode === 'normal') {
     addDeferredPromptTools(tools, chatUserId)

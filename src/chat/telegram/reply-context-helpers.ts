@@ -1,5 +1,8 @@
+import { logger } from '../../logger.js'
 import { buildReplyContextChain } from '../../reply-context.js'
 import type { ReplyContext } from '../types.js'
+
+const log = logger.child({ scope: 'chat:telegram:reply-context' })
 
 /** Minimal interface for extractReplyContext input. Matches grammy Context structure. */
 interface ExtractReplyContextInput {
@@ -27,6 +30,27 @@ export function extractReplyContext(ctx: ExtractReplyContextInput, contextId: st
   const { chain, chainSummary } = buildReplyContextChain(contextId, idStr)
   const fromId = replyToMessage.from?.id
   const threadId = ctx.message?.message_thread_id
+
+  const hasQuote = quote?.text !== undefined && quote.text !== ''
+  const fullMessageLength = replyToMessage.text?.length ?? 0
+  const quoteLength = quote?.text?.length ?? 0
+
+  log.debug(
+    {
+      contextId,
+      replyToMessageId: idStr,
+      authorId: fromId,
+      authorUsername: replyToMessage.from?.username ?? null,
+      fullMessageLength,
+      hasQuote,
+      quoteLength,
+      quotePreview: hasQuote ? quote.text?.slice(0, 100) : undefined,
+      fullMessagePreview: replyToMessage.text?.slice(0, 100),
+      chainLength: chain?.length ?? 0,
+      hasChainSummary: chainSummary !== undefined && chainSummary !== '',
+    },
+    'Extracted reply context from Telegram message',
+  )
 
   return {
     messageId: idStr,

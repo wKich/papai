@@ -12,7 +12,7 @@ interface MattermostReplyHelpersParams {
 }
 
 export function createMattermostReplyFn(params: MattermostReplyHelpersParams): ReplyFn {
-  const { channelId, postId, threadId, baseUrl, getWsSeq, apiFetch, wsSend, uploadFile } = params
+  const { channelId, postId, threadId, baseUrl: _baseUrl, getWsSeq, apiFetch, wsSend, uploadFile } = params
 
   const post = async (message: string, options?: ReplyOptions, extra?: Record<string, unknown>): Promise<void> => {
     await apiFetch('POST', '/api/v4/posts', {
@@ -38,19 +38,12 @@ export function createMattermostReplyFn(params: MattermostReplyHelpersParams): R
         await apiFetch('PUT', `/api/v4/posts/${postId}/patch`, { message: replacementText }).catch(() => undefined)
       }
     },
-    buttons: async (content: string, options: ButtonReplyOptions) => {
-      const actions =
-        options.buttons?.map((btn) => ({
-          name: btn.text,
-          integration: {
-            url: `${baseUrl}/api/v4/actions/placeholder`,
-            context: { action: btn.callbackData },
-          },
-          style: btn.style ?? 'default',
-        })) ?? []
-
-      const props = { attachments: [{ text: content, actions }] }
-      await post(content, options, { props })
+    buttons: (_content: string, _options: ButtonReplyOptions): Promise<void> => {
+      return Promise.reject(
+        new Error(
+          'Mattermost does not support interactive buttons. Use supportsInteractiveButtons() to check before calling reply.buttons().',
+        ),
+      )
     },
   }
 }

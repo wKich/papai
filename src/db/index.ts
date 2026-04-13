@@ -23,6 +23,10 @@ import { migration015DropBackgroundEvents } from './migrations/015_drop_backgrou
 import { migration016ExecutionMetadata } from './migrations/016_execution_metadata.js'
 import { migration017MessageMetadata } from './migrations/017_message_metadata.js'
 import { migration018Memos } from './migrations/018_memos.js'
+import { migration019UserIdentityMappings } from './migrations/019_user_identity_mappings.js'
+import { migration020GroupSettingsRegistry } from './migrations/020_group_settings_registry.js'
+import { migration021WebFetch } from './migrations/021_web_fetch.js'
+import { migration022DropUnusedLastSeenIndex } from './migrations/022_drop_unused_last_seen_index.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -68,6 +72,10 @@ const MIGRATIONS = [
   migration016ExecutionMetadata,
   migration017MessageMetadata,
   migration018Memos,
+  migration019UserIdentityMappings,
+  migration020GroupSettingsRegistry,
+  migration021WebFetch,
+  migration022DropUnusedLastSeenIndex,
 ] as const
 
 export const initDb = (): void => {

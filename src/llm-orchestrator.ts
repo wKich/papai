@@ -1,5 +1,4 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { APICallError } from '@ai-sdk/provider'
 import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory, getCachedTools, setCachedTools } from './cache.js'
@@ -7,20 +6,18 @@ import type { ReplyFn } from './chat/types.js'
 import { getConfig } from './config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from './conversation.js'
 import { emit } from './debug/event-bus.js'
-import { getUserMessage, isAppError } from './errors.js'
 import { appendHistory, saveHistory } from './history.js'
 import { getIdentityMapping } from './identity/mapping.js'
 import { attemptAutoLink } from './identity/resolver.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
+import { handleOrchestratorMessageError, handleToolCallFinish } from './llm-orchestrator-support.js'
 import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
+import { validateToolResults } from './llm-orchestrator-validation.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
-import { ProviderClassifiedError } from './providers/errors.js'
 import { buildProviderForUser } from './providers/factory.js'
-import { KaneoClassifiedError } from './providers/kaneo/classify-error.js'
 import { maybeProvisionKaneo } from './providers/kaneo/provision.js'
 import type { TaskProvider } from './providers/types.js'
-import { YouTrackClassifiedError } from './providers/youtrack/classify-error.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
 import { fetchWithoutTimeout } from './utils/fetch.js'
@@ -43,6 +40,18 @@ const checkRequiredConfig = (contextId: string): string[] => {
   const providerKeys = TASK_PROVIDER === 'youtrack' ? (['youtrack_token'] as const) : (['kaneo_apikey'] as const)
   return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
 }
+
+interface LlmConfig {
+  llmApiKey: string
+  llmBaseUrl: string
+  mainModel: string
+}
+
+const getLlmConfig = (contextId: string): LlmConfig => ({
+  llmApiKey: getConfig(contextId, 'llm_apikey')!,
+  llmBaseUrl: getConfig(contextId, 'llm_baseurl')!,
+  mainModel: getConfig(contextId, 'main_model')!,
+})
 
 const persistFactsFromResults = (
   contextId: string,
@@ -116,21 +125,7 @@ const invokeModel = async (
       })
     },
     experimental_onToolCallFinish(event) {
-      emit('llm:tool_result', {
-        userId: contextId,
-        toolName: event.toolCall.toolName,
-        toolCallId: event.toolCall.toolCallId,
-        durationMs: event.durationMs,
-        success: event.success,
-        ...(event.success ? {} : { error: String(event.error) }),
-      })
-      // Provide immediate user feedback for tool execution failures
-      if (!event.success && reply !== undefined) {
-        const toolName = event.toolCall.toolName
-        const errorMessage = event.error instanceof Error ? event.error.message : String(event.error)
-        log.warn({ contextId, toolName, error: errorMessage }, 'Tool execution failed')
-        void reply.text(`⚠️ Tool "${toolName}" failed: ${errorMessage}`)
-      }
+      handleToolCallFinish(contextId, reply, event)
     },
   })
   emitLlmEnd(contextId, mainModel, result, start, messages, tools)
@@ -162,28 +157,24 @@ const callLlm = async (
   history: readonly ModelMessage[],
   contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps,
+  configContextId?: string,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
-  await deps.maybeProvisionKaneo(reply, contextId, username)
-  const missing = checkRequiredConfig(contextId)
+  const configId = configContextId ?? contextId
+  await deps.maybeProvisionKaneo(reply, configId, username)
+  const missing = checkRequiredConfig(configId)
   if (missing.length > 0) {
-    log.warn({ contextId, missing }, 'Missing required config keys')
+    log.warn({ contextId, configId, missing }, 'Missing required config keys')
     await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /setup to configure.`)
     throw new Error('Missing configuration')
   }
-  const llmApiKey = getConfig(contextId, 'llm_apikey')!
-  const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
-  const mainModel = getConfig(contextId, 'main_model')!
+  const { llmApiKey, llmBaseUrl, mainModel } = getLlmConfig(configId)
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
-  const provider = deps.buildProviderForUser(contextId)
-
-  // Auto-link on first group chat interaction (skip for DMs)
-  // DMs use userId as contextId; groups use groupId (different from user's ID)
-  // Identity mappings are per-user, so we use chatUserId (not contextId) for storage
+  const provider = deps.buildProviderForUser(configId)
   await maybeAutoLinkIdentity(chatUserId, username, provider)
-
   const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
-  const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
+  const timezone = getConfig(configId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
+  const validatedMessages = validateToolResults(messagesWithMemory)
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -194,7 +185,7 @@ const callLlm = async (
     model,
     provider,
     tools,
-    messages: messagesWithMemory,
+    messages: validatedMessages,
     deps,
     reply,
   })
@@ -204,43 +195,6 @@ const callLlm = async (
   return result
 }
 
-const extractErrorDetails = (error: unknown): Record<string, unknown> => {
-  if (APICallError.isInstance(error)) {
-    return {
-      type: 'APICallError',
-      message: error.message,
-      statusCode: error.statusCode,
-      url: error.url,
-      responseBody: error.responseBody,
-      responseHeaders: error.responseHeaders,
-      isRetryable: error.isRetryable,
-      data: error.data,
-    }
-  }
-  if (isAppError(error)) {
-    return { type: 'AppError', errorType: error.type, code: error.code }
-  }
-  if (error instanceof Error) {
-    return { type: error.name, message: error.message }
-  }
-  return { type: 'unknown', value: String(error) }
-}
-
-const handleMessageError = async (reply: ReplyFn, contextId: string, error: unknown): Promise<void> => {
-  const errDetails = extractErrorDetails(error)
-  log.error({ contextId, error: errDetails }, 'Message handling failed')
-  if (isAppError(error)) await reply.text(getUserMessage(error))
-  else if (error instanceof KaneoClassifiedError || error instanceof YouTrackClassifiedError)
-    await reply.text(getUserMessage(error.appError))
-  else if (error instanceof ProviderClassifiedError) await reply.text(getUserMessage(error.error))
-  else
-    await reply.text(
-      APICallError.isInstance(error)
-        ? 'API call failed. Please try again.'
-        : 'An unexpected error occurred. Please try again later.',
-    )
-}
-
 export const processMessage = async (
   reply: ReplyFn,
   contextId: string,
@@ -248,9 +202,10 @@ export const processMessage = async (
   username: string | null,
   userText: string,
   contextType: 'dm' | 'group',
+  configContextId?: string,
   deps: LlmOrchestratorDeps = defaultDeps,
 ): Promise<void> => {
-  log.debug({ contextId, chatUserId, userText }, 'processMessage called')
+  log.debug({ contextId, configContextId, chatUserId, userText }, 'processMessage called')
   log.info({ contextId, chatUserId, messageLength: userText.length }, 'Message received from user')
 
   const baseHistory = getCachedHistory(contextId)
@@ -258,7 +213,7 @@ export const processMessage = async (
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, chatUserId, username, history, contextType, deps)
+    const result = await callLlm(reply, contextId, chatUserId, username, history, contextType, deps, configContextId)
     const assistantMessages = result.response.messages
     if (assistantMessages.length > 0) {
       appendHistory(contextId, assistantMessages)
@@ -271,12 +226,14 @@ export const processMessage = async (
       void runTrimInBackground(contextId, [...history, ...assistantMessages])
     }
   } catch (error) {
+    // Use configContextId for config lookup if available, otherwise fall back to contextId
+    const cfgId = configContextId ?? contextId
     emit('llm:error', {
       userId: contextId,
       error: error instanceof Error ? error.message : String(error),
-      model: getConfig(contextId, 'main_model') ?? 'unknown',
+      model: getConfig(cfgId, 'main_model') ?? 'unknown',
     })
     saveHistory(contextId, baseHistory)
-    await handleMessageError(reply, contextId, error)
+    await handleOrchestratorMessageError(reply, contextId, error)
   }
 }

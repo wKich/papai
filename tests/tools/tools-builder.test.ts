@@ -100,6 +100,20 @@ describe('buildTools', () => {
     expect(tools).not.toHaveProperty('lookup_group_history')
   })
 
+  it('should add web_fetch when a storage context exists', () => {
+    const provider = createMockProvider()
+    const tools = buildTools(provider, 'user-123', 'group-456', 'normal')
+
+    expect(tools).toHaveProperty('web_fetch')
+  })
+
+  it('should not add web_fetch when contextId is undefined', () => {
+    const provider = createMockProvider()
+    const tools = buildTools(provider, 'user-123', undefined, 'normal')
+
+    expect(tools).not.toHaveProperty('web_fetch')
+  })
+
   describe('chatUserId isolation', () => {
     it('should pass chatUserId separately from contextId to identity tools', () => {
       const provider = createMockProvider({

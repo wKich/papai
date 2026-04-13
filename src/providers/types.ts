@@ -127,6 +127,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
     status?: string
     dueDate?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   }): Promise<Task>
 
   getTask(taskId: string): Promise<Task>

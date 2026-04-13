@@ -1,14 +1,18 @@
 # E2E Test Plan
 
-Rename this file and title to match the specific behavior or journey before saving it as `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
+Copy this file and update the title to match the specific behavior or journey before saving it as `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
 
 **Objective:** State the user-visible behavior being validated.
 
 **Regression Boundary:** State what existing behavior must remain safe while adding this coverage.
 
+**Owners/Audience:** Name the team or individuals accountable for this plan and who should review it.
+
 **Realism Tier:** State the chosen tier and why cheaper tests are not enough.
 
-**Platforms and Providers:** Name the included surfaces and the intentionally excluded ones.
+**Platforms and Providers:** Name the included surfaces.
+
+**Excluded Scope:** Name the surfaces, providers, or scenarios intentionally excluded from this plan and why.
 
 ---
 
@@ -50,6 +54,11 @@ Add more rows until the plan covers happy path, routing or permission gates, inv
 
 - Name the existing harnesses to reuse.
 - Name any new helper, fixture, or platform setup work required.
+
+## Known Backend Quirks
+
+- Document systemic backend issues that affect multiple scenarios.
+- Note workarounds, timing issues, or provider-specific behaviors.
 
 ## Implementation Order
 

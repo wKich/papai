@@ -101,6 +101,10 @@ export type IncomingMessage = {
   /** storage key: userId in DMs, groupId in groups */
   contextId: string
   contextType: ContextType
+  /** Human-readable channel/group name when the adapter knows it */
+  contextName?: string
+  /** Human-readable workspace/team/guild label when the adapter knows it */
+  contextParentName?: string
   /** bot was @mentioned */
   isMentioned: boolean
   text: string
@@ -141,6 +145,7 @@ export type AuthorizationResult = {
   isBotAdmin: boolean
   isGroupAdmin: boolean
   storageContextId: string
+  configContextId?: string
 }
 
 /** Command handler signature. */
@@ -166,6 +171,47 @@ export interface ButtonReplyOptions extends ReplyOptions {
   buttons?: ChatButton[]
 }
 
+/** One section of the LLM context window, with an optional nested breakdown. */
+export type ContextSection = {
+  label: string
+  tokens: number
+  detail?: string
+  children?: ContextSection[]
+}
+
+/** Snapshot of the LLM context window for a given conversation. */
+export type ContextSnapshot = {
+  modelName: string
+  sections: ContextSection[]
+  totalTokens: number
+  /** Model's context window if known, null for unrecognized models. */
+  maxTokens: number | null
+  /** True when token counts came from a char/4 fallback because tokenization failed. */
+  approximate: boolean
+}
+
+/** One field inside a Discord-style embed. */
+export type EmbedField = {
+  name: string
+  value: string
+  inline?: boolean
+}
+
+/** Options for sending a structured embed (Discord-only today). */
+export type EmbedOptions = {
+  title: string
+  description: string
+  fields?: EmbedField[]
+  footer?: string
+  color?: number
+}
+
+/** Result of `ChatProvider.renderContext` — describes how the handler should send the output. */
+export type ContextRendered =
+  | { method: 'text'; content: string }
+  | { method: 'formatted'; content: string }
+  | { method: 'embed'; embed: EmbedOptions }
+
 /** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
@@ -174,6 +220,8 @@ export type ReplyFn = {
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
   buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
+  /** Optional: send a structured embed. Only Discord implements this today. */
+  embed?: (options: EmbedOptions) => Promise<void>
 }
 
 /** The core interface every chat platform provider must implement. */
@@ -213,6 +261,9 @@ export interface ChatProvider {
 
   /** Register the bot's command list with the platform (for command menus). */
   setCommands?(adminUserId: string): Promise<void>
+
+  /** Render a context snapshot into a platform-native representation. */
+  renderContext(snapshot: ContextSnapshot): ContextRendered
 
   /** Start the bot event loop. */
   start(): Promise<void>

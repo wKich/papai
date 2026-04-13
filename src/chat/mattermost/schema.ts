@@ -30,7 +30,16 @@ export const MattermostFileInfoSchema = z.object({
 
 export const UserMeSchema = z.object({ id: z.string(), username: z.string().optional() })
 export const ChannelSchema = z.object({ id: z.string() })
-export const ChannelInfoSchema = z.object({ type: z.string() })
+export const ChannelInfoSchema = z.object({
+  type: z.string(),
+  display_name: z.string().optional(),
+  name: z.string().optional(),
+  team_id: z.string().optional(),
+})
+export const TeamInfoSchema = z.object({
+  display_name: z.string().optional(),
+  name: z.string().optional(),
+})
 export const ChannelMemberSchema = z.object({ roles: z.string() })
 export const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string() })) })
 

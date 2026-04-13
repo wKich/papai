@@ -68,4 +68,24 @@ describe('chunkForDiscord', () => {
     expect(chunks.every((c) => c.length <= 2000)).toBe(true)
     expect(chunks.join('').replace(/\s+/g, '')).toBe((sentence1 + sentence2).replace(/\s+/g, ''))
   })
+
+  test('preserves language tag when splitting code blocks', () => {
+    // Create a typescript code block that will be split
+    const fenceOpen = '```typescript\n'
+    // Enough to exceed chunk size
+    const codeContent = 'const x = 1;\n'.repeat(200)
+    const fenceClose = '```'
+    const input = fenceOpen + codeContent + fenceClose
+
+    const chunks = chunkForDiscord(input, 500)
+
+    // All chunks except first should reopen with language tag
+    for (let i = 1; i < chunks.length; i++) {
+      const chunk = chunks[i]!
+      // Continuation chunks should start with ```typescript, not just ```
+      if (chunk.includes('```')) {
+        expect(chunk.startsWith('```typescript') || chunk.includes('\n```typescript')).toBe(true)
+      }
+    }
+  })
 })

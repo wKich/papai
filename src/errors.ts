@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { type ProviderError, getProviderMessage, providerError } from './providers/errors.js'
+import { ProviderClassifiedError, type ProviderError, getProviderMessage, providerError } from './providers/errors.js'
 
 // Re-export ProviderError and its constructors for backward compatibility
 export type { ProviderError }
@@ -21,7 +21,17 @@ export type SystemError =
   | { type: 'system'; code: 'network-error'; message: string }
   | { type: 'system'; code: 'unexpected'; originalError: Error }
 
-export type AppError = ProviderError | LlmError | ValidationError | SystemError
+export type WebFetchError =
+  | { type: 'web-fetch'; code: 'invalid-url' }
+  | { type: 'web-fetch'; code: 'blocked-host' }
+  | { type: 'web-fetch'; code: 'blocked-content-type' }
+  | { type: 'web-fetch'; code: 'too-large' }
+  | { type: 'web-fetch'; code: 'timeout' }
+  | { type: 'web-fetch'; code: 'rate-limited' }
+  | { type: 'web-fetch'; code: 'extract-failed' }
+  | { type: 'web-fetch'; code: 'upstream-error'; status?: number }
+
+export type AppError = ProviderError | LlmError | ValidationError | SystemError | WebFetchError
 
 export const systemError = {
   configMissing: (variable: string): AppError => ({ type: 'system', code: 'config-missing', variable }),
@@ -29,10 +39,35 @@ export const systemError = {
   unexpected: (originalError: Error): AppError => ({ type: 'system', code: 'unexpected', originalError }),
 }
 
-const appErrorTypeSchema = z.object({ type: z.enum(['provider', 'llm', 'validation', 'system']) })
+export const webFetchError = {
+  invalidUrl: (): WebFetchError => ({ type: 'web-fetch', code: 'invalid-url' }),
+  blockedHost: (): WebFetchError => ({ type: 'web-fetch', code: 'blocked-host' }),
+  blockedContentType: (): WebFetchError => ({ type: 'web-fetch', code: 'blocked-content-type' }),
+  tooLarge: (): WebFetchError => ({ type: 'web-fetch', code: 'too-large' }),
+  timeout: (): WebFetchError => ({ type: 'web-fetch', code: 'timeout' }),
+  rateLimited: (): WebFetchError => ({ type: 'web-fetch', code: 'rate-limited' }),
+  extractFailed: (): WebFetchError => ({ type: 'web-fetch', code: 'extract-failed' }),
+  upstreamError: (status?: number): WebFetchError =>
+    status === undefined
+      ? { type: 'web-fetch', code: 'upstream-error' }
+      : { type: 'web-fetch', code: 'upstream-error', status },
+}
+
+const appErrorTypeSchema = z.object({
+  type: z.enum(['provider', 'llm', 'validation', 'system', 'web-fetch']),
+})
 
 // Type guard to check if error is an AppError
 export const isAppError = (error: unknown): error is AppError => appErrorTypeSchema.safeParse(error).success
+
+export const extractAppError = (error: unknown): AppError | null => {
+  if (isAppError(error)) return error
+  if (error instanceof ProviderClassifiedError) return error.error
+  if (typeof error !== 'object' || error === null) return null
+  if ('appError' in error && isAppError(error.appError)) return error.appError
+  if ('error' in error && isAppError(error.error)) return error.error
+  return null
+}
 
 const getLlmMessage = (error: LlmError): string => {
   switch (error.code) {
@@ -73,6 +108,31 @@ const getSystemMessage = (error: SystemError): string => {
   }
 }
 
+const getWebFetchMessage = (error: WebFetchError): string => {
+  switch (error.code) {
+    case 'invalid-url':
+      return `That URL doesn't look valid.`
+    case 'blocked-host':
+      return `I can't fetch that address because it isn't on the public web.`
+    case 'blocked-content-type':
+      return `That content type isn't supported.`
+    case 'too-large':
+      return `That page is too large for me to read safely.`
+    case 'timeout':
+      return `Fetching that page took too long.`
+    case 'rate-limited':
+      return `You're fetching URLs too quickly. Please try again in a moment.`
+    case 'extract-failed':
+      return `I couldn't extract readable content from that page.`
+    case 'upstream-error':
+      return `The site returned an error.`
+    default:
+      return `I couldn't fetch that page.`
+  }
+}
+
+export { getAgentGuidance, getAppErrorDetails, isRetryableAppError } from './error-analysis.js'
+
 export const getUserMessage = (error: AppError): string => {
   switch (error.type) {
     case 'provider':
@@ -83,6 +143,8 @@ export const getUserMessage = (error: AppError): string => {
       return getValidationMessage(error)
     case 'system':
       return getSystemMessage(error)
+    case 'web-fetch':
+      return getWebFetchMessage(error)
     default:
       return `An unexpected error occurred. Please try again later.`
   }
