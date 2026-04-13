@@ -38,6 +38,19 @@ describe('decidePermissionOptionId', () => {
     expect(
       decidePermissionOptionId(
         {
+          title: 'Run tests with safe flags',
+          kind: 'execute',
+          locations: [],
+          rawInput: { command: 'bun test tests/foo.test.ts --timeout=5000 --bail --coverage' },
+          options,
+        },
+        '/repo',
+      ),
+    ).toBe('allow-once')
+
+    expect(
+      decidePermissionOptionId(
+        {
           title: 'Git status with irregular whitespace',
           kind: 'execute',
           locations: [],
@@ -124,6 +137,45 @@ describe('decidePermissionOptionId', () => {
           kind: 'execute',
           locations: [],
           rawInput: { command: 'bun test --config=/tmp/evil.config.ts' },
+          options,
+        },
+        '/repo',
+      ),
+    ).toBe('reject-once')
+
+    expect(
+      decidePermissionOptionId(
+        {
+          title: 'Preload bare module name (bypasses path detection)',
+          kind: 'execute',
+          locations: [],
+          rawInput: { command: 'bun test --preload evil-module tests/foo.test.ts' },
+          options,
+        },
+        '/repo',
+      ),
+    ).toBe('reject-once')
+
+    expect(
+      decidePermissionOptionId(
+        {
+          title: 'Snapshot mutation',
+          kind: 'execute',
+          locations: [],
+          rawInput: { command: 'bun test --update-snapshots tests/foo.test.ts' },
+          options,
+        },
+        '/repo',
+      ),
+    ).toBe('reject-once')
+
+    expect(
+      decidePermissionOptionId(
+        {
+          title: 'Snapshot mutation short flag',
+          kind: 'execute',
+          locations: [],
+          rawInput: { command: 'bun test -u tests/foo.test.ts' },
           options,
         },
         '/repo',

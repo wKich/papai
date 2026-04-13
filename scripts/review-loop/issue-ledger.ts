@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { z } from 'zod'
@@ -70,7 +70,7 @@ export async function createIssueLedger(runDir: string): Promise<IssueLedger> {
 
 export async function loadIssueLedger(runDir: string): Promise<IssueLedger> {
   const ledgerPath = path.join(runDir, 'ledger.json')
-  const snapshot = IssueLedgerSnapshotSchema.parse(JSON.parse(await Bun.file(ledgerPath).text()))
+  const snapshot = IssueLedgerSnapshotSchema.parse(JSON.parse(await readFile(ledgerPath, 'utf8')))
   return {
     path: ledgerPath,
     snapshot,

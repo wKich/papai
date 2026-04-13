@@ -494,6 +494,7 @@ someFunction(deps)
 - NEVER add lint-disable comments (`eslint-disable`, `@ts-ignore`, `@ts-nocheck`, `oxlint-disable`) — fix the underlying issue
 - Use `.js` extension in import paths (Bun ESM resolution)
 - Error message extraction: `error instanceof Error ? error.message : String(error)`
+- **Concurrent promises**: Use `p-limit` instead of `for...of` loops or bare `Promise.all` when executing multiple promises — `p-limit` provides concurrency control and avoids overwhelming downstream APIs
 
 ### Dependency Injection Pattern
 

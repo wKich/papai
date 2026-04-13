@@ -55,14 +55,17 @@ test('run state persists session ids through pointer files', async () => {
     config,
     path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
   )
+  const persistedJson = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(state.statePath, 'utf8')))
   const persisted = z
     .object({
+      runId: z.string(),
+      repoRoot: z.string(),
       planPath: z.string(),
-      statePath: z.string(),
-      reviewerSessionPath: z.string(),
-      fixerSessionPath: z.string(),
+      currentRound: z.number(),
+      noProgressRounds: z.number(),
     })
-    .parse(JSON.parse(readFileSync(state.statePath, 'utf8')))
+    .strict()
+    .parse(persistedJson)
   const reviewerSessionPointer = SessionPointerSchema.parse(JSON.parse(readFileSync(state.reviewerSessionPath, 'utf8')))
   const fixerSessionPointer = SessionPointerSchema.parse(JSON.parse(readFileSync(state.fixerSessionPath, 'utf8')))
 
@@ -70,8 +73,10 @@ test('run state persists session ids through pointer files', async () => {
   expect(persisted.planPath).toBe(
     path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
   )
-  expect('reviewerSessionId' in JSON.parse(readFileSync(state.statePath, 'utf8'))).toBe(false)
-  expect('fixerSessionId' in JSON.parse(readFileSync(state.statePath, 'utf8'))).toBe(false)
+  expect('reviewerSessionId' in persistedJson).toBe(false)
+  expect('fixerSessionId' in persistedJson).toBe(false)
+  expect('runDir' in persistedJson).toBe(false)
+  expect('statePath' in persistedJson).toBe(false)
   expect(reviewerSessionPointer.sessionId).toBeNull()
   expect(fixerSessionPointer.sessionId).toBeNull()
   expect(existsSync(state.reviewerSessionPath)).toBe(true)

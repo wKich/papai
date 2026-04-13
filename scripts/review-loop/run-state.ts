@@ -20,6 +20,8 @@ export const RunStateSchema = z.object({
   noProgressRounds: z.number().int().nonnegative(),
 })
 
+export type RunState = z.infer<typeof RunStateSchema>
+
 const PersistedRunStateSchema = RunStateSchema.pick({
   runId: true,
   repoRoot: true,
@@ -27,21 +29,6 @@ const PersistedRunStateSchema = RunStateSchema.pick({
   currentRound: true,
   noProgressRounds: true,
 })
-
-export interface RunState {
-  runId: string
-  runDir: string
-  transcriptDir: string
-  statePath: string
-  reviewerSessionPath: string
-  fixerSessionPath: string
-  repoRoot: string
-  planPath: string
-  reviewerSessionId: string | null
-  fixerSessionId: string | null
-  currentRound: number
-  noProgressRounds: number
-}
 
 const SessionPointerSchema = z.object({
   sessionId: z.string().nullable(),
@@ -102,7 +89,7 @@ export async function loadRunState(workDir: string, runId: string): Promise<RunS
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
-  const { reviewerSessionId: _reviewerSessionId, fixerSessionId: _fixerSessionId, ...persistedState } = state
+  const persistedState = PersistedRunStateSchema.parse(state)
   await writeFile(state.statePath, JSON.stringify(persistedState, null, 2))
   await writeSessionPointer(state.reviewerSessionPath, state.reviewerSessionId)
   await writeSessionPointer(state.fixerSessionPath, state.fixerSessionId)

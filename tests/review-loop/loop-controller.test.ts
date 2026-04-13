@@ -291,6 +291,92 @@ describe('runReviewLoop', () => {
     expect(Object.values(result.ledger.issues).every((record) => record.status === 'needs_human')).toBe(true)
   })
 
+  test('does not re-verify issues already in a terminal status across rounds', async () => {
+    const repoRoot = makeTempDir()
+    const config: ReviewLoopConfig = {
+      repoRoot,
+      workDir: path.join(repoRoot, '.review-loop'),
+      maxRounds: 5,
+      // allow two no-progress rounds so we reach round 2
+      maxNoProgressRounds: 2,
+      reviewer: {
+        command: '/usr/local/bin/claude-acp-adapter',
+        args: [],
+        env: {},
+        sessionConfig: {},
+        invocationPrefix: '/review-code',
+        requireInvocationPrefix: false,
+      },
+      fixer: {
+        command: 'opencode',
+        args: ['acp'],
+        env: {},
+        sessionConfig: {},
+        verifyInvocationPrefix: '/verify-issue',
+        fixInvocationPrefix: null,
+        requireVerifyInvocation: false,
+      },
+    }
+
+    const planPath = path.join(repoRoot, 'plan.md')
+    const runState = await createRunState(config, planPath)
+    const ledger = await createIssueLedger(runState.runDir)
+    let verifyCallCount = 0
+
+    // Reviewer always re-raises the same issue every round (and re-review)
+    const result = await runReviewLoop({
+      config,
+      runState,
+      ledger,
+      reviewer: {
+        availableCommands: ['review-code'],
+        promptText: () =>
+          Promise.resolve({
+            text: JSON.stringify({
+              round: 1,
+              issues: [
+                {
+                  title: 'Race condition in queue flush path',
+                  severity: 'high',
+                  summary: 'Two concurrent messages can bypass the intended lock.',
+                  whyItMatters: 'This can produce stale assistant replies.',
+                  evidence: 'src/message-queue/queue.ts lines 84-107',
+                  file: 'src/message-queue/queue.ts',
+                  lineStart: 84,
+                  lineEnd: 107,
+                  suggestedFix: 'Take the processing lock earlier.',
+                  confidence: 0.92,
+                },
+              ],
+            }),
+            stopReason: 'end_turn',
+          }),
+      },
+      fixer: {
+        availableCommands: ['verify-issue'],
+        promptText: () => {
+          verifyCallCount += 1
+          return Promise.resolve({
+            text: JSON.stringify({
+              verdict: 'invalid',
+              fixability: 'manual',
+              reasoning: 'False positive — the lock is already taken upstream.',
+              targetFiles: ['src/message-queue/queue.ts'],
+              fixPlan: 'Do nothing.',
+            }),
+            stopReason: 'end_turn',
+          })
+        },
+      },
+    })
+
+    // The issue was rejected in round 1. The reviewer raises it again in round 2,
+    // but the verifier must NOT be called again for an already-rejected issue.
+    expect(verifyCallCount).toBe(1)
+    expect(result.doneReason).toBe('no_progress')
+    expect(Object.values(result.ledger.issues).every((record) => record.status === 'rejected')).toBe(true)
+  })
+
   test('stops with max_rounds when unresolved issues remain after the final round', async () => {
     const repoRoot = makeTempDir()
     const config: ReviewLoopConfig = {

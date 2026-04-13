@@ -21,7 +21,33 @@ const SAFE_EXECUTE_PATTERNS = [
   /^oxlint\b/,
 ]
 
-const UNSAFE_COMMAND_TOKENS = ['&&', '||', ';', '|', '>', '<', '`', '$(', '\n']
+// Allowlist of flags permitted with `bun test`. Excludes --preload (can load arbitrary
+// node_modules code via bare module names that bypass path detection) and
+// --update-snapshots / -u (mutates source files, wrong for a review bot).
+const BUN_TEST_SAFE_FLAGS = new Set([
+  '--timeout',
+  '--bail',
+  '--reporter',
+  '--reporter-outfile',
+  '--dots',
+  '--coverage',
+  '--coverage-reporter',
+  '--coverage-dir',
+  '--only-failures',
+  '--pass-with-no-tests',
+  '--only',
+  '--todo',
+  '--concurrent',
+  '--randomize',
+  '--seed',
+  '--max-concurrency',
+  '--rerun-each',
+  '--retry',
+  '--test-name-pattern',
+  '-t',
+])
+
+const UNSAFE_COMMAND_TOKENS = ['&&', '||', ';', '|', '>', '<', '`', '$(', '${', '\n']
 
 function isRepoPath(repoRoot: string, candidatePath: string): boolean {
   const resolvedRoot = path.resolve(repoRoot)
@@ -69,6 +95,24 @@ function isSafeExecuteCommand(command: string): boolean {
   return SAFE_EXECUTE_PATTERNS.some((pattern) => pattern.test(normalizedCommand))
 }
 
+function areBunTestFlagsSafe(command: string): boolean {
+  const normalized = normalizeCommand(command)
+  if (!normalized.startsWith('bun test')) {
+    return true
+  }
+
+  const tokens = normalized.split(/\s+/).slice(2)
+
+  return tokens.every((token) => {
+    if (!token.startsWith('-')) {
+      return true
+    }
+
+    const flagName = token.includes('=') ? (token.split('=')[0] ?? token) : token
+    return BUN_TEST_SAFE_FLAGS.has(flagName)
+  })
+}
+
 function getPathCandidate(token: string): string | null {
   const normalizedToken = stripMatchingQuotes(token)
 
@@ -107,7 +151,8 @@ export function decidePermissionOptionId(request: PermissionRequestLike, repoRoo
   if (request.kind === 'execute') {
     const rawCommand = request.rawInput['command']
     const command = typeof rawCommand === 'string' ? rawCommand : ''
-    const isSafe = isSafeExecuteCommand(command) && areExecutePathsSafe(command, repoRoot)
+    const isSafe =
+      isSafeExecuteCommand(command) && areExecutePathsSafe(command, repoRoot) && areBunTestFlagsSafe(command)
     return chooseOption(request.options, isSafe ? 'allow' : 'reject')
   }
 

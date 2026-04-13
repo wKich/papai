@@ -18,17 +18,13 @@ interface SessionState {
   responseChunks: string[]
 }
 
-function applySessionConfig(
+async function applySessionConfig(
   client: AcpProcessClient,
   sessionId: string,
   sessionConfig: Record<string, string>,
 ): Promise<void> {
-  return Object.entries(sessionConfig).reduce(
-    (previous, [configId, value]) =>
-      previous.then(async () => {
-        await client.setConfigOption(sessionId, configId, value)
-      }),
-    Promise.resolve(),
+  await Promise.all(
+    Object.entries(sessionConfig).map(([configId, value]) => client.setConfigOption(sessionId, configId, value)),
   )
 }
 
@@ -81,6 +77,8 @@ export async function bootstrapAgentSession(
   const sessionId = await createOrLoadSession(client, options.cwd, options.previousSessionId)
 
   await applySessionConfig(client, sessionId, options.sessionConfig)
+
+  await client.waitForSessionUpdates()
 
   return {
     sessionId,

@@ -157,5 +157,15 @@ rl.on('line', (line) => {
         stopReason: 'end_turn',
       },
     })
+    return
   }
+
+  send({
+    jsonrpc: '2.0',
+    id: message.id,
+    error: {
+      code: -32601,
+      message: `Method not found: ${message.method}`,
+    },
+  })
 })

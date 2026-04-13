@@ -1,6 +1,6 @@
 {
-  "repoRoot": "/Users/ki/Projects/experiments/papai",
-  "workDir": "/Users/ki/Projects/experiments/papai/.review-loop",
+  "repoRoot": ".",
+  "workDir": ".review-loop",
   "maxRounds": 5,
   "maxNoProgressRounds": 2,
   "reviewer": {

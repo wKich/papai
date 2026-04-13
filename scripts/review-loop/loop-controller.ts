@@ -92,9 +92,12 @@ async function rereviewRound(round: number, deps: ReviewLoopDeps): Promise<Retur
   return rereviewResponse
 }
 
+const TERMINAL_STATUSES = new Set<LedgerIssueRecord['status']>(['rejected', 'already_fixed', 'needs_human'])
+
 async function processReviewRecords(records: readonly LedgerIssueRecord[], deps: ReviewLoopDeps): Promise<number> {
   const limit = pLimit(1)
-  const results = await Promise.all(records.map((record) => limit(() => processIssueVerifyFix(record, deps))))
+  const verifiable = records.filter((r) => !TERMINAL_STATUSES.has(r.status))
+  const results = await Promise.all(verifiable.map((record) => limit(() => processIssueVerifyFix(record, deps))))
   return results.filter(({ fixedThisIssue }) => fixedThisIssue).length
 }
 

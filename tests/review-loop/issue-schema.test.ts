@@ -66,6 +66,8 @@ End result.`,
   })
 
   test('parseVerifierDecision rejects freeform prose', () => {
-    expect(() => parseVerifierDecision('looks valid to me')).toThrow()
+    expect(() => parseVerifierDecision('looks valid to me')).toThrow(
+      'Expected exactly one JSON object for verifier decision',
+    )
   })
 })
