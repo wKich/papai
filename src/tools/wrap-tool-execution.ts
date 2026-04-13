@@ -12,6 +12,23 @@ export interface ToolErrorResult {
   timestamp: string
 }
 
+export function isToolErrorResult(value: unknown): value is ToolErrorResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    value.success === false &&
+    'error' in value &&
+    typeof value.error === 'string' &&
+    'toolName' in value &&
+    typeof value.toolName === 'string' &&
+    'toolCallId' in value &&
+    typeof value.toolCallId === 'string' &&
+    'timestamp' in value &&
+    typeof value.timestamp === 'string'
+  )
+}
+
 export function wrapToolExecution(
   execute: (input: unknown, options: ToolExecutionOptions) => Promise<unknown>,
   toolName: string,

@@ -13,6 +13,7 @@ import { getIdentityMapping } from './identity/mapping.js'
 import { attemptAutoLink } from './identity/resolver.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
+import { validateToolResults } from './llm-orchestrator-validation.js'
 import { logger } from './logger.js'
 import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { ProviderClassifiedError } from './providers/errors.js'
@@ -43,6 +44,18 @@ const checkRequiredConfig = (contextId: string): string[] => {
   const providerKeys = TASK_PROVIDER === 'youtrack' ? (['youtrack_token'] as const) : (['kaneo_apikey'] as const)
   return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
 }
+
+interface LlmConfig {
+  llmApiKey: string
+  llmBaseUrl: string
+  mainModel: string
+}
+
+const getLlmConfig = (contextId: string): LlmConfig => ({
+  llmApiKey: getConfig(contextId, 'llm_apikey')!,
+  llmBaseUrl: getConfig(contextId, 'llm_baseurl')!,
+  mainModel: getConfig(contextId, 'main_model')!,
+})
 
 const persistFactsFromResults = (
   contextId: string,
@@ -170,20 +183,14 @@ const callLlm = async (
     await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /setup to configure.`)
     throw new Error('Missing configuration')
   }
-  const llmApiKey = getConfig(contextId, 'llm_apikey')!
-  const llmBaseUrl = getConfig(contextId, 'llm_baseurl')!
-  const mainModel = getConfig(contextId, 'main_model')!
+  const { llmApiKey, llmBaseUrl, mainModel } = getLlmConfig(contextId)
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(contextId)
-
-  // Auto-link on first group chat interaction (skip for DMs)
-  // DMs use userId as contextId; groups use groupId (different from user's ID)
-  // Identity mappings are per-user, so we use chatUserId (not contextId) for storage
   await maybeAutoLinkIdentity(chatUserId, username, provider)
-
   const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
   const timezone = getConfig(contextId, 'timezone') ?? 'UTC'
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
+  const validatedMessages = validateToolResults(messagesWithMemory)
   log.debug(
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
@@ -194,7 +201,7 @@ const callLlm = async (
     model,
     provider,
     tools,
-    messages: messagesWithMemory,
+    messages: validatedMessages,
     deps,
     reply,
   })
