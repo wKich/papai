@@ -28,6 +28,43 @@ describe('issue schema parsing', () => {
     expect(parsed.issues[0]?.severity).toBe('high')
   })
 
+  test('parseReviewerIssues accepts fenced JSON with surrounding text', () => {
+    const parsed = parseReviewerIssues(
+      [
+        'Here is the structured review output:',
+        '',
+        '```json',
+        '{"round":2,"issues":[]}',
+        '```',
+        '',
+        'That is the full result.',
+      ].join('\n'),
+    )
+
+    expect(parsed.round).toBe(2)
+    expect(parsed.issues).toHaveLength(0)
+  })
+
+  test('parseVerifierDecision accepts lightly wrapped JSON', () => {
+    const parsed = parseVerifierDecision(
+      `Verifier result follows.
+
+{"verdict":"valid","fixability":"auto","reasoning":"Looks good.","targetFiles":["src/app.ts"],"fixPlan":"No changes required."}
+
+End result.`,
+    )
+
+    expect(parsed.verdict).toBe('valid')
+    expect(parsed.targetFiles).toEqual(['src/app.ts'])
+  })
+
+  test('parseReviewerIssues rejects ambiguous multi-json responses', () => {
+    expect(() =>
+      parseReviewerIssues(`{"round":1,"issues":[]}
+{"round":2,"issues":[]}`),
+    ).toThrow()
+  })
+
   test('parseVerifierDecision rejects freeform prose', () => {
     expect(() => parseVerifierDecision('looks valid to me')).toThrow()
   })
