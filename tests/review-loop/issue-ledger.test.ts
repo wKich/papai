@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-
-import { z } from 'zod'
 
 import {
   createIssueLedger,
   applyReviewRound,
+  loadIssueLedger,
   recordVerification,
   recordFixAttempt,
   saveIssueLedger,
@@ -50,6 +49,48 @@ describe('issue ledger', () => {
     expect(Object.keys(ledger.snapshot.issues)).toHaveLength(1)
   })
 
+  test('distinguishes invalid and already_fixed verification statuses', async () => {
+    const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
+    tempDirs.push(runDir)
+
+    const ledger = await createIssueLedger(runDir)
+    const [invalidRecord, alreadyFixedRecord] = applyReviewRound(ledger, 1, [
+      issue,
+      {
+        ...issue,
+        title: 'Queue flush race is already fixed',
+        summary: 'The lock now protects the flush path.',
+      },
+    ])
+
+    if (invalidRecord === undefined || alreadyFixedRecord === undefined) {
+      throw new Error('Expected two ledger records')
+    }
+
+    recordVerification(ledger, invalidRecord.fingerprint, {
+      verdict: 'invalid',
+      fixability: 'manual',
+      reasoning: 'The bug report is not supported by the current code.',
+      targetFiles: ['src/message-queue/queue.ts'],
+      fixPlan: 'No fix needed.',
+    })
+    recordVerification(ledger, alreadyFixedRecord.fingerprint, {
+      verdict: 'already_fixed',
+      fixability: 'manual',
+      reasoning: 'The implementation already contains the described fix.',
+      targetFiles: ['src/message-queue/queue.ts'],
+      fixPlan: 'No fix needed.',
+    })
+
+    await saveIssueLedger(ledger)
+    const loaded = await loadIssueLedger(runDir)
+
+    expect(loaded.snapshot.issues[invalidRecord.fingerprint]?.status).toBe('rejected')
+    expect(loaded.snapshot.issues[alreadyFixedRecord.fingerprint]?.status).toBe('already_fixed')
+    expect(loaded.snapshot.issues[invalidRecord.fingerprint]?.verifierDecision?.verdict).toBe('invalid')
+    expect(loaded.snapshot.issues[alreadyFixedRecord.fingerprint]?.verifierDecision?.verdict).toBe('already_fixed')
+  })
+
   test('reopens closed issues when the reviewer reports them again', async () => {
     const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
     tempDirs.push(runDir)
@@ -73,13 +114,9 @@ describe('issue ledger', () => {
     ledger.snapshot.issues[record.fingerprint]!.status = 'closed'
     applyReviewRound(ledger, 2, [issue])
     await saveIssueLedger(ledger)
+    const persisted = await loadIssueLedger(runDir)
 
-    const PersistedSchema = z.object({
-      issues: z.record(z.string(), z.object({ status: z.string(), fixAttempts: z.number() })),
-    })
-    const persisted = PersistedSchema.parse(JSON.parse(readFileSync(ledger.path, 'utf8')))
-
-    expect(persisted.issues[record.fingerprint]?.status).toBe('reopened')
-    expect(persisted.issues[record.fingerprint]?.fixAttempts).toBe(1)
+    expect(persisted.snapshot.issues[record.fingerprint]?.status).toBe('reopened')
+    expect(persisted.snapshot.issues[record.fingerprint]?.fixAttempts).toBe(1)
   })
 })

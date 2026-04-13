@@ -11,6 +11,7 @@ export type LedgerIssueStatus =
   | 'discovered'
   | 'verified'
   | 'rejected'
+  | 'already_fixed'
   | 'needs_human'
   | 'fixed_pending_review'
   | 'closed'
@@ -19,7 +20,16 @@ export type LedgerIssueStatus =
 export const LedgerIssueRecordSchema = z.object({
   fingerprint: z.string(),
   issue: ReviewerIssueSchema,
-  status: z.enum(['discovered', 'verified', 'rejected', 'needs_human', 'fixed_pending_review', 'closed', 'reopened']),
+  status: z.enum([
+    'discovered',
+    'verified',
+    'rejected',
+    'already_fixed',
+    'needs_human',
+    'fixed_pending_review',
+    'closed',
+    'reopened',
+  ]),
   firstSeenRound: z.number().int().nonnegative(),
   latestSeenRound: z.number().int().nonnegative(),
   fixAttempts: z.number().int().nonnegative(),
@@ -116,8 +126,7 @@ export function recordVerification(ledger: IssueLedger, fingerprint: string, dec
   }
 
   record.verifierDecision = decision
-  record.status =
-    decision.verdict === 'valid' ? 'verified' : decision.verdict === 'needs_human' ? 'needs_human' : 'rejected'
+  record.status = mapVerifierDecisionToLedgerStatus(decision.verdict)
 }
 
 export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void {
@@ -132,4 +141,19 @@ export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void
 
 export async function saveIssueLedger(ledger: IssueLedger): Promise<void> {
   await writeFile(ledger.path, JSON.stringify(ledger.snapshot, null, 2))
+}
+
+function mapVerifierDecisionToLedgerStatus(verdict: VerifierDecision['verdict']): LedgerIssueStatus {
+  switch (verdict) {
+    case 'valid':
+      return 'verified'
+    case 'already_fixed':
+      return 'already_fixed'
+    case 'needs_human':
+      return 'needs_human'
+    case 'invalid':
+      return 'rejected'
+    default:
+      throw new Error('Unhandled verifier verdict')
+  }
 }

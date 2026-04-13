@@ -737,6 +737,7 @@ export type LedgerIssueStatus =
   | 'discovered'
   | 'verified'
   | 'rejected'
+  | 'already_fixed'
   | 'needs_human'
   | 'fixed_pending_review'
   | 'closed'
@@ -772,7 +773,7 @@ export async function createIssueLedger(runDir: string): Promise<IssueLedger> {
 
 export async function loadIssueLedger(runDir: string): Promise<IssueLedger> {
   const ledgerPath = path.join(runDir, 'ledger.json')
-  const snapshot = JSON.parse(await Bun.file(ledgerPath).text()) as IssueLedgerSnapshot
+  const snapshot = IssueLedgerSnapshotSchema.parse(JSON.parse(await Bun.file(ledgerPath).text()))
   return {
     path: ledgerPath,
     snapshot,
@@ -784,8 +785,16 @@ export function applyReviewRound(
   round: number,
   issues: readonly ReviewerIssue[],
 ): readonly LedgerIssueRecord[] {
-  return issues.map((issue) => {
+  const seenFingerprints = new Set<string>()
+  const roundRecords: LedgerIssueRecord[] = []
+
+  for (const issue of issues) {
     const fingerprint = computeIssueFingerprint(issue)
+    if (seenFingerprints.has(fingerprint)) {
+      continue
+    }
+    seenFingerprints.add(fingerprint)
+
     const existing = ledger.snapshot.issues[fingerprint]
 
     const next: LedgerIssueRecord =
@@ -807,8 +816,10 @@ export function applyReviewRound(
           }
 
     ledger.snapshot.issues[fingerprint] = next
-    return next
-  })
+    roundRecords.push(next)
+  }
+
+  return roundRecords
 }
 
 export function recordVerification(ledger: IssueLedger, fingerprint: string, decision: VerifierDecision): void {
@@ -818,8 +829,7 @@ export function recordVerification(ledger: IssueLedger, fingerprint: string, dec
   }
 
   record.verifierDecision = decision
-  record.status =
-    decision.verdict === 'valid' ? 'verified' : decision.verdict === 'needs_human' ? 'needs_human' : 'rejected'
+  record.status = mapVerifierDecisionToLedgerStatus(decision.verdict)
 }
 
 export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void {
@@ -834,6 +844,21 @@ export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void
 
 export async function saveIssueLedger(ledger: IssueLedger): Promise<void> {
   await writeFile(ledger.path, JSON.stringify(ledger.snapshot, null, 2))
+}
+
+function mapVerifierDecisionToLedgerStatus(verdict: VerifierDecision['verdict']): LedgerIssueStatus {
+  switch (verdict) {
+    case 'valid':
+      return 'verified'
+    case 'invalid':
+      return 'rejected'
+    case 'already_fixed':
+      return 'already_fixed'
+    case 'needs_human':
+      return 'needs_human'
+    default:
+      throw new Error('Unhandled verifier verdict')
+  }
 }
 ```
 
