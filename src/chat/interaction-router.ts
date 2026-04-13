@@ -44,9 +44,9 @@ async function defaultHandleGroupSettingsInteraction(
 
 function getSettingsTargetContextId(interaction: IncomingInteraction): string {
   if (interaction.contextType !== 'dm') {
-    return interaction.contextId
+    return interaction.storageContextId
   }
-  return getActiveGroupSettingsTarget(interaction.user.id) ?? interaction.contextId
+  return getActiveGroupSettingsTarget(interaction.user.id) ?? interaction.storageContextId
 }
 
 async function defaultHandleConfigInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {

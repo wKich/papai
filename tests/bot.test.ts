@@ -354,6 +354,41 @@ describe('Bot Authorization Gate (setupBot)', () => {
     expect(adminObservation?.isAdmin).toBe(true)
   })
 
+  test('does not record group observations for ignored non-mentioned natural language', async () => {
+    addGroupMember('group-noise', 'group-member', ADMIN_ID)
+    setupUserConfig('group-noise')
+
+    const messageHandler = getMessageHandler()
+    expect(messageHandler).not.toBeNull()
+
+    const groupMessage: IncomingMessage = {
+      user: { id: 'group-member', username: 'groupmember', isAdmin: false },
+      contextId: 'group-noise',
+      contextType: 'group',
+      contextName: 'Noise',
+      contextParentName: 'Platform',
+      isMentioned: false,
+      text: 'hello team',
+    }
+
+    const { reply } = createMockReply()
+    await messageHandler!(groupMessage, reply)
+
+    const db = getDrizzleDb()
+    const knownGroup = db.select().from(knownGroupContexts).where(eq(knownGroupContexts.contextId, 'group-noise')).get()
+    const adminObservation = db
+      .select()
+      .from(groupAdminObservations)
+      .where(
+        and(eq(groupAdminObservations.contextId, 'group-noise'), eq(groupAdminObservations.userId, 'group-member')),
+      )
+      .get()
+
+    expect(knownGroup).toBeUndefined()
+    expect(adminObservation).toBeUndefined()
+    expect(processMessageCallCount).toBe(0)
+  })
+
   test('setupBot registers chat interaction handler when supported', () => {
     addUser('auth-user', ADMIN_ID)
     setupUserConfig('auth-user')

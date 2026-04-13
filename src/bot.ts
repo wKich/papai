@@ -143,9 +143,8 @@ async function handleMessage(
     return
   }
 
-  const hasCommand = msg.commandMatch !== undefined && msg.commandMatch !== ''
-  const isNaturalLanguage = !hasCommand
-  if (msg.contextType === 'group' && isNaturalLanguage && !msg.isMentioned) return
+  if (msg.contextType === 'group' && (msg.commandMatch === undefined || msg.commandMatch === '') && !msg.isMentioned)
+    return
 
   const queueItem = {
     text: buildPromptWithReplyContext(msg),
@@ -211,6 +210,7 @@ async function maybeInterceptWizard(
 
 function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void {
   if (msg.contextType !== 'group') return
+  if ((msg.commandMatch === undefined || msg.commandMatch === '') && !msg.isMentioned) return
   upsertKnownGroupContext({
     contextId: msg.contextId,
     provider: chat.name,

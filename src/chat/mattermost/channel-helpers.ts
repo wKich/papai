@@ -1,20 +1,7 @@
 import { logger } from '../../logger.js'
-import { ChannelInfoSchema, ChannelMemberSchema } from './schema.js'
+import { ChannelMemberSchema } from './schema.js'
 
 const log = logger.child({ scope: 'chat:mattermost:channel' })
-
-export async function fetchChannelInfo(
-  channelId: string,
-  apiFetch: (method: string, path: string, body: unknown) => Promise<unknown>,
-): Promise<{ type: string }> {
-  const data = await apiFetch('GET', `/api/v4/channels/${channelId}`, undefined)
-  const parsed = ChannelInfoSchema.safeParse(data)
-  if (!parsed.success) {
-    log.warn({ channelId, error: parsed.error }, 'Failed to parse channel info')
-    return { type: '' }
-  }
-  return parsed.data
-}
 
 export async function checkChannelAdmin(
   channelId: string,

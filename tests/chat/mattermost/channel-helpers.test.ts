@@ -1,27 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 
-import { checkChannelAdmin, fetchChannelInfo } from '../../../src/chat/mattermost/channel-helpers.js'
+import { checkChannelAdmin } from '../../../src/chat/mattermost/channel-helpers.js'
 
 describe('channel-helpers', () => {
-  describe('fetchChannelInfo', () => {
-    it('should return channel type on success', async () => {
-      const mockData = { type: 'D' }
-      const apiFetch = (): Promise<unknown> => Promise.resolve(mockData)
-
-      const result = await fetchChannelInfo('channel123', apiFetch)
-
-      expect(result).toEqual({ type: 'D' })
-    })
-
-    it('should return empty type on invalid response', async () => {
-      const apiFetch = (): Promise<unknown> => Promise.resolve({ invalid: true })
-
-      const result = await fetchChannelInfo('channel123', apiFetch)
-
-      expect(result).toEqual({ type: '' })
-    })
-  })
-
   describe('checkChannelAdmin', () => {
     it('should return true when user has channel_admin role', async () => {
       const apiFetch = (): Promise<unknown> => Promise.resolve({ roles: 'channel_admin system_user' })
