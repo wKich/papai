@@ -4,6 +4,7 @@
 
 import type { Plugin } from '@opencode-ai/plugin'
 
+import { blockGitStash } from '../../.hooks/git/checks/block-git-stash.mjs'
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { enforceWritePolicy } from '../../.hooks/tdd/checks/enforce-write-policy.mjs'
 import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
@@ -20,6 +21,13 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
   return {
     // PRE-WRITE HOOK (runs before Write/Edit/MultiEdit)
     'tool.execute.before': async (input, output) => {
+      // Block git stash regardless of tool type
+      if (input.tool === 'bash') {
+        const command = (output.args?.command as string) ?? ''
+        const gitStashResult = blockGitStash({ tool_name: 'bash', tool_input: { command } })
+        if (gitStashResult) throw new Error(gitStashResult.reason)
+      }
+
       // Only process edit tools
       if (!EDIT_TOOLS.has(input.tool)) return
 
