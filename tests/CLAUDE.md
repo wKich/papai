@@ -1,104 +1,66 @@
 # Testing Conventions
 
-Runtime: **Bun** test runner (`bun:test`). No Jest, no Vitest.
+Runtime: **Bun** test runner (`bun:test`). No Jest or Vitest.
 
-## Test Helpers (use these, don't reinvent)
+## Test Helpers
 
-| Helper                 | Location                       | Purpose                                                |
-| ---------------------- | ------------------------------ | ------------------------------------------------------ |
-| `mockLogger()`         | `tests/utils/test-helpers.ts`  | Stubs pino logger globally                             |
-| `mockDrizzle()`        | `tests/utils/test-helpers.ts`  | Stubs `getDrizzleDb` for in-memory SQLite              |
-| `setupTestDb()`        | `tests/utils/test-helpers.ts`  | Creates in-memory SQLite with all migrations           |
-| `createMockReply()`    | `tests/utils/test-helpers.ts`  | Captures `reply.text()` calls for assertions           |
-| `createDmMessage()`    | `tests/utils/test-helpers.ts`  | Factory for DM `IncomingMessage`                       |
-| `createGroupMessage()` | `tests/utils/test-helpers.ts`  | Factory for group `IncomingMessage`                    |
-| `createAuth()`         | `tests/utils/test-helpers.ts`  | Factory for `AuthorizationResult`                      |
-| `createMockChat()`     | `tests/utils/test-helpers.ts`  | Mock `ChatProvider` capturing command registrations    |
-| `mockMessageCache()`   | `tests/utils/test-helpers.ts`  | Test-local message cache (isolated from production)    |
-| `createMockProvider()` | `tests/tools/mock-provider.ts` | Fully-stubbed `TaskProvider` with overridable methods  |
-| `createMockTask()`     | `tests/test-helpers.ts`        | Factory for `Task` with `Partial<Task>` overrides      |
-| `createMockProject()`  | `tests/test-helpers.ts`        | Factory for `Project` with overrides                   |
-| `createMockLabel()`    | `tests/test-helpers.ts`        | Factory for `Label` with overrides                     |
-| `createMockColumn()`   | `tests/test-helpers.ts`        | Factory for status column with overrides               |
-| `schemaValidates()`    | `tests/test-helpers.ts`        | Tests tool input schemas accept/reject given data      |
-| `getToolExecutor()`    | `tests/test-helpers.ts`        | Extracts tool `execute` function                       |
-| `setMockFetch()`       | `tests/test-helpers.ts`        | Global fetch mock for provider API tests               |
-| `restoreFetch()`       | `tests/test-helpers.ts`        | Restores original `globalThis.fetch`                   |
-| `expectAppError()`     | `tests/utils/test-helpers.ts`  | Asserts error is `AppError` with expected user message |
+Use helpers from `tests/utils/test-helpers.ts` unless a test already follows a local pattern for a specialized reason.
+
+Common helpers include:
+
+- `mockLogger()`
+- `setupTestDb()`
+- `createMockReply()`
+- `createDmMessage()`
+- `createGroupMessage()`
+- `createAuth()`
+- `createMockChat()` and `createMockChatForBot()`
+- `mockMessageCache()`
+- `expectAppError()`
+- `schemaValidates()`
+- `getToolExecutor()`
+- `setMockFetch()` / `restoreFetch()`
+- `createMockTask()` / `createMockProject()` / `createMockLabel()` / `createMockColumn()`
+
+`createMockProvider()` lives in `tests/tools/mock-provider.ts`.
 
 ## Mocking Rules
 
-- **Prefer dependency injection over `mock.module()`** — most modules now export a `Deps` interface and accept an optional `deps` parameter with production defaults
-- NEVER mock `globalThis.fetch` directly — use `setMockFetch()` / `restoreFetch()` from `tests/test-helpers.ts`
-- NEVER use `spyOn().mockImplementation()` for module mocks — use DI or mutable `let impl` pattern
-- Use `mock()` from `bun:test` for spy functions
-- `mock.module()` is still required for: `ai`, `@ai-sdk/openai-compatible`, `logger`, and a few provider modules in `llm-orchestrator.test.ts`
+- Prefer dependency injection over module mocking whenever the source module already exposes a `Deps` interface.
+- Do not mock `globalThis.fetch` directly; use `setMockFetch()` and `restoreFetch()`.
+- Use `mock()` for spy functions.
+- When a suite must use `mock.module()`, be precise about why and keep the mocked boundary narrow.
 
-### Dependency Injection Pattern (preferred)
+## Mock Reset Model
 
-Many source modules export a `Deps` interface and accept an optional `deps` parameter:
+The preload `tests/mock-reset.ts` restores a known set of commonly mocked modules in a global `beforeEach`, and runs `mock.restore()` in a global `afterEach`.
 
-```typescript
-// Source module (src/tools/completion-hook.ts)
-export interface CompletionHookDeps {
-  findTemplateByTaskId: (taskId: string) => RecurringTaskRecord | null
-  isCompletionStatus: (status: string) => boolean
-}
-const defaultDeps: CompletionHookDeps = { /* real implementations */ }
-export const completionHook = async (taskId, status, provider, deps = defaultDeps) => { ... }
-```
+That means:
 
-Tests pass fakes directly — no `mock.module()` needed:
+- do not add `afterAll(() => { mock.restore() })` just to clean up common mocks
+- if you introduce a new long-lived mocked module that should be reset automatically, add it to `tests/mock-reset.ts`
+- suite-level `beforeEach` can still apply additional `mock.module()` overrides after the preload reset
 
-```typescript
-const deps: CompletionHookDeps = {
-  findTemplateByTaskId: (): RecurringTaskRecord | null => template,
-  isCompletionStatus: (s: string): boolean => s === 'done',
-}
-await completionHook('task-1', 'done', provider, deps)
-```
+## Important Reality Check
 
-### Mutable Implementation Pattern (legacy, for modules without DI)
+The repo currently contains both modern DI-first tests and legacy `mock.module()` plus delayed-import suites.
+
+- Prefer the DI-first pattern for new tests.
+- Do not rewrite existing stable tests just to match DI unless the work already touches that area.
+- When a test relies on module evaluation order, use the existing delayed-import pattern intentionally and keep it local to that suite.
+
+## New Test File Pattern
+
+For most new tests, use this shape:
 
 ```typescript
-import { mock } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
-type GenerateTextResult = { output: { keep_indices: number[]; summary: string } }
-let generateTextImpl = (): Promise<GenerateTextResult> =>
-  Promise.resolve({ output: { keep_indices: [0, 1], summary: 'Summary' } })
+import { functionUnderTest } from '../../src/module.js'
+import type { SomeDeps } from '../../src/module.js'
+import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
-void mock.module('ai', () => ({
-  generateText: (..._args: unknown[]): Promise<GenerateTextResult> => generateTextImpl(),
-}))
-
-// Now import code under test
-import { functionUnderTest } from '../src/module.js'
-```
-
-Override per-test by reassigning `generateTextImpl`.
-
-## Mock Pollution Prevention
-
-`mock.module()` is global and permanent in Bun. The preload `tests/mock-reset.ts`
-restores real modules before every test via a global `beforeEach`.
-
-### Rules
-
-1. **Never call `mock.module()` at file top-level** — always inside `describe`-level `beforeEach`
-2. **Never call `mockLogger()` / `mockDrizzle()` / `mockMessageCache()` at file top-level** — same rule
-3. **No `afterAll(() => { mock.restore() })` needed** — global `afterEach` handles it
-4. **Adding a new mocked module?** Add it to `tests/mock-reset.ts` originals list
-5. **Mutable `let impl` pattern** — declare inside `describe`, reset in `beforeEach`
-
-### Template for new test files
-
-```typescript
-import { describe, expect, test, beforeEach } from 'bun:test'
-import type { SomeDeps } from '../src/module.js'
-import { functionUnderTest } from '../src/module.js'
-import { mockLogger, setupTestDb } from './utils/test-helpers.js'
-
-describe('Module', () => {
+describe('module', () => {
   let deps: SomeDeps
 
   beforeEach(async () => {
@@ -106,84 +68,36 @@ describe('Module', () => {
     await setupTestDb()
 
     deps = {
-      dependency: (): ReturnType => fakeValue,
+      dependency: () => value,
     }
   })
 
-  test('does something', () => {
-    const result = functionUnderTest(input, deps)
-    expect(result).toBe(expected)
+  test('does something', async () => {
+    const result = await functionUnderTest(input, deps)
+    expect(result).toEqual(expected)
   })
 })
 ```
 
-### Checklist for new test files
+## Legacy Module-Mock Pattern
 
-- [ ] Prefer DI (`deps` parameter) over `mock.module()` where available
-- [ ] `mock.module()` and helpers called in `beforeEach` (NOT top-level)
-- [ ] Mutable `let impl` declared inside `describe`
-- [ ] No `afterAll(() => { mock.restore() })` present
-- [ ] If mocking a NEW module not in `mock-reset.ts`, add it there
-- [ ] `bun test` (full suite) passes
-- [ ] `bun test --randomize` passes
+When DI is not available and module evaluation order matters:
 
-## Test Structure
+- keep `mock.module()` inside `beforeEach` or another controlled setup path when feasible
+- if the suite truly needs top-level snapshot imports or top-level mocks, document that constraint in the file
+- use delayed `await import()` in the suite when the module must be loaded after the mock is installed
 
-```typescript
-describe('Feature', () => {
-  beforeEach(() => {
-    mock.restore()
-  })
+## Schema and Tool Tests
 
-  describe('specificFunction', () => {
-    test('returns expected result', async () => { ... })
-    test('validates required parameters', () => { ... })
-    test('propagates API errors', async () => { ... })
-  })
-})
-```
-
-## Schema Validation Testing
-
-```typescript
-expect(schemaValidates(tool, {})).toBe(false) // missing required fields
-expect(schemaValidates(tool, { taskId: 'x' })).toBe(true) // valid input
-```
+- Use `schemaValidates()` for input-schema acceptance/rejection checks.
+- Use `getToolExecutor()` to invoke tool `execute` safely from tests.
+- Tool tests should assert structured outputs, including confirmation-required and failure-result shapes when applicable.
 
 ## E2E Testing
 
-E2E tests run against a real Kaneo instance in Docker. Global setup is handled by `bun-test-setup.ts`.
-
-```typescript
-import { beforeEach, describe, expect, test } from 'bun:test'
-import type { KaneoConfig } from '../../src/providers/kaneo/client.js'
-import { createTestClient, type KaneoTestClient } from './kaneo-test-client.js'
-
-describe('Feature', () => {
-  let testClient: KaneoTestClient
-  let kaneoConfig: KaneoConfig
-
-  beforeEach(async () => {
-    testClient = createTestClient()
-    kaneoConfig = testClient.getKaneoConfig()
-    await testClient.cleanup()
-  })
-
-  test('does something', async () => {
-    const project = await testClient.createTestProject()
-    const task = await createTask(kaneoConfig, { title: 'Test', projectId: project.id })
-    testClient.trackTask(task.id)
-  })
-})
-```
-
-- Use `KaneoTestClient` for resource management
-- **Always** call `testClient.trackTask(taskId)` for tasks created outside the test client
-- Clean up in `beforeEach` — not `afterEach`
-- No `beforeAll`/`afterAll` needed — Docker lifecycle is global
-- Do NOT mock anything in E2E tests
-- Run with `bun test:e2e` (excluded from `bun test`)
-- Before writing a new E2E plan, read `docs/superpowers/e2e-planning-workflow.md`.
-- Start new E2E plan docs from `docs/superpowers/templates/e2e-test-plan-template.md`.
-- The current Docker-backed Kaneo harness maps to **Tier 1: Provider-Real E2E**.
-- Escalate to Tier 2-4 only when the scenario depends on runtime, platform, or operational boundaries that Tier 1 cannot prove.
+- Run E2E with `bun test:e2e`.
+- The current Docker-backed Kaneo harness is **Tier 1: Provider-Real E2E**.
+- Prefer `KaneoTestClient` for new resource-management-heavy suites.
+- Track resources created outside the test client with `testClient.trackTask(...)` or the matching tracker helper when the suite uses `KaneoTestClient`.
+- The suite is in transition: many files already rely on shared preload/setup, but some older E2E files still use local `beforeAll`/`afterAll` hooks or manual cleanup. Follow the local pattern unless you are intentionally modernizing that suite.
+- Before proposing new E2E coverage, read `docs/superpowers/e2e-planning-workflow.md` and start from `docs/superpowers/templates/e2e-test-plan-template.md`.

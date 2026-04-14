@@ -2,70 +2,92 @@
 
 ## Definition Pattern
 
-Tools use the Vercel AI SDK `tool()` factory from the `ai` package:
+Tools use the Vercel AI SDK `tool()` factory from `ai`, but the exported tool is not the final execution surface. All tool sets are wrapped by `wrapToolExecution()` in `src/tools/index.ts`, which converts thrown failures into structured tool-failure payloads.
 
 ```typescript
-import { tool } from 'ai'
-import type { ToolSet } from 'ai'
-import { z } from 'zod'
-
-const log = logger.child({ scope: 'tool:tool-name' })
-
-export function makeToolNameTool(provider: TaskProvider): ToolSet[string] {
+export function makeExampleTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
-    description: 'Clear description of what the tool does',
+    description: 'Clear, precise tool description',
     inputSchema: z.object({
-      requiredField: z.string().describe('What this field represents'),
-      optionalField: z.string().optional().describe('Optional field description'),
+      field: z.string().describe('What this field means'),
     }),
-    execute: async ({ requiredField, optionalField }) => {
-      try {
-        const result = await provider.someMethod({ requiredField, optionalField })
-        log.info({ resultId: result.id }, 'Action completed')
-        return result
-      } catch (error) {
-        log.error(
-          { error: error instanceof Error ? error.message : String(error), tool: 'tool_name' },
-          'Tool execution failed',
-        )
-        throw error
-      }
+    execute: async ({ field }) => {
+      const result = await provider.someMethod?.(field)
+      log.info({ field }, 'Tool completed')
+      return result
     },
   })
 }
 ```
 
+## Assembly
+
+- Core tool construction starts in `src/tools/core-tools.ts`.
+- Context-aware assembly happens in `src/tools/tools-builder.ts`.
+- Public entry point is `makeTools(provider, options)` in `src/tools/index.ts`.
+
+`MakeToolsOptions` controls tool exposure:
+
+- `storageContextId`: user or conversation storage key
+- `chatUserId`: real chat actor ID
+- `mode`: `normal` or `proactive`
+- `contextType`: `dm` or `group`
+
+Those options matter. For example:
+
+- deferred prompt tools are excluded in `proactive` mode
+- identity tools only appear in group context and only when the provider exposes `identityResolver`
+- attachment upload consumes incoming files from the in-memory file relay, so relay storage and tool assembly must stay aligned on the context key they use
+- group-history lookup only appears for thread-scoped group storage contexts
+
 ## Naming
 
-- Factory function: `make[Action]Tool` — e.g. `makeCreateTaskTool`, `makeSearchTasksTool`
-- Tool key in toolset: `snake_case` — e.g. `create_task`, `search_tasks`, `add_comment`
 - One tool per file in `src/tools/`
+- Factory name: `make[Action]Tool`
+- Tool key: `snake_case`
 
 ## Input Schema
 
-- Use `.describe()` on every field — the LLM reads these descriptions to decide how to call the tool
-- Use Zod v4 types: `z.string()`, `z.number()`, `z.enum()`, `z.boolean()`
-- Mark optional fields with `.optional()`
-- Do NOT add default values in schemas — let the LLM decide
+- Use `.describe()` on every field; descriptions are part of the LLM-facing contract.
+- Prefer explicit optionality over implicit defaults.
+- Encode user-facing confirmation or selection semantics directly in the schema when the tool depends on them.
 
 ## Capability Gating
 
-Tools are assembled in `src/tools/index.ts` via `makeTools(provider)`. Optional tools are added only if the provider supports the required capability:
+- Never assume provider support from method existence alone; check `provider.capabilities` and any additional contract conditions used by the builder.
+- The actual exposed tool surface is defined by `buildTools()` plus the current context, not just by a provider class.
 
-```typescript
-if (provider.capabilities.has('tasks.archive')) {
-  tools['archive_task'] = makeArchiveTaskTool(provider)
-}
-```
+## Execution and Failures
 
-Core tools (create, get, update, list, search tasks) are always included.
+- Tool code may throw; the wrapper converts thrown failures into structured outputs via `buildToolFailureResult()`.
+- Do not depend on uncaught tool exceptions bubbling directly back into the orchestrator.
+- Log failures before rethrowing inside the tool, and let the wrapper normalize the outward result.
 
 ## Destructive Actions
 
-Tools for destructive actions (archive, delete) must include a `confidence` field (0-1 float). If confidence < 0.85, return `{ status: 'confirmation_required', message: '...' }` instead of executing. Never leak the threshold value in the message.
+- Use the shared confirmation helpers from `src/tools/confirmation-gate.ts` for destructive actions.
+- Reuse `confidenceField` in the schema and `checkConfidence()` in execution.
+- If the confidence check fails, return the shared `{ status: 'confirmation_required', message }` shape instead of executing.
+- Use human-readable labels in confirmation text when available.
 
-## Logging (mandatory)
+This pattern applies to destructive removals such as task deletion, project deletion, label removal, attachment removal, and work-log removal.
 
-- `log.info()` on successful execution with result identifiers
-- `log.error()` on caught exceptions with error message and tool name
-- Error message extraction: `error instanceof Error ? error.message : String(error)`
+## Shared-State Status Mutations
+
+- Status tools use a different confirmation pattern from destructive confidence gating.
+- `create_status`, `update_status`, `delete_status`, and `reorder_statuses` may accept `confirm: true` and return `confirmation_required` when a provider needs explicit confirmation for shared state-bundle mutations.
+- Keep that distinction clear in docs and code.
+
+## Current Context-Sensitive Tool Areas
+
+- attachments: `upload_attachment` consumes incoming files from `src/file-relay.ts`
+- web fetch: `web_fetch` is user/context scoped, rate-limited, cached, and restricted to public HTTP(S) content
+- identity: `set_my_identity` and `clear_my_identity` are group-only and provider-dependent
+- history lookup: `lookup_group_history` searches the main group history when the current context is a thread-scoped group conversation
+
+## Logging
+
+- `debug` for tool entry and key parameters
+- `info` for successful operations with result identifiers
+- `warn` for blocked confirmations or degraded non-fatal behavior
+- `error` for caught failures with `tool` name and normalized message
