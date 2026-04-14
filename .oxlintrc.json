@@ -51,7 +51,8 @@
     "papai-policy/no-inline-suppression-comments": "error",
     "papai-policy/no-optional-type-syntax": "off",
     "papai-policy/no-default-value-syntax": "off",
-    "papai-policy/no-fallback-expressions": "off"
+    "papai-policy/no-fallback-expressions": "off",
+    "typescript/prefer-readonly-parameter-types": "off"
   },
   "overrides": [
     {
