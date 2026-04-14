@@ -16,7 +16,9 @@ function createReplyFn(typingSpy: ReturnType<typeof mock>): ReplyFn {
     text: (): Promise<void> => Promise.resolve(),
     formatted: (): Promise<void> => Promise.resolve(),
     file: (): Promise<void> => Promise.resolve(),
-    typing: typingSpy,
+    typing: (): void => {
+      typingSpy()
+    },
     buttons: (): Promise<void> => Promise.resolve(),
   }
 }

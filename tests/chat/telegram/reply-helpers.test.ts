@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test'
 
+import { formatLlmOutput } from '../../../src/chat/telegram/format.js'
 import {
   createReplyParamsBuilder,
   type ReplyContext,
@@ -109,5 +110,23 @@ describe('createReplyParamsBuilder', () => {
     const params = builder()
 
     expect(params).toBeUndefined()
+  })
+})
+
+describe('sendButtonReply content formatting', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
+  test('markdown content is converted: no raw asterisks, entities produced', () => {
+    const result = formatLlmOutput('**Bold title**\n*(not set)*')
+    expect(result.text.includes('**')).toBe(false)
+    expect(result.entities.length).toBeGreaterThan(0)
+  })
+
+  test('plain text passes through unchanged with no entities', () => {
+    const result = formatLlmOutput('Plain text message')
+    expect(result.text).toBe('Plain text message')
+    expect(result.entities).toHaveLength(0)
   })
 })

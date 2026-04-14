@@ -40,7 +40,7 @@ I'm your task management assistant. I can help you:
 
 Let's get you set up! 🎯`
 
-    await reply.text(welcomeMessage)
+    await reply.formatted(welcomeMessage)
   }
 
   chat.registerCommand('start', handler)

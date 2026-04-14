@@ -5,31 +5,48 @@
 Commands are platform-agnostic handlers registered via `ChatProvider.registerCommand()`:
 
 ```typescript
-export function registerXCommand(chat: ChatProvider): void {
+export function registerXCommand(chat: Readonly<ChatProvider>): void {
   const handler: CommandHandler = async (msg, reply, auth) => {
-    if (!auth.allowed) return // Early auth check — always first
-    // Command logic...
+    if (!auth.allowed) return
     await reply.text('Response')
   }
+
   chat.registerCommand('commandname', handler)
 }
 ```
 
 ## Rules
 
-- **Auth check first**: Always check `auth.allowed` before any logic
-- **No platform imports**: Command handlers must not import Telegram, Mattermost, or any platform-specific code
-- **Use injected `reply`**: Send responses via `reply.text()`, `reply.formatted()`, `reply.buttons()`, `reply.file()` — never platform APIs directly
-- **Admin commands**: Check `auth.isBotAdmin` for admin-only commands
-- **Group context**: Check `msg.contextType` and `auth.isGroupAdmin` for group-specific behavior
-- **Message data**: Access user info via `msg.user` (`{ id, username, isAdmin }`), context via `msg.contextId` and `msg.contextType`
+- Check `auth.allowed` before doing work unless the command is intentionally responsible for its own rejection message.
+- Do not import Telegram, Mattermost, or Discord modules into command handlers. Chat-specific behavior must be expressed through `ChatProvider` capabilities or `ReplyFn`.
+- Use injected reply helpers only: `reply.text()`, `reply.formatted()`, `reply.buttons()`, `reply.file?.()`, `reply.embed?.()`, `reply.redactMessage?.()`.
+- Feature-detect platform affordances. Use helpers from `src/chat/capabilities.ts` instead of branching on `chat.name` when deciding whether buttons, command menus, file replies, or username resolution are available.
+- Group-specific behavior belongs behind `msg.contextType` and the appropriate admin gate for that flow, usually `auth.isGroupAdmin`.
+- Admin-only commands must stay DM-only unless there is an explicit group-safe flow.
+
+## Current Command Behavior
+
+- Commands are registered in `src/bot.ts` via `setupBot(chat, adminUserId)`.
+- Current command surface is `/help`, `/start`, `/setup`, `/config`, `/context`, `/clear`, `/group`, plus admin-only `/user`, `/users`, and `/announce`.
+- `/setup` and `/config` are DM-driven. In groups they redirect admins to DM, then the user chooses personal settings or a manageable group through the group-settings selector.
+- `/context` is no longer an admin-only export command. It builds a tokenized `ContextSnapshot` and sends a platform-native view through `chat.renderContext()`.
+- `/clear` clears conversation history, summary, and facts for the current storage context. The bot admin can also clear another user or all users; non-bot group admins are limited to clearing the current group context.
+- `/group` is the group authorization command surface and must use `supportsUserResolution(chat)` before assuming `@username` lookup works.
+
+## Interception Flow
+
+Bot wiring in `src/bot.ts` may intercept non-command messages before they reach the LLM queue:
+
+- group-settings selector responses in DM
+- config-editor text input
+- wizard/setup input
+- auto-started setup wizard prompts
+
+Interactive callbacks are routed separately through `src/chat/interaction-router.ts`.
 
 ## Types
 
 - `CommandHandler`: `(msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>`
-- `IncomingMessage`: `{ user: ChatUser, contextId: string, contextType: 'dm' | 'group', text: string, commandMatch: string, ... }`
-- `ReplyFn`: `{ text, formatted, file, typing, redactMessage, buttons }`
-
-## Registration
-
-Commands are registered in `src/bot.ts` via `setupBot(chat, adminUserId)`. Add new command registrations there.
+- `IncomingMessage`: includes `contextId`, `contextType`, optional `threadId`, optional `replyContext`, and optional incoming `files`
+- `AuthorizationResult`: includes `allowed`, `isBotAdmin`, `isGroupAdmin`, `storageContextId`, and optional `configContextId`
+- `ReplyFn`: always includes `text`, `formatted`, `typing`, and `buttons`; other reply methods are optional by platform

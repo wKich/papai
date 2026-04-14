@@ -9,6 +9,7 @@
     "build:client": "bun scripts/build-client.ts",
     "start": "bun build:client && bun run src/index.ts",
     "start:debug": "bun build:client && DEBUG_SERVER=true bun run src/index.ts",
+    "review:loop": "bun scripts/review-loop.ts",
     "knip": "knip-bun --strict --no-gitignore",
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint --config .oxlintrc.json .",
@@ -18,7 +19,7 @@
     "format:check": "oxfmt --check . --ignore-path=.oxfmtignore",
     "security": "bun run scripts/run-semgrep.ts",
     "security:ci": "bun run scripts/run-semgrep.ts --ci",
-    "test": "bun test tests/providers tests/tools tests/web tests/db tests/utils tests/schemas tests/proactive tests/debug tests/*.test.ts",
+    "test": "bun test tests/providers tests/tools tests/web tests/db tests/utils tests/schemas tests/proactive tests/debug tests/review-loop tests/*.test.ts",
     "test:client": "bun test --preload ./tests/client-setup.ts --path-ignore-patterns '' tests/client/",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
@@ -58,6 +59,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "^0.18.2",
     "@gramio/types": "^9.6.0",
     "@grammyjs/types": "^3.26.0",
     "@happy-dom/global-registrator": "^20.8.9",

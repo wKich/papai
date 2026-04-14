@@ -29,13 +29,19 @@ if [ "$STAGED_MODE" = true ]; then
     [ -n "$file" ] && staged_files+=("$file")
   done < <(git diff --staged --name-only --diff-filter=ACM 2>/dev/null || true)
 
-  # Build array of relevant files
+  # Build arrays of staged files relevant to each checker
   relevant_files=()
+  lintable_files=()
   for file in "${staged_files[@]+${staged_files[@]}}"; do
     [ -z "$file" ] && continue
     case "$file" in
       *.ts|*.tsx|*.js|*.jsx|*.json|*.md)
         relevant_files+=("$file")
+        ;;
+    esac
+    case "$file" in
+      *.ts|*.tsx|*.js|*.jsx)
+        lintable_files+=("$file")
         ;;
     esac
   done
@@ -52,10 +58,14 @@ if [ "$STAGED_MODE" = true ]; then
   checks=("lint" "typecheck" "format:check")
   failed=0
 
-  # Run lint on staged files
+  # Run lint only on staged files oxlint actually supports
   (
     exit_code=0
-    bunx oxlint --config .oxlintrc.json "${relevant_files[@]}" >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
+    if [ ${#lintable_files[@]} -eq 0 ]; then
+      printf '%s\n' 'ℹ No lintable staged files for oxlint' >"$TMPDIR/lint.out"
+    else
+      bunx oxlint --config .oxlintrc.json "${lintable_files[@]}" >"$TMPDIR/lint.out" 2>&1 || exit_code=$?
+    fi
     echo "$exit_code" >"$TMPDIR/lint.exit"
   ) &
   lint_pid=$!

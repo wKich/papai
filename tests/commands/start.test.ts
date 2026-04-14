@@ -7,16 +7,16 @@ import { createMockChatWithCommandHandlers, mockLogger, setupTestDb } from '../u
 
 describe('start command — demo mode auto-add', () => {
   let lastHandler: CommandHandler | null = null
-  let capturedText: string | null = null
+  let capturedFormatted: string | null = null
 
   const { provider: mockChat, commandHandlers } = createMockChatWithCommandHandlers()
 
   const mockReply = {
-    text: (content: string): Promise<void> => {
-      capturedText = content
+    text: (): Promise<void> => Promise.resolve(),
+    formatted: (content: string): Promise<void> => {
+      capturedFormatted = content
       return Promise.resolve()
     },
-    formatted: (): Promise<void> => Promise.resolve(),
     file: (): Promise<void> => Promise.resolve(),
     typing: (): void => {},
     buttons: (): Promise<void> => Promise.resolve(),
@@ -25,7 +25,7 @@ describe('start command — demo mode auto-add', () => {
   beforeEach(async () => {
     mockLogger()
     await setupTestDb()
-    capturedText = null
+    capturedFormatted = null
     lastHandler = null
     registerStartCommand(mockChat)
     lastHandler = commandHandlers.get('start') ?? null
@@ -55,7 +55,7 @@ describe('start command — demo mode auto-add', () => {
     await lastHandler!(msg, mockReply, auth)
 
     expect(isAuthorized('demo-start-1')).toBe(true)
-    expect(capturedText).toContain('Welcome')
+    expect(capturedFormatted).toContain('Welcome')
   })
 
   test('demo mode off: unknown user is NOT auto-added via /start', async () => {
@@ -100,6 +100,6 @@ describe('start command — demo mode auto-add', () => {
     await lastHandler!(msg, mockReply, auth)
 
     expect(isAuthorized('existing-1')).toBe(true)
-    expect(capturedText).toContain('Welcome')
+    expect(capturedFormatted).toContain('Welcome')
   })
 })

@@ -110,7 +110,7 @@ describe('review-loop CLI bootstrap', () => {
     })
   })
 
-  test('loadReviewLoopConfig resolves repo and plan paths and creates workDir', async () => {
+  test('loadReviewLoopConfig resolves repo paths and creates workDir', async () => {
     const dir = makeTempDir()
     const configPath = path.join(dir, 'review-loop.config.json')
 
@@ -119,7 +119,6 @@ describe('review-loop CLI bootstrap', () => {
       JSON.stringify(
         {
           repoRoot: dir,
-          planPath: path.join(dir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
           workDir: path.join(dir, '.review-loop'),
           maxRounds: 5,
           maxNoProgressRounds: 2,
@@ -144,7 +143,6 @@ describe('review-loop CLI bootstrap', () => {
 
     const config = await loadReviewLoopConfig({
       configPath,
-      planPath: path.join(dir, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
     })
 
     expect(config.repoRoot).toBe(dir)
@@ -214,7 +212,6 @@ const FixerConfigSchema = z.object({
 
 export const ReviewLoopConfigSchema = z.object({
   repoRoot: z.string().min(1),
-  planPath: z.string().min(1),
   workDir: z.string().min(1),
   maxRounds: z.number().int().positive().default(5),
   maxNoProgressRounds: z.number().int().positive().default(2),
@@ -227,23 +224,23 @@ export type ReviewLoopConfig = z.infer<typeof ReviewLoopConfigSchema>
 export interface ConfigLoadInput {
   configPath: string
   repoRoot?: string
-  planPath?: string
 }
 
 export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<ReviewLoopConfig> {
-  const raw = JSON.parse(await readFile(input.configPath, 'utf8')) as unknown
+  const configPath = path.resolve(input.configPath)
+  const configDir = path.dirname(configPath)
+  const raw = JSON.parse(await readFile(configPath, 'utf8')) as unknown
   const parsed = ReviewLoopConfigSchema.parse(raw)
 
-  const repoRoot = path.resolve(input.repoRoot ?? parsed.repoRoot)
-  const planPath = path.resolve(input.planPath ?? parsed.planPath)
-  const workDir = path.resolve(parsed.workDir)
+  const repoRoot =
+    input.repoRoot === undefined ? path.resolve(configDir, parsed.repoRoot) : path.resolve(input.repoRoot)
+  const workDir = path.resolve(repoRoot, parsed.workDir)
 
   await mkdir(workDir, { recursive: true })
 
   return {
     ...parsed,
     repoRoot,
-    planPath,
     workDir,
   }
 }
@@ -253,7 +250,6 @@ export async function loadReviewLoopConfig(input: ConfigLoadInput): Promise<Revi
 // scripts/review-loop/config.example.json
 {
   "repoRoot": "/Users/ki/Projects/experiments/papai",
-  "planPath": "/Users/ki/Projects/experiments/papai/docs/superpowers/plans/2026-04-11-file-attachments-implementation.md",
   "workDir": "/Users/ki/Projects/experiments/papai/.review-loop",
   "maxRounds": 5,
   "maxNoProgressRounds": 2,
@@ -345,7 +341,6 @@ export async function runCli(argv: readonly string[]): Promise<ReviewLoopConfig>
   const config = await loadReviewLoopConfig({
     configPath: args.configPath,
     repoRoot: args.repoRoot,
-    planPath: args.planPath,
   })
   console.log(`Loaded ACP review loop config for ${config.repoRoot}`)
   return config
@@ -457,7 +452,6 @@ test('createRunState creates the run directory, state file, and session pointer 
   const repoRoot = makeTempDir()
   const config: ReviewLoopConfig = {
     repoRoot,
-    planPath: path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
     workDir: path.join(repoRoot, '.review-loop'),
     maxRounds: 5,
     maxNoProgressRounds: 2,
@@ -480,11 +474,12 @@ test('createRunState creates the run directory, state file, and session pointer 
     },
   }
 
-  const state = await createRunState(config)
+  const planPath = path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md')
+  const state = await createRunState(config, planPath)
   const persisted = JSON.parse(readFileSync(state.statePath, 'utf8')) as { planPath: string }
 
   expect(state.runDir.startsWith(path.join(config.workDir, 'runs'))).toBe(true)
-  expect(persisted.planPath).toBe(config.planPath)
+  expect(persisted.planPath).toBe(planPath)
   expect(existsSync(state.reviewerSessionPath)).toBe(true)
   expect(existsSync(state.fixerSessionPath)).toBe(true)
 })
@@ -623,14 +618,22 @@ import { createHash } from 'node:crypto'
 
 import type { ReviewerIssue } from './issue-schema.js'
 
-const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ')
+const normalize = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+const stripLineReferences = (value: string): string => value.replace(/\b(lines?|line)\s+\d+(?:\s*[-–]\s*\d+)?\b/gi, ' ')
 
 export function computeIssueFingerprint(issue: ReviewerIssue): string {
   const source = [
     normalize(issue.file),
-    `${issue.lineStart}-${issue.lineEnd}`,
     normalize(issue.title),
     normalize(issue.summary),
+    normalize(issue.whyItMatters),
+    normalize(stripLineReferences(issue.evidence)),
   ].join('|')
 
   return createHash('sha256').update(source).digest('hex').slice(0, 16)
@@ -661,11 +664,19 @@ export interface RunState {
   noProgressRounds: number
 }
 
+const PersistedRunStateSchema = RunStateSchema.pick({
+  runId: true,
+  repoRoot: true,
+  planPath: true,
+  currentRound: true,
+  noProgressRounds: true,
+})
+
 function makeRunId(): string {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-export async function createRunState(config: ReviewLoopConfig): Promise<RunState> {
+export async function createRunState(config: ReviewLoopConfig, planPath: string): Promise<RunState> {
   const runId = makeRunId()
   const runDir = path.join(config.workDir, 'runs', runId)
   const transcriptDir = path.join(runDir, 'transcripts')
@@ -683,7 +694,7 @@ export async function createRunState(config: ReviewLoopConfig): Promise<RunState
     reviewerSessionPath,
     fixerSessionPath,
     repoRoot: config.repoRoot,
-    planPath: config.planPath,
+    planPath,
     reviewerSessionId: null,
     fixerSessionId: null,
     currentRound: 0,
@@ -698,11 +709,32 @@ export async function createRunState(config: ReviewLoopConfig): Promise<RunState
 
 export async function loadRunState(workDir: string, runId: string): Promise<RunState> {
   const statePath = path.join(workDir, 'runs', runId, 'state.json')
-  return JSON.parse(await readFile(statePath, 'utf8')) as RunState
+  const runDir = path.dirname(statePath)
+  const state = PersistedRunStateSchema.parse(JSON.parse(await readFile(statePath, 'utf8')))
+  const transcriptDir = path.join(runDir, 'transcripts')
+  const reviewerSessionPath = path.join(runDir, 'reviewer-session.json')
+  const fixerSessionPath = path.join(runDir, 'fixer-session.json')
+  return {
+    ...state,
+    runDir,
+    transcriptDir,
+    statePath,
+    reviewerSessionPath,
+    fixerSessionPath,
+    reviewerSessionId: await readSessionPointer(reviewerSessionPath),
+    fixerSessionId: await readSessionPointer(fixerSessionPath),
+  }
 }
 
 export async function saveRunState(state: RunState): Promise<void> {
-  await writeFile(state.statePath, JSON.stringify(state, null, 2))
+  const { reviewerSessionId: _reviewerSessionId, fixerSessionId: _fixerSessionId, ...persistedState } = state
+  await writeFile(state.statePath, JSON.stringify(persistedState, null, 2))
+  await writeFile(state.reviewerSessionPath, JSON.stringify({ sessionId: state.reviewerSessionId }, null, 2))
+  await writeFile(state.fixerSessionPath, JSON.stringify({ sessionId: state.fixerSessionId }, null, 2))
+}
+
+async function readSessionPointer(pointerPath: string): Promise<string | null> {
+  return SessionPointerSchema.parse(JSON.parse(await readFile(pointerPath, 'utf8'))).sessionId
 }
 ```
 
@@ -720,6 +752,7 @@ export type LedgerIssueStatus =
   | 'discovered'
   | 'verified'
   | 'rejected'
+  | 'already_fixed'
   | 'needs_human'
   | 'fixed_pending_review'
   | 'closed'
@@ -755,7 +788,7 @@ export async function createIssueLedger(runDir: string): Promise<IssueLedger> {
 
 export async function loadIssueLedger(runDir: string): Promise<IssueLedger> {
   const ledgerPath = path.join(runDir, 'ledger.json')
-  const snapshot = JSON.parse(await Bun.file(ledgerPath).text()) as IssueLedgerSnapshot
+  const snapshot = IssueLedgerSnapshotSchema.parse(JSON.parse(await Bun.file(ledgerPath).text()))
   return {
     path: ledgerPath,
     snapshot,
@@ -767,8 +800,16 @@ export function applyReviewRound(
   round: number,
   issues: readonly ReviewerIssue[],
 ): readonly LedgerIssueRecord[] {
-  return issues.map((issue) => {
+  const seenFingerprints = new Set<string>()
+  const roundRecords: LedgerIssueRecord[] = []
+
+  for (const issue of issues) {
     const fingerprint = computeIssueFingerprint(issue)
+    if (seenFingerprints.has(fingerprint)) {
+      continue
+    }
+    seenFingerprints.add(fingerprint)
+
     const existing = ledger.snapshot.issues[fingerprint]
 
     const next: LedgerIssueRecord =
@@ -786,12 +827,15 @@ export function applyReviewRound(
             ...existing,
             issue,
             latestSeenRound: round,
-            status: existing.status === 'closed' ? 'reopened' : existing.status,
+            status:
+              existing.status === 'closed' || existing.status === 'fixed_pending_review' ? 'reopened' : existing.status,
           }
 
     ledger.snapshot.issues[fingerprint] = next
-    return next
-  })
+    roundRecords.push(next)
+  }
+
+  return roundRecords
 }
 
 export function recordVerification(ledger: IssueLedger, fingerprint: string, decision: VerifierDecision): void {
@@ -801,8 +845,7 @@ export function recordVerification(ledger: IssueLedger, fingerprint: string, dec
   }
 
   record.verifierDecision = decision
-  record.status =
-    decision.verdict === 'valid' ? 'verified' : decision.verdict === 'needs_human' ? 'needs_human' : 'rejected'
+  record.status = mapVerifierDecisionToLedgerStatus(decision.verdict)
 }
 
 export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void {
@@ -817,6 +860,21 @@ export function recordFixAttempt(ledger: IssueLedger, fingerprint: string): void
 
 export async function saveIssueLedger(ledger: IssueLedger): Promise<void> {
   await writeFile(ledger.path, JSON.stringify(ledger.snapshot, null, 2))
+}
+
+function mapVerifierDecisionToLedgerStatus(verdict: VerifierDecision['verdict']): LedgerIssueStatus {
+  switch (verdict) {
+    case 'valid':
+      return 'verified'
+    case 'invalid':
+      return 'rejected'
+    case 'already_fixed':
+      return 'already_fixed'
+    case 'needs_human':
+      return 'needs_human'
+    default:
+      throw new Error('Unhandled verifier verdict')
+  }
 }
 ```
 
@@ -1116,7 +1174,7 @@ export async function createAcpProcessClient(spec: AcpProcessSpec): Promise<AcpP
     },
     async setConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
       await appendTranscript('out', { method: 'session/set_config_option', sessionId, configId, value })
-      await connection.setConfigOption({ sessionId, configId, value })
+      await connection.setSessionConfigOption({ sessionId, configId, value })
     },
     async prompt(sessionId: string, text: string): Promise<{ stopReason: string }> {
       await appendTranscript('out', { method: 'session/prompt', sessionId, text })
@@ -1595,10 +1653,10 @@ describe('runReviewLoop', () => {
   test('stops cleanly when rereview returns no critical/high issues', async () => {
     const repoRoot = mkdtempSync(path.join(tmpdir(), 'review-loop-controller-'))
     tempDirs.push(repoRoot)
+    const planPath = path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md')
 
     const config: ReviewLoopConfig = {
       repoRoot,
-      planPath: path.join(repoRoot, 'docs/superpowers/plans/2026-04-11-file-attachments-implementation.md'),
       workDir: path.join(repoRoot, '.review-loop'),
       maxRounds: 5,
       maxNoProgressRounds: 2,
@@ -1621,7 +1679,7 @@ describe('runReviewLoop', () => {
       },
     }
 
-    const runState = await createRunState(config)
+    const runState = await createRunState(config, planPath)
     const ledger = await createIssueLedger(runState.runDir)
 
     const reviewerReplies = [
@@ -1751,7 +1809,6 @@ describe('review-loop fake integration', () => {
       JSON.stringify(
         {
           repoRoot: process.cwd(),
-          planPath,
           workDir: path.join(dir, '.review-loop'),
           maxRounds: 5,
           maxNoProgressRounds: 2,
@@ -1853,7 +1910,7 @@ export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopRes
     const reviewPrompt = resolveInvocationText(
       deps.config.reviewer.invocationPrefix,
       deps.reviewer.availableCommands,
-      buildReviewPrompt(deps.config.planPath, Object.values(deps.ledger.snapshot.issues)),
+      buildReviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
       deps.config.reviewer.requireInvocationPrefix,
     )
     const reviewResponse = parseReviewerIssues((await deps.reviewer.promptText(reviewPrompt)).text)
@@ -1871,7 +1928,7 @@ export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopRes
       const verifyPrompt = resolveInvocationText(
         deps.config.fixer.verifyInvocationPrefix,
         deps.fixer.availableCommands,
-        buildVerifyPrompt(deps.config.planPath, record.issue),
+        buildVerifyPrompt(deps.runState.planPath, record.issue),
         deps.config.fixer.requireVerifyInvocation,
       )
       const verifyDecision = parseVerifierDecision((await deps.fixer.promptText(verifyPrompt)).text)
@@ -1887,7 +1944,7 @@ export async function runReviewLoop(deps: ReviewLoopDeps): Promise<ReviewLoopRes
     const rereviewResponse = parseReviewerIssues(
       (
         await deps.reviewer.promptText(
-          buildRereviewPrompt(deps.config.planPath, Object.values(deps.ledger.snapshot.issues)),
+          buildRereviewPrompt(deps.runState.planPath, Object.values(deps.ledger.snapshot.issues)),
         )
       ).text,
     )
@@ -2026,11 +2083,12 @@ export async function runCli(argv: readonly string[]): Promise<void> {
   const config = await loadReviewLoopConfig({
     configPath: args.configPath,
     repoRoot: args.repoRoot,
-    planPath: args.planPath,
   })
 
   const runState: RunState =
-    args.resumeRunId === undefined ? await createRunState(config) : await loadRunState(config.workDir, args.resumeRunId)
+    args.resumeRunId === undefined
+      ? await createRunState(config, args.planPath)
+      : await loadRunState(config.workDir, args.resumeRunId)
 
   const ledger =
     args.resumeRunId === undefined ? await createIssueLedger(runState.runDir) : await loadIssueLedger(runState.runDir)
@@ -2118,7 +2176,6 @@ mkdir -p .review-loop
 cat > .review-loop/config.json <<'EOF'
 {
   "repoRoot": "/Users/ki/Projects/experiments/papai",
-  "planPath": "/Users/ki/Projects/experiments/papai/docs/superpowers/plans/2026-04-11-file-attachments-implementation.md",
   "workDir": "/Users/ki/Projects/experiments/papai/.review-loop",
   "maxRounds": 5,
   "maxNoProgressRounds": 2,

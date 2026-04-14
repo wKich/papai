@@ -1,0 +1,23 @@
+{
+  "repoRoot": ".",
+  "workDir": ".review-loop",
+  "maxRounds": 5,
+  "maxNoProgressRounds": 2,
+  "reviewer": {
+    "command": "/usr/local/bin/claude-acp-adapter",
+    "args": [],
+    "env": {},
+    "sessionConfig": {},
+    "invocationPrefix": "/review-code",
+    "requireInvocationPrefix": false
+  },
+  "fixer": {
+    "command": "opencode",
+    "args": ["acp"],
+    "env": {},
+    "sessionConfig": {},
+    "verifyInvocationPrefix": "/verify-issue",
+    "fixInvocationPrefix": null,
+    "requireVerifyInvocation": false
+  }
+}

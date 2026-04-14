@@ -46,3 +46,6 @@ reports/
 
 # Client build output
 public/
+
+# Review loop state
+.review-loop/
