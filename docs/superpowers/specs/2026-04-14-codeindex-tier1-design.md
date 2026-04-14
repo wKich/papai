@@ -1,344 +1,779 @@
-# codeindex: Tier 1 Code Indexing for AI Agents
+# codeindex: Tier 1 Symbol Index for AI Agents
 
-**Date**: 2026-04-14
-**Status**: Draft
-**Scope**: Tier 1 — AST-based chunking + FTS5 keyword search + MCP server
+**Date:** 2026-04-14
+**Status:** Proposed
+**Scope:** Tier 1 - TypeScript/JavaScript-first symbol index + FTS5 keyword search + MCP server
+**Approach:** Symbol-first, TS-aware, resolver-backed search
 
-## Problem
+## Summary
 
-AI coding agents (Claude Code, opencode) navigate codebases by reading files sequentially. This wastes tokens on irrelevant code, misses hidden dependencies, and re-reads the same files across sessions. The agent has no structural map of the codebase — it treats code as flat text rather than a graph of symbols and relationships.
+Build a standalone Bun/TypeScript tool called `codeindex` under `codeindex/` at the papai repo root. It will index TypeScript, JavaScript, TSX, and JSX repositories into a local SQLite database optimized for three Tier 1 query classes:
 
-Existing tools address this with varying depth:
+- exact symbol lookup
+- concept-to-code lookup without embeddings
+- impact and dependency lookup
 
-| Tool           | Stack             | Analysis depth                            | Agent-level benchmarks                                 | License     |
-| -------------- | ----------------- | ----------------------------------------- | ------------------------------------------------------ | ----------- |
-| codemogger     | TypeScript/libSQL | AST + embeddings                          | None (search latency only)                             | MIT         |
-| Ory Lumen      | Go/SQLite-vec     | AST + embeddings                          | SWE-style: -37% cost, -37% time, 0 quality regressions | Apache 2.0  |
-| CocoIndex Code | Python            | AST + embeddings                          | None (self-reported "70% savings")                     | Apache 2.0  |
-| llm-tldr       | Python/FAISS      | 5 layers (AST, call graph, CFG, DFG, PDG) | None                                                   | AGPL-3.0    |
-| GitNexus       | TypeScript/KuzuDB | Knowledge graph                           | None                                                   | NOASSERTION |
-| Srclight       | Python/SQLite     | AST + call graphs + git blame             | None                                                   | MIT         |
+The index is symbol-first instead of chunk-first. Tree-sitter extracts symbol structure and reference candidates. A project-aware resolver then resolves imports, exports, re-exports, barrel files, default exports, and `tsconfig` path aliases as far as possible without requiring a full TypeScript type-checker pass. Search is powered by SQLite FTS5 plus deterministic structural reranking. The tool is exposed through a local MCP server over stdio for Claude Code, OpenCode, and other MCP hosts.
 
-Of these, only Ory Lumen has rigorous, reproducible agent-level benchmarks. The rest rely on self-reported search latency or unverified token savings claims.
+This design is inspired by tools such as codemogger, llm-tldr, and Lumen, but it is tuned for papai's Bun workflow and local SQLite-friendly developer tooling.
 
-None integrate with the papai stack (TypeScript/Bun, drizzle+better-sqlite3, pluggable embeddings via `src/embeddings.ts`). Building custom avoids license risks (AGPL, NOASSERTION), vendor lock-in (libSQL, KuzuDB, FAISS), and stack mismatches (Python in a Bun project).
+## Why This Revision Exists
 
-## Solution
+The earlier draft was directionally useful, but it had several problems that would hurt a real Tier 1 implementation:
 
-A standalone TypeScript/Bun tool called **codeindex** that parses codebases into semantic chunks using tree-sitter, stores them in SQLite with FTS5, and exposes search via an MCP server for opencode and Claude Code.
+- it described papai's storage stack incorrectly as `drizzle + better-sqlite3`; this repo uses Bun and `bun:sqlite`, with `drizzle-orm/bun-sqlite` for the application database
+- it treated generic chunks as the primary unit, which weakens exact lookup, symbol identity, and impact precision
+- it described FTS5 ranking using caret-style field boosts instead of SQLite's actual `bm25(...)` ranking model
+- it relied on substring matching for impact analysis, which is too fuzzy for the chosen precision target
+- it advertised `semantic` and `auto` MCP search modes before embeddings exist, which creates surface area without value
 
-**Project location**: `codeindex/` directory at the papai repo root. Separate `package.json` and `tsconfig.json` so it can be extracted to its own repo later. Not a papai dependency — it's a development workflow tool that runs alongside the agent.
+This revision corrects those issues and narrows Tier 1 around the highest-value retrieval path: precise structural search for TS/JS repositories.
 
-### Tier 1 scope
+## Project Fit
 
-- AST-based chunking (functions, classes, interfaces, types, exports)
-- Symbol extraction (name, type, file, line range)
-- Import/call edge extraction (bridges to Layer 3)
-- FTS5 full-text keyword search with weighted fields
-- MCP server with search, index, reindex, and impact tools
-- Incremental re-indexing (SHA-256 file hashes)
-- Configurable via `.codeindex.json`
+- project lives in `codeindex/` at the papai repo root
+- separate `package.json` and `tsconfig.json` so it can be extracted later
+- not a papai runtime dependency; it is local developer infrastructure
+- SQLite access uses `bun:sqlite` directly for FTS-heavy queries and low-friction local deployment
+- embeddings are deferred, but the design leaves a clean migration path to a later Layer 2 using the same local database file
 
-### Out of scope
+## Goals
 
-- Vector embeddings / semantic search (Layer 2)
-- Graph traversal / blast radius (Layer 3)
-- Browser visualization
-- Language server protocol
+- optimize Tier 1 for TypeScript, JavaScript, TSX, and JSX repositories first
+- index all named symbols, including nested functions, local functions, and variables
+- rank exported and module-level symbols ahead of members and locals by default
+- resolve imports and references with project-aware logic instead of raw lexical matching
+- improve concept-to-code lookup using identifier normalization and doc comments without embeddings
+- provide precise impact results based on resolved symbol identities wherever possible
+- support fast incremental reindexing for changed files and their narrow dependency fan-out
+- keep MCP responses compact enough for agent workflows
+
+## Non-Goals
+
+- vector embeddings or semantic similarity search
+- CFG, DFG, PDG, or full static-analysis layers
+- browser visualization or graph UI
+- language server protocol support
+- full type-checker-backed semantic resolution of every runtime edge
+- framework-specific virtual wiring such as dependency injection containers, decorator registries, or generated route maps
+
+## Research Notes
+
+- codemogger is a strong reference for AST-aware semantic units, incremental hashing, and local SQLite-backed code search
+- llm-tldr is a strong reference for deeper structural analysis layers, but Tier 1 intentionally stops well before CFG, DFG, and PDG territory
+- Lumen is a useful reminder that benchmark discipline matters; its public benchmark claims should be used as motivation for later evaluation design, not as a direct implementation template
+
+Public benchmark numbers and license metadata can be inconsistent across package registries, repo metadata, and mirrored docs. This spec intentionally avoids making architectural decisions that depend on ambiguous third-party metadata.
+
+## Chosen Direction
+
+Tier 1 will be a **TypeScript/JavaScript-first symbol index**, not a generic code chunk store.
+
+The primary storage unit is a symbol record. Search snippets remain useful, but they are derived artifacts attached to symbols, not the core identity model. Impact analysis is driven by resolver-backed symbol references with explicit confidence levels. Unresolved-name fallback exists as a hinting mechanism, not as the primary truth model.
 
 ## Architecture
 
-```
+```text
 codeindex/
   src/
-    index.ts          — CLI entry + MCP server startup
-    indexer.ts        — directory walker + tree-sitter parser + chunker
-    storage.ts        — SQLite schema, CRUD, FTS5 queries
-    search.ts         — keyword search with ranking
-    impact.ts         — reverse-edge lookup (callers/importers of a symbol)
+    cli.ts                     # CLI entrypoint
+    config.ts                  # .codeindex.json loading and validation
+    indexer/
+      discover.ts              # root walking, gitignore/exclude handling
+      parse.ts                 # tree-sitter parse orchestration
+      extract-symbols.ts       # symbol extraction + doc comment capture
+      extract-references.ts    # import/export/reference candidate extraction
+      resolve-references.ts    # TS-aware project resolution
+      index-codebase.ts        # full and incremental indexing pipeline
+    resolver/
+      module-specifiers.ts     # relative paths, index files, extension rules
+      tsconfig-paths.ts        # tsconfig baseUrl / paths support
+      exports.ts               # export map + re-export traversal
+    storage/
+      db.ts                    # bun:sqlite connection + pragmas
+      schema.ts                # tables, indexes, triggers, migrations
+      queries.ts               # search, impact, stats queries
+    search/
+      exact.ts                 # exact-name and exact-path search pass
+      fts.ts                   # FTS5 query construction
+      rank.ts                  # deterministic structural reranking
     mcp/
-      server.ts       — MCP tool definitions and dispatch
-      tools.ts        — tool schemas (search, index, reindex, impact)
-    tree-sitter/
-      loader.ts       — grammar loading, language detection
-      chunker.ts      — AST to semantic chunk extraction
-      edges.ts        — import/call edge extraction
-  .codeindex.json     — config file (per-project)
-  .codeindex/         — SQLite db + cache (gitignored)
+      server.ts                # MCP server wiring over stdio
+      tools.ts                 # code_search, code_symbol, code_impact, code_index
+  .codeindex.json              # per-project config
+  .codeindex/                  # SQLite db, cache, and metadata (gitignored)
 ```
 
-### Data flow
+### Data Flow
 
+```text
+Source files
+  -> discover
+  -> tree-sitter parse
+  -> symbol extraction
+  -> reference candidate extraction
+  -> TS-aware resolution
+  -> SQLite tables + FTS5 index
+  -> MCP server over stdio
+  -> Claude Code / OpenCode / other MCP clients
 ```
-Source Files → tree-sitter → AST chunks + symbol edges → SQLite (FTS5 + chunks + edges)
-                                                       ↕
-                                            MCP server (stdio)
-                                             ↕
-                              opencode / Claude Code / any MCP client
-```
 
-## Data model
+## Data Model
 
-### chunks table
+Tier 1 uses five primary tables plus one FTS5 virtual table.
+
+### `files`
+
+Tracks per-file indexing state and module identity.
 
 ```sql
-CREATE TABLE chunks (
-  id TEXT PRIMARY KEY,       -- format: "{relative_file_path}::{symbol_name}::{start_line}"
-  file_path TEXT NOT NULL,
-  symbol_name TEXT NOT NULL,
-  symbol_type TEXT NOT NULL,  -- 'function' | 'class' | 'interface' | 'type' | 'variable' | 'export'
-  start_line INTEGER NOT NULL,
-  end_line INTEGER NOT NULL,
-  content TEXT NOT NULL,
+CREATE TABLE files (
+  id INTEGER PRIMARY KEY,
+  file_path TEXT NOT NULL UNIQUE,
+  module_key TEXT NOT NULL UNIQUE,
   language TEXT NOT NULL,
   file_hash TEXT NOT NULL,
+  parse_status TEXT NOT NULL, -- indexed | parse_failed | unsupported | skipped
+  parse_error TEXT,
   indexed_at TEXT NOT NULL
 );
 ```
 
-### FTS5 virtual table
+`module_key` is the canonical repo-relative module identity for the file itself. It is extensionless, but it does not collapse `index.ts` automatically. For example:
+
+- `src/db/drizzle.ts -> src/db/drizzle`
+- `src/foo/index.ts -> src/foo/index`
+
+Import-facing aliases such as `src/foo` are tracked separately so the resolver can distinguish canonical file identity from import shorthand.
+
+### `module_aliases`
+
+Maps importable module aliases to concrete files.
 
 ```sql
-CREATE VIRTUAL TABLE fts_chunks USING fts5(
-  symbol_name,
-  content,
+CREATE TABLE module_aliases (
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  alias_key TEXT NOT NULL,
+  alias_kind TEXT NOT NULL, -- extensionless | index_collapse | tsconfig_path
+  precedence INTEGER NOT NULL
+);
+
+CREATE INDEX idx_module_aliases_alias_key ON module_aliases(alias_key);
+CREATE INDEX idx_module_aliases_file_id ON module_aliases(file_id);
+```
+
+This table is what allows the resolver to map imports such as `src/foo`, `@/db/drizzle`, or other path-alias forms onto the correct file without overloading `files.module_key`.
+
+### `symbols`
+
+One row per named symbol occurrence.
+
+```sql
+CREATE TABLE symbols (
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  module_key TEXT NOT NULL,
+  symbol_key TEXT NOT NULL UNIQUE, -- snapshot-scoped identity: <file>#<start_byte>-<end_byte>
+  local_name TEXT NOT NULL,
+  qualified_name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  scope_tier TEXT NOT NULL, -- exported | module | member | local
+  parent_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+  is_exported INTEGER NOT NULL,
+  export_names TEXT NOT NULL, -- JSON array
+  signature_text TEXT NOT NULL,
+  doc_text TEXT NOT NULL,
+  body_text TEXT NOT NULL,
+  identifier_terms TEXT NOT NULL,
+  start_line INTEGER NOT NULL,
+  end_line INTEGER NOT NULL,
+  start_byte INTEGER NOT NULL,
+  end_byte INTEGER NOT NULL
+);
+
+CREATE INDEX idx_symbols_local_name ON symbols(local_name);
+CREATE INDEX idx_symbols_qualified_name ON symbols(qualified_name);
+CREATE INDEX idx_symbols_scope_tier ON symbols(scope_tier);
+CREATE INDEX idx_symbols_file_id ON symbols(file_id);
+CREATE INDEX idx_symbols_parent_symbol_id ON symbols(parent_symbol_id);
+```
+
+Design notes:
+
+- `symbol_key` is precise enough for one index snapshot and for MCP round-tripping, but it is not promised as a permanent cross-commit identifier
+- `qualified_name` is human-friendly and stable enough for disambiguation, for example `src/db/drizzle#getDrizzleDb` or `src/foo#outer>inner`
+- `identifier_terms` stores normalized search text such as `task provider resolver get drizzle db storage context id`
+- `body_text` is a compact search payload, not necessarily the full symbol body for very large symbols
+
+### `module_exports`
+
+First-class export map for named exports, default exports, namespaces, and re-exports.
+
+```sql
+CREATE TABLE module_exports (
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  export_name TEXT NOT NULL,
+  export_kind TEXT NOT NULL, -- named | default | namespace | reexport
+  symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
+  target_module_specifier TEXT,
+  resolved_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_module_exports_file_id ON module_exports(file_id);
+CREATE INDEX idx_module_exports_export_name ON module_exports(export_name);
+CREATE INDEX idx_module_exports_symbol_id ON module_exports(symbol_id);
+CREATE INDEX idx_module_exports_resolved_file_id ON module_exports(resolved_file_id);
+```
+
+This table is what makes barrel files, aliased exports, and re-export chains queryable without fuzzy heuristics.
+
+### `references`
+
+Resolver-backed edges between symbols.
+
+```sql
+CREATE TABLE references (
+  id INTEGER PRIMARY KEY,
+  source_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+  source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  target_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
+  target_name TEXT NOT NULL,
+  target_export_name TEXT,
+  target_module_specifier TEXT,
+  edge_type TEXT NOT NULL, -- imports | reexports | calls | extends | implements | references
+  confidence TEXT NOT NULL, -- resolved | file_resolved | name_only
+  line_number INTEGER NOT NULL
+);
+
+CREATE INDEX idx_references_source_symbol_id ON references(source_symbol_id);
+CREATE INDEX idx_references_target_symbol_id ON references(target_symbol_id);
+CREATE INDEX idx_references_target_name ON references(target_name);
+CREATE INDEX idx_references_edge_type ON references(edge_type);
+CREATE INDEX idx_references_confidence ON references(confidence);
+```
+
+`confidence` is mandatory. Tier 1 must distinguish exact resolution from fallback hints.
+
+`source_symbol_id` is nullable for file-scoped `imports` and `reexports` edges that do not belong to one enclosing symbol. Those edges are still queryable through `source_file_id` and should be returned as module-level importers.
+
+### `symbol_fts`
+
+FTS5 index over symbol search fields.
+
+```sql
+CREATE VIRTUAL TABLE symbol_fts USING fts5(
+  local_name,
+  qualified_name,
+  export_names,
+  identifier_terms,
+  signature_text,
+  doc_text,
+  body_text,
   file_path,
-  content='chunks',
-  content_rowid='rowid',
-  tokenize='porter'
+  content='symbols',
+  content_rowid='id',
+  tokenize='unicode61 remove_diacritics 1 tokenchars ''_-''',
+  prefix='2 3'
 );
 ```
 
-### edges table
+Why this shape:
 
-```sql
-CREATE TABLE edges (
-  source_id TEXT NOT NULL REFERENCES chunks(id),
-  target_id TEXT REFERENCES chunks(id),
-  target_symbol TEXT NOT NULL,
-  edge_type TEXT NOT NULL,  -- 'imports' | 'calls' | 'implements' | 'extends'
-  file_path TEXT NOT NULL
-);
+- `unicode61` is a better default for code than `porter`; stemming helps prose more than identifiers
+- identifier normalization happens in application code, not by hoping the tokenizer understands camelCase
+- prefix indexes improve short identifier-prefix queries without requiring trigram-style indexing
 
-CREATE INDEX idx_edges_target_symbol ON edges(target_symbol);
-CREATE INDEX idx_edges_source_id ON edges(source_id);
-CREATE INDEX idx_edges_edge_type ON edges(edge_type);
+Trigger shape should follow SQLite external-content-table guidance and include insert, update, and delete synchronization triggers.
 
-CREATE TRIGGER chunks_ai AFTER INSERT ON chunks BEGIN
-  INSERT INTO fts_chunks(rowid, symbol_name, content, file_path)
-  VALUES (new.rowid, new.symbol_name, new.content, new.file_path);
-END;
+## Indexing Pipeline
 
-CREATE TRIGGER chunks_ad AFTER DELETE ON chunks BEGIN
-  INSERT INTO fts_chunks(fts_chunks, rowid, symbol_name, content, file_path)
-  VALUES ('delete', old.rowid, old.symbol_name, old.content, old.file_path);
-END;
-```
+Indexing is a multi-stage pipeline.
 
-`target_id` is NULL for unresolved external symbols (npm packages, not-yet-indexed modules). `target_symbol` enables fuzzy reverse lookup for impact analysis.
+### 1. Discover
 
-## Indexing pipeline
+- walk configured roots from `.codeindex.json`
+- honor `.gitignore` and explicit exclude globs
+- skip generated, vendor, build, and coverage trees by default
+- detect language from file extension
 
-1. **Scan** — Walk directory from root, respect `.gitignore` + `.codeindex.json` excludes. Detect language from file extension.
+Tier 1 supported languages:
 
-2. **Parse** — For each file, load the appropriate tree-sitter grammar, parse to AST. Supported languages for Tier 1: TypeScript, JavaScript, TSX, JSX. Extensible grammar registry for future languages.
+- `.ts`
+- `.tsx`
+- `.js`
+- `.jsx`
 
-3. **Chunk** — Walk the AST, extract top-level definitions:
-   - Functions (including arrow functions assigned to `const`)
-   - Classes and class methods
-   - Interfaces and type aliases
-   - Named exports
-   - Items exceeding 100 lines split into sub-chunks at natural boundaries (closing braces, blank lines)
+### 2. Parse
 
-4. **Extract edges** — For each chunk, parse:
-   - Import statements to `imports` edges to target symbols
-   - Function calls to `calls` edges to target symbols
-   - `implements`/`extends` clauses to `implements`/`extends` edges
-   - Edges with unresolved targets store `target_id = NULL` with `target_symbol` for partial matching
+- parse with tree-sitter
+- capture parse failures without aborting the full run
+- store `parse_status` per file
 
-5. **Store** — Upsert chunks, delete stale chunks for changed files, rebuild FTS5 index for affected files. Track file hashes (SHA-256) for incremental updates. Only re-parse files whose hash changed since last index.
+Tier 1 parser choice is tree-sitter because it provides stable syntax trees across TS/JS variants and does not require full compiler involvement just to extract structure.
 
-## Search
+### 3. Module Analysis
 
-### Keyword search (FTS5)
+Extract per-file module metadata before symbol resolution:
 
-- Weighted fields: `symbol_name^3` (highest priority), `content^1`, `file_path^0.5`
-- Porter stemmer tokenizer handles plurals and verb forms
-- Returns: symbol name, type, file path, line range, content snippet
+- import specifiers
+- export declarations
+- re-exports
+- default export shape
+- canonical module identity
+- import-facing module aliases
+- `tsconfig` `baseUrl` and `paths` rules
+- index-file module collapsing such as `foo/index.ts -> foo`
 
-### Search modes (exposed via MCP)
+Tier 1 may use TypeScript's module-resolution rules or an equivalent compatibility layer for path and extension resolution, but it does not require the full type checker.
 
-| Mode       | Behavior                                                                        |
-| ---------- | ------------------------------------------------------------------------------- |
-| `keyword`  | FTS5 only. Default for Tier 1.                                                  |
-| `semantic` | Vector search. Returns "not available in Tier 1" for now. Reserved for Layer 2. |
-| `auto`     | Try keyword first, fall back to semantic when available.                        |
+### 4. Symbol Extraction
 
-### Impact analysis
+Index all named symbols, including:
 
-Using the edges table:
+- exported and non-exported top-level functions
+- classes, interfaces, type aliases, enums, and top-level variables
+- class methods and named class properties where meaningful
+- object-literal members that act like API surface
+- nested and local named functions
+- named local variables
 
-- `code_impact(symbol)` finds all chunks that import/call/extend the given symbol
-- Returns reverse graph: who depends on this symbol
-- Handles partial matches via `target_symbol` for symbols not in the same codebase
-- Matches by symbol name substring for resilience against import path differences
+Extraction rules:
 
-## MCP server
+- capture nearest leading JSDoc, TSDoc, or leading block comment as `doc_text`
+- do not index arbitrary inline comments or general string literals in Tier 1
+- keep one symbol identity per declaration; do not split a symbol into multiple chunk identities just because it is large
+- for very large symbols, clip `body_text` to a bounded search payload and rely on file reads for the full body later
 
-Four tools exposed via stdio:
+### 5. Reference Candidate Extraction
 
-### code_search
+Collect resolver candidates for:
 
-Search the indexed codebase by keyword.
+- imports
+- re-exports
+- calls
+- `extends`
+- `implements`
+- general named symbol references inside bodies
 
-```
+Tier 1 should prefer one accurate `references` edge over many overly-specific but unreliable subtypes.
+
+### 6. Resolution
+
+Resolve candidates in descending confidence:
+
+1. exact in-file lexical binding
+2. exact module export resolution
+3. barrel and re-export traversal
+4. `tsconfig` path alias expansion
+5. file-level fallback when target file is known but symbol is ambiguous
+6. unresolved name-only fallback
+
+The result is always stored with a `confidence` value. Name-only fallback is useful, but it must remain visibly lower-confidence than real symbol resolution.
+
+### 7. Persist
+
+- upsert changed `files`
+- replace that file's `symbols`, `module_exports`, and `references` in a transaction
+- update `symbol_fts` through external-content triggers
+- mark parse failures explicitly instead of leaving stale rows in place
+
+### Incremental Reindexing
+
+Primary unit: file hash.
+
+When file contents change:
+
+- reparse the changed file
+- recompute its module export map
+- identify narrow dependent files whose reference resolution may now differ
+- rerun reference resolution for that dependent set without reparsing the whole repo
+
+Dependent files include:
+
+- files importing the changed module
+- files re-exporting from the changed module
+- barrel files affected by changed export maps
+
+This is more precise than full-project rebuilds and more correct than only reparsing the changed file.
+
+## Search Design
+
+Tier 1 search is balanced across exact lookup, concept lookup, and impact workflows.
+
+### Search Inputs
+
+Search should work over:
+
+- `local_name`
+- `qualified_name`
+- `export_names`
+- normalized `identifier_terms`
+- `signature_text`
+- `doc_text`
+- `body_text`
+- `file_path`
+
+### Query Normalization
+
+Normalize user queries into multiple forms:
+
+- original query
+- quoted exact query when it looks like a symbol or path
+- identifier-split terms such as `getDrizzleDb -> get drizzle db`
+- path-friendly forms for queries containing `/`, `.`, or `#`
+
+### Two-Pass Retrieval
+
+Tier 1 should use two retrieval passes.
+
+#### Pass 1: exact and structured lookup
+
+Match against:
+
+- exact `local_name`
+- exact `qualified_name`
+- exact export name
+- exact or prefix `file_path`
+
+This pass is what makes direct identifier lookup feel precise.
+
+#### Pass 2: FTS5 keyword search
+
+Use FTS5 for broader lexical search across code-derived text and doc comments.
+
+Ranking should use SQLite `bm25(symbol_fts, ...)` with column weights that strongly prefer symbol-identifying fields over body text. Representative priority order:
+
+- `local_name`
+- `qualified_name`
+- `export_names`
+- `identifier_terms`
+- `signature_text`
+- `doc_text`
+- `body_text`
+- `file_path`
+
+### Structural Reranking
+
+After merging exact and FTS candidate sets, apply deterministic reranking.
+
+Higher priority:
+
+- exact export or exact qualified-name hits
+- exported symbols
+- module-level internal symbols
+- resolved cross-file references
+
+Lower priority:
+
+- member-level symbols when a better top-level match exists
+- local variables and local nested helpers
+- unresolved name-only matches
+
+This is the main mechanism that preserves recall while preventing local variables from overwhelming more useful public results.
+
+### Result Shape
+
+Each search result should include:
+
+- `symbol_key`
+- `qualified_name`
+- `local_name`
+- `kind`
+- `scope_tier`
+- `file_path`
+- `start_line`
+- `end_line`
+- `export_names`
+- `match_reason`
+- `confidence`
+- compact snippet
+
+Search results should not return full symbol bodies by default.
+
+## Impact Analysis
+
+Impact should be symbol-oriented, not raw-string-oriented.
+
+### `code_symbol`
+
+New Tier 1 tool recommended for identity resolution.
+
+Purpose:
+
+- resolve a human query into one or more candidate symbols
+- return disambiguation candidates before expensive impact queries
+
+Examples:
+
+- `TaskProviderResolver`
+- `src/db/drizzle.ts#getDrizzleDb`
+- `default export from src/foo/bar.ts`
+
+### `code_impact`
+
+Primary input should be `symbol_key` or `qualified_name`, not a bare string where possible.
+
+Behavior:
+
+- return incoming edges grouped by `edge_type`
+- prefer resolved `target_symbol_id` matches
+- include `confidence` on every returned row
+- return module-level importers when `source_symbol_id` is null
+- when the request is ambiguous, return candidate symbols instead of blending unrelated results
+
+This is the main correction to the earlier draft. Substring matching is acceptable only as an explicitly-labeled fallback, not as the default impact engine.
+
+## MCP Surface
+
+Tier 1 should expose a small and honest tool surface.
+
+### `code_search`
+
+Search indexed symbols.
+
 Parameters:
-  query: string (required) — search query
-  mode?: "keyword" | "semantic" | "auto" — search mode (default: "keyword")
-  limit?: number — max results (default: 10)
 
-Returns: Array of {
-  symbol_name, symbol_type, file_path,
-  start_line, end_line, content, score
-}
-```
+- `query: string`
+- `limit?: number`
+- `kinds?: string[]`
+- `scopeTiers?: string[]`
+- `pathPrefix?: string`
 
-### code_index
+Returns ranked symbol hits with structured metadata.
 
-Index a codebase for the first time.
+### `code_symbol`
 
-```
+Resolve a human query to candidate symbols.
+
 Parameters:
-  path: string (required) — path to codebase root
 
-Returns: { files_scanned, chunks_created, edges_created, time_ms }
-```
+- `query: string`
+- `limit?: number`
 
-### code_reindex
+Returns candidate symbol identities with confidence and disambiguation context.
 
-Incrementally update the index after file changes.
+### `code_impact`
 
-```
+Find incoming references for a specific symbol.
+
 Parameters:
-  path: string (required) — path to codebase root
 
-Returns: { files_changed, chunks_added, chunks_removed, edges_updated, time_ms }
-```
+- `symbolKey?: string`
+- `qualifiedName?: string`
+- `limit?: number`
 
-### code_impact
+If neither `symbolKey` nor `qualifiedName` is provided, return an input error. If more than one symbol matches the request, return candidates rather than merged results.
 
-Find all code that depends on a given symbol.
+### `code_index`
 
-```
+Run full or incremental indexing.
+
 Parameters:
-  symbol: string (required) — symbol name to search for
 
-Returns: Array of {
-  symbol_name, symbol_type, file_path,
-  start_line, end_line, edge_type
-}
-```
+- `path: string`
+- `mode?: 'full' | 'incremental'`
 
-## Integration
+Returns indexed file counts, symbol counts, reference counts, parse failures, and elapsed time.
 
-### opencode config
+### No Tier 1 `semantic` Mode
+
+Tier 1 should not expose `semantic` or `auto` search modes. Those names should be introduced only when embeddings actually exist.
+
+## Configuration
+
+Example `.codeindex.json`:
 
 ```json
 {
+  "roots": ["src", "client"],
+  "exclude": ["node_modules", "dist", ".git", "coverage", "**/*.test.*", "**/*.spec.*"],
+  "languages": ["ts", "tsx", "js", "jsx"],
+  "dbPath": ".codeindex/index.db",
+  "indexLocals": true,
+  "indexVariables": true,
+  "includeDocComments": true,
+  "maxStoredBodyLines": 120,
+  "tsconfigPaths": ["tsconfig.json"]
+}
+```
+
+Key fields:
+
+- `roots`: repo-relative roots to index
+- `exclude`: additional glob patterns to skip
+- `languages`: enabled file extensions
+- `dbPath`: SQLite file path under `.codeindex/`
+- `indexLocals`: whether to keep local/nested symbols in the index
+- `indexVariables`: whether named variables are first-class symbols
+- `includeDocComments`: whether leading doc comments are indexed
+- `maxStoredBodyLines`: clip size for `body_text`
+- `tsconfigPaths`: `tsconfig` files consulted for path-alias resolution
+
+## CLI
+
+```bash
+codeindex index .
+codeindex reindex .
+codeindex search "auth"
+codeindex symbol "TaskProviderResolver"
+codeindex impact "src/db/drizzle#getDrizzleDb"
+codeindex stats
+codeindex mcp
+```
+
+## Host Integration
+
+### OpenCode
+
+OpenCode supports local MCP servers via `mcp.<name>.type = "local"` and a command array.
+
+Illustrative config:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "codeindex": {
       "type": "local",
-      "command": ["bun", "run", "/path/to/codeindex/src/index.ts", "mcp"],
+      "command": ["bun", "run", "/path/to/codeindex/src/cli.ts", "mcp"],
       "enabled": true
     }
   }
 }
 ```
 
-### Claude Code config
+### Claude Code
 
-```json
-{
-  "mcpServers": {
-    "codeindex": {
-      "command": "bun",
-      "args": ["run", "/path/to/codeindex/src/index.ts", "mcp"]
-    }
-  }
-}
-```
-
-## Configuration (`.codeindex.json`)
-
-```json
-{
-  "roots": ["src/", "client/"],
-  "exclude": ["node_modules/", "dist/", ".git/", "coverage/", "*.test.*", "*.spec.*"],
-  "languages": ["typescript", "javascript", "tsx", "jsx"],
-  "chunk_max_lines": 100,
-  "db_path": ".codeindex/index.db"
-}
-```
-
-| Field             | Type     | Default                      | Description                          |
-| ----------------- | -------- | ---------------------------- | ------------------------------------ |
-| `roots`           | string[] | ["src/"]                     | Directories to index                 |
-| `exclude`         | string[] | gitignore + test patterns    | Glob patterns to skip                |
-| `languages`       | string[] | ["typescript", "javascript"] | Languages to parse                   |
-| `chunk_max_lines` | number   | 100                          | Max lines per chunk before splitting |
-| `db_path`         | string   | ".codeindex/index.db"        | SQLite database path                 |
-
-## CLI commands
+Claude Code supports stdio MCP servers either through `.mcp.json` or via the CLI. The lowest-risk onboarding path is the documented CLI command:
 
 ```bash
-codeindex index .              # Full index
-codeindex reindex .            # Incremental update
-codeindex search "auth"        # CLI search (for testing)
-codeindex impact "handleAuth"  # Impact analysis by symbol name
-codeindex mcp                  # Start MCP server (stdio)
-codeindex stats                # Show indexing stats
+claude mcp add --transport stdio codeindex -- \
+  bun run /path/to/codeindex/src/cli.ts mcp
 ```
 
-## Future iterations
+Implementation should verify the final shared-config format at build time rather than copying older example JSON blindly.
 
-### Layer 2 — Vector embeddings
+## Error Handling
 
-- Add `embedding BLOB` column to chunks table
-- Add sqlite-vec virtual table for vector similarity search
-- Plug in embedding function via config (MiniLM local, or OpenAI-compatible API reusing papai's embedding DI pattern from `src/embeddings.ts`)
-- The `mode: 'semantic'` search option activates
-- Hybrid search: Reciprocal Rank Fusion (RRF) combining FTS5 + vector scores
-- Embedding model configurable per project (same pattern as papai's per-user `embedding_model` config)
+Tier 1 favors a usable partial index over all-or-nothing failure.
 
-### Layer 3 — Knowledge graph
+- one file parse failure must not abort the full indexing run
+- file status is explicit: `indexed`, `parse_failed`, `unsupported`, or `skipped`
+- failed reindex of a changed file must not silently leave stale symbol rows pretending to be current
+- unresolved references are stored as lower-confidence edges, not as hard failures
+- startup should fail fast if the local SQLite build cannot create the required FTS5 table
+- MCP indexing responses should include partial-success counts such as `filesIndexed`, `filesFailed`, and `referencesUnresolved`
 
-- Promote edges table to full graph with BFS traversal via recursive CTEs on SQLite
-- Add `code_paths` MCP tool: show the execution path from symbol A to symbol B
-- Add `code_blast_radius` MCP tool: what breaks if I delete this symbol
-- Consider graduating to KuzuDB if recursive CTEs prove insufficient for multi-hop queries
-- Add visualization (Axon-style force-directed graph via web dashboard)
+Database behavior:
 
-### Cross-session persistence
+- enable `PRAGMA journal_mode=WAL`
+- enable `PRAGMA foreign_keys=ON`
+- use transactions for each indexing batch
 
-- The `.codeindex/` directory persists across agent sessions
-- Agent does not need to re-read files it already indexed
-- Optional git hook (post-commit) triggers incremental reindex automatically
+## Testing
 
-### Multi-language expansion
+### Parser and Extraction Tests
 
-- Tier 1 ships with TypeScript/JavaScript/TSX/JSX grammars
-- Python grammar added for papai's test infrastructure
-- Additional grammars (Go, Rust, etc.) loaded dynamically based on config
+- TS, JS, TSX, and JSX fixture files
+- symbol extraction for exports, members, nested functions, locals, and variables
+- doc comment capture behavior
 
-## Decision log
+### Resolver Tests
 
-| Decision                       | Rationale                                                                                                                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom build over codemogger   | Avoids libSQL vendor lock-in; integrates with papai's SQLite + embedding stack; MIT license                                                                                       |
-| Custom build over llm-tldr     | AGPL-3.0 license incompatible; Python stack mismatch; 5-layer analysis is Layer 3 scope                                                                                           |
-| Custom build over GitNexus     | NOASSERTION license risk; KuzuDB overkill for Tier 1; over-engineered for current needs                                                                                           |
-| Edges table in Tier 1          | Zero-cost addition (extracted during AST walk) that bridges to Layer 3 without re-architecture                                                                                    |
-| FTS5 over BM25                 | FTS5 is built into SQLite; no external dependency; porter stemmer handles most English variations                                                                                 |
-| tree-sitter WASM over native   | WASM grammars are portable, don't require native compilation, and work on all platforms. Uses `web-tree-sitter` npm package with pre-built WASM grammars from `tree-sitter-wasms` |
-| Impact tool in Tier 1          | Simple reverse-edge lookup on the edges table; provides immediate value for refactoring tasks                                                                                     |
-| Project location at papai root | Keeps the tool close to its primary consumer; separate package.json enables future extraction                                                                                     |
+- relative imports
+- `index.ts` barrels
+- named re-exports
+- default exports
+- `tsconfig` path aliases
+
+### Search Tests
+
+- exact symbol lookup beats similar locals
+- normalized identifier lookup works for camelCase, snake_case, and kebab-case
+- concept lookup can find relevant symbols through identifier terms and doc comments
+
+### Impact Tests
+
+- resolved callers/importers are returned with `confidence = resolved`
+- ambiguous symbol names trigger disambiguation instead of blended results
+- name-only fallback is clearly labeled and ranked lower
+
+### Incremental Reindex Tests
+
+- unchanged files are not reparsed
+- changed files replace old symbol rows atomically
+- narrow dependency fan-out is updated when export maps change
+
+### MCP Smoke Tests
+
+- server starts over stdio
+- tools list correctly
+- `code_search`, `code_symbol`, `code_impact`, and `code_index` return valid structured responses
+
+## Acceptance Criteria
+
+Tier 1 is done when all of the following are true on fixture repositories:
+
+- exact symbol lookup returns the intended symbol as the top hit for representative queries
+- concept-to-code queries return at least one materially relevant symbol in the top result set without embeddings
+- impact queries prefer resolved symbol identities and visibly label fallbacks
+- incremental reindex updates changed files and narrow dependents without full rebuilds
+- MCP results are compact enough to be usable in agent sessions
+
+## Efficiency Improvements Over The Earlier Draft
+
+- symbol-first indexing instead of chunk-first indexing
+- project-aware TS/JS module resolution instead of lexical-only edges
+- identifier normalization for concept lookup without embeddings
+- scope-aware ranking that keeps locals searchable but lower-priority
+- confidence-scored references instead of substring-based impact logic
+- two-pass search: exact first, FTS second
+- clipped search payloads for very large symbols instead of splitting symbols into artificial chunks
+- partial reindex with targeted dependency reconciliation instead of naive file-only updates
+
+## Future Layers
+
+### Layer 2: Embeddings
+
+Future semantic search can be added without rewriting Tier 1 by attaching embeddings to symbols rather than replacing symbol identity.
+
+Candidate additions:
+
+- `symbol_embeddings` table keyed by `symbol_id`
+- hybrid ranking that fuses FTS and vector hits
+- reuse of papai-style OpenAI-compatible embedding DI patterns where helpful
+
+### Layer 3: Richer Dependency Graph
+
+Future graph work should build on `references`, not replace it.
+
+Candidate additions:
+
+- multi-hop blast radius queries
+- path search between symbols
+- execution or ownership overlays
+- graph visualization
+
+## Decision Log
+
+| Decision                                             | Rationale                                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Symbol-first model over chunk-first model            | Better exact lookup, stronger impact analysis, cleaner future embedding attachment |
+| TypeScript/JavaScript-first Tier 1                   | Highest retrieval precision for the immediate use case                             |
+| All named symbols indexed                            | Preserves recall for local and nested logic without hiding useful internals        |
+| Exported and module-level symbols ranked first       | Prevents locals and variables from flooding results                                |
+| Doc comments included, arbitrary comments excluded   | Improves concept lookup without introducing too much noise                         |
+| `bun:sqlite` direct usage for codeindex DB           | Simpler for FTS-heavy local tooling than forcing ORM usage                         |
+| `unicode61` + identifier normalization over `porter` | Better fit for code tokens and structured identifiers                              |
+| `code_symbol` added in Tier 1                        | Improves identity resolution for impact and follow-on workflows                    |
+| No Tier 1 `semantic` or `auto` modes                 | Keeps the MCP contract honest until embeddings exist                               |
+| Confidence-scored resolver-backed references         | Stronger precision than substring-based reverse lookup                             |
+
+## Implementation Notes For Later Planning
+
+- validate the final MCP SDK package surface at implementation time and use the current official TypeScript MCP server package, not stale snippets
+- validate final host integration examples against current Claude Code and OpenCode docs before shipping install instructions
+- benchmark against representative query fixtures, not just raw indexing speed
