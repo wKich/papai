@@ -32,6 +32,31 @@ describe('apply_youtrack_command', () => {
     })
   })
 
+  test('returns confirmation_required for commands outside the safe allowlist without high confidence', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'State In Progress', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'State In Progress', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('forwards commands outside the safe allowlist after explicit confirmation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'State In Progress', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'State In Progress', taskIds: ['TEST-1'], confidence: 1 })
+
+    expect(result).toEqual({ query: 'State In Progress', taskIds: ['TEST-1'] })
+    expect(applyCommand).toHaveBeenCalledWith({
+      query: 'State In Progress',
+      taskIds: ['TEST-1'],
+      comment: undefined,
+      silent: undefined,
+    })
+  })
+
   test('returns confirmation_required for delete commands without high confidence', async () => {
     const applyCommand = mock(() => Promise.resolve({ query: 'delete', taskIds: ['TEST-1'] }))
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
@@ -75,5 +100,20 @@ describe('apply_youtrack_command', () => {
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
     expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('allows known-safe for-me commands without confirmation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'for me', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toEqual({ query: 'for me', taskIds: ['TEST-1'] })
+    expect(applyCommand).toHaveBeenCalledWith({
+      query: 'for me',
+      taskIds: ['TEST-1'],
+      comment: undefined,
+      silent: undefined,
+    })
   })
 })

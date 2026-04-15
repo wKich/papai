@@ -9,9 +9,22 @@ import { checkConfidence, confidenceField } from './confirmation-gate.js'
 const log = logger.child({ scope: 'tool:apply-youtrack-command' })
 
 const NON_EMPTY_STRING = z.string().trim().min(1)
-const DANGEROUS_COMMAND_PATTERN = /(?:^|\s)(?:delete|remove|untag|unvote|unstar)(?:\s|$)/i
+const SAFE_COMMAND_PATTERNS: readonly RegExp[] = [
+  /^for\s+me$/i,
+  /^for\s+\S+$/i,
+  /^comment\s+.+$/i,
+  /^tag\s+.+$/i,
+  /^untag\s+.+$/i,
+  /^vote$/i,
+  /^unvote$/i,
+  /^star$/i,
+  /^unstar$/i,
+]
 
-const isDangerousYouTrackCommand = (query: string): boolean => DANGEROUS_COMMAND_PATTERN.test(query)
+const requiresConfirmation = (query: string): boolean => {
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+  return !SAFE_COMMAND_PATTERNS.some((pattern) => pattern.test(normalizedQuery))
+}
 
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
@@ -32,7 +45,7 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
         throw new Error('YouTrack command support is unavailable')
       }
 
-      if (isDangerousYouTrackCommand(query)) {
+      if (requiresConfirmation(query)) {
         const gate = checkConfidence(
           confidence ?? 0,
           `Apply YouTrack command "${query.trim()}" to ${taskIds.length} issue(s)`,

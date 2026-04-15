@@ -171,7 +171,7 @@ function maybeAddPhaseFiveSprintTools(tools: ToolSet, provider: TaskProvider): v
     tools['assign_task_to_sprint'] = makeAssignTaskToSprintTool(provider)
 }
 
-function maybeAddPhaseFiveQueryTools(tools: ToolSet, provider: TaskProvider): void {
+function maybeAddPhaseFiveQueryTools(tools: ToolSet, provider: TaskProvider, mode: ToolMode): void {
   if (provider.capabilities.has('activities.read') && provider.getTaskHistory !== undefined)
     tools['get_task_history'] = makeGetTaskHistoryTool(provider)
   if (provider.capabilities.has('queries.saved') && provider.listSavedQueries !== undefined)
@@ -179,6 +179,7 @@ function maybeAddPhaseFiveQueryTools(tools: ToolSet, provider: TaskProvider): vo
   if (provider.capabilities.has('queries.saved') && provider.runSavedQuery !== undefined)
     tools['run_saved_query'] = makeRunSavedQueryTool(provider)
   if (
+    mode === 'normal' &&
     provider.name === 'youtrack' &&
     provider.capabilities.has('tasks.commands') &&
     provider.applyCommand !== undefined
@@ -282,7 +283,7 @@ export function buildTools(
   maybeAddAttachmentTools(tools, provider, contextId)
   maybeAddWorkItemTools(tools, provider)
   maybeAddPhaseFiveSprintTools(tools, provider)
-  maybeAddPhaseFiveQueryTools(tools, provider)
+  maybeAddPhaseFiveQueryTools(tools, provider, mode)
   if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined)
     tools['count_tasks'] = makeCountTasksTool(provider)
   addRecurringTools(tools, chatUserId)
