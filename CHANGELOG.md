@@ -5,6 +5,258 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-04-15
+
+### Added
+
+- **chat:** Add ThreadCapabilities type and threadId to IncomingMessage
+- **telegram:** Implement forum topic creation on mention
+- **bot:** Implement thread-scoped storage context IDs
+- **tools:** Add lookup_group_history tool
+- **thread-aware-group-chat:** Complete implementation
+- Add userIdentityMappings table for identity resolution
+- Add identity types module
+- Add identity mapping CRUD operations
+- Add identity resolver with auto-link support
+- Add natural language identity detection
+- Add Kaneo identity resolver implementation
+- **identity:** Update mapping module with type guards
+- **kaneo:** Add identity resolver and users operations
+- Add set_my_identity tool for NL identity claiming
+- Add clear_my_identity tool for NL identity denial
+- Add identity tools to toolset
+- Add identity resolution to create_task tool
+- Add identity resolution to update_task tool
+- Add identity resolution to search_tasks tool
+- Add identity resolution to list_tasks tool
+- Add identity resolution to watcher tools
+- Add identity resolution to watcher tools
+- Wire up identity resolvers to Kaneo and YouTrack providers
+- **chat:** Add ResolveUserContext and extend ChatProvider.resolveUserId signature
+- **chat/discord:** Scaffold DiscordChatProvider with env validation
+- **chat/registry:** Register discord provider
+- Add validateChatProviderEnv with discord support
+- **chat/discord:** Add stripBotMention and isBotMentioned helpers
+- **chat/discord:** Add mapDiscordMessage with bot/type filters
+- **chat/discord:** Add buildDiscordReplyContext with REST fallback
+- **chat/discord:** Add chunkForDiscord and formatLlmOutput
+- **chat/discord:** Add reply helpers — typing indicator, buttons, ReplyFn
+- **chat/discord:** Wire registerCommand, onMessage, and message dispatch
+- **chat/discord:** Implement sendMessage and resolveUserId
+- **commands/help:** Extract buildHelpText and append Discord deferral note
+- **wizard:** Re-export state, engine, and save functions for Discord handler
+- **chat/discord:** Implement start() and button interaction dispatch
+- **chat:** Add chat capability metadata
+- **chat:** Add provider-agnostic interaction routing
+- **chat:** Gate command menu, config, context, and group on chat capabilities
+- **message-queue:** Add QueueItem and CoalescedItem types
+- **message-queue:** Implement QueueRegistry with TTL cleanup
+- **message-queue:** Add public API with enqueueMessage and flushOnShutdown
+- **bot:** Integrate message queue into handleMessage
+- **index:** Add graceful shutdown hook to flush message queues
+- Implement per-context message queue with coalescing
+- Add thread-scoped storage context and forum status caching
+- **tools:** Add chatUserId to MakeToolsOptions for identity isolation
+- **tools:** Update buildTools and identity tools to use chatUserId
+- **orchestrator:** Thread chatUserId through to makeTools
+- Use preferredUserIdentifier for identity resolution
+- **tools:** Update makeTools to use chatUserId for identity isolation
+- **deferred-prompts:** Pass chatUserId in proactive LLM
+- **identity:** Wire auto-link flow on first group chat interaction
+- **identity:** Complete chat user ID isolation and auto-link flow
+- Add Discord interaction mapping helpers
+- **scripts:** Scaffold ACP review loop CLI
+- **scripts:** Add review-loop issue contracts and ledger
+- **scripts:** Add ACP subprocess wrapper
+- **scripts:** Add review-loop policy and prompt helpers
+- **scripts:** Automate ACP review loop
+- **group-settings:** Add registry persistence
+- **chat:** Capture group display metadata
+- **group-settings:** Add access checks and observations
+- **group-settings:** Add DM selector state machine
+- **group-settings:** Wire config selector flow
+- **group-settings:** Wire setup selector flow
+- Add web fetch error model
+- Add web fetch database tables
+- Add web fetch URL normalization and quota
+- Add Bun-compatible safe web fetch
+- Add web content extraction helpers
+- Add web fetch cache and distillation
+- Add web fetch orchestration
+- Wire web fetch tool and prompt guidance
+- **context:** Implement context command redesign with token counting and platform rendering
+- Add tool execution wrapper helper
+- Wrap all tool executions with error handler
+- Add pre-flight tool result validation
+- Integrate tool result validation before LLM calls
+- Complete missing tool results error prevention system
+- Add Mattermost typing indicator and YouTrack custom field validation
+- Add YouTrack workflow validation and custom fields support
+- Expose youtrack agile and sprint tools
+- Expose youtrack history and saved query tools
+- Surface honest youtrack custom field support
+- Add youtrack command tool
+- **hooks:** Add needsRecheck flag to SessionState
+- **hooks:** Add check output parser for concise failure summaries
+- **hooks:** Concise failure summary from check:full output
+- **hooks:** Add Stop hook with full-check gate and interrupt escape hatch
+- **hooks:** Register Stop hook in settings
+
+### Changed
+
+- Update tools index and tests for identity resolution
+- **providers:** Rename Capability to TaskCapability
+- **providers:** Fix blank lines around Capability alias and remove tautological test
+- **providers:** Restore interface spacing and merge split type imports
+- **chat:** Remove wizard platform branching
+- **providers:** Drop deprecated capability alias
+- **tools:** Convert makeTools to options object pattern with storageContextId
+- **search:** Use assigneeId filter with proper 'me' resolution
+- **discord:** Use mapping approach for interaction handlers, fix threadId import, update help text
+- **review-loop:** Replace while-loop with recursion, drop lint overrides
+- Extract Discord button dispatch and add auth to interaction routing
+- Extract orchestrator error handling into modular support modules
+- **group-settings:** Extract dispatchGroupSelectorResult and fix admin throttle
+- **hooks:** Remove baseline/surface from PreToolUse, add needsRecheck flag
+- **hooks:** Remove per-edit test run and surface diff from PostToolUse
+
+### Documentation
+
+- Add provider capability architecture design and plan
+- Sync CLAUDE.md and README.md with codebase
+- Add e2e planning workflow design
+- **env:** Add Discord block to .env.example
+- **CLAUDE:** Document Discord chat provider
+- Add /context command redesign spec
+- Add /context command redesign implementation plan
+- Add e2e planning workflow guide
+- Add e2e test plan template
+- Link e2e planning workflow
+- Finish e2e planning workflow rollout
+- Clarify e2e plan filename
+- **chat:** Clarify resolveUserId contract and Telegram passthrough semantics
+- **plugins:** Align plugin plans with provider capabilities
+- Add planning documents for message queue and group DM settings
+- Add file attachments design
+- Add Discord capability alignment design
+- Archive completed plans and add new ADRs
+- Add web fetch MVP design
+- Add ACP review automation design
+- **help:** Describe DM-only group settings
+- Refine E2E planning ADR, add excluded scope and backend quirks sections
+- Add multi-provider router design spec
+- Add proactive group messaging design spec
+- Add codeindex Tier 1 design spec
+- Refresh README and CLAUDE guidance
+- Tighten codeindex Tier 1 design
+- Add codeindex Tier 1 implementation plan
+- **superpowers:** Add YouTrack tool parity checklist plan
+- Add youtrack bulk command confirmation design
+- Add bulk youtrack confirmation plan
+- Update youtrack bulk command safety design
+- Add youtrack bulk command safety plan
+- Add stop-gated check plan
+
+### Fixed
+
+- **youtrack:** Allow null values for resolved field in IssueListSchema
+- **lint:** Resolve oxlint errors across codebase
+- **chat/discord:** Escape botId in mention regex to prevent ReDoS
+- **discord:** Reserve space for fence operations to prevent chunk overflow
+- **discord:** Catch event-listener rejections; wire env-validation into registry
+- **chat:** Address Task 2 review issues — contract, immutability, signatures
+- **chat:** Narrow Task 2 follow-up — remove premature interactions.callbacks, read-only sets, expand mock defaults
+- **chat/telegram:** Remove routeInteraction fallback from callback dispatch
+- **chat:** Address task 3 review follow-ups
+- **task4:** Separate buttonCalls from textCalls in createMockReply; add error boundary in setupBot onInteraction
+- **chat:** Correct config fallback guidance
+- Add readonly modifiers and expand test coverage for message queue types
+- **message-queue:** Add pino logging to MessageQueue
+- Update lastAccessed on get and add tests
+- **security:** Isolate identity mappings by chatUserId in group chats
+- Remove accidentally merged web-fetch-mvp.md
+- **review-loop:** Resolve config paths deterministically
+- **review-loop:** Remove planPath from config
+- Persist review-loop session pointers
+- **review-loop:** Preserve already_fixed verdicts
+- **scripts:** Harden review-loop task 2 state
+- **scripts:** Harden ACP session bootstrap
+- **scripts:** Harden review-loop permissions
+- **scripts:** Finalize ACP review loop
+- Make web fetch quota atomic
+- Classify safe fetch errors
+- Map safe fetch timeouts
+- Harden safe fetch validation
+- Classify safe fetch failures
+- Tighten safe fetch SSRF checks
+- Normalize safe fetch content types
+- Harden web distillation fallback
+- Harden web fetch orchestration
+- Improve Discord adapter mention detection, code block chunking, and button dispatch
+- **message-queue:** Add cleanup, timeout handling, and sequential execution
+- Remove unused ToolErrorResult interface
+- Address PR review comments from #92
+- Prevent recording group observations for ignored non-mentioned messages
+- Render static markdown messages correctly on Telegram
+- Align YouTrack tools with provider behavior
+- Validate and paginate YouTrack sprint operations
+- Reject impossible YouTrack sprint datetimes
+- Validate youtrack history and saved queries
+- Classify missing youtrack saved queries
+- Preserve youtrack query ids and history timestamps
+- Classify missing youtrack sprint assignment lookup
+- Validate update_task custom fields safely
+- Align custom field guardrails
+- Honor explicit custom field support
+- Gate destructive youtrack commands
+- Harden youtrack command tool input
+- Broaden youtrack command safeguards
+- Tighten youtrack command safety gating
+- Lock down youtrack command confirmation gating
+- Tighten youtrack command confirmation safeguards
+- Disable bulk youtrack commands
+- Clarify single-issue youtrack command contract
+- Enforce single-issue youtrack command input
+- Restore bulk youtrack validation path
+- Clarify youtrack taskIds contract
+- Centralize provider due date normalization
+
+### Miscellaneous
+
+- Update dependencies and design docs
+- Knip config for intentionally exported identity functions
+- **deps:** Add discord.js ^14.25.1
+- **knip:** Ignore env-validation.ts (entry-point side-effect boundary)
+- **opencode:** Bump @opencode-ai/plugin to 1.4.3
+- Remove archived docs and unused .semgrep config
+- Merge origin/master into acp-review-automation
+- Remove unused exports flagged by knip
+- **guardrails:** Prevent git stash usage in Claude/opencode hooks
+- Disable prefer-readonly-parameter-types and fix queue typing spy
+- Clean up youtrack bulk command plans and update opencode plugin
+
+### Testing
+
+- **db:** Update schema and migration tests for identity mappings
+- **commands:** Fix /config assertions to use buttonCalls
+- **tools:** Add chatUserId isolation tests for identity tools
+- **review-loop:** Cover resolved config paths
+- Hermetic review-loop cwd override
+- Add Mattermost metadata tests and interaction router coverage
+- Strengthen web fetch db coverage
+- Tighten extraction helper coverage
+- Cover web fetch tool failures
+- Add web fetch integration coverage
+- Strengthen web fetch integration coverage
+
+### Build
+
+- Prepare web fetch dependencies and tests
+- Prepare web fetch dependencies and tests
+
+### Review-loop
+
+- Harden permission policy, skip terminal issues, and cleanup
 ## [4.9.0] - 2026-04-09
 
 ### Added
