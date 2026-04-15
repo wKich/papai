@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
+import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
 import type { Agile, Sprint } from '../../types.js'
-import { classifyYouTrackError } from '../classify-error.js'
+import { classifyYouTrackError, YouTrackClassifiedError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { AGILE_FIELDS, SPRINT_FIELDS } from '../constants.js'
@@ -218,7 +219,10 @@ export async function assignYouTrackTaskToSprint(
     )
     const agile = agiles.find((candidate) => (candidate.sprints ?? []).some((sprint) => sprint.id === sprintId))
     if (agile === undefined) {
-      throw new Error(`Sprint ${sprintId} not found in any agile board`)
+      throw new YouTrackClassifiedError(
+        `Sprint ${sprintId} not found in any agile board`,
+        providerError.notFound('Sprint', sprintId),
+      )
     }
 
     await youtrackFetch(config, 'POST', `/api/agiles/${agile.id}/sprints/${sprintId}/issues`, {

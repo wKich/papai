@@ -448,4 +448,34 @@ describe('assignYouTrackTaskToSprint', () => {
       YouTrackClassifiedError,
     )
   })
+
+  test('classifies missing sprint lookup as a not found provider error', async () => {
+    mockFetchSequence([
+      { data: { id: 'issue-db-1' } },
+      {
+        data: [
+          { id: 'agile-1', sprints: [{ id: 'sprint-1' }] },
+          { id: 'agile-2', sprints: [{ id: 'sprint-9' }] },
+        ],
+      },
+    ])
+
+    try {
+      await assignYouTrackTaskToSprint(config, 'TEST-1', 'sprint-404')
+      throw new Error('Expected assignYouTrackTaskToSprint to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) {
+        throw error
+      }
+      expect(error.appError).toEqual({
+        type: 'provider',
+        code: 'not-found',
+        resourceType: 'Sprint',
+        resourceId: 'sprint-404',
+      })
+    }
+
+    expect(fetchMock?.mock.calls).toHaveLength(2)
+  })
 })
