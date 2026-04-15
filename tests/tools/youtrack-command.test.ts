@@ -109,8 +109,9 @@ describe('apply_youtrack_command', () => {
 
     expect(tool.description).toContain('single YouTrack issue')
     expect(tool.description).not.toContain('one or more issues')
-    expect(taskIdsDescription).toContain('One or more issue IDs')
+    expect(taskIdsDescription).toContain('Provide issue IDs as an array')
     expect(taskIdsDescription).toContain('Multi-issue requests are rejected for safety')
+    expect(taskIdsDescription).toContain('single-issue use')
   })
 
   test('forwards the command payload to the provider after explicit confirmation for side effects', async () => {

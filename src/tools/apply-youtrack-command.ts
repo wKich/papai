@@ -45,7 +45,9 @@ const BULK_COMMAND_DISABLED_REASON =
 const TASK_IDS_SCHEMA = z
   .array(NON_EMPTY_STRING)
   .min(1)
-  .describe('One or more issue IDs such as TEST-1. Multi-issue requests are rejected for safety.')
+  .describe(
+    'Provide issue IDs as an array, for example ["TEST-1"]. Multi-issue requests are rejected for safety, so this tool is intended for single-issue use.',
+  )
 
 const rejectBulkCommand = (query: string, taskCount: number): never => {
   log.warn({ query, taskCount }, 'apply_youtrack_command blocked — bulk commands disabled')
