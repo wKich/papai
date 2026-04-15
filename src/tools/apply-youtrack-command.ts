@@ -9,21 +9,18 @@ import { checkConfidence, confidenceField } from './confirmation-gate.js'
 const log = logger.child({ scope: 'tool:apply-youtrack-command' })
 
 const NON_EMPTY_STRING = z.string().trim().min(1)
-const SAFE_COMMAND_PATTERNS: readonly RegExp[] = [
-  /^for\s+me$/i,
-  /^for\s+\S+$/i,
-  /^comment\s+.+$/i,
-  /^tag\s+.+$/i,
-  /^untag\s+.+$/i,
-  /^vote$/i,
-  /^unvote$/i,
-  /^star$/i,
-  /^unstar$/i,
-]
+
+const normalizeCommand = (query: string): string => query.trim().replace(/\s+/g, ' ').toLowerCase()
+
+// YouTrack commands are space-delimited and tag values may contain spaces, so only
+// exact commands or the single-token assignee form can bypass confirmation safely.
+const SAFE_COMMANDS = new Set<string>(['for me', 'vote', 'unvote', 'star', 'unstar'])
+
+const SINGLE_ASSIGNEE_COMMAND = /^for\s+\S+$/i
 
 const requiresConfirmation = (query: string): boolean => {
-  const normalizedQuery = query.trim().replace(/\s+/g, ' ')
-  return !SAFE_COMMAND_PATTERNS.some((pattern) => pattern.test(normalizedQuery))
+  const normalizedQuery = normalizeCommand(query)
+  return !SAFE_COMMANDS.has(normalizedQuery) && !SINGLE_ASSIGNEE_COMMAND.test(normalizedQuery)
 }
 
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {

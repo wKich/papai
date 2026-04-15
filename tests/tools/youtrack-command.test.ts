@@ -102,6 +102,49 @@ describe('apply_youtrack_command', () => {
     expect(applyCommand).not.toHaveBeenCalled()
   })
 
+  test('returns confirmation_required when tag is followed by another operation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'tag blocker delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({
+      query: 'tag blocker delete',
+      taskIds: ['TEST-1'],
+      confidence: 0.6,
+    })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns confirmation_required when untag is followed by another operation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'untag blocker delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({
+      query: 'untag blocker delete',
+      taskIds: ['TEST-1'],
+      confidence: 0.6,
+    })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns confirmation_required when comment is combined with another operation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'comment delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({
+      query: 'comment delete',
+      taskIds: ['TEST-1'],
+      comment: 'Investigating now',
+      confidence: 0.6,
+    })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
   test('allows known-safe for-me commands without confirmation', async () => {
     const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1'] }))
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
@@ -111,6 +154,21 @@ describe('apply_youtrack_command', () => {
     expect(result).toEqual({ query: 'for me', taskIds: ['TEST-1'] })
     expect(applyCommand).toHaveBeenCalledWith({
       query: 'for me',
+      taskIds: ['TEST-1'],
+      comment: undefined,
+      silent: undefined,
+    })
+  })
+
+  test('allows exact single-user for commands without confirmation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for jane.doe', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'for jane.doe', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toEqual({ query: 'for jane.doe', taskIds: ['TEST-1'] })
+    expect(applyCommand).toHaveBeenCalledWith({
+      query: 'for jane.doe',
       taskIds: ['TEST-1'],
       comment: undefined,
       silent: undefined,

@@ -136,6 +136,36 @@ describe('buildTools', () => {
     expect(tools).toHaveProperty('run_saved_query')
   })
 
+  it('should not expose phase-five tools when capabilities are absent', () => {
+    const provider = createMockProvider({
+      capabilities: new Set(
+        [...createMockProvider().capabilities].filter(
+          (capability) =>
+            ![
+              'agiles.list',
+              'sprints.list',
+              'sprints.create',
+              'sprints.update',
+              'sprints.assign',
+              'activities.read',
+              'queries.saved',
+            ].includes(capability),
+        ),
+      ),
+    })
+
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+    expect(tools).not.toHaveProperty('list_agiles')
+    expect(tools).not.toHaveProperty('list_sprints')
+    expect(tools).not.toHaveProperty('create_sprint')
+    expect(tools).not.toHaveProperty('update_sprint')
+    expect(tools).not.toHaveProperty('assign_task_to_sprint')
+    expect(tools).not.toHaveProperty('get_task_history')
+    expect(tools).not.toHaveProperty('list_saved_queries')
+    expect(tools).not.toHaveProperty('run_saved_query')
+  })
+
   it('should expose apply_youtrack_command only for the YouTrack provider', () => {
     const provider = createMockProvider({ name: 'youtrack' as const })
     const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
