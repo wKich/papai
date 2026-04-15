@@ -18,9 +18,24 @@ const SAFE_COMMANDS = new Set<string>(['for me', 'vote', 'unvote', 'star', 'unst
 
 const SINGLE_ASSIGNEE_COMMAND = /^for\s+\S+$/i
 
-const requiresConfirmation = (query: string): boolean => {
+const requiresConfirmation = (query: string, comment: string | undefined, silent: boolean | undefined): boolean => {
+  if (comment !== undefined || silent === true) return true
   const normalizedQuery = normalizeCommand(query)
   return !SAFE_COMMANDS.has(normalizedQuery) && !SINGLE_ASSIGNEE_COMMAND.test(normalizedQuery)
+}
+
+const describeAction = (
+  query: string,
+  taskCount: number,
+  comment: string | undefined,
+  silent: boolean | undefined,
+): string => {
+  const details = [
+    comment === undefined ? null : 'with a comment',
+    silent === true ? 'without notifications' : null,
+  ].filter((detail): detail is string => detail !== null)
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : ''
+  return `Apply YouTrack command "${query.trim()}" to ${taskCount} issue(s)${suffix}`
 }
 
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
@@ -42,11 +57,8 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
         throw new Error('YouTrack command support is unavailable')
       }
 
-      if (requiresConfirmation(query)) {
-        const gate = checkConfidence(
-          confidence ?? 0,
-          `Apply YouTrack command "${query.trim()}" to ${taskIds.length} issue(s)`,
-        )
+      if (requiresConfirmation(query, comment, silent)) {
+        const gate = checkConfidence(confidence ?? 0, describeAction(query, taskIds.length, comment, silent))
         if (gate !== null) {
           log.warn(
             { query, taskCount: taskIds.length, confidence },

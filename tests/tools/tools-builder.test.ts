@@ -175,6 +175,30 @@ describe('buildTools', () => {
     expect(nonYouTrackTools).not.toHaveProperty('apply_youtrack_command')
   })
 
+  it('should not expose apply_youtrack_command when tasks.commands capability is absent', () => {
+    const provider = createMockProvider({
+      name: 'youtrack' as const,
+      capabilities: new Set(
+        [...createMockProvider().capabilities].filter((capability) => capability !== 'tasks.commands'),
+      ),
+    })
+
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+    expect(tools).not.toHaveProperty('apply_youtrack_command')
+  })
+
+  it('should not expose apply_youtrack_command when applyCommand is missing', () => {
+    const provider = createMockProvider({
+      name: 'youtrack' as const,
+      applyCommand: undefined,
+    })
+
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+    expect(tools).not.toHaveProperty('apply_youtrack_command')
+  })
+
   it('should not expose apply_youtrack_command in proactive mode', () => {
     const provider = createMockProvider({ name: 'youtrack' as const })
 
