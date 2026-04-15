@@ -42,6 +42,11 @@ const describeAction = (
 const BULK_COMMAND_DISABLED_REASON =
   'Bulk YouTrack commands are disabled for safety. Use structured tools when possible, or run the command one issue at a time. In other words, bulk commands are disabled for safety.'
 
+const TASK_IDS_SCHEMA = z
+  .array(NON_EMPTY_STRING)
+  .min(1)
+  .describe('One or more issue IDs such as TEST-1. Multi-issue requests are rejected for safety.')
+
 const rejectBulkCommand = (query: string, taskCount: number): never => {
   log.warn({ query, taskCount }, 'apply_youtrack_command blocked — bulk commands disabled')
   throw new ProviderClassifiedError(
@@ -58,7 +63,7 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
       query: NON_EMPTY_STRING.describe(
         'The YouTrack command string to apply, for example "for me" or "State In Progress"',
       ),
-      taskIds: z.array(NON_EMPTY_STRING).length(1).describe('A single issue ID such as TEST-1'),
+      taskIds: TASK_IDS_SCHEMA,
       comment: z.string().optional().describe('Optional comment to add while applying the command'),
       silent: z.boolean().optional().describe('Whether to suppress notifications for this command when supported'),
       confidence: confidenceField.optional(),

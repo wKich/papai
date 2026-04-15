@@ -97,9 +97,9 @@ describe('apply_youtrack_command', () => {
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const }))
     expect(schemaValidates(tool, {})).toBe(false)
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1'] })).toBe(true)
+    expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', 'TEST-2'] })).toBe(true)
     expect(schemaValidates(tool, { query: 'delete', taskIds: ['TEST-1'], confidence: 0.9 })).toBe(true)
     expect(schemaValidates(tool, { query: '   ', taskIds: ['TEST-1'] })).toBe(false)
-    expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', 'TEST-2'] })).toBe(false)
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', '   '] })).toBe(false)
   })
 
@@ -109,8 +109,8 @@ describe('apply_youtrack_command', () => {
 
     expect(tool.description).toContain('single YouTrack issue')
     expect(tool.description).not.toContain('one or more issues')
-    expect(taskIdsDescription).toContain('single issue ID')
-    expect(taskIdsDescription).not.toContain('One or more issue IDs')
+    expect(taskIdsDescription).toContain('One or more issue IDs')
+    expect(taskIdsDescription).toContain('Multi-issue requests are rejected for safety')
   })
 
   test('forwards the command payload to the provider after explicit confirmation for side effects', async () => {
