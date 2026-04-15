@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
+import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
 import type { TaskCommandResult } from '../../types.js'
-import { classifyYouTrackError } from '../classify-error.js'
+import { YouTrackClassifiedError, classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 
@@ -30,7 +31,11 @@ export async function applyYouTrackCommand(
       body,
       query: { fields: 'query,issues(id,idReadable)' },
     })
-    const response = CommandResponseSchema.parse(raw)
+    const parsed = CommandResponseSchema.safeParse(raw)
+    if (!parsed.success) {
+      throw new YouTrackClassifiedError(parsed.error.message, providerError.invalidResponse())
+    }
+    const response = parsed.data
 
     return {
       query: response.query,

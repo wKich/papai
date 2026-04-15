@@ -9,9 +9,9 @@ import { checkConfidence, confidenceField } from './confirmation-gate.js'
 const log = logger.child({ scope: 'tool:apply-youtrack-command' })
 
 const NON_EMPTY_STRING = z.string().trim().min(1)
-const DELETE_COMMAND_PATTERN = /(?:^|\s)delete(?:\s|$)/i
+const DANGEROUS_COMMAND_PATTERN = /(?:^|\s)(?:delete|remove|untag|unvote|unstar)(?:\s|$)/i
 
-const isDangerousYouTrackCommand = (query: string): boolean => DELETE_COMMAND_PATTERN.test(query)
+const isDangerousYouTrackCommand = (query: string): boolean => DANGEROUS_COMMAND_PATTERN.test(query)
 
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({

@@ -66,4 +66,14 @@ describe('apply_youtrack_command', () => {
     expect(result).toMatchObject({ status: 'confirmation_required' })
     expect(applyCommand).not.toHaveBeenCalled()
   })
+
+  test('returns confirmation_required for removal-style commands without high confidence', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'remove tag blocker', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'remove tag blocker', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
 })

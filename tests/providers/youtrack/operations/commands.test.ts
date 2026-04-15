@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { providerError } from '../../../../src/errors.js'
+import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import { applyYouTrackCommand } from '../../../../src/providers/youtrack/operations/commands.js'
 import { mockLogger, restoreFetch, setMockFetch } from '../../../utils/test-helpers.js'
@@ -62,5 +64,47 @@ describe('applyYouTrackCommand', () => {
       comment: 'Assigning to myself',
       silent: true,
     })
+  })
+
+  test('classifies 400 responses through the normal provider error path', async () => {
+    installFetchMock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: 'Command not valid', error_description: 'Command not valid' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    try {
+      await applyYouTrackCommand(config, { query: 'bad command', taskIds: ['TEST-1'] })
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) throw error
+
+      expect(error.appError).toEqual(providerError.validationFailed('unknown', 'Command not valid'))
+    }
+  })
+
+  test('routes malformed success responses through the normal provider error path', async () => {
+    installFetchMock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ issues: [{ idReadable: 'TEST-1' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    try {
+      await applyYouTrackCommand(config, { query: 'for me', taskIds: ['TEST-1'] })
+      expect.unreachable('Should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) throw error
+
+      expect(error.appError).toEqual(providerError.invalidResponse())
+    }
   })
 })
