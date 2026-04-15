@@ -106,6 +106,7 @@ export type ProviderConfigRequirement = { key: string; label: string; required: 
 export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
   readonly name: string
+  readonly supportsCustomFields?: boolean
   /** Capabilities this provider supports beyond core task CRUD. */
   readonly capabilities: ReadonlySet<TaskCapability>
   /** Config keys this provider needs (shown in /config, validated by /setup). */

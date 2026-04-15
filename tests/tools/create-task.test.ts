@@ -162,7 +162,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask, name: 'youtrack' })
+    const provider = createMockProvider({ createTask, name: 'youtrack', supportsCustomFields: true })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -267,7 +267,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask, name: 'youtrack' })
+    const provider = createMockProvider({ createTask, name: 'youtrack', supportsCustomFields: true })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -321,6 +321,34 @@ describe('create_task identity resolution', () => {
     })
 
     expect(createTask).not.toHaveBeenCalled()
+  })
+
+  test('create_task accepts customFields when provider explicitly supports them', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const createTask = mock((params: { title: string; customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({ id: 'task-1', title: params.title, status: 'todo', url: 'https://test.com/task/1' })
+    })
+    const provider = createMockProvider({
+      createTask,
+      name: 'custom-provider',
+      supportsCustomFields: true,
+    })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        title: 'Test Task',
+        projectId: 'proj-1',
+        customFields: [{ name: 'Environment', value: 'staging' }],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(createTask).toHaveBeenCalledTimes(1)
+    expect(capturedCustomFields).toEqual([{ name: 'Environment', value: 'staging' }])
   })
 
   test('create_task tool should return provider dueDate converted back to local time', async () => {

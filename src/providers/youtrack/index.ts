@@ -74,6 +74,7 @@ const log = logger.child({ scope: 'provider:youtrack' })
 
 export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskProvider {
   readonly name = 'youtrack'
+  readonly supportsCustomFields = true
   readonly capabilities = YOUTRACK_CAPABILITIES
   readonly configRequirements = CONFIG_REQUIREMENTS
   readonly preferredUserIdentifier = 'login' as const

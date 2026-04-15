@@ -25,7 +25,6 @@ type StandardCustomFieldPayload = {
   $type: string
   value: Record<string, string> | number
 }
-const KNOWN_CUSTOM_FIELDS = new Set(['State', 'Priority', 'Assignee'])
 const NON_GENERIC_FIELD_NAMES = new Set(['State', 'Priority', 'Assignee', YOUTRACK_DUE_DATE_FIELD_NAME])
 const normalizeCustomFieldType = (value: string | undefined): string | undefined => value?.trim().toLowerCase()
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -92,7 +91,7 @@ const buildHandledFieldSet = (
   projectFieldsByName: ReadonlyMap<string, ProjectCustomField & { readonly field: { readonly name: string } }>,
   customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
 ): Set<string> => {
-  const handledFields = new Set(KNOWN_CUSTOM_FIELDS)
+  const handledFields = new Set<string>()
   for (const fieldName of new Set((customFields ?? []).map((field) => field.name))) {
     const projectField = projectFieldsByName.get(fieldName)
     if (projectField === undefined) {
@@ -163,12 +162,26 @@ export const validateRequiredCreateFields = async (
   config: Readonly<YouTrackConfig>,
   projectId: string,
   projectShortName: string,
-  dueDate: string | undefined,
-  customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
+  params: Readonly<{
+    status?: string
+    priority?: string
+    dueDate?: string
+    assignee?: string
+    customFields?: Array<{ name: string; value: string }>
+  }>,
 ): Promise<ProjectCustomField[]> => {
   const projectCustomFields = await fetchProjectCustomFields(config, projectId)
-  const handledFields = buildHandledFieldSet(buildProjectFieldsByName(projectCustomFields), customFields)
-  if (dueDate !== undefined) {
+  const handledFields = buildHandledFieldSet(buildProjectFieldsByName(projectCustomFields), params.customFields)
+  if (params.status !== undefined) {
+    handledFields.add('State')
+  }
+  if (params.priority !== undefined) {
+    handledFields.add('Priority')
+  }
+  if (params.assignee !== undefined) {
+    handledFields.add('Assignee')
+  }
+  if (params.dueDate !== undefined) {
     handledFields.add(YOUTRACK_DUE_DATE_FIELD_NAME)
   }
   const requiredFields = projectCustomFields

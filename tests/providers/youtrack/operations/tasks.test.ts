@@ -647,6 +647,59 @@ describe('createYouTrackTask', () => {
     }
   })
 
+  test('treats omitted dedicated required fields as unhandled workflow requirements', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-17',
+              $type: 'StateProjectCustomField',
+              field: { id: '58-9', name: 'State', $type: 'CustomField' },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+            {
+              id: '82-18',
+              $type: 'SingleEnumProjectCustomField',
+              field: { id: '58-10', name: 'Priority', $type: 'CustomField' },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+            {
+              id: '82-19',
+              $type: 'SingleUserProjectCustomField',
+              field: { id: '58-11', name: 'Assignee', $type: 'CustomField' },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    await expect(createYouTrackTask(config, { projectId: 'TEST', title: 'Test task' })).rejects.toMatchObject({
+      appError: {
+        code: 'workflow-validation-failed',
+        requiredFields: [{ name: 'State' }, { name: 'Priority' }, { name: 'Assignee' }],
+      },
+    })
+
+    expect(callCount).toBe(2)
+  })
+
   test('allows required custom fields when they are explicitly provided', async () => {
     mockCreateTaskResponse(makeIssueResponse(), { id: '0-1', shortName: 'TEST' }, [
       {

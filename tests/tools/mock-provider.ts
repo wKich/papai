@@ -58,6 +58,7 @@ const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
 export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskProvider {
   return {
     name: 'mock',
+    supportsCustomFields: false,
     capabilities: ALL_CAPABILITIES,
     configRequirements: [],
     preferredUserIdentifier: 'id',

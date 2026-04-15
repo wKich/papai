@@ -75,13 +75,7 @@ export async function createYouTrackTask(config: YouTrackConfig, params: CreateT
       query: { fields: 'id,shortName' },
     })
     const project = z.object({ id: z.string(), shortName: z.string() }).parse(projectRaw)
-    const projectCustomFields = await validateRequiredCreateFields(
-      config,
-      project.id,
-      project.shortName,
-      params.dueDate,
-      params.customFields,
-    )
+    const projectCustomFields = await validateRequiredCreateFields(config, project.id, project.shortName, params)
 
     const body: Record<string, unknown> = {
       project: { id: project.id },

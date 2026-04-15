@@ -49,7 +49,7 @@ const assertCustomFieldsSupported = (
   provider: Readonly<TaskProvider>,
   customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
 ): void => {
-  if (customFields === undefined || customFields.length === 0 || provider.name === 'youtrack') {
+  if (customFields === undefined || customFields.length === 0 || provider.supportsCustomFields === true) {
     return
   }
 
