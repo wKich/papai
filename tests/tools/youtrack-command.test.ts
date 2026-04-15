@@ -99,6 +99,7 @@ describe('apply_youtrack_command', () => {
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1'] })).toBe(true)
     expect(schemaValidates(tool, { query: 'delete', taskIds: ['TEST-1'], confidence: 0.9 })).toBe(true)
     expect(schemaValidates(tool, { query: '   ', taskIds: ['TEST-1'] })).toBe(false)
+    expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', 'TEST-2'] })).toBe(false)
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', '   '] })).toBe(false)
   })
 

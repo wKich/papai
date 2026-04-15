@@ -58,7 +58,7 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
       query: NON_EMPTY_STRING.describe(
         'The YouTrack command string to apply, for example "for me" or "State In Progress"',
       ),
-      taskIds: z.array(NON_EMPTY_STRING).min(1).describe('A single issue ID such as TEST-1'),
+      taskIds: z.array(NON_EMPTY_STRING).length(1).describe('A single issue ID such as TEST-1'),
       comment: z.string().optional().describe('Optional comment to add while applying the command'),
       silent: z.boolean().optional().describe('Whether to suppress notifications for this command when supported'),
       confidence: confidenceField.optional(),
