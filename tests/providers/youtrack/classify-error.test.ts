@@ -48,6 +48,12 @@ describe('classifyYouTrackError', () => {
       expect(result.appError.code).toBe('label-not-found')
     })
 
+    test('returns notFound for 404 with saved query in message', () => {
+      const error = new YouTrackApiError('Saved query not found', 404, {})
+      const result = classifyYouTrackError(error, { taskId: 'query-404' })
+      expect(result.appError).toEqual(providerError.notFound('Saved query', 'query-404'))
+    })
+
     test('returns unknown for 404 without recognisable resource type', () => {
       const error = new YouTrackApiError('Not found', 404, {})
       const result = classifyYouTrackError(error)

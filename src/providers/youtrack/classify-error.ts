@@ -157,6 +157,10 @@ const classifyNotFoundError = (message: string, context?: ClassificationContext)
     return new YouTrackClassifiedError(message, providerError.labelNotFound(context?.labelId ?? 'unknown'))
   }
 
+  if (msg.includes('saved query') || msg.includes('/savedqueries/')) {
+    return new YouTrackClassifiedError(message, providerError.notFound('Saved query', context?.taskId ?? 'unknown'))
+  }
+
   return new YouTrackClassifiedError(message, providerError.unknown(new Error(message)))
 }
 
