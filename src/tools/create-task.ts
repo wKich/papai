@@ -5,10 +5,28 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
+import { providerError, ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:create-task' })
+
+const assertCustomFieldsSupported = (
+  provider: Readonly<TaskProvider>,
+  customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
+): void => {
+  if (customFields === undefined || customFields.length === 0 || provider.name === 'youtrack') {
+    return
+  }
+
+  throw new ProviderClassifiedError(
+    'customFields are only supported for create_task with YouTrack',
+    providerError.validationFailed(
+      'customFields',
+      `Provider ${provider.name} does not support customFields in create_task`,
+    ),
+  )
+}
 
 const resolveToolDueDate = (
   dueDate: Readonly<{ date: string; time?: string }> | undefined,
@@ -81,6 +99,7 @@ async function executeCreateTask(
   const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
   const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
   if (identityRequired !== undefined) return identityRequired
+  assertCustomFieldsSupported(provider, customFields)
   const task = await provider.createTask({
     projectId,
     title,

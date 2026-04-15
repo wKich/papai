@@ -162,7 +162,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask })
+    const provider = createMockProvider({ createTask, name: 'youtrack' })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -267,7 +267,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask })
+    const provider = createMockProvider({ createTask, name: 'youtrack' })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -290,6 +290,37 @@ describe('create_task identity resolution', () => {
       value: 'stream://myapp',
     })
     expect(capturedCustomFields?.[1]).toEqual({ name: 'Environment', value: 'production' })
+  })
+
+  test('create_task rejects customFields for providers that do not support them', async () => {
+    const createTask = mock(() =>
+      Promise.resolve({ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }),
+    )
+    const provider = createMockProvider({
+      createTask,
+      name: 'kaneo',
+    })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await expect(
+      tool.execute(
+        {
+          title: 'Test Task',
+          projectId: 'proj-1',
+          customFields: [{ name: 'Environment', value: 'staging' }],
+        },
+        { toolCallId: '1', messages: [] },
+      ),
+    ).rejects.toMatchObject({
+      error: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(createTask).not.toHaveBeenCalled()
   })
 
   test('create_task tool should return provider dueDate converted back to local time', async () => {

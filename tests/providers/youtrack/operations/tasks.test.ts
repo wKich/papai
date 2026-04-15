@@ -1328,6 +1328,139 @@ describe('updateYouTrackTask', () => {
     })
   })
 
+  test('rejects unknown custom field names on update before sending the write request', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ project: { id: '0-1' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await expect(
+      updateYouTrackTask(config, 'TEST-1', {
+        customFields: [{ name: 'Unknown field', value: 'value' }],
+      }),
+    ).rejects.toMatchObject({
+      appError: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(callCount).toBe(2)
+  })
+
+  test('rejects unsupported project custom field types on update before sending the write request', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ project: { id: '0-1' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: 'pcf-3',
+              $type: 'EnumProjectCustomField',
+              field: { name: 'Type', fieldType: { id: 'enum[1]', presentation: 'enum[1]' } },
+              canBeEmpty: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    await expect(
+      updateYouTrackTask(config, 'TEST-1', {
+        customFields: [{ name: 'Type', value: 'Bug' }],
+      }),
+    ).rejects.toMatchObject({
+      appError: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(callCount).toBe(2)
+  })
+
+  test('rejects writes to dedicated fields through customFields on update', async () => {
+    const dedicatedFields = ['State', 'Priority', 'Assignee', 'Due Date'] as const
+
+    for (const fieldName of dedicatedFields) {
+      let callCount = 0
+      installFetchMock(() => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ project: { id: '0-1' } }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          )
+        }
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: `pcf-${fieldName}`,
+                $type:
+                  fieldName === 'Assignee'
+                    ? 'UserProjectCustomField'
+                    : fieldName === 'Due Date'
+                      ? 'DateProjectCustomField'
+                      : 'SimpleProjectCustomField',
+                field: {
+                  name: fieldName,
+                  fieldType:
+                    fieldName === 'Due Date'
+                      ? { id: 'date', presentation: 'date' }
+                      : fieldName === 'Assignee'
+                        ? { id: 'user[1]', presentation: 'user[1]' }
+                        : { id: 'string', presentation: 'string' },
+                },
+                canBeEmpty: true,
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      })
+
+      await expect(
+        updateYouTrackTask(config, 'TEST-1', {
+          customFields: [{ name: fieldName, value: 'value' }],
+        }),
+      ).rejects.toMatchObject({
+        appError: {
+          code: 'validation-failed',
+          field: 'customFields',
+        },
+      })
+
+      expect(callCount).toBe(2)
+    }
+  })
+
   test('validates custom fields against the destination project when moving an issue', async () => {
     let callCount = 0
     installFetchMock(() => {
