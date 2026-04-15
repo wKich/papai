@@ -187,6 +187,13 @@ describe('makeTools', () => {
     expect(tools).toHaveProperty('assign_task_to_sprint')
   })
 
+  test('includes task history and saved query tools when provider exposes them', () => {
+    const tools = makeTools(provider, { storageContextId: 'user-1', chatUserId: 'user-1' })
+    expect(tools).toHaveProperty('get_task_history')
+    expect(tools).toHaveProperty('list_saved_queries')
+    expect(tools).toHaveProperty('run_saved_query')
+  })
+
   test('includes count_tasks when provider has countTasks method and capability', () => {
     const tools = makeTools(createMockProvider(), { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).toHaveProperty('count_tasks')

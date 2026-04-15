@@ -127,6 +127,15 @@ describe('buildTools', () => {
     expect(tools).toHaveProperty('assign_task_to_sprint')
   })
 
+  it('should expose history and saved-query tools when phase-five capabilities are present', () => {
+    const provider = createMockProvider()
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+    expect(tools).toHaveProperty('get_task_history')
+    expect(tools).toHaveProperty('list_saved_queries')
+    expect(tools).toHaveProperty('run_saved_query')
+  })
+
   it('should not add deferred prompt tools in proactive mode', () => {
     const provider = createMockProvider()
     const tools = buildTools(provider, 'user-123', 'user-123', 'proactive')

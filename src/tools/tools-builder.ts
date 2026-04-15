@@ -29,6 +29,7 @@ import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetCurrentUserTool } from './get-current-user.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetProjectTool } from './get-project.js'
+import { makeGetTaskHistoryTool } from './get-task-history.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
 import { makeListAgilesTool } from './list-agiles.js'
 import { makeListAttachmentsTool } from './list-attachments.js'
@@ -38,6 +39,7 @@ import { makeListMemosTool } from './list-memos.js'
 import { makeListProjectTeamTool } from './list-project-team.js'
 import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
+import { makeListSavedQueriesTool } from './list-saved-queries.js'
 import { makeListSprintsTool } from './list-sprints.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListWatchersTool } from './list-watchers.js'
@@ -58,6 +60,7 @@ import { makeRemoveWatcherTool } from './remove-watcher.js'
 import { makeRemoveWorkTool } from './remove-work.js'
 import { makeReorderStatusesTool } from './reorder-statuses.js'
 import { makeResumeRecurringTaskTool } from './resume-recurring-task.js'
+import { makeRunSavedQueryTool } from './run-saved-query.js'
 import { makeSaveMemoTool } from './save-memo.js'
 import { makeSearchMemosTool } from './search-memos.js'
 import { makeSetMyIdentityTool } from './set-my-identity.js'
@@ -177,13 +180,19 @@ function maybeAddPhaseFiveSprintTools(tools: ToolSet, provider: TaskProvider): v
     tools['assign_task_to_sprint'] = makeAssignTaskToSprintTool(provider)
 }
 
+function maybeAddPhaseFiveQueryTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('activities.read') && provider.getTaskHistory !== undefined)
+    tools['get_task_history'] = makeGetTaskHistoryTool(provider)
+  if (provider.capabilities.has('queries.saved') && provider.listSavedQueries !== undefined)
+    tools['list_saved_queries'] = makeListSavedQueriesTool(provider)
+  if (provider.capabilities.has('queries.saved') && provider.runSavedQuery !== undefined)
+    tools['run_saved_query'] = makeRunSavedQueryTool(provider)
+}
+
 function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
-  if (provider.listUsers !== undefined) {
-    tools['find_user'] = makeFindUserTool(provider)
-  }
-  if (provider.identityResolver !== undefined && provider.getCurrentUser !== undefined) {
+  if (provider.listUsers !== undefined) tools['find_user'] = makeFindUserTool(provider)
+  if (provider.identityResolver !== undefined && provider.getCurrentUser !== undefined)
     tools['get_current_user'] = makeGetCurrentUserTool(provider)
-  }
   if (provider.capabilities.has('tasks.watchers')) {
     tools['list_watchers'] = makeListWatchersTool(provider)
     tools['add_watcher'] = makeAddWatcherTool(provider, chatUserId)
@@ -271,16 +280,14 @@ export function buildTools(
   maybeAddLabelTools(tools, provider)
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
-  if (provider.capabilities.has('tasks.delete')) {
-    tools['delete_task'] = makeDeleteTaskTool(provider)
-  }
+  if (provider.capabilities.has('tasks.delete')) tools['delete_task'] = makeDeleteTaskTool(provider)
   maybeAddCollaborationTaskTools(tools, provider, chatUserId)
   maybeAddAttachmentTools(tools, provider, contextId)
   maybeAddWorkItemTools(tools, provider)
   maybeAddPhaseFiveSprintTools(tools, provider)
-  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
+  maybeAddPhaseFiveQueryTools(tools, provider)
+  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined)
     tools['count_tasks'] = makeCountTasksTool(provider)
-  }
   addRecurringTools(tools, chatUserId)
   addMemoTools(tools, provider, chatUserId)
   addInstructionTools(tools, contextId)

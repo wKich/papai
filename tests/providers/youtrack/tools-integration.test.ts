@@ -76,5 +76,8 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('create_sprint')
     expect(toolNames).toContain('update_sprint')
     expect(toolNames).toContain('assign_task_to_sprint')
+    expect(toolNames).toContain('get_task_history')
+    expect(toolNames).toContain('list_saved_queries')
+    expect(toolNames).toContain('run_saved_query')
   })
 })
