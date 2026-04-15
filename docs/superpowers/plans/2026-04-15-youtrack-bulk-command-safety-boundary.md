@@ -119,12 +119,12 @@ Expected: FAIL because the current implementation still executes or confirms bul
 In `src/tools/apply-youtrack-command.ts`, add this block inside `execute`, after the existing `applyCommand` availability check and before `requiresConfirmation(...)` is called:
 
 ```ts
-      if (taskIds.length > 1) {
-        const message =
-          'Bulk YouTrack commands are disabled for safety. Use structured tools when possible, or run the command one issue at a time.'
-        log.warn({ query, taskCount: taskIds.length }, 'apply_youtrack_command blocked — bulk commands disabled')
-        return { success: false, message }
-      }
+if (taskIds.length > 1) {
+  const message =
+    'Bulk YouTrack commands are disabled for safety. Use structured tools when possible, or run the command one issue at a time.'
+  log.warn({ query, taskCount: taskIds.length }, 'apply_youtrack_command blocked — bulk commands disabled')
+  return { success: false, message }
+}
 ```
 
 - [ ] **Step 2: Leave single-issue confirmation logic untouched**
