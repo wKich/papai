@@ -4,8 +4,13 @@ import { z } from 'zod'
 
 import { logger } from '../logger.js'
 import type { TaskCommandResult, TaskProvider } from '../providers/types.js'
+import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:apply-youtrack-command' })
+
+const DELETE_COMMAND_PATTERN = /^\s*delete(?:\s|$)/i
+
+const isDangerousYouTrackCommand = (query: string): boolean => DELETE_COMMAND_PATTERN.test(query)
 
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
@@ -16,11 +21,26 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
       taskIds: z.array(z.string()).min(1).describe('One or more issue IDs such as TEST-1'),
       comment: z.string().optional().describe('Optional comment to add while applying the command'),
       silent: z.boolean().optional().describe('Whether to suppress notifications for this command when supported'),
+      confidence: confidenceField.optional(),
     }),
-    execute: async ({ query, taskIds, comment, silent }) => {
+    execute: async ({ query, taskIds, comment, silent, confidence }) => {
       const applyCommand = provider.applyCommand
       if (applyCommand === undefined) {
         throw new Error('YouTrack command support is unavailable')
+      }
+
+      if (isDangerousYouTrackCommand(query)) {
+        const gate = checkConfidence(
+          confidence ?? 0,
+          `Apply YouTrack command "${query.trim()}" to ${taskIds.length} issue(s)`,
+        )
+        if (gate !== null) {
+          log.warn(
+            { query, taskCount: taskIds.length, confidence },
+            'apply_youtrack_command blocked — confirmation required',
+          )
+          return gate
+        }
       }
 
       try {

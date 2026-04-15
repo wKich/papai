@@ -14,6 +14,7 @@ describe('apply_youtrack_command', () => {
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const }))
     expect(schemaValidates(tool, {})).toBe(false)
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1'] })).toBe(true)
+    expect(schemaValidates(tool, { query: 'delete', taskIds: ['TEST-1'], confidence: 0.9 })).toBe(true)
   })
 
   test('forwards the command payload to the provider', async () => {
@@ -26,6 +27,31 @@ describe('apply_youtrack_command', () => {
       taskIds: ['TEST-1'],
       comment: undefined,
       silent: true,
+    })
+  })
+
+  test('returns confirmation_required for delete commands without high confidence', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'delete', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('forwards delete commands after explicit confirmation', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'delete', taskIds: ['TEST-1'], confidence: 1 })
+
+    expect(result).toEqual({ query: 'delete', taskIds: ['TEST-1'] })
+    expect(applyCommand).toHaveBeenCalledWith({
+      query: 'delete',
+      taskIds: ['TEST-1'],
+      comment: undefined,
+      silent: undefined,
     })
   })
 })
