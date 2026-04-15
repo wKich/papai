@@ -180,4 +180,23 @@ describe('runYouTrackSavedQuery', () => {
 
     expect(fetchMock?.mock.calls).toHaveLength(1)
   })
+
+  test('preserves queryId when the saved query is missing', async () => {
+    mockFetchError(404, { error: 'Saved query not found' })
+
+    try {
+      await runYouTrackSavedQuery(config, 'query-404')
+      throw new Error('Expected runYouTrackSavedQuery to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      expect(extractAppError(error)).toEqual({
+        type: 'provider',
+        code: 'not-found',
+        resourceType: 'Saved query',
+        resourceId: 'query-404',
+      })
+    }
+
+    expect(fetchMock?.mock.calls).toHaveLength(1)
+  })
 })

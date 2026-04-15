@@ -56,6 +56,6 @@ export async function runYouTrackSavedQuery(config: YouTrackConfig, queryId: str
     return issues.map((issue) => mapIssueToSearchResult(issue, config.baseUrl))
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), queryId }, 'Failed to run saved query')
-    throw classifyYouTrackError(error)
+    throw classifyYouTrackError(error, { queryId })
   }
 }

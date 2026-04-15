@@ -195,4 +195,20 @@ describe('getYouTrackTaskHistory', () => {
     }
     expect(fetchMock).toBeUndefined()
   })
+
+  test('rejects timezone-less start timestamp before request execution', async () => {
+    try {
+      await getYouTrackTaskHistory(config, 'TEST-1', { start: '2026-04-01T00:00:00' })
+      throw new Error('Expected getYouTrackTaskHistory to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      expect(extractAppError(error)).toEqual({
+        type: 'provider',
+        code: 'validation-failed',
+        field: 'start',
+        reason: 'Expected an ISO datetime with timezone information',
+      })
+    }
+    expect(fetchMock).toBeUndefined()
+  })
 })

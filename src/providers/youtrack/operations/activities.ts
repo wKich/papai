@@ -11,7 +11,16 @@ import { ActivitySchema } from '../schemas/activity.js'
 const log = logger.child({ scope: 'provider:youtrack:activities' })
 
 const parseActivityBoundaryTimestamp = (field: 'start' | 'end', value: string): string => {
-  const timestamp = Date.parse(value)
+  const parsedValue = value.trim()
+  const timezoneAwareIsoDatetime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/
+  if (!timezoneAwareIsoDatetime.test(parsedValue)) {
+    throw new YouTrackClassifiedError(
+      `Invalid ${field}: ${value}`,
+      providerError.validationFailed(field, 'Expected an ISO datetime with timezone information'),
+    )
+  }
+
+  const timestamp = Date.parse(parsedValue)
   if (!Number.isFinite(timestamp)) {
     throw new YouTrackClassifiedError(
       `Invalid ${field}: ${value}`,

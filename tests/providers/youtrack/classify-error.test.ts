@@ -50,7 +50,7 @@ describe('classifyYouTrackError', () => {
 
     test('returns notFound for 404 with saved query in message', () => {
       const error = new YouTrackApiError('Saved query not found', 404, {})
-      const result = classifyYouTrackError(error, { taskId: 'query-404' })
+      const result = classifyYouTrackError(error, { queryId: 'query-404' })
       expect(result.appError).toEqual(providerError.notFound('Saved query', 'query-404'))
     })
 
