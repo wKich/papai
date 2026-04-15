@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { isToolFailureResult } from '../../src/tool-failure.js'
 import { makeApplyYouTrackCommandTool } from '../../src/tools/apply-youtrack-command.js'
+import { wrapToolExecution } from '../../src/tools/wrap-tool-execution.js'
 import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
@@ -11,6 +13,67 @@ const expectConfirmationMessage = (result: unknown, text: string): void => {
     expect.unreachable('Expected confirmation result with a message string')
   }
   expect(result.message).toContain(text)
+}
+
+const expectToolFailureUserMessage = (result: unknown, text: string): void => {
+  expect(result).toBeObject()
+  if (
+    result === null ||
+    typeof result !== 'object' ||
+    !('success' in result) ||
+    result.success !== false ||
+    ('status' in result && result.status === 'confirmation_required') ||
+    !('userMessage' in result) ||
+    typeof result.userMessage !== 'string'
+  ) {
+    expect.unreachable('Expected structured tool failure result with a userMessage string')
+  }
+  expect(result.userMessage).toContain(text)
+}
+
+const expectBulkValidationFailure = (result: unknown): void => {
+  expect(isToolFailureResult(result)).toBe(true)
+  expect(result).toMatchObject({
+    success: false,
+    errorType: 'provider',
+    errorCode: 'validation-failed',
+  })
+  expectToolFailureUserMessage(result, 'bulk commands are disabled for safety')
+  expectToolFailureUserMessage(result, 'structured tools')
+  expectToolFailureUserMessage(result, 'one issue at a time')
+
+  if (
+    result === null ||
+    typeof result !== 'object' ||
+    !('details' in result) ||
+    typeof result.details !== 'object' ||
+    result.details === null
+  ) {
+    expect.unreachable('Expected structured tool failure result with validation details')
+  }
+
+  if (!('field' in result.details) || typeof result.details.field !== 'string') {
+    expect.unreachable('Expected validation details.field to be a string')
+  }
+
+  if (!('reason' in result.details) || typeof result.details.reason !== 'string') {
+    expect.unreachable('Expected validation details.reason to be a string')
+  }
+
+  expect(result.details.field).toBe('taskIds')
+  expect(result.details.reason).toContain('bulk commands are disabled for safety')
+  expect(result.details.reason).toContain('structured tools')
+  expect(result.details.reason).toContain('one issue at a time')
+  expect(result).not.toMatchObject({ status: 'confirmation_required' })
+}
+
+const executeWrappedTool = (tool: unknown, input: unknown): Promise<unknown> => {
+  const execute = getToolExecutor(tool) as (
+    input: unknown,
+    options: { toolCallId: string; messages: unknown[] },
+  ) => Promise<unknown>
+  const wrappedExecute = wrapToolExecution(execute, 'apply_youtrack_command')
+  return wrappedExecute(input, { toolCallId: 'call-1', messages: [] })
 }
 
 describe('apply_youtrack_command', () => {
@@ -184,18 +247,110 @@ describe('apply_youtrack_command', () => {
     expect(applyCommand).not.toHaveBeenCalled()
   })
 
-  test('requires confirmation when a safe command runs silently', async () => {
-    const applyCommand = mock(() => Promise.resolve({ query: 'vote', taskIds: ['TEST-1'], silent: true }))
+  test('returns a wrapped tool failure when a command targets multiple issues', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1', 'TEST-2'] }))
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
 
-    const result = await getToolExecutor(tool)({
-      query: 'vote',
-      taskIds: ['TEST-1'],
-      silent: true,
+    const result = await executeWrappedTool(tool, {
+      query: 'for me',
+      taskIds: ['TEST-1', 'TEST-2'],
       confidence: 0.6,
     })
 
-    expectConfirmationMessage(result, 'without notifications')
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for high-confidence bulk input', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1', 'TEST-2'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'for me',
+      taskIds: ['TEST-1', 'TEST-2'],
+      confidence: 1,
+    })
+
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for low-confidence bulk delete instead of confirmation_required', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'delete', taskIds: ['TEST-1', 'TEST-2'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'delete',
+      taskIds: ['TEST-1', 'TEST-2'],
+      confidence: 0.6,
+    })
+
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for high-confidence bulk delete', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'delete', taskIds: ['TEST-1', 'TEST-2'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'delete',
+      taskIds: ['TEST-1', 'TEST-2'],
+      confidence: 1,
+    })
+
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for bulk input with a comment instead of confirmation_required', async () => {
+    const applyCommand = mock(() =>
+      Promise.resolve({ query: 'for me', taskIds: ['TEST-1', 'TEST-2'], comment: 'On it' }),
+    )
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'for me',
+      taskIds: ['TEST-1', 'TEST-2'],
+      comment: 'On it',
+      confidence: 0.6,
+    })
+
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for high-confidence bulk input with a comment', async () => {
+    const applyCommand = mock(() =>
+      Promise.resolve({ query: 'for me', taskIds: ['TEST-1', 'TEST-2'], comment: 'On it' }),
+    )
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'for me',
+      taskIds: ['TEST-1', 'TEST-2'],
+      comment: 'On it',
+      confidence: 1,
+    })
+
+    expectBulkValidationFailure(result)
+    expect(applyCommand).not.toHaveBeenCalled()
+  })
+
+  test('returns a wrapped tool failure for low-confidence bulk delete with a comment instead of confirmation_required', async () => {
+    const applyCommand = mock(() =>
+      Promise.resolve({ query: 'delete', taskIds: ['TEST-1', 'TEST-2'], comment: 'On it' }),
+    )
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await executeWrappedTool(tool, {
+      query: 'delete',
+      taskIds: ['TEST-1', 'TEST-2'],
+      comment: 'On it',
+      confidence: 0.6,
+    })
+
+    expectBulkValidationFailure(result)
     expect(applyCommand).not.toHaveBeenCalled()
   })
 

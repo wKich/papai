@@ -3,6 +3,7 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { logger } from '../logger.js'
+import { providerError, ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskCommandResult, TaskProvider } from '../providers/types.js'
 import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
@@ -38,6 +39,17 @@ const describeAction = (
   return `Apply YouTrack command "${query.trim()}" to ${taskCount} issue(s)${suffix}`
 }
 
+const BULK_COMMAND_DISABLED_REASON =
+  'Bulk YouTrack commands are disabled for safety. Use structured tools when possible, or run the command one issue at a time. In other words, bulk commands are disabled for safety.'
+
+const rejectBulkCommand = (query: string, taskCount: number): never => {
+  log.warn({ query, taskCount }, 'apply_youtrack_command blocked — bulk commands disabled')
+  throw new ProviderClassifiedError(
+    BULK_COMMAND_DISABLED_REASON,
+    providerError.validationFailed('taskIds', BULK_COMMAND_DISABLED_REASON),
+  )
+}
+
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
     description:
@@ -55,6 +67,10 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
       const applyCommand = provider.applyCommand
       if (applyCommand === undefined) {
         throw new Error('YouTrack command support is unavailable')
+      }
+
+      if (taskIds.length > 1) {
+        rejectBulkCommand(query, taskIds.length)
       }
 
       if (requiresConfirmation(query, comment, silent)) {
