@@ -48,11 +48,57 @@ describe('Agile tools', () => {
     })
   })
 
+  test('create_sprint rejects invalid datetime input', () => {
+    const tool = makeCreateSprintTool(createMockProvider())
+
+    expect(
+      schemaValidates(tool, {
+        agileId: 'agile-1',
+        name: 'Sprint 24',
+        start: 'not-a-date',
+      }),
+    ).toBe(false)
+    expect(
+      schemaValidates(tool, {
+        agileId: 'agile-1',
+        name: 'Sprint 24',
+        finish: 'also-not-a-date',
+      }),
+    ).toBe(false)
+  })
+
   test('update_sprint requires agileId and sprintId', () => {
     const tool = makeUpdateSprintTool(createMockProvider())
     expect(schemaValidates(tool, { agileId: 'agile-1' })).toBe(false)
     expect(schemaValidates(tool, { sprintId: 'sprint-1' })).toBe(false)
     expect(schemaValidates(tool, { agileId: 'agile-1', sprintId: 'sprint-1', archived: true })).toBe(true)
+  })
+
+  test('update_sprint rejects invalid datetime input', () => {
+    const tool = makeUpdateSprintTool(createMockProvider())
+
+    expect(
+      schemaValidates(tool, {
+        agileId: 'agile-1',
+        sprintId: 'sprint-1',
+        start: 'not-a-date',
+      }),
+    ).toBe(false)
+    expect(
+      schemaValidates(tool, {
+        agileId: 'agile-1',
+        sprintId: 'sprint-1',
+        finish: 'also-not-a-date',
+      }),
+    ).toBe(false)
+    expect(
+      schemaValidates(tool, {
+        agileId: 'agile-1',
+        sprintId: 'sprint-1',
+        start: null,
+        finish: null,
+      }),
+    ).toBe(true)
   })
 
   test('assign_task_to_sprint forwards task and sprint IDs', async () => {

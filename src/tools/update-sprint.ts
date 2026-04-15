@@ -6,6 +6,7 @@ import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:update-sprint' })
+const isoDatetimeSchema = z.iso.datetime({ offset: true })
 
 export function makeUpdateSprintTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
@@ -15,13 +16,11 @@ export function makeUpdateSprintTool(provider: Readonly<TaskProvider>): ToolSet[
       sprintId: z.string().describe('Sprint ID'),
       name: z.string().optional().describe('Updated sprint name'),
       goal: z.string().nullable().optional().describe('Updated sprint goal, or null to clear it'),
-      start: z
-        .string()
+      start: isoDatetimeSchema
         .nullable()
         .optional()
         .describe('Updated sprint start timestamp in ISO-8601 format, or null to clear it'),
-      finish: z
-        .string()
+      finish: isoDatetimeSchema
         .nullable()
         .optional()
         .describe('Updated sprint finish timestamp in ISO-8601 format, or null to clear it'),

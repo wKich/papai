@@ -6,6 +6,7 @@ import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:create-sprint' })
+const isoDatetimeSchema = z.iso.datetime({ offset: true })
 
 export function makeCreateSprintTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
@@ -14,8 +15,8 @@ export function makeCreateSprintTool(provider: Readonly<TaskProvider>): ToolSet[
       agileId: z.string().describe('Agile board ID'),
       name: z.string().describe('Sprint name'),
       goal: z.string().optional().describe('Optional sprint goal'),
-      start: z.string().optional().describe('Sprint start timestamp in ISO-8601 format'),
-      finish: z.string().optional().describe('Sprint finish timestamp in ISO-8601 format'),
+      start: isoDatetimeSchema.optional().describe('Sprint start timestamp in ISO-8601 format'),
+      finish: isoDatetimeSchema.optional().describe('Sprint finish timestamp in ISO-8601 format'),
       previousSprintId: z.string().optional().describe('Optional previous sprint ID'),
       isDefault: z.boolean().optional().describe('Whether the sprint should become the default sprint'),
     }),

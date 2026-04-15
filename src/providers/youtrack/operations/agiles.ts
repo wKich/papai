@@ -6,6 +6,7 @@ import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { AGILE_FIELDS, SPRINT_FIELDS } from '../constants.js'
+import { paginate } from '../helpers.js'
 import { mapAgile, mapSprint } from '../mappers.js'
 import { AgileSchema, AgileWithSprintsSchema } from '../schemas/agile.js'
 import type { YouTrackAgileWithSprints } from '../schemas/agile.js'
@@ -17,13 +18,18 @@ const IssueIdSchema = z.object({
   id: z.string(),
 })
 
+const parseSprintTimestamp = (value: string, field: 'start' | 'finish'): number => {
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) {
+    throw new Error(`Invalid sprint ${field} datetime: ${value}`)
+  }
+  return timestamp
+}
+
 export async function listYouTrackAgiles(config: YouTrackConfig): Promise<Agile[]> {
   log.debug({}, 'listAgiles')
   try {
-    const raw = await youtrackFetch(config, 'GET', '/api/agiles', {
-      query: { fields: AGILE_FIELDS, $top: '100' },
-    })
-    const agiles = AgileSchema.array().parse(raw)
+    const agiles = await paginate(config, '/api/agiles', { fields: AGILE_FIELDS }, AgileSchema.array())
     log.info({ count: agiles.length }, 'Agiles listed')
     return agiles.map(mapAgile)
   } catch (error) {
@@ -35,10 +41,12 @@ export async function listYouTrackAgiles(config: YouTrackConfig): Promise<Agile[
 export async function listYouTrackSprints(config: YouTrackConfig, agileId: string): Promise<Sprint[]> {
   log.debug({ agileId }, 'listSprints')
   try {
-    const raw = await youtrackFetch(config, 'GET', `/api/agiles/${agileId}/sprints`, {
-      query: { fields: SPRINT_FIELDS, $top: '100' },
-    })
-    const sprints = SprintSchema.array().parse(raw)
+    const sprints = await paginate(
+      config,
+      `/api/agiles/${agileId}/sprints`,
+      { fields: SPRINT_FIELDS },
+      SprintSchema.array(),
+    )
     log.info({ agileId, count: sprints.length }, 'Sprints listed')
     return sprints.map((sprint) => mapSprint(sprint, agileId))
   } catch (error) {
@@ -63,8 +71,8 @@ export async function createYouTrackSprint(
   try {
     const body: Record<string, unknown> = { name: params.name }
     if (params.goal !== undefined) body['goal'] = params.goal
-    if (params.start !== undefined) body['start'] = new Date(params.start).getTime()
-    if (params.finish !== undefined) body['finish'] = new Date(params.finish).getTime()
+    if (params.start !== undefined) body['start'] = parseSprintTimestamp(params.start, 'start')
+    if (params.finish !== undefined) body['finish'] = parseSprintTimestamp(params.finish, 'finish')
     if (params.previousSprintId !== undefined) body['previousSprint'] = { id: params.previousSprintId }
     if (params.isDefault !== undefined) body['isDefault'] = params.isDefault
 
@@ -102,11 +110,11 @@ export async function updateYouTrackSprint(
     if (params.goal !== undefined) body['goal'] = params.goal
     if (params.start !== undefined) {
       if (params.start === null) body['start'] = null
-      else body['start'] = new Date(params.start).getTime()
+      else body['start'] = parseSprintTimestamp(params.start, 'start')
     }
     if (params.finish !== undefined) {
       if (params.finish === null) body['finish'] = null
-      else body['finish'] = new Date(params.finish).getTime()
+      else body['finish'] = parseSprintTimestamp(params.finish, 'finish')
     }
     if (params.previousSprintId !== undefined) {
       if (params.previousSprintId === null) body['previousSprint'] = null
@@ -143,10 +151,12 @@ export async function assignYouTrackTaskToSprint(
     })
     const issueDbId = IssueIdSchema.parse(issueRaw).id
 
-    const agilesRaw = await youtrackFetch(config, 'GET', '/api/agiles', {
-      query: { fields: 'id,sprints(id)', $top: '100' },
-    })
-    const agiles: YouTrackAgileWithSprints[] = AgileWithSprintsSchema.array().parse(agilesRaw)
+    const agiles: YouTrackAgileWithSprints[] = await paginate(
+      config,
+      '/api/agiles',
+      { fields: 'id,sprints(id)' },
+      AgileWithSprintsSchema.array(),
+    )
     const agile = agiles.find((candidate) => (candidate.sprints ?? []).some((sprint) => sprint.id === sprintId))
     if (agile === undefined) {
       throw new Error(`Sprint ${sprintId} not found in any agile board`)

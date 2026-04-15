@@ -113,6 +113,24 @@ describe('listYouTrackAgiles', () => {
     expect(getFetchMethodAt(0)).toBe('GET')
   })
 
+  test('paginates beyond the first agile page', async () => {
+    mockFetchSequence([
+      {
+        data: Array.from({ length: 100 }, (_, index) => ({ id: `agile-${index + 1}`, name: `Agile ${index + 1}` })),
+      },
+      {
+        data: [{ id: 'agile-101', name: 'Agile 101' }],
+      },
+    ])
+
+    const agiles = await listYouTrackAgiles(config)
+
+    expect(agiles).toHaveLength(101)
+    expect(agiles.at(100)).toEqual({ id: 'agile-101', name: 'Agile 101' })
+    expect(getFetchUrlAt(0).searchParams.get('$skip')).toBe('0')
+    expect(getFetchUrlAt(1).searchParams.get('$skip')).toBe('100')
+  })
+
   test('throws classified error on failure', async () => {
     mockFetchError(401)
 
@@ -145,6 +163,39 @@ describe('listYouTrackSprints', () => {
     )
     expect(getFetchUrlAt(0).searchParams.get('$top')).toBe('100')
     expect(getFetchMethodAt(0)).toBe('GET')
+  })
+
+  test('paginates beyond the first sprint page', async () => {
+    mockFetchSequence([
+      {
+        data: Array.from({ length: 100 }, (_, index) =>
+          makeSprintResponse({
+            id: `sprint-${index + 1}`,
+            name: `Sprint ${index + 1}`,
+          }),
+        ),
+      },
+      {
+        data: [makeSprintResponse({ id: 'sprint-101', name: 'Sprint 101' })],
+      },
+    ])
+
+    const sprints = await listYouTrackSprints(config, 'agile-1')
+
+    expect(sprints).toHaveLength(101)
+    expect(sprints.at(100)).toEqual({
+      id: 'sprint-101',
+      agileId: 'agile-1',
+      name: 'Sprint 101',
+      start: new Date(1700000000000).toISOString(),
+      finish: new Date(1700600000000).toISOString(),
+      archived: false,
+      goal: 'Ship it',
+      isDefault: true,
+      unresolvedIssuesCount: 7,
+    })
+    expect(getFetchUrlAt(0).searchParams.get('$skip')).toBe('0')
+    expect(getFetchUrlAt(1).searchParams.get('$skip')).toBe('100')
   })
 })
 
@@ -192,6 +243,28 @@ describe('createYouTrackSprint', () => {
       previousSprint: { id: 'sprint-0' },
       isDefault: true,
     })
+  })
+
+  test('rejects invalid start and finish timestamps before sending request', async () => {
+    mockFetchResponse(makeSprintResponse())
+
+    await expect(
+      createYouTrackSprint(config, 'agile-1', {
+        name: 'Sprint 1',
+        start: 'not-a-date',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+
+    await expect(
+      createYouTrackSprint(config, 'agile-1', {
+        name: 'Sprint 1',
+        finish: 'also-not-a-date',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
   })
 })
 
@@ -253,6 +326,26 @@ describe('updateYouTrackSprint', () => {
     expect(sprint.goal).toBeNull()
     expect(getFetchBodyAt(0)).toEqual({ goal: null })
   })
+
+  test('rejects invalid update timestamps before sending request', async () => {
+    mockFetchResponse(makeSprintResponse())
+
+    await expect(
+      updateYouTrackSprint(config, 'agile-1', 'sprint-3', {
+        start: 'not-a-date',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+
+    await expect(
+      updateYouTrackSprint(config, 'agile-1', 'sprint-3', {
+        finish: 'also-not-a-date',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+  })
 })
 
 describe('assignYouTrackTaskToSprint', () => {
@@ -281,6 +374,29 @@ describe('assignYouTrackTaskToSprint', () => {
     expect(getFetchUrlAt(2).pathname).toBe('/api/agiles/agile-1/sprints/sprint-2/issues')
     expect(getFetchMethodAt(2)).toBe('POST')
     expect(getFetchBodyAt(2)).toEqual({ id: 'issue-db-1', $type: 'Issue' })
+  })
+
+  test('searches across paginated agile results when resolving sprint ownership', async () => {
+    mockFetchSequence([
+      { data: { id: 'issue-db-1' } },
+      {
+        data: Array.from({ length: 100 }, (_, index) => ({
+          id: `agile-${index + 1}`,
+          sprints: [{ id: `other-${index}` }],
+        })),
+      },
+      {
+        data: [{ id: 'agile-101', sprints: [{ id: 'sprint-2' }] }],
+      },
+      { data: null, status: 204 },
+    ])
+
+    const result = await assignYouTrackTaskToSprint(config, 'TEST-1', 'sprint-2')
+
+    expect(result).toEqual({ taskId: 'TEST-1', sprintId: 'sprint-2' })
+    expect(getFetchUrlAt(1).searchParams.get('$skip')).toBe('0')
+    expect(getFetchUrlAt(2).searchParams.get('$skip')).toBe('100')
+    expect(getFetchUrlAt(3).pathname).toBe('/api/agiles/agile-101/sprints/sprint-2/issues')
   })
 
   test('throws classified error on api failure', async () => {
