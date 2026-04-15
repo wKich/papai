@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { z } from 'zod'
+
 import { isToolFailureResult } from '../../src/tool-failure.js'
 import { makeApplyYouTrackCommandTool } from '../../src/tools/apply-youtrack-command.js'
 import { wrapToolExecution } from '../../src/tools/wrap-tool-execution.js'
@@ -76,6 +78,15 @@ const executeWrappedTool = (tool: unknown, input: unknown): Promise<unknown> => 
   return wrappedExecute(input, { toolCallId: 'call-1', messages: [] })
 }
 
+const getInputFieldDescription = (schema: unknown, fieldName: string): string | undefined => {
+  if (!(schema instanceof z.ZodType)) return undefined
+  const jsonSchema = z.toJSONSchema(schema)
+  if (!('properties' in jsonSchema) || jsonSchema.properties === undefined) return undefined
+  const property = jsonSchema.properties[fieldName]
+  if (property === undefined || typeof property !== 'object' || property === null) return undefined
+  return 'description' in property && typeof property.description === 'string' ? property.description : undefined
+}
+
 describe('apply_youtrack_command', () => {
   beforeEach(() => {
     mockLogger()
@@ -91,6 +102,16 @@ describe('apply_youtrack_command', () => {
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', '   '] })).toBe(false)
   })
 
+  test('describes single-issue command usage', () => {
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const }))
+    const taskIdsDescription = getInputFieldDescription(tool.inputSchema, 'taskIds')
+
+    expect(tool.description).toContain('single YouTrack issue')
+    expect(tool.description).not.toContain('one or more issues')
+    expect(taskIdsDescription).toContain('single issue ID')
+    expect(taskIdsDescription).not.toContain('One or more issue IDs')
+  })
+
   test('forwards the command payload to the provider after explicit confirmation for side effects', async () => {
     const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1'], silent: true }))
     const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
@@ -102,6 +123,16 @@ describe('apply_youtrack_command', () => {
       comment: undefined,
       silent: true,
     })
+  })
+
+  test('returns confirmation_required for low-confidence single-issue silent commands', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for me', taskIds: ['TEST-1'], silent: true }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'for me', taskIds: ['TEST-1'], silent: true, confidence: 0.6 })
+
+    expectConfirmationMessage(result, 'without notifications')
+    expect(applyCommand).not.toHaveBeenCalled()
   })
 
   test('returns confirmation_required for commands outside the safe allowlist without high confidence', async () => {

@@ -53,12 +53,12 @@ const rejectBulkCommand = (query: string, taskCount: number): never => {
 export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
     description:
-      'Apply a YouTrack command to one or more issues. Use this only for YouTrack-native command workflows that do not fit the structured tools.',
+      'Apply a YouTrack command to a single YouTrack issue. Use this only for YouTrack-native command workflows that do not fit the structured tools.',
     inputSchema: z.object({
       query: NON_EMPTY_STRING.describe(
         'The YouTrack command string to apply, for example "for me" or "State In Progress"',
       ),
-      taskIds: z.array(NON_EMPTY_STRING).min(1).describe('One or more issue IDs such as TEST-1'),
+      taskIds: z.array(NON_EMPTY_STRING).min(1).describe('A single issue ID such as TEST-1'),
       comment: z.string().optional().describe('Optional comment to add while applying the command'),
       silent: z.boolean().optional().describe('Whether to suppress notifications for this command when supported'),
       confidence: confidenceField.optional(),
