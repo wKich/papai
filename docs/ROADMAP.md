@@ -176,6 +176,7 @@ New config keys: per-calendar-provider credentials in `user_config`
 - [ ] Integration test scaffolding
 - [ ] Webhook-based task provider notifications — prerequisite for real-time event-driven suggestions (Phase 9); useful when external systems mutate state (GitHub/CI auto-transitions, Sentry auto-created issues, UI edits)
 - [ ] **Investigate pre-existing logic bug in `classify-error.ts`** — The `message.includes('issue')` matcher at line 19 is overly broad and could misclassify errors (e.g., "Configuration issue: timeout" → issue-not-found). Review error classification logic and tighten matchers.
+- [ ] **Configurable YouTrack custom field names** — Self-hosted YouTrack deployments can rename standard fields (e.g., "Due Date" → "Deadline"). Add per-user config keys (`youtrack_due_date_field`, etc.) to override hardcoded field name constants in `constants.ts`. Field should be auto-discovered from project custom fields if not configured.
 
 ---
 
