@@ -8,7 +8,8 @@ import { checkConfidence, confidenceField } from './confirmation-gate.js'
 
 const log = logger.child({ scope: 'tool:apply-youtrack-command' })
 
-const DELETE_COMMAND_PATTERN = /^\s*delete(?:\s|$)/i
+const NON_EMPTY_STRING = z.string().trim().min(1)
+const DELETE_COMMAND_PATTERN = /(?:^|\s)delete(?:\s|$)/i
 
 const isDangerousYouTrackCommand = (query: string): boolean => DELETE_COMMAND_PATTERN.test(query)
 
@@ -17,8 +18,10 @@ export function makeApplyYouTrackCommandTool(provider: Readonly<TaskProvider>): 
     description:
       'Apply a YouTrack command to one or more issues. Use this only for YouTrack-native command workflows that do not fit the structured tools.',
     inputSchema: z.object({
-      query: z.string().describe('The YouTrack command string to apply, for example "for me" or "State In Progress"'),
-      taskIds: z.array(z.string()).min(1).describe('One or more issue IDs such as TEST-1'),
+      query: NON_EMPTY_STRING.describe(
+        'The YouTrack command string to apply, for example "for me" or "State In Progress"',
+      ),
+      taskIds: z.array(NON_EMPTY_STRING).min(1).describe('One or more issue IDs such as TEST-1'),
       comment: z.string().optional().describe('Optional comment to add while applying the command'),
       silent: z.boolean().optional().describe('Whether to suppress notifications for this command when supported'),
       confidence: confidenceField.optional(),

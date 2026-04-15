@@ -15,6 +15,8 @@ describe('apply_youtrack_command', () => {
     expect(schemaValidates(tool, {})).toBe(false)
     expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1'] })).toBe(true)
     expect(schemaValidates(tool, { query: 'delete', taskIds: ['TEST-1'], confidence: 0.9 })).toBe(true)
+    expect(schemaValidates(tool, { query: '   ', taskIds: ['TEST-1'] })).toBe(false)
+    expect(schemaValidates(tool, { query: 'for me', taskIds: ['TEST-1', '   '] })).toBe(false)
   })
 
   test('forwards the command payload to the provider', async () => {
@@ -53,5 +55,15 @@ describe('apply_youtrack_command', () => {
       comment: undefined,
       silent: undefined,
     })
+  })
+
+  test('returns confirmation_required when delete appears later in the command', async () => {
+    const applyCommand = mock(() => Promise.resolve({ query: 'for me delete', taskIds: ['TEST-1'] }))
+    const tool = makeApplyYouTrackCommandTool(createMockProvider({ name: 'youtrack' as const, applyCommand }))
+
+    const result = await getToolExecutor(tool)({ query: 'for me delete', taskIds: ['TEST-1'], confidence: 0.6 })
+
+    expect(result).toMatchObject({ status: 'confirmation_required' })
+    expect(applyCommand).not.toHaveBeenCalled()
   })
 })
