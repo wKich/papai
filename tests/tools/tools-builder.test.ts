@@ -116,6 +116,17 @@ describe('buildTools', () => {
     expect(tools).toHaveProperty('list_deferred_prompts')
   })
 
+  it('should expose agile and sprint tools when phase-five capabilities are present', () => {
+    const provider = createMockProvider()
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+
+    expect(tools).toHaveProperty('list_agiles')
+    expect(tools).toHaveProperty('list_sprints')
+    expect(tools).toHaveProperty('create_sprint')
+    expect(tools).toHaveProperty('update_sprint')
+    expect(tools).toHaveProperty('assign_task_to_sprint')
+  })
+
   it('should not add deferred prompt tools in proactive mode', () => {
     const provider = createMockProvider()
     const tools = buildTools(provider, 'user-123', 'user-123', 'proactive')

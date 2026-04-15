@@ -120,6 +120,7 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCa
   'workItems.update',
   'workItems.delete',
   // Sprints, activities, saved queries
+  'agiles.list',
   'sprints.list',
   'sprints.create',
   'sprints.update',

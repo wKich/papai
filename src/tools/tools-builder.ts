@@ -9,6 +9,7 @@ import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeAddVoteTool } from './add-vote.js'
 import { makeAddWatcherTool } from './add-watcher.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
+import { makeAssignTaskToSprintTool } from './assign-task-to-sprint.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { makeClearMyIdentityTool } from './clear-my-identity.js'
 import { makeCoreTools } from './core-tools.js'
@@ -17,6 +18,7 @@ import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
+import { makeCreateSprintTool } from './create-sprint.js'
 import { makeCreateStatusTool } from './create-status.js'
 import { makeDeleteProjectTool } from './delete-project.js'
 import { makeDeleteRecurringTaskTool } from './delete-recurring-task.js'
@@ -28,6 +30,7 @@ import { makeGetCurrentUserTool } from './get-current-user.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetProjectTool } from './get-project.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
+import { makeListAgilesTool } from './list-agiles.js'
 import { makeListAttachmentsTool } from './list-attachments.js'
 import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
 import { makeListLabelsTool } from './list-labels.js'
@@ -35,6 +38,7 @@ import { makeListMemosTool } from './list-memos.js'
 import { makeListProjectTeamTool } from './list-project-team.js'
 import { makeListProjectsTool } from './list-projects.js'
 import { makeListRecurringTasksTool } from './list-recurring-tasks.js'
+import { makeListSprintsTool } from './list-sprints.js'
 import { makeListStatusesTool } from './list-statuses.js'
 import { makeListWatchersTool } from './list-watchers.js'
 import { makeListWorkTool } from './list-work.js'
@@ -65,6 +69,7 @@ import { makeUpdateDeferredPromptTool } from './update-deferred-prompt.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
 import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
+import { makeUpdateSprintTool } from './update-sprint.js'
 import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
 import { makeUpdateWorkTool } from './update-work.js'
@@ -72,21 +77,12 @@ import { makeUploadAttachmentTool } from './upload-attachment.js'
 import { makeWebFetchTool } from './web-fetch.js'
 
 function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('projects.read') && provider.getProject !== undefined) {
+  if (provider.capabilities.has('projects.read') && provider.getProject !== undefined)
     tools['get_project'] = makeGetProjectTool(provider)
-  }
-  if (provider.capabilities.has('projects.list')) {
-    tools['list_projects'] = makeListProjectsTool(provider)
-  }
-  if (provider.capabilities.has('projects.create')) {
-    tools['create_project'] = makeCreateProjectTool(provider)
-  }
-  if (provider.capabilities.has('projects.update')) {
-    tools['update_project'] = makeUpdateProjectTool(provider)
-  }
-  if (provider.capabilities.has('projects.delete')) {
-    tools['delete_project'] = makeDeleteProjectTool(provider)
-  }
+  if (provider.capabilities.has('projects.list')) tools['list_projects'] = makeListProjectsTool(provider)
+  if (provider.capabilities.has('projects.create')) tools['create_project'] = makeCreateProjectTool(provider)
+  if (provider.capabilities.has('projects.update')) tools['update_project'] = makeUpdateProjectTool(provider)
+  if (provider.capabilities.has('projects.delete')) tools['delete_project'] = makeDeleteProjectTool(provider)
   if (provider.capabilities.has('projects.team')) {
     tools['list_project_team'] = makeListProjectTeamTool(provider)
     tools['add_project_member'] = makeAddProjectMemberTool(provider)
@@ -141,21 +137,11 @@ function maybeAddRelationTools(tools: ToolSet, provider: TaskProvider): void {
 }
 
 function maybeAddStatusTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('statuses.list')) {
-    tools['list_statuses'] = makeListStatusesTool(provider)
-  }
-  if (provider.capabilities.has('statuses.create')) {
-    tools['create_status'] = makeCreateStatusTool(provider)
-  }
-  if (provider.capabilities.has('statuses.update')) {
-    tools['update_status'] = makeUpdateStatusTool(provider)
-  }
-  if (provider.capabilities.has('statuses.delete')) {
-    tools['delete_status'] = makeDeleteStatusTool(provider)
-  }
-  if (provider.capabilities.has('statuses.reorder')) {
-    tools['reorder_statuses'] = makeReorderStatusesTool(provider)
-  }
+  if (provider.capabilities.has('statuses.list')) tools['list_statuses'] = makeListStatusesTool(provider)
+  if (provider.capabilities.has('statuses.create')) tools['create_status'] = makeCreateStatusTool(provider)
+  if (provider.capabilities.has('statuses.update')) tools['update_status'] = makeUpdateStatusTool(provider)
+  if (provider.capabilities.has('statuses.delete')) tools['delete_status'] = makeDeleteStatusTool(provider)
+  if (provider.capabilities.has('statuses.reorder')) tools['reorder_statuses'] = makeReorderStatusesTool(provider)
 }
 
 function maybeAddAttachmentTools(tools: ToolSet, provider: TaskProvider, contextId: string | undefined): void {
@@ -172,18 +158,23 @@ function maybeAddAttachmentTools(tools: ToolSet, provider: TaskProvider, context
 }
 
 function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('workItems.list')) {
-    tools['list_work'] = makeListWorkTool(provider)
-  }
-  if (provider.capabilities.has('workItems.create')) {
-    tools['log_work'] = makeLogWorkTool(provider)
-  }
-  if (provider.capabilities.has('workItems.update')) {
-    tools['update_work'] = makeUpdateWorkTool(provider)
-  }
-  if (provider.capabilities.has('workItems.delete')) {
-    tools['remove_work'] = makeRemoveWorkTool(provider)
-  }
+  if (provider.capabilities.has('workItems.list')) tools['list_work'] = makeListWorkTool(provider)
+  if (provider.capabilities.has('workItems.create')) tools['log_work'] = makeLogWorkTool(provider)
+  if (provider.capabilities.has('workItems.update')) tools['update_work'] = makeUpdateWorkTool(provider)
+  if (provider.capabilities.has('workItems.delete')) tools['remove_work'] = makeRemoveWorkTool(provider)
+}
+
+function maybeAddPhaseFiveSprintTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('agiles.list') && provider.listAgiles !== undefined)
+    tools['list_agiles'] = makeListAgilesTool(provider)
+  if (provider.capabilities.has('sprints.list') && provider.listSprints !== undefined)
+    tools['list_sprints'] = makeListSprintsTool(provider)
+  if (provider.capabilities.has('sprints.create') && provider.createSprint !== undefined)
+    tools['create_sprint'] = makeCreateSprintTool(provider)
+  if (provider.capabilities.has('sprints.update') && provider.updateSprint !== undefined)
+    tools['update_sprint'] = makeUpdateSprintTool(provider)
+  if (provider.capabilities.has('sprints.assign') && provider.assignTaskToSprint !== undefined)
+    tools['assign_task_to_sprint'] = makeAssignTaskToSprintTool(provider)
 }
 
 function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
@@ -286,6 +277,7 @@ export function buildTools(
   maybeAddCollaborationTaskTools(tools, provider, chatUserId)
   maybeAddAttachmentTools(tools, provider, contextId)
   maybeAddWorkItemTools(tools, provider)
+  maybeAddPhaseFiveSprintTools(tools, provider)
   if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
     tools['count_tasks'] = makeCountTasksTool(provider)
   }

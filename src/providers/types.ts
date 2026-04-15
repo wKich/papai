@@ -83,6 +83,7 @@ export type TaskCapability =
   | 'workItems.create'
   | 'workItems.update'
   | 'workItems.delete'
+  | 'agiles.list'
   | 'sprints.list'
   | 'sprints.create'
   | 'sprints.update'
@@ -294,7 +295,6 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   buildTaskUrl(taskId: string, projectId?: string): string
   buildProjectUrl(projectId: string): string
   classifyError(error: unknown): AppError
-
   /** Provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string
 }
