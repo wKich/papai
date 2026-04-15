@@ -65,6 +65,7 @@ describe('getProviderMessage', () => {
     expect(getProviderMessage(error)).toContain('proj-123')
     expect(getProviderMessage(error)).toContain('Missing URL field')
     expect(getProviderMessage(error)).toContain('URL адеса где будет размещаться приложени')
+    expect(getProviderMessage(error)).not.toContain('customFields parameter')
   })
 
   test('returns message for unsupported-operation', () => {

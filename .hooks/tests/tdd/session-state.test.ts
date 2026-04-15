@@ -85,4 +85,31 @@ describe('SessionState (Claude backend)', () => {
       output: 'fail output',
     })
   })
+
+  test('getNeedsRecheck returns true initially', () => {
+    const state = new SessionState('recheck-init', tempDir)
+    expect(state.getNeedsRecheck()).toBe(true)
+  })
+
+  test('setNeedsRecheck persists false', () => {
+    const state = new SessionState('recheck-set', tempDir)
+    state.setNeedsRecheck(false)
+    expect(state.getNeedsRecheck()).toBe(false)
+  })
+
+  test('setNeedsRecheck persists true after being set to false', () => {
+    const state = new SessionState('recheck-toggle', tempDir)
+    state.setNeedsRecheck(false)
+    state.setNeedsRecheck(true)
+    expect(state.getNeedsRecheck()).toBe(true)
+  })
+
+  test('needsRecheck survives reload', () => {
+    const sessionId = 'recheck-persist'
+    const first = new SessionState(sessionId, tempDir)
+    first.setNeedsRecheck(false)
+
+    const second = new SessionState(sessionId, tempDir)
+    expect(second.getNeedsRecheck()).toBe(false)
+  })
 })

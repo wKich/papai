@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type { z } from 'zod'
 
 import {
+  buildCreateIssueCustomField,
   mapIssueToTask,
   mapIssueToListItem,
   mapIssueToSearchResult,
@@ -81,6 +82,24 @@ describe('mapIssueToTask', () => {
     expect(result.resolved).toBe('2024-01-01T00:00:00.000Z')
     expect(result.parent).toEqual({ id: '100', idReadable: 'PROJ-0', title: 'Parent Task' })
     expect(result.subtasks).toEqual([{ id: '200', idReadable: 'PROJ-2', title: 'Subtask', status: 'open' }])
+  })
+
+  test('maps due date custom field as date-only string', () => {
+    const issue = {
+      id: '123',
+      idReadable: 'PROJ-1',
+      summary: 'Test',
+      created: 1704067200000,
+      updated: 1704153600000,
+      project: { id: 'proj-1' },
+      customFields: [
+        { $type: 'DateIssueCustomField' as const, name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') },
+      ],
+    } satisfies z.infer<typeof import('../../../src/providers/youtrack/schemas/issue.js').IssueSchema>
+
+    const result = mapIssueToTask(issue, 'https://example.com')
+
+    expect(result.dueDate).toBe('2026-03-25')
   })
 
   test('maps subtask status based on resolved field', () => {
@@ -600,24 +619,82 @@ describe('mapComment', () => {
     expect(result).toHaveLength(0)
   })
 
-  test('includes custom fields when provided', () => {
+  test('ignores create-only custom fields without project metadata', () => {
     const result = buildCustomFields({
       customFields: [
         { name: 'URL адеса где будет размещаться приложени', value: 'stream://myapp' },
         { name: 'Environment', value: 'production' },
       ],
     })
-    expect(result).toHaveLength(2)
-    expect(result[0]).toEqual({
-      name: 'URL адеса где будет размещаться приложени',
+    expect(result).toEqual([])
+  })
+
+  test('builds create-time custom field payload for supported simple string project fields', () => {
+    expect(
+      buildCreateIssueCustomField(
+        {
+          id: '82-12',
+          $type: 'SimpleProjectCustomField',
+          field: {
+            id: '58-4',
+            name: 'Requester email',
+            $type: 'CustomField',
+            fieldType: { id: 'string', presentation: 'string' },
+          },
+          canBeEmpty: true,
+          isPublic: true,
+        },
+        'test@example.com',
+      ),
+    ).toEqual({
+      name: 'Requester email',
       $type: 'SimpleIssueCustomField',
-      value: { text: 'stream://myapp' },
+      value: 'test@example.com',
     })
-    expect(result[1]).toEqual({
-      name: 'Environment',
-      $type: 'SimpleIssueCustomField',
-      value: { text: 'production' },
+  })
+
+  test('builds create-time custom field payload for supported text project fields', () => {
+    expect(
+      buildCreateIssueCustomField(
+        {
+          id: '82-13',
+          $type: 'TextProjectCustomField',
+          field: {
+            id: '58-5',
+            name: 'Environment details',
+            $type: 'CustomField',
+            fieldType: { id: 'text', presentation: 'text' },
+          },
+          canBeEmpty: true,
+          isPublic: true,
+        },
+        'Needs staging parity',
+      ),
+    ).toEqual({
+      name: 'Environment details',
+      $type: 'TextIssueCustomField',
+      value: { text: 'Needs staging parity' },
     })
+  })
+
+  test('returns undefined for unsupported create-time project custom fields', () => {
+    expect(
+      buildCreateIssueCustomField(
+        {
+          id: '82-14',
+          $type: 'EnumProjectCustomField',
+          field: {
+            id: '58-6',
+            name: 'Type',
+            $type: 'CustomField',
+            fieldType: { id: 'enum[1]', presentation: 'enum[1]' },
+          },
+          canBeEmpty: true,
+          isPublic: true,
+        },
+        'Bug',
+      ),
+    ).toBeUndefined()
   })
 
   test('combines standard and custom fields', () => {
@@ -625,16 +702,51 @@ describe('mapComment', () => {
       priority: 'High',
       customFields: [{ name: 'URL', value: 'stream://test' }],
     })
-    expect(result).toHaveLength(2)
+    expect(result).toHaveLength(1)
     expect(result[0]).toEqual({
       name: 'Priority',
       $type: 'SingleEnumIssueCustomField',
       value: { name: 'High' },
     })
-    expect(result[1]).toEqual({
-      name: 'URL',
-      $type: 'SimpleIssueCustomField',
-      value: { text: 'stream://test' },
-    })
+  })
+
+  test('encodes due date as midday UTC for date-only custom field', () => {
+    const result = buildCustomFields({ dueDate: '2026-03-25' })
+
+    expect(result).toEqual([
+      {
+        name: 'Due Date',
+        $type: 'DateIssueCustomField',
+        value: Date.parse('2026-03-25T12:00:00.000Z'),
+      },
+    ])
+  })
+
+  test('preserves calendar date from iso datetime input with offset', () => {
+    const result = buildCustomFields({ dueDate: '2026-03-25T00:30:00+02:00' })
+
+    expect(result).toEqual([
+      {
+        name: 'Due Date',
+        $type: 'DateIssueCustomField',
+        value: Date.parse('2026-03-25T12:00:00.000Z'),
+      },
+    ])
+  })
+
+  test('rejects malformed due date input', () => {
+    expect(() => buildCustomFields({ dueDate: 'not-a-date' })).toThrow('Invalid dueDate')
+  })
+
+  test('rejects impossible date-only input', () => {
+    expect(() => buildCustomFields({ dueDate: '2026-02-30' })).toThrow('Invalid dueDate')
+  })
+
+  test('rejects ambiguous non-iso datetime input', () => {
+    expect(() => buildCustomFields({ dueDate: '03/25/2026 17:00' })).toThrow('Invalid dueDate')
+  })
+
+  test('does not reject custom field values without metadata', () => {
+    expect(() => buildCustomFields({ customFields: [{ name: 'Type', value: 'Bug' }] })).not.toThrow()
   })
 })

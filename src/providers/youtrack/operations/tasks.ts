@@ -1,19 +1,24 @@
 import { z } from 'zod'
 
-import { providerError } from '../../../errors.js'
 import { logger } from '../../../logger.js'
 import type { ListTasksParams, Task, TaskListItem, TaskSearchResult } from '../../types.js'
-import { classifyYouTrackError, YouTrackClassifiedError } from '../classify-error.js'
-import type { YouTrackConfig } from '../client.js'
+import { classifyYouTrackError } from '../classify-error.js'
+import type { YouTrackConfig, YouTrackQueryValue } from '../client.js'
 import { youtrackFetch } from '../client.js'
-import { ISSUE_FIELDS, ISSUE_LIST_FIELDS } from '../constants.js'
+import { ISSUE_FIELDS, ISSUE_LIST_FIELDS, YOUTRACK_INLINE_LIST_CUSTOM_FIELDS } from '../constants.js'
 import { paginate } from '../helpers.js'
-import { buildCustomFields, mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
-import { ProjectCustomFieldSchema } from '../schemas/bundle.js'
+import { mapIssueToListItem, mapIssueToSearchResult, mapIssueToTask } from '../mappers.js'
 import { IssueListSchema, IssueSchema } from '../schemas/issue.js'
+import {
+  buildCreateCustomFields,
+  buildCustomFields,
+  buildYouTrackQuery,
+  buildWriteSafeCustomFields,
+  enrichTaskWithDueDate,
+  validateRequiredCreateFields,
+} from '../task-helpers.js'
 
 const log = logger.child({ scope: 'provider:youtrack:tasks' })
-const KNOWN_CUSTOM_FIELDS = new Set(['State', 'Priority', 'Assignee'])
 
 type CreateTaskParams = {
   projectId: string
@@ -26,39 +31,34 @@ type CreateTaskParams = {
   customFields?: Array<{ name: string; value: string }>
 }
 
-async function validateRequiredFields(
-  config: YouTrackConfig,
-  projectId: string,
-  projectShortName: string,
-  customFields: Array<{ name: string; value: string }> | undefined,
-): Promise<void> {
-  const raw = await youtrackFetch(config, 'GET', `/api/admin/projects/${projectId}/customFields`)
-  const projectCustomFields = ProjectCustomFieldSchema.array().parse(raw)
-  const handledFields = new Set(KNOWN_CUSTOM_FIELDS)
+const fallbackDueDate = (dueDate: string | undefined): string | undefined =>
+  dueDate === undefined ? undefined : dueDate.slice(0, 10)
 
-  if (customFields !== undefined) {
-    for (const field of customFields) {
-      handledFields.add(field.name)
-    }
-  }
+const fetchIssueProjectId = async (config: Readonly<YouTrackConfig>, taskId: string): Promise<string> => {
+  const issueRaw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
+    query: { fields: 'project(id)' },
+  })
+  const issueProject = z.object({ project: z.object({ id: z.string() }) }).parse(issueRaw)
+  return issueProject.project.id
+}
 
-  const requiredFields = projectCustomFields
-    .filter((field) => field.canBeEmpty === false)
-    .map((field) => field.field?.name)
-    .filter((fieldName): fieldName is string => fieldName !== undefined && !handledFields.has(fieldName))
-
-  if (requiredFields.length === 0) return
-
-  const errorMessage = `Project ${projectShortName} requires these custom fields: ${requiredFields.join(', ')}`
-  log.warn({ projectId, requiredFields }, 'Missing required custom fields')
-  throw new YouTrackClassifiedError(
-    errorMessage,
-    providerError.workflowValidationFailed(
-      projectId,
-      'The project workflow requires additional custom fields before the task can be created.',
-      requiredFields.map((name) => ({ name })),
-    ),
-  )
+const buildUpdateCustomFields = async (
+  config: Readonly<YouTrackConfig>,
+  taskId: string,
+  params: Readonly<{
+    status?: string
+    priority?: string
+    dueDate?: string
+    assignee?: string
+    projectId?: string
+    customFields?: Array<{ name: string; value: string }>
+  }>,
+): Promise<
+  Array<ReturnType<typeof buildCustomFields>[number] | Awaited<ReturnType<typeof buildWriteSafeCustomFields>>[number]>
+> => {
+  const projectId = params.projectId ?? (await fetchIssueProjectId(config, taskId))
+  const projectCustomFields = await buildWriteSafeCustomFields(config, projectId, params.customFields)
+  return [...buildCustomFields(params), ...projectCustomFields]
 }
 
 export async function createYouTrackTask(config: YouTrackConfig, params: CreateTaskParams): Promise<Task> {
@@ -75,7 +75,7 @@ export async function createYouTrackTask(config: YouTrackConfig, params: CreateT
       query: { fields: 'id,shortName' },
     })
     const project = z.object({ id: z.string(), shortName: z.string() }).parse(projectRaw)
-    await validateRequiredFields(config, project.id, project.shortName, params.customFields)
+    const projectCustomFields = await validateRequiredCreateFields(config, project.id, project.shortName, params)
 
     const body: Record<string, unknown> = {
       project: { id: project.id },
@@ -83,7 +83,7 @@ export async function createYouTrackTask(config: YouTrackConfig, params: CreateT
     }
     if (params.description !== undefined) body['description'] = params.description
 
-    const customFields = buildCustomFields(params)
+    const customFields = buildCreateCustomFields(params, projectCustomFields)
     if (customFields.length > 0) body['customFields'] = customFields
 
     const raw = await youtrackFetch(config, 'POST', '/api/issues', {
@@ -92,7 +92,10 @@ export async function createYouTrackTask(config: YouTrackConfig, params: CreateT
     })
     const issue = IssueSchema.parse(raw)
     log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue created')
-    return mapIssueToTask(issue, config.baseUrl)
+    const task = await enrichTaskWithDueDate(config, mapIssueToTask(issue, config.baseUrl))
+    return task.dueDate === null && params.dueDate !== undefined
+      ? { ...task, dueDate: fallbackDueDate(params.dueDate) ?? null }
+      : task
   } catch (error) {
     log.error(
       { error: error instanceof Error ? error.message : String(error), projectId: params.projectId },
@@ -109,7 +112,7 @@ export async function getYouTrackTask(config: YouTrackConfig, taskId: string): P
       query: { fields: ISSUE_FIELDS },
     })
     const issue = IssueSchema.parse(raw)
-    return mapIssueToTask(issue, config.baseUrl)
+    return await enrichTaskWithDueDate(config, mapIssueToTask(issue, config.baseUrl))
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to get task')
     throw classifyYouTrackError(error, { taskId })
@@ -127,6 +130,7 @@ export async function updateYouTrackTask(
     dueDate?: string
     projectId?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   },
 ): Promise<Task> {
   log.debug({ taskId, hasTitle: params.title !== undefined, hasStatus: params.status !== undefined }, 'updateTask')
@@ -136,8 +140,13 @@ export async function updateYouTrackTask(
     if (params.description !== undefined) body['description'] = params.description
     if (params.projectId !== undefined) body['project'] = { id: params.projectId }
 
-    const customFields = buildCustomFields(params)
-    if (customFields.length > 0) body['customFields'] = customFields
+    if (params.customFields !== undefined && params.customFields.length > 0) {
+      const customFields = await buildUpdateCustomFields(config, taskId, params)
+      if (customFields.length > 0) body['customFields'] = customFields
+    } else {
+      const customFields = buildCustomFields(params)
+      if (customFields.length > 0) body['customFields'] = customFields
+    }
 
     const raw = await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
       body,
@@ -145,7 +154,10 @@ export async function updateYouTrackTask(
     })
     const issue = IssueSchema.parse(raw)
     log.info({ issueId: issue.idReadable ?? issue.id }, 'Issue updated')
-    return mapIssueToTask(issue, config.baseUrl)
+    const task = await enrichTaskWithDueDate(config, mapIssueToTask(issue, config.baseUrl))
+    return task.dueDate === null && params.dueDate !== undefined
+      ? { ...task, dueDate: fallbackDueDate(params.dueDate) ?? null }
+      : task
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to update task')
     throw classifyYouTrackError(error, { taskId })
@@ -164,7 +176,14 @@ function fetchTasksWithPagination(
 }
 
 function fetchTasksAuto(config: YouTrackConfig, query: string): Promise<z.infer<typeof IssueListSchema>[]> {
-  return paginate(config, '/api/issues', { fields: ISSUE_LIST_FIELDS, query }, IssueListSchema.array(), 10, 100)
+  return paginate(
+    config,
+    '/api/issues',
+    { fields: ISSUE_LIST_FIELDS, query, customFields: YOUTRACK_INLINE_LIST_CUSTOM_FIELDS },
+    IssueListSchema.array(),
+    10,
+    100,
+  )
 }
 
 async function fetchTasksManual(
@@ -176,10 +195,11 @@ async function fetchTasksManual(
   const page = params.page ?? 1
   const skip = (page - 1) * limit
 
-  const requestQuery: Record<string, string> = {
+  const requestQuery: Record<string, YouTrackQueryValue> = {
     fields: ISSUE_LIST_FIELDS,
     query,
     $top: String(limit),
+    customFields: YOUTRACK_INLINE_LIST_CUSTOM_FIELDS,
   }
 
   if (skip > 0) {
@@ -190,38 +210,6 @@ async function fetchTasksManual(
     query: requestQuery,
   })
   return IssueListSchema.array().parse(raw)
-}
-
-function buildYouTrackQuery(params: ListTasksParams | undefined, projectShortName: string): string {
-  const queryParts: string[] = [`project: {${projectShortName}}`]
-
-  if (params?.status !== undefined) {
-    queryParts.push(`State: {${params.status}}`)
-  }
-
-  if (params?.priority !== undefined) {
-    queryParts.push(`Priority: {${params.priority}}`)
-  }
-
-  if (params?.assigneeId !== undefined) {
-    queryParts.push(`Assignee: {${params.assigneeId}}`)
-  }
-
-  if (params?.dueAfter !== undefined) {
-    queryParts.push(`Due date: >${params.dueAfter}`)
-  }
-
-  if (params?.dueBefore !== undefined) {
-    queryParts.push(`Due date: <${params.dueBefore}`)
-  }
-
-  if (params?.sortBy !== undefined) {
-    const sortField = params.sortBy === 'createdAt' ? 'created' : params.sortBy
-    const sortOrder = params.sortOrder ?? 'asc'
-    queryParts.push(`sort by: ${sortField} ${sortOrder}`)
-  }
-
-  return queryParts.join(' ')
 }
 
 export async function listYouTrackTasks(
@@ -267,7 +255,12 @@ export async function searchYouTrackTasks(
       query = `assignee: {${params.assigneeId}} ${query}`
     }
     const raw = await youtrackFetch(config, 'GET', '/api/issues', {
-      query: { fields: ISSUE_LIST_FIELDS, query, $top: String(params.limit ?? 50) },
+      query: {
+        fields: ISSUE_LIST_FIELDS,
+        query,
+        $top: String(params.limit ?? 50),
+        customFields: YOUTRACK_INLINE_LIST_CUSTOM_FIELDS,
+      },
     })
     const issues = IssueListSchema.array().parse(raw)
     log.info({ query: params.query, assigneeId: params.assigneeId, count: issues.length }, 'Tasks searched')

@@ -3,7 +3,7 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('get_task', () => {
   beforeEach(async () => {
@@ -36,6 +36,71 @@ describe('get_task', () => {
     expect(getTask).toHaveBeenCalledWith('task-1')
     expect(result).toHaveProperty('id', 'task-1')
     expect(result).toHaveProperty('title', 'Test Task')
+  })
+
+  test('should return provider dueDate converted to local time', async () => {
+    const getTask = mock((_taskId: string) => {
+      return Promise.resolve({
+        id: 'task-1',
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25T17:00:00.000Z',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ getTask })
+    const tool = makeGetTaskTool(provider, 'user-123')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+
+    expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+  })
+
+  test('should preserve date-only dueDate from provider', async () => {
+    const getTask = mock((_taskId: string) => {
+      return Promise.resolve({
+        id: 'task-1',
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockYouTrackProvider({ getTask })
+    const tool = makeGetTaskTool(provider, 'user-123')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ taskId: 'task-1' }, { toolCallId: '1', messages: [] })
+
+    expect(result).toHaveProperty('dueDate', '2026-03-25')
+  })
+
+  test('get_task returns normalized customFields when the provider includes them', async () => {
+    const getTask = mock(() =>
+      Promise.resolve({
+        id: 'TEST-1',
+        title: 'Test Task',
+        status: 'todo',
+        url: 'https://test.com/task/1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      }),
+    )
+
+    const tool = makeGetTaskTool(createMockProvider({ getTask }))
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ taskId: 'TEST-1' }, { toolCallId: '1', messages: [] })
+    expect(result).toMatchObject({
+      customFields: [
+        { name: 'Environment', value: 'staging' },
+        { name: 'Steps', value: 'Click login' },
+      ],
+    })
   })
 
   describe('timezone config lookup (NI2 fix)', () => {

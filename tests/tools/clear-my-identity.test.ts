@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { clearIdentityMapping, getIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { makeClearMyIdentityTool } from '../../src/tools/clear-my-identity.js'
+import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
 import { getToolExecutor, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const mockProvider: TaskProvider = {
@@ -16,6 +17,11 @@ const mockProvider: TaskProvider = {
     throw e
   },
   getPromptAddendum: () => '',
+  normalizeDueDateInput: (dueDate, timezone) =>
+    dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone),
+  formatDueDateOutput: (dueDate, timezone) =>
+    dueDate === undefined || dueDate === null ? dueDate : utcToLocal(dueDate, timezone),
+  normalizeListTaskParams: (params) => ({ ...params }),
   createTask(): Promise<never> {
     throw new Error('not implemented')
   },
@@ -31,7 +37,7 @@ const mockProvider: TaskProvider = {
   searchTasks(): Promise<never> {
     throw new Error('not implemented')
   },
-} as TaskProvider
+}
 
 describe('clear_my_identity tool', () => {
   const testUserId = 'test-user-clear-123'

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { youtrackFetch } from './client.js'
-import type { YouTrackConfig } from './client.js'
+import type { YouTrackConfig, YouTrackQueryValue } from './client.js'
 
 // --- Duration helpers ---
 
@@ -83,7 +83,7 @@ export function isoToMinutes(iso: string): number {
 export function paginate<T>(
   config: YouTrackConfig,
   path: string,
-  query: Record<string, string>,
+  query: Record<string, YouTrackQueryValue>,
   schema: z.ZodType<T[]>,
   maxPages = 10,
   pageSize = 100,
@@ -94,7 +94,7 @@ export function paginate<T>(
 async function paginatePage<T>(
   config: YouTrackConfig,
   path: string,
-  query: Record<string, string>,
+  query: Record<string, YouTrackQueryValue>,
   schema: z.ZodType<T[]>,
   maxPages: number,
   pageSize: number,
@@ -103,7 +103,7 @@ async function paginatePage<T>(
 ): Promise<T[]> {
   if (skip >= maxPages * pageSize) return accumulated
 
-  const pageQuery: Record<string, string> = {
+  const pageQuery: Record<string, YouTrackQueryValue> = {
     ...query,
     $top: String(pageSize),
     $skip: String(skip),

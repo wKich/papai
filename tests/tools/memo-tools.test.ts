@@ -1,4 +1,6 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { describe, test, expect, beforeEach, mock } from 'bun:test'
+
+import { z } from 'zod'
 
 import { _userCaches } from '../../src/cache.js'
 import { setConfig } from '../../src/config.js'
@@ -9,7 +11,7 @@ import { makePromoteMemoTool } from '../../src/tools/promote-memo.js'
 import { makeSaveMemoTool } from '../../src/tools/save-memo.js'
 import { makeSearchMemosTool } from '../../src/tools/search-memos.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 beforeEach(() => {
   mockLogger()
@@ -22,6 +24,15 @@ async function exec(
   if (!toolInstance.execute) throw new Error('Tool execute is undefined')
   const result: unknown = await toolInstance.execute(input, { toolCallId: '1', messages: [] })
   return result
+}
+
+function getInputFieldDescription(schema: unknown, fieldName: string): string | undefined {
+  if (!(schema instanceof z.ZodType)) return undefined
+  const jsonSchema = z.toJSONSchema(schema)
+  if (!('properties' in jsonSchema) || jsonSchema.properties === undefined) return undefined
+  const property = jsonSchema.properties[fieldName]
+  if (property === undefined || typeof property !== 'object' || property === null) return undefined
+  return 'description' in property && typeof property.description === 'string' ? property.description : undefined
 }
 
 describe('save_memo tool', () => {
@@ -169,5 +180,66 @@ describe('promote_memo tool', () => {
     })
     expect(result).toHaveProperty('status', 'error')
     expect(result).toHaveProperty('message')
+  })
+
+  test('uses date-only dueDate semantics for YouTrack', async () => {
+    const memo = saveMemo('user1', 'promote with date', [])
+    let capturedDueDate: string | undefined
+    const provider = createMockYouTrackProvider({
+      createTask: mock((params: Readonly<{ dueDate?: string; title: string }>) => {
+        capturedDueDate = params.dueDate
+        return Promise.resolve({
+          id: 'task-1',
+          title: params.title,
+          status: 'todo',
+          dueDate: '2026-03-25',
+          url: 'https://test.com/task/1',
+        })
+      }),
+    })
+
+    const result = await exec(makePromoteMemoTool(provider, 'user1'), {
+      memoId: memo.id,
+      projectId: 'proj-1',
+      dueDate: { date: '2026-03-25', time: '23:45' },
+    })
+
+    expect(capturedDueDate).toBe('2026-03-25')
+    expect(result).toHaveProperty('dueDate', '2026-03-25')
+  })
+
+  test('keeps datetime behavior for non-YouTrack providers', async () => {
+    const memo = saveMemo('user1', 'promote with datetime', [])
+    setConfig('user1', 'timezone', 'Asia/Karachi')
+    let capturedDueDate: string | undefined
+    const provider = createMockProvider({
+      createTask: mock((params: Readonly<{ dueDate?: string; title: string }>) => {
+        capturedDueDate = params.dueDate
+        return Promise.resolve({
+          id: 'task-1',
+          title: params.title,
+          status: 'todo',
+          dueDate: '2026-03-25T18:45:00.000Z',
+          url: 'https://test.com/task/1',
+        })
+      }),
+    })
+
+    const result = await exec(makePromoteMemoTool(provider, 'user1'), {
+      memoId: memo.id,
+      projectId: 'proj-1',
+      dueDate: { date: '2026-03-25', time: '23:45' },
+    })
+
+    expect(capturedDueDate).toBe('2026-03-25T18:45:00.000Z')
+    expect(result).toHaveProperty('dueDate', '2026-03-25T23:45:00')
+  })
+
+  test('describes YouTrack promote due dates as date-only', () => {
+    const provider = createMockYouTrackProvider()
+    const tool = makePromoteMemoTool(provider, 'user1')
+    const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
+
+    expect(dueDateDescription).toContain('For YouTrack, due dates are date-only and time-of-day is ignored')
   })
 })

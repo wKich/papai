@@ -1,5 +1,6 @@
 import type { AppError } from '../../errors.js'
 import { logger } from '../../logger.js'
+import { localDatetimeToUtc, utcToLocal } from '../../utils/datetime.js'
 import type {
   Column,
   Comment,
@@ -241,6 +242,22 @@ export class KaneoProvider implements TaskProvider {
 - Columns define the board layout ("Todo", "In Progress", "Done"); task status is the column the task currently sits in.
 - To move a task, update its status to the target column name. To change the board structure, use the column management tools.
 - Always call list_columns before updating a task status to make sure the column exists.`
+  }
+
+  normalizeDueDateInput(
+    dueDate: Readonly<{ date: string; time?: string }> | undefined,
+    timezone: string,
+  ): string | undefined {
+    if (dueDate === undefined) return undefined
+    return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+  }
+
+  formatDueDateOutput(dueDate: string | null | undefined, timezone: string): string | null | undefined {
+    return utcToLocal(dueDate, timezone)
+  }
+
+  normalizeListTaskParams(params: Readonly<ListTasksParams>): ListTasksParams {
+    return { ...params }
   }
 }
 

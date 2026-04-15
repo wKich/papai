@@ -1,17 +1,11 @@
-import { z } from 'zod'
-
 import { logger } from '../../logger.js'
 import type { Label } from '../types.js'
 import { classifyYouTrackError } from './classify-error.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { TAG_FIELDS } from './constants.js'
+import { paginate } from './helpers.js'
 import { TagSchema } from './schemas/tag.js'
-
-const IssueTagsSchema = z.object({
-  id: z.string(),
-  tags: z.array(z.object({ id: z.string() })).optional(),
-})
 
 const log = logger.child({ scope: 'provider:youtrack:labels' })
 
@@ -26,6 +20,29 @@ export async function listYouTrackLabels(config: YouTrackConfig): Promise<Label[
     return tags.map((t) => ({ id: t.id, name: t.name, color: t.color?.background }))
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to list labels')
+    throw classifyYouTrackError(error)
+  }
+}
+
+export async function findYouTrackLabelsByName(config: Readonly<YouTrackConfig>, labelName: string): Promise<Label[]> {
+  log.debug({ labelName }, 'findLabelsByName')
+  try {
+    const tags = await paginate(
+      config,
+      '/api/tags',
+      { fields: TAG_FIELDS, query: labelName },
+      TagSchema.array(),
+      10,
+      100,
+    )
+    const labels = tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color?.background }))
+    log.info({ labelName, count: labels.length }, 'Tags looked up by name')
+    return labels.filter((label) => label.name === labelName)
+  } catch (error) {
+    log.error(
+      { error: error instanceof Error ? error.message : String(error), labelName },
+      'Failed to look up labels by name',
+    )
     throw classifyYouTrackError(error)
   }
 }
@@ -97,15 +114,9 @@ export async function addYouTrackTaskLabel(
 ): Promise<{ taskId: string; labelId: string }> {
   log.debug({ taskId, labelId }, 'addTaskLabel')
   try {
-    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: 'id,tags(id)' },
-    })
-    const issue = IssueTagsSchema.parse(raw)
-    const currentTagIds = (issue.tags ?? []).map((t) => ({ id: t.id }))
-    currentTagIds.push({ id: labelId })
-    await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
-      body: { tags: currentTagIds },
-      query: { fields: 'id' },
+    await youtrackFetch(config, 'POST', `/api/issues/${taskId}/tags`, {
+      body: { id: labelId },
+      query: { fields: TAG_FIELDS },
     })
     log.info({ taskId, labelId }, 'Tag added to issue')
     return { taskId, labelId }
@@ -125,15 +136,7 @@ export async function removeYouTrackTaskLabel(
 ): Promise<{ taskId: string; labelId: string }> {
   log.debug({ taskId, labelId }, 'removeTaskLabel')
   try {
-    const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
-      query: { fields: 'id,tags(id)' },
-    })
-    const issue = IssueTagsSchema.parse(raw)
-    const filteredTags = (issue.tags ?? []).filter((t) => t.id !== labelId).map((t) => ({ id: t.id }))
-    await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
-      body: { tags: filteredTags },
-      query: { fields: 'id' },
-    })
+    await youtrackFetch(config, 'DELETE', `/api/issues/${taskId}/tags/${labelId}`)
     log.info({ taskId, labelId }, 'Tag removed from issue')
     return { taskId, labelId }
   } catch (error) {

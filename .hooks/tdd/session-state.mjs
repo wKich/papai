@@ -99,6 +99,7 @@ export class SessionState {
       surfaceSnapshots: new Map(),
       mutationSnapshots: new Map(),
       sessionMutationBaseline: null,
+      needsRecheck: true,
     }
   }
 
@@ -160,6 +161,17 @@ export class SessionState {
   clearPendingFailure() {
     this.#ensureLoaded()
     this.#state.pendingFailure = null
+    this.#persist()
+  }
+
+  getNeedsRecheck() {
+    this.#ensureLoaded()
+    return this.#state.needsRecheck
+  }
+
+  setNeedsRecheck(value) {
+    this.#ensureLoaded()
+    this.#state.needsRecheck = value
     this.#persist()
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { YOUTRACK_CAPABILITIES } from '../../../src/providers/youtrack/constants.js'
+import { ISSUE_FIELDS, YOUTRACK_CAPABILITIES } from '../../../src/providers/youtrack/constants.js'
 
 describe('YOUTRACK_CAPABILITIES', () => {
   test('includes projects.delete capability', () => {
@@ -13,5 +13,12 @@ describe('YOUTRACK_CAPABILITIES', () => {
     expect(YOUTRACK_CAPABILITIES.has('tasks.visibility')).toBe(true)
     expect(YOUTRACK_CAPABILITIES.has('comments.reactions')).toBe(true)
     expect(YOUTRACK_CAPABILITIES.has('projects.team')).toBe(true)
+  })
+
+  test('requests custom fields without duplicate scalar value selector', () => {
+    expect(ISSUE_FIELDS).toContain(
+      'customFields($type,name,value($type,id,name,login,fullName,localizedName,minutes,presentation,text))',
+    )
+    expect(ISSUE_FIELDS).not.toContain('customFields($type,name,value,value(')
   })
 })

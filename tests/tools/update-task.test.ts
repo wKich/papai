@@ -3,8 +3,8 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('update_task identity resolution', () => {
   beforeEach(async () => {
@@ -192,6 +192,164 @@ describe('update_task identity resolution', () => {
 
     expect(updateTask).toHaveBeenCalledTimes(1)
     expect(capturedAssignee).toBe('jsmith')
+  })
+
+  test('should return provider dueDate converted back to local time', async () => {
+    const updateTask = mock((taskId: string, _params: Readonly<{ dueDate?: string }>) => {
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25T17:00:00.000Z',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ updateTask })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { taskId: 'task-1', dueDate: { date: '2026-03-25', time: '17:00' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+  })
+
+  test('should preserve date-only dueDate from provider', async () => {
+    let capturedDueDate: string | undefined
+    const updateTask = mock((taskId: string, params: Readonly<{ dueDate?: string }>) => {
+      capturedDueDate = params.dueDate
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockYouTrackProvider({ updateTask })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { taskId: 'task-1', dueDate: { date: '2026-03-25' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedDueDate).toBe('2026-03-25')
+    expect(result).toHaveProperty('dueDate', '2026-03-25')
+  })
+
+  test('update_task input schema accepts provider-defined priority values', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: 'Show-stopper' })).toBe(true)
+  })
+
+  test('update_task accepts customFields for provider-safe YouTrack updates', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+    expect(
+      schemaValidates(tool, {
+        taskId: 'TEST-1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      }),
+    ).toBe(true)
+  })
+
+  test('update_task forwards customFields to the provider', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const updateTask = mock((_taskId: string, params: { customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({ id: 'TEST-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' })
+    })
+
+    const tool = makeUpdateTaskTool(createMockYouTrackProvider({ updateTask, supportsCustomFields: true }))
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute(
+      {
+        taskId: 'TEST-1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedCustomFields).toEqual([
+      { name: 'Environment', value: 'staging' },
+      { name: 'Steps', value: 'Click login' },
+    ])
+  })
+
+  test('update_task rejects customFields for providers that do not support them', async () => {
+    const updateTask = mock(() =>
+      Promise.resolve({ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }),
+    )
+    const provider = createMockProvider({
+      updateTask,
+      name: 'kaneo',
+    })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await expect(
+      tool.execute(
+        {
+          taskId: 'task-1',
+          customFields: [{ name: 'Environment', value: 'staging' }],
+        },
+        { toolCallId: '1', messages: [] },
+      ),
+    ).rejects.toMatchObject({
+      error: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(updateTask).not.toHaveBeenCalled()
+  })
+
+  test('update_task accepts customFields when provider explicitly supports them', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const updateTask = mock((_taskId: string, params: { customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({ id: 'TEST-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' })
+    })
+    const provider = createMockProvider({
+      updateTask,
+      name: 'custom-provider',
+      supportsCustomFields: true,
+    })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        taskId: 'TEST-1',
+        customFields: [{ name: 'Environment', value: 'staging' }],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(updateTask).toHaveBeenCalledTimes(1)
+    expect(capturedCustomFields).toEqual([{ name: 'Environment', value: 'staging' }])
+  })
+
+  test('update_task input schema rejects blank priority values', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: '' })).toBe(false)
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: '   ' })).toBe(false)
   })
 
   describe('timezone config lookup (NI2 fix)', () => {

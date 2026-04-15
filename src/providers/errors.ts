@@ -119,9 +119,9 @@ export const getProviderMessage = (error: ProviderError): string => {
           ? `The project workflow blocked this request`
           : `The project workflow blocked this request in project "${error.projectId}"`
       if (fields === '') {
-        return `${prefix}: ${error.message}. Please provide the required custom fields using the customFields parameter.`
+        return `${prefix}: ${error.message}.`
       }
-      return `${prefix}: ${error.message}. Required fields: ${fields}. Please provide these fields using the customFields parameter.`
+      return `${prefix}: ${error.message}. Required fields: ${fields}.`
     }
     case 'unsupported-operation':
       return `Operation "${error.operation}" is not supported by this provider.`

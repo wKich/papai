@@ -7,6 +7,20 @@ export type YouTrackConfig = {
   token: string
 }
 
+export type YouTrackQueryValue = string | readonly string[]
+
+const appendQueryParams = (url: URL, query: Record<string, YouTrackQueryValue>): void => {
+  for (const [key, value] of Object.entries(query)) {
+    if (typeof value !== 'string') {
+      for (const item of value) {
+        url.searchParams.append(key, item)
+      }
+      continue
+    }
+    url.searchParams.set(key, value)
+  }
+}
+
 export class YouTrackApiError extends Error {
   constructor(
     message: string,
@@ -23,13 +37,11 @@ export async function youtrackFetch(
   config: YouTrackConfig,
   method: string,
   path: string,
-  options?: { body?: unknown; query?: Record<string, string> },
+  options?: { body?: unknown; query?: Record<string, YouTrackQueryValue> },
 ): Promise<unknown> {
   const url = new URL(path, config.baseUrl)
   if (options?.query !== undefined) {
-    for (const [key, value] of Object.entries(options.query)) {
-      url.searchParams.set(key, value)
-    }
+    appendQueryParams(url, options.query)
   }
 
   log.debug({ method, path, hasBody: options?.body !== undefined }, 'YouTrack API request')
@@ -77,13 +89,11 @@ export async function youtrackUpload(
   config: YouTrackConfig,
   path: string,
   file: { name: string; content: Uint8Array | Blob; mimeType?: string },
-  query?: Record<string, string>,
+  query?: Record<string, YouTrackQueryValue>,
 ): Promise<unknown> {
   const url = new URL(path, config.baseUrl)
   if (query !== undefined) {
-    for (const [key, value] of Object.entries(query)) {
-      url.searchParams.set(key, value)
-    }
+    appendQueryParams(url, query)
   }
 
   log.debug({ path, fileName: file.name }, 'YouTrack upload request')

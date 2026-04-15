@@ -1,6 +1,7 @@
 import { logger } from '../../../logger.js'
+import { providerError } from '../../../providers/errors.js'
 import type { Activity } from '../../types.js'
-import { classifyYouTrackError } from '../classify-error.js'
+import { YouTrackClassifiedError, classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { ACTIVITY_FIELDS, DEFAULT_ACTIVITY_CATEGORIES } from '../constants.js'
@@ -8,6 +9,26 @@ import { mapActivity } from '../mappers.js'
 import { ActivitySchema } from '../schemas/activity.js'
 
 const log = logger.child({ scope: 'provider:youtrack:activities' })
+
+const parseActivityBoundaryTimestamp = (field: 'start' | 'end', value: string): string => {
+  const parsedValue = value.trim()
+  const timezoneAwareIsoDatetime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/
+  if (!timezoneAwareIsoDatetime.test(parsedValue)) {
+    throw new YouTrackClassifiedError(
+      `Invalid ${field}: ${value}`,
+      providerError.validationFailed(field, 'Expected an ISO datetime with timezone information'),
+    )
+  }
+
+  const timestamp = Date.parse(parsedValue)
+  if (!Number.isFinite(timestamp)) {
+    throw new YouTrackClassifiedError(
+      `Invalid ${field}: ${value}`,
+      providerError.validationFailed(field, 'Expected an ISO datetime with timezone information'),
+    )
+  }
+  return String(timestamp)
+}
 
 export async function getYouTrackTaskHistory(
   config: YouTrackConfig,
@@ -34,8 +55,8 @@ export async function getYouTrackTaskHistory(
     if (params?.limit !== undefined) query['$top'] = String(params.limit)
     if (params?.offset !== undefined) query['$skip'] = String(params.offset)
     if (params?.reverse !== undefined) query['reverse'] = String(params.reverse)
-    if (params?.start !== undefined) query['start'] = String(new Date(params.start).getTime())
-    if (params?.end !== undefined) query['end'] = String(new Date(params.end).getTime())
+    if (params?.start !== undefined) query['start'] = parseActivityBoundaryTimestamp('start', params.start)
+    if (params?.end !== undefined) query['end'] = parseActivityBoundaryTimestamp('end', params.end)
     if (params?.author !== undefined) query['author'] = params.author
 
     const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/activities`, {

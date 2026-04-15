@@ -4,6 +4,7 @@ import type { TaskCapability, ProviderConfigRequirement } from '../types.js'
 export const REACTION_FIELDS = 'id,reaction,author(id,login,fullName,email)'
 export const VISIBILITY_FIELDS = '$type,permittedGroups(id,name),permittedUsers(id,login,fullName)'
 export const ISSUE_WATCHER_FIELDS = 'watchers(issueWatchers(user(id,login,fullName,email),isStarred),hasStar)'
+export const YOUTRACK_DUE_DATE_FIELD_NAME = 'Due Date'
 
 /** Fields parameter for issue requests returning full detail. */
 export const ISSUE_FIELDS = [
@@ -41,9 +42,12 @@ export const ISSUE_LIST_FIELDS = [
   'project(id,shortName)',
   'customFields($type,name,value($type,name,login))',
 ].join(',')
+export const YOUTRACK_INLINE_LIST_CUSTOM_FIELDS = ['State', 'Priority', YOUTRACK_DUE_DATE_FIELD_NAME] as const
 
 export const COMMENT_FIELDS = `id,text,author(id,$type,login,name),created,updated,reactions(${REACTION_FIELDS})`
 export const PROJECT_FIELDS = 'id,name,shortName,description,archived'
+export const PROJECT_CUSTOM_FIELD_FIELDS =
+  'id,$type,canBeEmpty,isPublic,field(id,name,$type,fieldType(id,presentation)),bundle(id,$type)'
 export const TAG_FIELDS = 'id,name,color(id,background)'
 export const ATTACHMENT_FIELDS = 'id,name,mimeType,size,url,thumbnailURL,author(login),created'
 export const WORK_ITEM_FIELDS = 'id,date,duration(minutes,presentation),text,author(id,login,name),type(id,name)'
@@ -81,6 +85,7 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCa
   'tasks.watchers',
   'tasks.votes',
   'tasks.visibility',
+  'tasks.commands',
   // Projects (full CRUD)
   'projects.read',
   'projects.list',
@@ -116,6 +121,7 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCa
   'workItems.update',
   'workItems.delete',
   // Sprints, activities, saved queries
+  'agiles.list',
   'sprints.list',
   'sprints.create',
   'sprints.update',

@@ -52,6 +52,11 @@ export type CommentReaction = {
   createdAt?: string
 }
 
+export type TaskCustomField = {
+  name: string
+  value: string | number | boolean | string[] | null
+}
+
 /** Normalized task returned by all providers. */
 export type Task = {
   id: string
@@ -74,6 +79,7 @@ export type Task = {
   commentsCount?: number
   resolved?: string
   attachments?: Attachment[]
+  customFields?: TaskCustomField[]
   visibility?: TaskVisibility
   parent?: { id: string; idReadable?: string; title: string }
   subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>
@@ -81,7 +87,7 @@ export type Task = {
 
 export type ListTasksParams = {
   status?: string
-  priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
+  priority?: string
   assigneeId?: string
   page?: number
   limit?: number
@@ -217,4 +223,11 @@ export type SavedQuery = {
   id: string
   name: string
   query?: string | null
+}
+
+export type TaskCommandResult = {
+  query: string
+  taskIds: string[]
+  comment?: string
+  silent?: boolean
 }

@@ -4,8 +4,8 @@ import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { resolveMeReference } from '../../src/identity/resolver.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('create_task identity resolution', () => {
   beforeEach(async () => {
@@ -162,7 +162,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask })
+    const provider = createMockYouTrackProvider({ createTask, supportsCustomFields: true })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -242,6 +242,19 @@ describe('create_task identity resolution', () => {
     ).rejects.toThrow('Database connection failed')
   })
 
+  test('create_task input schema accepts provider-defined priority values', () => {
+    const tool = makeCreateTaskTool(createMockProvider(), 'test-user-456')
+
+    expect(schemaValidates(tool, { title: 'Test Task', projectId: 'proj-1', priority: 'Show-stopper' })).toBe(true)
+  })
+
+  test('create_task input schema rejects blank priority values', () => {
+    const tool = makeCreateTaskTool(createMockProvider(), 'test-user-456')
+
+    expect(schemaValidates(tool, { title: 'Test Task', projectId: 'proj-1', priority: '' })).toBe(false)
+    expect(schemaValidates(tool, { title: 'Test Task', projectId: 'proj-1', priority: '   ' })).toBe(false)
+  })
+
   test('create_task tool should pass customFields to provider', async () => {
     let capturedCustomFields: Array<{ name: string; value: string }> | undefined
     const createTask = mock((params: { title: string; customFields?: Array<{ name: string; value: string }> }) => {
@@ -254,7 +267,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask })
+    const provider = createMockProvider({ createTask, name: 'youtrack', supportsCustomFields: true })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -277,6 +290,114 @@ describe('create_task identity resolution', () => {
       value: 'stream://myapp',
     })
     expect(capturedCustomFields?.[1]).toEqual({ name: 'Environment', value: 'production' })
+  })
+
+  test('create_task rejects customFields for providers that do not support them', async () => {
+    const createTask = mock(() =>
+      Promise.resolve({ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }),
+    )
+    const provider = createMockProvider({
+      createTask,
+      name: 'kaneo',
+    })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await expect(
+      tool.execute(
+        {
+          title: 'Test Task',
+          projectId: 'proj-1',
+          customFields: [{ name: 'Environment', value: 'staging' }],
+        },
+        { toolCallId: '1', messages: [] },
+      ),
+    ).rejects.toMatchObject({
+      error: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(createTask).not.toHaveBeenCalled()
+  })
+
+  test('create_task accepts customFields when provider explicitly supports them', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const createTask = mock((params: { title: string; customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({ id: 'task-1', title: params.title, status: 'todo', url: 'https://test.com/task/1' })
+    })
+    const provider = createMockProvider({
+      createTask,
+      name: 'custom-provider',
+      supportsCustomFields: true,
+    })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        title: 'Test Task',
+        projectId: 'proj-1',
+        customFields: [{ name: 'Environment', value: 'staging' }],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(createTask).toHaveBeenCalledTimes(1)
+    expect(capturedCustomFields).toEqual([{ name: 'Environment', value: 'staging' }])
+  })
+
+  test('create_task tool should return provider dueDate converted back to local time', async () => {
+    const createTask = mock((params: Readonly<{ title: string; dueDate?: string }>) => {
+      return Promise.resolve({
+        id: 'task-1',
+        title: params.title,
+        status: 'todo',
+        dueDate: '2026-03-25T17:00:00.000Z',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ createTask })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { title: 'Test Task', projectId: 'proj-1', dueDate: { date: '2026-03-25', time: '17:00' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+  })
+
+  test('create_task tool should preserve date-only dueDate from provider', async () => {
+    let capturedDueDate: string | undefined
+    const createTask = mock((params: Readonly<{ title: string; dueDate?: string }>) => {
+      capturedDueDate = params.dueDate
+      return Promise.resolve({
+        id: 'task-1',
+        title: params.title,
+        status: 'todo',
+        dueDate: '2026-03-25',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockYouTrackProvider({ createTask })
+    const tool = makeCreateTaskTool(provider, 'test-user-456')
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { title: 'Test Task', projectId: 'proj-1', dueDate: { date: '2026-03-25' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedDueDate).toBe('2026-03-25')
+    expect(result).toHaveProperty('dueDate', '2026-03-25')
   })
 
   describe('timezone config lookup (NI2 fix)', () => {

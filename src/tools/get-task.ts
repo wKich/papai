@@ -5,11 +5,14 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
-import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:get-task' })
 
-export function makeGetTaskTool(provider: TaskProvider, userId?: string, storageContextId?: string): ToolSet[string] {
+export function makeGetTaskTool(
+  provider: Readonly<TaskProvider>,
+  userId?: string,
+  storageContextId?: string,
+): ToolSet[string] {
   return tool({
     description:
       'Fetch complete details of a single task including description, status, priority, assignee, due date, and relations. For a full picture including comments, also call get_comments with the same task ID.',
@@ -22,7 +25,7 @@ export function makeGetTaskTool(provider: TaskProvider, userId?: string, storage
         // Falls back to userId for backwards compatibility, then UTC
         const configKey = storageContextId ?? userId
         const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
-        return { ...task, dueDate: utcToLocal(task.dueDate, timezone) }
+        return { ...task, dueDate: provider.formatDueDateOutput(task.dueDate, timezone) }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'get_task' },

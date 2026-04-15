@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { getIdentityMapping, setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { resolveMeReference, attemptAutoLink } from '../../src/identity/resolver.js'
 import type { TaskProvider } from '../../src/providers/types.js'
+import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 // Mock provider with identity resolver
@@ -28,6 +29,11 @@ const mockProvider: TaskProvider = {
     throw e
   },
   getPromptAddendum: () => '',
+  normalizeDueDateInput: (dueDate, timezone) =>
+    dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone),
+  formatDueDateOutput: (dueDate, timezone) =>
+    dueDate === undefined || dueDate === null ? dueDate : utcToLocal(dueDate, timezone),
+  normalizeListTaskParams: (params) => ({ ...params }),
   createTask() {
     return Promise.reject(new Error('not implemented'))
   },
@@ -43,7 +49,7 @@ const mockProvider: TaskProvider = {
   searchTasks() {
     return Promise.reject(new Error('not implemented'))
   },
-} as TaskProvider
+}
 
 describe('resolveMeReference', () => {
   const testContextId = 'test-resolver-123'
@@ -55,8 +61,8 @@ describe('resolveMeReference', () => {
   })
 
   it('should return not_found when no mapping exists', async () => {
-    const providerWithoutResolver = { ...mockProvider, identityResolver: undefined }
-    const result = await resolveMeReference(testContextId, providerWithoutResolver as TaskProvider)
+    const providerWithoutResolver: TaskProvider = { ...mockProvider, identityResolver: undefined }
+    const result = await resolveMeReference(testContextId, providerWithoutResolver)
     expect(result.type).toBe('not_found')
   })
 

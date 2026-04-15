@@ -18,6 +18,7 @@ interface ClassificationContext {
   projectId?: string
   commentId?: string
   labelId?: string
+  queryId?: string
 }
 
 interface YouTrackErrorBody {
@@ -155,6 +156,10 @@ const classifyNotFoundError = (message: string, context?: ClassificationContext)
 
   if (msg.includes('tag') || msg.includes('/tags/')) {
     return new YouTrackClassifiedError(message, providerError.labelNotFound(context?.labelId ?? 'unknown'))
+  }
+
+  if (msg.includes('saved query') || msg.includes('/savedqueries/')) {
+    return new YouTrackClassifiedError(message, providerError.notFound('Saved query', context?.queryId ?? 'unknown'))
   }
 
   return new YouTrackClassifiedError(message, providerError.unknown(new Error(message)))
