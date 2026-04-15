@@ -9,6 +9,7 @@ import type {
   Project,
   RelationType,
   Task,
+  TaskCommandResult,
   TaskListItem,
   TaskProvider,
   TaskSearchResult,
@@ -32,6 +33,7 @@ import {
   listYouTrackAttachments,
   uploadYouTrackAttachment,
 } from './operations/attachments.js'
+import { applyYouTrackCommand } from './operations/commands.js'
 import {
   addYouTrackComment,
   getYouTrackComment,
@@ -175,35 +177,27 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   removeComment(params: { taskId: string; commentId: string }): Promise<{ id: string }> {
     return removeYouTrackComment(this.config, params)
   }
-
   listLabels(): Promise<Label[]> {
     return listYouTrackLabels(this.config)
   }
-
   getLabelByName(labelName: string): Promise<Label[]> {
     return findYouTrackLabelsByName(this.config, labelName)
   }
-
   createLabel(params: { name: string; color?: string }): Promise<Label> {
     return createYouTrackLabel(this.config, params)
   }
-
   updateLabel(labelId: string, params: { name?: string; color?: string }): Promise<Label> {
     return updateYouTrackLabel(this.config, labelId, params)
   }
-
   removeLabel(labelId: string): Promise<{ id: string }> {
     return removeYouTrackLabel(this.config, labelId)
   }
-
   addTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
     return addYouTrackTaskLabel(this.config, taskId, labelId)
   }
-
   removeTaskLabel(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }> {
     return removeYouTrackTaskLabel(this.config, taskId, labelId)
   }
-
   addRelation(
     taskId: string,
     relatedTaskId: string,
@@ -281,20 +275,25 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   deleteAttachment(taskId: string, attachmentId: string): Promise<{ id: string }> {
     return deleteYouTrackAttachment(this.config, taskId, attachmentId)
   }
-
   listWorkItems(taskId: string): Promise<WorkItem[]> {
     return listYouTrackWorkItems(this.config, taskId)
   }
-
   createWorkItem(taskId: string, params: CreateWorkItemParams): Promise<WorkItem> {
     return createYouTrackWorkItem(this.config, taskId, params)
   }
-
   updateWorkItem(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem> {
     return updateYouTrackWorkItem(this.config, taskId, workItemId, params)
   }
-
   deleteWorkItem(taskId: string, workItemId: string): Promise<{ id: string }> {
     return deleteYouTrackWorkItem(this.config, taskId, workItemId)
+  }
+
+  applyCommand(params: {
+    query: string
+    taskIds: string[]
+    comment?: string
+    silent?: boolean
+  }): Promise<TaskCommandResult> {
+    return applyYouTrackCommand(this.config, params)
   }
 }

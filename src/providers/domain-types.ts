@@ -224,3 +224,10 @@ export type SavedQuery = {
   name: string
   query?: string | null
 }
+
+export type TaskCommandResult = {
+  query: string
+  taskIds: string[]
+  comment?: string
+  silent?: boolean
+}

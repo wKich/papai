@@ -11,6 +11,7 @@ import type {
   RelationType,
   SetTaskVisibilityParams,
   Task,
+  TaskCommandResult,
   TaskListItem,
   TaskSearchResult,
   TaskVisibility,
@@ -36,6 +37,7 @@ export type {
   Sprint,
   SetTaskVisibilityParams,
   Task,
+  TaskCommandResult,
   TaskCustomField,
   TaskLabel,
   TaskListItem,
@@ -56,6 +58,7 @@ export type TaskCapability =
   | 'tasks.watchers'
   | 'tasks.votes'
   | 'tasks.visibility'
+  | 'tasks.commands'
   | 'projects.read'
   | 'projects.list'
   | 'projects.create'
@@ -155,49 +158,27 @@ export interface TaskProvider extends TaskProviderPhaseFive {
     limit?: number
   }): Promise<TaskSearchResult[]>
 
-  // --- Optional: tasks.delete ---
-
   deleteTask?(taskId: string): Promise<{ id: string }>
-
   // --- Optional: shared user lookup helpers ---
-
   listUsers?(query?: string, limit?: number): Promise<UserRef[]>
   getCurrentUser?(): Promise<UserRef>
-
   // --- Optional: projects.* ---
-
   getProject?(projectId: string): Promise<Project>
-
   listProjects?(): Promise<Project[]>
-
   createProject?(params: { name: string; description?: string }): Promise<Project>
-
   updateProject?(projectId: string, params: { name?: string; description?: string }): Promise<Project>
-
   deleteProject?(projectId: string): Promise<{ id: string }>
-
   // --- Optional: projects.team ---
-
   listProjectTeam?(projectId: string): Promise<UserRef[]>
-
   addProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
-
   removeProjectMember?(projectId: string, userId: string): Promise<{ projectId: string; userId: string }>
-
   // --- Optional: comments.* ---
-
   getComment?(taskId: string, commentId: string): Promise<Comment>
-
   addComment?(taskId: string, body: string): Promise<Comment>
-
   getComments?(taskId: string): Promise<Comment[]>
-
   updateComment?(params: { taskId: string; commentId: string; body: string }): Promise<Comment>
-
   removeComment?(params: { taskId: string; commentId: string }): Promise<{ id: string }>
-
   // --- Optional: comments.reactions ---
-
   addCommentReaction?(taskId: string, commentId: string, reaction: string): Promise<CommentReaction>
 
   removeCommentReaction?(
@@ -206,23 +187,14 @@ export interface TaskProvider extends TaskProviderPhaseFive {
     reactionId: string,
   ): Promise<{ id: string; taskId: string; commentId: string }>
 
-  // --- Optional: labels.* ---
-
   listLabels?(): Promise<Label[]>
   getLabelByName?(labelName: string): Promise<Label[]>
-
   createLabel?(params: { name: string; color?: string }): Promise<Label>
-
   updateLabel?(labelId: string, params: { name?: string; color?: string }): Promise<Label>
-
   removeLabel?(labelId: string): Promise<{ id: string }>
-
   addTaskLabel?(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }>
-
   removeTaskLabel?(taskId: string, labelId: string): Promise<{ taskId: string; labelId: string }>
-
   // --- Optional: tasks.relations ---
-
   addRelation?(
     taskId: string,
     relatedTaskId: string,
@@ -237,22 +209,22 @@ export interface TaskProvider extends TaskProviderPhaseFive {
 
   removeRelation?(taskId: string, relatedTaskId: string): Promise<{ taskId: string; relatedTaskId: string }>
 
-  // --- Optional: collaboration task surfaces ---
-
   listWatchers?(taskId: string): Promise<UserRef[]>
-
   addWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
-
   removeWatcher?(taskId: string, userId: string): Promise<{ taskId: string; userId: string }>
-
   addVote?(taskId: string): Promise<{ taskId: string }>
-
   removeVote?(taskId: string): Promise<{ taskId: string }>
 
   setVisibility?(
     taskId: string,
     params: SetTaskVisibilityParams,
   ): Promise<{ taskId: string; visibility: TaskVisibility }>
+  applyCommand?(params: {
+    query: string
+    taskIds: string[]
+    comment?: string
+    silent?: boolean
+  }): Promise<TaskCommandResult>
 
   // --- Optional: statuses.* ---
   listStatuses?(projectId: string): Promise<Column[]>

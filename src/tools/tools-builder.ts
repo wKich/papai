@@ -8,6 +8,7 @@ import { makeAddTaskLabelTool } from './add-task-label.js'
 import { makeAddTaskRelationTool } from './add-task-relation.js'
 import { makeAddVoteTool } from './add-vote.js'
 import { makeAddWatcherTool } from './add-watcher.js'
+import { makeApplyYouTrackCommandTool } from './apply-youtrack-command.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeAssignTaskToSprintTool } from './assign-task-to-sprint.js'
 import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
@@ -86,26 +87,16 @@ function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
   if (provider.capabilities.has('projects.create')) tools['create_project'] = makeCreateProjectTool(provider)
   if (provider.capabilities.has('projects.update')) tools['update_project'] = makeUpdateProjectTool(provider)
   if (provider.capabilities.has('projects.delete')) tools['delete_project'] = makeDeleteProjectTool(provider)
-  if (provider.capabilities.has('projects.team')) {
-    tools['list_project_team'] = makeListProjectTeamTool(provider)
-    tools['add_project_member'] = makeAddProjectMemberTool(provider)
-    tools['remove_project_member'] = makeRemoveProjectMemberTool(provider)
-  }
+  if (provider.capabilities.has('projects.team')) tools['list_project_team'] = makeListProjectTeamTool(provider)
+  if (provider.capabilities.has('projects.team')) tools['add_project_member'] = makeAddProjectMemberTool(provider)
+  if (provider.capabilities.has('projects.team')) tools['remove_project_member'] = makeRemoveProjectMemberTool(provider)
 }
 
 function maybeAddCommentTools(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('comments.read')) {
-    tools['get_comments'] = makeGetCommentsTool(provider)
-  }
-  if (provider.capabilities.has('comments.create')) {
-    tools['add_comment'] = makeAddCommentTool(provider)
-  }
-  if (provider.capabilities.has('comments.update')) {
-    tools['update_comment'] = makeUpdateCommentTool(provider)
-  }
-  if (provider.capabilities.has('comments.delete')) {
-    tools['remove_comment'] = makeRemoveCommentTool(provider)
-  }
+  if (provider.capabilities.has('comments.read')) tools['get_comments'] = makeGetCommentsTool(provider)
+  if (provider.capabilities.has('comments.create')) tools['add_comment'] = makeAddCommentTool(provider)
+  if (provider.capabilities.has('comments.update')) tools['update_comment'] = makeUpdateCommentTool(provider)
+  if (provider.capabilities.has('comments.delete')) tools['remove_comment'] = makeRemoveCommentTool(provider)
   if (provider.capabilities.has('comments.reactions')) {
     tools['add_comment_reaction'] = makeAddCommentReactionTool(provider)
     tools['remove_comment_reaction'] = makeRemoveCommentReactionTool(provider)
@@ -187,6 +178,12 @@ function maybeAddPhaseFiveQueryTools(tools: ToolSet, provider: TaskProvider): vo
     tools['list_saved_queries'] = makeListSavedQueriesTool(provider)
   if (provider.capabilities.has('queries.saved') && provider.runSavedQuery !== undefined)
     tools['run_saved_query'] = makeRunSavedQueryTool(provider)
+  if (
+    provider.name === 'youtrack' &&
+    provider.capabilities.has('tasks.commands') &&
+    provider.applyCommand !== undefined
+  )
+    tools['apply_youtrack_command'] = makeApplyYouTrackCommandTool(provider)
 }
 
 function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {

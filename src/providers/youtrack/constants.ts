@@ -85,6 +85,7 @@ export const YOUTRACK_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCa
   'tasks.watchers',
   'tasks.votes',
   'tasks.visibility',
+  'tasks.commands',
   // Projects (full CRUD)
   'projects.read',
   'projects.list',

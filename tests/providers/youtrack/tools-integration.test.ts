@@ -79,5 +79,6 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('get_task_history')
     expect(toolNames).toContain('list_saved_queries')
     expect(toolNames).toContain('run_saved_query')
+    expect(toolNames).toContain('apply_youtrack_command')
   })
 })

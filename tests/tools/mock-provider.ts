@@ -10,6 +10,7 @@ const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   'tasks.watchers',
   'tasks.votes',
   'tasks.visibility',
+  'tasks.commands',
   // Projects (full CRUD)
   'projects.read',
   'projects.list',
@@ -122,6 +123,9 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
                   groups: visibility.groupIds?.map((id) => ({ name: id })),
                 },
         }),
+    ),
+    applyCommand: mock((params: { query: string; taskIds: string[]; comment?: string; silent?: boolean }) =>
+      Promise.resolve(params),
     ),
     listStatuses: mock(() => Promise.resolve([])),
     createStatus: mock((_projectId: string, params: { name: string }) =>

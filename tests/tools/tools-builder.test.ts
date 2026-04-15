@@ -136,6 +136,15 @@ describe('buildTools', () => {
     expect(tools).toHaveProperty('run_saved_query')
   })
 
+  it('should expose apply_youtrack_command only for the YouTrack provider', () => {
+    const provider = createMockProvider({ name: 'youtrack' as const })
+    const tools = buildTools(provider, 'user-123', 'user-123', 'normal')
+    expect(tools).toHaveProperty('apply_youtrack_command')
+
+    const nonYouTrackTools = buildTools(createMockProvider({ name: 'mock' }), 'user-123', 'user-123', 'normal')
+    expect(nonYouTrackTools).not.toHaveProperty('apply_youtrack_command')
+  })
+
   it('should not add deferred prompt tools in proactive mode', () => {
     const provider = createMockProvider()
     const tools = buildTools(provider, 'user-123', 'user-123', 'proactive')
