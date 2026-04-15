@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 
 import { providerError } from '../../errors.js'
 import type { ListTasksParams, Task } from '../types.js'
@@ -6,6 +6,7 @@ import { YouTrackClassifiedError } from './classify-error.js'
 import type { YouTrackConfig } from './client.js'
 import { youtrackFetch } from './client.js'
 import { PROJECT_CUSTOM_FIELD_FIELDS, YOUTRACK_DUE_DATE_FIELD_NAME } from './constants.js'
+import { DueDateCustomFieldSchema, mapYouTrackDueDateValue, parseDueDateValue } from './due-date.js'
 import { paginate } from './helpers.js'
 import { ProjectCustomFieldListSchema, ProjectCustomFieldSchema } from './schemas/bundle.js'
 
@@ -24,46 +25,9 @@ type StandardCustomFieldPayload = {
 }
 
 const KNOWN_CUSTOM_FIELDS = new Set(['State', 'Priority', 'Assignee'])
-
-const DueDateCustomFieldSchema = z.object({
-  name: z.string(),
-  value: z.unknown().optional(),
-})
-
-const isDateOnlyValue = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value)
-
-const isIsoDateTimeValue = (value: string): boolean =>
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+const NON_GENERIC_FIELD_NAMES = new Set(['State', 'Priority', 'Assignee', YOUTRACK_DUE_DATE_FIELD_NAME])
 
 const normalizeCustomFieldType = (value: string | undefined): string | undefined => value?.trim().toLowerCase()
-
-const isValidDateOnlyValue = (value: string): boolean => {
-  if (!isDateOnlyValue(value)) return false
-  const parsed = new Date(`${value}T12:00:00.000Z`)
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
-}
-
-const parseDueDateValue = (dueDate: string): number => {
-  if (isValidDateOnlyValue(dueDate)) {
-    return Date.parse(`${dueDate}T12:00:00.000Z`)
-  }
-
-  if (isDateOnlyValue(dueDate)) {
-    throw new YouTrackClassifiedError(
-      `Invalid dueDate: ${dueDate}`,
-      providerError.validationFailed('dueDate', 'Expected a real calendar date in YYYY-MM-DD format'),
-    )
-  }
-
-  if (isIsoDateTimeValue(dueDate)) {
-    return Date.parse(`${dueDate.slice(0, 10)}T12:00:00.000Z`)
-  }
-
-  throw new YouTrackClassifiedError(
-    `Invalid dueDate: ${dueDate}`,
-    providerError.validationFailed('dueDate', 'Expected YYYY-MM-DD or an ISO datetime with timezone information'),
-  )
-}
 
 const isStringSimpleProjectField = (field: ProjectCustomField): boolean => {
   if (field.$type !== 'SimpleProjectCustomField') return false
@@ -130,9 +94,6 @@ const buildHandledFieldSet = (
 
   return handledFields
 }
-
-export const mapYouTrackDueDateValue = (timestamp: number | null | undefined): string | undefined =>
-  timestamp === undefined || timestamp === null ? undefined : new Date(timestamp).toISOString().slice(0, 10)
 
 export const buildCustomFields = (
   params: Readonly<{
@@ -222,18 +183,51 @@ export const buildCreateCustomFields = (
   }>,
   projectCustomFields: readonly ProjectCustomField[],
 ): Array<StandardCustomFieldPayload | CreateIssueCustomFieldPayload> => {
-  const fields: Array<StandardCustomFieldPayload | CreateIssueCustomFieldPayload> = [...buildCustomFields(params)]
-  const projectFieldsByName = new Map(projectCustomFields.map((field) => [field.field?.name, field] as const))
+  const projectFieldsByName = buildProjectFieldsByName(projectCustomFields)
+  return [
+    ...buildCustomFields(params),
+    ...(params.customFields ?? []).map((input) => buildWriteSafeCustomFieldPayload(projectFieldsByName, input)),
+  ]
+}
 
-  for (const field of params.customFields ?? []) {
-    const projectField = projectFieldsByName.get(field.name)
-    const mappedField = projectField === undefined ? undefined : buildCreateIssueCustomField(projectField, field.value)
-    if (mappedField !== undefined) {
-      fields.push(mappedField)
-    }
+const buildWriteSafeCustomFieldPayload = (
+  projectFieldsByName: ReadonlyMap<string, ProjectCustomField & { readonly field: { readonly name: string } }>,
+  input: Readonly<{ name: string; value: string }>,
+): CreateIssueCustomFieldPayload => {
+  const projectField = projectFieldsByName.get(input.name)
+  if (projectField === undefined) {
+    throw customFieldValidationError(
+      `Unknown custom field for update: ${input.name}`,
+      `${input.name} is not a known project field for this YouTrack project`,
+    )
   }
+  if (NON_GENERIC_FIELD_NAMES.has(input.name)) {
+    throw customFieldValidationError(
+      `Use the dedicated field for ${input.name}`,
+      `Use the dedicated tool field for ${input.name}`,
+    )
+  }
+  const payload = buildCreateIssueCustomField(projectField, input.value)
+  if (payload === undefined) {
+    throw customFieldValidationError(
+      `Unsupported custom field for update: ${input.name}`,
+      `${input.name} only supports simple string/text writes in update_task`,
+    )
+  }
+  return payload
+}
 
-  return fields
+const customFieldValidationError = (reason: string, message: string): YouTrackClassifiedError =>
+  new YouTrackClassifiedError(reason, providerError.validationFailed('customFields', message))
+
+export const buildWriteSafeCustomFields = async (
+  config: Readonly<YouTrackConfig>,
+  projectId: string,
+  customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
+): Promise<CreateIssueCustomFieldPayload[]> => {
+  if (customFields === undefined || customFields.length === 0) return []
+  const projectFieldsByName = buildProjectFieldsByName(await fetchProjectCustomFields(config, projectId))
+  return customFields.map((input) => buildWriteSafeCustomFieldPayload(projectFieldsByName, input))
 }
 
 export const buildYouTrackQuery = (params: Readonly<ListTasksParams> | undefined, projectShortName: string): string => {
@@ -275,3 +269,5 @@ export const enrichTaskWithDueDate = async (config: Readonly<YouTrackConfig>, ta
     return { ...task }
   }
 }
+
+export { mapYouTrackDueDateValue } from './due-date.js'

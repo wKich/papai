@@ -249,6 +249,45 @@ describe('update_task identity resolution', () => {
     expect(schemaValidates(tool, { taskId: 'task-1', priority: 'Show-stopper' })).toBe(true)
   })
 
+  test('update_task accepts customFields for provider-safe YouTrack updates', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+    expect(
+      schemaValidates(tool, {
+        taskId: 'TEST-1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      }),
+    ).toBe(true)
+  })
+
+  test('update_task forwards customFields to the provider', async () => {
+    let capturedCustomFields: Array<{ name: string; value: string }> | undefined
+    const updateTask = mock((_taskId: string, params: { customFields?: Array<{ name: string; value: string }> }) => {
+      capturedCustomFields = params.customFields
+      return Promise.resolve({ id: 'TEST-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' })
+    })
+
+    const tool = makeUpdateTaskTool(createMockProvider({ updateTask }))
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    await tool.execute(
+      {
+        taskId: 'TEST-1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedCustomFields).toEqual([
+      { name: 'Environment', value: 'staging' },
+      { name: 'Steps', value: 'Click login' },
+    ])
+  })
+
   test('update_task input schema rejects blank priority values', () => {
     const tool = makeUpdateTaskTool(createMockProvider())
 

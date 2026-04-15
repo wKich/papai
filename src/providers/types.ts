@@ -36,6 +36,7 @@ export type {
   Sprint,
   SetTaskVisibilityParams,
   Task,
+  TaskCustomField,
   TaskLabel,
   TaskListItem,
   TaskRelation,
@@ -105,13 +106,10 @@ export type ProviderConfigRequirement = { key: string; label: string; required: 
 export interface TaskProvider extends TaskProviderPhaseFive {
   /** Provider identifier, e.g. "kaneo", "linear", "jira". */
   readonly name: string
-
   /** Capabilities this provider supports beyond core task CRUD. */
   readonly capabilities: ReadonlySet<TaskCapability>
-
   /** Config keys this provider needs (shown in /config, validated by /setup). */
   readonly configRequirements: readonly ProviderConfigRequirement[]
-
   /** Which user identifier this provider prefers for assignee/watcher operations. */
   readonly preferredUserIdentifier: 'id' | 'login'
 
@@ -143,6 +141,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
       dueDate?: string
       projectId?: string
       assignee?: string
+      customFields?: Array<{ name: string; value: string }>
     },
   ): Promise<Task>
 

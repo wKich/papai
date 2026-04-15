@@ -6,6 +6,7 @@ import type {
   CommentReaction,
   RelationType,
   Task,
+  TaskCustomField,
   TaskListItem,
   TaskSearchResult,
   TaskVisibility,
@@ -13,12 +14,12 @@ import type {
   VisibilityGroupRef,
 } from '../types.js'
 import { YOUTRACK_DUE_DATE_FIELD_NAME } from './constants.js'
+import { mapYouTrackDueDateValue } from './due-date.js'
 import type { CommentSchema } from './schemas/comment.js'
 import type { CustomFieldValueSchema } from './schemas/custom-fields.js'
 import type { IssueListSchema, IssueSchema } from './schemas/issue.js'
 import type { ReactionSchema } from './schemas/reaction.js'
 import type { VisibilitySchema } from './schemas/visibility.js'
-import { mapYouTrackDueDateValue } from './task-helpers.js'
 
 type AnyCustomField = z.infer<typeof CustomFieldValueSchema>
 
@@ -60,6 +61,50 @@ const getCustomFieldTimestamp = (customFields: AnyCustomField[] | undefined, fie
   const cf = customFields?.find((field) => field.name === fieldName)
   if (cf === undefined) return undefined
   return typeof cf.value === 'number' ? cf.value : undefined
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const getStringProperty = (value: unknown, property: 'login' | 'name' | 'text'): string | undefined => {
+  if (!isRecord(value)) return undefined
+  const prop = value[property]
+  return typeof prop === 'string' ? prop : undefined
+}
+
+const stringifyUnknownValue = (value: unknown): string => {
+  try {
+    return JSON.stringify(value) ?? '[complex value]'
+  } catch {
+    return '[complex value]'
+  }
+}
+
+const buildReadOnlyCustomFieldValue = (value: unknown): string | number | boolean | string[] | null => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+  const textValue = getStringProperty(value, 'text')
+  if (textValue !== undefined) return textValue
+  const nameValue = getStringProperty(value, 'name')
+  if (nameValue !== undefined) return nameValue
+  const loginValue = getStringProperty(value, 'login')
+  if (loginValue !== undefined) return loginValue
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (item === null || item === undefined) return undefined
+        return typeof item === 'string' ? item : (getStringProperty(item, 'name') ?? getStringProperty(item, 'login'))
+      })
+      .filter((item): item is string => item !== undefined)
+  }
+  return stringifyUnknownValue(value)
+}
+
+const mapReadOnlyCustomFields = (customFields: AnyCustomField[] | undefined): TaskCustomField[] | undefined => {
+  const mapped = (customFields ?? [])
+    .filter((field) => !['State', 'Priority', 'Assignee', YOUTRACK_DUE_DATE_FIELD_NAME].includes(field.name))
+    .map((field) => ({ name: field.name, value: buildReadOnlyCustomFieldValue(field.value) }))
+
+  return mapped.length === 0 ? undefined : mapped
 }
 
 export const mapUserRef = (
@@ -201,6 +246,7 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
     commentsCount: issue.commentsCount,
     resolved: toIsoOrUndefined(issue.resolved),
     attachments: mapAttachments(issue.attachments),
+    customFields: mapReadOnlyCustomFields(issue.customFields),
     visibility: mapTaskVisibility(issue.visibility),
     parent: mapParent(issue.parent),
     subtasks: mapSubtasks(issue.subtasks),

@@ -1161,6 +1161,30 @@ describe('getYouTrackTask', () => {
     expect(secondPageUrl.searchParams.get('$skip')).toBe('100')
   })
 
+  test('returns normalized read-only custom fields alongside the standard task fields', async () => {
+    mockFetchResponse(
+      makeIssueResponse({
+        customFields: [
+          {
+            $type: 'SingleEnumIssueCustomField',
+            name: 'Priority',
+            value: { $type: 'EnumBundleElement', name: 'High' },
+          },
+          { $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } },
+          { $type: 'SimpleIssueCustomField', name: 'Environment', value: 'staging' },
+          { $type: 'TextIssueCustomField', name: 'Steps', value: { $type: 'TextFieldValue', text: 'Click login' } },
+        ],
+      }),
+    )
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.customFields).toEqual([
+      { name: 'Environment', value: 'staging' },
+      { name: 'Steps', value: 'Click login' },
+    ])
+  })
+
   test('throws classified error on 404', async () => {
     mockFetchError(404, { error: 'Issue not found /issues/' })
 
@@ -1241,6 +1265,66 @@ describe('updateYouTrackTask', () => {
       name: 'Due Date',
       $type: 'DateIssueCustomField',
       value: Date.parse('2026-03-25T12:00:00.000Z'),
+    })
+  })
+
+  test('sends simple and text custom fields on update', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse({ project: { id: '0-1', shortName: 'TEST' } })), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: 'pcf-1',
+                $type: 'SimpleProjectCustomField',
+                field: { name: 'Environment', fieldType: { id: 'string', presentation: 'string' } },
+                canBeEmpty: true,
+              },
+              {
+                id: 'pcf-2',
+                $type: 'TextProjectCustomField',
+                field: { name: 'Steps', fieldType: { id: 'text', presentation: 'text' } },
+                canBeEmpty: true,
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(makeIssueResponse()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    await updateYouTrackTask(config, 'TEST-1', {
+      customFields: [
+        { name: 'Environment', value: 'staging' },
+        { name: 'Steps', value: 'Click login' },
+      ],
+    })
+
+    expect(getFetchBodyAt(2)['customFields']).toContainEqual({
+      name: 'Environment',
+      $type: 'SimpleIssueCustomField',
+      value: 'staging',
+    })
+    expect(getFetchBodyAt(2)['customFields']).toContainEqual({
+      name: 'Steps',
+      $type: 'TextIssueCustomField',
+      value: { text: 'Click login' },
     })
   })
 

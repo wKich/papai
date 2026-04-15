@@ -83,6 +83,10 @@ const inputSchema = z.object({
     ),
   assignee: z.string().optional().describe('User ID to assign the task to'),
   projectId: z.string().optional().describe('Project ID to move the task to'),
+  customFields: z
+    .array(z.object({ name: z.string(), value: z.string() }))
+    .optional()
+    .describe('Provider-safe custom field writes. For YouTrack this is limited to simple string/text project fields.'),
 })
 
 export function makeUpdateTaskTool(
@@ -94,7 +98,7 @@ export function makeUpdateTaskTool(
   return tool({
     description: "Update an existing task's status, priority, assignee, due date, title, description, or project.",
     inputSchema,
-    execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId }) => {
+    execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId, customFields }) => {
       try {
         // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
         // Falls back to userId for backwards compatibility, then UTC
@@ -115,6 +119,7 @@ export function makeUpdateTaskTool(
           dueDate: resolvedDueDate,
           projectId,
           assignee: resolvedAssignee,
+          customFields,
         })
         log.info({ taskId }, 'Task updated via tool')
 

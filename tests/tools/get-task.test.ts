@@ -78,6 +78,31 @@ describe('get_task', () => {
     expect(result).toHaveProperty('dueDate', '2026-03-25')
   })
 
+  test('get_task returns normalized customFields when the provider includes them', async () => {
+    const getTask = mock(() =>
+      Promise.resolve({
+        id: 'TEST-1',
+        title: 'Test Task',
+        status: 'todo',
+        url: 'https://test.com/task/1',
+        customFields: [
+          { name: 'Environment', value: 'staging' },
+          { name: 'Steps', value: 'Click login' },
+        ],
+      }),
+    )
+
+    const tool = makeGetTaskTool(createMockProvider({ getTask }))
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute({ taskId: 'TEST-1' }, { toolCallId: '1', messages: [] })
+    expect(result).toMatchObject({
+      customFields: [
+        { name: 'Environment', value: 'staging' },
+        { name: 'Steps', value: 'Click login' },
+      ],
+    })
+  })
+
   describe('timezone config lookup (NI2 fix)', () => {
     test('should use storageContextId for timezone in group chats', async () => {
       const chatUserId = 'user-123'

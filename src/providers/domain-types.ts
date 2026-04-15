@@ -52,6 +52,11 @@ export type CommentReaction = {
   createdAt?: string
 }
 
+export type TaskCustomField = {
+  name: string
+  value: string | number | boolean | string[] | null
+}
+
 /** Normalized task returned by all providers. */
 export type Task = {
   id: string
@@ -74,6 +79,7 @@ export type Task = {
   commentsCount?: number
   resolved?: string
   attachments?: Attachment[]
+  customFields?: TaskCustomField[]
   visibility?: TaskVisibility
   parent?: { id: string; idReadable?: string; title: string }
   subtasks?: Array<{ id: string; idReadable?: string; title: string; status?: string }>

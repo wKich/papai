@@ -130,7 +130,7 @@ export function makeCreateTaskTool(
         .array(z.object({ name: z.string(), value: z.string() }))
         .optional()
         .describe(
-          'For YouTrack, only use this for simple string/text project fields required by YouTrack workflows, not arbitrary field types.',
+          'For YouTrack, use this only for project fields that are simple string/text values. Use dedicated fields for status, priority, assignee, and due date.',
         ),
     }),
     execute: async (params) => {

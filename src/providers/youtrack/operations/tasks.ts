@@ -13,6 +13,7 @@ import {
   buildCreateCustomFields,
   buildCustomFields,
   buildYouTrackQuery,
+  buildWriteSafeCustomFields,
   enrichTaskWithDueDate,
   validateRequiredCreateFields,
 } from '../task-helpers.js'
@@ -108,6 +109,7 @@ export async function updateYouTrackTask(
     dueDate?: string
     projectId?: string
     assignee?: string
+    customFields?: Array<{ name: string; value: string }>
   },
 ): Promise<Task> {
   log.debug({ taskId, hasTitle: params.title !== undefined, hasStatus: params.status !== undefined }, 'updateTask')
@@ -117,8 +119,18 @@ export async function updateYouTrackTask(
     if (params.description !== undefined) body['description'] = params.description
     if (params.projectId !== undefined) body['project'] = { id: params.projectId }
 
-    const customFields = buildCustomFields(params)
-    if (customFields.length > 0) body['customFields'] = customFields
+    if (params.customFields !== undefined && params.customFields.length > 0) {
+      const issueRaw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
+        query: { fields: 'project(id)' },
+      })
+      const issueProject = z.object({ project: z.object({ id: z.string() }) }).parse(issueRaw)
+      const projectCustomFields = await buildWriteSafeCustomFields(config, issueProject.project.id, params.customFields)
+      const customFields = [...buildCustomFields(params), ...projectCustomFields]
+      if (customFields.length > 0) body['customFields'] = customFields
+    } else {
+      const customFields = buildCustomFields(params)
+      if (customFields.length > 0) body['customFields'] = customFields
+    }
 
     const raw = await youtrackFetch(config, 'POST', `/api/issues/${taskId}`, {
       body,
