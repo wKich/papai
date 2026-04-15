@@ -7,6 +7,10 @@ import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:get-task-history' })
 
+const isoDatetimeSchema = z.iso
+  .datetime({ offset: true })
+  .refine((value) => Number.isFinite(Date.parse(value)), 'Expected an ISO datetime with timezone information')
+
 export function makeGetTaskHistoryTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
     description:
@@ -17,8 +21,8 @@ export function makeGetTaskHistoryTool(provider: Readonly<TaskProvider>): ToolSe
       limit: z.number().int().positive().optional().describe('Maximum number of activity items to return'),
       offset: z.number().int().min(0).optional().describe('Number of activity items to skip'),
       reverse: z.boolean().optional().describe('Whether to return history in reverse chronological order'),
-      start: z.string().optional().describe('Optional inclusive start timestamp in ISO-8601 format'),
-      end: z.string().optional().describe('Optional inclusive end timestamp in ISO-8601 format'),
+      start: isoDatetimeSchema.optional().describe('Optional inclusive start timestamp in ISO-8601 format'),
+      end: isoDatetimeSchema.optional().describe('Optional inclusive end timestamp in ISO-8601 format'),
       author: z.string().optional().describe('Optional author login or user ID filter'),
     }),
     execute: async ({ taskId, ...params }) => {

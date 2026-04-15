@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { extractAppError } from '../../../../src/errors.js'
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import {
@@ -97,6 +98,31 @@ describe('listYouTrackSavedQueries', () => {
     expect(getFetchMethodAt(0)).toBe('GET')
   })
 
+  test('paginates beyond the first 100 saved queries', async () => {
+    mockFetchSequence([
+      {
+        data: Array.from({ length: 100 }, (_, index) => ({
+          id: `query-${index + 1}`,
+          name: `Saved Query ${index + 1}`,
+          query: `project: TEST sort by: created ${index + 1}`,
+        })),
+      },
+      {
+        data: [{ id: 'query-101', name: 'Saved Query 101', query: 'project: TEST #Unresolved' }],
+      },
+    ])
+
+    const queries = await listYouTrackSavedQueries(config)
+
+    expect(queries).toHaveLength(101)
+    expect(queries[0]).toEqual({ id: 'query-1', name: 'Saved Query 1', query: 'project: TEST sort by: created 1' })
+    expect(queries[100]).toEqual({ id: 'query-101', name: 'Saved Query 101', query: 'project: TEST #Unresolved' })
+    expect(getFetchUrlAt(0).searchParams.get('$top')).toBe('100')
+    expect(getFetchUrlAt(0).searchParams.get('$skip')).toBe('0')
+    expect(getFetchUrlAt(1).searchParams.get('$top')).toBe('100')
+    expect(getFetchUrlAt(1).searchParams.get('$skip')).toBe('100')
+  })
+
   test('throws classified error on failure', async () => {
     mockFetchError(403)
 
@@ -134,5 +160,24 @@ describe('runYouTrackSavedQuery', () => {
     expect(getFetchUrlAt(1).searchParams.get('$top')).toBe('100')
     expect(getFetchUrlAt(1).searchParams.get('$skip')).toBe('0')
     expect(getFetchMethodAt(1)).toBe('GET')
+  })
+
+  test('rejects saved queries whose query text is null', async () => {
+    mockFetchResponse({ id: 'query-1', name: 'Broken Query', query: null })
+
+    try {
+      await runYouTrackSavedQuery(config, 'query-1')
+      throw new Error('Expected runYouTrackSavedQuery to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      expect(extractAppError(error)).toEqual({
+        type: 'provider',
+        code: 'validation-failed',
+        field: 'query',
+        reason: 'Saved query does not define a search query',
+      })
+    }
+
+    expect(fetchMock?.mock.calls).toHaveLength(1)
   })
 })

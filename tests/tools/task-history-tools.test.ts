@@ -16,6 +16,20 @@ describe('Task history tool', () => {
     expect(schemaValidates(tool, { taskId: 'TEST-1' })).toBe(true)
   })
 
+  test('rejects invalid start and end timestamps', () => {
+    const tool = makeGetTaskHistoryTool(createMockProvider())
+
+    expect(schemaValidates(tool, { taskId: 'TEST-1', start: 'not-a-date' })).toBe(false)
+    expect(schemaValidates(tool, { taskId: 'TEST-1', end: '2026-13-99T00:00:00Z' })).toBe(false)
+    expect(
+      schemaValidates(tool, {
+        taskId: 'TEST-1',
+        start: '2026-04-01T00:00:00.000Z',
+        end: '2026-04-15T00:00:00.000Z',
+      }),
+    ).toBe(true)
+  })
+
   test('forwards history filters', async () => {
     const getTaskHistory = mock(() =>
       Promise.resolve([{ id: 'act-1', timestamp: '2026-04-15T00:00:00.000Z', category: 'CommentsCategory' }]),

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { z } from 'zod'
 
+import { extractAppError } from '../../../../src/errors.js'
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
 import { getYouTrackTaskHistory } from '../../../../src/providers/youtrack/operations/activities.js'
@@ -166,5 +167,32 @@ describe('getYouTrackTaskHistory', () => {
     mockFetchError(500)
 
     await expect(getYouTrackTaskHistory(config, 'TEST-1')).rejects.toBeInstanceOf(YouTrackClassifiedError)
+  })
+
+  test('rejects invalid start timestamp before request execution', async () => {
+    await expect(getYouTrackTaskHistory(config, 'TEST-1', { start: 'not-a-date' })).rejects.toMatchObject({
+      appError: {
+        type: 'provider',
+        code: 'validation-failed',
+        field: 'start',
+      },
+    })
+    expect(fetchMock).toBeUndefined()
+  })
+
+  test('rejects invalid end timestamp before request execution', async () => {
+    try {
+      await getYouTrackTaskHistory(config, 'TEST-1', { end: '2026-99-99T00:00:00Z' })
+      throw new Error('Expected getYouTrackTaskHistory to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      expect(extractAppError(error)).toEqual({
+        type: 'provider',
+        code: 'validation-failed',
+        field: 'end',
+        reason: 'Expected an ISO datetime with timezone information',
+      })
+    }
+    expect(fetchMock).toBeUndefined()
   })
 })
