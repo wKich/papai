@@ -266,6 +266,28 @@ describe('createYouTrackSprint', () => {
 
     expect(fetchMock?.mock.calls).toHaveLength(0)
   })
+
+  test('rejects impossible ISO datetimes before sending request', async () => {
+    mockFetchResponse(makeSprintResponse())
+
+    await expect(
+      createYouTrackSprint(config, 'agile-1', {
+        name: 'Sprint 1',
+        start: '2024-02-30T00:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+
+    await expect(
+      createYouTrackSprint(config, 'agile-1', {
+        name: 'Sprint 1',
+        finish: '2024-02-30T00:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+  })
 })
 
 describe('updateYouTrackSprint', () => {
@@ -341,6 +363,26 @@ describe('updateYouTrackSprint', () => {
     await expect(
       updateYouTrackSprint(config, 'agile-1', 'sprint-3', {
         finish: 'also-not-a-date',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+  })
+
+  test('rejects impossible ISO datetimes when updating before sending request', async () => {
+    mockFetchResponse(makeSprintResponse())
+
+    await expect(
+      updateYouTrackSprint(config, 'agile-1', 'sprint-3', {
+        start: '2024-02-30T00:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(YouTrackClassifiedError)
+
+    expect(fetchMock?.mock.calls).toHaveLength(0)
+
+    await expect(
+      updateYouTrackSprint(config, 'agile-1', 'sprint-3', {
+        finish: '2024-02-30T00:00:00.000Z',
       }),
     ).rejects.toBeInstanceOf(YouTrackClassifiedError)
 

@@ -18,12 +18,71 @@ const IssueIdSchema = z.object({
   id: z.string(),
 })
 
+const ISO_DATE_TIME_WITH_TIMEZONE_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z|([+-])(\d{2}):(\d{2}))$/
+
+const isLeapYear = (year: number): boolean => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+
+const getDaysInMonth = (year: number, month: number): number => {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30
+    default:
+      return 31
+  }
+}
+
 const parseSprintTimestamp = (value: string, field: 'start' | 'finish'): number => {
-  const timestamp = new Date(value).getTime()
-  if (Number.isNaN(timestamp)) {
+  const match = ISO_DATE_TIME_WITH_TIMEZONE_PATTERN.exec(value)
+  if (match === null) {
     throw new Error(`Invalid sprint ${field} datetime: ${value}`)
   }
-  return timestamp
+
+  const [
+    ,
+    yearText,
+    monthText,
+    dayText,
+    hourText,
+    minuteText,
+    secondText,
+    millisecondText,
+    sign,
+    tzHourText,
+    tzMinuteText,
+  ] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = secondText === undefined ? 0 : Number(secondText)
+  const millisecond = millisecondText === undefined ? 0 : Number(millisecondText.padEnd(3, '0'))
+  const timezoneHour = tzHourText === undefined ? 0 : Number(tzHourText)
+  const timezoneMinute = tzMinuteText === undefined ? 0 : Number(tzMinuteText)
+
+  const isValidCalendarDate =
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= getDaysInMonth(year, month) &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59
+  const isValidTimezoneOffset = timezoneHour <= 23 && timezoneMinute <= 59
+
+  if (!isValidCalendarDate || !isValidTimezoneOffset) {
+    throw new Error(`Invalid sprint ${field} datetime: ${value}`)
+  }
+
+  const timezoneOffsetMinutes = sign === undefined ? 0 : (sign === '+' ? 1 : -1) * (timezoneHour * 60 + timezoneMinute)
+
+  return Date.UTC(year, month - 1, day, hour, minute, second, millisecond) - timezoneOffsetMinutes * 60_000
 }
 
 export async function listYouTrackAgiles(config: YouTrackConfig): Promise<Agile[]> {
