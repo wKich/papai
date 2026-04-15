@@ -27,6 +27,12 @@ export const ProjectCustomFieldSchema = z.object({
       name: z.string(),
       localizedName: z.string().optional(),
       $type: z.string().optional(),
+      fieldType: z
+        .object({
+          id: z.string().optional(),
+          presentation: z.string().optional(),
+        })
+        .optional(),
     })
     .optional(),
   canBeEmpty: z.boolean().optional(),
@@ -39,3 +45,5 @@ export const ProjectCustomFieldSchema = z.object({
     })
     .optional(),
 })
+
+export const ProjectCustomFieldListSchema = z.array(ProjectCustomFieldSchema)

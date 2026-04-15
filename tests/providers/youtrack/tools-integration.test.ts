@@ -1,56 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { TaskCapability } from '../../../src/providers/types.js'
+import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
+import { YouTrackProvider } from '../../../src/providers/youtrack/index.js'
 import { makeTools } from '../../../src/tools/index.js'
-import { createMockProvider } from '../../tools/mock-provider.js'
+
+const createConfig = (): YouTrackConfig => ({
+  baseUrl: 'https://test.youtrack.cloud',
+  token: 'test-token',
+})
 
 describe('YouTrack provider tools integration', () => {
-  test('makeTools generates correct tool set for YouTrack capabilities', () => {
-    // YouTrack supports full granular capabilities:
-    // - tasks: delete, relations, watchers, votes, visibility
-    // - projects: read, list, create, update, delete, team
-    // - comments: read, create, update, delete, reactions
-    // - labels: list, create, update, delete, assign
-    // - statuses: full CRUD + reorder
-    const youtrackCapabilities = new Set<TaskCapability>([
-      // Tasks
-      'tasks.delete',
-      'tasks.count',
-      'tasks.relations',
-      'tasks.watchers',
-      'tasks.votes',
-      'tasks.visibility',
-      // Projects (full CRUD)
-      'projects.read',
-      'projects.list',
-      'projects.create',
-      'projects.update',
-      'projects.delete',
-      'projects.team',
-      // Comments (full CRUD)
-      'comments.read',
-      'comments.create',
-      'comments.update',
-      'comments.delete',
-      'comments.reactions',
-      // Labels (full)
-      'labels.list',
-      'labels.create',
-      'labels.update',
-      'labels.delete',
-      'labels.assign',
-      // Statuses
-      'statuses.list',
-      'statuses.create',
-      'statuses.update',
-      'statuses.delete',
-      'statuses.reorder',
-    ])
-
-    const provider = createMockProvider({
-      name: 'youtrack',
-      capabilities: youtrackCapabilities,
-    })
+  test('makeTools generates correct tool set for the real YouTrack provider', () => {
+    const provider = new YouTrackProvider(createConfig())
 
     const tools = makeTools(provider)
     const toolNames = Object.keys(tools)
@@ -62,9 +23,11 @@ describe('YouTrack provider tools integration', () => {
     expect(toolNames).toContain('list_tasks')
     expect(toolNames).toContain('search_tasks')
     expect(toolNames).toContain('find_user')
+    expect(toolNames).toContain('get_current_user')
     expect(toolNames).toContain('count_tasks')
 
     // YouTrack-supported project tools (full CRUD)
+    expect(toolNames).toContain('get_project')
     expect(toolNames).toContain('list_projects')
     expect(toolNames).toContain('create_project')
     expect(toolNames).toContain('update_project')

@@ -12,11 +12,13 @@ import type {
   UserRef,
   VisibilityGroupRef,
 } from '../types.js'
+import { YOUTRACK_DUE_DATE_FIELD_NAME } from './constants.js'
 import type { CommentSchema } from './schemas/comment.js'
 import type { CustomFieldValueSchema } from './schemas/custom-fields.js'
 import type { IssueListSchema, IssueSchema } from './schemas/issue.js'
 import type { ReactionSchema } from './schemas/reaction.js'
 import type { VisibilitySchema } from './schemas/visibility.js'
+import { mapYouTrackDueDateValue } from './task-helpers.js'
 
 type AnyCustomField = z.infer<typeof CustomFieldValueSchema>
 
@@ -51,6 +53,14 @@ const mapRelationType = (linkTypeName: string, direction: string): RelationType 
 
 const toIsoOrUndefined = (timestamp: number | null | undefined): string | undefined =>
   timestamp === undefined || timestamp === null ? undefined : new Date(timestamp).toISOString()
+
+const toDateOnlyOrUndefined = mapYouTrackDueDateValue
+
+const getCustomFieldTimestamp = (customFields: AnyCustomField[] | undefined, fieldName: string): number | undefined => {
+  const cf = customFields?.find((field) => field.name === fieldName)
+  if (cf === undefined) return undefined
+  return typeof cf.value === 'number' ? cf.value : undefined
+}
 
 export const mapUserRef = (
   user: { id: string; login?: string; fullName?: string; name?: string } | undefined,
@@ -177,7 +187,7 @@ export const mapIssueToTask = (issue: z.infer<typeof IssueSchema>, baseUrl: stri
     status: getCustomFieldValue(issue.customFields, 'State'),
     priority: getCustomFieldValue(issue.customFields, 'Priority'),
     assignee: getCustomFieldValue(issue.customFields, 'Assignee'),
-    dueDate: null,
+    dueDate: toDateOnlyOrUndefined(getCustomFieldTimestamp(issue.customFields, YOUTRACK_DUE_DATE_FIELD_NAME)) ?? null,
     createdAt: toIsoOrUndefined(issue.created),
     projectId: issue.project?.id,
     url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
@@ -203,6 +213,7 @@ export const mapIssueToListItem = (issue: z.infer<typeof IssueListSchema>, baseU
   number: issue.numberInProject,
   status: getCustomFieldValue(issue.customFields, 'State'),
   priority: getCustomFieldValue(issue.customFields, 'Priority'),
+  dueDate: toDateOnlyOrUndefined(getCustomFieldTimestamp(issue.customFields, YOUTRACK_DUE_DATE_FIELD_NAME)),
   resolved: toIsoOrUndefined(issue.resolved),
   url: `${baseUrl}/issue/${issue.idReadable ?? issue.id}`,
 })
@@ -224,29 +235,5 @@ export const mapComment = (c: z.infer<typeof CommentSchema>): Comment => ({
   reactions: c.reactions?.map(mapCommentReaction),
 })
 
-/** Build custom fields array for create/update requests. */
-export const buildCustomFields = (params: {
-  status?: string
-  priority?: string
-  assignee?: string
-  customFields?: Array<{ name: string; value: string }>
-}): Array<{ name: string; $type: string; value: Record<string, string> }> => {
-  const fields: Array<{ name: string; $type: string; value: Record<string, string> }> = []
-  if (params.priority !== undefined) {
-    fields.push({ name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: params.priority } })
-  }
-  if (params.status !== undefined) {
-    fields.push({ name: 'State', $type: 'StateIssueCustomField', value: { name: params.status } })
-  }
-  if (params.assignee !== undefined) {
-    fields.push({ name: 'Assignee', $type: 'SingleUserIssueCustomField', value: { login: params.assignee } })
-  }
-  if (params.customFields !== undefined) {
-    for (const field of params.customFields) {
-      fields.push({ name: field.name, $type: 'SimpleIssueCustomField', value: { text: field.value } })
-    }
-  }
-  return fields
-}
-
+export { buildCreateIssueCustomField, buildCustomFields } from './task-helpers.js'
 export { mapActivity, mapAgile, mapSavedQuery, mapSprint } from './phase-five-mappers.js'

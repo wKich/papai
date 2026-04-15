@@ -24,7 +24,9 @@ import { makeDeleteStatusTool } from './delete-status.js'
 import { makeDeleteTaskTool } from './delete-task.js'
 import { makeFindUserTool } from './find-user.js'
 import { makeGetCommentsTool } from './get-comments.js'
+import { makeGetCurrentUserTool } from './get-current-user.js'
 import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
+import { makeGetProjectTool } from './get-project.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
 import { makeListAttachmentsTool } from './list-attachments.js'
 import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
@@ -70,6 +72,9 @@ import { makeUploadAttachmentTool } from './upload-attachment.js'
 import { makeWebFetchTool } from './web-fetch.js'
 
 function maybeAddProjectTools(tools: ToolSet, provider: TaskProvider): void {
+  if (provider.capabilities.has('projects.read') && provider.getProject !== undefined) {
+    tools['get_project'] = makeGetProjectTool(provider)
+  }
   if (provider.capabilities.has('projects.list')) {
     tools['list_projects'] = makeListProjectsTool(provider)
   }
@@ -181,21 +186,12 @@ function maybeAddWorkItemTools(tools: ToolSet, provider: TaskProvider): void {
   }
 }
 
-function maybeAddCountTasksTool(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
-    tools['count_tasks'] = makeCountTasksTool(provider)
-  }
-}
-
-function maybeAddDeleteTool(tools: ToolSet, provider: TaskProvider): void {
-  if (provider.capabilities.has('tasks.delete')) {
-    tools['delete_task'] = makeDeleteTaskTool(provider)
-  }
-}
-
 function maybeAddCollaborationTaskTools(tools: ToolSet, provider: TaskProvider, chatUserId: string | undefined): void {
   if (provider.listUsers !== undefined) {
     tools['find_user'] = makeFindUserTool(provider)
+  }
+  if (provider.identityResolver !== undefined && provider.getCurrentUser !== undefined) {
+    tools['get_current_user'] = makeGetCurrentUserTool(provider)
   }
   if (provider.capabilities.has('tasks.watchers')) {
     tools['list_watchers'] = makeListWatchersTool(provider)
@@ -217,6 +213,7 @@ function addInstructionTools(tools: ToolSet, contextId: string | undefined): voi
   tools['list_instructions'] = makeListInstructionsTool(contextId)
   tools['delete_instruction'] = makeDeleteInstructionTool(contextId)
 }
+
 function addWebFetchTool(tools: ToolSet, storageContextId: string | undefined, actorUserId: string | undefined): void {
   if (storageContextId === undefined) return
   tools['web_fetch'] = makeWebFetchTool(storageContextId, actorUserId)
@@ -256,6 +253,7 @@ function addLookupGroupHistoryTool(tools: ToolSet, userId: string | undefined, c
   if (!contextId.includes(':')) return
   tools['lookup_group_history'] = makeLookupGroupHistoryTool(userId, contextId)
 }
+
 function maybeAddIdentityTools(
   tools: ToolSet,
   provider: TaskProvider,
@@ -282,19 +280,21 @@ export function buildTools(
   maybeAddLabelTools(tools, provider)
   maybeAddRelationTools(tools, provider)
   maybeAddStatusTools(tools, provider)
-  maybeAddDeleteTool(tools, provider)
+  if (provider.capabilities.has('tasks.delete')) {
+    tools['delete_task'] = makeDeleteTaskTool(provider)
+  }
   maybeAddCollaborationTaskTools(tools, provider, chatUserId)
-  maybeAddAttachmentTools(tools, provider, chatUserId)
+  maybeAddAttachmentTools(tools, provider, contextId)
   maybeAddWorkItemTools(tools, provider)
-  maybeAddCountTasksTool(tools, provider)
+  if (provider.capabilities.has('tasks.count') && provider.countTasks !== undefined) {
+    tools['count_tasks'] = makeCountTasksTool(provider)
+  }
   addRecurringTools(tools, chatUserId)
   addMemoTools(tools, provider, chatUserId)
   addInstructionTools(tools, contextId)
   addLookupGroupHistoryTool(tools, chatUserId, contextId)
   addWebFetchTool(tools, contextId, chatUserId)
   maybeAddIdentityTools(tools, provider, chatUserId, contextType)
-  if (mode === 'normal') {
-    addDeferredPromptTools(tools, chatUserId)
-  }
+  if (mode === 'normal') addDeferredPromptTools(tools, chatUserId)
   return tools
 }

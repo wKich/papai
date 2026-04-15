@@ -26,4 +26,10 @@ describe('error-analysis', () => {
     expect(isRetryableAppError(error)).toBe(true)
     expect(getAgentGuidance(error)).toContain('Wait briefly before retrying')
   })
+
+  test('does not always instruct retrying workflow validation failures with customFields', () => {
+    const error = providerError.workflowValidationFailed('PRJ', 'Workflow blocked request', [{ name: 'Type' }])
+
+    expect(getAgentGuidance(error)).not.toContain('retry the same tool with customFields')
+  })
 })

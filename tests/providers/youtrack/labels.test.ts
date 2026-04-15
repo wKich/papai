@@ -7,6 +7,7 @@ import type { YouTrackConfig } from '../../../src/providers/youtrack/client.js'
 import {
   addYouTrackTaskLabel,
   createYouTrackLabel,
+  findYouTrackLabelsByName,
   listYouTrackLabels,
   removeYouTrackLabel,
   removeYouTrackTaskLabel,
@@ -43,23 +44,6 @@ const mockFetchError = (status: number, body: unknown = { error: 'Something went
   installFetchMock(() =>
     Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })),
   )
-}
-
-/** Install a fetch mock that returns different responses on successive calls. */
-const mockFetchSequence = (responses: Array<{ data: unknown; status?: number }>): void => {
-  let callIndex = 0
-  const m = mock<(url: string, init: RequestInit) => Promise<Response>>(() => {
-    const response = responses[callIndex] ?? responses[responses.length - 1]!
-    callIndex++
-    return Promise.resolve(
-      new Response(JSON.stringify(response.data), {
-        status: response.status ?? 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
-  })
-  fetchMock = m
-  setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
 const FetchCallSchema = z.tuple([
@@ -269,6 +253,74 @@ describe('createYouTrackLabel', () => {
   })
 })
 
+describe('findYouTrackLabelsByName', () => {
+  beforeEach(() => {
+    fetchMock = undefined!
+  })
+
+  afterEach(() => {
+    restoreFetch()
+  })
+
+  test('queries tags by name and returns exact visible matches', async () => {
+    mockFetchResponse([
+      makeTagResponse({ id: 'tag-1', name: 'blocked' }),
+      makeTagResponse({ id: 'tag-2', name: 'blocked' }),
+      makeTagResponse({ id: 'tag-3', name: 'blocking' }),
+    ])
+
+    const result = await findYouTrackLabelsByName(config, 'blocked')
+
+    expect(result).toEqual([
+      { id: 'tag-1', name: 'blocked', color: '#ff0000' },
+      { id: 'tag-2', name: 'blocked', color: '#ff0000' },
+    ])
+  })
+
+  test('sends the tag name as the server-side query parameter', async () => {
+    mockFetchResponse([])
+
+    await findYouTrackLabelsByName(config, 'blocked')
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/tags')
+    expect(url.searchParams.get('query')).toBe('blocked')
+    expect(getLastFetchMethod()).toBe('GET')
+  })
+
+  test('paginates through tag results when exact match is not on the first page', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              Array.from({ length: 100 }, (_, index) =>
+                makeTagResponse({ id: `tag-${index}`, name: `other-${index}` }),
+              ),
+            ),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([makeTagResponse({ id: 'tag-101', name: 'blocked' })]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const result = await findYouTrackLabelsByName(config, 'blocked')
+
+    expect(result).toEqual([{ id: 'tag-101', name: 'blocked', color: '#ff0000' }])
+    expect(getFetchUrl(0).searchParams.get('$top')).toBe('100')
+    expect(getFetchUrl(1).searchParams.get('$skip')).toBe('100')
+  })
+})
+
 describe('updateYouTrackLabel', () => {
   beforeEach(() => {
     fetchMock = undefined!
@@ -394,51 +446,33 @@ describe('addYouTrackTaskLabel', () => {
   })
 
   test('adds label to task and returns ids', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1', tags: [{ id: 'existing-tag' }] } }, { data: { id: 'issue-1' } }])
+    mockFetchResponse({ id: 'new-tag', name: 'blocked' })
 
     const result = await addYouTrackTaskLabel(config, 'TEST-1', 'new-tag')
 
     expect(result).toEqual({ taskId: 'TEST-1', labelId: 'new-tag' })
   })
 
-  test('first fetches current tags then sends updated list', async () => {
-    mockFetchSequence([
-      { data: { id: 'issue-1', tags: [{ id: 'tag-a' }, { id: 'tag-b' }] } },
-      { data: { id: 'issue-1' } },
-    ])
+  test('uses direct issue tag endpoint with POST body containing the tag id', async () => {
+    mockFetchResponse({ id: 'tag-c', name: 'blocked' })
 
     await addYouTrackTaskLabel(config, 'TEST-1', 'tag-c')
 
-    // First call: GET to fetch current tags
-    const firstUrl = getFetchUrl(0)
-    expect(firstUrl.pathname).toBe('/api/issues/TEST-1')
-    expect(getFetchMethod(0)).toBe('GET')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const url = getFetchUrl(0)
+    expect(url.pathname).toBe('/api/issues/TEST-1/tags')
+    expect(getFetchMethod(0)).toBe('POST')
 
-    // Second call: POST to update tags
-    const secondUrl = getFetchUrl(1)
-    expect(secondUrl.pathname).toBe('/api/issues/TEST-1')
-    expect(getFetchMethod(1)).toBe('POST')
-
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([{ id: 'tag-a' }, { id: 'tag-b' }, { id: 'tag-c' }])
+    const body = getFetchBody(0)
+    expect(body).toEqual({ id: 'tag-c' })
   })
 
-  test('handles task with no existing tags', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1' } }, { data: { id: 'issue-1' } }])
+  test('does not fetch the full current tag list before adding', async () => {
+    mockFetchResponse({ id: 'tag-1', name: 'blocked' })
 
     await addYouTrackTaskLabel(config, 'TEST-1', 'tag-1')
 
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([{ id: 'tag-1' }])
-  })
-
-  test('handles task with empty tags array', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1', tags: [] } }, { data: { id: 'issue-1' } }])
-
-    await addYouTrackTaskLabel(config, 'TEST-1', 'tag-1')
-
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([{ id: 'tag-1' }])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   test('throws classified error on failure', async () => {
@@ -458,56 +492,30 @@ describe('removeYouTrackTaskLabel', () => {
   })
 
   test('removes label from task and returns ids', async () => {
-    mockFetchSequence([
-      { data: { id: 'issue-1', tags: [{ id: 'tag-keep' }, { id: 'tag-remove' }] } },
-      { data: { id: 'issue-1' } },
-    ])
+    mockFetchNoContent()
 
     const result = await removeYouTrackTaskLabel(config, 'TEST-1', 'tag-remove')
 
     expect(result).toEqual({ taskId: 'TEST-1', labelId: 'tag-remove' })
   })
 
-  test('filters out the specified tag and sends remaining', async () => {
-    mockFetchSequence([
-      { data: { id: 'issue-1', tags: [{ id: 'tag-a' }, { id: 'tag-b' }, { id: 'tag-c' }] } },
-      { data: { id: 'issue-1' } },
-    ])
+  test('uses direct issue tag endpoint with DELETE and tag id in path', async () => {
+    mockFetchNoContent()
 
     await removeYouTrackTaskLabel(config, 'TEST-1', 'tag-b')
 
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([{ id: 'tag-a' }, { id: 'tag-c' }])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const url = getFetchUrl(0)
+    expect(url.pathname).toBe('/api/issues/TEST-1/tags/tag-b')
+    expect(getFetchMethod(0)).toBe('DELETE')
   })
 
-  test('sends empty tags when removing the only tag', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1', tags: [{ id: 'tag-only' }] } }, { data: { id: 'issue-1' } }])
-
-    await removeYouTrackTaskLabel(config, 'TEST-1', 'tag-only')
-
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([])
-  })
-
-  test('handles task with no existing tags', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1' } }, { data: { id: 'issue-1' } }])
+  test('does not fetch the full current tag list before removing', async () => {
+    mockFetchNoContent()
 
     await removeYouTrackTaskLabel(config, 'TEST-1', 'tag-1')
 
-    const body = getFetchBody(1)
-    expect(body['tags']).toEqual([])
-  })
-
-  test('first fetches current tags then sends filtered list', async () => {
-    mockFetchSequence([{ data: { id: 'issue-1', tags: [{ id: 'tag-1' }] } }, { data: { id: 'issue-1' } }])
-
-    await removeYouTrackTaskLabel(config, 'TEST-1', 'tag-1')
-
-    // First call: GET
-    expect(getFetchMethod(0)).toBe('GET')
-
-    // Second call: POST with filtered tags
-    expect(getFetchMethod(1)).toBe('POST')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   test('throws classified error on failure', async () => {

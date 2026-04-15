@@ -7,19 +7,65 @@ import type { TaskProvider } from '../providers/types.js'
 
 const log = logger.child({ scope: 'tool:add-task-label' })
 
-export function makeAddTaskLabelTool(provider: TaskProvider): ToolSet[string] {
+const labelTargetSchema = z
+  .object({
+    taskId: z.string().describe('Task ID'),
+    labelId: z.string().optional().describe('Label ID to add'),
+    labelName: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Visible label name to add when you do not already know the label ID'),
+  })
+  .refine((value) => (value.labelId === undefined) !== (value.labelName === undefined), {
+    message: 'Provide exactly one of labelId or labelName',
+    path: ['labelId'],
+  })
+
+const resolveLabelId = async (
+  provider: Readonly<TaskProvider>,
+  labelId: string | undefined,
+  labelName: string | undefined,
+): Promise<string> => {
+  if (labelId !== undefined) return labelId
+  if (labelName === undefined) {
+    throw new Error('Provide exactly one of labelId or labelName')
+  }
+  const labels =
+    provider.getLabelByName === undefined ? await provider.listLabels?.() : await provider.getLabelByName(labelName)
+  const matches = (labels ?? []).filter((label) => label.name === labelName)
+  if (matches.length === 0) {
+    throw new Error(`Label not found: ${labelName}`)
+  }
+  if (matches.length > 1) {
+    throw new Error(`Multiple labels found: ${labelName}`)
+  }
+  const [match] = matches
+  if (match === undefined) {
+    throw new Error(`Label not found: ${labelName}`)
+  }
+  return match.id
+}
+
+export function makeAddTaskLabelTool(provider: Readonly<TaskProvider>): ToolSet[string] {
   return tool({
-    description: 'Add a label to a task. Use list_labels first to get available label IDs.',
-    inputSchema: z.object({
-      taskId: z.string().describe('Task ID'),
-      labelId: z.string().describe('Label ID to add'),
-    }),
-    execute: async ({ taskId, labelId }) => {
+    description:
+      'Add a label to a task. Prefer labelName for natural-language tagging flows, or use labelId when you already have an exact ID from list_labels.',
+    inputSchema: labelTargetSchema,
+    execute: async ({ taskId, labelId, labelName }) => {
       try {
-        return await provider.addTaskLabel!(taskId, labelId)
+        const resolvedLabelId = await resolveLabelId(provider, labelId, labelName)
+        return await provider.addTaskLabel!(taskId, resolvedLabelId)
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), taskId, labelId, tool: 'add_task_label' },
+          {
+            error: error instanceof Error ? error.message : String(error),
+            taskId,
+            labelId,
+            labelName,
+            tool: 'add_task_label',
+          },
           'Tool execution failed',
         )
         throw error

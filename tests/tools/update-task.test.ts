@@ -3,7 +3,7 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 describe('update_task identity resolution', () => {
@@ -192,6 +192,68 @@ describe('update_task identity resolution', () => {
 
     expect(updateTask).toHaveBeenCalledTimes(1)
     expect(capturedAssignee).toBe('jsmith')
+  })
+
+  test('should return provider dueDate converted back to local time', async () => {
+    const updateTask = mock((taskId: string, _params: Readonly<{ dueDate?: string }>) => {
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25T17:00:00.000Z',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ updateTask })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { taskId: 'task-1', dueDate: { date: '2026-03-25', time: '17:00' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(result).toHaveProperty('dueDate', '2026-03-25T17:00:00')
+  })
+
+  test('should preserve date-only dueDate from provider', async () => {
+    let capturedDueDate: string | undefined
+    const updateTask = mock((taskId: string, params: Readonly<{ dueDate?: string }>) => {
+      capturedDueDate = params.dueDate
+      return Promise.resolve({
+        id: taskId,
+        title: 'Test Task',
+        status: 'todo',
+        dueDate: '2026-03-25',
+        url: 'https://test.com/task/1',
+      })
+    })
+
+    const provider = createMockProvider({ updateTask, name: 'youtrack' })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+    const result: unknown = await tool.execute(
+      { taskId: 'task-1', dueDate: { date: '2026-03-25' } },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedDueDate).toBe('2026-03-25')
+    expect(result).toHaveProperty('dueDate', '2026-03-25')
+  })
+
+  test('update_task input schema accepts provider-defined priority values', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: 'Show-stopper' })).toBe(true)
+  })
+
+  test('update_task input schema rejects blank priority values', () => {
+    const tool = makeUpdateTaskTool(createMockProvider())
+
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: '' })).toBe(false)
+    expect(schemaValidates(tool, { taskId: 'task-1', priority: '   ' })).toBe(false)
   })
 
   describe('timezone config lookup (NI2 fix)', () => {

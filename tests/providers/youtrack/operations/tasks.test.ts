@@ -89,18 +89,32 @@ const getLastFetchUrl = (): URL => {
   return new URL(parsed.data[0])
 }
 
-const getLastFetchBody = (): z.infer<typeof BodySchema> => {
+const getLastFetchMethod = (): string => {
   const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
   const parsed = FetchCallSchema.safeParse(lastCall)
+  if (!parsed.success) return ''
+  return parsed.data[1].method ?? ''
+}
+
+const getFetchBodyAt = (index: number): z.infer<typeof BodySchema> => {
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
   if (!parsed.success) return {}
   const { body } = parsed.data[1]
   if (body === undefined) return {}
   return BodySchema.parse(JSON.parse(body))
 }
 
-const getLastFetchMethod = (): string => {
-  const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
-  const parsed = FetchCallSchema.safeParse(lastCall)
+const getFetchUrlAt = (index: number): URL => {
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return new URL('https://empty')
+  return new URL(parsed.data[0])
+}
+
+const getFetchMethodAt = (index: number): string => {
+  const call = fetchMock.mock.calls[index]
+  const parsed = FetchCallSchema.safeParse(call)
   if (!parsed.success) return ''
   return parsed.data[1].method ?? ''
 }
@@ -180,7 +194,7 @@ describe('createYouTrackTask', () => {
       description: 'My description',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['description']).toBe('My description')
   })
 
@@ -192,7 +206,7 @@ describe('createYouTrackTask', () => {
       title: 'Test task',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['description']).toBeUndefined()
   })
 
@@ -206,7 +220,7 @@ describe('createYouTrackTask', () => {
       status: 'In Progress',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['customFields']).toEqual([
       { name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } },
       { name: 'State', $type: 'StateIssueCustomField', value: { name: 'In Progress' } },
@@ -222,12 +236,201 @@ describe('createYouTrackTask', () => {
       assignee: 'john.doe',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['customFields']).toContainEqual({
       name: 'Assignee',
       $type: 'SingleUserIssueCustomField',
       value: { login: 'john.doe' },
     })
+  })
+
+  test('sends due date custom field when provided', async () => {
+    mockCreateTaskResponse(makeIssueResponse())
+
+    await createYouTrackTask(config, {
+      projectId: '0-1',
+      title: 'Test task',
+      dueDate: '2026-03-25',
+    })
+
+    const body = getFetchBodyAt(2)
+    expect(body['customFields']).toContainEqual({
+      name: 'Due Date',
+      $type: 'DateIssueCustomField',
+      value: Date.parse('2026-03-25T12:00:00.000Z'),
+    })
+  })
+
+  test('returns dueDate after create using follow-up custom fields fetch', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 3) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await createYouTrackTask(config, {
+      projectId: '0-1',
+      title: 'Test task',
+      dueDate: '2026-03-25',
+    })
+
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('preserves create dueDate when enrichment fetch fails', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 3) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'custom field lookup failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await createYouTrackTask(config, {
+      projectId: '0-1',
+      title: 'Test task',
+      dueDate: '2026-03-25T23:45:00+02:00',
+    })
+
+    expect(task.id).toBe('TEST-1')
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('canonicalizes datetime input to date-only value when creating', async () => {
+    mockCreateTaskResponse(makeIssueResponse())
+
+    await createYouTrackTask(config, {
+      projectId: '0-1',
+      title: 'Test task',
+      dueDate: '2026-03-25T23:45:00.000Z',
+    })
+
+    const body = getFetchBodyAt(2)
+    expect(body['customFields']).toContainEqual({
+      name: 'Due Date',
+      $type: 'DateIssueCustomField',
+      value: Date.parse('2026-03-25T12:00:00.000Z'),
+    })
+  })
+
+  test('throws workflow validation error when due date is required but omitted', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-12',
+              $type: 'DateProjectCustomField',
+              field: { id: '58-4', name: 'Due Date', $type: 'CustomField' },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    await expect(createYouTrackTask(config, { projectId: 'TEST', title: 'Test task' })).rejects.toMatchObject({
+      appError: {
+        code: 'workflow-validation-failed',
+        requiredFields: [{ name: 'Due Date' }],
+      },
+    })
+  })
+
+  test('rejects malformed due date before sending create request', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await expect(
+      createYouTrackTask(config, { projectId: '0-1', title: 'Test task', dueDate: 'not-a-date' }),
+    ).rejects.toMatchObject({
+      appError: { code: 'validation-failed', field: 'dueDate' },
+    })
+
+    expect(callCount).toBe(2)
   })
 
   test('does not send customFields when none provided', async () => {
@@ -238,7 +441,7 @@ describe('createYouTrackTask', () => {
       title: 'Test task',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['customFields']).toBeUndefined()
   })
 
@@ -247,9 +450,9 @@ describe('createYouTrackTask', () => {
 
     await createYouTrackTask(config, { projectId: '0-1', title: 'Test task' })
 
-    const url = getLastFetchUrl()
+    const url = getFetchUrlAt(2)
     expect(url.pathname).toBe('/api/issues')
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getFetchMethodAt(2)).toBe('POST')
   })
 
   test('throws YouTrackClassifiedError on API error', async () => {
@@ -379,6 +582,7 @@ describe('createYouTrackTask', () => {
     if (!secondParsed.success) return
     const secondUrl = new URL(secondParsed.data[0])
     expect(secondUrl.pathname).toBe('/api/admin/projects/0-1/customFields')
+    expect(secondUrl.searchParams.get('fields')).toContain('fieldType(id,presentation)')
     expect(secondParsed.data[1].method).toBe('GET')
 
     // Verify third call created issue with internal ID
@@ -447,8 +651,13 @@ describe('createYouTrackTask', () => {
     mockCreateTaskResponse(makeIssueResponse(), { id: '0-1', shortName: 'TEST' }, [
       {
         id: '82-10',
-        $type: 'EnumProjectCustomField',
-        field: { id: '58-2', name: 'Type', $type: 'CustomField' },
+        $type: 'SimpleProjectCustomField',
+        field: {
+          id: '58-2',
+          name: 'Environment',
+          $type: 'CustomField',
+          fieldType: { id: 'string', presentation: 'string' },
+        },
         canBeEmpty: false,
         isPublic: true,
       },
@@ -457,15 +666,272 @@ describe('createYouTrackTask', () => {
     await createYouTrackTask(config, {
       projectId: 'TEST',
       title: 'Test task',
-      customFields: [{ name: 'Type', value: 'Bug' }],
+      customFields: [{ name: 'Environment', value: 'production' }],
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(2)
     expect(body['customFields']).toContainEqual({
-      name: 'Type',
+      name: 'Environment',
       $type: 'SimpleIssueCustomField',
-      value: { text: 'Bug' },
+      value: 'production',
     })
+
+    const customFieldsUrl = getFetchUrlAt(1)
+    expect(customFieldsUrl.pathname).toBe('/api/admin/projects/0-1/customFields')
+    expect(customFieldsUrl.searchParams.get('fields')).toContain('fieldType(id,presentation)')
+  })
+
+  test('sends raw string value for supported string simple project custom fields', async () => {
+    mockCreateTaskResponse(makeIssueResponse(), { id: '0-1', shortName: 'TEST' }, [
+      {
+        id: '82-12',
+        $type: 'SimpleProjectCustomField',
+        field: {
+          id: '58-4',
+          name: 'Requester email',
+          $type: 'CustomField',
+          fieldType: { id: 'string', presentation: 'string' },
+        },
+        canBeEmpty: true,
+        isPublic: true,
+      },
+    ])
+
+    await createYouTrackTask(config, {
+      projectId: 'TEST',
+      title: 'Test task',
+      customFields: [{ name: 'Requester email', value: 'test@example.com' }],
+    })
+
+    const body = getFetchBodyAt(2)
+    expect(body['customFields']).toContainEqual({
+      name: 'Requester email',
+      $type: 'SimpleIssueCustomField',
+      value: 'test@example.com',
+    })
+  })
+
+  test('sends text object value for supported text project custom fields', async () => {
+    mockCreateTaskResponse(makeIssueResponse(), { id: '0-1', shortName: 'TEST' }, [
+      {
+        id: '82-13',
+        $type: 'TextProjectCustomField',
+        field: {
+          id: '58-5',
+          name: 'Environment details',
+          $type: 'CustomField',
+          fieldType: { id: 'text', presentation: 'text' },
+        },
+        canBeEmpty: true,
+        isPublic: true,
+      },
+    ])
+
+    await createYouTrackTask(config, {
+      projectId: 'TEST',
+      title: 'Test task',
+      customFields: [{ name: 'Environment details', value: 'Needs staging parity' }],
+    })
+
+    const body = getFetchBodyAt(2)
+    expect(body['customFields']).toContainEqual({
+      name: 'Environment details',
+      $type: 'TextIssueCustomField',
+      value: { text: 'Needs staging parity' },
+    })
+  })
+
+  test('rejects explicitly supplied unsupported custom field types', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-14',
+              $type: 'EnumProjectCustomField',
+              field: {
+                id: '58-6',
+                name: 'Type',
+                $type: 'CustomField',
+                fieldType: { id: 'enum[1]', presentation: 'enum[1]' },
+              },
+              canBeEmpty: true,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    await expect(
+      createYouTrackTask(config, {
+        projectId: 'TEST',
+        title: 'Test task',
+        customFields: [{ name: 'Type', value: 'Bug' }],
+      }),
+    ).rejects.toMatchObject({
+      appError: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(callCount).toBe(2)
+  })
+
+  test('rejects unknown custom field names instead of ignoring them', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    try {
+      await createYouTrackTask(config, {
+        projectId: 'TEST',
+        title: 'Test task',
+        customFields: [{ name: 'Unknown field', value: 'value' }],
+      })
+      throw new Error('Expected createYouTrackTask to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) return
+      expect(error.appError.code).toBe('validation-failed')
+      if (error.appError.code !== 'validation-failed') return
+      expect(error.appError.field).toBe('customFields')
+      expect(error.appError.reason).toContain('Unknown field')
+    }
+
+    expect(callCount).toBe(2)
+  })
+
+  test('rejects supplied required custom field when its project type is unsupported', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-15',
+              $type: 'EnumProjectCustomField',
+              field: {
+                id: '58-7',
+                name: 'Type',
+                $type: 'CustomField',
+                fieldType: { id: 'enum[1]', presentation: 'enum[1]' },
+              },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    try {
+      await createYouTrackTask(config, {
+        projectId: 'TEST',
+        title: 'Test task',
+        customFields: [{ name: 'Type', value: 'Bug' }],
+      })
+      throw new Error('Expected createYouTrackTask to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) return
+      expect(error.appError.code).toBe('validation-failed')
+      if (error.appError.code !== 'validation-failed') return
+      expect(error.appError.field).toBe('customFields')
+      expect(error.appError.reason).toContain('Type')
+    }
+
+    expect(callCount).toBe(2)
+  })
+
+  test('rejects supplied required simple project custom field when it is non-string', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '0-1', shortName: 'TEST' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: '82-16',
+              $type: 'SimpleProjectCustomField',
+              field: {
+                id: '58-8',
+                name: 'Story points',
+                $type: 'CustomField',
+                fieldType: { id: 'integer', presentation: 'integer' },
+              },
+              canBeEmpty: false,
+              isPublic: true,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    try {
+      await createYouTrackTask(config, {
+        projectId: 'TEST',
+        title: 'Test task',
+        customFields: [{ name: 'Story points', value: '5' }],
+      })
+      throw new Error('Expected createYouTrackTask to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(YouTrackClassifiedError)
+      if (!(error instanceof YouTrackClassifiedError)) return
+      expect(error.appError.code).toBe('validation-failed')
+      if (error.appError.code !== 'validation-failed') return
+      expect(error.appError.field).toBe('customFields')
+      expect(error.appError.reason).toContain('Story points')
+    }
+
+    expect(callCount).toBe(2)
   })
 })
 
@@ -478,8 +944,27 @@ describe('getYouTrackTask', () => {
     restoreFetch()
   })
 
+  const mockGetTaskResponse = (issueResponse: unknown, dueDateCustomFieldsResponse: unknown = []): void => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(issueResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify(dueDateCustomFieldsResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+  }
+
   test('retrieves task by id', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockGetTaskResponse(makeIssueResponse())
 
     const task = await getYouTrackTask(config, 'TEST-1')
 
@@ -490,17 +975,21 @@ describe('getYouTrackTask', () => {
   })
 
   test('uses GET method with task id in path', async () => {
-    mockFetchResponse(makeIssueResponse())
+    mockGetTaskResponse(makeIssueResponse())
 
     await getYouTrackTask(config, 'TEST-1')
 
-    const url = getLastFetchUrl()
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+
+    const url = new URL(parsed.data[0])
     expect(url.pathname).toBe('/api/issues/TEST-1')
-    expect(getLastFetchMethod()).toBe('GET')
+    expect(parsed.data[1].method ?? 'GET').toBe('GET')
   })
 
   test('maps labels from tags', async () => {
-    mockFetchResponse(
+    mockGetTaskResponse(
       makeIssueResponse({
         tags: [
           { id: 'tag-1', name: 'bug', color: { id: 'c-1', background: '#ff0000' } },
@@ -518,7 +1007,7 @@ describe('getYouTrackTask', () => {
   })
 
   test('maps relations from links', async () => {
-    mockFetchResponse(
+    mockGetTaskResponse(
       makeIssueResponse({
         links: [
           {
@@ -534,6 +1023,142 @@ describe('getYouTrackTask', () => {
     const task = await getYouTrackTask(config, 'TEST-1')
 
     expect(task.relations).toEqual([{ type: 'blocks', taskId: 'TEST-2' }])
+  })
+
+  test('maps due date custom field to normalized dueDate', async () => {
+    mockGetTaskResponse(
+      makeIssueResponse({
+        customFields: [
+          {
+            $type: 'SingleEnumIssueCustomField',
+            name: 'Priority',
+            value: { $type: 'EnumBundleElement', name: 'Normal' },
+          },
+          { $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } },
+        ],
+      }),
+      [{ name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') }],
+    )
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.dueDate).toBe('2026-03-25')
+
+    const dueDateFetch = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(dueDateFetch.success).toBe(true)
+    if (!dueDateFetch.success) return
+
+    const dueDateUrl = new URL(dueDateFetch.data[0])
+    expect(dueDateUrl.pathname).toBe('/api/issues/TEST-1/customFields')
+    expect(dueDateUrl.searchParams.get('fields')).toBe('name,value')
+  })
+
+  test('degrades gracefully when get dueDate enrichment fetch fails', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'custom field lookup failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.id).toBe('TEST-1')
+    expect(task.dueDate).toBeNull()
+  })
+
+  test('preserves existing dueDate when enrichment payload omits the field', async () => {
+    mockGetTaskResponse(
+      makeIssueResponse({
+        customFields: [
+          {
+            $type: 'SingleEnumIssueCustomField',
+            name: 'Priority',
+            value: { $type: 'EnumBundleElement', name: 'Normal' },
+          },
+          { $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } },
+          { $type: 'DateIssueCustomField', name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') },
+        ],
+      }),
+      [{ name: 'Priority', value: { name: 'Normal' } }],
+    )
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('reads due date from mixed-type custom field responses', async () => {
+    mockGetTaskResponse(makeIssueResponse(), [
+      { name: 'Priority', value: { name: 'Normal' } },
+      { name: 'Assignee', value: { login: 'alice' } },
+      { name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') },
+    ])
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('paginates custom field fetch until due date is found', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              Array.from({ length: 100 }, (_, index) => ({
+                name: `Field ${index + 1}`,
+                value: { text: `value-${index + 1}` },
+              })),
+            ),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await getYouTrackTask(config, 'TEST-1')
+
+    expect(task.dueDate).toBe('2026-03-25')
+
+    const secondPageFetch = FetchCallSchema.safeParse(fetchMock.mock.calls[2])
+    expect(secondPageFetch.success).toBe(true)
+    if (!secondPageFetch.success) return
+
+    const secondPageUrl = new URL(secondPageFetch.data[0])
+    expect(secondPageUrl.pathname).toBe('/api/issues/TEST-1/customFields')
+    expect(secondPageUrl.searchParams.get('$skip')).toBe('100')
   })
 
   test('throws classified error on 404', async () => {
@@ -567,7 +1192,7 @@ describe('updateYouTrackTask', () => {
     expect(task.id).toBe('TEST-1')
     expect(task.title).toBe('Updated title')
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(0)
     expect(body['summary']).toBe('Updated title')
   })
 
@@ -576,7 +1201,7 @@ describe('updateYouTrackTask', () => {
 
     await updateYouTrackTask(config, 'TEST-1', { description: 'New desc' })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(0)
     expect(body['description']).toBe('New desc')
   })
 
@@ -585,7 +1210,7 @@ describe('updateYouTrackTask', () => {
 
     await updateYouTrackTask(config, 'TEST-1', { projectId: 'proj-2' })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(0)
     expect(body['project']).toEqual({ id: 'proj-2' })
   })
 
@@ -598,10 +1223,107 @@ describe('updateYouTrackTask', () => {
       assignee: 'john',
     })
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(0)
     expect(body['customFields']).toContainEqual(expect.objectContaining({ name: 'Priority', value: { name: 'Major' } }))
     expect(body['customFields']).toContainEqual(expect.objectContaining({ name: 'State', value: { name: 'Done' } }))
     expect(body['customFields']).toContainEqual(expect.objectContaining({ name: 'Assignee', value: { login: 'john' } }))
+  })
+
+  test('sends due date custom field when provided', async () => {
+    mockFetchResponse(makeIssueResponse())
+
+    await updateYouTrackTask(config, 'TEST-1', {
+      dueDate: '2026-03-25',
+    })
+
+    const body = getFetchBodyAt(0)
+    expect(body['customFields']).toContainEqual({
+      name: 'Due Date',
+      $type: 'DateIssueCustomField',
+      value: Date.parse('2026-03-25T12:00:00.000Z'),
+    })
+  })
+
+  test('returns dueDate after update using follow-up custom fields fetch', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await updateYouTrackTask(config, 'TEST-1', {
+      dueDate: '2026-03-25',
+    })
+
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('preserves update dueDate when enrichment fetch fails', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(makeIssueResponse()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'custom field lookup failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const task = await updateYouTrackTask(config, 'TEST-1', {
+      dueDate: '2026-03-25T23:45:00+02:00',
+    })
+
+    expect(task.id).toBe('TEST-1')
+    expect(task.dueDate).toBe('2026-03-25')
+  })
+
+  test('canonicalizes datetime input to date-only value when updating', async () => {
+    mockFetchResponse(makeIssueResponse())
+
+    await updateYouTrackTask(config, 'TEST-1', {
+      dueDate: '2026-03-25T23:45:00.000Z',
+    })
+
+    const body = getFetchBodyAt(0)
+    expect(body['customFields']).toContainEqual({
+      name: 'Due Date',
+      $type: 'DateIssueCustomField',
+      value: Date.parse('2026-03-25T12:00:00.000Z'),
+    })
+  })
+
+  test('rejects malformed due date before sending update request', async () => {
+    mockFetchResponse(makeIssueResponse())
+
+    await expect(updateYouTrackTask(config, 'TEST-1', { dueDate: 'not-a-date' })).rejects.toMatchObject({
+      appError: { code: 'validation-failed', field: 'dueDate' },
+    })
+
+    expect(fetchMock.mock.calls).toHaveLength(0)
   })
 
   test('does not send fields when they are not provided', async () => {
@@ -609,7 +1331,7 @@ describe('updateYouTrackTask', () => {
 
     await updateYouTrackTask(config, 'TEST-1', {})
 
-    const body = getLastFetchBody()
+    const body = getFetchBodyAt(0)
     expect(body['summary']).toBeUndefined()
     expect(body['description']).toBeUndefined()
     expect(body['project']).toBeUndefined()
@@ -621,9 +1343,9 @@ describe('updateYouTrackTask', () => {
 
     await updateYouTrackTask(config, 'TEST-1', { title: 'Updated' })
 
-    const url = getLastFetchUrl()
+    const url = getFetchUrlAt(0)
     expect(url.pathname).toBe('/api/issues/TEST-1')
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getFetchMethodAt(0)).toBe('POST')
   })
 
   test('throws classified error on failure', async () => {
@@ -709,6 +1431,7 @@ describe('listYouTrackTasks', () => {
     expect(urlObj.pathname).toBe('/api/issues')
     expect(urlObj.searchParams.get('query')).toBe('project: {DEMO}')
     expect(urlObj.searchParams.get('$top')).toBe('100')
+    expect(urlObj.searchParams.getAll('customFields')).toEqual(['State', 'Priority', 'Due Date'])
   })
 
   test('returns empty array when no issues', async () => {
@@ -731,6 +1454,123 @@ describe('listYouTrackTasks', () => {
     const items = await listYouTrackTasks(config, '39-883')
 
     expect(items).toEqual([])
+  })
+
+  test('maps due date on list results when provided inline', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: '2-1',
+                idReadable: 'DEMO-1',
+                numberInProject: 1,
+                summary: 'Task with due date',
+                resolved: null,
+                created: 1718400000000,
+                project: { id: '39-883', shortName: 'DEMO' },
+                customFields: [
+                  { $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } },
+                  { $type: 'DateIssueCustomField', name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') },
+                ],
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    const items = await listYouTrackTasks(config, '39-883')
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toHaveProperty('dueDate', '2026-03-25')
+    expect(callCount).toBe(2)
+  })
+
+  test('requests only selected custom fields inline for list results', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: '2-1',
+                idReadable: 'DEMO-1',
+                numberInProject: 1,
+                summary: 'Task one',
+                resolved: null,
+                created: 1718400000000,
+                project: { id: '39-883', shortName: 'DEMO' },
+                customFields: [
+                  { $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } },
+                  {
+                    $type: 'SingleEnumIssueCustomField',
+                    name: 'Priority',
+                    value: { $type: 'EnumBundleElement', name: 'Normal' },
+                  },
+                  { $type: 'DateIssueCustomField', name: 'Due Date', value: Date.parse('2026-03-25T12:00:00.000Z') },
+                ],
+              },
+              {
+                id: '2-2',
+                idReadable: 'DEMO-2',
+                numberInProject: 2,
+                summary: 'Task two',
+                resolved: null,
+                created: 1718400000000,
+                project: { id: '39-883', shortName: 'DEMO' },
+                customFields: [{ $type: 'StateIssueCustomField', name: 'State', value: { name: 'Open' } }],
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    const items = await listYouTrackTasks(config, '39-883')
+
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveProperty('dueDate', '2026-03-25')
+    expect(items[1]).toHaveProperty('dueDate', undefined)
+    expect(items[0]).toHaveProperty('priority', 'Normal')
+    expect(callCount).toBe(2)
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.getAll('customFields')).toEqual(['State', 'Priority', 'Due Date'])
   })
 
   test('throws classified error on project fetch failure', async () => {
@@ -852,6 +1692,60 @@ describe('listYouTrackTasks', () => {
     const [url] = parsed.data
     const urlObj = new URL(url)
     expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Due date: >2024-01-01 Due date: <2024-12-31')
+  })
+
+  test('uses exclusive dueAfter filter when only lower bound is provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { dueAfter: '2024-01-01' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Due date: >2024-01-01')
+  })
+
+  test('uses exclusive dueBefore filter when only upper bound is provided', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: '39-883', shortName: 'DEMO', name: 'Demo Project' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackTasks(config, '39-883', { dueBefore: '2024-12-31' })
+
+    const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[1])
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const [url] = parsed.data
+    const urlObj = new URL(url)
+    expect(urlObj.searchParams.get('query')).toBe('project: {DEMO} Due date: <2024-12-31')
   })
 
   test('uses limit parameter for $top', async () => {
@@ -1023,8 +1917,7 @@ describe('listYouTrackTasks', () => {
     expect(items[99]!.id).toBe('DEMO-100')
     expect(items[199]!.id).toBe('DEMO-200')
     expect(items[249]!.id).toBe('DEMO-250')
-    // Verify multiple API calls were made
-    // 1 project + 3 pages
+    // 1 project + 3 list pages
     expect(callCount).toBe(4)
   })
 
@@ -1057,7 +1950,7 @@ describe('listYouTrackTasks', () => {
 
     // Should stop at maxPages (10 pages = 1000 items)
     expect(items).toHaveLength(1000)
-    // 1 project + 10 pages
+    // 1 project + 10 list pages
     expect(callCount).toBe(11)
   })
 })

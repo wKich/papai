@@ -1,5 +1,7 @@
 import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
+import { z } from 'zod'
+
 import { setCachedConfig, _userCaches } from '../../src/cache.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
 import { makeDeleteTaskTool } from '../../src/tools/delete-task.js'
@@ -40,6 +42,15 @@ function isTaskWithRelations(
 
 function isTaskArray(val: unknown): val is Array<{ title: string }> {
   return Array.isArray(val) && val.every((item) => item !== null && typeof item === 'object' && 'title' in item)
+}
+
+function getInputFieldDescription(schema: unknown, fieldName: string): string | undefined {
+  if (!(schema instanceof z.ZodType)) return undefined
+  const jsonSchema = z.toJSONSchema(schema)
+  if (!('properties' in jsonSchema) || jsonSchema.properties === undefined) return undefined
+  const property = jsonSchema.properties[fieldName]
+  if (property === undefined || typeof property !== 'object' || property === null) return undefined
+  return 'description' in property && typeof property.description === 'string' ? property.description : undefined
 }
 
 describe('Task Tools', () => {
@@ -187,6 +198,60 @@ describe('Task Tools', () => {
       expect(capturedDueDate).toBeUndefined()
     })
 
+    test('preserves date-only dueDate for YouTrack provider', async () => {
+      let capturedDueDate: string | undefined
+      const provider = createMockProvider({
+        name: 'youtrack',
+        createTask: mock((input: Readonly<{ dueDate?: string; title: string }>) => {
+          capturedDueDate = input.dueDate
+          return Promise.resolve({ id: 'task-1', title: input.title, status: 'todo', url: '', dueDate: '2026-03-25' })
+        }),
+      })
+
+      const tool = makeCreateTaskTool(provider, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { title: 'Test', projectId: 'p1', dueDate: { date: '2026-03-25' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(capturedDueDate).toBe('2026-03-25')
+      expect(result).toHaveProperty('dueDate', '2026-03-25')
+    })
+
+    test('describes YouTrack due dates as date-only', () => {
+      const provider = createMockProvider({ name: 'youtrack' })
+      const tool = makeCreateTaskTool(provider, 'user-1')
+      const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
+      const customFieldsDescription = getInputFieldDescription(tool.inputSchema, 'customFields')
+
+      expect(tool.description).toContain('Create a new task')
+      expect(dueDateDescription).toContain('For YouTrack, due dates are date-only and time-of-day is ignored')
+      expect(customFieldsDescription).toContain('simple string/text project fields required by YouTrack workflows')
+      expect(customFieldsDescription).toContain('not arbitrary field types')
+    })
+
+    test('ignores time-of-day for YouTrack dueDate inputs', async () => {
+      let capturedDueDate: string | undefined
+      const provider = createMockProvider({
+        name: 'youtrack',
+        createTask: mock((input: Readonly<{ dueDate?: string; title: string }>) => {
+          capturedDueDate = input.dueDate
+          return Promise.resolve({ id: 'task-1', title: input.title, status: 'todo', url: '', dueDate: '2026-03-25' })
+        }),
+      })
+
+      const tool = makeCreateTaskTool(provider, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { title: 'Test', projectId: 'p1', dueDate: { date: '2026-03-25', time: '23:45' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(capturedDueDate).toBe('2026-03-25')
+      expect(result).toHaveProperty('dueDate', '2026-03-25')
+    })
+
     test('returns dueDate converted back to user local time (UTC→local)', async () => {
       const provider = createMockProvider({
         createTask: mock(() =>
@@ -279,6 +344,57 @@ describe('Task Tools', () => {
       expect(params['priority']).toBe('high')
       // dueDate { date: '2026-12-31' } in Asia/Karachi → midnight local = 19:00 UTC previous day
       expect(params['dueDate']).toBe('2026-12-30T19:00:00.000Z')
+    })
+
+    test('preserves date-only dueDate for YouTrack update', async () => {
+      let capturedDueDate: string | undefined
+      const provider = createMockProvider({
+        name: 'youtrack',
+        updateTask: mock((_id: string, updates: Readonly<{ dueDate?: string }>) => {
+          capturedDueDate = updates.dueDate
+          return Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: '', dueDate: '2026-03-25' })
+        }),
+      })
+
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2026-03-25' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(capturedDueDate).toBe('2026-03-25')
+      expect(result).toHaveProperty('dueDate', '2026-03-25')
+    })
+
+    test('describes YouTrack update due dates as date-only', () => {
+      const provider = createMockProvider({ name: 'youtrack' })
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
+      const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
+
+      expect(tool.description).toContain('Update an existing task')
+      expect(dueDateDescription).toContain('For YouTrack, due dates are date-only and time-of-day is ignored')
+    })
+
+    test('ignores time-of-day for YouTrack update dueDate inputs', async () => {
+      let capturedDueDate: string | undefined
+      const provider = createMockProvider({
+        name: 'youtrack',
+        updateTask: mock((_id: string, updates: Readonly<{ dueDate?: string }>) => {
+          capturedDueDate = updates.dueDate
+          return Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: '', dueDate: '2026-03-25' })
+        }),
+      })
+
+      const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute(
+        { taskId: 'task-1', dueDate: { date: '2026-03-25', time: '23:45' } },
+        { toolCallId: '1', messages: [] },
+      )
+
+      expect(capturedDueDate).toBe('2026-03-25')
+      expect(result).toHaveProperty('dueDate', '2026-03-25')
     })
 
     test('propagates API errors including 404', async () => {

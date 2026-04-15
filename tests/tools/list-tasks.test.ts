@@ -3,7 +3,7 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 function hasDueDate(val: unknown): val is { dueDate: string } {
@@ -26,6 +26,26 @@ describe('list_tasks identity resolution', () => {
 
   afterAll(() => {
     mock.restore()
+  })
+
+  test('schema accepts date-only due date filters', () => {
+    const tool = makeListTasksTool(createMockProvider(), testUserId)
+
+    expect(schemaValidates(tool, { projectId: 'proj-1', dueAfter: '2026-03-25' })).toBe(true)
+    expect(schemaValidates(tool, { projectId: 'proj-1', dueBefore: '2026-03-25' })).toBe(true)
+  })
+
+  test('schema accepts provider-defined priority filter values', () => {
+    const tool = makeListTasksTool(createMockProvider(), testUserId)
+
+    expect(schemaValidates(tool, { projectId: 'proj-1', priority: 'Show-stopper' })).toBe(true)
+  })
+
+  test('schema rejects blank priority filter values', () => {
+    const tool = makeListTasksTool(createMockProvider(), testUserId)
+
+    expect(schemaValidates(tool, { projectId: 'proj-1', priority: '' })).toBe(false)
+    expect(schemaValidates(tool, { projectId: 'proj-1', priority: '   ' })).toBe(false)
   })
 
   test('should resolve "me" assigneeId to identity', async () => {
@@ -164,6 +184,42 @@ describe('list_tasks identity resolution', () => {
     expect(capturedAssigneeId).toBe('other-user')
   })
 
+  test('should normalize YouTrack due date filters to date-only', async () => {
+    let capturedParams: Record<string, unknown> | undefined
+    const listTasks = mock((_projectId: string, params?: Readonly<Record<string, unknown>>) => {
+      capturedParams = params === undefined ? undefined : { ...params }
+      return Promise.resolve([])
+    })
+
+    const provider = createMockProvider({ listTasks, name: 'youtrack' })
+    const tool = makeListTasksTool(provider, testUserId)
+
+    await getToolExecutor(tool)(
+      { projectId: 'proj-1', dueAfter: '2026-03-25T23:45:00+02:00', dueBefore: '2026-03-31' },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedParams).toEqual({ dueAfter: '2026-03-25', dueBefore: '2026-03-31' })
+  })
+
+  test('should preserve non-YouTrack due date filters', async () => {
+    let capturedParams: Record<string, unknown> | undefined
+    const listTasks = mock((_projectId: string, params?: Readonly<Record<string, unknown>>) => {
+      capturedParams = params === undefined ? undefined : { ...params }
+      return Promise.resolve([])
+    })
+
+    const provider = createMockProvider({ listTasks })
+    const tool = makeListTasksTool(provider, testUserId)
+
+    await getToolExecutor(tool)(
+      { projectId: 'proj-1', dueAfter: '2026-03-25T23:45:00+02:00', dueBefore: '2026-03-31' },
+      { toolCallId: '1', messages: [] },
+    )
+
+    expect(capturedParams).toEqual({ dueAfter: '2026-03-25T23:45:00+02:00', dueBefore: '2026-03-31' })
+  })
+
   test('should work without assigneeId filter', async () => {
     let capturedParams: { assigneeId?: string } | undefined
     const listTasks = mock((_projectId: string, params?: { assigneeId?: string }) => {
@@ -277,6 +333,34 @@ describe('list_tasks identity resolution', () => {
       if (!Array.isArray(result)) throw new Error('Expected array')
       if (!hasDueDate(result[0])) throw new Error('Expected task with dueDate')
       expect(result[0].dueDate).toContain('12:00')
+    })
+
+    test('should preserve date-only dueDate for YouTrack list results', async () => {
+      const chatUserId = 'user-123'
+      const storageContextId = 'group-456'
+      setConfig(storageContextId, 'timezone', 'Asia/Tokyo')
+
+      const listTasks = mock(() => {
+        return Promise.resolve([
+          {
+            id: 'task-1',
+            title: 'Test Task',
+            status: 'todo',
+            dueDate: '2026-03-25',
+            url: 'https://test.com/task/1',
+          },
+        ])
+      })
+
+      const provider = createMockProvider({ listTasks, name: 'youtrack' })
+      const tool = makeListTasksTool(provider, chatUserId, storageContextId)
+
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
+
+      if (!Array.isArray(result)) throw new Error('Expected array')
+      if (!hasDueDate(result[0])) throw new Error('Expected task with dueDate')
+      expect(result[0].dueDate).toBe('2026-03-25')
     })
   })
 })

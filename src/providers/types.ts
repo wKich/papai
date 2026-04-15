@@ -161,7 +161,6 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   // --- Optional: shared user lookup helpers ---
 
   listUsers?(query?: string, limit?: number): Promise<UserRef[]>
-
   getCurrentUser?(): Promise<UserRef>
 
   // --- Optional: projects.* ---
@@ -209,6 +208,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   // --- Optional: labels.* ---
 
   listLabels?(): Promise<Label[]>
+  getLabelByName?(labelName: string): Promise<Label[]>
 
   createLabel?(params: { name: string; color?: string }): Promise<Label>
 

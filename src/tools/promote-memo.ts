@@ -10,7 +10,35 @@ import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:memo' })
 
-export function makePromoteMemoTool(provider: TaskProvider, userId: string): ToolSet[string] {
+const resolveToolDueDate = (
+  dueDate: Readonly<{ date: string; time?: string }> | undefined,
+  timezone: string,
+  provider: Readonly<TaskProvider>,
+): string | undefined => {
+  if (dueDate === undefined) return undefined
+  if (provider.name === 'youtrack') {
+    return dueDate.date
+  }
+  return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+}
+
+const formatToolDueDate = (
+  dueDate: string | null | undefined,
+  timezone: string,
+  provider: Readonly<TaskProvider>,
+): string | null | undefined => {
+  if (
+    provider.name === 'youtrack' &&
+    dueDate !== undefined &&
+    dueDate !== null &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+  ) {
+    return dueDate
+  }
+  return utcToLocal(dueDate, timezone)
+}
+
+export function makePromoteMemoTool(provider: Readonly<TaskProvider>, userId: string): ToolSet[string] {
   return tool({
     description: 'Promote a personal note to a tracked task. Call list_memos or search_memos first to get the memo_id.',
     inputSchema: z.object({
@@ -20,10 +48,12 @@ export function makePromoteMemoTool(provider: TaskProvider, userId: string): Too
       dueDate: z
         .object({
           date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
-          time: z.string().optional().describe("Time in HH:MM 24-hour format (user's local time)"),
+          time: z.string().optional().describe('Time in HH:MM 24-hour format (ignored for YouTrack due dates)'),
         })
         .optional()
-        .describe("Due date in the user's local time"),
+        .describe(
+          "Due date input. For most providers, date+time is converted from the user's local time to UTC. For YouTrack, due dates are date-only and time-of-day is ignored.",
+        ),
     }),
     execute: ({ memoId, projectId, title, dueDate }) => {
       log.debug({ userId, memoId, projectId }, 'promote_memo called')
@@ -33,7 +63,7 @@ export function makePromoteMemoTool(provider: TaskProvider, userId: string): Too
 }
 
 async function promoteToTask(
-  provider: TaskProvider,
+  provider: Readonly<TaskProvider>,
   userId: string,
   memoId: string,
   projectId: string,
@@ -48,7 +78,7 @@ async function promoteToTask(
 
   const taskTitle = title ?? memo.content.slice(0, 100)
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const resolvedDueDate = dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+  const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
 
   let task: Awaited<ReturnType<typeof provider.createTask>>
   try {
@@ -79,6 +109,6 @@ async function promoteToTask(
     taskTitle: task.title,
     taskUrl: task.url,
     memoId,
-    dueDate: utcToLocal(task.dueDate, timezone),
+    dueDate: formatToolDueDate(task.dueDate, timezone, provider),
   }
 }

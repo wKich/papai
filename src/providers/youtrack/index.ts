@@ -21,6 +21,7 @@ import { createYouTrackIdentityResolver } from './identity-resolver.js'
 import {
   addYouTrackTaskLabel,
   createYouTrackLabel,
+  findYouTrackLabelsByName,
   listYouTrackLabels,
   removeYouTrackLabel,
   removeYouTrackTaskLabel,
@@ -175,6 +176,10 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
 
   listLabels(): Promise<Label[]> {
     return listYouTrackLabels(this.config)
+  }
+
+  getLabelByName(labelName: string): Promise<Label[]> {
+    return findYouTrackLabelsByName(this.config, labelName)
   }
 
   createLabel(params: { name: string; color?: string }): Promise<Label> {

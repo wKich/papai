@@ -2,6 +2,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 import { makeCreateProjectTool } from '../../src/tools/create-project.js'
 import { makeDeleteProjectTool } from '../../src/tools/delete-project.js'
+import { makeGetProjectTool } from '../../src/tools/get-project.js'
 import { makeListProjectsTool } from '../../src/tools/list-projects.js'
 import { makeUpdateProjectTool } from '../../src/tools/update-project.js'
 import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
@@ -99,6 +100,64 @@ describe('Project Tools', () => {
       } catch {
         // ignore
       }
+    })
+  })
+
+  describe('makeGetProjectTool', () => {
+    test('returns tool with correct structure', () => {
+      const provider = createMockProvider()
+      const tool = makeGetProjectTool(provider)
+      expect(tool.description).toContain('Fetch complete details of a single project')
+    })
+
+    test('gets one project by ID', async () => {
+      const provider = createMockProvider({
+        getProject: mock((projectId: string) =>
+          Promise.resolve({ id: projectId, name: 'Project 1', url: 'https://test.com/project/1' }),
+        ),
+      })
+
+      const tool = makeGetProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      const result: unknown = await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
+      if (!isProject(result)) throw new Error('Invalid result')
+
+      expect(result.id).toBe('proj-1')
+      expect(result.name).toBe('Project 1')
+    })
+
+    test('calls provider getProject with the project ID', async () => {
+      const getProject = mock((projectId: string) =>
+        Promise.resolve({ id: projectId, name: 'Project 1', url: 'https://test.com/project/1' }),
+      )
+      const provider = createMockProvider({ getProject })
+
+      const tool = makeGetProjectTool(provider)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute({ projectId: 'proj-1' }, { toolCallId: '1', messages: [] })
+
+      expect(getProject).toHaveBeenCalledWith('proj-1')
+    })
+
+    test('propagates API errors', async () => {
+      const provider = createMockProvider({
+        getProject: mock(() => Promise.reject(new Error('Project not found'))),
+      })
+
+      const tool = makeGetProjectTool(provider)
+      const promise = getToolExecutor(tool)({ projectId: 'missing-project' }, { toolCallId: '1', messages: [] })
+      await expect(promise).rejects.toThrow('Project not found')
+      try {
+        await promise
+      } catch {
+        // ignore
+      }
+    })
+
+    test('validates projectId is required', () => {
+      const provider = createMockProvider()
+      const tool = makeGetProjectTool(provider)
+      expect(schemaValidates(tool, {})).toBe(false)
     })
   })
 

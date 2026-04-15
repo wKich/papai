@@ -81,7 +81,7 @@ export type Task = {
 
 export type ListTasksParams = {
   status?: string
-  priority?: 'no-priority' | 'low' | 'medium' | 'high' | 'urgent'
+  priority?: string
   assigneeId?: string
   page?: number
   limit?: number
