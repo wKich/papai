@@ -3,7 +3,7 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 import { getConfig, setConfig } from '../../src/config.js'
 import { makeGetTaskTool } from '../../src/tools/get-task.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('get_task', () => {
   beforeEach(async () => {
@@ -26,7 +26,7 @@ describe('get_task', () => {
       })
     })
 
-    const provider = createMockProvider({ getTask, name: 'youtrack' })
+    const provider = createMockProvider({ getTask })
     const tool = makeGetTaskTool(provider, 'user-123')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -49,7 +49,7 @@ describe('get_task', () => {
       })
     })
 
-    const provider = createMockProvider({ getTask, name: 'youtrack' })
+    const provider = createMockProvider({ getTask })
     const tool = makeGetTaskTool(provider, 'user-123')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -69,7 +69,7 @@ describe('get_task', () => {
       })
     })
 
-    const provider = createMockProvider({ getTask, name: 'youtrack' })
+    const provider = createMockYouTrackProvider({ getTask })
     const tool = makeGetTaskTool(provider, 'user-123')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')

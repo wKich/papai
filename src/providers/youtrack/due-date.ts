@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { providerError } from '../../errors.js'
+import type { ListTasksParams } from '../types.js'
 import { YouTrackClassifiedError } from './classify-error.js'
 
 export const DueDateCustomFieldSchema = z.object({ name: z.string(), value: z.unknown().optional() })
@@ -40,3 +41,19 @@ export const parseDueDateValue = (dueDate: string): number => {
 
 export const mapYouTrackDueDateValue = (timestamp: number | null | undefined): string | undefined =>
   timestamp === undefined || timestamp === null ? undefined : new Date(timestamp).toISOString().slice(0, 10)
+
+export const normalizeYouTrackDueDateInput = (
+  dueDate: Readonly<{ date: string; time?: string }> | undefined,
+): string | undefined => {
+  if (dueDate === undefined) return undefined
+  return dueDate.date
+}
+
+const normalizeYouTrackDueDateFilter = (value: string | undefined): string | undefined =>
+  value === undefined ? undefined : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : value.slice(0, 10)
+
+export const normalizeYouTrackListTaskParams = (params: Readonly<ListTasksParams>): ListTasksParams => ({
+  ...params,
+  dueAfter: normalizeYouTrackDueDateFilter(params.dueAfter),
+  dueBefore: normalizeYouTrackDueDateFilter(params.dueBefore),
+})

@@ -4,7 +4,7 @@ import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 function hasDueDate(val: unknown): val is { dueDate: string } {
   return (
@@ -191,7 +191,7 @@ describe('list_tasks identity resolution', () => {
       return Promise.resolve([])
     })
 
-    const provider = createMockProvider({ listTasks, name: 'youtrack' })
+    const provider = createMockYouTrackProvider({ listTasks })
     const tool = makeListTasksTool(provider, testUserId)
 
     await getToolExecutor(tool)(
@@ -352,7 +352,7 @@ describe('list_tasks identity resolution', () => {
         ])
       })
 
-      const provider = createMockProvider({ listTasks, name: 'youtrack' })
+      const provider = createMockYouTrackProvider({ listTasks })
       const tool = makeListTasksTool(provider, chatUserId, storageContextId)
 
       if (!tool.execute) throw new Error('Tool execute is undefined')

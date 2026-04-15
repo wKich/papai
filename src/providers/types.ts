@@ -94,6 +94,9 @@ export type TaskCapability =
   | 'sprints.assign'
   | 'activities.read'
   | 'queries.saved'
+
+export type ToolDueDateInput = Readonly<{ date: string; time?: string }>
+
 /** User search result for identity resolution. */
 export type IdentityUser = { id: string; login: string; name?: string }
 
@@ -117,10 +120,9 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   /** Which user identifier this provider prefers for assignee/watcher operations. */
   readonly preferredUserIdentifier: 'id' | 'login'
 
+  // --- Core task operations (required) ---
   /** Optional identity resolver for user matching (auto-link). */
   readonly identityResolver?: UserIdentityResolver
-
-  // --- Core task operations (required) ---
 
   createTask(params: {
     projectId: string
@@ -269,4 +271,10 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   classifyError(error: unknown): AppError
   /** Provider-specific instructions to append to the LLM system prompt. */
   getPromptAddendum(): string
+  /** Normalize due date input from tool format to provider-specific format. */
+  normalizeDueDateInput(dueDate: ToolDueDateInput | undefined, timezone: string): string | undefined
+  /** Format due date output from provider format to tool/display format. */
+  formatDueDateOutput(dueDate: string | null | undefined, timezone: string): string | null | undefined
+  /** Normalize list task params (e.g., due date filters) for provider-specific handling. */
+  normalizeListTaskParams(params: Readonly<ListTasksParams>): ListTasksParams
 }

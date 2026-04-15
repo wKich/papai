@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { getIdentityMapping, clearIdentityMapping, setIdentityMapping } from '../../src/identity/mapping.js'
 import type { TaskProvider } from '../../src/providers/types.js'
 import { makeSetMyIdentityTool } from '../../src/tools/set-my-identity.js'
+import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
 import { mockLogger, setupTestDb, getToolExecutor } from '../utils/test-helpers.js'
 
 const mockProvider: TaskProvider = {
@@ -24,6 +25,11 @@ const mockProvider: TaskProvider = {
     throw e
   },
   getPromptAddendum: () => '',
+  normalizeDueDateInput: (dueDate, timezone) =>
+    dueDate === undefined ? undefined : localDatetimeToUtc(dueDate.date, dueDate.time, timezone),
+  formatDueDateOutput: (dueDate, timezone) =>
+    dueDate === undefined || dueDate === null ? dueDate : utcToLocal(dueDate, timezone),
+  normalizeListTaskParams: (params) => ({ ...params }),
   createTask(): Promise<never> {
     throw new Error('not implemented')
   },
@@ -39,7 +45,7 @@ const mockProvider: TaskProvider = {
   searchTasks(): Promise<never> {
     throw new Error('not implemented')
   },
-} as TaskProvider
+}
 
 describe('set_my_identity tool', () => {
   const testUserId = 'test-user-tool-123'
@@ -75,7 +81,7 @@ describe('set_my_identity tool', () => {
     const providerWithoutResolver = {
       ...mockProvider,
       identityResolver: undefined,
-    } as TaskProvider
+    }
 
     const tool = makeSetMyIdentityTool(providerWithoutResolver, testUserId)
     const result: unknown = await getToolExecutor(tool)({ claim: "I'm jsmith" }, { toolCallId: '1', messages: [] })
@@ -117,7 +123,7 @@ describe('set_my_identity tool', () => {
           return Promise.resolve([])
         }),
       },
-    } as TaskProvider
+    }
 
     const bobTool = makeSetMyIdentityTool(bobProvider, 'user-bob')
     await getToolExecutor(bobTool)({ claim: "I'm bobsmith" }, { toolCallId: '2', messages: [] })

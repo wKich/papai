@@ -10,7 +10,7 @@ import { makeListTasksTool } from '../../src/tools/list-tasks.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
 import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 function isTask(val: unknown): val is { id: string; title: string; status: string } {
   return (
@@ -200,8 +200,7 @@ describe('Task Tools', () => {
 
     test('preserves date-only dueDate for YouTrack provider', async () => {
       let capturedDueDate: string | undefined
-      const provider = createMockProvider({
-        name: 'youtrack',
+      const provider = createMockYouTrackProvider({
         createTask: mock((input: Readonly<{ dueDate?: string; title: string }>) => {
           capturedDueDate = input.dueDate
           return Promise.resolve({ id: 'task-1', title: input.title, status: 'todo', url: '', dueDate: '2026-03-25' })
@@ -220,7 +219,7 @@ describe('Task Tools', () => {
     })
 
     test('describes YouTrack due dates as date-only', () => {
-      const provider = createMockProvider({ name: 'youtrack' })
+      const provider = createMockYouTrackProvider()
       const tool = makeCreateTaskTool(provider, 'user-1')
       const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
       const customFieldsDescription = getInputFieldDescription(tool.inputSchema, 'customFields')
@@ -233,8 +232,7 @@ describe('Task Tools', () => {
 
     test('ignores time-of-day for YouTrack dueDate inputs', async () => {
       let capturedDueDate: string | undefined
-      const provider = createMockProvider({
-        name: 'youtrack',
+      const provider = createMockYouTrackProvider({
         createTask: mock((input: Readonly<{ dueDate?: string; title: string }>) => {
           capturedDueDate = input.dueDate
           return Promise.resolve({ id: 'task-1', title: input.title, status: 'todo', url: '', dueDate: '2026-03-25' })
@@ -348,8 +346,7 @@ describe('Task Tools', () => {
 
     test('preserves date-only dueDate for YouTrack update', async () => {
       let capturedDueDate: string | undefined
-      const provider = createMockProvider({
-        name: 'youtrack',
+      const provider = createMockYouTrackProvider({
         updateTask: mock((_id: string, updates: Readonly<{ dueDate?: string }>) => {
           capturedDueDate = updates.dueDate
           return Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: '', dueDate: '2026-03-25' })
@@ -368,7 +365,7 @@ describe('Task Tools', () => {
     })
 
     test('describes YouTrack update due dates as date-only', () => {
-      const provider = createMockProvider({ name: 'youtrack' })
+      const provider = createMockYouTrackProvider()
       const tool = makeUpdateTaskTool(provider, undefined, 'user-1')
       const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
 
@@ -378,8 +375,7 @@ describe('Task Tools', () => {
 
     test('ignores time-of-day for YouTrack update dueDate inputs', async () => {
       let capturedDueDate: string | undefined
-      const provider = createMockProvider({
-        name: 'youtrack',
+      const provider = createMockYouTrackProvider({
         updateTask: mock((_id: string, updates: Readonly<{ dueDate?: string }>) => {
           capturedDueDate = updates.dueDate
           return Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: '', dueDate: '2026-03-25' })

@@ -63,7 +63,6 @@ const FetchCallSchema = z.tuple([
   }),
 ])
 
-/** Schema for request body with custom fields */
 const RequestBodySchema = z.object({
   customFields: z.array(z.unknown()).optional(),
 })
@@ -106,14 +105,10 @@ const getFetchBodyAt = (index: number): unknown => {
   return JSON.parse(init.body) as unknown
 }
 
-/** Parse and validate request body has customFields. */
-const parseCustomFields = (obj: unknown): unknown[] => {
-  const parsed = RequestBodySchema.safeParse(obj)
-  if (!parsed.success) {
+const parseCustomFields = (value: unknown): unknown[] => {
+  const parsed = RequestBodySchema.safeParse(value)
+  if (!parsed.success || parsed.data.customFields === undefined) {
     throw new Error('Expected body to have customFields')
-  }
-  if (parsed.data.customFields === undefined) {
-    throw new Error('Expected customFields to be present')
   }
   return parsed.data.customFields
 }
@@ -278,6 +273,8 @@ describe('YouTrackProvider', () => {
             links: [],
           },
         },
+        // Fourth: enrichTaskWithDueDate fetches issue custom fields
+        { data: [] },
       ])
 
       await provider.createTask({
@@ -287,16 +284,21 @@ describe('YouTrackProvider', () => {
         status: 'In Progress',
       })
 
-      // Get the second call (issue creation)
+      // Get the third call (issue creation - first two are GET project and GET custom fields)
       const calls = fetchMock?.mock.calls ?? []
-      const lastCall = calls[calls.length - 1]
-      const parsed = FetchCallSchema.safeParse(lastCall)
+      const createCallIndex = calls.findIndex((call) => {
+        const parsed = FetchCallSchema.safeParse(call)
+        return parsed.success && parsed.data[0].includes('/api/issues')
+      })
+      expect(createCallIndex).toBeGreaterThanOrEqual(0)
+      const createCall = calls[createCallIndex]
+      const parsed = FetchCallSchema.safeParse(createCall)
       expect(parsed.success).toBe(true)
       if (!parsed.success) return
 
       const [, init] = parsed.data
-      const body = init.body === undefined ? undefined : (JSON.parse(init.body) as unknown)
-      const customFields = parseCustomFields(body)
+      const rawBody: unknown = init.body === undefined ? undefined : JSON.parse(init.body)
+      const customFields = parseCustomFields(rawBody)
       expect(customFields).toEqual([
         { name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } },
         { name: 'State', $type: 'StateIssueCustomField', value: { name: 'In Progress' } },
@@ -1003,6 +1005,45 @@ describe('YouTrackProvider', () => {
       if (result && 'message' in result) {
         expect(result.message).toContain('shared')
       }
+    })
+  })
+
+  describe('normalizeDueDateInput', () => {
+    test('returns date-only, ignores time', () => {
+      const result = provider.normalizeDueDateInput({ date: '2024-03-15', time: '14:30' }, 'America/New_York')
+      expect(result).toBe('2024-03-15')
+    })
+
+    test('returns date-only when no time', () => {
+      const result = provider.normalizeDueDateInput({ date: '2024-03-15' }, 'UTC')
+      expect(result).toBe('2024-03-15')
+    })
+
+    test('returns undefined when no dueDate', () => {
+      const result = provider.normalizeDueDateInput(undefined, 'UTC')
+      expect(result).toBeUndefined()
+    })
+  })
+
+  describe('formatDueDateOutput', () => {
+    test('preserves date-only format', () => {
+      const result = provider.formatDueDateOutput('2024-03-15', 'America/New_York')
+      expect(result).toBe('2024-03-15')
+    })
+
+    test('returns null when null', () => {
+      const result = provider.formatDueDateOutput(null, 'UTC')
+      expect(result).toBeNull()
+    })
+
+    test('returns undefined when undefined', () => {
+      const result = provider.formatDueDateOutput(undefined, 'UTC')
+      expect(result).toBeUndefined()
+    })
+
+    test('returns non-date string as-is', () => {
+      const result = provider.formatDueDateOutput('2024-03-15T18:30:00.000Z', 'UTC')
+      expect(result).toBe('2024-03-15T18:30:00.000Z')
     })
   })
 })

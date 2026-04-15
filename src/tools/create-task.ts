@@ -7,7 +7,6 @@ import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import { providerError, ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
-import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:create-task' })
 
@@ -26,34 +25,6 @@ const assertCustomFieldsSupported = (
       `Provider ${provider.name} does not support customFields in create_task`,
     ),
   )
-}
-
-const resolveToolDueDate = (
-  dueDate: Readonly<{ date: string; time?: string }> | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | undefined => {
-  if (dueDate === undefined) return undefined
-  if (provider.name === 'youtrack') {
-    return dueDate.date
-  }
-  return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
-}
-
-const formatToolDueDate = (
-  dueDate: string | null | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | null | undefined => {
-  if (
-    provider.name === 'youtrack' &&
-    dueDate !== undefined &&
-    dueDate !== null &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
-  ) {
-    return dueDate
-  }
-  return utcToLocal(dueDate, timezone)
 }
 
 interface ResolveAssigneeResult {
@@ -96,7 +67,7 @@ async function executeCreateTask(
   const { title, description, priority, projectId, dueDate, status, assignee, customFields } = params
   const configKey = storageContextId ?? userId
   const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
-  const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
+  const resolvedDueDate = provider.normalizeDueDateInput(dueDate, timezone)
   const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
   if (identityRequired !== undefined) return identityRequired
   assertCustomFieldsSupported(provider, customFields)
@@ -114,7 +85,7 @@ async function executeCreateTask(
     { taskId: task.id, title, hasCustomFields: customFields !== undefined && customFields.length > 0 },
     'Task created via tool',
   )
-  return { ...task, dueDate: formatToolDueDate(task.dueDate, timezone, provider) }
+  return { ...task, dueDate: provider.formatDueDateOutput(task.dueDate, timezone) }
 }
 
 export function makeCreateTaskTool(
@@ -149,7 +120,7 @@ export function makeCreateTaskTool(
         .array(z.object({ name: z.string(), value: z.string() }))
         .optional()
         .describe(
-          'For YouTrack, use this only for project fields that are simple string/text values. Use dedicated fields for status, priority, assignee, and due date.',
+          'For YouTrack, use this only for simple string/text project fields required by YouTrack workflows, not arbitrary field types. Use dedicated fields for status, priority, assignee, and due date.',
         ),
     }),
     execute: async (params) => {

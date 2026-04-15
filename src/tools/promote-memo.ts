@@ -6,37 +6,8 @@ import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { getMemo, addMemoLink, archiveMemos } from '../memos.js'
 import type { TaskProvider } from '../providers/types.js'
-import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:memo' })
-
-const resolveToolDueDate = (
-  dueDate: Readonly<{ date: string; time?: string }> | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | undefined => {
-  if (dueDate === undefined) return undefined
-  if (provider.name === 'youtrack') {
-    return dueDate.date
-  }
-  return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
-}
-
-const formatToolDueDate = (
-  dueDate: string | null | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | null | undefined => {
-  if (
-    provider.name === 'youtrack' &&
-    dueDate !== undefined &&
-    dueDate !== null &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
-  ) {
-    return dueDate
-  }
-  return utcToLocal(dueDate, timezone)
-}
 
 export function makePromoteMemoTool(provider: Readonly<TaskProvider>, userId: string): ToolSet[string] {
   return tool({
@@ -78,7 +49,7 @@ async function promoteToTask(
 
   const taskTitle = title ?? memo.content.slice(0, 100)
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-  const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
+  const resolvedDueDate = provider.normalizeDueDateInput(dueDate, timezone)
 
   let task: Awaited<ReturnType<typeof provider.createTask>>
   try {
@@ -109,6 +80,6 @@ async function promoteToTask(
     taskTitle: task.title,
     taskUrl: task.url,
     memoId,
-    dueDate: formatToolDueDate(task.dueDate, timezone, provider),
+    dueDate: provider.formatDueDateOutput(task.dueDate, timezone),
   }
 }

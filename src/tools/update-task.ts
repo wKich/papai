@@ -7,38 +7,9 @@ import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
 import { providerError, ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
-import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import type { CompletionHookFn } from './completion-hook.js'
 
 const log = logger.child({ scope: 'tool:update-task' })
-
-const resolveToolDueDate = (
-  dueDate: Readonly<{ date: string; time?: string }> | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | undefined => {
-  if (dueDate === undefined) return undefined
-  if (provider.name === 'youtrack') {
-    return dueDate.date
-  }
-  return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
-}
-
-const formatToolDueDate = (
-  dueDate: string | null | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | null | undefined => {
-  if (
-    provider.name === 'youtrack' &&
-    dueDate !== undefined &&
-    dueDate !== null &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
-  ) {
-    return dueDate
-  }
-  return utcToLocal(dueDate, timezone)
-}
 
 interface ResolveAssigneeResult {
   assignee?: string
@@ -124,7 +95,7 @@ export function makeUpdateTaskTool(
     execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId, customFields }) => {
       try {
         const timezone = getTimezone(storageContextId, userId)
-        const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
+        const resolvedDueDate = provider.normalizeDueDateInput(dueDate, timezone)
 
         const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
         if (identityRequired !== undefined) {
@@ -149,7 +120,7 @@ export function makeUpdateTaskTool(
           await completionHook(taskId, task.status, provider)
         }
 
-        return { ...task, dueDate: formatToolDueDate(task.dueDate, timezone, provider) }
+        return { ...task, dueDate: provider.formatDueDateOutput(task.dueDate, timezone) }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'update_task' },

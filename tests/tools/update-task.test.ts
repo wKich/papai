@@ -4,7 +4,7 @@ import { getConfig, setConfig } from '../../src/config.js'
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeUpdateTaskTool } from '../../src/tools/update-task.js'
 import { mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('update_task identity resolution', () => {
   beforeEach(async () => {
@@ -230,7 +230,7 @@ describe('update_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ updateTask, name: 'youtrack' })
+    const provider = createMockYouTrackProvider({ updateTask })
     const tool = makeUpdateTaskTool(provider)
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -269,7 +269,7 @@ describe('update_task identity resolution', () => {
       return Promise.resolve({ id: 'TEST-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' })
     })
 
-    const tool = makeUpdateTaskTool(createMockProvider({ updateTask, name: 'youtrack', supportsCustomFields: true }))
+    const tool = makeUpdateTaskTool(createMockYouTrackProvider({ updateTask, supportsCustomFields: true }))
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute(
       {

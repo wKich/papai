@@ -1,6 +1,7 @@
 import { mock } from 'bun:test'
 
-import type { TaskCapability, TaskProvider } from '../../src/providers/types.js'
+import type { ListTasksParams, TaskCapability, TaskProvider, ToolDueDateInput } from '../../src/providers/types.js'
+import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
 
 const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   // Tasks
@@ -54,6 +55,39 @@ const ALL_CAPABILITIES: ReadonlySet<TaskCapability> = new Set<TaskCapability>([
   'activities.read',
   'queries.saved',
 ])
+
+const normalizeMockDueDateInput = (dueDate: ToolDueDateInput | undefined, timezone: string): string | undefined => {
+  if (dueDate === undefined) return undefined
+  return localDatetimeToUtc(dueDate.date, dueDate.time, timezone)
+}
+
+const formatMockDueDateOutput = (dueDate: string | null | undefined, timezone: string): string | null | undefined =>
+  dueDate === undefined || dueDate === null ? dueDate : utcToLocal(dueDate, timezone)
+
+const normalizeMockListTaskParams = (params: Readonly<ListTasksParams>): ListTasksParams => ({ ...params })
+
+const normalizeYouTrackMockDueDateInput = (dueDate: ToolDueDateInput | undefined): string | undefined => dueDate?.date
+
+const formatYouTrackMockDueDateOutput = (dueDate: string | null | undefined): string | null | undefined => {
+  if (dueDate === undefined || dueDate === null) return dueDate
+  return /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : dueDate
+}
+
+const normalizeYouTrackMockListTaskParams = (params: Readonly<ListTasksParams>): ListTasksParams => ({
+  ...params,
+  dueAfter:
+    params.dueAfter === undefined
+      ? undefined
+      : /^\d{4}-\d{2}-\d{2}$/.test(params.dueAfter)
+        ? params.dueAfter
+        : params.dueAfter.slice(0, 10),
+  dueBefore:
+    params.dueBefore === undefined
+      ? undefined
+      : /^\d{4}-\d{2}-\d{2}$/.test(params.dueBefore)
+        ? params.dueBefore
+        : params.dueBefore.slice(0, 10),
+})
 
 /** Create a mock TaskProvider with all methods stubbed. Override specific methods as needed. */
 export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskProvider {
@@ -176,6 +210,22 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
       originalError: new Error('test'),
     })),
     getPromptAddendum: mock(() => ''),
+    normalizeDueDateInput: normalizeMockDueDateInput,
+    formatDueDateOutput: formatMockDueDateOutput,
+    normalizeListTaskParams: normalizeMockListTaskParams,
     ...overrides,
   }
+}
+
+export function createMockYouTrackProvider(overrides: Partial<TaskProvider> = {}): TaskProvider {
+  return createMockProvider({
+    name: 'youtrack',
+    preferredUserIdentifier: 'login',
+    normalizeDueDateInput: (_dueDate: ToolDueDateInput | undefined, _timezone: string): string | undefined =>
+      normalizeYouTrackMockDueDateInput(_dueDate),
+    formatDueDateOutput: (dueDate: string | null | undefined, _timezone: string): string | null | undefined =>
+      formatYouTrackMockDueDateOutput(dueDate),
+    normalizeListTaskParams: normalizeYouTrackMockListTaskParams,
+    ...overrides,
+  })
 }

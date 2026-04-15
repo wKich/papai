@@ -105,4 +105,47 @@ describe('KaneoProvider', () => {
       await provider.reorderStatuses('proj-1', [{ id: 'col-1', position: 0 }])
     })
   })
+
+  describe('normalizeDueDateInput', () => {
+    test('converts date+time to UTC', () => {
+      const result = provider.normalizeDueDateInput({ date: '2024-03-15', time: '14:30' }, 'America/New_York')
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+      expect(result).toContain('Z')
+    })
+
+    test('converts date-only to UTC with midnight', () => {
+      const result = provider.normalizeDueDateInput({ date: '2024-03-15' }, 'UTC')
+      expect(result).toMatch(/^2024-03-15/)
+    })
+
+    test('returns undefined when no dueDate', () => {
+      const result = provider.normalizeDueDateInput(undefined, 'UTC')
+      expect(result).toBeUndefined()
+    })
+  })
+
+  describe('formatDueDateOutput', () => {
+    test('converts UTC to local timezone', () => {
+      const result = provider.formatDueDateOutput('2024-03-15T18:30:00.000Z', 'America/New_York')
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+    })
+
+    test('returns null when null', () => {
+      const result = provider.formatDueDateOutput(null, 'UTC')
+      expect(result).toBeNull()
+    })
+
+    test('returns undefined when undefined', () => {
+      const result = provider.formatDueDateOutput(undefined, 'UTC')
+      expect(result).toBeUndefined()
+    })
+  })
+
+  describe('normalizeListTaskParams', () => {
+    test('returns params unchanged', () => {
+      const params = { assigneeId: 'user-1', limit: 10 }
+      const result = provider.normalizeListTaskParams(params)
+      expect(result).toEqual(params)
+    })
+  })
 })

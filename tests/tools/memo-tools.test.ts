@@ -11,7 +11,7 @@ import { makePromoteMemoTool } from '../../src/tools/promote-memo.js'
 import { makeSaveMemoTool } from '../../src/tools/save-memo.js'
 import { makeSearchMemosTool } from '../../src/tools/search-memos.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 beforeEach(() => {
   mockLogger()
@@ -185,8 +185,7 @@ describe('promote_memo tool', () => {
   test('uses date-only dueDate semantics for YouTrack', async () => {
     const memo = saveMemo('user1', 'promote with date', [])
     let capturedDueDate: string | undefined
-    const provider = createMockProvider({
-      name: 'youtrack',
+    const provider = createMockYouTrackProvider({
       createTask: mock((params: Readonly<{ dueDate?: string; title: string }>) => {
         capturedDueDate = params.dueDate
         return Promise.resolve({
@@ -237,7 +236,7 @@ describe('promote_memo tool', () => {
   })
 
   test('describes YouTrack promote due dates as date-only', () => {
-    const provider = createMockProvider({ name: 'youtrack' })
+    const provider = createMockYouTrackProvider()
     const tool = makePromoteMemoTool(provider, 'user1')
     const dueDateDescription = getInputFieldDescription(tool.inputSchema, 'dueDate')
 

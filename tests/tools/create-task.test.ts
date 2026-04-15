@@ -5,7 +5,7 @@ import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/map
 import { resolveMeReference } from '../../src/identity/resolver.js'
 import { makeCreateTaskTool } from '../../src/tools/create-task.js'
 import { mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
-import { createMockProvider } from './mock-provider.js'
+import { createMockProvider, createMockYouTrackProvider } from './mock-provider.js'
 
 describe('create_task identity resolution', () => {
   beforeEach(async () => {
@@ -162,7 +162,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask, name: 'youtrack', supportsCustomFields: true })
+    const provider = createMockYouTrackProvider({ createTask, supportsCustomFields: true })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -387,7 +387,7 @@ describe('create_task identity resolution', () => {
       })
     })
 
-    const provider = createMockProvider({ createTask, name: 'youtrack' })
+    const provider = createMockYouTrackProvider({ createTask })
     const tool = makeCreateTaskTool(provider, 'test-user-456')
 
     if (!tool.execute) throw new Error('Tool execute is undefined')

@@ -5,25 +5,8 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
 import type { TaskProvider } from '../providers/types.js'
-import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:get-task' })
-
-const formatToolDueDate = (
-  dueDate: string | null | undefined,
-  timezone: string,
-  provider: Readonly<TaskProvider>,
-): string | null | undefined => {
-  if (
-    provider.name === 'youtrack' &&
-    dueDate !== undefined &&
-    dueDate !== null &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
-  ) {
-    return dueDate
-  }
-  return utcToLocal(dueDate, timezone)
-}
 
 export function makeGetTaskTool(
   provider: Readonly<TaskProvider>,
@@ -42,7 +25,7 @@ export function makeGetTaskTool(
         // Falls back to userId for backwards compatibility, then UTC
         const configKey = storageContextId ?? userId
         const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
-        return { ...task, dueDate: formatToolDueDate(task.dueDate, timezone, provider) }
+        return { ...task, dueDate: provider.formatDueDateOutput(task.dueDate, timezone) }
       } catch (error) {
         log.error(
           { error: error instanceof Error ? error.message : String(error), taskId, tool: 'get_task' },
