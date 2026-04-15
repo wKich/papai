@@ -34,6 +34,19 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stop.mjs",
+            "timeout": 300,
+            "statusMessage": "Running full check..."
+          }
+        ]
+      }
     ]
   }
 }
