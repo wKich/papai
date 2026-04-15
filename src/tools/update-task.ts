@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { resolveMeReference } from '../identity/resolver.js'
 import { logger } from '../logger.js'
+import { providerError, ProviderClassifiedError } from '../providers/errors.js'
 import type { TaskProvider } from '../providers/types.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import type { CompletionHookFn } from './completion-hook.js'
@@ -42,6 +43,28 @@ const formatToolDueDate = (
 interface ResolveAssigneeResult {
   assignee?: string
   identityRequired?: { status: 'identity_required'; message: string }
+}
+
+const assertCustomFieldsSupported = (
+  provider: Readonly<TaskProvider>,
+  customFields: ReadonlyArray<{ name: string; value: string }> | undefined,
+): void => {
+  if (customFields === undefined || customFields.length === 0 || provider.name === 'youtrack') {
+    return
+  }
+
+  throw new ProviderClassifiedError(
+    'customFields are only supported for update_task with YouTrack',
+    providerError.validationFailed(
+      'customFields',
+      `Provider ${provider.name} does not support customFields in update_task`,
+    ),
+  )
+}
+
+const getTimezone = (storageContextId: string | undefined, userId: string | undefined): string => {
+  const configKey = storageContextId ?? userId
+  return configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
 }
 
 async function resolveAssignee(
@@ -100,16 +123,15 @@ export function makeUpdateTaskTool(
     inputSchema,
     execute: async ({ taskId, title, description, status, priority, dueDate, assignee, projectId, customFields }) => {
       try {
-        // NI2 Fix: Use storageContextId for config lookup (per-user config stored there)
-        // Falls back to userId for backwards compatibility, then UTC
-        const configKey = storageContextId ?? userId
-        const timezone = configKey === undefined ? 'UTC' : (getConfig(configKey, 'timezone') ?? 'UTC')
+        const timezone = getTimezone(storageContextId, userId)
         const resolvedDueDate = resolveToolDueDate(dueDate, timezone, provider)
 
         const { assignee: resolvedAssignee, identityRequired } = await resolveAssignee(assignee, userId, provider)
         if (identityRequired !== undefined) {
           return identityRequired
         }
+
+        assertCustomFieldsSupported(provider, customFields)
 
         const task = await provider.updateTask(taskId, {
           title,

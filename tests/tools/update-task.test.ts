@@ -269,7 +269,7 @@ describe('update_task identity resolution', () => {
       return Promise.resolve({ id: 'TEST-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' })
     })
 
-    const tool = makeUpdateTaskTool(createMockProvider({ updateTask }))
+    const tool = makeUpdateTaskTool(createMockProvider({ updateTask, name: 'youtrack' }))
     if (!tool.execute) throw new Error('Tool execute is undefined')
     await tool.execute(
       {
@@ -286,6 +286,36 @@ describe('update_task identity resolution', () => {
       { name: 'Environment', value: 'staging' },
       { name: 'Steps', value: 'Click login' },
     ])
+  })
+
+  test('update_task rejects customFields for providers that do not support them', async () => {
+    const updateTask = mock(() =>
+      Promise.resolve({ id: 'task-1', title: 'Test Task', status: 'todo', url: 'https://test.com/task/1' }),
+    )
+    const provider = createMockProvider({
+      updateTask,
+      name: 'kaneo',
+    })
+    const tool = makeUpdateTaskTool(provider)
+
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await expect(
+      tool.execute(
+        {
+          taskId: 'task-1',
+          customFields: [{ name: 'Environment', value: 'staging' }],
+        },
+        { toolCallId: '1', messages: [] },
+      ),
+    ).rejects.toMatchObject({
+      error: {
+        code: 'validation-failed',
+        field: 'customFields',
+      },
+    })
+
+    expect(updateTask).not.toHaveBeenCalled()
   })
 
   test('update_task input schema rejects blank priority values', () => {

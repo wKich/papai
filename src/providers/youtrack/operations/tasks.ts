@@ -34,6 +34,33 @@ type CreateTaskParams = {
 const fallbackDueDate = (dueDate: string | undefined): string | undefined =>
   dueDate === undefined ? undefined : dueDate.slice(0, 10)
 
+const fetchIssueProjectId = async (config: Readonly<YouTrackConfig>, taskId: string): Promise<string> => {
+  const issueRaw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
+    query: { fields: 'project(id)' },
+  })
+  const issueProject = z.object({ project: z.object({ id: z.string() }) }).parse(issueRaw)
+  return issueProject.project.id
+}
+
+const buildUpdateCustomFields = async (
+  config: Readonly<YouTrackConfig>,
+  taskId: string,
+  params: Readonly<{
+    status?: string
+    priority?: string
+    dueDate?: string
+    assignee?: string
+    projectId?: string
+    customFields?: Array<{ name: string; value: string }>
+  }>,
+): Promise<
+  Array<ReturnType<typeof buildCustomFields>[number] | Awaited<ReturnType<typeof buildWriteSafeCustomFields>>[number]>
+> => {
+  const projectId = params.projectId ?? (await fetchIssueProjectId(config, taskId))
+  const projectCustomFields = await buildWriteSafeCustomFields(config, projectId, params.customFields)
+  return [...buildCustomFields(params), ...projectCustomFields]
+}
+
 export async function createYouTrackTask(config: YouTrackConfig, params: CreateTaskParams): Promise<Task> {
   log.debug(
     {
@@ -120,12 +147,7 @@ export async function updateYouTrackTask(
     if (params.projectId !== undefined) body['project'] = { id: params.projectId }
 
     if (params.customFields !== undefined && params.customFields.length > 0) {
-      const issueRaw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}`, {
-        query: { fields: 'project(id)' },
-      })
-      const issueProject = z.object({ project: z.object({ id: z.string() }) }).parse(issueRaw)
-      const projectCustomFields = await buildWriteSafeCustomFields(config, issueProject.project.id, params.customFields)
-      const customFields = [...buildCustomFields(params), ...projectCustomFields]
+      const customFields = await buildUpdateCustomFields(config, taskId, params)
       if (customFields.length > 0) body['customFields'] = customFields
     } else {
       const customFields = buildCustomFields(params)

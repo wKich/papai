@@ -1328,6 +1328,51 @@ describe('updateYouTrackTask', () => {
     })
   })
 
+  test('validates custom fields against the destination project when moving an issue', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: 'pcf-2',
+                $type: 'SimpleProjectCustomField',
+                field: { name: 'Environment', fieldType: { id: 'string', presentation: 'string' } },
+                canBeEmpty: true,
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify(makeIssueResponse({ project: { id: '0-2', shortName: 'DEST' } })), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    await updateYouTrackTask(config, 'TEST-1', {
+      projectId: '0-2',
+      customFields: [{ name: 'Environment', value: 'staging' }],
+    })
+
+    const customFieldsUrl = getFetchUrlAt(0)
+    expect(customFieldsUrl.pathname).toBe('/api/admin/projects/0-2/customFields')
+
+    const updateBody = getFetchBodyAt(1)
+    expect(updateBody['project']).toEqual({ id: '0-2' })
+    expect(updateBody['customFields']).toContainEqual({
+      name: 'Environment',
+      $type: 'SimpleIssueCustomField',
+      value: 'staging',
+    })
+  })
+
   test('returns dueDate after update using follow-up custom fields fetch', async () => {
     let callCount = 0
     installFetchMock(() => {
