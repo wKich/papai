@@ -17,6 +17,8 @@ import {
 import type { IncomingMessage, ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
+type EditMessageCall = [text: string, options?: { reply_markup?: unknown }]
+
 function isIncomingMessage(value: unknown): value is IncomingMessage {
   return (
     typeof value === 'object' &&
@@ -188,6 +190,56 @@ describe('TelegramChatProvider', () => {
       )
 
       expect(captured).toEqual(['123'])
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('dispatchCallbackQuery reply exposes replacement methods for interaction menus', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const dispatchCallbackQuery: unknown = Reflect.get(provider, 'dispatchCallbackQuery')
+      const editCalls: EditMessageCall[] = []
+
+      expect(dispatchCallbackQuery).toBeInstanceOf(Function)
+      if (!(dispatchCallbackQuery instanceof Function)) {
+        throw new Error('dispatchCallbackQuery not available')
+      }
+
+      Reflect.set(provider, 'checkAdminStatus', (): Promise<boolean> => Promise.resolve(false))
+      provider.onInteraction(async (_interaction, reply) => {
+        expect(typeof reply.replaceText).toBe('function')
+        expect(typeof reply.replaceButtons).toBe('function')
+
+        await reply.replaceText?.('Updated menu')
+        await reply.replaceButtons?.('Choose next', {
+          buttons: [
+            { text: 'One', callbackData: 'one' },
+            { text: 'Two', callbackData: 'two' },
+          ],
+        })
+      })
+
+      await Promise.resolve(
+        dispatchCallbackQuery.call(provider, {
+          from: { id: 42, username: 'alice' },
+          chat: { id: 99, type: 'supergroup' },
+          callbackQuery: {
+            data: 'cfg:edit:timezone',
+            message: { message_id: 321, message_thread_id: 123 },
+          },
+          answerCallbackQuery: (): Promise<void> => Promise.resolve(),
+          editMessageText: (text: string, options?: { reply_markup?: unknown }): Promise<void> => {
+            editCalls.push([text, options])
+            return Promise.resolve()
+          },
+        }),
+      )
+
+      expect(editCalls).toHaveLength(2)
+      expect(editCalls[0]?.[0]).toBe('Updated menu')
+      expect(editCalls[1]?.[0]).toBe('Choose next')
+      expect(editCalls[0]?.[1]?.reply_markup).toBeDefined()
+      expect(editCalls[1]?.[1]?.reply_markup).toBeDefined()
+
       delete process.env['TELEGRAM_BOT_TOKEN']
     })
   })

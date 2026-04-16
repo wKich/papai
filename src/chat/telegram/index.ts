@@ -34,6 +34,8 @@ import {
   sendButtonReply,
   sendFileReply,
   sendFormattedReply,
+  sendReplacementButtonReply,
+  sendReplacementTextReply,
   sendTextReply,
 } from './reply-helpers.js'
 export { extractReplyContext } from './message-extraction.js'
@@ -214,6 +216,7 @@ export class TelegramChatProvider implements ChatProvider {
 
     return {
       text: (content: string, options?: ReplyOptions) => sendTextReply(ctx, content, buildReplyParams, options),
+      replaceText: (content: string) => sendReplacementTextReply(ctx, content),
       formatted: (markdown: string, options?: ReplyOptions) =>
         sendFormattedReply(ctx, markdown, buildReplyParams, options),
       file: (file, options?: ReplyOptions) => sendFileReply(ctx, file, buildReplyParams, options),
@@ -229,6 +232,7 @@ export class TelegramChatProvider implements ChatProvider {
         }
       },
       buttons: (content: string, options) => sendButtonReply(ctx, content, buildReplyParams, options),
+      replaceButtons: (content: string, options) => sendReplacementButtonReply(ctx, content, options),
     }
   }
 
