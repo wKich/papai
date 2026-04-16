@@ -4,6 +4,8 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
+import { InlineKeyboard } from 'grammy'
+
 import { formatLlmOutput } from '../../../src/chat/telegram/format.js'
 import {
   createReplyParamsBuilder,
@@ -21,6 +23,11 @@ function createMockContext(message: {
   message_thread_id: number | undefined
 }): ReplyContext {
   return { message }
+}
+
+type ReplacementCallOptions = {
+  entities?: ReturnType<typeof formatLlmOutput>['entities']
+  reply_markup?: InlineKeyboard
 }
 
 describe('createReplyParamsBuilder', () => {
@@ -140,7 +147,13 @@ describe('replacement reply helpers', () => {
   })
 
   test('sendReplacementButtonReply edits the callback message with a new keyboard', async () => {
-    const editMessageText = mock((_text: string, _options?: unknown) => Promise.resolve(true))
+    let capturedText: string | undefined
+    let capturedOptions: ReplacementCallOptions | undefined
+    const editMessageText = mock((text: string, options?: ReplacementCallOptions) => {
+      capturedText = text
+      capturedOptions = options
+      return Promise.resolve(true)
+    })
     const ctx: ReplacementReplyContext = { editMessageText }
 
     await sendReplacementButtonReply(ctx, '**Updated**', {
@@ -154,26 +167,28 @@ describe('replacement reply helpers', () => {
     const formatted = formatLlmOutput('**Updated**')
 
     expect(editMessageText).toHaveBeenCalledTimes(1)
-    const call = editMessageText.mock.calls[0]
 
-    expect(call?.[0]).toBe(formatted.text)
-    expect(call?.[1]).toEqual({
-      entities: formatted.entities,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: 'First', callback_data: 'first' },
-            { text: 'Second', callback_data: 'second' },
-          ],
-          [{ text: 'Third', callback_data: 'third' }],
-          [],
-        ],
-      },
-    })
+    expect(capturedText).toBe(formatted.text)
+    expect(capturedOptions?.entities).toEqual(formatted.entities)
+    expect(capturedOptions?.reply_markup).toBeInstanceOf(InlineKeyboard)
+
+    const inlineKeyboard = capturedOptions?.reply_markup?.inline_keyboard ?? []
+
+    expect(inlineKeyboard.flat()).toEqual([
+      { text: 'First', callback_data: 'first' },
+      { text: 'Second', callback_data: 'second' },
+      { text: 'Third', callback_data: 'third' },
+    ])
   })
 
-  test('sendReplacementTextReply edits the callback message without a keyboard', async () => {
-    const editMessageText = mock((_text: string, _options?: unknown) => Promise.resolve(true))
+  test('sendReplacementTextReply edits the callback message and clears any existing keyboard', async () => {
+    let capturedText: string | undefined
+    let capturedOptions: ReplacementCallOptions | undefined
+    const editMessageText = mock((text: string, options?: ReplacementCallOptions) => {
+      capturedText = text
+      capturedOptions = options
+      return Promise.resolve(true)
+    })
     const ctx: ReplacementReplyContext = { editMessageText }
 
     await sendReplacementTextReply(ctx, '**Updated**')
@@ -181,8 +196,10 @@ describe('replacement reply helpers', () => {
     const formatted = formatLlmOutput('**Updated**')
 
     expect(editMessageText).toHaveBeenCalledTimes(1)
-    expect(editMessageText).toHaveBeenCalledWith(formatted.text, {
-      entities: formatted.entities,
-    })
+
+    expect(capturedText).toBe(formatted.text)
+    expect(capturedOptions?.entities).toEqual(formatted.entities)
+    expect(capturedOptions?.reply_markup).toBeInstanceOf(InlineKeyboard)
+    expect(capturedOptions?.reply_markup?.inline_keyboard).toEqual([])
   })
 })

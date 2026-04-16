@@ -99,6 +99,7 @@ export async function sendReplacementTextReply(ctx: ReplacementReplyContext, con
   const formatted = formatLlmOutput(content)
   await ctx.editMessageText(formatted.text, {
     entities: formatted.entities,
+    reply_markup: new InlineKeyboard([]),
   })
 }
 
