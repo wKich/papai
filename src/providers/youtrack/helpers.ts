@@ -87,8 +87,9 @@ export function paginate<T>(
   schema: z.ZodType<T[]>,
   maxPages = 10,
   pageSize = 100,
+  initialSkip = 0,
 ): Promise<T[]> {
-  return paginatePage(config, path, query, schema, maxPages, pageSize, 0, [])
+  return paginatePage(config, path, query, schema, maxPages, pageSize, initialSkip, [])
 }
 
 async function paginatePage<T>(

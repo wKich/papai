@@ -53,7 +53,7 @@ export async function listYouTrackWorkItems(
 ): Promise<WorkItem[]> {
   log.debug({ taskId, params }, 'listWorkItems')
   try {
-    if (params?.limit !== undefined || params?.offset !== undefined) {
+    if (params?.limit !== undefined) {
       const query: Record<string, string> = { fields: WORK_ITEM_FIELDS }
       if (params.limit !== undefined) query['$top'] = String(params.limit)
       if (params.offset !== undefined) query['$skip'] = String(params.offset)
@@ -69,6 +69,9 @@ export async function listYouTrackWorkItems(
       `/api/issues/${taskId}/timeTracking/workItems`,
       { fields: WORK_ITEM_FIELDS },
       YouTrackWorkItemSchema.array(),
+      undefined,
+      undefined,
+      params?.offset ?? 0,
     )
     log.info({ taskId, count: items.length }, 'Work items listed')
     return items.map((wi) => mapWorkItem(wi, taskId))

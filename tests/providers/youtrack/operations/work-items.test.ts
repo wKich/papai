@@ -140,6 +140,65 @@ describe('listYouTrackWorkItems', () => {
     expect(url.searchParams.get('$skip')).toBe('30')
   })
 
+  test('uses paginated fetching for offset-only requests so results are not silently truncated', async () => {
+    installFetchMock((url: string) => {
+      const parsedUrl = new URL(url)
+      const skip = parsedUrl.searchParams.get('$skip')
+      const top = parsedUrl.searchParams.get('$top')
+
+      if (skip === '30' && top === '100') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${31 + index}` }))),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        )
+      }
+
+      if (skip === '130' && top === '100') {
+        return Promise.resolve(
+          new Response(JSON.stringify([makeWorkItemResponse({ id: '8-131' })]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const result = await listYouTrackWorkItems(config, 'PROJ-42', { offset: 30 })
+
+    expect(result).toHaveLength(101)
+    expect(result[0]).toEqual({
+      id: '8-31',
+      taskId: 'PROJ-42',
+      author: 'alice',
+      date: '2023-11-14',
+      duration: 'PT1H30M',
+      description: 'Worked on feature',
+      type: 'Development',
+    })
+    expect(result[100]?.id).toBe('8-131')
+    expect(fetchMock.mock.calls).toHaveLength(2)
+
+    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[0])[0])
+    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[1])[0])
+
+    expect(firstUrl.searchParams.get('$skip')).toBe('30')
+    expect(firstUrl.searchParams.get('$top')).toBe('100')
+    expect(secondUrl.searchParams.get('$skip')).toBe('130')
+    expect(secondUrl.searchParams.get('$top')).toBe('100')
+  })
+
   test('throws classified error on 404', async () => {
     mockFetchError(404)
     await expect(listYouTrackWorkItems(config, 'PROJ-99')).rejects.toBeInstanceOf(YouTrackClassifiedError)
