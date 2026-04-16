@@ -82,6 +82,29 @@ describe('dispatchGroupSelectorResult', () => {
     expect(reply.text).not.toHaveBeenCalled()
   })
 
+  test('calls reply.replaceButtons when available for a result with buttons', async () => {
+    const buttons = [{ text: 'Option A', callbackData: 'opt:a' }]
+    const replaceButtons = mock(() => Promise.resolve())
+    const result: GroupSettingsSelectorResult = {
+      handled: true,
+      response: 'Choose:',
+      buttons,
+    }
+    const reply = {
+      ...makeReply(),
+      replaceButtons,
+    } as ReplyFn & {
+      replaceButtons: typeof replaceButtons
+    }
+
+    const handled = await dispatchGroupSelectorResult(result, reply, 'user-1')
+
+    expect(handled).toBe(true)
+    expect(replaceButtons).toHaveBeenCalledWith('Choose:', { buttons })
+    expect(reply.buttons).not.toHaveBeenCalled()
+    expect(reply.text).not.toHaveBeenCalled()
+  })
+
   test('calls reply.text for a plain response result and returns true', async () => {
     const result: GroupSettingsSelectorResult = {
       handled: true,

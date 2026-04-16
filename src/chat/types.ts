@@ -215,11 +215,13 @@ export type ContextRendered =
 /** Reply function injected into handlers — the only way to send messages back to the user. */
 export type ReplyFn = {
   text: (content: string, options?: ReplyOptions) => Promise<void>
+  replaceText?: (content: string, options?: ReplyOptions) => Promise<void>
   formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
   file?: (file: ChatFile, options?: ReplyOptions) => Promise<void>
   typing: () => void
   redactMessage?: (replacementText: string) => Promise<void>
   buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
+  replaceButtons?: (content: string, options: ButtonReplyOptions) => Promise<void>
   /** Optional: send a structured embed. Only Discord implements this today. */
   embed?: (options: EmbedOptions) => Promise<void>
 }
