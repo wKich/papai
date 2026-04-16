@@ -13,6 +13,14 @@ export type ReplyContext = {
   message?: { message_id?: number; message_thread_id?: number }
 }
 
+/** Subset of Context properties that replacement reply helpers use */
+export type ReplacementReplyContext = {
+  editMessageText: (
+    text: string,
+    other?: { entities?: ReturnType<typeof formatLlmOutput>['entities']; reply_markup?: InlineKeyboard },
+  ) => Promise<unknown>
+}
+
 export function createReplyParamsBuilder(ctx: ReplyContext, threadId?: string): ReplyParamsBuilder {
   const messageId = ctx.message?.message_id
   const contextThreadId = ctx.message?.message_thread_id
@@ -78,6 +86,35 @@ export async function sendButtonReply(
   buildReplyParams: ReplyParamsBuilder,
   options: ButtonReplyOptions,
 ): Promise<void> {
+  const keyboard = buildInlineKeyboard(options)
+  const formatted = formatLlmOutput(content)
+  await ctx.reply(formatted.text, {
+    entities: formatted.entities,
+    reply_markup: keyboard,
+    reply_parameters: buildReplyParams(options),
+  })
+}
+
+export async function sendReplacementTextReply(ctx: ReplacementReplyContext, content: string): Promise<void> {
+  const formatted = formatLlmOutput(content)
+  await ctx.editMessageText(formatted.text, {
+    entities: formatted.entities,
+  })
+}
+
+export async function sendReplacementButtonReply(
+  ctx: ReplacementReplyContext,
+  content: string,
+  options: ButtonReplyOptions,
+): Promise<void> {
+  const formatted = formatLlmOutput(content)
+  await ctx.editMessageText(formatted.text, {
+    entities: formatted.entities,
+    reply_markup: buildInlineKeyboard(options),
+  })
+}
+
+function buildInlineKeyboard(options: ButtonReplyOptions): InlineKeyboard {
   const keyboard = new InlineKeyboard()
   if (options.buttons !== undefined) {
     for (let i = 0; i < options.buttons.length; i += 2) {
@@ -92,10 +129,5 @@ export async function sendButtonReply(
       keyboard.row()
     }
   }
-  const formatted = formatLlmOutput(content)
-  await ctx.reply(formatted.text, {
-    entities: formatted.entities,
-    reply_markup: keyboard,
-    reply_parameters: buildReplyParams(options),
-  })
+  return keyboard
 }

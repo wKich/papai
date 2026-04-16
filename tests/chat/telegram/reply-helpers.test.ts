@@ -2,13 +2,16 @@
  * Tests for Telegram reply helpers
  */
 
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { formatLlmOutput } from '../../../src/chat/telegram/format.js'
 import {
   createReplyParamsBuilder,
+  type ReplacementReplyContext,
   type ReplyContext,
   type ReplyParamsBuilder,
+  sendReplacementButtonReply,
+  sendReplacementTextReply,
 } from '../../../src/chat/telegram/reply-helpers.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
@@ -128,5 +131,58 @@ describe('sendButtonReply content formatting', () => {
     const result = formatLlmOutput('Plain text message')
     expect(result.text).toBe('Plain text message')
     expect(result.entities).toHaveLength(0)
+  })
+})
+
+describe('replacement reply helpers', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
+  test('sendReplacementButtonReply edits the callback message with a new keyboard', async () => {
+    const editMessageText = mock((_text: string, _options?: unknown) => Promise.resolve(true))
+    const ctx: ReplacementReplyContext = { editMessageText }
+
+    await sendReplacementButtonReply(ctx, '**Updated**', {
+      buttons: [
+        { text: 'First', callbackData: 'first' },
+        { text: 'Second', callbackData: 'second' },
+        { text: 'Third', callbackData: 'third' },
+      ],
+    })
+
+    const formatted = formatLlmOutput('**Updated**')
+
+    expect(editMessageText).toHaveBeenCalledTimes(1)
+    const call = editMessageText.mock.calls[0]
+
+    expect(call?.[0]).toBe(formatted.text)
+    expect(call?.[1]).toEqual({
+      entities: formatted.entities,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: 'First', callback_data: 'first' },
+            { text: 'Second', callback_data: 'second' },
+          ],
+          [{ text: 'Third', callback_data: 'third' }],
+          [],
+        ],
+      },
+    })
+  })
+
+  test('sendReplacementTextReply edits the callback message without a keyboard', async () => {
+    const editMessageText = mock((_text: string, _options?: unknown) => Promise.resolve(true))
+    const ctx: ReplacementReplyContext = { editMessageText }
+
+    await sendReplacementTextReply(ctx, '**Updated**')
+
+    const formatted = formatLlmOutput('**Updated**')
+
+    expect(editMessageText).toHaveBeenCalledTimes(1)
+    expect(editMessageText).toHaveBeenCalledWith(formatted.text, {
+      entities: formatted.entities,
+    })
   })
 })
