@@ -35,7 +35,8 @@
     "duplicates": "bun run scripts/detect-duplicates.ts",
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
-    "changelog:generate": "git-cliff -o CHANGELOG.md"
+    "changelog:generate": "git-cliff -o CHANGELOG.md",
+    "audit:behavior": "bun scripts/behavior-audit.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.41",
