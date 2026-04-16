@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] - 2026-04-16
+
+### Added
+
+- **chat:** Add reply replacement methods
+- **interactions:** Replace selector menus in place
+- **interactions:** Replace config and wizard menus in place
+- **telegram:** Add menu replacement reply helpers
+- **telegram:** Expose interaction menu replacement replies
+- **discord:** Add interaction menu replacement replies
+- **discord:** Wire menu replacement to clicked interaction message
+- **youtrack:** Add comment pagination controls
+- **bot:** Record group observations for command handlers; archive completed plans as ADRs
+- **youtrack:** Add work-item pagination controls
+- **youtrack:** Add search pagination controls
+- **behavior-audit:** Add two-phase AI agent script for UX evaluation
+
+### Documentation
+
+- **plans:** Archive completed work and add planning notes
+
+### Fixed
+
+- **telegram:** Clear buttons on text menu replacement
+- **telegram:** Limit menu replacement to callback replies
+- **discord:** Gate menu replacement on editable messages
+- **youtrack:** Handle offset-only comment pagination
+- **youtrack:** Handle offset-only work-item pagination
+- **youtrack:** Preserve high-offset pagination
+- **search:** Honor offset across providers
+- **search:** Apply offset after kaneo assignee filtering
+- **youtrack:** Finalize remaining parity gaps
+
+### Testing
+
+- **chat:** Specify reply replacement semantics
+- **discord:** Cover replacement fallback behavior
+- **interactions:** Verify menu replacement flows
 ## [5.0.0] - 2026-04-15
 
 ### Added
