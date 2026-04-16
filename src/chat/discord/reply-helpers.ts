@@ -23,6 +23,7 @@ export type SendableChannel = {
 export type CreateDiscordReplyFnParams = {
   channel: SendableChannel
   replyToMessageId: string | undefined
+  replaceMessage?: BotMessage
 }
 
 type MessageRef = { messageReference: string; failIfNotExists: boolean } | undefined
@@ -31,6 +32,8 @@ type BotMessage = {
   id: string
   edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
 }
+
+type EditPayload = { content?: string; components?: unknown[] }
 
 function buildReply(replyToMessageId: string | undefined, options?: ReplyOptions): MessageRef {
   const target = options?.replyToMessageId ?? replyToMessageId
@@ -77,40 +80,94 @@ function createEmbedPayload(options: EmbedOptions): Record<string, unknown> {
   return embed
 }
 
+async function sendTextReply(
+  channel: SendableChannel,
+  sentMessages: BotMessage[],
+  replyToMessageId: string | undefined,
+  content: string,
+  options?: ReplyOptions,
+): Promise<void> {
+  const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
+  const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+  sentMessages.push(...messages)
+}
+
+async function sendFormattedReply(
+  channel: SendableChannel,
+  sentMessages: BotMessage[],
+  replyToMessageId: string | undefined,
+  markdown: string,
+  options?: ReplyOptions,
+): Promise<void> {
+  const chunks = formatLlmOutput(markdown)
+  const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
+  sentMessages.push(...messages)
+}
+
+async function sendButtonsReply(
+  channel: SendableChannel,
+  sentMessages: BotMessage[],
+  replyToMessageId: string | undefined,
+  content: string,
+  options: ButtonReplyOptions,
+): Promise<void> {
+  const rows = options.buttons === undefined ? [] : toActionRows(options.buttons)
+  const sent = await channel.send({ content, components: rows, reply: buildReply(replyToMessageId, options) })
+  sentMessages.push(sent)
+}
+
+async function replaceOrSend(
+  replaceMessage: BotMessage | undefined,
+  payload: EditPayload,
+  fallback: () => Promise<void>,
+): Promise<void> {
+  if (replaceMessage === undefined) {
+    await fallback()
+    return
+  }
+
+  await replaceMessage.edit(payload)
+}
+
+async function redactMessages(channelId: string, sentMessages: BotMessage[], replacementText: string): Promise<void> {
+  if (sentMessages.length === 0) return
+
+  const results = await Promise.allSettled(
+    sentMessages.map((msg) => msg.edit({ content: replacementText, components: [] })),
+  )
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (failures.length > 0) {
+    log.warn({ channelId, failureCount: failures.length }, 'Failed to redact some Discord messages')
+  }
+}
+
 export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyFn {
-  const { channel, replyToMessageId } = params
+  const { channel, replyToMessageId, replaceMessage } = params
   const sentMessages: BotMessage[] = []
 
   return {
-    text: async (content: string, options?: ReplyOptions): Promise<void> => {
-      const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
-      const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
-      sentMessages.push(...messages)
-    },
-    formatted: async (markdown: string, options?: ReplyOptions): Promise<void> => {
-      const chunks = formatLlmOutput(markdown)
-      const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
-      sentMessages.push(...messages)
-    },
+    text: (content: string, options?: ReplyOptions): Promise<void> =>
+      sendTextReply(channel, sentMessages, replyToMessageId, content, options),
+    replaceText: (content: string, options?: ReplyOptions): Promise<void> =>
+      replaceOrSend(replaceMessage, { content, components: [] }, () =>
+        sendTextReply(channel, sentMessages, replyToMessageId, content, options),
+      ),
+    formatted: (markdown: string, options?: ReplyOptions): Promise<void> =>
+      sendFormattedReply(channel, sentMessages, replyToMessageId, markdown, options),
 
     typing: (): void => {
       channel.sendTyping().catch(() => undefined)
     },
-    redactMessage: async (replacementText: string): Promise<void> => {
-      if (sentMessages.length === 0) return
-      const results = await Promise.allSettled(
-        sentMessages.map((msg) => msg.edit({ content: replacementText, components: [] })),
-      )
-      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      if (failures.length > 0) {
-        log.warn({ channelId: channel.id, failureCount: failures.length }, 'Failed to redact some Discord messages')
-      }
-    },
-    buttons: async (content: string, options: ButtonReplyOptions): Promise<void> => {
-      const rows = options.buttons === undefined ? [] : toActionRows(options.buttons)
-      const sent = await channel.send({ content, components: rows, reply: buildReply(replyToMessageId, options) })
-      sentMessages.push(sent)
-    },
+    redactMessage: (replacementText: string): Promise<void> =>
+      redactMessages(channel.id, sentMessages, replacementText),
+    buttons: (content: string, options: ButtonReplyOptions): Promise<void> =>
+      sendButtonsReply(channel, sentMessages, replyToMessageId, content, options),
+    replaceButtons: (content: string, options: ButtonReplyOptions): Promise<void> =>
+      replaceOrSend(
+        replaceMessage,
+        { content, components: options.buttons === undefined ? [] : toActionRows(options.buttons) },
+        () => sendButtonsReply(channel, sentMessages, replyToMessageId, content, options),
+      ),
     embed: async (options: EmbedOptions): Promise<void> => {
       const embed = createEmbedPayload(options)
       const sent = await channel.send({ embeds: [embed], reply: buildReply(replyToMessageId, undefined) })

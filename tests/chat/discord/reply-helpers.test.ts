@@ -10,6 +10,11 @@ type SendArg = {
   embeds?: unknown[]
 }
 
+type EditArg = {
+  content?: string
+  components?: unknown[]
+}
+
 describe('createDiscordReplyFn', () => {
   beforeEach(() => {
     mockLogger()
@@ -133,6 +138,52 @@ describe('createDiscordReplyFn', () => {
     expect(sends[0]!.content).toBe('choose')
     expect(Array.isArray(sends[0]!.components)).toBe(true)
     expect((sends[0]!.components ?? []).length).toBe(1)
+  })
+
+  test('replaceButtons() edits the interaction-origin message instead of sending a new one', async () => {
+    const { channel, sends } = makeChannel()
+    const edits: EditArg[] = []
+    const replaceMessage = {
+      id: 'interaction-msg-1',
+      edit: (arg: EditArg): Promise<void> => {
+        edits.push(arg)
+        return Promise.resolve()
+      },
+    }
+
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined, replaceMessage })
+
+    await reply.replaceButtons!('Choose again', {
+      buttons: [
+        { text: 'Retry', callbackData: 'cb:retry', style: 'primary' },
+        { text: 'Cancel', callbackData: 'cb:cancel', style: 'secondary' },
+      ],
+    })
+
+    expect(sends).toHaveLength(0)
+    expect(edits).toHaveLength(1)
+    expect(edits[0]!.content).toBe('Choose again')
+    expect(Array.isArray(edits[0]!.components)).toBe(true)
+    expect((edits[0]!.components ?? []).length).toBe(1)
+  })
+
+  test('replaceText() clears components on the interaction-origin message', async () => {
+    const { channel, sends } = makeChannel()
+    const edits: EditArg[] = []
+    const replaceMessage = {
+      id: 'interaction-msg-1',
+      edit: (arg: EditArg): Promise<void> => {
+        edits.push(arg)
+        return Promise.resolve()
+      },
+    }
+
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined, replaceMessage })
+
+    await reply.replaceText!('Done')
+
+    expect(sends).toHaveLength(0)
+    expect(edits).toEqual([{ content: 'Done', components: [] }])
   })
 
   test('embed() sends an embed via channel.send', async () => {
