@@ -43,8 +43,20 @@ export function buildInteraction(
 
   if (incomingInteraction === null) return null
 
-  const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+  const reply = createDiscordReplyFn({
+    channel,
+    replyToMessageId: undefined,
+    replaceMessage: supportsEditableMessage(interaction.message) ? interaction.message : undefined,
+  })
   return { incoming: incomingInteraction, channel, reply }
+}
+
+function supportsEditableMessage(
+  message: ButtonInteractionLike['message'],
+): message is ButtonInteractionLike['message'] & {
+  edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
+} {
+  return typeof message.edit === 'function'
 }
 
 export function createFallbackMessage(
@@ -129,7 +141,11 @@ export async function routeButtonFallback(
   // Use user's platform admin status if true, otherwise check if user is bot admin
   const isPlatformAdmin = interaction.user.isAdmin === true || interaction.user.id === adminUserId
   const mapped = createFallbackMessage(interaction, contextId, contextType, isPlatformAdmin)
-  const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+  const reply = createDiscordReplyFn({
+    channel,
+    replyToMessageId: undefined,
+    replaceMessage: supportsEditableMessage(interaction.message) ? interaction.message : undefined,
+  })
 
   const trimmed = mapped.text.trim()
   if (!trimmed.startsWith('/')) {

@@ -24,7 +24,12 @@ export type ButtonInteractionLike = {
   customId: string
   channelId: string
   channel: ButtonChannelLike | null
-  message: { id: string; channelId?: string; threadId?: string }
+  message: {
+    id: string
+    channelId?: string
+    threadId?: string
+    edit?: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
+  }
   deferUpdate(): Promise<void>
 }
 
