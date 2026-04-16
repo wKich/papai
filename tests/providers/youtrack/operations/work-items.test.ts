@@ -199,6 +199,59 @@ describe('listYouTrackWorkItems', () => {
     expect(secondUrl.searchParams.get('$top')).toBe('100')
   })
 
+  test('uses paginated fetching for high offset-only requests without skipping the first page', async () => {
+    installFetchMock((url: string) => {
+      const parsedUrl = new URL(url)
+      const skip = parsedUrl.searchParams.get('$skip')
+      const top = parsedUrl.searchParams.get('$top')
+
+      if (skip === '1000' && top === '100') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${1001 + index}` })),
+            ),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        )
+      }
+
+      if (skip === '1100' && top === '100') {
+        return Promise.resolve(
+          new Response(JSON.stringify([makeWorkItemResponse({ id: '8-1101' })]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const result = await listYouTrackWorkItems(config, 'PROJ-42', { offset: 1000 })
+
+    expect(result).toHaveLength(101)
+    expect(result[0]?.id).toBe('8-1001')
+    expect(result[100]?.id).toBe('8-1101')
+    expect(fetchMock.mock.calls).toHaveLength(2)
+
+    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[0])[0])
+    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[1])[0])
+
+    expect(firstUrl.searchParams.get('$skip')).toBe('1000')
+    expect(firstUrl.searchParams.get('$top')).toBe('100')
+    expect(secondUrl.searchParams.get('$skip')).toBe('1100')
+    expect(secondUrl.searchParams.get('$top')).toBe('100')
+  })
+
   test('throws classified error on 404', async () => {
     mockFetchError(404)
     await expect(listYouTrackWorkItems(config, 'PROJ-99')).rejects.toBeInstanceOf(YouTrackClassifiedError)

@@ -89,7 +89,7 @@ export function paginate<T>(
   pageSize = 100,
   initialSkip = 0,
 ): Promise<T[]> {
-  return paginatePage(config, path, query, schema, maxPages, pageSize, initialSkip, [])
+  return paginatePage(config, path, query, schema, maxPages, pageSize, initialSkip, initialSkip, [])
 }
 
 async function paginatePage<T>(
@@ -99,10 +99,11 @@ async function paginatePage<T>(
   schema: z.ZodType<T[]>,
   maxPages: number,
   pageSize: number,
+  initialSkip: number,
   skip: number,
   accumulated: T[],
 ): Promise<T[]> {
-  if (skip >= maxPages * pageSize) return accumulated
+  if (skip - initialSkip >= maxPages * pageSize) return accumulated
 
   const pageQuery: Record<string, YouTrackQueryValue> = {
     ...query,
@@ -115,7 +116,7 @@ async function paginatePage<T>(
   const all = [...accumulated, ...items]
 
   if (items.length < pageSize) return all
-  return paginatePage(config, path, query, schema, maxPages, pageSize, skip + pageSize, all)
+  return paginatePage(config, path, query, schema, maxPages, pageSize, initialSkip, skip + pageSize, all)
 }
 
 // --- Work item type resolution ---
