@@ -116,4 +116,25 @@ describe('dispatchGroupSelectorResult', () => {
     expect(reply.text).toHaveBeenCalledWith('Done.')
     expect(reply.buttons).not.toHaveBeenCalled()
   })
+
+  test('calls reply.replaceText when available for a plain response result', async () => {
+    const replaceText = mock(() => Promise.resolve())
+    const result: GroupSettingsSelectorResult = {
+      handled: true,
+      response: 'Done.',
+    }
+    const reply = {
+      ...makeReply(),
+      replaceText,
+    } as ReplyFn & {
+      replaceText: typeof replaceText
+    }
+
+    const handled = await dispatchGroupSelectorResult(result, reply, 'user-1')
+
+    expect(handled).toBe(true)
+    expect(replaceText).toHaveBeenCalledWith('Done.')
+    expect(reply.text).not.toHaveBeenCalled()
+    expect(reply.buttons).not.toHaveBeenCalled()
+  })
 })
