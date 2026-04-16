@@ -2,7 +2,7 @@ import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test'
 
 import { setIdentityMapping, clearIdentityMapping } from '../../src/identity/mapping.js'
 import { makeSearchTasksTool } from '../../src/tools/search-tasks.js'
-import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, schemaValidates, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 describe('search_tasks', () => {
@@ -14,6 +14,29 @@ describe('search_tasks', () => {
 
   afterAll(() => {
     mock.restore()
+  })
+
+  test('accepts offset and limit for paginated search results', () => {
+    const tool = makeSearchTasksTool(createMockProvider(), 'test-search-identity')
+
+    expect(schemaValidates(tool, { query: 'tasks', limit: 25, offset: 50 })).toBe(true)
+    expect(schemaValidates(tool, { query: 'tasks', offset: -1 })).toBe(false)
+  })
+
+  test('passes offset and limit to provider.searchTasks', async () => {
+    const searchTasks = mock(() => Promise.resolve([]))
+    const provider = createMockProvider({ searchTasks })
+    const tool = makeSearchTasksTool(provider, 'test-search-identity')
+
+    await getToolExecutor(tool)({ query: 'tasks', limit: 25, offset: 50 }, { toolCallId: '1', messages: [] })
+
+    expect(searchTasks).toHaveBeenCalledWith({
+      query: 'tasks',
+      projectId: undefined,
+      assigneeId: undefined,
+      limit: 25,
+      offset: 50,
+    })
   })
 
   describe('identity resolution via assigneeId', () => {

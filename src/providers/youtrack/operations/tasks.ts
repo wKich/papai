@@ -237,9 +237,12 @@ export async function listYouTrackTasks(
 
 export async function searchYouTrackTasks(
   config: YouTrackConfig,
-  params: { query: string; projectId?: string; assigneeId?: string; limit?: number },
+  params: { query: string; projectId?: string; assigneeId?: string; limit?: number; offset?: number },
 ): Promise<TaskSearchResult[]> {
-  log.debug({ query: params.query, projectId: params.projectId, assigneeId: params.assigneeId }, 'searchTasks')
+  log.debug(
+    { query: params.query, projectId: params.projectId, assigneeId: params.assigneeId, offset: params.offset },
+    'searchTasks',
+  )
   try {
     let query = params.query
     if (params.projectId !== undefined) {
@@ -259,6 +262,7 @@ export async function searchYouTrackTasks(
         fields: ISSUE_LIST_FIELDS,
         query,
         $top: String(params.limit ?? 50),
+        ...(params.offset === undefined ? {} : { $skip: String(params.offset) }),
         customFields: YOUTRACK_INLINE_LIST_CUSTOM_FIELDS,
       },
     })

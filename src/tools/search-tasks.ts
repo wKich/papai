@@ -15,9 +15,10 @@ export function makeSearchTasksTool(provider: TaskProvider, userId?: string): To
       query: z.string().describe('Search keyword or phrase'),
       projectId: z.string().optional().describe('Filter by project ID'),
       assigneeId: z.string().optional().describe('Filter by assignee user ID, or "me" to filter by your own tasks'),
-      limit: z.number().optional().describe('Maximum number of results to return'),
+      limit: z.number().int().positive().optional().describe('Maximum number of results to return'),
+      offset: z.number().int().min(0).optional().describe('Number of matching tasks to skip before returning results'),
     }),
-    execute: async ({ query, projectId, assigneeId, limit }) => {
+    execute: async ({ query, projectId, assigneeId, limit, offset }) => {
       try {
         let resolvedAssigneeId = assigneeId
 
@@ -31,7 +32,7 @@ export function makeSearchTasksTool(provider: TaskProvider, userId?: string): To
           }
         }
 
-        const tasks = await provider.searchTasks({ query, projectId, assigneeId: resolvedAssigneeId, limit })
+        const tasks = await provider.searchTasks({ query, projectId, assigneeId: resolvedAssigneeId, limit, offset })
         log.info({ query, assigneeId: resolvedAssigneeId, resultCount: tasks.length }, 'Tasks searched via tool')
         return tasks
       } catch (error) {

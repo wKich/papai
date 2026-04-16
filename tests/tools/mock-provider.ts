@@ -107,7 +107,10 @@ export function createMockProvider(overrides: Partial<TaskProvider> = {}): TaskP
       Promise.resolve({ id: 'task-1', title: 'Test', status: 'todo', url: 'https://test.com/task/1' }),
     ),
     listTasks: mock(() => Promise.resolve([])),
-    searchTasks: mock(() => Promise.resolve([])),
+    searchTasks: mock(
+      (_params: { query: string; projectId?: string; assigneeId?: string; limit?: number; offset?: number }) =>
+        Promise.resolve([]),
+    ),
     deleteTask: mock(() => Promise.resolve({ id: 'task-1' })),
     listUsers: mock(() => Promise.resolve([{ id: 'user-1', login: 'alice', name: 'Alice Smith' }])),
     getCurrentUser: mock(() => Promise.resolve({ id: 'user-1', login: 'alice', name: 'Alice Smith' })),

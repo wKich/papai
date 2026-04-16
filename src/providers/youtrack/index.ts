@@ -127,6 +127,7 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
     projectId?: string
     assigneeId?: string
     limit?: number
+    offset?: number
   }): Promise<TaskSearchResult[]> {
     return searchYouTrackTasks(this.config, params)
   }

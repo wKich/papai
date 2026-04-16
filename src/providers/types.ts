@@ -158,6 +158,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
     projectId?: string
     assigneeId?: string
     limit?: number
+    offset?: number
   }): Promise<TaskSearchResult[]>
 
   deleteTask?(taskId: string): Promise<{ id: string }>

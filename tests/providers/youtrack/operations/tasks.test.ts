@@ -2339,6 +2339,17 @@ describe('searchYouTrackTasks', () => {
     expect(url.searchParams.get('$top')).toBe('10')
   })
 
+  test('passes $top and $skip when search pagination params are provided', async () => {
+    mockFetchResponse([])
+
+    await searchYouTrackTasks(config, { query: 'bug', limit: 25, offset: 50 })
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/issues')
+    expect(url.searchParams.get('$top')).toBe('25')
+    expect(url.searchParams.get('$skip')).toBe('50')
+  })
+
   test('defaults to limit 50', async () => {
     mockFetchResponse([])
 
