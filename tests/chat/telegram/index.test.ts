@@ -30,6 +30,10 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
   )
 }
 
+function isReplyFn(value: unknown): value is ReplyFn {
+  return typeof value === 'object' && value !== null && 'text' in value && 'buttons' in value && 'formatted' in value
+}
+
 // Mock the auth module to provide getThreadScopedStorageContextId
 void mock.module('../../../src/auth.js', () => ({
   getThreadScopedStorageContextId: (
@@ -125,6 +129,35 @@ describe('TelegramChatProvider', () => {
       provider.onMessage(async () => {
         // Handler
       })
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('message reply does not expose replacement methods', () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const buildReplyFn: unknown = Reflect.get(provider, 'buildReplyFn')
+
+      expect(buildReplyFn).toBeInstanceOf(Function)
+      if (!(buildReplyFn instanceof Function)) {
+        throw new Error('buildReplyFn not available')
+      }
+
+      const reply: unknown = buildReplyFn.call(provider, {
+        chat: { id: 99, type: 'supergroup' },
+        message: { message_id: 321, message_thread_id: 123 },
+        replyWithChatAction: (): Promise<void> => Promise.resolve(),
+        reply: (): Promise<void> => Promise.resolve(),
+        replyWithDocument: (): Promise<void> => Promise.resolve(),
+      })
+
+      expect(isReplyFn(reply)).toBe(true)
+      if (!isReplyFn(reply)) {
+        throw new Error('Expected buildReplyFn to return a ReplyFn')
+      }
+
+      expect(reply.replaceText).toBeUndefined()
+      expect(reply.replaceButtons).toBeUndefined()
 
       delete process.env['TELEGRAM_BOT_TOKEN']
     })

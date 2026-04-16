@@ -209,14 +209,14 @@ export class TelegramChatProvider implements ChatProvider {
     }
   }
 
-  private buildReplyFn(ctx: Context, threadId?: string): ReplyFn {
+  private buildReplyFn(ctx: Context, threadId?: string, allowReplacement = false): ReplyFn {
     const chatId = ctx.chat?.id
     const messageId = ctx.message?.message_id
     const buildReplyParams = createReplyParamsBuilder(ctx, threadId)
 
     return {
       text: (content: string, options?: ReplyOptions) => sendTextReply(ctx, content, buildReplyParams, options),
-      replaceText: (content: string) => sendReplacementTextReply(ctx, content),
+      ...(allowReplacement ? { replaceText: (content: string) => sendReplacementTextReply(ctx, content) } : {}),
       formatted: (markdown: string, options?: ReplyOptions) =>
         sendFormattedReply(ctx, markdown, buildReplyParams, options),
       file: (file, options?: ReplyOptions) => sendFileReply(ctx, file, buildReplyParams, options),
@@ -232,7 +232,9 @@ export class TelegramChatProvider implements ChatProvider {
         }
       },
       buttons: (content: string, options) => sendButtonReply(ctx, content, buildReplyParams, options),
-      replaceButtons: (content: string, options) => sendReplacementButtonReply(ctx, content, options),
+      ...(allowReplacement
+        ? { replaceButtons: (content: string, options) => sendReplacementButtonReply(ctx, content, options) }
+        : {}),
     }
   }
 
@@ -251,7 +253,7 @@ export class TelegramChatProvider implements ChatProvider {
     await ctx.answerCallbackQuery()
     const interaction = buildTelegramInteraction(ctx, await this.checkAdminStatus(ctx))
     if (interaction === null) return
-    const reply = this.buildReplyFn(ctx, interaction.threadId)
+    const reply = this.buildReplyFn(ctx, interaction.threadId, true)
     if (this.interactionHandler === undefined) {
       log.warn({ callbackData: ctx.callbackQuery?.data }, 'No interaction handler registered')
       return
