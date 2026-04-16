@@ -23,7 +23,7 @@ const config: YouTrackConfig = {
   token: 'test-token',
 }
 
-const installFetchMock = (handler: () => Promise<Response>): void => {
+const installFetchMock = (handler: (url: string, init: RequestInit) => Promise<Response>): void => {
   const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = m
   setMockFetch((url: string, init: RequestInit) => m(url, init))
@@ -231,6 +231,67 @@ describe('listYouTrackProjects', () => {
     const url = getLastFetchUrl()
     expect(url.pathname).toBe('/api/admin/projects')
     expect(url.searchParams.get('$top')).toBe('100')
+    expect(url.searchParams.get('$skip')).toBe('0')
+  })
+
+  test('fetches multiple pages when the first page reaches the pagination limit', async () => {
+    let callCount = 0
+    installFetchMock(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              Array.from({ length: 100 }, (_, index) =>
+                makeProjectResponse({ id: `proj-${index}`, shortName: `P${index}` }),
+              ),
+            ),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([makeProjectResponse({ id: 'proj-last', shortName: 'LAST' })]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const projects = await listYouTrackProjects(config)
+
+    expect(projects).toHaveLength(101)
+    expect(fetchMock.mock.calls).toHaveLength(2)
+  })
+
+  test('requests project pages with $top and $skip pagination params', async () => {
+    let callCount = 0
+    let firstRequestUrl: URL | undefined
+
+    installFetchMock((url: string) => {
+      callCount++
+      const parsedUrl = new URL(url)
+      if (callCount === 1) {
+        firstRequestUrl = parsedUrl
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    await listYouTrackProjects(config)
+
+    expect(firstRequestUrl).toBeDefined()
+    if (firstRequestUrl === undefined) {
+      throw new Error('Expected first project-list request URL')
+    }
+    expect(firstRequestUrl.searchParams.get('$top')).toBe('100')
+    expect(firstRequestUrl.searchParams.get('$skip')).toBe('0')
   })
 
   test('throws classified error on failure', async () => {

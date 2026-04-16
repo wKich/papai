@@ -4,6 +4,7 @@ import { classifyYouTrackError } from '../classify-error.js'
 import type { YouTrackConfig } from '../client.js'
 import { youtrackFetch } from '../client.js'
 import { PROJECT_FIELDS } from '../constants.js'
+import { paginate } from '../helpers.js'
 import { ProjectSchema } from '../schemas/project.js'
 
 const log = logger.child({ scope: 'provider:youtrack:projects' })
@@ -57,10 +58,14 @@ export async function getYouTrackProject(config: YouTrackConfig, projectId: stri
 export async function listYouTrackProjects(config: YouTrackConfig): Promise<Project[]> {
   log.debug('listProjects')
   try {
-    const raw = await youtrackFetch(config, 'GET', '/api/admin/projects', {
-      query: { fields: PROJECT_FIELDS, $top: '100' },
-    })
-    const projects = ProjectSchema.array().parse(raw)
+    const projects = await paginate(
+      config,
+      '/api/admin/projects',
+      { fields: PROJECT_FIELDS },
+      ProjectSchema.array(),
+      10,
+      100,
+    )
     log.info({ count: projects.length }, 'Projects listed')
     return projects
       .filter((p) => p.archived !== true)

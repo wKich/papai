@@ -289,9 +289,8 @@
 
 **Checklist:**
 
-- [ ] Confirm this is worth the extra tool surface rather than relying on `get_task`.
-- [ ] If yes, implement as a thin wrapper over `provider.getTask()` returning only `id` and `title`.
-- [ ] If no, document that `get_task` already subsumes the MCP endpoint.
+- [x] Confirmed `get_task` already subsumes the MCP summary-only endpoint for current papai usage. No separate `get_task_summary` tool will be added in this pass because it adds tool-surface area without reducing provider complexity or unlocking missing YouTrack functionality.
+- [x] Verified the current single-task read path remains covered by `tests/tools/get-task.test.ts`, `tests/tools/tools-builder.test.ts`, and `tests/providers/youtrack/tools-integration.test.ts`.
 
 ### 10. Promote provider-only YouTrack features into intentional tools
 

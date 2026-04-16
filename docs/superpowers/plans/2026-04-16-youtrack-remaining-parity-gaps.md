@@ -4,7 +4,7 @@
 
 **Goal:** Close the remaining YouTrack parity gaps by adding pagination controls to the highest-volume read tools, making the summary-only task lookup decision explicit, and removing the last provider-side hard cap on project listing.
 
-**Architecture:** Extend the shared provider contract only where the exposed tool surface truly needs it, using optional pagination params that preserve current callers. Reuse existing YouTrack `$top`/`$skip` behavior and avoid introducing a redundant summary tool unless the contract win is clear and documented.
+**Architecture:** Extend the shared provider contract only where the exposed tool surface truly needs it, using optional pagination params that preserve current callers. Reuse existing YouTrack `$top`/`$skip` behavior, but keep `offset`-only reads from silently truncating by continuing bounded pagination from the requested offset when no explicit limit is supplied. Avoid introducing a redundant summary tool unless the contract win is clear and documented.
 
 **Tech Stack:** Bun, TypeScript, Zod v4, Vercel AI SDK tools, Bun test runner, YouTrack REST API
 
@@ -15,12 +15,12 @@
 **Provider files to modify**
 
 - `src/providers/types.ts`: add minimal optional pagination params for comments and work items; optionally add a summary-specific method only if the summary tool is approved.
-- `src/providers/youtrack/operations/comments.ts`: thread `limit` and `offset` into comment reads using `$top` and `$skip`.
-- `src/providers/youtrack/operations/work-items.ts`: thread `limit` and `offset` into work-item reads using `$top` and `$skip`.
+- `src/providers/youtrack/operations/comments.ts`: thread `limit` and `offset` into comment reads using `$top` and `$skip`, while keeping `offset`-only requests from falling back to YouTrack's server-default page size.
+- `src/providers/youtrack/operations/work-items.ts`: thread `limit` and `offset` into work-item reads using `$top` and `$skip`, while keeping `offset`-only requests from falling back to YouTrack's server-default page size.
 - `src/providers/youtrack/operations/tasks.ts`: extend search pagination beyond the current `limit`-only contract if the chosen tool contract needs offset/page behavior.
 - `src/providers/youtrack/operations/projects.ts`: replace the fixed `$top=100` project listing cap with paginated collection fetching.
 - `src/providers/youtrack/index.ts`: wire new optional provider params through the concrete provider methods.
-- `src/providers/youtrack/helpers.ts`: reuse existing `paginate()` helper; do not add a second pagination mechanism unless required for a provider-specific edge case.
+- `src/providers/youtrack/helpers.ts`: reuse existing `paginate()` helper; extending it with an initial offset is acceptable when that avoids duplicating bounded pagination logic for offset-only reads.
 
 **Tool files to modify**
 
@@ -37,8 +37,8 @@
 - `tests/tools/comment-tools.test.ts`: add schema and execution coverage for paginated `get_comments`.
 - `tests/tools/work-item-tools.test.ts`: add schema and execution coverage for paginated `list_work`.
 - `tests/tools/search-tasks.test.ts`: add schema and execution coverage for the chosen search pagination contract.
-- `tests/providers/youtrack/operations/comments.test.ts`: assert `$top` and `$skip` query propagation while preserving current defaults.
-- `tests/providers/youtrack/operations/work-items.test.ts`: assert `$top` and `$skip` query propagation while preserving current defaults.
+- `tests/providers/youtrack/operations/comments.test.ts`: assert `$top` and `$skip` query propagation, plus safe `offset`-only behavior that does not silently truncate results.
+- `tests/providers/youtrack/operations/work-items.test.ts`: assert `$top` and `$skip` query propagation, plus safe `offset`-only behavior that does not silently truncate results.
 - `tests/providers/youtrack/operations/tasks.test.ts`: assert the chosen search pagination query parameters.
 - `tests/providers/youtrack/operations/projects.test.ts`: replace the current `$top=100` assumption with paginated project fetch expectations.
 - `tests/tools/tools-builder.test.ts`: add or update expectations only if a summary-only tool is approved.
@@ -89,7 +89,7 @@ test('passes limit and offset to provider.getComments', async () => {
 })
 ```
 
-- [ ] **Step 3: Write the failing provider test for paginated comment requests**
+- [ ] **Step 3: Write the failing provider tests for explicit and offset-only comment pagination**
 
 Add this test to `tests/providers/youtrack/operations/comments.test.ts` inside `describe('getYouTrackComments', ...)`:
 
@@ -106,6 +106,48 @@ test('passes $top and $skip when pagination params are provided', async () => {
 })
 ```
 
+Add this second test to cover the `offset`-only edge case:
+
+```typescript
+test('continues bounded pagination from the requested offset when only offset is provided', async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) =>
+    makeCommentResponse({ id: `comment-${index + 41}`, text: `Comment ${index + 41}` }),
+  )
+  const secondPage = [makeCommentResponse({ id: 'comment-141', text: 'Comment 141' })]
+
+  installFetchMock((url) => {
+    const requestUrl = new URL(url)
+    const skip = requestUrl.searchParams.get('$skip')
+
+    if (skip === '40') {
+      return Promise.resolve(
+        new Response(JSON.stringify(firstPage), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    }
+
+    if (skip === '140') {
+      return Promise.resolve(
+        new Response(JSON.stringify(secondPage), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    }
+
+    return Promise.resolve(
+      new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+  })
+
+  const comments = await getYouTrackComments(config, 'TEST-1', { offset: 40 })
+
+  expect(comments).toHaveLength(101)
+  const firstUrl = getFetchUrl(0)
+  expect(firstUrl.searchParams.get('$top')).toBe('100')
+  expect(firstUrl.searchParams.get('$skip')).toBe('40')
+  const secondUrl = getFetchUrl(1)
+  expect(secondUrl.searchParams.get('$top')).toBe('100')
+  expect(secondUrl.searchParams.get('$skip')).toBe('140')
+})
+```
+
 - [ ] **Step 4: Run the focused comment suites to verify they fail**
 
 Run:
@@ -114,7 +156,7 @@ Run:
 bun test tests/tools/comment-tools.test.ts tests/providers/youtrack/operations/comments.test.ts
 ```
 
-Expected: FAIL because `get_comments` only accepts `taskId`, the shared provider contract does not accept pagination params, and the YouTrack comment reader always uses the auto-pagination helper.
+Expected: FAIL because `get_comments` only accepts `taskId`, the shared provider contract does not accept pagination params, and the YouTrack comment reader cannot yet distinguish explicit pagination from safe `offset`-only pagination.
 
 - [ ] **Step 5: Extend the shared provider contract minimally**
 
@@ -138,13 +180,19 @@ export async function getYouTrackComments(
 ): Promise<Comment[]> {
   log.debug({ taskId, params }, 'getComments')
   try {
-    if (params?.limit !== undefined || params?.offset !== undefined) {
+    if (params?.limit !== undefined) {
       const query: Record<string, string> = { fields: COMMENT_FIELDS }
       if (params?.limit !== undefined) query['$top'] = String(params.limit)
       if (params?.offset !== undefined) query['$skip'] = String(params.offset)
 
       const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, { query })
       const comments = CommentSchema.array().parse(raw)
+      log.info({ taskId, count: comments.length }, 'Comments retrieved')
+      return comments.map(mapComment)
+    }
+
+    if (params?.offset !== undefined) {
+      const comments = await paginateYouTrackCommentsFromOffset(config, taskId, params.offset, 100, 10)
       log.info({ taskId, count: comments.length }, 'Comments retrieved')
       return comments.map(mapComment)
     }
@@ -161,6 +209,49 @@ export async function getYouTrackComments(
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to get comments')
     throw classifyYouTrackError(error, { taskId })
   }
+}
+```
+
+Add local helpers in the same file to preserve the existing bounded pagination semantics while starting from an explicit offset:
+
+```typescript
+function paginateYouTrackCommentsFromOffset(
+  config: YouTrackConfig,
+  taskId: string,
+  offset: number,
+  pageSize: number,
+  maxPages: number,
+): Promise<readonly YouTrackComment[]> {
+  return paginateYouTrackCommentsPage(config, taskId, offset, pageSize, maxPages, [])
+}
+
+async function paginateYouTrackCommentsPage(
+  config: YouTrackConfig,
+  taskId: string,
+  offset: number,
+  pageSize: number,
+  maxPages: number,
+  accumulated: readonly YouTrackComment[],
+): Promise<readonly YouTrackComment[]> {
+  if (accumulated.length >= maxPages * pageSize) {
+    return accumulated
+  }
+
+  const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, {
+    query: {
+      fields: COMMENT_FIELDS,
+      $top: String(pageSize),
+      $skip: String(offset),
+    },
+  })
+  const comments = CommentSchema.array().parse(raw)
+  const nextAccumulated = [...accumulated, ...comments]
+
+  if (comments.length < pageSize) {
+    return nextAccumulated
+  }
+
+  return paginateYouTrackCommentsPage(config, taskId, offset + pageSize, pageSize, maxPages, nextAccumulated)
 }
 ```
 
@@ -184,6 +275,8 @@ execute: async ({ taskId, limit, offset }) => {
   return await provider.getComments!(taskId, { limit, offset })
 }
 ```
+
+Also add one tool-level passthrough test covering `offset`-only and `limit`-only calls so the semantics stay explicit.
 
 - [ ] **Step 8: Run the comment suites to verify they pass**
 
@@ -243,7 +336,7 @@ test('passes limit and offset to provider.listWorkItems', async () => {
 })
 ```
 
-- [ ] **Step 3: Write the failing provider test for paginated work-item requests**
+- [ ] **Step 3: Write the failing provider tests for explicit and offset-only work-item pagination**
 
 Add this test to `tests/providers/youtrack/operations/work-items.test.ts` inside `describe('listYouTrackWorkItems', ...)`:
 
@@ -260,6 +353,57 @@ test('passes $top and $skip when pagination params are provided', async () => {
 })
 ```
 
+Add this second test to cover the `offset`-only edge case:
+
+```typescript
+test('uses paginated fetching for offset-only requests so results are not silently truncated', async () => {
+  installFetchMock((url: string) => {
+    const parsedUrl = new URL(url)
+    const skip = parsedUrl.searchParams.get('$skip')
+    const top = parsedUrl.searchParams.get('$top')
+
+    if (skip === '30' && top === '100') {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${31 + index}` }))),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+    }
+
+    if (skip === '130' && top === '100') {
+      return Promise.resolve(
+        new Response(JSON.stringify([makeWorkItemResponse({ id: '8-131' })]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+
+    return Promise.resolve(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  })
+
+  const result = await listYouTrackWorkItems(config, 'PROJ-42', { offset: 30 })
+
+  expect(result).toHaveLength(101)
+  expect(fetchMock.mock.calls).toHaveLength(2)
+  const firstUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[0])[0])
+  const secondUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[1])[0])
+  expect(firstUrl.searchParams.get('$skip')).toBe('30')
+  expect(firstUrl.searchParams.get('$top')).toBe('100')
+  expect(secondUrl.searchParams.get('$skip')).toBe('130')
+  expect(secondUrl.searchParams.get('$top')).toBe('100')
+})
+```
+
 - [ ] **Step 4: Run the focused work-item suites to verify they fail**
 
 Run:
@@ -268,7 +412,7 @@ Run:
 bun test tests/tools/work-item-tools.test.ts tests/providers/youtrack/operations/work-items.test.ts
 ```
 
-Expected: FAIL because `list_work` only accepts `taskId`, the provider contract does not accept pagination params, and the operation currently always auto-paginates.
+Expected: FAIL because `list_work` only accepts `taskId`, the provider contract does not accept pagination params, and the operation cannot yet distinguish explicit pagination from safe `offset`-only pagination.
 
 - [ ] **Step 5: Extend the shared work-item contract minimally**
 
@@ -290,7 +434,7 @@ export async function listYouTrackWorkItems(
 ): Promise<WorkItem[]> {
   log.debug({ taskId, params }, 'listWorkItems')
   try {
-    if (params?.limit !== undefined || params?.offset !== undefined) {
+    if (params?.limit !== undefined) {
       const query: Record<string, string> = { fields: WORK_ITEM_FIELDS }
       if (params?.limit !== undefined) query['$top'] = String(params.limit)
       if (params?.offset !== undefined) query['$skip'] = String(params.offset)
@@ -306,6 +450,9 @@ export async function listYouTrackWorkItems(
       `/api/issues/${taskId}/timeTracking/workItems`,
       { fields: WORK_ITEM_FIELDS },
       YouTrackWorkItemSchema.array(),
+      undefined,
+      undefined,
+      params?.offset ?? 0,
     )
     log.info({ taskId, count: items.length }, 'Work items listed')
     return items.map((wi) => mapWorkItem(wi, taskId))
@@ -315,6 +462,24 @@ export async function listYouTrackWorkItems(
   }
 }
 ```
+
+Update `src/providers/youtrack/helpers.ts` so `paginate` can start from a non-zero initial offset without duplicating the pagination loop:
+
+```typescript
+export function paginate<T>(
+  config: YouTrackConfig,
+  path: string,
+  query: Record<string, YouTrackQueryValue>,
+  schema: z.ZodType<T[]>,
+  maxPages = 10,
+  pageSize = 100,
+  initialSkip = 0,
+): Promise<T[]> {
+  return paginatePage(config, path, query, schema, maxPages, pageSize, initialSkip, [])
+}
+```
+
+This keeps the existing default behavior intact while letting offset-only work-item reads continue bounded pagination from the requested skip.
 
 - [ ] **Step 7: Wire the concrete provider and tool passthrough**
 
@@ -640,6 +805,10 @@ git commit -m "fix(youtrack): paginate project listing"
 
 ## Task 5: Decide and Document the Summary-Only Lookup Tool
 
+Decision rule: only add a summary-only tool if it provides a materially smaller, lower-risk contract than `get_task` without creating provider-specific branching, duplicate maintenance, or new ambiguity for the model. Otherwise, explicitly document that `get_task` already covers the use case.
+
+Chosen path: do not add `get_task_summary` in this pass. Keep `get_task` as the only single-task read tool and revisit only if model telemetry shows repeated over-fetch or tool misuse.
+
 **Files:**
 
 - Modify: `docs/superpowers/plans/2026-04-14-youtrack-tool-parity-checklist.md`
@@ -776,3 +945,11 @@ git commit -m "docs(youtrack): finalize remaining parity gap plan"
 
 - Pagination uses `limit` and `offset` consistently across tool schemas, provider contracts, and YouTrack `$top`/`$skip` translation.
 - The summary-only path intentionally reuses `provider.getTask()` instead of inventing a new provider method unless later requirements justify it.
+
+## Execution Notes
+
+- Comment pagination added with `limit` and `offset`.
+- Work-item pagination added with `limit` and `offset`.
+- Search pagination extended beyond `limit` with `offset`.
+- Project listing no longer stops at the first 100 results.
+- Summary-only task lookup explicitly deferred; `get_task` remains the canonical single-task read tool.
