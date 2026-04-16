@@ -164,6 +164,18 @@ describe('Comment Tools', () => {
       expect(getComments).toHaveBeenCalledWith('task-1', { limit: 20, offset: 40 })
     })
 
+    test('passes offset-only and limit-only pagination params through unchanged', async () => {
+      const getComments = mock(() => Promise.resolve([]))
+      const provider = createMockProvider({ getComments })
+      const tool = makeGetCommentsTool(provider)
+
+      await getToolExecutor(tool)({ taskId: 'task-1', offset: 40 }, { toolCallId: '1', messages: [] })
+      await getToolExecutor(tool)({ taskId: 'task-1', limit: 20 }, { toolCallId: '2', messages: [] })
+
+      expect(getComments).toHaveBeenNthCalledWith(1, 'task-1', { limit: undefined, offset: 40 })
+      expect(getComments).toHaveBeenNthCalledWith(2, 'task-1', { limit: 20, offset: undefined })
+    })
+
     test('filters non-comment activities', async () => {
       const provider = createMockProvider({
         getComments: mock(() =>

@@ -22,15 +22,24 @@ const config: YouTrackConfig = {
   token: 'test-token',
 }
 
-const installFetchMock = (handler: () => Promise<Response>): void => {
+const installFetchMock = (handler: (url: string, init: RequestInit) => Promise<Response>): void => {
   const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
   fetchMock = m
   setMockFetch((url: string, init: RequestInit) => m(url, init))
 }
 
-const mockFetchResponse = (data: unknown, status = 200): void => {
+function mockFetchResponse(data: unknown): void
+function mockFetchResponse(data: unknown, status: number): void
+function mockFetchResponse(...args: [data: unknown] | [data: unknown, status: number]): void {
+  const [data, status] = args
+  let resolvedStatus = 200
+  if (status !== undefined) {
+    resolvedStatus = status
+  }
   installFetchMock(() =>
-    Promise.resolve(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })),
+    Promise.resolve(
+      new Response(JSON.stringify(data), { status: resolvedStatus, headers: { 'Content-Type': 'application/json' } }),
+    ),
   )
 }
 
@@ -38,9 +47,18 @@ const mockFetchNoContent = (): void => {
   installFetchMock(() => Promise.resolve(new Response(null, { status: 204 })))
 }
 
-const mockFetchError = (status: number, body: unknown = { error: 'Something went wrong' }): void => {
+function mockFetchError(status: number): void
+function mockFetchError(status: number, body: unknown): void
+function mockFetchError(...args: [status: number] | [status: number, body: unknown]): void {
+  const [status, body] = args
+  let resolvedBody: unknown = { error: 'Something went wrong' }
+  if (body !== undefined) {
+    resolvedBody = body
+  }
   installFetchMock(() =>
-    Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })),
+    Promise.resolve(
+      new Response(JSON.stringify(resolvedBody), { status, headers: { 'Content-Type': 'application/json' } }),
+    ),
   )
 }
 
@@ -57,6 +75,12 @@ const getLastFetchUrl = (): URL => {
   return new URL(parsed.data[0])
 }
 
+const getFetchUrl = (callIndex: number): URL => {
+  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[callIndex])
+  if (!parsed.success) return new URL('https://empty')
+  return new URL(parsed.data[0])
+}
+
 const getLastFetchBody = (): z.infer<typeof BodySchema> => {
   const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
   if (!parsed.success) return {}
@@ -68,20 +92,34 @@ const getLastFetchBody = (): z.infer<typeof BodySchema> => {
 const getLastFetchMethod = (): string => {
   const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
   if (!parsed.success) return ''
-  return parsed.data[1].method ?? ''
+  if (parsed.data[1].method === undefined) return ''
+  return parsed.data[1].method
 }
 
 // --- Fixtures ---
 
 type CommentFixture = Record<string, unknown>
 
-const makeCommentResponse = (overrides: Record<string, unknown> = {}): CommentFixture => ({
-  id: 'comment-1',
-  text: 'Test comment body',
-  author: { id: 'user-1', login: 'testuser', name: 'Test User' },
-  created: 1700000000000,
-  ...overrides,
-})
+function makeCommentResponse(): CommentFixture
+function makeCommentResponse(overrides: Record<string, unknown>): CommentFixture
+function makeCommentResponse(...args: [] | [overrides: Record<string, unknown>]): CommentFixture {
+  const overrides = args[0]
+  const baseComment: CommentFixture = {
+    id: 'comment-1',
+    text: 'Test comment body',
+    author: { id: 'user-1', login: 'testuser', name: 'Test User' },
+    created: 1700000000000,
+  }
+
+  if (overrides === undefined) {
+    return baseComment
+  }
+
+  return {
+    ...baseComment,
+    ...overrides,
+  }
+}
 
 // --- Tests ---
 
@@ -208,6 +246,65 @@ describe('getYouTrackComments', () => {
     expect(url.pathname).toBe('/api/issues/TEST-1/comments')
     expect(url.searchParams.get('$top')).toBe('20')
     expect(url.searchParams.get('$skip')).toBe('40')
+  })
+
+  test('continues auto-pagination when only offset is provided', async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      makeCommentResponse({
+        id: `comment-${index + 41}`,
+        text: `Comment ${index + 41}`,
+      }),
+    )
+    const secondPage = [makeCommentResponse({ id: 'comment-141', text: 'Comment 141' })]
+
+    installFetchMock((url) => {
+      const requestUrl = new URL(url)
+      const skip = requestUrl.searchParams.get('$skip')
+
+      if (skip === '40') {
+        return Promise.resolve(
+          new Response(JSON.stringify(firstPage), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+
+      if (skip === '140') {
+        return Promise.resolve(
+          new Response(JSON.stringify(secondPage), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    })
+
+    const comments = await getYouTrackComments(config, 'TEST-1', { offset: 40 })
+
+    expect(comments).toHaveLength(101)
+    expect(fetchMock.mock.calls).toHaveLength(2)
+
+    const firstUrl = getFetchUrl(0)
+    expect(firstUrl.pathname).toBe('/api/issues/TEST-1/comments')
+    expect(firstUrl.searchParams.get('$top')).toBe('100')
+    expect(firstUrl.searchParams.get('$skip')).toBe('40')
+
+    const secondUrl = getFetchUrl(1)
+    expect(secondUrl.searchParams.get('$top')).toBe('100')
+    expect(secondUrl.searchParams.get('$skip')).toBe('140')
+  })
+
+  test('uses explicit one-shot pagination when only limit is provided', async () => {
+    mockFetchResponse([makeCommentResponse()])
+
+    const comments = await getYouTrackComments(config, 'TEST-1', { limit: 20 })
+
+    expect(comments).toHaveLength(1)
+    expect(fetchMock.mock.calls).toHaveLength(1)
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/issues/TEST-1/comments')
+    expect(url.searchParams.get('$top')).toBe('20')
+    expect(url.searchParams.has('$skip')).toBe(false)
   })
 
   test('throws classified error on failure', async () => {

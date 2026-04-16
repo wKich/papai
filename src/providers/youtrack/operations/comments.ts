@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { logger } from '../../../logger.js'
 import type { Comment } from '../../types.js'
 import { classifyYouTrackError } from '../classify-error.js'
@@ -9,6 +11,10 @@ import { mapComment } from '../mappers.js'
 import { CommentSchema } from '../schemas/comment.js'
 
 const log = logger.child({ scope: 'provider:youtrack:comments' })
+
+type CommentPaginationParams = Partial<Record<'limit' | 'offset', number>>
+
+type YouTrackComment = z.infer<typeof CommentSchema>
 
 export async function addYouTrackComment(config: YouTrackConfig, taskId: string, body: string): Promise<Comment> {
   log.debug({ taskId }, 'addComment')
@@ -44,17 +50,24 @@ export async function getYouTrackComment(config: YouTrackConfig, taskId: string,
   }
 }
 
+export function getYouTrackComments(config: YouTrackConfig, taskId: string): Promise<Comment[]>
+export function getYouTrackComments(
+  config: YouTrackConfig,
+  taskId: string,
+  params: CommentPaginationParams | undefined,
+): Promise<Comment[]>
 export async function getYouTrackComments(
   config: YouTrackConfig,
   taskId: string,
-  params?: { limit?: number; offset?: number },
+  ...rest: [] | [params: CommentPaginationParams | undefined]
 ): Promise<Comment[]> {
+  const params = rest[0]
   log.debug({ taskId, params }, 'getComments')
   try {
-    if (params?.limit !== undefined || params?.offset !== undefined) {
-      const query: Record<string, string> = { fields: COMMENT_FIELDS }
-      if (params.limit !== undefined) {
-        query['$top'] = String(params.limit)
+    if (params !== undefined && params.limit !== undefined) {
+      const query: Record<string, string> = {
+        fields: COMMENT_FIELDS,
+        $top: String(params.limit),
       }
       if (params.offset !== undefined) {
         query['$skip'] = String(params.offset)
@@ -63,7 +76,13 @@ export async function getYouTrackComments(
       const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, { query })
       const comments = CommentSchema.array().parse(raw)
       log.info({ taskId, count: comments.length }, 'Comments retrieved')
-      return comments.map(mapComment)
+      return comments.map((comment) => mapComment(comment))
+    }
+
+    if (params !== undefined && params.offset !== undefined) {
+      const comments = await paginateYouTrackCommentsFromOffset(config, taskId, params.offset, 100, 10)
+      log.info({ taskId, count: comments.length }, 'Comments retrieved')
+      return comments.map((comment) => mapComment(comment))
     }
 
     const comments = await paginate(
@@ -73,11 +92,50 @@ export async function getYouTrackComments(
       CommentSchema.array(),
     )
     log.info({ taskId, count: comments.length }, 'Comments retrieved')
-    return comments.map(mapComment)
+    return comments.map((comment) => mapComment(comment))
   } catch (error) {
     log.error({ error: error instanceof Error ? error.message : String(error), taskId }, 'Failed to get comments')
     throw classifyYouTrackError(error, { taskId })
   }
+}
+
+function paginateYouTrackCommentsFromOffset(
+  config: YouTrackConfig,
+  taskId: string,
+  offset: number,
+  pageSize: number,
+  maxPages: number,
+): Promise<readonly YouTrackComment[]> {
+  return paginateYouTrackCommentsPage(config, taskId, offset, pageSize, maxPages, [])
+}
+
+async function paginateYouTrackCommentsPage(
+  config: YouTrackConfig,
+  taskId: string,
+  offset: number,
+  pageSize: number,
+  maxPages: number,
+  accumulated: readonly YouTrackComment[],
+): Promise<readonly YouTrackComment[]> {
+  if (accumulated.length >= maxPages * pageSize) {
+    return accumulated
+  }
+
+  const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, {
+    query: {
+      fields: COMMENT_FIELDS,
+      $top: String(pageSize),
+      $skip: String(offset),
+    },
+  })
+  const comments = CommentSchema.array().parse(raw)
+  const nextAccumulated = [...accumulated, ...comments]
+
+  if (comments.length < pageSize) {
+    return nextAccumulated
+  }
+
+  return paginateYouTrackCommentsPage(config, taskId, offset + pageSize, pageSize, maxPages, nextAccumulated)
 }
 
 export async function updateYouTrackComment(
