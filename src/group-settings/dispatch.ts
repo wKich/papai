@@ -36,12 +36,20 @@ export async function dispatchGroupSelectorResult(
   }
 
   if ('buttons' in result && result.buttons !== undefined) {
-    await reply.buttons(result.response, { buttons: result.buttons })
+    if ('replaceButtons' in reply && typeof reply.replaceButtons === 'function') {
+      await reply.replaceButtons(result.response, { buttons: result.buttons })
+    } else {
+      await reply.buttons(result.response, { buttons: result.buttons })
+    }
     return true
   }
 
   if ('response' in result) {
-    await reply.text(result.response)
+    if ('replaceText' in reply && typeof reply.replaceText === 'function') {
+      await reply.replaceText(result.response)
+    } else {
+      await reply.text(result.response)
+    }
     return true
   }
 
