@@ -151,8 +151,8 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   addComment(taskId: string, body: string): Promise<Comment> {
     return addYouTrackComment(this.config, taskId, body)
   }
-  getComments(taskId: string): Promise<Comment[]> {
-    return getYouTrackComments(this.config, taskId)
+  getComments(taskId: string, params?: { limit?: number; offset?: number }): Promise<Comment[]> {
+    return getYouTrackComments(this.config, taskId, params)
   }
   getComment(taskId: string, commentId: string): Promise<Comment> {
     return getYouTrackComment(this.config, taskId, commentId)

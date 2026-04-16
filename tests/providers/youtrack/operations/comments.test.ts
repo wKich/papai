@@ -199,6 +199,17 @@ describe('getYouTrackComments', () => {
     expect(getLastFetchMethod()).toBe('GET')
   })
 
+  test('passes $top and $skip when pagination params are provided', async () => {
+    mockFetchResponse([])
+
+    await getYouTrackComments(config, 'TEST-1', { limit: 20, offset: 40 })
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/issues/TEST-1/comments')
+    expect(url.searchParams.get('$top')).toBe('20')
+    expect(url.searchParams.get('$skip')).toBe('40')
+  })
+
   test('throws classified error on failure', async () => {
     mockFetchError(500)
 

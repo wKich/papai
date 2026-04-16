@@ -177,7 +177,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   // --- Optional: comments.* ---
   getComment?(taskId: string, commentId: string): Promise<Comment>
   addComment?(taskId: string, body: string): Promise<Comment>
-  getComments?(taskId: string): Promise<Comment[]>
+  getComments?(taskId: string, params?: { limit?: number; offset?: number }): Promise<Comment[]>
   updateComment?(params: { taskId: string; commentId: string; body: string }): Promise<Comment>
   removeComment?(params: { taskId: string; commentId: string }): Promise<{ id: string }>
   // --- Optional: comments.reactions ---

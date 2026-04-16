@@ -127,6 +127,15 @@ describe('Comment Tools', () => {
       expect(tool.description).toContain('Get all comments')
     })
 
+    test('accepts optional limit and offset for comment pagination', () => {
+      const provider = createMockProvider()
+      const tool = makeGetCommentsTool(provider)
+
+      expect(schemaValidates(tool, { taskId: 'task-1', limit: 20, offset: 40 })).toBe(true)
+      expect(schemaValidates(tool, { taskId: 'task-1', limit: 0 })).toBe(false)
+      expect(schemaValidates(tool, { taskId: 'task-1', offset: -1 })).toBe(false)
+    })
+
     test('gets all comments on task', async () => {
       const provider = createMockProvider({
         getComments: mock(() =>
@@ -143,6 +152,16 @@ describe('Comment Tools', () => {
       if (!Array.isArray(result)) throw new Error('Invalid result')
 
       expect(result).toHaveLength(2)
+    })
+
+    test('passes limit and offset to provider.getComments', async () => {
+      const getComments = mock(() => Promise.resolve([]))
+      const provider = createMockProvider({ getComments })
+      const tool = makeGetCommentsTool(provider)
+
+      await getToolExecutor(tool)({ taskId: 'task-1', limit: 20, offset: 40 }, { toolCallId: '1', messages: [] })
+
+      expect(getComments).toHaveBeenCalledWith('task-1', { limit: 20, offset: 40 })
     })
 
     test('filters non-comment activities', async () => {

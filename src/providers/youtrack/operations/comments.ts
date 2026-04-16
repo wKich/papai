@@ -44,9 +44,28 @@ export async function getYouTrackComment(config: YouTrackConfig, taskId: string,
   }
 }
 
-export async function getYouTrackComments(config: YouTrackConfig, taskId: string): Promise<Comment[]> {
-  log.debug({ taskId }, 'getComments')
+export async function getYouTrackComments(
+  config: YouTrackConfig,
+  taskId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<Comment[]> {
+  log.debug({ taskId, params }, 'getComments')
   try {
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      const query: Record<string, string> = { fields: COMMENT_FIELDS }
+      if (params.limit !== undefined) {
+        query['$top'] = String(params.limit)
+      }
+      if (params.offset !== undefined) {
+        query['$skip'] = String(params.offset)
+      }
+
+      const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/comments`, { query })
+      const comments = CommentSchema.array().parse(raw)
+      log.info({ taskId, count: comments.length }, 'Comments retrieved')
+      return comments.map(mapComment)
+    }
+
     const comments = await paginate(
       config,
       `/api/issues/${taskId}/comments`,
