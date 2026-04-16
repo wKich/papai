@@ -586,6 +586,7 @@ describe('DiscordChatProvider', () => {
         },
         message: {
           id: 'clicked-msg-1',
+          editable: true,
           edit: (arg: { content?: string; components?: unknown[] }): Promise<void> => {
             edits.push(arg)
             return Promise.resolve()
@@ -602,6 +603,60 @@ describe('DiscordChatProvider', () => {
       expect(edits[1]!.content).toBe('Choose next')
       expect(Array.isArray(edits[1]!.components)).toBe(true)
       expect((edits[1]!.components ?? []).length).toBe(1)
+    })
+
+    test('falls back to new messages when the clicked message is not editable', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider()
+
+      const sends: Array<{ content?: string; components?: unknown[] }> = []
+      const edits: Array<{ content?: string; components?: unknown[] }> = []
+
+      provider.onInteraction(async (_interaction, reply): Promise<void> => {
+        expect(typeof reply.replaceText).toBe('function')
+        expect(typeof reply.replaceButtons).toBe('function')
+
+        await reply.replaceText?.('Updated menu')
+        await reply.replaceButtons?.('Choose next', {
+          buttons: [{ text: 'Retry', callbackData: 'cb:retry', style: 'primary' }],
+        })
+      })
+
+      const fakeInteraction: ButtonInteractionLike = {
+        user: { id: 'u-readonly', username: 'viewer' },
+        customId: 'menu:action',
+        channelId: 'u-readonly',
+        channel: {
+          id: 'u-readonly',
+          type: 1,
+          send: (arg: {
+            content?: string
+            components?: unknown[]
+          }): Promise<{ id: string; edit: () => Promise<void> }> => {
+            sends.push(arg)
+            return Promise.resolve({ id: 'msg-sent', edit: (): Promise<void> => Promise.resolve() })
+          },
+          sendTyping: (): Promise<void> => Promise.resolve(),
+        },
+        message: {
+          id: 'clicked-msg-2',
+          editable: false,
+          edit: (arg: { content?: string; components?: unknown[] }): Promise<void> => {
+            edits.push(arg)
+            return Promise.resolve()
+          },
+        },
+        deferUpdate: (): Promise<void> => Promise.resolve(),
+      }
+
+      await provider.testDispatchButtonInteraction(fakeInteraction, 'bot-42', 'admin-id')
+
+      expect(edits).toHaveLength(0)
+      expect(sends).toHaveLength(2)
+      expect(sends[0]).toEqual({ content: 'Updated menu' })
+      expect(sends[1]!.content).toBe('Choose next')
+      expect(Array.isArray(sends[1]!.components)).toBe(true)
+      expect((sends[1]!.components ?? []).length).toBe(1)
     })
 
     test('routes slash-prefixed customId to registered command handler', async () => {

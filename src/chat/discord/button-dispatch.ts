@@ -54,9 +54,10 @@ export function buildInteraction(
 function supportsEditableMessage(
   message: ButtonInteractionLike['message'],
 ): message is ButtonInteractionLike['message'] & {
+  editable: true
   edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
 } {
-  return typeof message.edit === 'function'
+  return message.editable === true && typeof message.edit === 'function'
 }
 
 export function createFallbackMessage(

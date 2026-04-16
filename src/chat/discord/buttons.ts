@@ -28,6 +28,7 @@ export type ButtonInteractionLike = {
     id: string
     channelId?: string
     threadId?: string
+    editable?: boolean
     edit?: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
   }
   deferUpdate(): Promise<void>
