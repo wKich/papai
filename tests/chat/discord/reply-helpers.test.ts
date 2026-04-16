@@ -186,6 +186,33 @@ describe('createDiscordReplyFn', () => {
     expect(edits).toEqual([{ content: 'Done', components: [] }])
   })
 
+  test('replaceText() falls back to normal sending when replaceMessage is absent', async () => {
+    const { channel, sends } = makeChannel()
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+
+    await reply.replaceText!('Fallback text')
+
+    expect(sends).toHaveLength(1)
+    expect(sends[0]).toEqual({ content: 'Fallback text', reply: undefined })
+  })
+
+  test('replaceButtons() falls back to normal sending with components when replaceMessage is absent', async () => {
+    const { channel, sends } = makeChannel()
+    const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
+
+    await reply.replaceButtons!('Fallback buttons', {
+      buttons: [
+        { text: 'Retry', callbackData: 'cb:retry', style: 'primary' },
+        { text: 'Cancel', callbackData: 'cb:cancel', style: 'secondary' },
+      ],
+    })
+
+    expect(sends).toHaveLength(1)
+    expect(sends[0]!.content).toBe('Fallback buttons')
+    expect(Array.isArray(sends[0]!.components)).toBe(true)
+    expect((sends[0]!.components ?? []).length).toBe(1)
+  })
+
   test('embed() sends an embed via channel.send', async () => {
     const { channel, sends } = makeChannel()
     const reply = createDiscordReplyFn({ channel, replyToMessageId: undefined })
