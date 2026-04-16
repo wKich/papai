@@ -10,6 +10,28 @@ import type { AuthorizationResult, IncomingInteraction, ReplyFn } from './types.
 
 const log = logger.child({ scope: 'chat:interaction-router' })
 
+async function replyTextPreferReplace(reply: ReplyFn, content: string): Promise<void> {
+  if ('replaceText' in reply && typeof reply.replaceText === 'function') {
+    await reply.replaceText(content)
+    return
+  }
+
+  await reply.text(content)
+}
+
+async function replyButtonsPreferReplace(
+  reply: ReplyFn,
+  content: string,
+  buttons: Parameters<ReplyFn['buttons']>[1]['buttons'],
+): Promise<void> {
+  if ('replaceButtons' in reply && typeof reply.replaceButtons === 'function') {
+    await reply.replaceButtons(content, { buttons })
+    return
+  }
+
+  await reply.buttons(content, { buttons })
+}
+
 export type InteractionRouteDeps = {
   handleGroupSettingsInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleConfigInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
@@ -36,7 +58,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
 
   if (parsed.action === null) {
     log.warn({ callbackData }, 'Unknown config editor callback data')
-    await reply.text('This action is no longer valid. Please start over with /config.')
+    await replyTextPreferReplace(reply, 'This action is no longer valid. Please start over with /config.')
     return true
   }
 
@@ -50,19 +72,21 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
 
   if (!result.handled) {
     log.warn({ action: parsed.action, key: parsed.key }, 'Config editor callback not handled')
-    await reply.text('This action is no longer valid. Please start over with /config.')
+    await replyTextPreferReplace(reply, 'This action is no longer valid. Please start over with /config.')
     return true
   }
 
   if (result.buttons !== undefined && result.buttons.length > 0) {
-    await reply.buttons(result.response ?? '', {
-      buttons: result.buttons.map((btn) => ({
+    await replyButtonsPreferReplace(
+      reply,
+      result.response ?? '',
+      result.buttons.map((btn) => ({
         text: btn.text,
         callbackData: serializeCallbackData(btn, targetContextId),
       })),
-    })
+    )
   } else {
-    await reply.text(result.response ?? '')
+    await replyTextPreferReplace(reply, result.response ?? '')
   }
 
   return true
@@ -76,22 +100,24 @@ async function replyWithWizardButtons(
 ): Promise<void> {
   const contextSuffix = targetContextId === undefined ? '' : `@${Buffer.from(targetContextId).toString('base64url')}`
   if (buttons !== undefined && buttons.length > 0) {
-    await reply.buttons(response ?? '', {
-      buttons: buttons.map((button) => ({
+    await replyButtonsPreferReplace(
+      reply,
+      response ?? '',
+      buttons.map((button) => ({
         text: button.text,
         callbackData: `wizard_${button.action}${contextSuffix}`,
       })),
-    })
+    )
     return
   }
 
-  await reply.text(response ?? '')
+  await replyTextPreferReplace(reply, response ?? '')
 }
 
 async function handleWizardEdit(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   const session = getWizardSession(userId, storageContextId)
   if (session === null) {
-    await reply.text('No active setup session. Type /setup to start.')
+    await replyTextPreferReplace(reply, 'No active setup session. Type /setup to start.')
     return true
   }
 
@@ -140,7 +166,7 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
     }
     case 'wizard_cancel': {
       if (!hasActiveWizard(userId, storageContextId)) {
-        await reply.text('No active setup session. Type /setup to start.')
+        await replyTextPreferReplace(reply, 'No active setup session. Type /setup to start.')
         return true
       }
       cancelWizard(userId, storageContextId)
@@ -149,7 +175,7 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
     }
     case 'wizard_restart': {
       if (!hasActiveWizard(userId, storageContextId)) {
-        await reply.text('No active setup session. Type /setup to start.')
+        await replyTextPreferReplace(reply, 'No active setup session. Type /setup to start.')
         return true
       }
       cancelWizard(userId, storageContextId)

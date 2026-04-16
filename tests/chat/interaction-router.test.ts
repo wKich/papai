@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { routeInteraction } from '../../src/chat/interaction-router.js'
 import type { AuthorizationResult, IncomingInteraction, ReplyFn } from '../../src/chat/types.js'
@@ -163,6 +163,31 @@ describe('routeInteraction', () => {
     expect(buttonReplies[0]).toContain('Changes cancelled')
   })
 
+  test('prefers replaceButtons for cfg callback responses with buttons when available', async () => {
+    createEditorSession({
+      userId: interaction.user.id,
+      storageContextId: interaction.storageContextId,
+      editingKey: 'timezone',
+    })
+
+    const replaceButtons = mock(() => Promise.resolve())
+    const buttons = mock(() => Promise.resolve())
+
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'cfg:cancel' },
+      {
+        ...reply,
+        buttons,
+        replaceButtons,
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replaceButtons).toHaveBeenCalledTimes(1)
+    expect(buttons).not.toHaveBeenCalled()
+  })
+
   test('saves edited config into the selected group context instead of the DM user context', async () => {
     createGroupSettingsSession({
       userId: interaction.user.id,
@@ -271,6 +296,25 @@ describe('routeInteraction', () => {
 
     expect(handled).toBe(true)
     expect(replies).toEqual(['No active setup session. Type /setup to start.'])
+  })
+
+  test('prefers replaceText for wizard no-session cancel replies when available', async () => {
+    const replaceText = mock(() => Promise.resolve())
+    const text = mock(() => Promise.resolve())
+
+    const handled = await routeInteraction(
+      { ...interaction, callbackData: 'wizard_cancel' },
+      {
+        ...reply,
+        text,
+        replaceText,
+      },
+      createMockAuth(true),
+    )
+
+    expect(handled).toBe(true)
+    expect(replaceText).toHaveBeenCalledWith('No active setup session. Type /setup to start.')
+    expect(text).not.toHaveBeenCalled()
   })
 
   test('replies with no active session when wizard_restart clicked without active wizard', async () => {
