@@ -189,6 +189,7 @@ export class TaskResource {
     projectId?: string
     assigneeId?: string
     limit?: number
+    offset?: number
   }): Promise<TaskResult[]> {
     this.log.debug(params, 'Searching tasks')
     try {
@@ -198,6 +199,7 @@ export class TaskResource {
         workspaceId: params.workspaceId,
         ...(params.projectId === undefined ? {} : { projectId: params.projectId }),
         ...(params.limit === undefined ? {} : { limit: String(params.limit) }),
+        ...(params.offset === undefined ? {} : { offset: String(params.offset) }),
       }
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
       // API returns a flat results array — filter to tasks only and remap taskNumber → number.

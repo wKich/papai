@@ -34,6 +34,7 @@ export async function searchTasks({
   projectId,
   assigneeId,
   limit,
+  offset,
 }: {
   config: KaneoConfig
   query: string
@@ -41,12 +42,13 @@ export async function searchTasks({
   projectId?: string
   assigneeId?: string
   limit?: number
+  offset?: number
 }): Promise<TaskResult[]> {
-  log.debug({ query, workspaceId, projectId, assigneeId }, 'searchTasks called')
+  log.debug({ query, workspaceId, projectId, assigneeId, limit, offset }, 'searchTasks called')
 
   try {
     const client = new KaneoClient(config)
-    const tasks = await client.tasks.search({ query, workspaceId, projectId, assigneeId, limit })
+    const tasks = await client.tasks.search({ query, workspaceId, projectId, assigneeId, limit, offset })
     log.info({ query, resultCount: tasks.length, assigneeId }, 'Tasks searched')
     return tasks
   } catch (error) {

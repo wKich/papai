@@ -84,7 +84,47 @@ describe('searchTasks', () => {
     })
 
     expect(result).toHaveLength(1)
-    expect(result[0]?.id).toBe('task-1')
-    expect(result[0]?.userId).toBe('user-123')
+    const [firstResult] = result
+    expect(firstResult).toBeDefined()
+    if (firstResult === undefined) {
+      throw new Error('Expected a filtered Kaneo search result')
+    }
+    expect(firstResult.id).toBe('task-1')
+    expect(firstResult.userId).toBe('user-123')
+  })
+
+  test('should pass offset through to the Kaneo search request', async () => {
+    let requestUrl: URL | undefined
+
+    setMockFetch((url) => {
+      requestUrl = new URL(url)
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            results: [],
+            totalCount: 0,
+            searchQuery: 'test',
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    const params: Parameters<typeof searchTasks>[0] & { offset: number } = {
+      config: mockConfig,
+      query: 'test',
+      workspaceId: 'ws-1',
+      offset: 30,
+    }
+
+    await searchTasks(params)
+
+    expect(requestUrl).toBeDefined()
+    if (requestUrl === undefined) {
+      throw new Error('Expected Kaneo search request URL')
+    }
+    expect(requestUrl.pathname).toBe('/api/search')
+    expect(requestUrl.searchParams.get('offset')).toBe('30')
   })
 })

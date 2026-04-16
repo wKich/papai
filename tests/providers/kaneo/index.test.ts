@@ -124,6 +124,41 @@ describe('KaneoProvider', () => {
     })
   })
 
+  describe('searchTasks', () => {
+    test('passes offset through the provider search contract', async () => {
+      let requestUrl: URL | undefined
+
+      setMockFetch((url) => {
+        requestUrl = new URL(url)
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              results: [],
+              totalCount: 0,
+              searchQuery: 'bug',
+            }),
+            { status: 200 },
+          ),
+        )
+      })
+
+      const params: Parameters<KaneoProvider['searchTasks']>[0] & { offset: number } = {
+        query: 'bug',
+        offset: 40,
+      }
+
+      await provider.searchTasks(params)
+
+      expect(requestUrl).toBeDefined()
+      if (requestUrl === undefined) {
+        throw new Error('Expected Kaneo provider search request URL')
+      }
+      expect(requestUrl.pathname).toBe('/api/search')
+      expect(requestUrl.searchParams.get('offset')).toBe('40')
+    })
+  })
+
   describe('formatDueDateOutput', () => {
     test('converts UTC to local timezone', () => {
       const result = provider.formatDueDateOutput('2024-03-15T18:30:00.000Z', 'America/New_York')
