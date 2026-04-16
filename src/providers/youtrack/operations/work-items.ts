@@ -46,9 +46,24 @@ const resolveWorkItemType = async (config: YouTrackConfig, input: string): Promi
   return { id: typeId }
 }
 
-export async function listYouTrackWorkItems(config: YouTrackConfig, taskId: string): Promise<WorkItem[]> {
-  log.debug({ taskId }, 'listWorkItems')
+export async function listYouTrackWorkItems(
+  config: YouTrackConfig,
+  taskId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<WorkItem[]> {
+  log.debug({ taskId, params }, 'listWorkItems')
   try {
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      const query: Record<string, string> = { fields: WORK_ITEM_FIELDS }
+      if (params.limit !== undefined) query['$top'] = String(params.limit)
+      if (params.offset !== undefined) query['$skip'] = String(params.offset)
+
+      const raw = await youtrackFetch(config, 'GET', `/api/issues/${taskId}/timeTracking/workItems`, { query })
+      const items = YouTrackWorkItemSchema.array().parse(raw)
+      log.info({ taskId, count: items.length }, 'Work items listed')
+      return items.map((wi) => mapWorkItem(wi, taskId))
+    }
+
     const items = await paginate(
       config,
       `/api/issues/${taskId}/timeTracking/workItems`,

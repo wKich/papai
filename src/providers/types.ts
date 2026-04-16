@@ -261,7 +261,7 @@ export interface TaskProvider extends TaskProviderPhaseFive {
   deleteAttachment?(taskId: string, attachmentId: string): Promise<{ id: string }>
 
   // --- Optional: workItems.* ---
-  listWorkItems?(taskId: string): Promise<WorkItem[]>
+  listWorkItems?(taskId: string, params?: { limit?: number; offset?: number }): Promise<WorkItem[]>
   createWorkItem?(taskId: string, params: CreateWorkItemParams): Promise<WorkItem>
   updateWorkItem?(taskId: string, workItemId: string, params: UpdateWorkItemParams): Promise<WorkItem>
   deleteWorkItem?(taskId: string, workItemId: string): Promise<{ id: string }>

@@ -129,6 +129,17 @@ describe('listYouTrackWorkItems', () => {
     expect(getLastFetchMethod()).toBe('GET')
   })
 
+  test('passes $top and $skip when pagination params are provided', async () => {
+    mockFetchResponse([])
+
+    await listYouTrackWorkItems(config, 'PROJ-42', { limit: 10, offset: 30 })
+
+    const url = getLastFetchUrl()
+    expect(url.pathname).toBe('/api/issues/PROJ-42/timeTracking/workItems')
+    expect(url.searchParams.get('$top')).toBe('10')
+    expect(url.searchParams.get('$skip')).toBe('30')
+  })
+
   test('throws classified error on 404', async () => {
     mockFetchError(404)
     await expect(listYouTrackWorkItems(config, 'PROJ-99')).rejects.toBeInstanceOf(YouTrackClassifiedError)

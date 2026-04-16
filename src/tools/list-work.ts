@@ -12,16 +12,21 @@ export function makeListWorkTool(provider: TaskProvider): ToolSet[string] {
     description: 'List all work items (time tracking entries) logged on a task.',
     inputSchema: z.object({
       taskId: z.string().describe('Task ID to list work items for'),
+      limit: z.number().int().positive().optional().describe('Maximum number of work items to return'),
+      offset: z.number().int().min(0).optional().describe('Number of work items to skip before returning results'),
     }),
-    execute: async ({ taskId }) => {
-      log.debug({ taskId }, 'list_work called')
+    execute: async ({ taskId, limit, offset }) => {
+      log.debug({ taskId, limit, offset }, 'list_work called')
       try {
-        const result = await provider.listWorkItems!(taskId)
+        const result =
+          limit !== undefined || offset !== undefined
+            ? await provider.listWorkItems!(taskId, { limit, offset })
+            : await provider.listWorkItems!(taskId)
         log.info({ taskId, count: result.length }, 'Work items listed')
         return result
       } catch (error) {
         log.error(
-          { error: error instanceof Error ? error.message : String(error), taskId, tool: 'list_work' },
+          { error: error instanceof Error ? error.message : String(error), taskId, limit, offset, tool: 'list_work' },
           'Tool execution failed',
         )
         throw error

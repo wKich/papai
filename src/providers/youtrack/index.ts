@@ -251,8 +251,8 @@ export class YouTrackProvider extends YouTrackPhaseFiveProvider implements TaskP
   deleteAttachment(taskId: string, attachmentId: string): Promise<{ id: string }> {
     return deleteYouTrackAttachment(this.config, taskId, attachmentId)
   }
-  listWorkItems(taskId: string): Promise<WorkItem[]> {
-    return listYouTrackWorkItems(this.config, taskId)
+  listWorkItems(taskId: string, params?: { limit?: number; offset?: number }): Promise<WorkItem[]> {
+    return listYouTrackWorkItems(this.config, taskId, params)
   }
   createWorkItem(taskId: string, params: CreateWorkItemParams): Promise<WorkItem> {
     return createYouTrackWorkItem(this.config, taskId, params)

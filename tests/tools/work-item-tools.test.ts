@@ -27,6 +27,15 @@ describe('Work Item Tools', () => {
       expect(schemaValidates(t, { taskId: 'task-1' })).toBe(true)
     })
 
+    test('schema accepts optional limit and offset', () => {
+      const provider = createMockProvider()
+      const t = makeListWorkTool(provider)
+
+      expect(schemaValidates(t, { taskId: 'task-1', limit: 10, offset: 30 })).toBe(true)
+      expect(schemaValidates(t, { taskId: 'task-1', limit: 0 })).toBe(false)
+      expect(schemaValidates(t, { taskId: 'task-1', offset: -1 })).toBe(false)
+    })
+
     test('returns work items from provider', async () => {
       const workItems = [{ id: 'wi-1', taskId: 'task-1', author: 'alice', date: '2024-01-15', duration: 'PT2H' }]
       const provider = createMockProvider({ listWorkItems: mock(() => Promise.resolve(workItems)) })
@@ -39,6 +48,15 @@ describe('Work Item Tools', () => {
       const provider = createMockProvider({ listWorkItems })
       await getToolExecutor(makeListWorkTool(provider))({ taskId: 'task-99' })
       expect(listWorkItems).toHaveBeenCalledWith('task-99')
+    })
+
+    test('passes limit and offset to provider.listWorkItems', async () => {
+      const listWorkItems = mock(() => Promise.resolve([]))
+      const provider = createMockProvider({ listWorkItems })
+
+      await getToolExecutor(makeListWorkTool(provider))({ taskId: 'task-99', limit: 10, offset: 30 })
+
+      expect(listWorkItems).toHaveBeenCalledWith('task-99', { limit: 10, offset: 30 })
     })
 
     test('propagates provider errors', async () => {
