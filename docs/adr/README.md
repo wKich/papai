@@ -73,6 +73,9 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0067](0067-youtrack-bulk-command-safety-boundary.md)          | YouTrack Bulk Command Safety Boundary                                | 2026-04-15 | Implemented                           |
 | [0068](0068-youtrack-gap-closure.md)                           | YouTrack Gap Closure — Phase-Five Tools, Custom Fields, Command Tool | 2026-04-15 | Accepted                              |
 | [0069](0069-dm-only-group-settings.md)                         | DM-Only Group Settings                                               | 2026-04-11 | Accepted                              |
+| [0070](0070-silent-post-hooks-stop-gate.md)                    | Silent PostToolUse + Stop-Gated Full Check                           | 2026-04-16 | Implemented                           |
+| [0071](0071-wizard-deferred-fixes.md)                          | Wizard Deferred Fixes                                                | 2026-04-16 | Partially Implemented                 |
+| [0072](0072-interaction-menu-replacement.md)                   | Interaction Menu Replacement                                         | 2026-04-16 | Implemented                           |
 
 ## Skipped / Not Written
 
