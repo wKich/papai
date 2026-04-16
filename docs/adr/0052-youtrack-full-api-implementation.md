@@ -303,7 +303,8 @@ if (bundle.isShared && params.confirm !== true) {
 
 ## References
 
-- Implementation Plan: `docs/superpowers/plans/2026-04-08-youtrack-api-implementation.md`
-- Enhanced Design: `docs/superpowers/plans/2026-04-08-youtrack-full-api-enhanced-design.md`
+- Implementation Plan: `docs/archive/youtrack-api-implementation-2026-04-08.md`
+- Enhanced Design: `docs/archive/2026-04-08-youtrack-full-api-enhanced-design.md`
+- Original Spec: `docs/archive/youtrack-full-api-design.md`
 - YouTrack REST API Documentation: https://www.jetbrains.com/help/youtrack/devportal/youtrack-rest-api.html
 - Provider Conventions: `src/providers/CLAUDE.md`

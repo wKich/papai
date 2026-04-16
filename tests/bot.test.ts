@@ -9,11 +9,14 @@ import { setConfig } from '../src/config.js'
 import { getDrizzleDb } from '../src/db/drizzle.js'
 import { groupAdminObservations, knownGroupContexts } from '../src/db/schema.js'
 import { getIncomingFiles } from '../src/file-relay.js'
+import { listManageableGroups } from '../src/group-settings/access.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser, isAuthorized, removeUser } from '../src/users.js'
 import {
+  createAuth,
   createDmMessage,
   createGroupMessage,
+  createMockChat,
   createMockChatForBot,
   createMockReply,
   mockLogger,
@@ -352,6 +355,95 @@ describe('Bot Authorization Gate (setupBot)', () => {
     expect(knownGroup?.displayName).toBe('Operations')
     expect(knownGroup?.parentName).toBe('Platform')
     expect(adminObservation?.isAdmin).toBe(true)
+  })
+
+  test('records group admin observations for group setup commands before redirecting to DM', async () => {
+    addUser('group-admin', ADMIN_ID)
+    setupUserConfig('group-admin')
+
+    const commandHandlers = new Map<
+      string,
+      (msg: IncomingMessage, reply: ReplyFn, auth: ReturnType<typeof createAuth>) => Promise<void>
+    >()
+    const mockChat = createMockChat({ commandHandlers })
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const setupHandler = commandHandlers.get('setup')
+    expect(setupHandler).not.toBeUndefined()
+
+    const groupMessage = createGroupMessage('group-admin', '/setup', true, 'group-ops')
+    groupMessage.contextName = 'Operations'
+    groupMessage.contextParentName = 'Platform'
+
+    const { reply, textCalls } = createMockReply()
+    await setupHandler!(groupMessage, reply, createAuth('group-admin', { isGroupAdmin: true }))
+
+    expect(textCalls[0]).toBe(
+      'Group settings are configured in direct messages with the bot. Open a DM with me and run /setup.',
+    )
+    expect(listManageableGroups('group-admin').map((group) => group.contextId)).toEqual(['group-ops'])
+  })
+
+  test('does not record group observation for DM command handler', async () => {
+    addUser('dm-user', ADMIN_ID)
+    setupUserConfig('dm-user')
+
+    const commandHandlers = new Map<
+      string,
+      (msg: IncomingMessage, reply: ReplyFn, auth: ReturnType<typeof createAuth>) => Promise<void>
+    >()
+    const mockChat = createMockChat({ commandHandlers })
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const setupHandler = commandHandlers.get('setup')
+    expect(setupHandler).not.toBeUndefined()
+
+    const dmMessage = createDmMessage('dm-user', '/setup')
+    const { reply } = createMockReply()
+    await setupHandler!(dmMessage, reply, createAuth('dm-user', { isGroupAdmin: false }))
+
+    expect(listManageableGroups('dm-user')).toHaveLength(0)
+  })
+
+  test('replies with authorization hint for unauthorized mentioned group user', async () => {
+    const messageHandler = getMessageHandler()
+    expect(messageHandler).not.toBeNull()
+
+    const groupMessage = createGroupMessage('unknown-group-user', '@bot hello', true, 'group-auth')
+    const { reply, textCalls } = createMockReply()
+    await messageHandler!(groupMessage, reply)
+
+    expect(processMessageCallCount).toBe(0)
+    expect(textCalls).toHaveLength(1)
+    expect(textCalls[0]).toContain('not authorized')
+  })
+
+  test('does not record group observation for non-admin group command handler', async () => {
+    addUser('non-admin', ADMIN_ID)
+    setupUserConfig('non-admin')
+
+    const commandHandlers = new Map<
+      string,
+      (msg: IncomingMessage, reply: ReplyFn, auth: ReturnType<typeof createAuth>) => Promise<void>
+    >()
+    const mockChat = createMockChat({ commandHandlers })
+    setupBot(mockChat, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const setupHandler = commandHandlers.get('setup')
+    expect(setupHandler).not.toBeUndefined()
+
+    const groupMessage = createGroupMessage('non-admin', '/setup', true, 'group-noadmin')
+    groupMessage.contextName = 'NoAdmin'
+    const { reply } = createMockReply()
+    await setupHandler!(groupMessage, reply, createAuth('non-admin', { isGroupAdmin: false }))
+
+    expect(listManageableGroups('non-admin')).toHaveLength(0)
   })
 
   test('does not record group observations for ignored non-mentioned natural language', async () => {

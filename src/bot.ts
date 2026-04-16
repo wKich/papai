@@ -54,21 +54,34 @@ const checkAuthorization = (userId: string, username?: string | null): boolean =
 export { checkAuthorizationExtended, getThreadScopedStorageContextId }
 
 function registerCommands(chat: ChatProvider, adminUserId: string): void {
-  registerHelpCommand(chat)
-  registerStartCommand(chat)
-  registerSetupCommand(chat, checkAuthorization)
-  registerConfigCommand(chat, checkAuthorization)
-  registerContextCommand(chat)
-  registerClearCommand(chat, checkAuthorization, adminUserId)
-  registerAdminCommands(chat, adminUserId)
-  registerGroupCommand(chat)
+  const orig = chat.registerCommand.bind(chat)
+  const withObs =
+    (
+      h: (m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>,
+    ): ((m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>) =>
+    async (m, r, a) => {
+      if (m.contextType === 'group' && a.isGroupAdmin) recordGroupObservation(chat, m)
+      await h(m, r, a)
+    }
+  const w: ChatProvider = {
+    ...chat,
+    registerCommand: (name, handler): void => {
+      orig(name, withObs(handler))
+    },
+  }
+  registerHelpCommand(w)
+  registerStartCommand(w)
+  registerSetupCommand(w, checkAuthorization)
+  registerConfigCommand(w, checkAuthorization)
+  registerContextCommand(w)
+  registerClearCommand(w, checkAuthorization, adminUserId)
+  registerAdminCommands(w, adminUserId)
+  registerGroupCommand(w)
 }
 
 function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtrack'): boolean {
   const config = getAllConfig(storageContextId)
-  const steps = getWizardSteps(taskProvider)
-
-  return steps.some((step) => {
+  return getWizardSteps(taskProvider).some((step) => {
     if (step.isOptional === true) return false
     const value = config[step.key]
     return value === undefined || value === ''
@@ -81,11 +94,8 @@ async function autoStartWizardIfNeeded(userId: string, storageContextId: string,
   const taskProvider = process.env['TASK_PROVIDER'] === 'youtrack' ? 'youtrack' : 'kaneo'
   if (!userNeedsSetup(storageContextId, taskProvider)) return false
   const result = createWizard(userId, storageContextId, taskProvider)
-  if (result.success) {
-    await reply.text(result.prompt)
-    return true
-  }
-  return false
+  if (result.success) await reply.text(result.prompt)
+  return result.success
 }
 
 async function processCoalescedMessage(
