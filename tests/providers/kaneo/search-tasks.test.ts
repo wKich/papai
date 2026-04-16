@@ -93,7 +93,105 @@ describe('searchTasks', () => {
     expect(firstResult.userId).toBe('user-123')
   })
 
-  test('should pass offset through to the Kaneo search request', async () => {
+  test('should apply offset and limit after assignee filtering', async () => {
+    let requestUrl: URL | undefined
+
+    setMockFetch((url) => {
+      requestUrl = new URL(url)
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                id: 'task-1',
+                type: 'task',
+                title: 'Task 1',
+                taskNumber: 1,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                userId: 'user-other',
+                createdAt: new Date().toISOString(),
+                relevanceScore: 1,
+              },
+              {
+                id: 'task-2',
+                type: 'task',
+                title: 'Task 2',
+                taskNumber: 2,
+                status: 'todo',
+                priority: 'medium',
+                projectId: 'proj-1',
+                userId: 'user-123',
+                createdAt: new Date().toISOString(),
+                relevanceScore: 1,
+              },
+              {
+                id: 'task-3',
+                type: 'task',
+                title: 'Task 3',
+                taskNumber: 3,
+                status: 'doing',
+                priority: 'high',
+                projectId: 'proj-1',
+                userId: 'user-other',
+                createdAt: new Date().toISOString(),
+                relevanceScore: 1,
+              },
+              {
+                id: 'task-4',
+                type: 'task',
+                title: 'Task 4',
+                taskNumber: 4,
+                status: 'done',
+                priority: 'low',
+                projectId: 'proj-1',
+                userId: 'user-123',
+                createdAt: new Date().toISOString(),
+                relevanceScore: 1,
+              },
+              {
+                id: 'task-5',
+                type: 'task',
+                title: 'Task 5',
+                taskNumber: 5,
+                status: 'done',
+                priority: 'low',
+                projectId: 'proj-1',
+                userId: 'user-123',
+                createdAt: new Date().toISOString(),
+                relevanceScore: 1,
+              },
+            ],
+            totalCount: 5,
+            searchQuery: 'test',
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    const result = await searchTasks({
+      config: mockConfig,
+      query: 'test',
+      workspaceId: 'ws-1',
+      assigneeId: 'user-123',
+      offset: 1,
+      limit: 1,
+    })
+
+    expect(requestUrl).toBeDefined()
+    if (requestUrl === undefined) {
+      throw new Error('Expected Kaneo search request URL')
+    }
+    expect(requestUrl.searchParams.get('offset')).toBeNull()
+    expect(requestUrl.searchParams.get('limit')).toBeNull()
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('task-4')
+  })
+
+  test('should pass offset through to the Kaneo search request without assignee filtering', async () => {
     let requestUrl: URL | undefined
 
     setMockFetch((url) => {

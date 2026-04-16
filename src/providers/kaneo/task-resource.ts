@@ -193,13 +193,14 @@ export class TaskResource {
   }): Promise<TaskResult[]> {
     this.log.debug(params, 'Searching tasks')
     try {
+      const shouldPaginateLocally = params.assigneeId !== undefined
       const queryParams: Record<string, string> = {
         q: params.query,
         type: 'tasks',
         workspaceId: params.workspaceId,
         ...(params.projectId === undefined ? {} : { projectId: params.projectId }),
-        ...(params.limit === undefined ? {} : { limit: String(params.limit) }),
-        ...(params.offset === undefined ? {} : { offset: String(params.offset) }),
+        ...(shouldPaginateLocally || params.limit === undefined ? {} : { limit: String(params.limit) }),
+        ...(shouldPaginateLocally || params.offset === undefined ? {} : { offset: String(params.offset) }),
       }
       const result = await kaneoFetch(this.config, 'GET', '/search', undefined, queryParams, KaneoSearchResponseSchema)
       // API returns a flat results array — filter to tasks only and remap taskNumber → number.
@@ -221,6 +222,9 @@ export class TaskResource {
       // Client-side filter by assignee since API doesn't support it
       if (params.assigneeId !== undefined) {
         tasks = tasks.filter((t) => t.userId === params.assigneeId)
+        const offset = params.offset ?? 0
+        const limit = params.limit
+        tasks = limit === undefined ? tasks.slice(offset) : tasks.slice(offset, offset + limit)
       }
       this.log.info({ count: tasks.length, assigneeId: params.assigneeId }, 'Tasks searched')
       return tasks
