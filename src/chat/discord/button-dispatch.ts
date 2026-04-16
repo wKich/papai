@@ -55,7 +55,7 @@ function supportsEditableMessage(
   message: ButtonInteractionLike['message'],
 ): message is ButtonInteractionLike['message'] & {
   editable: true
-  edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
+  edit: (arg: Partial<{ content: string; components: unknown[] }>) => Promise<unknown>
 } {
   return message.editable === true && typeof message.edit === 'function'
 }
@@ -88,7 +88,12 @@ function findCommand(
   if (!trimmed.startsWith('/')) return null
 
   for (const [name, handler] of commands.entries()) {
-    if (trimmed === `/${name}` || trimmed.startsWith(`/${name} `)) {
+    if (trimmed === `/${name}`) {
+      const match = trimmed.slice(name.length + 2).trim()
+      return { name, handler, match }
+    }
+
+    if (trimmed.startsWith(`/${name} `)) {
       const match = trimmed.slice(name.length + 2).trim()
       return { name, handler, match }
     }
@@ -140,7 +145,7 @@ export async function routeButtonFallback(
   log.debug({ customId: data }, 'Unhandled button interaction in routeButtonFallback')
 
   // Use user's platform admin status if true, otherwise check if user is bot admin
-  const isPlatformAdmin = interaction.user.isAdmin === true || interaction.user.id === adminUserId
+  const isPlatformAdmin = interaction.user.isAdmin === true ? true : interaction.user.id === adminUserId
   const mapped = createFallbackMessage(interaction, contextId, contextType, isPlatformAdmin)
   const reply = createDiscordReplyFn({
     channel,

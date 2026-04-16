@@ -42,11 +42,12 @@ export type ChatCapability =
 export type ChatProviderTraits = {
   /** Whether the bot sees all group messages or only mentions */
   observedGroupMessages: 'all' | 'mentions_only'
+} & Partial<{
   /** Maximum length of a single message (platform limit) */
-  maxMessageLength?: number
+  maxMessageLength: number
   /** Maximum length of callback data in button interactions */
-  callbackDataMaxLength?: number
-}
+  callbackDataMaxLength: number
+}>
 
 /** A config key required by this chat provider. */
 export type ChatProviderConfigRequirement = {
@@ -67,33 +68,35 @@ export type IncomingFile = {
   fileId: string
   /** Human-readable filename */
   filename: string
-  /** MIME type (if available) */
-  mimeType?: string
-  /** File size in bytes (if available) */
-  size?: number
   /** Raw file content */
   content: Buffer
-}
+} & Partial<{
+  /** MIME type (if available) */
+  mimeType: string
+  /** File size in bytes (if available) */
+  size: number
+}>
 
 /** Context about a message reply or quote. */
 export type ReplyContext = {
   /** Platform-specific ID of the message being replied to */
   messageId: string
+} & Partial<{
   /** User ID of the original message author (if available) */
-  authorId?: string
+  authorId: string
   /** Username of the original message author (if available) */
-  authorUsername?: string | null
+  authorUsername: string | null
   /** Text content of the message being replied to (if available) */
-  text?: string
+  text: string
   /** For quote-style replies, the specific quoted text */
-  quotedText?: string
+  quotedText: string
   /** Platform-specific thread/topic ID (Telegram: message_thread_id, Mattermost: root_id) */
-  threadId?: string
+  threadId: string
   /** Full reply chain message IDs in chronological order (oldest first) */
-  chain?: string[]
+  chain: string[]
   /** Summary of earlier messages in the chain (excludes immediate parent) */
-  chainSummary?: string
-}
+  chainSummary: string
+}>
 
 /** Incoming message from a user. */
 export type IncomingMessage = {
@@ -101,25 +104,26 @@ export type IncomingMessage = {
   /** storage key: userId in DMs, groupId in groups */
   contextId: string
   contextType: ContextType
-  /** Human-readable channel/group name when the adapter knows it */
-  contextName?: string
-  /** Human-readable workspace/team/guild label when the adapter knows it */
-  contextParentName?: string
   /** bot was @mentioned */
   isMentioned: boolean
   text: string
-  commandMatch?: string
+} & Partial<{
+  /** Human-readable channel/group name when the adapter knows it */
+  contextName: string
+  /** Human-readable workspace/team/guild label when the adapter knows it */
+  contextParentName: string
+  commandMatch: string
   /** platform-specific message ID for deletion */
-  messageId?: string
+  messageId: string
   /** parent message ID if this is a reply */
-  replyToMessageId?: string
+  replyToMessageId: string
   /** Reply or quote context if this message is a reply */
-  replyContext?: ReplyContext
+  replyContext: ReplyContext
   /** Files attached to this message (populated by platform adapters) */
-  files?: IncomingFile[]
+  files: IncomingFile[]
   /** Platform thread ID (if in thread) */
-  threadId?: string
-}
+  threadId: string
+}>
 
 /** An incoming button interaction from a user. */
 export type IncomingInteraction = {
@@ -133,11 +137,12 @@ export type IncomingInteraction = {
    */
   storageContextId: string
   callbackData: string
+} & Partial<{
   /** Platform-specific message ID of the interactive message */
-  messageId?: string
+  messageId: string
   /** Platform thread ID (if in thread) */
-  threadId?: string
-}
+  threadId: string
+}>
 
 /** Authorization result for message processing. */
 export type AuthorizationResult = {
@@ -145,39 +150,36 @@ export type AuthorizationResult = {
   isBotAdmin: boolean
   isGroupAdmin: boolean
   storageContextId: string
-  configContextId?: string
-}
+} & Partial<{ configContextId: string }>
 
 /** Command handler signature. */
 export type CommandHandler = (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>
 
 /** Options for reply functions to control threading behavior. */
-export type ReplyOptions = {
+export type ReplyOptions = Partial<{
   /** Reply to this specific message ID */
-  replyToMessageId?: string
+  replyToMessageId: string
   /** Post in this thread/topic */
-  threadId?: string
-}
+  threadId: string
+}>
 
 /** Button for interactive messages */
-export interface ChatButton {
+export type ChatButton = {
   text: string
   callbackData: string
-  style?: 'primary' | 'secondary' | 'danger'
-}
+} & Partial<{ style: 'primary' | 'secondary' | 'danger' }>
 
 /** Extended reply options with buttons */
-export interface ButtonReplyOptions extends ReplyOptions {
-  buttons?: ChatButton[]
-}
+export interface ButtonReplyOptions extends ReplyOptions, Partial<{ buttons: ChatButton[] }> {}
 
 /** One section of the LLM context window, with an optional nested breakdown. */
 export type ContextSection = {
   label: string
   tokens: number
-  detail?: string
-  children?: ContextSection[]
-}
+} & Partial<{
+  detail: string
+  children: ContextSection[]
+}>
 
 /** Snapshot of the LLM context window for a given conversation. */
 export type ContextSnapshot = {
@@ -194,17 +196,50 @@ export type ContextSnapshot = {
 export type EmbedField = {
   name: string
   value: string
-  inline?: boolean
-}
+} & Partial<{ inline: boolean }>
 
 /** Options for sending a structured embed (Discord-only today). */
 export type EmbedOptions = {
   title: string
   description: string
-  fields?: EmbedField[]
-  footer?: string
-  color?: number
+} & Partial<{
+  fields: EmbedField[]
+  footer: string
+  color: number
+}>
+
+type ReplyTextFn = {
+  (content: string): Promise<void>
+  (content: string, options: ReplyOptions): Promise<void>
 }
+type ReplyFormattedFn = {
+  (markdown: string): Promise<void>
+  (markdown: string, options: ReplyOptions): Promise<void>
+}
+type ReplyFileFn = {
+  (file: ChatFile): Promise<void>
+  (file: ChatFile, options: ReplyOptions): Promise<void>
+}
+type RedactMessageFn = (replacementText: string) => Promise<void>
+type ReplyButtonsFn = (content: string, options: ButtonReplyOptions) => Promise<void>
+type ReplyEmbedFn = (options: EmbedOptions) => Promise<void>
+
+/** Reply function injected into handlers — the only way to send messages back to the user. */
+export type ReplyFn = {
+  text: ReplyTextFn
+  formatted: ReplyFormattedFn
+  typing: () => void
+  buttons: ReplyButtonsFn
+} & Partial<{
+  /** Replaces the current interactive message in place. Prefer only for button interaction flows; fall back to `text` when unavailable. */
+  replaceText: ReplyTextFn
+  file: ReplyFileFn
+  redactMessage: RedactMessageFn
+  /** Replaces the current interactive message in place. Prefer only for button interaction flows; fall back to `buttons` when unavailable. */
+  replaceButtons: ReplyButtonsFn
+  /** Optional: send a structured embed. Only Discord implements this today. */
+  embed: ReplyEmbedFn
+}>
 
 /** Result of `ChatProvider.renderContext` — describes how the handler should send the output. */
 export type ContextRendered =
@@ -212,24 +247,8 @@ export type ContextRendered =
   | { method: 'formatted'; content: string }
   | { method: 'embed'; embed: EmbedOptions }
 
-/** Reply function injected into handlers — the only way to send messages back to the user. */
-export type ReplyFn = {
-  text: (content: string, options?: ReplyOptions) => Promise<void>
-  /** Replaces the current interactive message in place. Prefer only for button interaction flows; fall back to `text` when unavailable. */
-  replaceText?: (content: string, options?: ReplyOptions) => Promise<void>
-  formatted: (markdown: string, options?: ReplyOptions) => Promise<void>
-  file?: (file: ChatFile, options?: ReplyOptions) => Promise<void>
-  typing: () => void
-  redactMessage?: (replacementText: string) => Promise<void>
-  buttons: (content: string, options: ButtonReplyOptions) => Promise<void>
-  /** Replaces the current interactive message in place. Prefer only for button interaction flows; fall back to `buttons` when unavailable. */
-  replaceButtons?: (content: string, options: ButtonReplyOptions) => Promise<void>
-  /** Optional: send a structured embed. Only Discord implements this today. */
-  embed?: (options: EmbedOptions) => Promise<void>
-}
-
 /** The core interface every chat platform provider must implement. */
-export interface ChatProvider {
+export type ChatProvider = {
   readonly name: string
   /** Thread support capabilities */
   readonly threadCapabilities: ThreadCapabilities
@@ -246,26 +265,8 @@ export interface ChatProvider {
   /** Register the catch-all handler for non-command messages. */
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void
 
-  /** Register the handler for button/callback interactions (optional). */
-  onInteraction?(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void
-
   /** Send a formatted markdown message to a user by ID (for announcements). */
   sendMessage(userId: string, markdown: string): Promise<void>
-
-  /**
-   * Resolve a username to a user ID. Returns null if not found or not supported.
-   *
-   * The `users.resolve` capability signals full username-resolution support (e.g. Mattermost).
-   * A provider may still expose a narrower passthrough implementation without advertising that
-   * capability — for example, accepting numeric IDs directly while rejecting plain usernames.
-   *
-   * The `context` parameter lets adapters like Discord scope the lookup to the caller's guild.
-   */
-  resolveUserId?(username: string, context: ResolveUserContext): Promise<string | null>
-
-  /** Register the bot's command list with the platform (for command menus). */
-  setCommands?(adminUserId: string): Promise<void>
-
   /** Render a context snapshot into a platform-native representation. */
   renderContext(snapshot: ContextSnapshot): ContextRendered
 
@@ -274,4 +275,10 @@ export interface ChatProvider {
 
   /** Graceful shutdown. */
   stop(): Promise<void>
-}
+} & Partial<{
+  /** Register the handler for button/callback interactions (optional). */
+  onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
+  resolveUserId: (username: string, context: ResolveUserContext) => Promise<string | null>
+  /** Register the bot's command list with the platform (for command menus). */
+  setCommands: (adminUserId: string) => Promise<void>
+}>

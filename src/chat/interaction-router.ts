@@ -32,6 +32,49 @@ async function replyButtonsPreferReplace(
   await reply.buttons(content, { buttons })
 }
 
+function getTargetContextId(parsedTargetContextId: string | undefined, interaction: IncomingInteraction): string {
+  if (parsedTargetContextId !== undefined) {
+    return parsedTargetContextId
+  }
+  return getSettingsTargetContextId(interaction)
+}
+
+function getEditorCallbackKey(
+  key: ReturnType<typeof parseCallbackData>['key'],
+): Parameters<typeof handleEditorCallback>[3] {
+  if (key === null) {
+    return undefined
+  }
+  return key
+}
+
+function getResponseText(response: string | undefined): string {
+  if (response === undefined) {
+    return ''
+  }
+  return response
+}
+
+async function replyConfigEditorResult(
+  reply: ReplyFn,
+  targetContextId: string,
+  result: ReturnType<typeof handleEditorCallback>,
+): Promise<void> {
+  const response = getResponseText(result.response)
+  if (result.buttons !== undefined && result.buttons.length > 0) {
+    await replyButtonsPreferReplace(
+      reply,
+      response,
+      result.buttons.map((btn) => ({
+        text: btn.text,
+        callbackData: serializeCallbackData(btn, targetContextId),
+      })),
+    )
+    return
+  }
+  await replyTextPreferReplace(reply, response)
+}
+
 export type InteractionRouteDeps = {
   handleGroupSettingsInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleConfigInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
@@ -47,7 +90,11 @@ function getSettingsTargetContextId(interaction: IncomingInteraction): string {
   if (interaction.contextType !== 'dm') {
     return interaction.storageContextId
   }
-  return getActiveGroupSettingsTarget(interaction.user.id) ?? interaction.storageContextId
+  const activeGroupTarget = getActiveGroupSettingsTarget(interaction.user.id)
+  if (activeGroupTarget === undefined || activeGroupTarget === null) {
+    return interaction.storageContextId
+  }
+  return activeGroupTarget
 }
 
 async function defaultHandleConfigInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
@@ -62,13 +109,14 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
     return true
   }
 
-  const targetContextId = parsed.targetContextId ?? getSettingsTargetContextId(interaction)
+  const targetContextId = getTargetContextId(parsed.targetContextId, interaction)
   log.debug(
     { userId: user.id, contextId: targetContextId, action: parsed.action, key: parsed.key },
     'Handling config editor callback',
   )
 
-  const result = handleEditorCallback(user.id, targetContextId, parsed.action, parsed.key ?? undefined)
+  const key = getEditorCallbackKey(parsed.key)
+  const result = handleEditorCallback(user.id, targetContextId, parsed.action, key)
 
   if (!result.handled) {
     log.warn({ action: parsed.action, key: parsed.key }, 'Config editor callback not handled')
@@ -76,18 +124,7 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
     return true
   }
 
-  if (result.buttons !== undefined && result.buttons.length > 0) {
-    await replyButtonsPreferReplace(
-      reply,
-      result.response ?? '',
-      result.buttons.map((btn) => ({
-        text: btn.text,
-        callbackData: serializeCallbackData(btn, targetContextId),
-      })),
-    )
-  } else {
-    await replyTextPreferReplace(reply, result.response ?? '')
-  }
+  await replyConfigEditorResult(reply, targetContextId, result)
 
   return true
 }
@@ -96,13 +133,14 @@ async function replyWithWizardButtons(
   reply: ReplyFn,
   response: string | undefined,
   buttons: Array<{ text: string; action: string }> | undefined,
-  targetContextId?: string,
+  targetContextId: string | undefined,
 ): Promise<void> {
   const contextSuffix = targetContextId === undefined ? '' : `@${Buffer.from(targetContextId).toString('base64url')}`
   if (buttons !== undefined && buttons.length > 0) {
+    const content = getResponseText(response)
     await replyButtonsPreferReplace(
       reply,
-      response ?? '',
+      content,
       buttons.map((button) => ({
         text: button.text,
         callbackData: `wizard_${button.action}${contextSuffix}`,
@@ -111,7 +149,8 @@ async function replyWithWizardButtons(
     return
   }
 
-  await replyTextPreferReplace(reply, response ?? '')
+  const content = getResponseText(response)
+  await replyTextPreferReplace(reply, content)
 }
 
 async function handleWizardEdit(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
@@ -156,7 +195,7 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
 
   const userId = user.id
   const { action, targetContextId: callbackContextId } = parseWizardContextId(callbackData)
-  const storageContextId = callbackContextId ?? getSettingsTargetContextId(interaction)
+  const storageContextId = getTargetContextId(callbackContextId, interaction)
 
   switch (action) {
     case 'wizard_confirm': {
@@ -202,8 +241,24 @@ export function routeInteraction(
   interaction: IncomingInteraction,
   reply: ReplyFn,
   auth: AuthorizationResult,
-  deps: InteractionRouteDeps = defaultDeps,
+): Promise<boolean>
+export function routeInteraction(
+  interaction: IncomingInteraction,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+  deps: InteractionRouteDeps,
+): Promise<boolean>
+export function routeInteraction(
+  interaction: IncomingInteraction,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+  ...rest: [] | [InteractionRouteDeps]
 ): Promise<boolean> {
+  const deps = rest[0]
+  let resolvedDeps = defaultDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   if (!auth.allowed) {
     return reply.text('You are not authorized to use this bot.').then(() => true)
   }
@@ -211,15 +266,15 @@ export function routeInteraction(
   const { callbackData } = interaction
 
   if (callbackData.startsWith('gsel:')) {
-    return deps.handleGroupSettingsInteraction(interaction, reply)
+    return resolvedDeps.handleGroupSettingsInteraction(interaction, reply)
   }
 
   if (callbackData.startsWith('cfg:')) {
-    return deps.handleConfigInteraction(interaction, reply)
+    return resolvedDeps.handleConfigInteraction(interaction, reply)
   }
 
   if (callbackData.startsWith('wizard_')) {
-    return deps.handleWizardInteraction(interaction, reply)
+    return resolvedDeps.handleWizardInteraction(interaction, reply)
   }
 
   log.debug({ callbackData }, 'No route matched for interaction callback')

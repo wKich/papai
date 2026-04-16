@@ -19,6 +19,8 @@ describe('DiscordChatProvider', () => {
     process.env['ADMIN_USER_ID'] = 'admin-id'
   })
 
+  type SendCapture = Partial<{ content: string; components: unknown[] }>
+
   afterEach(() => {
     if (originalToken === undefined) {
       delete process.env['DISCORD_BOT_TOKEN']
@@ -152,10 +154,10 @@ describe('DiscordChatProvider', () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
     const provider = new DiscordChatProvider()
 
-    const sends: { content?: string }[] = []
+    const sends: Array<Partial<{ content: string }>> = []
     const dmChannel = {
       id: 'dm-chan-1',
-      send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+      send: (arg: Partial<{ content: string }>): Promise<{ id: string; edit: () => Promise<void> }> => {
         sends.push(arg)
         return Promise.resolve({ id: 'msg-x', edit: (): Promise<void> => Promise.resolve() })
       },
@@ -259,7 +261,7 @@ describe('DiscordChatProvider', () => {
       expect(typeof client.login).toBe('function')
       expect(typeof client.destroy).toBe('function')
       // Clean up the client to avoid open handles
-      await client.destroy().catch(() => undefined)
+      await client.destroy().catch(() => {})
     })
   })
 
@@ -555,15 +557,19 @@ describe('DiscordChatProvider', () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
-      const sends: Array<{ content?: string; components?: unknown[] }> = []
-      const edits: Array<{ content?: string; components?: unknown[] }> = []
+      const sends: SendCapture[] = []
+      const edits: SendCapture[] = []
 
       provider.onInteraction(async (_interaction, reply): Promise<void> => {
         expect(typeof reply.replaceText).toBe('function')
         expect(typeof reply.replaceButtons).toBe('function')
 
-        await reply.replaceText?.('Updated menu')
-        await reply.replaceButtons?.('Choose next', {
+        if (reply.replaceText === undefined || reply.replaceButtons === undefined) {
+          throw new TypeError('Expected replacement helpers to be available')
+        }
+
+        await reply.replaceText('Updated menu')
+        await reply.replaceButtons('Choose next', {
           buttons: [{ text: 'Retry', callbackData: 'cb:retry', style: 'primary' }],
         })
       })
@@ -575,10 +581,7 @@ describe('DiscordChatProvider', () => {
         channel: {
           id: 'u-edit',
           type: 1,
-          send: (arg: {
-            content?: string
-            components?: unknown[]
-          }): Promise<{ id: string; edit: () => Promise<void> }> => {
+          send: (arg: SendCapture): Promise<{ id: string; edit: () => Promise<void> }> => {
             sends.push(arg)
             return Promise.resolve({ id: 'msg-sent', edit: (): Promise<void> => Promise.resolve() })
           },
@@ -587,7 +590,7 @@ describe('DiscordChatProvider', () => {
         message: {
           id: 'clicked-msg-1',
           editable: true,
-          edit: (arg: { content?: string; components?: unknown[] }): Promise<void> => {
+          edit: (arg: SendCapture): Promise<void> => {
             edits.push(arg)
             return Promise.resolve()
           },
@@ -602,22 +605,31 @@ describe('DiscordChatProvider', () => {
       expect(edits[0]).toEqual({ content: 'Updated menu', components: [] })
       expect(edits[1]!.content).toBe('Choose next')
       expect(Array.isArray(edits[1]!.components)).toBe(true)
-      expect((edits[1]!.components ?? []).length).toBe(1)
+      const secondEditComponents = edits[1]!.components
+      expect(secondEditComponents).toBeDefined()
+      if (secondEditComponents === undefined) {
+        throw new TypeError('Expected replacement button components')
+      }
+      expect(secondEditComponents.length).toBe(1)
     })
 
     test('falls back to new messages when the clicked message is not editable', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
       const provider = new DiscordChatProvider()
 
-      const sends: Array<{ content?: string; components?: unknown[] }> = []
-      const edits: Array<{ content?: string; components?: unknown[] }> = []
+      const sends: SendCapture[] = []
+      const edits: SendCapture[] = []
 
       provider.onInteraction(async (_interaction, reply): Promise<void> => {
         expect(typeof reply.replaceText).toBe('function')
         expect(typeof reply.replaceButtons).toBe('function')
 
-        await reply.replaceText?.('Updated menu')
-        await reply.replaceButtons?.('Choose next', {
+        if (reply.replaceText === undefined || reply.replaceButtons === undefined) {
+          throw new TypeError('Expected replacement helpers to be available')
+        }
+
+        await reply.replaceText('Updated menu')
+        await reply.replaceButtons('Choose next', {
           buttons: [{ text: 'Retry', callbackData: 'cb:retry', style: 'primary' }],
         })
       })
@@ -629,10 +641,7 @@ describe('DiscordChatProvider', () => {
         channel: {
           id: 'u-readonly',
           type: 1,
-          send: (arg: {
-            content?: string
-            components?: unknown[]
-          }): Promise<{ id: string; edit: () => Promise<void> }> => {
+          send: (arg: SendCapture): Promise<{ id: string; edit: () => Promise<void> }> => {
             sends.push(arg)
             return Promise.resolve({ id: 'msg-sent', edit: (): Promise<void> => Promise.resolve() })
           },
@@ -641,7 +650,7 @@ describe('DiscordChatProvider', () => {
         message: {
           id: 'clicked-msg-2',
           editable: false,
-          edit: (arg: { content?: string; components?: unknown[] }): Promise<void> => {
+          edit: (arg: SendCapture): Promise<void> => {
             edits.push(arg)
             return Promise.resolve()
           },
@@ -656,7 +665,12 @@ describe('DiscordChatProvider', () => {
       expect(sends[0]).toEqual({ content: 'Updated menu' })
       expect(sends[1]!.content).toBe('Choose next')
       expect(Array.isArray(sends[1]!.components)).toBe(true)
-      expect((sends[1]!.components ?? []).length).toBe(1)
+      const secondSendComponents = sends[1]!.components
+      expect(secondSendComponents).toBeDefined()
+      if (secondSendComponents === undefined) {
+        throw new TypeError('Expected fallback button components')
+      }
+      expect(secondSendComponents.length).toBe(1)
     })
 
     test('routes slash-prefixed customId to registered command handler', async () => {
@@ -862,7 +876,7 @@ describe('DiscordChatProvider', () => {
       })
       startGroupSettingsSelection('user-1', 'config', true)
 
-      const sends: Array<{ content?: string }> = []
+      const sends: Array<Partial<{ content: string }>> = []
       const interaction: ButtonInteractionLike = {
         user: { id: 'user-1', username: 'alice' },
         customId: 'gsel:scope:group',
@@ -870,7 +884,7 @@ describe('DiscordChatProvider', () => {
         channel: {
           id: 'dm-1',
           type: 1,
-          send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+          send: (arg: Partial<{ content: string }>): Promise<{ id: string; edit: () => Promise<void> }> => {
             sends.push(arg)
             return Promise.resolve({ id: 'out-1', edit: (): Promise<void> => Promise.resolve() })
           },
@@ -882,7 +896,11 @@ describe('DiscordChatProvider', () => {
 
       await provider.testDispatchButtonInteraction(interaction, 'bot-id', 'admin-id')
 
-      expect(sends[0]?.content).toContain('Choose a group to configure.')
+      expect(sends[0]).toBeDefined()
+      if (sends[0] === undefined || sends[0].content === undefined) {
+        throw new TypeError('Expected a config prompt message')
+      }
+      expect(sends[0].content).toContain('Choose a group to configure.')
     })
 
     test('Discord DM selector continues into setup when the selector command is setup', async () => {
@@ -920,7 +938,7 @@ describe('DiscordChatProvider', () => {
       }
       await provider.testDispatchButtonInteraction(groupSelectorInteraction, 'bot-id', 'admin-id')
 
-      const sends: Array<{ content?: string }> = []
+      const sends: Array<Partial<{ content: string }>> = []
       const interaction: ButtonInteractionLike = {
         user: { id: 'user-1', username: 'alice' },
         customId: 'gsel:group:group-1',
@@ -928,7 +946,7 @@ describe('DiscordChatProvider', () => {
         channel: {
           id: 'dm-1',
           type: 1,
-          send: (arg: { content?: string }): Promise<{ id: string; edit: () => Promise<void> }> => {
+          send: (arg: Partial<{ content: string }>): Promise<{ id: string; edit: () => Promise<void> }> => {
             sends.push(arg)
             return Promise.resolve({ id: 'out-1', edit: (): Promise<void> => Promise.resolve() })
           },
@@ -940,7 +958,11 @@ describe('DiscordChatProvider', () => {
 
       await provider.testDispatchButtonInteraction(interaction, 'bot-id', 'admin-id')
 
-      expect(sends[0]?.content).toContain('Welcome to papai configuration wizard!')
+      expect(sends[0]).toBeDefined()
+      if (sends[0] === undefined || sends[0].content === undefined) {
+        throw new TypeError('Expected a setup prompt message')
+      }
+      expect(sends[0].content).toContain('Welcome to papai configuration wizard!')
     })
 
     test('handles deferUpdate failure gracefully', async () => {

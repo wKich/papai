@@ -9,34 +9,34 @@ import { discordTraits } from './metadata.js'
 
 const log = logger.child({ scope: 'chat:discord:reply' })
 
+type MessageRef = { messageReference: string; failIfNotExists: boolean } | undefined
+type SendPayload = Partial<{
+  content: string
+  components: unknown[]
+  embeds: unknown[]
+  reply: Exclude<MessageRef, undefined>
+}>
+type EditPayload = Partial<{ content: string; components: unknown[] }>
+
 export type SendableChannel = {
   id: string
-  send: (arg: {
-    content?: string
-    components?: unknown[]
-    embeds?: unknown[]
-    reply?: { messageReference: string; failIfNotExists: boolean }
-  }) => Promise<{ id: string; edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown> }>
+  send: (arg: SendPayload) => Promise<{ id: string; edit: (arg: EditPayload) => Promise<unknown> }>
   sendTyping: () => Promise<void>
 }
 
 export type CreateDiscordReplyFnParams = {
   channel: SendableChannel
   replyToMessageId: string | undefined
-  replaceMessage?: BotMessage
-}
-
-type MessageRef = { messageReference: string; failIfNotExists: boolean } | undefined
+} & Partial<{ replaceMessage: BotMessage }>
 
 type BotMessage = {
   id: string
-  edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
+  edit: (arg: EditPayload) => Promise<unknown>
 }
 
-type EditPayload = { content?: string; components?: unknown[] }
-
-function buildReply(replyToMessageId: string | undefined, options?: ReplyOptions): MessageRef {
-  const target = options?.replyToMessageId ?? replyToMessageId
+function buildReply(replyToMessageId: string | undefined, options: ReplyOptions | undefined): MessageRef {
+  const target =
+    options !== undefined && options.replyToMessageId !== undefined ? options.replyToMessageId : replyToMessageId
   return target === undefined ? undefined : { messageReference: target, failIfNotExists: false }
 }
 
@@ -44,7 +44,7 @@ async function sendChunksSequentially(
   channel: SendableChannel,
   chunks: string[],
   replyToMessageId: string | undefined,
-  options?: ReplyOptions,
+  options: ReplyOptions | undefined,
 ): Promise<BotMessage[]> {
   // Chunks must be sent sequentially to preserve message ordering.
   // Use p-limit with concurrency=1 to enforce sequential execution without await-in-loop.
@@ -85,7 +85,7 @@ async function sendTextReply(
   sentMessages: BotMessage[],
   replyToMessageId: string | undefined,
   content: string,
-  options?: ReplyOptions,
+  options: ReplyOptions | undefined,
 ): Promise<void> {
   const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
   const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
@@ -97,7 +97,7 @@ async function sendFormattedReply(
   sentMessages: BotMessage[],
   replyToMessageId: string | undefined,
   markdown: string,
-  options?: ReplyOptions,
+  options: ReplyOptions | undefined,
 ): Promise<void> {
   const chunks = formatLlmOutput(markdown)
   const messages = await sendChunksSequentially(channel, chunks, replyToMessageId, options)
@@ -144,19 +144,31 @@ async function redactMessages(channelId: string, sentMessages: BotMessage[], rep
 export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyFn {
   const { channel, replyToMessageId, replaceMessage } = params
   const sentMessages: BotMessage[] = []
+  const text: ReplyFn['text'] = (content: string, ...rest: [] | [ReplyOptions]): Promise<void> => {
+    const options = rest[0]
+    return sendTextReply(channel, sentMessages, replyToMessageId, content, options)
+  }
+  const replaceText: NonNullable<ReplyFn['replaceText']> = (
+    content: string,
+    ...rest: [] | [ReplyOptions]
+  ): Promise<void> => {
+    const options = rest[0]
+    return replaceOrSend(replaceMessage, { content, components: [] }, () =>
+      sendTextReply(channel, sentMessages, replyToMessageId, content, options),
+    )
+  }
+  const formatted: ReplyFn['formatted'] = (markdown: string, ...rest: [] | [ReplyOptions]): Promise<void> => {
+    const options = rest[0]
+    return sendFormattedReply(channel, sentMessages, replyToMessageId, markdown, options)
+  }
 
   return {
-    text: (content: string, options?: ReplyOptions): Promise<void> =>
-      sendTextReply(channel, sentMessages, replyToMessageId, content, options),
-    replaceText: (content: string, options?: ReplyOptions): Promise<void> =>
-      replaceOrSend(replaceMessage, { content, components: [] }, () =>
-        sendTextReply(channel, sentMessages, replyToMessageId, content, options),
-      ),
-    formatted: (markdown: string, options?: ReplyOptions): Promise<void> =>
-      sendFormattedReply(channel, sentMessages, replyToMessageId, markdown, options),
+    text,
+    replaceText,
+    formatted,
 
     typing: (): void => {
-      channel.sendTyping().catch(() => undefined)
+      void channel.sendTyping().catch(() => null)
     },
     redactMessage: (replacementText: string): Promise<void> =>
       redactMessages(channel.id, sentMessages, replacementText),
@@ -170,7 +182,7 @@ export function createDiscordReplyFn(params: CreateDiscordReplyFnParams): ReplyF
       ),
     embed: async (options: EmbedOptions): Promise<void> => {
       const embed = createEmbedPayload(options)
-      const sent = await channel.send({ embeds: [embed], reply: buildReply(replyToMessageId, undefined) })
+      const sent = await channel.send({ embeds: [embed] })
       sentMessages.push(sent)
     },
   }

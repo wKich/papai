@@ -21,16 +21,43 @@ export async function dispatchGroupSelectorResult(
   result: GroupSettingsSelectorResult,
   reply: ReplyFn,
   userId: string,
-  interactiveButtons = true,
-  deps: DispatchGroupSelectorDeps = defaultDeps,
+): Promise<boolean>
+export async function dispatchGroupSelectorResult(
+  result: GroupSettingsSelectorResult,
+  reply: ReplyFn,
+  userId: string,
+  interactiveButtons: boolean | undefined,
+): Promise<boolean>
+export async function dispatchGroupSelectorResult(
+  result: GroupSettingsSelectorResult,
+  reply: ReplyFn,
+  userId: string,
+  interactiveButtons: boolean | undefined,
+  deps: DispatchGroupSelectorDeps | undefined,
+): Promise<boolean>
+export async function dispatchGroupSelectorResult(
+  result: GroupSettingsSelectorResult,
+  reply: ReplyFn,
+  userId: string,
+  ...rest: [] | [boolean | undefined] | [boolean | undefined, DispatchGroupSelectorDeps | undefined]
 ): Promise<boolean> {
+  const interactiveButtons = rest[0]
+  const deps = rest[1]
+  let shouldUseInteractiveButtons = true
+  if (interactiveButtons !== undefined) {
+    shouldUseInteractiveButtons = interactiveButtons
+  }
+  let resolvedDeps = defaultDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   if (!result.handled) return false
 
   if ('continueWith' in result) {
     if (result.continueWith.command === 'config') {
-      await deps.renderConfigForTarget(reply, result.continueWith.targetContextId, interactiveButtons)
+      await resolvedDeps.renderConfigForTarget(reply, result.continueWith.targetContextId, shouldUseInteractiveButtons)
     } else {
-      await deps.startSetupForTarget(userId, reply, result.continueWith.targetContextId)
+      await resolvedDeps.startSetupForTarget(userId, reply, result.continueWith.targetContextId)
     }
     return true
   }

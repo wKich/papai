@@ -25,10 +25,10 @@ function createMockContext(message: {
   return { message }
 }
 
-type ReplacementCallOptions = {
-  entities?: ReturnType<typeof formatLlmOutput>['entities']
-  reply_markup?: InlineKeyboard
-}
+type ReplacementCallOptions = Partial<{
+  entities: ReturnType<typeof formatLlmOutput>['entities']
+  reply_markup: InlineKeyboard
+}>
 
 describe('createReplyParamsBuilder', () => {
   beforeEach(() => {
@@ -149,7 +149,8 @@ describe('replacement reply helpers', () => {
   test('sendReplacementButtonReply edits the callback message with a new keyboard', async () => {
     let capturedText: string | undefined
     let capturedOptions: ReplacementCallOptions | undefined
-    const editMessageText = mock((text: string, options?: ReplacementCallOptions) => {
+    const editMessageText = mock((text: string, ...rest: [] | [ReplacementCallOptions]) => {
+      const options = rest[0]
       capturedText = text
       capturedOptions = options
       return Promise.resolve(true)
@@ -169,10 +170,19 @@ describe('replacement reply helpers', () => {
     expect(editMessageText).toHaveBeenCalledTimes(1)
 
     expect(capturedText).toBe(formatted.text)
-    expect(capturedOptions?.entities).toEqual(formatted.entities)
-    expect(capturedOptions?.reply_markup).toBeInstanceOf(InlineKeyboard)
+    expect(capturedOptions).toBeDefined()
+    if (capturedOptions === undefined) {
+      throw new TypeError('Expected replacement options to be captured')
+    }
+    expect(capturedOptions.entities).toEqual(formatted.entities)
+    expect(capturedOptions.reply_markup).toBeInstanceOf(InlineKeyboard)
 
-    const inlineKeyboard = capturedOptions?.reply_markup?.inline_keyboard ?? []
+    const replyMarkup = capturedOptions.reply_markup
+    expect(replyMarkup).toBeDefined()
+    if (replyMarkup === undefined) {
+      throw new TypeError('Expected replacement keyboard to be captured')
+    }
+    const inlineKeyboard = replyMarkup.inline_keyboard
 
     expect(inlineKeyboard.flat()).toEqual([
       { text: 'First', callback_data: 'first' },
@@ -184,7 +194,8 @@ describe('replacement reply helpers', () => {
   test('sendReplacementTextReply edits the callback message and clears any existing keyboard', async () => {
     let capturedText: string | undefined
     let capturedOptions: ReplacementCallOptions | undefined
-    const editMessageText = mock((text: string, options?: ReplacementCallOptions) => {
+    const editMessageText = mock((text: string, ...rest: [] | [ReplacementCallOptions]) => {
+      const options = rest[0]
       capturedText = text
       capturedOptions = options
       return Promise.resolve(true)
@@ -198,8 +209,17 @@ describe('replacement reply helpers', () => {
     expect(editMessageText).toHaveBeenCalledTimes(1)
 
     expect(capturedText).toBe(formatted.text)
-    expect(capturedOptions?.entities).toEqual(formatted.entities)
-    expect(capturedOptions?.reply_markup).toBeInstanceOf(InlineKeyboard)
-    expect(capturedOptions?.reply_markup?.inline_keyboard).toEqual([])
+    expect(capturedOptions).toBeDefined()
+    if (capturedOptions === undefined) {
+      throw new TypeError('Expected replacement options to be captured')
+    }
+    expect(capturedOptions.entities).toEqual(formatted.entities)
+    expect(capturedOptions.reply_markup).toBeInstanceOf(InlineKeyboard)
+    const replyMarkup = capturedOptions.reply_markup
+    expect(replyMarkup).toBeDefined()
+    if (replyMarkup === undefined) {
+      throw new TypeError('Expected replacement keyboard to be captured')
+    }
+    expect(replyMarkup.inline_keyboard).toEqual([])
   })
 })

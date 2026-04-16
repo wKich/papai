@@ -6,31 +6,36 @@ export const DISCORD_CUSTOM_ID_MAX = 100
 export const DISCORD_BUTTONS_PER_ROW = 5
 export const DISCORD_ROWS_PER_MESSAGE = 5
 
+type DiscordMessageRef = { messageReference: string; failIfNotExists: boolean }
+type DiscordEditPayload = Partial<{ content: string; components: unknown[] }>
+type DiscordSendPayload = Partial<{
+  content: string
+  components: unknown[]
+  reply: DiscordMessageRef
+}>
+
 /** Channel interface for button interactions. */
 export type ButtonChannelLike = {
   id: string
   type: number
-  send: (arg: {
-    content?: string
-    components?: unknown[]
-    reply?: { messageReference: string; failIfNotExists: boolean }
-  }) => Promise<{ id: string; edit: (arg: { content?: string; components?: unknown[] }) => Promise<unknown> }>
+  send: (arg: DiscordSendPayload) => Promise<{ id: string; edit: (arg: DiscordEditPayload) => Promise<unknown> }>
   sendTyping: () => Promise<void>
 }
 
 /** Structural type for a Discord button interaction. */
 export type ButtonInteractionLike = {
-  user: { id: string; username: string; bot?: boolean; isAdmin?: boolean }
+  user: { id: string; username: string } & Partial<{ bot: boolean; isAdmin: boolean }>
   customId: string
   channelId: string
   channel: ButtonChannelLike | null
   message: {
     id: string
-    channelId?: string
-    threadId?: string
-    editable?: boolean
-    edit?: (arg: { content?: string; components?: unknown[] }) => Promise<unknown>
-  }
+  } & Partial<{
+    channelId: string
+    threadId: string
+    editable: boolean
+    edit: (arg: DiscordEditPayload) => Promise<unknown>
+  }>
   deferUpdate(): Promise<void>
 }
 

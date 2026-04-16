@@ -35,6 +35,13 @@ const createMockAuth = (allowed: boolean): AuthorizationResult => ({
   storageContextId: 'ctx-1',
 })
 
+const captureReplyText = (replies: string[]): ReplyFn['text'] => {
+  return (content: string, ..._rest: [] | [Parameters<ReplyFn['text']>[1]]): Promise<void> => {
+    replies.push(content)
+    return Promise.resolve()
+  }
+}
+
 describe('routeInteraction', () => {
   beforeEach(async () => {
     mockLogger()
@@ -121,10 +128,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'wizard_edit' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
@@ -232,10 +236,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'gsel:group:group-9' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
@@ -250,10 +251,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'cfg:edit:timezone' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(false),
     )
@@ -268,10 +266,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'wizard_confirm' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(false),
     )
@@ -286,10 +281,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'wizard_cancel' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
@@ -323,10 +315,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'wizard_restart' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
@@ -341,10 +330,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'cfg:invalid:callback' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
@@ -359,10 +345,7 @@ describe('routeInteraction', () => {
       { ...interaction, callbackData: 'cfg:save:timezone' },
       {
         ...reply,
-        text: (content: string): Promise<void> => {
-          replies.push(content)
-          return Promise.resolve()
-        },
+        text: captureReplyText(replies),
       },
       createMockAuth(true),
     )
