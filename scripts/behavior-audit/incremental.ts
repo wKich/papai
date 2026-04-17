@@ -1,5 +1,5 @@
-import { mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { mkdir, rename } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
@@ -98,6 +98,13 @@ export async function loadManifest(): Promise<IncrementalManifest | null> {
 
 export async function saveManifest(manifest: IncrementalManifest): Promise<void> {
   const parsedManifest = IncrementalManifestSchema.parse(manifest)
-  await mkdir(dirname(INCREMENTAL_MANIFEST_PATH), { recursive: true })
-  await Bun.write(INCREMENTAL_MANIFEST_PATH, JSON.stringify(parsedManifest, null, 2) + '\n')
+  const manifestDir = dirname(INCREMENTAL_MANIFEST_PATH)
+  const tempManifestPath = join(
+    manifestDir,
+    `.${basename(INCREMENTAL_MANIFEST_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  )
+
+  await mkdir(manifestDir, { recursive: true })
+  await Bun.write(tempManifestPath, JSON.stringify(parsedManifest, null, 2) + '\n')
+  await rename(tempManifestPath, INCREMENTAL_MANIFEST_PATH)
 }

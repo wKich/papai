@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import * as fsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -199,6 +200,20 @@ describe('behavior-audit incremental manifest', () => {
     await expect(incremental.loadManifest()).rejects.toThrow()
   })
 
+  test('loadManifest throws when manifest JSON is schema-invalid', async () => {
+    const incremental = await loadIncrementalModule()
+
+    await Bun.write(
+      manifestPath,
+      JSON.stringify({
+        version: 2,
+        tests: {},
+      }),
+    )
+
+    await expect(incremental.loadManifest()).rejects.toThrow()
+  })
+
   test('captureRunStart saves previous lastStartCommit for diffing and writes new HEAD immediately', async () => {
     const incremental = await loadIncrementalModule()
     const manifest = {
@@ -211,6 +226,23 @@ describe('behavior-audit incremental manifest', () => {
     expect(result.previousLastStartCommit).toBe('old-commit')
     expect(result.updatedManifest.lastStartCommit).toBe('new-commit')
     expect(result.updatedManifest.lastStartedAt).toBe('2026-04-17T12:00:00.000Z')
+  })
+
+  test('saveManifest writes through a temp file and atomically renames it into place', async () => {
+    const renameSpy = spyOn(fsPromises, 'rename')
+    const incremental = await loadIncrementalModule()
+
+    await incremental.saveManifest(incremental.createEmptyManifest())
+
+    const reportEntries = readdirSync(reportsDir)
+    expect(reportEntries).toEqual(['incremental-manifest.json'])
+    expect(renameSpy).toHaveBeenCalledTimes(1)
+    const firstRenameCall = renameSpy.mock.calls[0]
+    if (firstRenameCall === undefined) {
+      throw new Error('Expected rename to be called')
+    }
+    expect(firstRenameCall[0]).not.toBe(manifestPath)
+    expect(firstRenameCall[1]).toBe(manifestPath)
   })
 
   test('startup writes lastStartCommit to the manifest before phase execution', async () => {
@@ -254,6 +286,37 @@ describe('behavior-audit incremental manifest', () => {
 
     await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
     expect(await Bun.file(manifestPath).text()).toBe('{broken json')
+    expect(errorCalls.some((line) => line.includes('Fatal error:'))).toBe(true)
+    expect(phase1Calls).toBe(0)
+
+    consoleErrorSpy.mockRestore()
+    processExitSpy.mockRestore()
+  })
+
+  test('startup stops on schema-invalid manifest before overwriting it', async () => {
+    await initializeGitRepo(root)
+
+    await Bun.write(
+      manifestPath,
+      JSON.stringify({
+        version: 2,
+        tests: {},
+      }),
+    )
+
+    const errorCalls: string[] = []
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: readonly unknown[]) => {
+      errorCalls.push(args.map(String).join(' '))
+    })
+    const processExitSpy = spyOn(process, 'exit').mockImplementation(((code: number | undefined) => {
+      if (code === undefined) {
+        throw new Error('process.exit:0')
+      }
+      throw new Error(`process.exit:${code}`)
+    }) as typeof process.exit)
+
+    await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
+    expect(await Bun.file(manifestPath).text()).toBe('{"version":2,"tests":{}}')
     expect(errorCalls.some((line) => line.includes('Fatal error:'))).toBe(true)
     expect(phase1Calls).toBe(0)
 
