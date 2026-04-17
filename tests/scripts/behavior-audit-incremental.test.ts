@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -37,6 +37,71 @@ async function loadIncrementalModule(): Promise<typeof IncrementalModule> {
   return mod
 }
 
+async function loadBehaviorAuditEntryPoint(tag: string): Promise<void> {
+  await import(`../../scripts/behavior-audit.ts?test=${tag}`)
+}
+
+async function runCommand(command: string[], cwd: string): Promise<string> {
+  const proc = Bun.spawn(command, {
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    const errorMessage = stderr.trim()
+    if (errorMessage.length > 0) {
+      throw new Error(errorMessage)
+    }
+    throw new Error(`Command failed: ${command.join(' ')}`)
+  }
+  return stdout.trim()
+}
+
+async function initializeGitRepo(root: string): Promise<void> {
+  await runCommand(['git', 'init', '-q'], root)
+  await runCommand(
+    [
+      'git',
+      '-c',
+      'user.name=Test User',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'init',
+      '-q',
+    ],
+    root,
+  )
+}
+
+function isSavedManifest(
+  value: unknown,
+): value is { readonly lastStartCommit: string | null; readonly lastStartedAt: string | null } {
+  if (!isObject(value)) {
+    return false
+  }
+  if (!('lastStartCommit' in value) || !('lastStartedAt' in value)) {
+    return false
+  }
+
+  const lastStartCommit = value['lastStartCommit']
+  if (typeof lastStartCommit !== 'string' && lastStartCommit !== null) {
+    return false
+  }
+
+  const lastStartedAt = value['lastStartedAt']
+  if (typeof lastStartedAt !== 'string' && lastStartedAt !== null) {
+    return false
+  }
+
+  return true
+}
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
@@ -44,13 +109,22 @@ afterEach(() => {
 })
 
 describe('behavior-audit incremental manifest', () => {
+  let root: string
   let reportsDir: string
   let manifestPath: string
+  let phase1ManifestSnapshot: string | null
+  let phase1Calls: number
 
   beforeEach(() => {
-    const root = makeTempDir()
+    root = makeTempDir()
     reportsDir = path.join(root, 'reports')
     manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+    phase1ManifestSnapshot = null
+    phase1Calls = 0
+
+    const testsDir = path.join(root, 'tests', 'tools')
+    mkdirSync(testsDir, { recursive: true })
+    writeFileSync(path.join(testsDir, 'sample.test.ts'), "test('sample', () => {})\n")
 
     void mock.module('../../scripts/behavior-audit/config.js', () => ({
       MODEL: 'qwen3-30b-a3b',
@@ -74,6 +148,15 @@ describe('behavior-audit incremental manifest', () => {
         'tests/review-loop/',
         'tests/types/',
       ] as const,
+    }))
+    void mock.module('../../scripts/behavior-audit/extract.js', () => ({
+      runPhase1: async (): Promise<void> => {
+        phase1Calls += 1
+        phase1ManifestSnapshot = await Bun.file(manifestPath).text()
+      },
+    }))
+    void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
+      runPhase2: async (): Promise<void> => {},
     }))
   })
 
@@ -128,5 +211,53 @@ describe('behavior-audit incremental manifest', () => {
     expect(result.previousLastStartCommit).toBe('old-commit')
     expect(result.updatedManifest.lastStartCommit).toBe('new-commit')
     expect(result.updatedManifest.lastStartedAt).toBe('2026-04-17T12:00:00.000Z')
+  })
+
+  test('startup writes lastStartCommit to the manifest before phase execution', async () => {
+    await initializeGitRepo(root)
+    const currentHead = await runCommand(['git', 'rev-parse', 'HEAD'], root)
+
+    await loadBehaviorAuditEntryPoint(crypto.randomUUID())
+
+    const savedManifestJson: unknown = JSON.parse(await Bun.file(manifestPath).text())
+    if (!isSavedManifest(savedManifestJson)) {
+      throw new Error('Saved manifest shape mismatch')
+    }
+
+    expect(savedManifestJson.lastStartCommit).toBe(currentHead)
+    expect(savedManifestJson.lastStartedAt).not.toBeNull()
+    expect(phase1Calls).toBe(1)
+    expect(phase1ManifestSnapshot).not.toBeNull()
+    if (phase1ManifestSnapshot === null) {
+      throw new Error('Expected phase1 manifest snapshot')
+    }
+    expect(JSON.parse(phase1ManifestSnapshot)).toMatchObject({
+      lastStartCommit: currentHead,
+    })
+  })
+
+  test('startup stops on corrupt manifest before overwriting it', async () => {
+    await initializeGitRepo(root)
+
+    await Bun.write(manifestPath, '{broken json')
+
+    const errorCalls: string[] = []
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: readonly unknown[]) => {
+      errorCalls.push(args.map(String).join(' '))
+    })
+    const processExitSpy = spyOn(process, 'exit').mockImplementation(((code: number | undefined) => {
+      if (code === undefined) {
+        throw new Error('process.exit:0')
+      }
+      throw new Error(`process.exit:${code}`)
+    }) as typeof process.exit)
+
+    await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
+    expect(await Bun.file(manifestPath).text()).toBe('{broken json')
+    expect(errorCalls.some((line) => line.includes('Fatal error:'))).toBe(true)
+    expect(phase1Calls).toBe(0)
+
+    consoleErrorSpy.mockRestore()
+    processExitSpy.mockRestore()
   })
 })
