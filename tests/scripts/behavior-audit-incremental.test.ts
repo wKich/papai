@@ -108,6 +108,14 @@ describe('behavior-audit incremental manifest', () => {
     expect(loaded.tests).toEqual({})
   })
 
+  test('loadManifest throws when manifest content is malformed', async () => {
+    const incremental = await loadIncrementalModule()
+
+    await Bun.write(manifestPath, '{not valid json')
+
+    await expect(incremental.loadManifest()).rejects.toThrow()
+  })
+
   test('captureRunStart saves previous lastStartCommit for diffing and writes new HEAD immediately', async () => {
     const incremental = await loadIncrementalModule()
     const manifest = {

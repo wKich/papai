@@ -87,12 +87,13 @@ export function captureRunStart(
 }
 
 export async function loadManifest(): Promise<IncrementalManifest | null> {
-  try {
-    const text = await Bun.file(INCREMENTAL_MANIFEST_PATH).text()
-    return IncrementalManifestSchema.parse(JSON.parse(text))
-  } catch {
+  const manifestFile = Bun.file(INCREMENTAL_MANIFEST_PATH)
+  if (!(await manifestFile.exists())) {
     return null
   }
+
+  const text = await manifestFile.text()
+  return IncrementalManifestSchema.parse(JSON.parse(text))
 }
 
 export async function saveManifest(manifest: IncrementalManifest): Promise<void> {
