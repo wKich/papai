@@ -73,7 +73,9 @@ export const recurringTasks = sqliteTable(
   'recurring_tasks',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.platformUserId, { onDelete: 'cascade' }),
     projectId: text('project_id').notNull(),
     title: text('title').notNull(),
     description: text('description'),
@@ -105,7 +107,9 @@ export const recurringTaskOccurrences = sqliteTable(
   'recurring_task_occurrences',
   {
     id: text('id').primaryKey(),
-    templateId: text('template_id').notNull(),
+    templateId: text('template_id')
+      .notNull()
+      .references(() => recurringTasks.id, { onDelete: 'cascade' }),
     taskId: text('task_id').notNull(),
     createdAt: text('created_at')
       .notNull()
@@ -293,5 +297,4 @@ export const groupAdminObservations = sqliteTable(
     index('idx_group_admin_observations_user_admin').on(table.userId, table.isAdmin),
   ],
 )
-
 export { webCache, webRateLimit } from './web-schema.js'

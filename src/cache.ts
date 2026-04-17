@@ -234,6 +234,12 @@ export function clearCachedTools(userId: string): void {
   getOrCreateCache(userId).tools = null
 }
 
+export function evictUser(userId: string): void {
+  userCaches.delete(userId)
+  emit('cache:expire', { userId })
+  log.debug({ userId }, 'User cache evicted')
+}
+
 export function clearCachedFacts(userId: string): void {
   const cache = userCaches.get(userId)
   if (cache === undefined) {

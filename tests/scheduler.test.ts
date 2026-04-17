@@ -57,10 +57,20 @@ describe('scheduler', () => {
 
   const setupDb = (): void => {
     testSqlite = new Database(':memory:')
+    testSqlite.run('PRAGMA foreign_keys=ON')
     testDb = drizzle(testSqlite, { schema })
     testSqlite.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT DEFAULT (datetime('now')) NOT NULL,
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
+    testSqlite.run(`
       CREATE TABLE IF NOT EXISTS recurring_tasks (
-        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT NOT NULL, title TEXT NOT NULL,
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(platform_user_id) ON DELETE CASCADE, project_id TEXT NOT NULL, title TEXT NOT NULL,
         description TEXT, priority TEXT, status TEXT, assignee TEXT, labels TEXT,
         trigger_type TEXT NOT NULL DEFAULT 'cron', cron_expression TEXT,
         timezone TEXT NOT NULL DEFAULT 'UTC', enabled TEXT NOT NULL DEFAULT '1',
@@ -72,13 +82,14 @@ describe('scheduler', () => {
     testSqlite.run('CREATE INDEX IF NOT EXISTS idx_recurring_tasks_enabled_next ON recurring_tasks(enabled, next_run)')
     testSqlite.run(`
       CREATE TABLE IF NOT EXISTS recurring_task_occurrences (
-        id TEXT PRIMARY KEY, template_id TEXT NOT NULL, task_id TEXT NOT NULL,
+        id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES recurring_tasks(id) ON DELETE CASCADE, task_id TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now')) NOT NULL
       )
     `)
   }
 
   const seedUser = (userId: string = USER_ID): void => {
+    testSqlite.run('INSERT OR IGNORE INTO users (platform_user_id, added_by) VALUES (?, ?)', [userId, 'admin'])
     clearUserCache(userId)
     setCachedConfig(userId, 'kaneo_apikey', 'test-api-key')
     setKaneoWorkspace(userId, 'workspace-1')

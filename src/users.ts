@@ -1,6 +1,6 @@
 import { eq, or } from 'drizzle-orm'
 
-import { getCachedWorkspace, setCachedWorkspace } from './cache.js'
+import { evictUser, getCachedWorkspace, setCachedWorkspace } from './cache.js'
 import { getDrizzleDb } from './db/drizzle.js'
 import { users } from './db/schema.js'
 import { logger } from './logger.js'
@@ -45,6 +45,9 @@ export function removeUser(identifier: string): boolean {
 
   const removed = deleted.length > 0
   if (removed) {
+    for (const row of deleted) {
+      evictUser(row.platformUserId)
+    }
     log.info('User removed')
   } else {
     log.info('User not found for removal')

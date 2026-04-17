@@ -43,6 +43,7 @@ import { migration019UserIdentityMappings } from '../../src/db/migrations/019_us
 import { migration020GroupSettingsRegistry } from '../../src/db/migrations/020_group_settings_registry.js'
 import { migration021WebFetch } from '../../src/db/migrations/021_web_fetch.js'
 import { migration022DropUnusedLastSeenIndex } from '../../src/db/migrations/022_drop_unused_last_seen_index.js'
+import { migration023AddForeignKeys } from '../../src/db/migrations/023_add_foreign_keys.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
 import { getUserMessage } from '../../src/errors.js'
@@ -71,6 +72,7 @@ const ALL_MIGRATIONS: readonly Migration[] = [
   migration020GroupSettingsRegistry,
   migration021WebFetch,
   migration022DropUnusedLastSeenIndex,
+  migration023AddForeignKeys,
 ]
 
 // ============================================================================
@@ -157,6 +159,7 @@ export async function setupTestDb(): Promise<ReturnType<typeof drizzle<typeof sc
   _userCaches.clear()
 
   testSqlite = new Database(':memory:')
+  testSqlite.run('PRAGMA foreign_keys=ON')
   testDb = drizzle(testSqlite, { schema })
 
   runMigrations(testSqlite, [...ALL_MIGRATIONS])

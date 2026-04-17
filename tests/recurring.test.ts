@@ -36,11 +36,22 @@ describe('recurring tasks', () => {
     testDb = drizzle(testSqlite, { schema })
     setTestDrizzleDb(testDb)
 
+    testSqlite.run(`
+      CREATE TABLE users (
+        platform_user_id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        added_at TEXT DEFAULT (datetime('now')) NOT NULL,
+        added_by TEXT NOT NULL,
+        kaneo_workspace_id TEXT
+      )
+    `)
+    testSqlite.run(`INSERT INTO users (platform_user_id, added_by) VALUES ('${USER_ID}', 'admin')`)
+
     // Create the recurring_tasks table
     testSqlite.run(`
     CREATE TABLE recurring_tasks (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(platform_user_id) ON DELETE CASCADE,
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
@@ -66,7 +77,7 @@ describe('recurring tasks', () => {
     testSqlite.run(`
     CREATE TABLE recurring_task_occurrences (
       id TEXT PRIMARY KEY,
-      template_id TEXT NOT NULL,
+      template_id TEXT NOT NULL REFERENCES recurring_tasks(id) ON DELETE CASCADE,
       task_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')) NOT NULL
     )
@@ -139,6 +150,7 @@ describe('recurring tasks', () => {
         triggerType: 'cron',
         cronExpression: '0 9 * * 5',
       })
+      testSqlite.run("INSERT INTO users (platform_user_id, added_by) VALUES ('other-user', 'admin')")
       createRecurringTask({
         userId: 'other-user',
         projectId: PROJECT_ID,
@@ -320,6 +332,28 @@ describe('recurring tasks', () => {
       const tasks = listRecurringTasks(USER_ID)
       expect(tasks).toHaveLength(0)
     })
+
+    test('cascade-deletes occurrences when template is deleted', () => {
+      const task = createRecurringTask({
+        userId: USER_ID,
+        projectId: PROJECT_ID,
+        title: 'Test',
+        triggerType: 'cron',
+        cronExpression: '0 9 * * 1',
+      })
+
+      recordOccurrence(task.id, 'external-task-cascade')
+
+      expect(deleteRecurringTask(task.id)).toBe(true)
+
+      const occurrenceCount = testSqlite
+        .query<{ count: number }, [string]>(
+          'SELECT count(*) AS count FROM recurring_task_occurrences WHERE template_id = ?',
+        )
+        .get(task.id)
+
+      expect(occurrenceCount?.count).toBe(0)
+    })
   })
 
   describe('getDueRecurringTasks', () => {
@@ -371,7 +405,7 @@ describe('recurring tasks', () => {
       testSqlite.run(`
       CREATE TABLE recurring_tasks (
         id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
+        user_id TEXT NOT NULL REFERENCES users(platform_user_id) ON DELETE CASCADE,
         project_id TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT,
@@ -394,6 +428,7 @@ describe('recurring tasks', () => {
       testSqlite.run('CREATE INDEX idx_recurring_tasks_enabled_next ON recurring_tasks(enabled, next_run)')
 
       // Insert an enabled task with a past nextRun using raw SQL (INTEGER 1 for enabled)
+      testSqlite.run("INSERT OR IGNORE INTO users (platform_user_id, added_by) VALUES ('u1', 'admin')")
       const pastTime = new Date(Date.now() - 60000).toISOString()
       testSqlite.run(
         `INSERT INTO recurring_tasks (id, user_id, project_id, title, trigger_type, enabled, catch_up, next_run, created_at, updated_at)

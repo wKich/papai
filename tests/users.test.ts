@@ -107,6 +107,18 @@ describe('removeUser', () => {
     const secondResult = removeUser('111')
     expect(secondResult).toBe(false)
   })
+
+  test('evicts cached workspace entry when a user is removed', () => {
+    addUser('cache-test', '999')
+    setKaneoWorkspace('cache-test', 'workspace-1')
+
+    expect(_userCaches.has('cache-test')).toBe(true)
+
+    const removed = removeUser('cache-test')
+
+    expect(removed).toBe(true)
+    expect(_userCaches.has('cache-test')).toBe(false)
+  })
 })
 
 describe('isAuthorized', () => {

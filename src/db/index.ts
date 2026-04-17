@@ -27,6 +27,7 @@ import { migration019UserIdentityMappings } from './migrations/019_user_identity
 import { migration020GroupSettingsRegistry } from './migrations/020_group_settings_registry.js'
 import { migration021WebFetch } from './migrations/021_web_fetch.js'
 import { migration022DropUnusedLastSeenIndex } from './migrations/022_drop_unused_last_seen_index.js'
+import { migration023AddForeignKeys } from './migrations/023_add_foreign_keys.js'
 
 const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
 
@@ -76,6 +77,7 @@ const MIGRATIONS = [
   migration020GroupSettingsRegistry,
   migration021WebFetch,
   migration022DropUnusedLastSeenIndex,
+  migration023AddForeignKeys,
 ] as const
 
 export const initDb = (): void => {
