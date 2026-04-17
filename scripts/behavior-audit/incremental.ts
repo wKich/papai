@@ -68,6 +68,24 @@ export function createEmptyManifest(): IncrementalManifest {
   }
 }
 
+export function captureRunStart(
+  manifest: IncrementalManifest,
+  currentHead: string,
+  startedAt: string,
+): {
+  readonly previousLastStartCommit: string | null
+  readonly updatedManifest: IncrementalManifest
+} {
+  return {
+    previousLastStartCommit: manifest.lastStartCommit,
+    updatedManifest: {
+      ...manifest,
+      lastStartCommit: currentHead,
+      lastStartedAt: startedAt,
+    },
+  }
+}
+
 export async function loadManifest(): Promise<IncrementalManifest | null> {
   try {
     const text = await Bun.file(INCREMENTAL_MANIFEST_PATH).text()

@@ -4,6 +4,8 @@ import { join, relative } from 'node:path'
 import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './behavior-audit/config.js'
 import { runPhase2 } from './behavior-audit/evaluate.js'
 import { runPhase1 } from './behavior-audit/extract.js'
+import type { IncrementalManifest } from './behavior-audit/incremental.js'
+import { captureRunStart, createEmptyManifest, loadManifest, saveManifest } from './behavior-audit/incremental.js'
 import type { Progress } from './behavior-audit/progress.js'
 import { createEmptyProgress, loadProgress, saveProgress } from './behavior-audit/progress.js'
 import { parseTestFile } from './behavior-audit/test-parser.js'
@@ -30,7 +32,7 @@ async function discoverTestFiles(): Promise<string[]> {
   }
 
   await walk(testDir)
-  return files.sort()
+  return files.toSorted()
 }
 
 async function loadOrCreateProgress(testCount: number): Promise<Progress> {
@@ -65,8 +67,28 @@ async function runPhase2IfNeeded(progress: Progress): Promise<void> {
   await runPhase2(progress)
 }
 
+async function resolveHeadCommit(): Promise<string> {
+  const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], {
+    cwd: PROJECT_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const output = await new Response(proc.stdout).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    throw new Error('Failed to resolve HEAD commit')
+  }
+  return output.trim()
+}
+
 async function main(): Promise<void> {
   console.log('Behavior Audit — discovering test files...\n')
+
+  const loadedManifest = await loadManifest()
+  const manifest = resolveRunStartManifest(loadedManifest)
+  const currentHead = await resolveHeadCommit()
+  const { updatedManifest } = captureRunStart(manifest, currentHead, new Date().toISOString())
+  await saveManifest(updatedManifest)
 
   const testFilePaths = await discoverTestFiles()
   console.log(`Found ${testFilePaths.length} test files (after exclusions)\n`)
@@ -84,7 +106,14 @@ async function main(): Promise<void> {
   console.log('\nBehavior audit complete.')
 }
 
-main().catch((error: unknown) => {
+function resolveRunStartManifest(manifest: Awaited<ReturnType<typeof loadManifest>>): IncrementalManifest {
+  if (manifest === null) {
+    return createEmptyManifest()
+  }
+  return manifest
+}
+
+await main().catch((error: unknown) => {
   console.error('Fatal error:', error instanceof Error ? error.message : String(error))
   process.exit(1)
 })

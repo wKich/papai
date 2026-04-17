@@ -22,6 +22,8 @@ function isIncrementalModule(value: unknown): value is typeof IncrementalModule 
     isObject(value) &&
     'createEmptyManifest' in value &&
     typeof value['createEmptyManifest'] === 'function' &&
+    'captureRunStart' in value &&
+    typeof value['captureRunStart'] === 'function' &&
     'loadManifest' in value &&
     typeof value['loadManifest'] === 'function' &&
     'saveManifest' in value &&
@@ -104,5 +106,19 @@ describe('behavior-audit incremental manifest', () => {
     expect(loaded.lastCompletedAt).toBeNull()
     expect(loaded.phaseVersions).toEqual({ phase1: '', phase2: '', reports: '' })
     expect(loaded.tests).toEqual({})
+  })
+
+  test('captureRunStart saves previous lastStartCommit for diffing and writes new HEAD immediately', async () => {
+    const incremental = await loadIncrementalModule()
+    const manifest = {
+      ...incremental.createEmptyManifest(),
+      lastStartCommit: 'old-commit',
+    }
+
+    const result = incremental.captureRunStart(manifest, 'new-commit', '2026-04-17T12:00:00.000Z')
+
+    expect(result.previousLastStartCommit).toBe('old-commit')
+    expect(result.updatedManifest.lastStartCommit).toBe('new-commit')
+    expect(result.updatedManifest.lastStartedAt).toBe('2026-04-17T12:00:00.000Z')
   })
 })
