@@ -28,7 +28,11 @@ function isIncrementalModule(value: unknown): value is typeof IncrementalModule 
     'loadManifest' in value &&
     typeof value['loadManifest'] === 'function' &&
     'saveManifest' in value &&
-    typeof value['saveManifest'] === 'function'
+    typeof value['saveManifest'] === 'function' &&
+    'combineChangedFileLists' in value &&
+    typeof value['combineChangedFileLists'] === 'function' &&
+    'collectChangedFiles' in value &&
+    typeof value['collectChangedFiles'] === 'function'
   )
 }
 
@@ -76,6 +80,14 @@ async function initializeGitRepo(root: string): Promise<void> {
       'init',
       '-q',
     ],
+    root,
+  )
+}
+
+async function commitAll(root: string, message: string): Promise<void> {
+  await runCommand(['git', 'add', '.'], root)
+  await runCommand(
+    ['git', '-c', 'user.name=Test User', '-c', 'user.email=test@example.com', 'commit', '-m', message, '-q'],
     root,
   )
 }
@@ -226,6 +238,74 @@ describe('behavior-audit incremental manifest', () => {
     expect(result.previousLastStartCommit).toBe('old-commit')
     expect(result.updatedManifest.lastStartCommit).toBe('new-commit')
     expect(result.updatedManifest.lastStartedAt).toBe('2026-04-17T12:00:00.000Z')
+  })
+
+  test('combineChangedFileLists unions and sorts paths deterministically', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const paths = incremental.combineChangedFileLists([
+      ['tests/tools/a.test.ts', 'src/tools/a.ts'],
+      ['src/tools/a.ts', 'scripts/behavior-audit/evaluate.ts'],
+      [],
+      ['new-file.ts'],
+    ])
+
+    expect(paths).toEqual([
+      'new-file.ts',
+      'scripts/behavior-audit/evaluate.ts',
+      'src/tools/a.ts',
+      'tests/tools/a.test.ts',
+    ])
+  })
+
+  test('collectChangedFiles unions committed, staged, unstaged, and untracked paths', async () => {
+    const incremental = await loadIncrementalModule()
+    await initializeGitRepo(root)
+
+    const committedPath = path.join(root, 'committed.ts')
+    const stagedPath = path.join(root, 'staged.ts')
+    const unstagedPath = path.join(root, 'unstaged.ts')
+    writeFileSync(committedPath, 'export const committed = 1\n')
+    writeFileSync(stagedPath, 'export const staged = 1\n')
+    writeFileSync(unstagedPath, 'export const unstaged = 1\n')
+    await commitAll(root, 'seed tracked files')
+
+    const previousLastStartCommit = await runCommand(['git', 'rev-parse', 'HEAD'], root)
+
+    writeFileSync(committedPath, 'export const committed = 2\n')
+    await commitAll(root, 'commit tracked change')
+
+    writeFileSync(stagedPath, 'export const staged = 2\n')
+    await runCommand(['git', 'add', 'staged.ts'], root)
+
+    writeFileSync(unstagedPath, 'export const unstaged = 2\n')
+
+    writeFileSync(path.join(root, 'untracked.ts'), 'export const untracked = 1\n')
+
+    const changedFiles = await incremental.collectChangedFiles(previousLastStartCommit)
+
+    expect(changedFiles).toEqual(['committed.ts', 'staged.ts', 'unstaged.ts', 'untracked.ts'])
+  })
+
+  test('collectChangedFiles skips committed diff when previousLastStartCommit is null', async () => {
+    const incremental = await loadIncrementalModule()
+    await initializeGitRepo(root)
+
+    writeFileSync(path.join(root, 'tracked.ts'), 'export const tracked = 1\n')
+    await commitAll(root, 'seed tracked file')
+
+    writeFileSync(path.join(root, 'committed-only.ts'), 'export const committedOnly = 1\n')
+    await commitAll(root, 'commit without baseline')
+
+    writeFileSync(path.join(root, 'staged-only.ts'), 'export const stagedOnly = 1\n')
+    await runCommand(['git', 'add', 'staged-only.ts'], root)
+
+    writeFileSync(path.join(root, 'unstaged-only.ts'), 'export const unstagedOnly = 1\n')
+    writeFileSync(path.join(root, 'untracked-only.ts'), 'export const untrackedOnly = 1\n')
+
+    const changedFiles = await incremental.collectChangedFiles(null)
+
+    expect(changedFiles).toEqual(['staged-only.ts', 'unstaged-only.ts', 'untracked-only.ts'])
   })
 
   test('saveManifest writes through a temp file and atomically renames it into place', async () => {

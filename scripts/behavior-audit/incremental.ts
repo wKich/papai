@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { INCREMENTAL_MANIFEST_PATH } from './config.js'
+import { INCREMENTAL_MANIFEST_PATH, PROJECT_ROOT } from './config.js'
 
 export interface ManifestTestEntry {
   readonly testFile: string
@@ -84,6 +84,52 @@ export function captureRunStart(
       lastStartedAt: startedAt,
     },
   }
+}
+
+function splitGitPathOutput(output: string): readonly string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+async function runGitLines(args: readonly string[]): Promise<readonly string[]> {
+  const proc = Bun.spawn(['git', ...args], {
+    cwd: PROJECT_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    const errorMessage = stderr.trim()
+    throw new Error(errorMessage.length > 0 ? errorMessage : `Git command failed: git ${args.join(' ')}`)
+  }
+  return splitGitPathOutput(stdout)
+}
+
+function runGitNameOnlyDiff(rangeOrFlag: string | null): Promise<readonly string[]> {
+  const args = ['diff', '--name-only']
+  return runGitLines(rangeOrFlag === null ? args : [...args, rangeOrFlag])
+}
+
+function runGitUntrackedFiles(): Promise<readonly string[]> {
+  return runGitLines(['ls-files', '--others', '--exclude-standard'])
+}
+
+export function combineChangedFileLists(lists: readonly (readonly string[])[]): readonly string[] {
+  return [...new Set(lists.flat())].toSorted()
+}
+
+export async function collectChangedFiles(previousLastStartCommit: string | null): Promise<readonly string[]> {
+  const committed =
+    previousLastStartCommit === null ? [] : await runGitNameOnlyDiff(`${previousLastStartCommit}...HEAD`)
+  const staged = await runGitNameOnlyDiff('--cached')
+  const unstaged = await runGitNameOnlyDiff(null)
+  const untracked = await runGitUntrackedFiles()
+
+  return combineChangedFileLists([committed, staged, unstaged, untracked])
 }
 
 export async function loadManifest(): Promise<IncrementalManifest | null> {
