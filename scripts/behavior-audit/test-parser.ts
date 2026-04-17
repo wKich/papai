@@ -45,7 +45,7 @@ function collectMatches(content: string): readonly Match[] {
   while ((m = testPattern.exec(content)) !== null) {
     matches.push({ type: 'test', name: m[3]!, index: m.index })
   }
-  return [...matches].sort((a, b) => a.index - b.index)
+  return [...matches].toSorted((a, b) => a.index - b.index)
 }
 
 function findEnclosingDescribes(matches: readonly Match[], testIndex: number, content: string): readonly string[] {

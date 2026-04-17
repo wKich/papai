@@ -3,6 +3,9 @@ import { generateText, stepCountIs } from 'ai'
 import pLimit from 'p-limit'
 
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
+import { updateManifestForExtractedTest } from './extract-incremental.js'
+import type { IncrementalManifest } from './incremental.js'
+import { saveManifest } from './incremental.js'
 import type { Progress } from './progress.js'
 import { getFailedTestAttempts, markFileDone, markTestDone, markTestFailed, saveProgress } from './progress.js'
 import type { ExtractedBehavior } from './report-writer.js'
@@ -10,7 +13,28 @@ import { writeBehaviorFile } from './report-writer.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 import { makeAuditTools } from './tools.js'
 
-const apiKey = process.env['OPENAI_API_KEY'] ?? 'no-key'
+interface Phase1RunInput {
+  readonly testFiles: readonly ParsedTestFile[]
+  readonly progress: Progress
+  readonly selectedTestKeys: ReadonlySet<string>
+  readonly manifest: IncrementalManifest
+}
+
+function getEnvOrFallback(name: string, fallback: string): string {
+  const value = process.env[name]
+  if (value === undefined) return fallback
+  return value
+}
+
+interface GenerationStep {
+  readonly toolCalls: readonly unknown[] | undefined
+}
+
+function getToolCallsForStep(step: GenerationStep): number {
+  return step.toolCalls === undefined ? 0 : step.toolCalls.length
+}
+
+const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
 const provider = createOpenAICompatible({ name: 'behavior-audit', apiKey, baseURL: BASE_URL })
 const model = provider(MODEL)
 
@@ -85,7 +109,7 @@ async function extractSingleTest(
       abortSignal: AbortSignal.timeout(timeout),
     })
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
-    const toolCallCount = result.steps.reduce((sum, s) => sum + (s.toolCalls?.length ?? 0), 0)
+    const toolCallCount = result.steps.reduce((sum, step) => sum + getToolCallsForStep(step), 0)
     const parsed = parseJsonResponse(result.text)
     if (parsed === null) {
       console.log(`    ✗ malformed JSON (${elapsed}s)`)
@@ -110,12 +134,18 @@ function retryExtraction(testCase: TestCase, testFilePath: string, attempt: numb
 
 async function processSingleTestCase(
   testCase: TestCase,
+  testFile: ParsedTestFile,
   testFilePath: string,
   displayIndex: number,
   totalTests: number,
   progress: Progress,
-): Promise<ExtractedBehavior | null> {
+  manifest: IncrementalManifest,
+): Promise<{ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null> {
   const testKey = `${testFilePath}::${testCase.fullPath}`
+  const existing = progress.phase1.extractedBehaviors[testKey]
+  if (existing !== undefined) {
+    return { behavior: existing, manifest }
+  }
   if (getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
     console.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
     return null
@@ -126,13 +156,69 @@ async function processSingleTestCase(
     markTestFailed(progress, testKey, 'extraction failed')
     return null
   }
-  markTestDone(progress, testFilePath, testKey)
-  return {
+  const behavior: ExtractedBehavior = {
     testName: testCase.name,
     fullPath: testCase.fullPath,
     behavior: extracted.behavior,
     context: extracted.context,
   }
+  markTestDone(progress, testFilePath, testKey, behavior)
+  const updatedManifest = await updateManifestForExtractedTest({
+    manifest,
+    testFile,
+    testCase,
+    extractedBehavior: behavior,
+  })
+  await saveManifest(updatedManifest)
+  return { behavior, manifest: updatedManifest }
+}
+
+async function runSelectedExtractions(input: {
+  readonly selectedTests: readonly TestCase[]
+  readonly testFile: ParsedTestFile
+  readonly progress: Progress
+  readonly manifest: IncrementalManifest
+}): Promise<{
+  readonly results: readonly ({ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null)[]
+  readonly manifest: IncrementalManifest
+}> {
+  let currentManifest = input.manifest
+  const limit = pLimit(1)
+  const results = await Promise.all(
+    input.selectedTests.map((testCase, index) =>
+      limit(async () => {
+        const result = await processSingleTestCase(
+          testCase,
+          input.testFile,
+          input.testFile.filePath,
+          index + 1,
+          input.selectedTests.length,
+          input.progress,
+          currentManifest,
+        )
+        if (result !== null) {
+          currentManifest = result.manifest
+        }
+        return result
+      }),
+    ),
+  )
+  return { results, manifest: currentManifest }
+}
+
+function getSelectedTests(testFile: ParsedTestFile, selectedTestKeys: ReadonlySet<string>): readonly TestCase[] {
+  return testFile.tests.filter((testCase) => selectedTestKeys.has(`${testFile.filePath}::${testCase.fullPath}`))
+}
+
+function collectValidBehaviors(
+  results: readonly ({ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null)[],
+): readonly ExtractedBehavior[] {
+  return results
+    .filter(
+      (result): result is { readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } =>
+        result !== null,
+    )
+    .map((result) => result.behavior)
 }
 
 async function processTestFile(
@@ -140,32 +226,43 @@ async function processTestFile(
   progress: Progress,
   fileIndex: number,
   totalFiles: number,
-): Promise<void> {
+  selectedTestKeys: ReadonlySet<string>,
+  manifest: IncrementalManifest,
+): Promise<IncrementalManifest> {
   if (progress.phase1.completedFiles.includes(testFile.filePath)) {
     console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, already done)`)
-    return
+    return manifest
   }
   console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath}`)
-  const limit = pLimit(1)
-  const behaviors = await Promise.all(
-    testFile.tests.map((tc, i) =>
-      limit(() => processSingleTestCase(tc, testFile.filePath, i + 1, testFile.tests.length, progress)),
-    ),
-  )
-  const valid = behaviors.filter((b): b is ExtractedBehavior => b !== null)
+  const selectedTests = getSelectedTests(testFile, selectedTestKeys)
+  const extractionResult = await runSelectedExtractions({
+    selectedTests,
+    testFile,
+    progress,
+    manifest,
+  })
+  const valid = collectValidBehaviors(extractionResult.results)
   if (valid.length > 0) {
     await writeBehaviorFile(testFile.filePath, valid)
     console.log(`  → wrote ${valid.length} behaviors`)
   }
   markFileDone(progress, testFile.filePath)
   await saveProgress(progress)
+  return extractionResult.manifest
 }
 
-export async function runPhase1(testFiles: readonly ParsedTestFile[], progress: Progress): Promise<void> {
+export async function runPhase1({ testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput): Promise<void> {
   progress.phase1.status = 'in-progress'
   await saveProgress(progress)
   const limit = pLimit(1)
-  await Promise.all(testFiles.map((f, i) => limit(() => processTestFile(f, progress, i + 1, testFiles.length))))
+  let currentManifest = manifest
+  await Promise.all(
+    testFiles.map((f, i) =>
+      limit(async () => {
+        currentManifest = await processTestFile(f, progress, i + 1, testFiles.length, selectedTestKeys, currentManifest)
+      }),
+    ),
+  )
   progress.phase1.status = 'done'
   await saveProgress(progress)
   console.log(

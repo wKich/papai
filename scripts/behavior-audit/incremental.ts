@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, rename } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
@@ -28,6 +29,34 @@ export interface IncrementalManifest {
     readonly reports: string
   }
   readonly tests: Record<string, ManifestTestEntry>
+}
+
+export interface IncrementalSelection {
+  readonly phase1SelectedTestKeys: readonly string[]
+  readonly phase2SelectedTestKeys: readonly string[]
+  readonly reportRebuildOnly: boolean
+}
+
+interface SelectIncrementalWorkInput {
+  readonly changedFiles: readonly string[]
+  readonly previousManifest: IncrementalManifest
+  readonly currentPhaseVersions: IncrementalManifest['phaseVersions']
+  readonly discoveredTestKeys: readonly string[]
+}
+
+interface Phase1FingerprintInput {
+  readonly testKey: string
+  readonly testFileHash: string
+  readonly testSource: string
+  readonly mirroredSourceHash: string | null
+  readonly phaseVersion: string
+}
+
+interface Phase2FingerprintInput {
+  readonly testKey: string
+  readonly behavior: string
+  readonly context: string
+  readonly phaseVersion: string
 }
 
 const ManifestTestEntrySchema = z.object({
@@ -86,11 +115,73 @@ export function captureRunStart(
   }
 }
 
-function splitGitPathOutput(output: string): readonly string[] {
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+function sha256Json(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+export function hashText(text: string): string {
+  return createHash('sha256').update(text).digest('hex')
+}
+
+export function buildPhase1Fingerprint(input: Phase1FingerprintInput): string {
+  return sha256Json(input)
+}
+
+export function buildPhase2Fingerprint(input: Phase2FingerprintInput): string {
+  return sha256Json(input)
+}
+
+function toSortedUnique(values: readonly string[]): readonly string[] {
+  return [...new Set(values)].toSorted()
+}
+
+export function selectIncrementalWork(input: SelectIncrementalWorkInput): IncrementalSelection {
+  const discoveredSet = new Set(input.discoveredTestKeys)
+  const changedFilesSet = new Set(input.changedFiles)
+  const previousPhaseVersions = input.previousManifest.phaseVersions
+
+  const phase1VersionChanged = previousPhaseVersions.phase1 !== input.currentPhaseVersions.phase1
+  if (phase1VersionChanged) {
+    const allDiscoveredTestKeys = toSortedUnique(input.discoveredTestKeys)
+    return {
+      phase1SelectedTestKeys: allDiscoveredTestKeys,
+      phase2SelectedTestKeys: allDiscoveredTestKeys,
+      reportRebuildOnly: false,
+    }
+  }
+
+  const discoveredManifestEntries = Object.entries(input.previousManifest.tests).filter(([testKey]) =>
+    discoveredSet.has(testKey),
+  )
+
+  const dependencySelectedTestKeys = discoveredManifestEntries
+    .filter(([, entry]) => entry.dependencyPaths.some((dependencyPath) => changedFilesSet.has(dependencyPath)))
+    .map(([testKey]) => testKey)
+
+  const newTestKeys = input.discoveredTestKeys.filter((testKey) => input.previousManifest.tests[testKey] === undefined)
+
+  const phase1SelectedTestKeys = toSortedUnique([...dependencySelectedTestKeys, ...newTestKeys])
+
+  const phase2VersionChanged = previousPhaseVersions.phase2 !== input.currentPhaseVersions.phase2
+  const phase2VersionSelectedTestKeys = phase2VersionChanged
+    ? discoveredManifestEntries.filter(([, entry]) => entry.extractedBehaviorPath !== null).map(([testKey]) => testKey)
+    : []
+
+  const phase2SelectedTestKeys = toSortedUnique([...phase1SelectedTestKeys, ...phase2VersionSelectedTestKeys])
+
+  const reportVersionChanged = previousPhaseVersions.reports !== input.currentPhaseVersions.reports
+
+  return {
+    phase1SelectedTestKeys,
+    phase2SelectedTestKeys,
+    reportRebuildOnly:
+      reportVersionChanged && phase1SelectedTestKeys.length === 0 && phase2SelectedTestKeys.length === 0,
+  }
+}
+
+function splitGitPathOutput(output: Uint8Array): readonly string[] {
+  const decodedOutput = new TextDecoder().decode(output)
+  return decodedOutput.split('\u0000').filter((line) => line.length > 0)
 }
 
 async function runGitLines(args: readonly string[]): Promise<readonly string[]> {
@@ -99,7 +190,7 @@ async function runGitLines(args: readonly string[]): Promise<readonly string[]> 
     stdout: 'pipe',
     stderr: 'pipe',
   })
-  const stdout = await new Response(proc.stdout).text()
+  const stdout = new Uint8Array(await new Response(proc.stdout).arrayBuffer())
   const stderr = await new Response(proc.stderr).text()
   const exitCode = await proc.exited
   if (exitCode !== 0) {
@@ -110,12 +201,12 @@ async function runGitLines(args: readonly string[]): Promise<readonly string[]> 
 }
 
 function runGitNameOnlyDiff(rangeOrFlag: string | null): Promise<readonly string[]> {
-  const args = ['diff', '--name-only']
+  const args = ['diff', '--name-only', '-z']
   return runGitLines(rangeOrFlag === null ? args : [...args, rangeOrFlag])
 }
 
 function runGitUntrackedFiles(): Promise<readonly string[]> {
-  return runGitLines(['ls-files', '--others', '--exclude-standard'])
+  return runGitLines(['ls-files', '--others', '--exclude-standard', '-z'])
 }
 
 export function combineChangedFileLists(lists: readonly (readonly string[])[]): readonly string[] {

@@ -5,9 +5,18 @@ import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './behavior-audit/config.js'
 import { runPhase2 } from './behavior-audit/evaluate.js'
 import { runPhase1 } from './behavior-audit/extract.js'
 import type { IncrementalManifest } from './behavior-audit/incremental.js'
-import { captureRunStart, createEmptyManifest, loadManifest, saveManifest } from './behavior-audit/incremental.js'
+import {
+  captureRunStart,
+  collectChangedFiles,
+  createEmptyManifest,
+  loadManifest,
+  saveManifest,
+  selectIncrementalWork,
+} from './behavior-audit/incremental.js'
 import type { Progress } from './behavior-audit/progress.js'
 import { createEmptyProgress, loadProgress, saveProgress } from './behavior-audit/progress.js'
+import { rebuildReportsFromStoredResults } from './behavior-audit/report-writer.js'
+import type { ParsedTestFile } from './behavior-audit/test-parser.js'
 import { parseTestFile } from './behavior-audit/test-parser.js'
 
 async function discoverTestFiles(): Promise<string[]> {
@@ -45,26 +54,40 @@ async function loadOrCreateProgress(testCount: number): Promise<Progress> {
   return loaded
 }
 
-async function runPhase1IfNeeded(testFilePaths: readonly string[], progress: Progress): Promise<void> {
-  if (progress.phase1.status === 'done') {
-    console.log('[Phase 1] Already complete, skipping.\n')
-    return
-  }
-  const parsedFiles = await Promise.all(
+function parseDiscoveredTestFiles(testFilePaths: readonly string[]): Promise<readonly ParsedTestFile[]> {
+  return Promise.all(
     testFilePaths.map(async (filePath) => {
       const content = await Bun.file(join(PROJECT_ROOT, filePath)).text()
       return parseTestFile(filePath, content)
     }),
   )
-  await runPhase1(parsedFiles, progress)
 }
 
-async function runPhase2IfNeeded(progress: Progress): Promise<void> {
+function getDiscoveredTestKeys(parsedFiles: readonly ParsedTestFile[]): readonly string[] {
+  return parsedFiles
+    .flatMap((parsedFile) => parsedFile.tests.map((testCase) => `${parsedFile.filePath}::${testCase.fullPath}`))
+    .toSorted()
+}
+
+async function runPhase1IfNeeded(
+  parsedFiles: readonly ParsedTestFile[],
+  progress: Progress,
+  selectedTestKeys: ReadonlySet<string>,
+  manifest: IncrementalManifest,
+): Promise<void> {
+  if (progress.phase1.status === 'done') {
+    console.log('[Phase 1] Already complete, skipping.\n')
+    return
+  }
+  await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest })
+}
+
+async function runPhase2IfNeeded(progress: Progress, selectedTestKeys: ReadonlySet<string>): Promise<void> {
   if (progress.phase2.status === 'done') {
     console.log('[Phase 2] Already complete.\n')
     return
   }
-  await runPhase2(progress)
+  await runPhase2({ progress, selectedTestKeys })
 }
 
 async function resolveHeadCommit(): Promise<string> {
@@ -84,24 +107,46 @@ async function resolveHeadCommit(): Promise<string> {
 async function main(): Promise<void> {
   console.log('Behavior Audit — discovering test files...\n')
 
-  const loadedManifest = await loadManifest()
-  const manifest = resolveRunStartManifest(loadedManifest)
+  const previousManifest = resolveRunStartManifest(await loadManifest())
   const currentHead = await resolveHeadCommit()
-  const { updatedManifest } = captureRunStart(manifest, currentHead, new Date().toISOString())
+  const { previousLastStartCommit, updatedManifest } = captureRunStart(
+    previousManifest,
+    currentHead,
+    new Date().toISOString(),
+  )
   await saveManifest(updatedManifest)
 
   const testFilePaths = await discoverTestFiles()
   console.log(`Found ${testFilePaths.length} test files (after exclusions)\n`)
+  const parsedFiles = await parseDiscoveredTestFiles(testFilePaths)
+  const discoveredTestKeys = getDiscoveredTestKeys(parsedFiles)
+  const changedFiles = await collectChangedFiles(previousLastStartCommit)
+  const selection = selectIncrementalWork({
+    changedFiles,
+    previousManifest,
+    currentPhaseVersions: previousManifest.phaseVersions,
+    discoveredTestKeys,
+  })
 
   const progress = await loadOrCreateProgress(testFilePaths.length)
 
+  if (selection.reportRebuildOnly) {
+    await rebuildReportsFromStoredResults({
+      manifest: updatedManifest,
+      extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
+      evaluationsByKey: progress.phase2.evaluations,
+    })
+    console.log('\nBehavior audit complete.')
+    return
+  }
+
   if (progress.phase1.status === 'not-started' || progress.phase1.status === 'in-progress') {
-    await runPhase1IfNeeded(testFilePaths, progress)
+    await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
   } else {
     console.log('[Phase 1] Already complete, skipping.\n')
   }
 
-  await runPhase2IfNeeded(progress)
+  await runPhase2IfNeeded(progress, new Set(selection.phase2SelectedTestKeys))
 
   console.log('\nBehavior audit complete.')
 }

@@ -6,6 +6,9 @@ import pLimit from 'p-limit'
 import { BEHAVIORS_DIR, MAX_RETRIES } from './config.js'
 import { getDomain } from './domain-map.js'
 import { evaluateWithRetry } from './evaluate-agent.js'
+import { recordEval, recordStoredEvaluation, writeReports } from './evaluate-reporting.js'
+import type { IncrementalManifest } from './incremental.js'
+import { buildPhase2Fingerprint, createEmptyManifest, loadManifest, saveManifest } from './incremental.js'
 import { ALL_PERSONAS } from './personas.js'
 import type { Progress } from './progress.js'
 import {
@@ -16,7 +19,11 @@ import {
   saveProgress,
 } from './progress.js'
 import type { EvaluatedBehavior } from './report-writer.js'
-import { writeIndexFile, writeStoryFile } from './report-writer.js'
+
+interface Phase2RunInput {
+  readonly progress: Progress
+  readonly selectedTestKeys: ReadonlySet<string>
+}
 
 interface ParsedBehavior {
   readonly testFile: string
@@ -26,9 +33,16 @@ interface ParsedBehavior {
   readonly domain: string
 }
 
+function readMatchedGroup(match: RegExpMatchArray | null, index: number, fallback: string): string {
+  if (match === null) return fallback
+  const value = match[index]
+  if (value === undefined) return fallback
+  return value
+}
+
 async function parseSingleFile(fullPath: string, behaviors: ParsedBehavior[]): Promise<void> {
   const content = await Bun.file(fullPath).text()
-  const testFile = content.match(/^# (.+)$/m)?.[1] ?? 'unknown'
+  const testFile = readMatchedGroup(content.match(/^# (.+)$/m), 1, 'unknown')
   const domain = getDomain(testFile)
   const sections = content.split(/^## Test: /m).slice(1)
   for (const section of sections) {
@@ -36,11 +50,12 @@ async function parseSingleFile(fullPath: string, behaviors: ParsedBehavior[]): P
     const behaviorMatch = section.match(/\*\*Behavior:\*\* (.+?)(?=\n\*\*Context:|\n##|\n$)/s)
     const contextMatch = section.match(/\*\*Context:\*\* (.+?)(?=\n##|\n$)/s)
     if (nameMatch !== null && behaviorMatch !== null) {
+      const context = contextMatch === null || contextMatch[1] === undefined ? '' : contextMatch[1].trim()
       behaviors.push({
         testFile,
         testName: nameMatch[1]!,
         behavior: behaviorMatch[1]!.trim(),
-        context: contextMatch?.[1]?.trim() ?? '',
+        context,
         domain,
       })
     }
@@ -68,85 +83,128 @@ function buildPrompt(b: ParsedBehavior): string {
   return `${ALL_PERSONAS}\n\n---\n\n**Domain:** ${b.domain}\n**Test file:** ${b.testFile}\n**Test name:** ${b.testName}\n\n**Behavior:** ${b.behavior}\n\n**Context:** ${b.context}`
 }
 
-function recordEval(
-  evalResult: import('./evaluate-agent.js').EvalResult,
-  b: ParsedBehavior,
-  evaluationsByDomain: Map<string, EvaluatedBehavior[]>,
+function updateManifestForEvaluatedBehavior(input: {
+  readonly manifest: IncrementalManifest
+  readonly behavior: ParsedBehavior
+}): IncrementalManifest {
+  const testKey = `${input.behavior.testFile}::${input.behavior.testName}`
+  const previousEntry = input.manifest.tests[testKey]
+  if (previousEntry === undefined) {
+    return input.manifest
+  }
+
+  return {
+    ...input.manifest,
+    tests: {
+      ...input.manifest.tests,
+      [testKey]: {
+        ...previousEntry,
+        phase2Fingerprint: buildPhase2Fingerprint({
+          testKey,
+          behavior: input.behavior.behavior,
+          context: input.behavior.context,
+          phaseVersion: input.manifest.phaseVersions.phase2,
+        }),
+        lastPhase2CompletedAt: new Date().toISOString(),
+      },
+    },
+  }
+}
+
+function resolveLoadedManifest(manifest: IncrementalManifest | null): IncrementalManifest {
+  if (manifest === null) {
+    return createEmptyManifest()
+  }
+  return manifest
+}
+
+function reuseStoredEvaluation(
+  key: string,
+  domain: string,
+  progress: Progress,
+  evalsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
 ): void {
-  const evaluated: EvaluatedBehavior = {
-    testName: b.testName,
-    behavior: b.behavior,
-    userStory: evalResult.userStory,
-    maria: evalResult.maria,
-    dani: evalResult.dani,
-    viktor: evalResult.viktor,
-    flaws: evalResult.flaws,
-    improvements: evalResult.improvements,
+  const existing = progress.phase2.evaluations[key]
+  if (existing !== undefined) {
+    recordStoredEvaluation(existing, domain, evalsByDomain, flawFreq, impFreq)
   }
-  evaluationsByDomain.set(b.domain, [...(evaluationsByDomain.get(b.domain) ?? []), evaluated])
-  for (const flaw of evalResult.flaws) flawFreq.set(flaw, (flawFreq.get(flaw) ?? 0) + 1)
-  for (const imp of evalResult.improvements) impFreq.set(imp, (impFreq.get(imp) ?? 0) + 1)
 }
 
-function buildSummary(
+function shouldSkipBehavior(
+  key: string,
+  idx: number,
+  total: number,
   domain: string,
-  evals: readonly EvaluatedBehavior[],
-): {
-  readonly domain: string
-  readonly count: number
-  readonly avgDiscover: number
-  readonly avgUse: number
-  readonly avgRetain: number
-  readonly worstPersona: string
-} {
-  const avg = (fn: (e: EvaluatedBehavior) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
-  const pAvg = (p: 'maria' | 'dani' | 'viktor'): number => avg((e) => (e[p].discover + e[p].use + e[p].retain) / 3)
-  const personaScores: ReadonlyArray<readonly [string, number]> = [
-    ['Maria', pAvg('maria')],
-    ['Dani', pAvg('dani')],
-    ['Viktor', pAvg('viktor')],
-  ]
-  const worst = personaScores.reduce((min, cur) => (cur[1] < min[1] ? cur : min))
-  return {
-    domain,
-    count: evals.length,
-    avgDiscover: avg((e) => (e.maria.discover + e.dani.discover + e.viktor.discover) / 3),
-    avgUse: avg((e) => (e.maria.use + e.dani.use + e.viktor.use) / 3),
-    avgRetain: avg((e) => (e.maria.retain + e.dani.retain + e.viktor.retain) / 3),
-    worstPersona: `${worst[0]} (${worst[1].toFixed(1)})`,
-  }
-}
-
-async function writeReports(
-  evaluationsByDomain: ReadonlyMap<string, EvaluatedBehavior[]>,
-  flawFreq: ReadonlyMap<string, number>,
-  impFreq: ReadonlyMap<string, number>,
+  testName: string,
   progress: Progress,
-): Promise<void> {
-  await Promise.all([...evaluationsByDomain.entries()].map(([d, ev]) => writeStoryFile(d, ev)))
-  const summaries = [...evaluationsByDomain.entries()].map(([d, ev]) => buildSummary(d, ev))
-  const failedItems = Object.entries(progress.phase2.failedBehaviors).map(([key, entry]) => {
-    const parts = key.split('::')
-    return {
-      testFile: parts[0] ?? 'unknown',
-      testName: parts.slice(1).join('::'),
-      error: entry.error,
-      attempts: entry.attempts,
-    }
-  })
-  await writeIndexFile(
-    summaries,
-    progress.phase2.stats.behaviorsDone,
-    progress.phase2.stats.behaviorsFailed,
-    flawFreq,
-    impFreq,
-    failedItems,
-  )
+  evalsByDomain: Map<string, EvaluatedBehavior[]>,
+  flawFreq: Map<string, number>,
+  impFreq: Map<string, number>,
+  selectedTestKeys: ReadonlySet<string>,
+): boolean {
+  if (!selectedTestKeys.has(key)) {
+    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq)
+    return true
+  }
+  if (isBehaviorCompleted(progress, key)) {
+    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq)
+    console.log(`  [${idx}/${total}] ${domain} :: "${testName}" (skipped)`)
+    return true
+  }
+  if (getFailedBehaviorAttempts(progress, key) >= MAX_RETRIES) {
+    console.log(`  [${idx}/${total}] ${domain} :: "${testName}" (max retries)`)
+    return true
+  }
+  return false
 }
 
-async function processSingleBehavior(
+async function evaluateSelectedBehavior(input: {
+  readonly behavior: ParsedBehavior
+  readonly key: string
+  readonly idx: number
+  readonly total: number
+  readonly progress: Progress
+  readonly evalsByDomain: Map<string, EvaluatedBehavior[]>
+  readonly flawFreq: Map<string, number>
+  readonly impFreq: Map<string, number>
+  readonly manifest: IncrementalManifest
+}): Promise<IncrementalManifest> {
+  process.stdout.write(`  [${input.idx}/${input.total}] ${input.behavior.domain} :: "${input.behavior.testName}" `)
+  const result = await evaluateWithRetry(buildPrompt(input.behavior))
+  if (result === null) {
+    markBehaviorFailed(input.progress, input.key, 'evaluation failed')
+    return input.manifest
+  }
+  recordEval(
+    result,
+    {
+      domain: input.behavior.domain,
+      testName: input.behavior.testName,
+      behavior: input.behavior.behavior,
+    },
+    input.evalsByDomain,
+    input.flawFreq,
+    input.impFreq,
+  )
+  markBehaviorDone(input.progress, input.key, {
+    testName: input.behavior.testName,
+    behavior: input.behavior.behavior,
+    userStory: result.userStory,
+    maria: result.maria,
+    dani: result.dani,
+    viktor: result.viktor,
+    flaws: result.flaws,
+    improvements: result.improvements,
+  })
+  await saveProgress(input.progress)
+  const updatedManifest = updateManifestForEvaluatedBehavior({ manifest: input.manifest, behavior: input.behavior })
+  await saveManifest(updatedManifest)
+  return updatedManifest
+}
+
+function processSingleBehavior(
   b: ParsedBehavior,
   idx: number,
   total: number,
@@ -154,30 +212,43 @@ async function processSingleBehavior(
   evalsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
-): Promise<void> {
+  selectedTestKeys: ReadonlySet<string>,
+  manifest: IncrementalManifest,
+): Promise<IncrementalManifest> {
   const key = `${b.testFile}::${b.testName}`
-  if (isBehaviorCompleted(progress, key)) {
-    console.log(`  [${idx}/${total}] ${b.domain} :: "${b.testName}" (skipped)`)
-    return
+  if (
+    shouldSkipBehavior(
+      key,
+      idx,
+      total,
+      b.domain,
+      b.testName,
+      progress,
+      evalsByDomain,
+      flawFreq,
+      impFreq,
+      selectedTestKeys,
+    )
+  ) {
+    return Promise.resolve(manifest)
   }
-  if (getFailedBehaviorAttempts(progress, key) >= MAX_RETRIES) {
-    console.log(`  [${idx}/${total}] ${b.domain} :: "${b.testName}" (max retries)`)
-    return
-  }
-  process.stdout.write(`  [${idx}/${total}] ${b.domain} :: "${b.testName}" `)
-  const result = await evaluateWithRetry(buildPrompt(b))
-  if (result === null) {
-    markBehaviorFailed(progress, key, 'evaluation failed')
-    return
-  }
-  recordEval(result, b, evalsByDomain, flawFreq, impFreq)
-  markBehaviorDone(progress, key)
-  if (idx % 10 === 0) await saveProgress(progress)
+  return evaluateSelectedBehavior({
+    behavior: b,
+    key,
+    idx,
+    total,
+    progress,
+    evalsByDomain,
+    flawFreq,
+    impFreq,
+    manifest,
+  })
 }
 
-export async function runPhase2(progress: Progress): Promise<void> {
+export async function runPhase2({ progress, selectedTestKeys }: Phase2RunInput): Promise<void> {
   console.log('\n[Phase 2] Parsing behavior files...')
   const allBehaviors = await parseBehaviorFiles()
+  const manifest = resolveLoadedManifest(await loadManifest())
   progress.phase2.status = 'in-progress'
   progress.phase2.stats.behaviorsTotal = allBehaviors.length
   await saveProgress(progress)
@@ -187,10 +258,23 @@ export async function runPhase2(progress: Progress): Promise<void> {
   const flawFreq = new Map<string, number>()
   const impFreq = new Map<string, number>()
   const limit = pLimit(1)
+  let currentManifest = manifest
 
   await Promise.all(
     allBehaviors.map((b, i) =>
-      limit(() => processSingleBehavior(b, i + 1, allBehaviors.length, progress, evalsByDomain, flawFreq, impFreq)),
+      limit(async () => {
+        currentManifest = await processSingleBehavior(
+          b,
+          i + 1,
+          allBehaviors.length,
+          progress,
+          evalsByDomain,
+          flawFreq,
+          impFreq,
+          selectedTestKeys,
+          currentManifest,
+        )
+      }),
     ),
   )
 

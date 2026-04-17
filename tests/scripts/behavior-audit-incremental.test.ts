@@ -32,7 +32,9 @@ function isIncrementalModule(value: unknown): value is typeof IncrementalModule 
     'combineChangedFileLists' in value &&
     typeof value['combineChangedFileLists'] === 'function' &&
     'collectChangedFiles' in value &&
-    typeof value['collectChangedFiles'] === 'function'
+    typeof value['collectChangedFiles'] === 'function' &&
+    'selectIncrementalWork' in value &&
+    typeof value['selectIncrementalWork'] === 'function'
   )
 }
 
@@ -306,6 +308,215 @@ describe('behavior-audit incremental manifest', () => {
     const changedFiles = await incremental.collectChangedFiles(null)
 
     expect(changedFiles).toEqual(['staged-only.ts', 'unstaged-only.ts', 'untracked-only.ts'])
+  })
+
+  test('collectChangedFiles preserves literal filenames with newlines', async () => {
+    const incremental = await loadIncrementalModule()
+    await initializeGitRepo(root)
+
+    const committedName = 'committed\nname.ts'
+    const stagedName = 'staged\nname.ts'
+    const unstagedName = 'unstaged\nname.ts'
+    const untrackedName = 'untracked\nname.ts'
+
+    writeFileSync(path.join(root, committedName), 'export const committed = 1\n')
+    writeFileSync(path.join(root, stagedName), 'export const staged = 1\n')
+    writeFileSync(path.join(root, unstagedName), 'export const unstaged = 1\n')
+    await commitAll(root, 'seed tracked files with newline names')
+
+    const previousLastStartCommit = await runCommand(['git', 'rev-parse', 'HEAD'], root)
+
+    writeFileSync(path.join(root, committedName), 'export const committed = 2\n')
+    await commitAll(root, 'commit tracked newline name change')
+
+    writeFileSync(path.join(root, stagedName), 'export const staged = 2\n')
+    await runCommand(['git', 'add', stagedName], root)
+
+    writeFileSync(path.join(root, unstagedName), 'export const unstaged = 2\n')
+
+    writeFileSync(path.join(root, untrackedName), 'export const untracked = 1\n')
+
+    const changedFiles = await incremental.collectChangedFiles(previousLastStartCommit)
+
+    expect(changedFiles).toEqual([committedName, stagedName, unstagedName, untrackedName].toSorted())
+  })
+
+  test('buildPhase1Fingerprint changes when mirrored source hash changes', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const a = incremental.buildPhase1Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      testFileHash: 'test-hash',
+      testSource: 'it(...)',
+      mirroredSourceHash: 'src-a',
+      phaseVersion: 'v1',
+    })
+    const b = incremental.buildPhase1Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      testFileHash: 'test-hash',
+      testSource: 'it(...)',
+      mirroredSourceHash: 'src-b',
+      phaseVersion: 'v1',
+    })
+
+    expect(a).not.toBe(b)
+  })
+
+  test('buildPhase2Fingerprint changes when extracted context changes', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const a = incremental.buildPhase2Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls createTask and persists provider output.',
+      phaseVersion: 'v1',
+    })
+    const b = incremental.buildPhase2Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls createTask, enriches metadata, and persists provider output.',
+      phaseVersion: 'v1',
+    })
+
+    expect(a).not.toBe(b)
+  })
+
+  test('selectIncrementalWork marks Phase 1 and Phase 2 when a dependency path changed', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const selection = incremental.selectIncrementalWork({
+      changedFiles: ['src/tools/create-task.ts'],
+      previousManifest: {
+        version: 1,
+        lastStartCommit: 'abc',
+        lastStartedAt: 'x',
+        lastCompletedAt: 'y',
+        phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+        tests: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testFile: 'tests/tools/create-task.test.ts',
+            testName: 'suite > case',
+            dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
+            phase1Fingerprint: 'fp1',
+            phase2Fingerprint: 'fp2',
+            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            domain: 'tools',
+            lastPhase1CompletedAt: 'x',
+            lastPhase2CompletedAt: 'y',
+          },
+        },
+      },
+      currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+      discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+    })
+
+    expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.reportRebuildOnly).toBe(false)
+  })
+
+  test('selectIncrementalWork reruns only Phase 2 when only the Phase 2 version changed', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const selection = incremental.selectIncrementalWork({
+      changedFiles: [],
+      previousManifest: {
+        version: 1,
+        lastStartCommit: 'abc',
+        lastStartedAt: 'x',
+        lastCompletedAt: 'y',
+        phaseVersions: { phase1: 'p1', phase2: 'p2-old', reports: 'r1' },
+        tests: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testFile: 'tests/tools/create-task.test.ts',
+            testName: 'suite > case',
+            dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
+            phase1Fingerprint: 'fp1',
+            phase2Fingerprint: 'fp2',
+            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            domain: 'tools',
+            lastPhase1CompletedAt: 'x',
+            lastPhase2CompletedAt: 'y',
+          },
+          'tests/tools/no-behavior.test.ts::suite > pending': {
+            testFile: 'tests/tools/no-behavior.test.ts',
+            testName: 'suite > pending',
+            dependencyPaths: ['tests/tools/no-behavior.test.ts'],
+            phase1Fingerprint: 'fp3',
+            phase2Fingerprint: null,
+            extractedBehaviorPath: null,
+            domain: 'tools',
+            lastPhase1CompletedAt: null,
+            lastPhase2CompletedAt: null,
+          },
+        },
+      },
+      currentPhaseVersions: { phase1: 'p1', phase2: 'p2-new', reports: 'r1' },
+      discoveredTestKeys: [
+        'tests/tools/create-task.test.ts::suite > case',
+        'tests/tools/no-behavior.test.ts::suite > pending',
+      ],
+    })
+
+    expect(selection.phase1SelectedTestKeys).toEqual([])
+    expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.reportRebuildOnly).toBe(false)
+  })
+
+  test('selectIncrementalWork reports rebuild only when only the report version changed', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const selection = incremental.selectIncrementalWork({
+      changedFiles: [],
+      previousManifest: {
+        version: 1,
+        lastStartCommit: 'abc',
+        lastStartedAt: 'x',
+        lastCompletedAt: 'y',
+        phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1-old' },
+        tests: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testFile: 'tests/tools/create-task.test.ts',
+            testName: 'suite > case',
+            dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
+            phase1Fingerprint: 'fp1',
+            phase2Fingerprint: 'fp2',
+            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            domain: 'tools',
+            lastPhase1CompletedAt: 'x',
+            lastPhase2CompletedAt: 'y',
+          },
+        },
+      },
+      currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1-new' },
+      discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+    })
+
+    expect(selection.phase1SelectedTestKeys).toEqual([])
+    expect(selection.phase2SelectedTestKeys).toEqual([])
+    expect(selection.reportRebuildOnly).toBe(true)
+  })
+
+  test('selectIncrementalWork selects newly discovered tests for both phases', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const selection = incremental.selectIncrementalWork({
+      changedFiles: [],
+      previousManifest: {
+        version: 1,
+        lastStartCommit: 'abc',
+        lastStartedAt: 'x',
+        lastCompletedAt: 'y',
+        phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+        tests: {},
+      },
+      currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+      discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > new case'],
+    })
+
+    expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
+    expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
+    expect(selection.reportRebuildOnly).toBe(false)
   })
 
   test('saveManifest writes through a temp file and atomically renames it into place', async () => {

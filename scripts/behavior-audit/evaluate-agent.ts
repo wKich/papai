@@ -4,7 +4,13 @@ import { generateText, stepCountIs } from 'ai'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
-const apiKey = process.env['OPENAI_API_KEY'] ?? 'no-key'
+function getEnvOrFallback(name: string, fallback: string): string {
+  const value = process.env[name]
+  if (value === undefined) return fallback
+  return value
+}
+
+const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
 const provider = createOpenAICompatible({ name: 'behavior-audit-eval', apiKey, baseURL: BASE_URL })
 const model = provider(MODEL)
 
@@ -36,13 +42,41 @@ export interface EvalResult {
   readonly improvements: readonly string[]
 }
 
+function isPersonaScore(raw: unknown): raw is EvalResult['maria'] {
+  return (
+    typeof raw === 'object' &&
+    raw !== null &&
+    'discover' in raw &&
+    typeof raw.discover === 'number' &&
+    'use' in raw &&
+    typeof raw.use === 'number' &&
+    'retain' in raw &&
+    typeof raw.retain === 'number' &&
+    'notes' in raw &&
+    typeof raw.notes === 'string'
+  )
+}
+
+function isStringArray(raw: unknown): raw is readonly string[] {
+  return Array.isArray(raw) && raw.every((item) => typeof item === 'string')
+}
+
 function isValidEval(raw: unknown): raw is EvalResult {
   return (
     typeof raw === 'object' &&
     raw !== null &&
     'userStory' in raw &&
     typeof (raw as Record<string, unknown>)['userStory'] === 'string' &&
-    'maria' in raw
+    'maria' in raw &&
+    isPersonaScore(raw.maria) &&
+    'dani' in raw &&
+    isPersonaScore(raw.dani) &&
+    'viktor' in raw &&
+    isPersonaScore(raw.viktor) &&
+    'flaws' in raw &&
+    isStringArray(raw.flaws) &&
+    'improvements' in raw &&
+    isStringArray(raw.improvements)
   )
 }
 

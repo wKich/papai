@@ -1,5 +1,5 @@
 import { readdir, stat } from 'node:fs/promises'
-import { resolve, join } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
@@ -8,7 +8,18 @@ import { PROJECT_ROOT } from './config.js'
 
 function resolveSafe(inputPath: string): string | null {
   const resolved = resolve(PROJECT_ROOT, inputPath)
-  if (!resolved.startsWith(PROJECT_ROOT)) return null
+  const rel = relative(PROJECT_ROOT, resolved)
+  if (rel === '' || (!rel.startsWith('..') && !rel.includes(`${pathSeparator()}..${pathSeparator()}`))) return resolved
+  return null
+}
+
+function pathSeparator(): string {
+  return process.platform === 'win32' ? '\\' : '/'
+}
+
+function resolveSafeDirectory(inputPath: string): string | null {
+  const resolved = resolveSafe(inputPath)
+  if (resolved === null) return null
   return resolved
 }
 
@@ -38,7 +49,8 @@ function makeGrepTool(): ToolSet[string] {
       directory: z.string().optional().describe('Subdirectory to search within (default: src/ and tests/)'),
     }),
     execute: async ({ pattern, directory }): Promise<string> => {
-      const dirs = directory === undefined ? ['src', 'tests'] : [directory]
+      const dirs = resolveGrepDirectories(directory)
+      if (dirs === null) return `Error: directory "${directory}" resolves outside project`
       const args = ['-rn', '--include=*.ts', '-E', pattern, ...dirs]
       try {
         const proc = Bun.spawn(['grep', ...args], {
@@ -58,6 +70,13 @@ function makeGrepTool(): ToolSet[string] {
       }
     },
   })
+}
+
+function resolveGrepDirectories(directory: string | undefined): readonly string[] | null {
+  if (directory === undefined) return ['src', 'tests']
+  const safe = resolveSafeDirectory(directory)
+  if (safe === null) return null
+  return [relative(PROJECT_ROOT, safe)]
 }
 
 function makeFindFilesTool(): ToolSet[string] {

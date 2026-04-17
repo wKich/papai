@@ -9,6 +9,7 @@ export const REPORTS_DIR = resolve(PROJECT_ROOT, 'reports')
 export const BEHAVIORS_DIR = resolve(REPORTS_DIR, 'behaviors')
 export const STORIES_DIR = resolve(REPORTS_DIR, 'stories')
 export const PROGRESS_PATH = resolve(REPORTS_DIR, 'progress.json')
+export const INCREMENTAL_MANIFEST_PATH = resolve(REPORTS_DIR, 'incremental-manifest.json')
 
 export const PHASE1_TIMEOUT_MS = 1_200_000
 export const PHASE2_TIMEOUT_MS = 600_000
