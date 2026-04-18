@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.2] - 2026-04-18
+
+### Changed
+
+- **opencode:** Update TDD plugin to match ADR-0070 silent post hooks + stop gate
+
+### Documentation
+
+- Add ADRs for behavior audit, group Kaneo provisioning, sensitive message cleanup, and Discord thread capabilities
+- Move completed specs and plans to archive, add ADRs 77-78
+
+### Fixed
+
+- Replace unsafe object cloning with Proxy for observed chat provider
+- Address PR #95 review comments
 ## [5.1.1] - 2026-04-18
 
 ### Added
