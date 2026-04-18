@@ -59,7 +59,7 @@ async function maybeHandleSetupFlows(
   autoStartWizardIfNeeded: (userId: string, storageContextId: string, reply: ReplyFn) => Promise<boolean>,
 ): Promise<boolean> {
   if (isCommand || !auth.allowed) return false
-  if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply)) return true
+  if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply, msg.messageId)) return true
   if (
     await handleWizardMessage(
       msg.user.id,
@@ -68,6 +68,7 @@ async function maybeHandleSetupFlows(
       reply,
       interactiveButtons,
       settingsTargetContextId,
+      msg.messageId,
     )
   ) {
     return true
