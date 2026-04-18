@@ -49,6 +49,46 @@ function wrapReplyWithHeartbeatStop(reply: ReplyFn, stop: () => void): ReplyFn {
   }
 }
 
+/**
+ * Check if value is a Promise-like object (has catch method).
+ */
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  if (value === undefined || value === null) return false
+  if (typeof value !== 'object') return false
+  return 'catch' in value && typeof (value as Record<string, unknown>)['catch'] === 'function'
+}
+
+/**
+ * Send typing indicator safely, swallowing both sync and async errors.
+ * Typing is best-effort and should never block message processing.
+ */
+function sendTypingSafely(reply: ReplyFn): void {
+  // Cast to unknown-returning function since implementations may return
+  // a Promise (even though ReplyFn.typing is typed as () => void)
+  const typingFn = reply.typing as () => unknown
+
+  // Call typing and capture result, handling both sync errors and async rejections
+  let result: unknown
+  try {
+    result = typingFn()
+  } catch {
+    // Sync error - non-fatal
+    return
+  }
+
+  // Handle async typing that returns a Promise
+  if (isPromiseLike(result)) {
+    const promise = result
+    promise.catch(() => {
+      // Non-fatal: typing is best-effort
+    })
+  }
+}
+
+/**
+ * Execute a function with a typing heartbeat that periodically
+ * triggers the typing indicator until a reply is sent.
+ */
 export async function withReplyTypingHeartbeat<T>(
   reply: ReplyFn,
   fn: (wrappedReply: ReplyFn) => Promise<T>,
@@ -59,8 +99,10 @@ export async function withReplyTypingHeartbeat<T>(
   if (options !== undefined && options.intervalMs !== undefined) {
     intervalMs = options.intervalMs
   }
+
   const scheduler = createScheduler()
   let stopped = false
+
   const stop = (): void => {
     if (stopped) return
     stopped = true
@@ -72,11 +114,14 @@ export async function withReplyTypingHeartbeat<T>(
     interval: intervalMs,
     handler: (): void => {
       if (stopped) return
-      reply.typing()
+      sendTypingSafely(reply)
     },
   })
+
+  // Initial typing indicator
+  sendTypingSafely(reply)
+
   scheduler.start(TYPING_HEARTBEAT_TASK)
-  reply.typing()
 
   try {
     return await fn(wrapReplyWithHeartbeatStop(reply, stop))

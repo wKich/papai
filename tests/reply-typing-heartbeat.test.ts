@@ -74,4 +74,145 @@ describe('reply typing heartbeat', () => {
       { intervalMs: 20 },
     )
   })
+
+  test('handles initial typing error gracefully and continues execution', async () => {
+    const typingCalls: number[] = []
+    const textCalls: string[] = []
+    let shouldThrow = true
+    const reply: ReplyFn = {
+      text: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      formatted: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      // Cast to handle both sync and async typing signatures
+      typing: ((): unknown => {
+        if (shouldThrow) {
+          shouldThrow = false
+          return Promise.reject(new Error('Typing failed'))
+        }
+        typingCalls.push(Date.now())
+        return Promise.resolve()
+      }) as () => void,
+      buttons: (): Promise<void> => Promise.resolve(),
+    }
+
+    await withReplyTypingHeartbeat(
+      reply,
+      async (wrappedReply) => {
+        await wait(25)
+        // Should have retried typing after initial failure
+        expect(typingCalls.length).toBeGreaterThanOrEqual(1)
+        await wrappedReply.text('done')
+      },
+      { intervalMs: 20 },
+    )
+
+    expect(textCalls).toEqual(['done'])
+  })
+
+  test('handles recurring typing errors gracefully', async () => {
+    const typingCalls: number[] = []
+    const textCalls: string[] = []
+    let callCount = 0
+    const reply: ReplyFn = {
+      text: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      formatted: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      // Cast to handle both sync and async typing signatures
+      typing: ((): unknown => {
+        callCount++
+        if (callCount <= 2) {
+          return Promise.reject(new Error('Typing failed'))
+        }
+        typingCalls.push(Date.now())
+        return Promise.resolve()
+      }) as () => void,
+      buttons: (): Promise<void> => Promise.resolve(),
+    }
+
+    await withReplyTypingHeartbeat(
+      reply,
+      async (wrappedReply) => {
+        await wait(50)
+        // Should continue despite errors and eventually succeed
+        expect(typingCalls.length).toBeGreaterThanOrEqual(1)
+        await wrappedReply.text('done')
+      },
+      { intervalMs: 20 },
+    )
+
+    expect(textCalls).toEqual(['done'])
+  })
+
+  test('handles synchronous typing errors', async () => {
+    const textCalls: string[] = []
+    const reply: ReplyFn = {
+      text: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      formatted: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      typing: (): void => {
+        // Synchronous throw (not a Promise)
+        throw new Error('Sync typing error')
+      },
+      buttons: (): Promise<void> => Promise.resolve(),
+    }
+
+    // Should not throw despite sync error from typing
+    await withReplyTypingHeartbeat(
+      reply,
+      async (wrappedReply) => {
+        await wrappedReply.text('done')
+      },
+      { intervalMs: 20 },
+    )
+
+    expect(textCalls).toEqual(['done'])
+  })
+
+  test('handles async typing that resolves successfully', async () => {
+    const typingCalls: number[] = []
+    const textCalls: string[] = []
+    const reply: ReplyFn = {
+      text: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      formatted: (content: string): Promise<void> => {
+        textCalls.push(content)
+        return Promise.resolve()
+      },
+      // Cast to handle both sync and async typing signatures
+      typing: ((): unknown => {
+        typingCalls.push(Date.now())
+        return Promise.resolve()
+      }) as () => void,
+      buttons: (): Promise<void> => Promise.resolve(),
+    }
+
+    await withReplyTypingHeartbeat(
+      reply,
+      async (wrappedReply) => {
+        await wait(25)
+        expect(typingCalls.length).toBeGreaterThanOrEqual(1)
+        await wrappedReply.text('done')
+      },
+      { intervalMs: 20 },
+    )
+
+    expect(textCalls).toEqual(['done'])
+  })
 })
