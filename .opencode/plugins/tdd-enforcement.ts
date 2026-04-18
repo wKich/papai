@@ -1,18 +1,18 @@
 // .opencode/plugins/tdd-enforcement.ts
-// OpenCode plugin — TDD enforcement following PIPELINES.md specification
+// OpenCode plugin — TDD enforcement following ADR-0070: Silent PostToolUse + Stop-Gated Full Check
 // Delegates to .hooks/tdd/checks/* for all check implementations
 
 import type { Plugin } from '@opencode-ai/plugin'
 
 import { blockGitStash } from '../../.hooks/git/checks/block-git-stash.mjs'
+import { checkFull } from '../../.hooks/tdd/checks/check-full.mjs'
 import { enforceTdd } from '../../.hooks/tdd/checks/enforce-tdd.mjs'
 import { enforceWritePolicy } from '../../.hooks/tdd/checks/enforce-write-policy.mjs'
-import { snapshotSurface } from '../../.hooks/tdd/checks/snapshot-surface.mjs'
 import { trackTestWrite } from '../../.hooks/tdd/checks/track-test-write.mjs'
-import { verifyNoNewSurface } from '../../.hooks/tdd/checks/verify-no-new-surface.mjs'
 import { verifyTestImport } from '../../.hooks/tdd/checks/verify-test-import.mjs'
-import { verifyTestsPass } from '../../.hooks/tdd/checks/verify-tests-pass.mjs'
 import { getSessionBaseline } from '../../.hooks/tdd/coverage-session.mjs'
+import { getSessionsDir } from '../../.hooks/tdd/paths.mjs'
+import { SessionState } from '../../.hooks/tdd/session-state.mjs'
 
 // OpenCode edit tools that use filePath
 const EDIT_TOOLS = new Set(['write', 'edit', 'multiedit'])
@@ -58,12 +58,9 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
         throw new Error(tddResult.reason)
       }
 
-      // [2] snapshotSurface - Capture pre-edit state
-      try {
-        snapshotSurface(ctx)
-      } catch {
-        // Fail open - don't block on snapshot errors
-      }
+      // Set needsRecheck flag so Stop hook knows to run full check
+      const state = new SessionState(input.sessionID, getSessionsDir(directory))
+      state.setNeedsRecheck(true)
     },
 
     // POST-WRITE HOOK (runs after Write/Edit/MultiEdit)
@@ -95,29 +92,32 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
         return
       }
 
-      // [6] verifyTestsPass - Run tests and check coverage
-      const testResult = await verifyTestsPass(ctx)
-      if (testResult) {
-        void client.session.promptAsync({
-          path: { id: input.sessionID },
-          body: {
-            parts: [{ type: 'text', text: testResult.reason }],
-          },
-        })
-        return
+      // Note: verifyTestsPass and verifyNoNewSurface were removed from post-write
+      // They now run in the Stop hook instead (ADR-0070)
+    },
+
+    // STOP HOOK (runs when session stops)
+    'session.stop': async (session) => {
+      const state = new SessionState(session.id, getSessionsDir(directory))
+
+      // If needsRecheck is false, LLM was blocked and did nothing → user interrupt → allow stop
+      if (!state.getNeedsRecheck()) {
+        state.setNeedsRecheck(true)
+        return { allow: true }
       }
 
-      // [7] verifyNoNewSurface - Only run for gateable impl files (not test files)
-      const surfaceResult = verifyNoNewSurface(ctx)
-      if (surfaceResult) {
-        void client.session.promptAsync({
-          path: { id: input.sessionID },
-          body: {
-            parts: [{ type: 'text', text: surfaceResult.reason }],
-          },
-        })
-        return
+      // Run full check
+      const result = checkFull({ cwd: directory, session_id: session.id })
+
+      if (result) {
+        // Block with concise failure summary, set needsRecheck false for escape hatch
+        state.setNeedsRecheck(false)
+        return { allow: false, reason: result.reason }
       }
+
+      // All checks passed
+      state.setNeedsRecheck(true)
+      return { allow: true }
     },
   }
 }
