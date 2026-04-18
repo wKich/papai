@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] - 2026-04-18
+
+### Added
+
+- Export isSensitiveKey helper from config module
+- Add messages.delete capability and deleteMessage to ReplyFn
+- Implement deleteMessage in Mattermost adapter
+- Mask sensitive values in config editor confirmation, add isSensitiveKey flag
+- Add isSensitiveKey flag to wizard process results
+- Delete or warn after sensitive config editor input
+- Delete or warn after sensitive wizard input
+- Pass messageId to setup flow integration functions
+- Add upfront warning on platforms without message deletion
 ## [5.1.0] - 2026-04-18
 
 ### Added
