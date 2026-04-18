@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-04-18
+
+### Added
+
+- **behavior-audit:** Add incremental manifest schema
+- **behavior-audit:** Persist lastStartCommit at run start
+- **behavior-audit:** Collect changed files for incremental selection
+- **behavior-audit:** Add incremental manifest reruns
+- **db:** Add recurring ownership foreign keys
+- **groups:** Gate group access behind allowlists
+
+### Documentation
+
+- Add calendar sync design spec (Google Calendar + Apple Calendar via tsdav)
+- Add calendar sync implementation plan (17 tasks)
+- Add sensitive message cleanup design spec
+- Add sensitive message cleanup implementation plan
+
+### Fixed
+
+- **behavior-audit:** Surface corrupt manifest state
+- **behavior-audit:** Write manifest atomically
+
+### Miscellaneous
+
+- **opencode:** Bump plugin and refresh cleanup plan
+
+### Testing
+
+- **behavior-audit:** Narrow task 3 startup coverage
 ## [5.0.1] - 2026-04-16
 
 ### Added
