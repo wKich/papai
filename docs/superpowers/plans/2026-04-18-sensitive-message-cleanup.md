@@ -14,28 +14,29 @@
 
 ## File Structure
 
-| File | Responsibility |
-|------|---------------|
-| `src/chat/types.ts` | `ChatCapability` union, `ReplyFn` partial type |
-| `src/chat/capabilities.ts` | Capability query helpers |
-| `src/config.ts` | `isSensitiveKey()` export |
-| `src/config-editor/types.ts` | `EditorProcessResult` type with `isSensitiveKey` |
-| `src/config-editor/handlers.ts` | Masked confirmation, `isSensitiveKey` flag |
-| `src/wizard/types.ts` | `WizardProcessResult` type with `isSensitiveKey` |
-| `src/wizard/engine.ts` | `isSensitiveKey` flag on wizard results |
-| `src/chat/config-editor-integration.ts` | Delete-or-warn coordination for config editor |
-| `src/wizard-integration.ts` | Delete-or-warn coordination for wizard |
-| `src/bot.ts` | Pass `messageId` to integration functions |
-| `src/commands/setup.ts` | Upfront warning when platform lacks delete |
-| `src/commands/config.ts` | Upfront warning when platform lacks delete |
-| `src/chat/mattermost/reply-helpers.ts` | `deleteMessage` on ReplyFn |
-| `src/chat/mattermost/metadata.ts` | Declare `messages.delete` capability |
+| File                                    | Responsibility                                   |
+| --------------------------------------- | ------------------------------------------------ |
+| `src/chat/types.ts`                     | `ChatCapability` union, `ReplyFn` partial type   |
+| `src/chat/capabilities.ts`              | Capability query helpers                         |
+| `src/config.ts`                         | `isSensitiveKey()` export                        |
+| `src/config-editor/types.ts`            | `EditorProcessResult` type with `isSensitiveKey` |
+| `src/config-editor/handlers.ts`         | Masked confirmation, `isSensitiveKey` flag       |
+| `src/wizard/types.ts`                   | `WizardProcessResult` type with `isSensitiveKey` |
+| `src/wizard/engine.ts`                  | `isSensitiveKey` flag on wizard results          |
+| `src/chat/config-editor-integration.ts` | Delete-or-warn coordination for config editor    |
+| `src/wizard-integration.ts`             | Delete-or-warn coordination for wizard           |
+| `src/bot.ts`                            | Pass `messageId` to integration functions        |
+| `src/commands/setup.ts`                 | Upfront warning when platform lacks delete       |
+| `src/commands/config.ts`                | Upfront warning when platform lacks delete       |
+| `src/chat/mattermost/reply-helpers.ts`  | `deleteMessage` on ReplyFn                       |
+| `src/chat/mattermost/metadata.ts`       | Declare `messages.delete` capability             |
 
 ---
 
 ### Task 1: Export `isSensitiveKey` helper from config
 
 **Files:**
+
 - Modify: `src/config.ts:7-8`
 - Modify: `tests/config.test.ts`
 
@@ -95,6 +96,7 @@ git commit -m "feat: export isSensitiveKey helper from config module"
 ### Task 2: Add `messages.delete` capability and `deleteMessage` to types
 
 **Files:**
+
 - Modify: `src/chat/types.ts:31-39` (ChatCapability union)
 - Modify: `src/chat/types.ts:236-245` (ReplyFn partial)
 - Modify: `src/chat/capabilities.ts`
@@ -140,7 +142,7 @@ export type ChatCapability =
 In the same file, add `deleteMessage` to the `ReplyFn` partial type (after line 244, before the closing `}`):
 
 ```typescript
-  deleteMessage: (messageId: string) => Promise<void>
+deleteMessage: (messageId: string) => Promise<void>
 ```
 
 The `ReplyFn` partial should now read:
@@ -188,6 +190,7 @@ git commit -m "feat: add messages.delete capability and deleteMessage to ReplyFn
 ### Task 3: Implement `deleteMessage` in Mattermost adapter
 
 **Files:**
+
 - Modify: `src/chat/mattermost/metadata.ts`
 - Modify: `src/chat/mattermost/reply-helpers.ts`
 
@@ -234,6 +237,7 @@ git commit -m "feat: implement deleteMessage in Mattermost adapter"
 ### Task 4: Add `isSensitiveKey` to config-editor result type and mask confirmation
 
 **Files:**
+
 - Modify: `src/config-editor/types.ts:43-48`
 - Modify: `src/config-editor/handlers.ts:219-256`
 - Modify: `tests/chat/config-editor-integration.test.ts`
@@ -259,15 +263,15 @@ Add to `tests/chat/config-editor-integration.test.ts` after the existing tests. 
 Add after the `'handles message when editor is active'` test:
 
 ```typescript
-  test('sets isSensitiveKey flag for sensitive key', async () => {
-    startEditor(userId, storageContextId, 'llm_apikey')
-    const { reply, buttonCalls } = createMockReply()
+test('sets isSensitiveKey flag for sensitive key', async () => {
+  startEditor(userId, storageContextId, 'llm_apikey')
+  const { reply, buttonCalls } = createMockReply()
 
-    const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-test-api-key-12345', reply)
-    expect(result).toBe(true)
-    expect(buttonCalls.length).toBeGreaterThan(0)
-    expect(buttonCalls[0]).not.toContain('sk-test-api-key-12345')
-  })
+  const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-test-api-key-12345', reply)
+  expect(result).toBe(true)
+  expect(buttonCalls.length).toBeGreaterThan(0)
+  expect(buttonCalls[0]).not.toContain('sk-test-api-key-12345')
+})
 ```
 
 Update the imports at the top: add `createMockReply` to the import from `'../utils/test-helpers.js'`.
@@ -282,6 +286,7 @@ Expected: FAIL — the confirmation still echoes the raw value
 In `src/config-editor/handlers.ts`, modify the `handleEditorMessage` function:
 
 Add `isSensitiveKey` import at the top of the file (add to the import from `'../config.js'`):
+
 ```typescript
 import { getConfig, maskValue, isSensitiveKey } from '../config.js'
 ```
@@ -289,18 +294,18 @@ import { getConfig, maskValue, isSensitiveKey } from '../config.js'
 Change the confirmation response at line 247-255 to mask sensitive values:
 
 ```typescript
-  const maskedOrRaw = isSensitiveKey(session.editingKey) ? maskValue(session.editingKey, text.trim()) : text.trim()
+const maskedOrRaw = isSensitiveKey(session.editingKey) ? maskValue(session.editingKey, text.trim()) : text.trim()
 
-  return {
-    handled: true,
-    response: `✏️ **${displayName}**\n\nNew value: \`${maskedOrRaw}\`\n\nSave this value?`,
-    buttons: [
-      { text: '❌ Cancel', action: 'cancel', style: 'danger' },
-      { text: '⬅️ Back', action: 'back', style: 'secondary' },
-      { text: `✅ Save ${emoji}`, action: 'save', key: session.editingKey, style: 'primary' },
-    ],
-    isSensitiveKey: isSensitiveKey(session.editingKey),
-  }
+return {
+  handled: true,
+  response: `✏️ **${displayName}**\n\nNew value: \`${maskedOrRaw}\`\n\nSave this value?`,
+  buttons: [
+    { text: '❌ Cancel', action: 'cancel', style: 'danger' },
+    { text: '⬅️ Back', action: 'back', style: 'secondary' },
+    { text: `✅ Save ${emoji}`, action: 'save', key: session.editingKey, style: 'primary' },
+  ],
+  isSensitiveKey: isSensitiveKey(session.editingKey),
+}
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -320,6 +325,7 @@ git commit -m "feat: mask sensitive values in config editor confirmation, add is
 ### Task 5: Add `isSensitiveKey` to wizard result type and set flag
 
 **Files:**
+
 - Modify: `src/wizard/types.ts:49-54`
 - Modify: `src/wizard/engine.ts`
 - Modify: `tests/wizard-integration.test.ts`
@@ -343,14 +349,14 @@ export interface WizardProcessResult {
 Add to `tests/wizard-integration.test.ts` after the existing tests:
 
 ```typescript
-  test('returns isSensitiveKey flag for sensitive wizard step', async () => {
-    await createWizard(userId, storageContextId, 'kaneo')
-    const { reply, textCalls } = createMockReply()
+test('returns isSensitiveKey flag for sensitive wizard step', async () => {
+  await createWizard(userId, storageContextId, 'kaneo')
+  const { reply, textCalls } = createMockReply()
 
-    const handled = await handleWizardMessage(userId, storageContextId, 'sk-test-api-key-12345', reply, false)
-    expect(handled).toBe(true)
-    expect(textCalls.length).toBeGreaterThan(0)
-  })
+  const handled = await handleWizardMessage(userId, storageContextId, 'sk-test-api-key-12345', reply, false)
+  expect(handled).toBe(true)
+  expect(textCalls.length).toBeGreaterThan(0)
+})
 ```
 
 This test verifies the wizard handles a sensitive key input (the first step is `llm_apikey`) without error. The real assertion for the flag will be tested implicitly through the integration layer in Task 6.
@@ -359,9 +365,10 @@ This test verifies the wizard handles a sensitive key input (the first step is `
 
 In `src/wizard/engine.ts`, the `processWizardMessage` function returns results from `advanceStep`. We need to propagate the sensitivity of the step that was just completed.
 
-Modify the `processWizardMessage` function. After the `const result = await advanceStep(...)` call (around line 264), we need to check the *previous* step (the one just completed). The session has already advanced, so we check `currentSession.currentStep - 1`:
+Modify the `processWizardMessage` function. After the `const result = await advanceStep(...)` call (around line 264), we need to check the _previous_ step (the one just completed). The session has already advanced, so we check `currentSession.currentStep - 1`:
 
 First, add the import at the top:
+
 ```typescript
 import { getAllConfig, isSensitiveKey, maskValue } from '../config.js'
 ```
@@ -369,31 +376,31 @@ import { getAllConfig, isSensitiveKey, maskValue } from '../config.js'
 Then in `processWizardMessage`, change the final return block. Replace the return statement at the end of the function (lines 264-278) with:
 
 ```typescript
-  const result = await advanceStep(userId, storageContextId, text)
+const result = await advanceStep(userId, storageContextId, text)
 
-  const currentSession = getWizardSession(userId, storageContextId)
-  const completedStepIndex = currentSession !== null ? currentSession.currentStep - 1 : -1
-  const completedStep =
-    currentSession !== null ? getStepByIndex(currentSession.taskProvider, completedStepIndex) : undefined
-  const stepIsSensitive = completedStep !== undefined && isSensitiveKey(completedStep.key)
+const currentSession = getWizardSession(userId, storageContextId)
+const completedStepIndex = currentSession !== null ? currentSession.currentStep - 1 : -1
+const completedStep =
+  currentSession !== null ? getStepByIndex(currentSession.taskProvider, completedStepIndex) : undefined
+const stepIsSensitive = completedStep !== undefined && isSensitiveKey(completedStep.key)
 
-  if (currentSession !== null) {
-    const currentStep = getStepByIndex(currentSession.taskProvider, currentSession.currentStep)
-    if (currentStep !== null && currentStep !== undefined) {
-      const skipButtons = buildSkipButtons(currentStep.key)
-      if (skipButtons !== undefined) {
-        return {
-          handled: true,
-          response: result.prompt,
-          requiresInput: true,
-          buttons: skipButtons,
-          isSensitiveKey: stepIsSensitive,
-        }
+if (currentSession !== null) {
+  const currentStep = getStepByIndex(currentSession.taskProvider, currentSession.currentStep)
+  if (currentStep !== null && currentStep !== undefined) {
+    const skipButtons = buildSkipButtons(currentStep.key)
+    if (skipButtons !== undefined) {
+      return {
+        handled: true,
+        response: result.prompt,
+        requiresInput: true,
+        buttons: skipButtons,
+        isSensitiveKey: stepIsSensitive,
       }
     }
   }
+}
 
-  return { handled: true, response: result.prompt, requiresInput: true, isSensitiveKey: stepIsSensitive }
+return { handled: true, response: result.prompt, requiresInput: true, isSensitiveKey: stepIsSensitive }
 ```
 
 Remove the old `const currentSession = ...` block that was inside this function (lines 267-276) since we moved it up.
@@ -420,6 +427,7 @@ git commit -m "feat: add isSensitiveKey flag to wizard process results"
 ### Task 6: Implement delete-or-warn in config-editor integration
 
 **Files:**
+
 - Modify: `src/chat/config-editor-integration.ts`
 - Modify: `tests/chat/config-editor-integration.test.ts`
 
@@ -428,53 +436,53 @@ git commit -m "feat: add isSensitiveKey flag to wizard process results"
 Add these tests to `tests/chat/config-editor-integration.test.ts`:
 
 ```typescript
-  test('calls deleteMessage when available and key is sensitive', async () => {
-    startEditor(userId, storageContextId, 'llm_apikey')
-    const deletedIds: string[] = []
-    const reply: ReplyFn = {
-      text: async (): Promise<void> => {},
-      formatted: async (): Promise<void> => {},
-      file: async (): Promise<void> => {},
-      typing: (): void => {},
-      buttons: async (): Promise<void> => {},
-      deleteMessage: async (messageId: string): Promise<void> => {
-        deletedIds.push(messageId)
-      },
-    }
+test('calls deleteMessage when available and key is sensitive', async () => {
+  startEditor(userId, storageContextId, 'llm_apikey')
+  const deletedIds: string[] = []
+  const reply: ReplyFn = {
+    text: async (): Promise<void> => {},
+    formatted: async (): Promise<void> => {},
+    file: async (): Promise<void> => {},
+    typing: (): void => {},
+    buttons: async (): Promise<void> => {},
+    deleteMessage: async (messageId: string): Promise<void> => {
+      deletedIds.push(messageId)
+    },
+  }
 
-    const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-key', reply, 'msg-123')
-    expect(result).toBe(true)
-    expect(deletedIds).toEqual(['msg-123'])
-  })
+  const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-key', reply, 'msg-123')
+  expect(result).toBe(true)
+  expect(deletedIds).toEqual(['msg-123'])
+})
 
-  test('appends warning when deleteMessage unavailable and key is sensitive', async () => {
-    startEditor(userId, storageContextId, 'llm_apikey')
-    const { reply, buttonCalls } = createMockReply()
+test('appends warning when deleteMessage unavailable and key is sensitive', async () => {
+  startEditor(userId, storageContextId, 'llm_apikey')
+  const { reply, buttonCalls } = createMockReply()
 
-    const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-key', reply, 'msg-123')
-    expect(result).toBe(true)
-    expect(buttonCalls.length).toBeGreaterThan(0)
-    expect(buttonCalls[0]).toContain('manually delete')
-  })
+  const result = await handleConfigEditorMessage(userId, storageContextId, 'sk-key', reply, 'msg-123')
+  expect(result).toBe(true)
+  expect(buttonCalls.length).toBeGreaterThan(0)
+  expect(buttonCalls[0]).toContain('manually delete')
+})
 
-  test('does not delete or warn for non-sensitive key', async () => {
-    startEditor(userId, storageContextId, 'main_model')
-    const deletedIds: string[] = []
-    const reply: ReplyFn = {
-      text: async (): Promise<void> => {},
-      formatted: async (): Promise<void> => {},
-      file: async (): Promise<void> => {},
-      typing: (): void => {},
-      buttons: async (): Promise<void> => {},
-      deleteMessage: async (messageId: string): Promise<void> => {
-        deletedIds.push(messageId)
-      },
-    }
+test('does not delete or warn for non-sensitive key', async () => {
+  startEditor(userId, storageContextId, 'main_model')
+  const deletedIds: string[] = []
+  const reply: ReplyFn = {
+    text: async (): Promise<void> => {},
+    formatted: async (): Promise<void> => {},
+    file: async (): Promise<void> => {},
+    typing: (): void => {},
+    buttons: async (): Promise<void> => {},
+    deleteMessage: async (messageId: string): Promise<void> => {
+      deletedIds.push(messageId)
+    },
+  }
 
-    const result = await handleConfigEditorMessage(userId, storageContextId, 'gpt-4', reply, 'msg-456')
-    expect(result).toBe(true)
-    expect(deletedIds).toEqual([])
-  })
+  const result = await handleConfigEditorMessage(userId, storageContextId, 'gpt-4', reply, 'msg-456')
+  expect(result).toBe(true)
+  expect(deletedIds).toEqual([])
+})
 ```
 
 Add `ReplyFn` to the import from `'../../src/chat/types.js'`.
@@ -522,7 +530,10 @@ export async function handleConfigEditorMessage(
           await reply.deleteMessage(messageId)
           log.info({ userId, messageId }, 'Deleted user message containing sensitive config value')
         } catch (error) {
-          log.warn({ userId, messageId, error: error instanceof Error ? error.message : String(error) }, 'Failed to delete user message with sensitive config value')
+          log.warn(
+            { userId, messageId, error: error instanceof Error ? error.message : String(error) },
+            'Failed to delete user message with sensitive config value',
+          )
         }
       } else {
         response += SENSITIVE_DELETE_WARNING
@@ -564,6 +575,7 @@ git commit -m "feat: delete or warn after sensitive config editor input"
 ### Task 7: Implement delete-or-warn in wizard integration
 
 **Files:**
+
 - Modify: `src/wizard-integration.ts`
 - Modify: `tests/wizard-integration.test.ts`
 
@@ -572,30 +584,46 @@ git commit -m "feat: delete or warn after sensitive config editor input"
 Add these tests to `tests/wizard-integration.test.ts`:
 
 ```typescript
-  test('calls deleteMessage when available and step is sensitive', async () => {
-    await createWizard(userId, storageContextId, 'kaneo')
-    const deletedIds: string[] = []
-    const reply: ReplyFn = {
-      ...createMockReply().reply,
-      deleteMessage: async (messageId: string): Promise<void> => {
-        deletedIds.push(messageId)
-      },
-    }
+test('calls deleteMessage when available and step is sensitive', async () => {
+  await createWizard(userId, storageContextId, 'kaneo')
+  const deletedIds: string[] = []
+  const reply: ReplyFn = {
+    ...createMockReply().reply,
+    deleteMessage: async (messageId: string): Promise<void> => {
+      deletedIds.push(messageId)
+    },
+  }
 
-    const handled = await handleWizardMessage(userId, storageContextId, 'sk-test-api-key', reply, false, undefined, 'msg-789')
-    expect(handled).toBe(true)
-    expect(deletedIds).toEqual(['msg-789'])
-  })
+  const handled = await handleWizardMessage(
+    userId,
+    storageContextId,
+    'sk-test-api-key',
+    reply,
+    false,
+    undefined,
+    'msg-789',
+  )
+  expect(handled).toBe(true)
+  expect(deletedIds).toEqual(['msg-789'])
+})
 
-  test('appends warning when deleteMessage unavailable and step is sensitive', async () => {
-    await createWizard(userId, storageContextId, 'kaneo')
-    const { reply, textCalls } = createMockReply()
+test('appends warning when deleteMessage unavailable and step is sensitive', async () => {
+  await createWizard(userId, storageContextId, 'kaneo')
+  const { reply, textCalls } = createMockReply()
 
-    const handled = await handleWizardMessage(userId, storageContextId, 'sk-test-api-key', reply, false, undefined, 'msg-789')
-    expect(handled).toBe(true)
-    expect(textCalls.length).toBeGreaterThan(0)
-    expect(textCalls[0]).toContain('manually delete')
-  })
+  const handled = await handleWizardMessage(
+    userId,
+    storageContextId,
+    'sk-test-api-key',
+    reply,
+    false,
+    undefined,
+    'msg-789',
+  )
+  expect(handled).toBe(true)
+  expect(textCalls.length).toBeGreaterThan(0)
+  expect(textCalls[0]).toContain('manually delete')
+})
 ```
 
 Add `ReplyFn` to the import from `'../src/chat/types.js'`.
@@ -645,7 +673,10 @@ export async function handleWizardMessage(
           await reply.deleteMessage(messageId)
           log.info({ userId, messageId }, 'Deleted user message containing sensitive wizard value')
         } catch (error) {
-          log.warn({ userId, messageId, error: error instanceof Error ? error.message : String(error) }, 'Failed to delete user message with sensitive wizard value')
+          log.warn(
+            { userId, messageId, error: error instanceof Error ? error.message : String(error) },
+            'Failed to delete user message with sensitive wizard value',
+          )
         }
       } else {
         response += SENSITIVE_DELETE_WARNING
@@ -698,6 +729,7 @@ git commit -m "feat: delete or warn after sensitive wizard input"
 ### Task 8: Pass `messageId` from bot.ts to integration functions
 
 **Files:**
+
 - Modify: `src/bot.ts:251-257`
 
 - [ ] **Step 1: Update bot.ts call sites**
@@ -705,21 +737,48 @@ git commit -m "feat: delete or warn after sensitive wizard input"
 In `src/bot.ts`, update `maybeHandleSetupFlows` to pass `msg.messageId` to both integration functions.
 
 Change line 253 from:
+
 ```typescript
-  if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply)) return true
+if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply)) return true
 ```
+
 to:
+
 ```typescript
-  if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply, msg.messageId)) return true
+if (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply, msg.messageId)) return true
 ```
 
 Change line 254 from:
+
 ```typescript
-  if (await handleWizardMessage(msg.user.id, settingsTargetContextId, msg.text, reply, interactiveButtons, settingsTargetContextId)) return true
+if (
+  await handleWizardMessage(
+    msg.user.id,
+    settingsTargetContextId,
+    msg.text,
+    reply,
+    interactiveButtons,
+    settingsTargetContextId,
+  )
+)
+  return true
 ```
+
 to:
+
 ```typescript
-  if (await handleWizardMessage(msg.user.id, settingsTargetContextId, msg.text, reply, interactiveButtons, settingsTargetContextId, msg.messageId)) return true
+if (
+  await handleWizardMessage(
+    msg.user.id,
+    settingsTargetContextId,
+    msg.text,
+    reply,
+    interactiveButtons,
+    settingsTargetContextId,
+    msg.messageId,
+  )
+)
+  return true
 ```
 
 - [ ] **Step 2: Run typecheck**
@@ -739,6 +798,7 @@ git commit -m "feat: pass messageId to setup flow integration functions"
 ### Task 9: Add upfront warning in `/setup` and `/config` commands
 
 **Files:**
+
 - Modify: `src/commands/setup.ts`
 - Modify: `src/commands/config.ts`
 
@@ -758,9 +818,9 @@ const NO_DELETE_WARNING =
 In `startSetupForTarget`, before the `deps.createWizard(...)` call (line 90), add the warning check:
 
 ```typescript
-  if (!supportsMessageDeletion({ capabilities: chatCapabilities })) {
-    await reply.text(NO_DELETE_WARNING)
-  }
+if (!supportsMessageDeletion({ capabilities: chatCapabilities })) {
+  await reply.text(NO_DELETE_WARNING)
+}
 ```
 
 Wait — `startSetupForTarget` doesn't have access to the chat provider. The warning needs to be sent from the command handler where `chat` is available.
@@ -772,23 +832,23 @@ Actually the simplest approach: the handler has `chat` in scope. Send the warnin
 Change the handler to:
 
 ```typescript
-  const handler: CommandHandler = async (msg, reply, auth) => {
-    if (!auth.allowed) {
-      await reply.text('You are not authorized to use this bot.')
-      return
-    }
-
-    if (msg.contextType === 'group') {
-      await reply.text(auth.isGroupAdmin ? GROUP_SETUP_REDIRECT : GROUP_SETUP_ADMIN_ONLY)
-      return
-    }
-
-    log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
-    if (!supportsMessageDeletion(chat)) {
-      await reply.text(NO_DELETE_WARNING)
-    }
-    await replyWithSetupSelection(reply, msg.user.id, supportsInteractiveButtons(chat))
+const handler: CommandHandler = async (msg, reply, auth) => {
+  if (!auth.allowed) {
+    await reply.text('You are not authorized to use this bot.')
+    return
   }
+
+  if (msg.contextType === 'group') {
+    await reply.text(auth.isGroupAdmin ? GROUP_SETUP_REDIRECT : GROUP_SETUP_ADMIN_ONLY)
+    return
+  }
+
+  log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
+  if (!supportsMessageDeletion(chat)) {
+    await reply.text(NO_DELETE_WARNING)
+  }
+  await replyWithSetupSelection(reply, msg.user.id, supportsInteractiveButtons(chat))
+}
 ```
 
 - [ ] **Step 2: Add warning to config command**
@@ -807,9 +867,9 @@ const NO_DELETE_WARNING =
 In `registerConfigCommand`, inside the handler, before `replyWithConfigSelection` (line 116), add the check:
 
 ```typescript
-    if (!supportsMessageDeletion(chat)) {
-      await reply.text(NO_DELETE_WARNING)
-    }
+if (!supportsMessageDeletion(chat)) {
+  await reply.text(NO_DELETE_WARNING)
+}
 ```
 
 - [ ] **Step 3: Run typecheck**
