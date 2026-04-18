@@ -277,7 +277,6 @@ export function setupBot(chat: ChatProvider, adminUserId: string, ...rest: [] | 
   const deps = rest.length === 0 ? defaultBotDeps : rest[0]
   registerCommands(chat, adminUserId)
   chat.onMessage((msg, reply): Promise<void> => onIncomingMessage(chat, msg, reply, deps))
-  const onInteraction = chat.onInteraction
-  if (onInteraction !== undefined)
-    onInteraction((interaction, reply): Promise<void> => routeIncomingInteraction(interaction, reply))
+  if (chat.onInteraction !== undefined)
+    chat.onInteraction((interaction, reply): Promise<void> => routeIncomingInteraction(interaction, reply))
 }

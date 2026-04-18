@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm'
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { addAuthorizedGroup, removeAuthorizedGroup } from '../src/authorized-groups.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
-import type { IncomingFile, IncomingInteraction, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type { ChatProvider, IncomingFile, IncomingInteraction, IncomingMessage, ReplyFn } from '../src/chat/types.js'
 import { getConfig, setConfig } from '../src/config.js'
 import { getDrizzleDb } from '../src/db/drizzle.js'
 import { groupAdminObservations, knownGroupContexts } from '../src/db/schema.js'
@@ -1099,6 +1099,29 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
     expect(getRegisteredMessageHandler()).not.toBeNull()
     expect(getInteractionHandler()).not.toBeNull()
+  })
+
+  test('setupBot preserves provider binding when registering interaction handlers', () => {
+    const baseProvider = createMockChat()
+    const provider: ChatProvider & {
+      registrationCount: number
+      interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null
+    } = {
+      ...baseProvider,
+      registrationCount: 0,
+      interactionHandler: null,
+      onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
+        this.registrationCount += 1
+        this.interactionHandler = handler
+      },
+    }
+
+    setupBot(provider, ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    expect(provider.registrationCount).toBe(1)
+    expect(provider.interactionHandler).not.toBeNull()
   })
 
   test('interaction handler replies with allowlist hint for non-allowlisted groups', async () => {
