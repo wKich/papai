@@ -1,4 +1,4 @@
-import { supportsInteractiveButtons } from '../chat/capabilities.js'
+import { supportsInteractiveButtons, supportsMessageDeletion } from '../chat/capabilities.js'
 import type { ChatButton, ChatProvider, CommandHandler, ReplyFn } from '../chat/types.js'
 import { serializeCallbackData } from '../config-editor/index.js'
 import { getAllConfig, maskValue } from '../config.js'
@@ -11,6 +11,8 @@ const GROUP_CONFIG_REDIRECT =
   'Group settings are configured in direct messages with the bot. Open a DM with me and run /config.'
 const GROUP_CONFIG_ADMIN_ONLY =
   'Only group admins can configure group settings, and group settings are configured in direct messages with the bot.'
+const NO_DELETE_WARNING =
+  '⚠️ This platform does not support automatic deletion of messages containing secrets. Please manually delete your messages after entering API keys and tokens.\n\n'
 
 const FIELD_DISPLAY_NAMES: Record<ConfigKey, string> = {
   llm_apikey: 'LLM API Key',
@@ -113,6 +115,9 @@ export function registerConfigCommand(
     const interactiveButtons = supportsInteractiveButtons(chat)
 
     log.info({ userId: msg.user.id, storageContextId: auth.storageContextId }, '/config command executed')
+    if (!supportsMessageDeletion(chat)) {
+      await reply.text(NO_DELETE_WARNING)
+    }
     await replyWithConfigSelection(reply, msg.user.id, interactiveButtons)
   }
 
