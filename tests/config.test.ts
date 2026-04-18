@@ -5,6 +5,7 @@ import {
   getAllConfig,
   getConfig,
   isConfigKey,
+  isSensitiveKey,
   isMissingLlmConfig,
   maskValue,
   setConfig,
@@ -130,6 +131,22 @@ describe('maskValue', () => {
   test('handles short values for sensitive keys', () => {
     expect(maskValue('kaneo_apikey', 'ab')).toBe('****ab')
     expect(maskValue('kaneo_apikey', '')).toBe('****')
+  })
+})
+
+describe('isSensitiveKey', () => {
+  test('returns true for sensitive keys', () => {
+    expect(isSensitiveKey('kaneo_apikey')).toBe(true)
+    expect(isSensitiveKey('youtrack_token')).toBe(true)
+    expect(isSensitiveKey('llm_apikey')).toBe(true)
+  })
+
+  test('returns false for non-sensitive keys', () => {
+    expect(isSensitiveKey('llm_baseurl')).toBe(false)
+    expect(isSensitiveKey('main_model')).toBe(false)
+    expect(isSensitiveKey('small_model')).toBe(false)
+    expect(isSensitiveKey('embedding_model')).toBe(false)
+    expect(isSensitiveKey('timezone')).toBe(false)
   })
 })
 

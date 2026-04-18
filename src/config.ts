@@ -6,6 +6,10 @@ const log = logger.child({ scope: 'config' })
 
 const SENSITIVE_KEYS: ReadonlySet<ConfigKey> = new Set(['kaneo_apikey', 'youtrack_token', 'llm_apikey'])
 
+export function isSensitiveKey(key: ConfigKey): boolean {
+  return SENSITIVE_KEYS.has(key)
+}
+
 export function setConfig(userId: string, key: ConfigKey, value: string): void {
   log.debug({ userId, key }, 'setConfig called')
   setCachedConfig(userId, key, value)
