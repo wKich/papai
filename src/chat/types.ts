@@ -90,6 +90,8 @@ export type ReplyContext = {
   text: string
   /** For quote-style replies, the specific quoted text */
   quotedText: string
+  /** True when the quoted text was truncated by the platform API limit (Telegram: 1024 chars) */
+  quotedTextTruncated: boolean
   /** Platform-specific thread/topic ID (Telegram: message_thread_id, Mattermost: root_id) */
   threadId: string
   /** Full reply chain message IDs in chronological order (oldest first) */
@@ -145,12 +147,15 @@ export type IncomingInteraction = {
 }>
 
 /** Authorization result for message processing. */
+export type AuthorizationDenyReason = 'group_not_allowed' | 'group_member_not_allowed' | 'dm_not_allowed'
+
+/** Authorization result for message processing. */
 export type AuthorizationResult = {
   allowed: boolean
   isBotAdmin: boolean
   isGroupAdmin: boolean
   storageContextId: string
-} & Partial<{ configContextId: string }>
+} & Partial<{ configContextId: string; reason: AuthorizationDenyReason }>
 
 /** Command handler signature. */
 export type CommandHandler = (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => Promise<void>

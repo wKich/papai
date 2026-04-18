@@ -1,10 +1,81 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { addAuthorizedGroup } from '../../../src/authorized-groups.js'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { CommandHandler } from '../../../src/chat/types.js'
 import { addGroupMember } from '../../../src/groups.js'
 import { addUser } from '../../../src/users.js'
 import { createMockReply, mockLogger, setupTestDb } from '../../utils/test-helpers.js'
+
+type MockInteractionOverrides = Partial<
+  Readonly<{
+    userId: string
+    username: string
+    channelId: string
+    channelType: number
+    customId: string
+    threadId: string
+    isAdmin: boolean
+  }>
+>
+
+const createMockInteraction = (overrides: MockInteractionOverrides | undefined): ButtonInteractionLike => {
+  let userId = 'unauthorized-user'
+  let username = 'unauthorized'
+  let channelId = 'channel-123'
+  let channelType = 0
+  let customId = '/testcommand'
+  let threadId: string | undefined
+  const isAdmin = overrides !== undefined && overrides.isAdmin === true
+
+  if (overrides !== undefined) {
+    if (overrides.userId !== undefined) {
+      userId = overrides.userId
+    }
+    if (overrides.username !== undefined) {
+      username = overrides.username
+    }
+    if (overrides.channelId !== undefined) {
+      channelId = overrides.channelId
+    }
+    if (overrides.channelType !== undefined) {
+      channelType = overrides.channelType
+    }
+    if (overrides.customId !== undefined) {
+      customId = overrides.customId
+    }
+    threadId = overrides.threadId
+  }
+
+  return {
+    user: { id: userId, username, bot: false, isAdmin },
+    customId,
+    channelId,
+    channel: {
+      id: channelId,
+      type: channelType,
+      send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
+        Promise.resolve({ id: 'msg-1', edit: (): Promise<void> => Promise.resolve() }),
+      sendTyping: (): Promise<void> => Promise.resolve(),
+    },
+    message: {
+      id: 'msg-123',
+      channelId,
+      threadId,
+    },
+    deferUpdate: (): Promise<void> => Promise.resolve(),
+  }
+}
+
+const requireCapturedAuth = (
+  auth: { allowed: boolean; isBotAdmin: boolean; isGroupAdmin: boolean; storageContextId: string } | null,
+): { allowed: boolean; isBotAdmin: boolean; isGroupAdmin: boolean; storageContextId: string } => {
+  if (auth === null) {
+    throw new Error('Expected captured auth to be set')
+  }
+
+  return auth
+}
 
 describe('routeButtonFallback', () => {
   const originalAdminUserId = process.env['ADMIN_USER_ID']
@@ -22,44 +93,6 @@ describe('routeButtonFallback', () => {
       storageContextId: auth.storageContextId,
     }
     return Promise.resolve()
-  }
-
-  const createMockInteraction = (overrides?: {
-    userId?: string
-    username?: string
-    channelId?: string
-    channelType?: number
-    customId?: string
-    threadId?: string
-    isAdmin?: boolean
-  }): ButtonInteractionLike => {
-    const userId = overrides?.userId ?? 'unauthorized-user'
-    const username = overrides?.username ?? 'unauthorized'
-    const channelId = overrides?.channelId ?? 'channel-123'
-    // 0 = text channel (group)
-    const channelType = overrides?.channelType ?? 0
-    const customId = overrides?.customId ?? '/testcommand'
-    const threadId = overrides?.threadId
-    const isAdmin = overrides?.isAdmin ?? false
-
-    return {
-      user: { id: userId, username, bot: false, isAdmin },
-      customId,
-      channelId,
-      channel: {
-        id: channelId,
-        type: channelType,
-        send: (): Promise<{ id: string; edit: () => Promise<void> }> =>
-          Promise.resolve({ id: 'msg-1', edit: (): Promise<void> => Promise.resolve() }),
-        sendTyping: (): Promise<void> => Promise.resolve(),
-      },
-      message: {
-        id: 'msg-123',
-        channelId,
-        threadId,
-      },
-      deferUpdate: (): Promise<void> => Promise.resolve(),
-    }
   }
 
   beforeEach(async () => {
@@ -103,13 +136,12 @@ describe('routeButtonFallback', () => {
       expect(commandCalled).toBe(false)
     })
 
-    test('allows authorized bot admins to execute commands via buttons', async () => {
-      const authorizedUserId = 'authorized-user'
-      addUser(authorizedUserId, 'authorized', 'authorizeduser')
+    test('allows configured bot admin to execute commands via buttons in allowlisted groups', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
 
       const interaction = createMockInteraction({
-        userId: authorizedUserId,
-        username: 'authorizeduser',
+        userId: 'admin-123',
+        username: 'adminuser',
         customId: '/help',
       })
       const commands = new Map<string, CommandHandler>([['help', mockCommandHandler]])
@@ -118,10 +150,13 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.allowed).toBe(true)
+      const auth = requireCapturedAuth(capturedAuth)
+      expect(auth.allowed).toBe(true)
+      expect(auth.isBotAdmin).toBe(true)
     })
 
     test('allows group members to execute commands in groups', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
       // This tests that group members (not just bot admins) can use buttons
       const groupMemberId = 'group-member'
       // Add user as group member (added by admin)
@@ -139,14 +174,16 @@ describe('routeButtonFallback', () => {
 
       // Group members should be allowed (with isBotAdmin: false)
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.allowed).toBe(true)
-      expect(capturedAuth?.isBotAdmin).toBe(false)
+      const auth = requireCapturedAuth(capturedAuth)
+      expect(auth.allowed).toBe(true)
+      expect(auth.isBotAdmin).toBe(false)
     })
   })
 
   describe('storage context', () => {
     test('uses thread-scoped storage context ID for threads', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       const interaction = createMockInteraction({
@@ -162,11 +199,12 @@ describe('routeButtonFallback', () => {
 
       expect(commandCalled).toBe(true)
       // For threads, storageContextId should be contextId:threadId
-      expect(capturedAuth?.storageContextId).toBe('channel-123:thread-456')
+      expect(requireCapturedAuth(capturedAuth).storageContextId).toBe('channel-123:thread-456')
     })
 
     test('uses plain context ID for non-thread group messages', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       const interaction = createMockInteraction({
@@ -181,7 +219,7 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.storageContextId).toBe('channel-123')
+      expect(requireCapturedAuth(capturedAuth).storageContextId).toBe('channel-123')
     })
 
     test('uses user ID for DM context', async () => {
@@ -210,12 +248,13 @@ describe('routeButtonFallback', () => {
       )
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.storageContextId).toBe(authorizedUserId)
+      expect(requireCapturedAuth(capturedAuth).storageContextId).toBe(authorizedUserId)
     })
   })
 
   describe('admin flags', () => {
     test('distinguishes between bot admin and group admin', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
       // A group admin who is NOT a bot admin
       const groupAdminId = 'group-admin'
       // Add as group member (not bot admin), added by admin
@@ -235,12 +274,14 @@ describe('routeButtonFallback', () => {
 
       expect(commandCalled).toBe(true)
       // Should be allowed, not a bot admin, but IS a group admin
-      expect(capturedAuth?.allowed).toBe(true)
-      expect(capturedAuth?.isBotAdmin).toBe(false)
-      expect(capturedAuth?.isGroupAdmin).toBe(true)
+      const auth = requireCapturedAuth(capturedAuth)
+      expect(auth.allowed).toBe(true)
+      expect(auth.isBotAdmin).toBe(false)
+      expect(auth.isGroupAdmin).toBe(true)
     })
 
     test('bot admin has both isBotAdmin and isGroupAdmin true in groups', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
       // The configured admin user
       const interaction = createMockInteraction({
         userId: 'admin-123',
@@ -253,8 +294,9 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.isBotAdmin).toBe(true)
-      expect(capturedAuth?.isGroupAdmin).toBe(true)
+      const auth = requireCapturedAuth(capturedAuth)
+      expect(auth.isBotAdmin).toBe(true)
+      expect(auth.isGroupAdmin).toBe(true)
     })
   })
 
@@ -335,11 +377,12 @@ describe('routeButtonFallback', () => {
   describe('command parsing', () => {
     test('parses command with arguments correctly', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       let receivedMatch = ''
       const mockCommandWithArgs: CommandHandler = (msg): Promise<void> => {
-        receivedMatch = msg.commandMatch ?? ''
+        receivedMatch = typeof msg.commandMatch === 'string' ? msg.commandMatch : ''
         return Promise.resolve()
       }
 
@@ -357,11 +400,12 @@ describe('routeButtonFallback', () => {
 
     test('matches exact command without arguments', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       let receivedMatch = 'non-empty'
       const mockCommandNoArgs: CommandHandler = (msg): Promise<void> => {
-        receivedMatch = msg.commandMatch ?? ''
+        receivedMatch = typeof msg.commandMatch === 'string' ? msg.commandMatch : ''
         return Promise.resolve()
       }
 
@@ -381,6 +425,7 @@ describe('routeButtonFallback', () => {
   describe('text trimming', () => {
     test('trims whitespace from command text', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       const interaction = createMockInteraction({
@@ -398,13 +443,14 @@ describe('routeButtonFallback', () => {
 
     test('handles command with extra spaces around arguments', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       let receivedMatch = ''
       let commandWasCalled = false
       const mockCommand: CommandHandler = (msg): Promise<void> => {
         commandWasCalled = true
-        receivedMatch = msg.commandMatch ?? ''
+        receivedMatch = typeof msg.commandMatch === 'string' ? msg.commandMatch : ''
         return Promise.resolve()
       }
 
@@ -428,6 +474,7 @@ describe('routeButtonFallback', () => {
   describe('thread handling', () => {
     test('handles thread ID from interaction message', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       const interaction = createMockInteraction({
@@ -441,11 +488,12 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.storageContextId).toBe('channel-123:thread-789')
+      expect(requireCapturedAuth(capturedAuth).storageContextId).toBe('channel-123:thread-789')
     })
 
     test('handles undefined thread ID', async () => {
       const authorizedUserId = 'authorized-user'
+      addAuthorizedGroup('channel-123', 'admin-123')
       addUser(authorizedUserId, 'authorized', 'authorizeduser')
 
       const interaction = createMockInteraction({
@@ -459,12 +507,13 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.storageContextId).toBe('channel-123')
+      expect(requireCapturedAuth(capturedAuth).storageContextId).toBe('channel-123')
     })
   })
 
   describe('platform admin detection', () => {
     test('detects platform admin from user isAdmin property', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
       const groupMemberId = 'group-member'
       // Add as group member
       addGroupMember('channel-123', groupMemberId, 'admin-123')
@@ -481,10 +530,11 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.isGroupAdmin).toBe(true)
+      expect(requireCapturedAuth(capturedAuth).isGroupAdmin).toBe(true)
     })
 
     test('detects platform admin from bot admin ID match', async () => {
+      addAuthorizedGroup('channel-123', 'admin-123')
       // User matches adminUserId but doesn't have explicit isAdmin property
       const interaction = createMockInteraction({
         userId: 'admin-123',
@@ -497,8 +547,9 @@ describe('routeButtonFallback', () => {
       await routeButtonFallback(interaction, interaction.channel!, 'channel-123', 'group', 'admin-123', commands, null)
 
       expect(commandCalled).toBe(true)
-      expect(capturedAuth?.isBotAdmin).toBe(true)
-      expect(capturedAuth?.isGroupAdmin).toBe(true)
+      const auth = requireCapturedAuth(capturedAuth)
+      expect(auth.isBotAdmin).toBe(true)
+      expect(auth.isGroupAdmin).toBe(true)
     })
   })
 

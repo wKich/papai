@@ -4,6 +4,7 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'db:index' })
 
+import type { Migration } from './migrate.js'
 import { runMigrations } from './migrate.js'
 import { migration001Initial } from './migrations/001_initial.js'
 import { migration002ConversationHistory } from './migrations/002_conversation_history.js'
@@ -28,8 +29,17 @@ import { migration020GroupSettingsRegistry } from './migrations/020_group_settin
 import { migration021WebFetch } from './migrations/021_web_fetch.js'
 import { migration022DropUnusedLastSeenIndex } from './migrations/022_drop_unused_last_seen_index.js'
 import { migration023AddForeignKeys } from './migrations/023_add_foreign_keys.js'
+import { migration024AuthorizedGroups } from './migrations/024_authorized_groups.js'
 
-const DB_PATH = process.env['DB_PATH'] ?? 'papai.db'
+const getDbPath = (): string => {
+  const dbPath = process.env['DB_PATH']
+  if (dbPath === undefined || dbPath === '') {
+    return 'papai.db'
+  }
+  return dbPath
+}
+
+const DB_PATH = getDbPath()
 
 let migrationDbInstance: Database | undefined
 
@@ -54,7 +64,7 @@ const closeMigrationDb = (): void => {
   }
 }
 
-const MIGRATIONS = [
+export const MIGRATIONS: readonly Migration[] = [
   migration001Initial,
   migration002ConversationHistory,
   migration003MultiuserSupport,
@@ -78,7 +88,8 @@ const MIGRATIONS = [
   migration021WebFetch,
   migration022DropUnusedLastSeenIndex,
   migration023AddForeignKeys,
-] as const
+  migration024AuthorizedGroups,
+]
 
 export const initDb = (): void => {
   runMigrations(getMigrationDb(), MIGRATIONS)

@@ -1,12 +1,21 @@
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { getKaneoWorkspace } from '../users.js'
+import { isKaneoSessionCookie } from './kaneo/client.js'
 import { createProvider } from './registry.js'
 import type { TaskProvider } from './types.js'
 
 const log = logger.child({ scope: 'provider:factory' })
 
-const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
+const getTaskProvider = (): string => {
+  const taskProvider = process.env['TASK_PROVIDER']
+  if (taskProvider === undefined || taskProvider === '') {
+    return 'kaneo'
+  }
+  return taskProvider
+}
+
+const TASK_PROVIDER = getTaskProvider()
 
 const buildKaneoProvider = (userId: string, strict: boolean): TaskProvider | null => {
   const kaneoKey = getConfig(userId, 'kaneo_apikey')
@@ -27,7 +36,7 @@ const buildKaneoProvider = (userId: string, strict: boolean): TaskProvider | nul
     return null
   }
 
-  const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
+  const isSessionCookie = isKaneoSessionCookie(kaneoKey)
   const config: Record<string, string> = isSessionCookie
     ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
     : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }

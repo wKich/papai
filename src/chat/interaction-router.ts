@@ -1,58 +1,24 @@
 import { handleEditorCallback, parseCallbackData, serializeCallbackData } from '../config-editor/index.js'
+import { listManageableGroups } from '../group-settings/access.js'
 import { dispatchGroupSelectorResult } from '../group-settings/dispatch.js'
 import { handleGroupSettingsSelectorCallback } from '../group-settings/selector.js'
-import { getActiveGroupSettingsTarget } from '../group-settings/state.js'
+import { deleteGroupSettingsSession, getActiveGroupSettingsTarget } from '../group-settings/state.js'
+import { getMissingGroupTargetMessage } from '../group-settings/target-validation.js'
 import { logger } from '../logger.js'
 import { cancelWizard, getNextPrompt, processWizardMessage } from '../wizard/engine.js'
 import { validateAndSaveWizardConfig } from '../wizard/save.js'
 import { getWizardSession, hasActiveWizard, resetWizardSession } from '../wizard/state.js'
+import { replyButtonsPreferReplace, replyTextPreferReplace } from './interaction-router-replies.js'
+import { getResponseText, getTargetContextId } from './interaction-router-support.js'
 import type { AuthorizationResult, IncomingInteraction, ReplyFn } from './types.js'
 
 const log = logger.child({ scope: 'chat:interaction-router' })
 
-async function replyTextPreferReplace(reply: ReplyFn, content: string): Promise<void> {
-  if ('replaceText' in reply && typeof reply.replaceText === 'function') {
-    await reply.replaceText(content)
-    return
-  }
-
-  await reply.text(content)
-}
-
-async function replyButtonsPreferReplace(
-  reply: ReplyFn,
-  content: string,
-  buttons: Parameters<ReplyFn['buttons']>[1]['buttons'],
-): Promise<void> {
-  if ('replaceButtons' in reply && typeof reply.replaceButtons === 'function') {
-    await reply.replaceButtons(content, { buttons })
-    return
-  }
-
-  await reply.buttons(content, { buttons })
-}
-
-function getTargetContextId(parsedTargetContextId: string | undefined, interaction: IncomingInteraction): string {
-  if (parsedTargetContextId !== undefined) {
-    return parsedTargetContextId
-  }
-  return getSettingsTargetContextId(interaction)
-}
-
 function getEditorCallbackKey(
   key: ReturnType<typeof parseCallbackData>['key'],
 ): Parameters<typeof handleEditorCallback>[3] {
-  if (key === null) {
-    return undefined
-  }
+  if (key === null) return undefined
   return key
-}
-
-function getResponseText(response: string | undefined): string {
-  if (response === undefined) {
-    return ''
-  }
-  return response
 }
 
 async function replyConfigEditorResult(
@@ -80,21 +46,55 @@ export type InteractionRouteDeps = {
   handleConfigInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
   handleWizardInteraction: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<boolean>
 }
-
 function defaultHandleGroupSettingsInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
   const result = handleGroupSettingsSelectorCallback(interaction.user.id, interaction.callbackData)
   return dispatchGroupSelectorResult(result, reply, interaction.user.id)
 }
 
-function getSettingsTargetContextId(interaction: IncomingInteraction): string {
-  if (interaction.contextType !== 'dm') {
-    return interaction.storageContextId
+function getValidatedDmTargetContextId(userId: string): string | null {
+  const activeGroupTarget = getActiveGroupSettingsTarget(userId)
+  if (activeGroupTarget === null) return null
+
+  const hasAccess = listManageableGroups(userId).some((group) => group.contextId === activeGroupTarget)
+  if (hasAccess) {
+    return activeGroupTarget
   }
-  const activeGroupTarget = getActiveGroupSettingsTarget(interaction.user.id)
-  if (activeGroupTarget === undefined || activeGroupTarget === null) {
-    return interaction.storageContextId
+
+  deleteGroupSettingsSession(userId)
+  return null
+}
+
+function getValidatedDmCallbackTargetContextId(userId: string, targetContextId: string): string | null {
+  if (targetContextId === userId) return targetContextId
+
+  const hasAccess = listManageableGroups(userId).some((group) => group.contextId === targetContextId)
+  if (hasAccess) {
+    return targetContextId
   }
-  return activeGroupTarget
+
+  deleteGroupSettingsSession(userId)
+  return null
+}
+
+async function validateImplicitDmConfigTarget(userId: string, reply: ReplyFn): Promise<boolean> {
+  if (getActiveGroupSettingsTarget(userId) === null) return true
+
+  const previousActiveTarget = getActiveGroupSettingsTarget(userId)
+  const validatedTargetContextId = getValidatedDmTargetContextId(userId)
+  if (validatedTargetContextId !== null) return true
+
+  const message =
+    previousActiveTarget === null
+      ? 'That group is no longer available. Run /config or /setup again.'
+      : getMissingGroupTargetMessage(userId, previousActiveTarget)
+  await replyTextPreferReplace(reply, message)
+  return false
+}
+
+async function replyUnknownConfigAction(reply: ReplyFn, callbackData: string): Promise<true> {
+  log.warn({ callbackData }, 'Unknown config editor callback data')
+  await replyTextPreferReplace(reply, 'This action is no longer valid. Please start over with /config.')
+  return true
 }
 
 async function defaultHandleConfigInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<boolean> {
@@ -104,12 +104,24 @@ async function defaultHandleConfigInteraction(interaction: IncomingInteraction, 
   const parsed = parseCallbackData(callbackData)
 
   if (parsed.action === null) {
-    log.warn({ callbackData }, 'Unknown config editor callback data')
-    await replyTextPreferReplace(reply, 'This action is no longer valid. Please start over with /config.')
-    return true
+    return replyUnknownConfigAction(reply, callbackData)
   }
 
   const targetContextId = getTargetContextId(parsed.targetContextId, interaction)
+  if (
+    interaction.contextType === 'dm' &&
+    parsed.targetContextId === undefined &&
+    !(await validateImplicitDmConfigTarget(user.id, reply))
+  ) {
+    return true
+  }
+  if (interaction.contextType === 'dm' && parsed.targetContextId !== undefined) {
+    const validatedTargetContextId = getValidatedDmCallbackTargetContextId(user.id, targetContextId)
+    if (validatedTargetContextId === null) {
+      await replyTextPreferReplace(reply, getMissingGroupTargetMessage(user.id, targetContextId))
+      return true
+    }
+  }
   log.debug(
     { userId: user.id, contextId: targetContextId, action: parsed.action, key: parsed.key },
     'Handling config editor callback',
@@ -197,6 +209,14 @@ async function defaultHandleWizardInteraction(interaction: IncomingInteraction, 
   const { action, targetContextId: callbackContextId } = parseWizardContextId(callbackData)
   const storageContextId = getTargetContextId(callbackContextId, interaction)
 
+  if (interaction.contextType === 'dm' && callbackContextId !== undefined) {
+    const validatedTargetContextId = getValidatedDmCallbackTargetContextId(userId, storageContextId)
+    if (validatedTargetContextId === null) {
+      await replyTextPreferReplace(reply, getMissingGroupTargetMessage(userId, storageContextId))
+      return true
+    }
+  }
+
   switch (action) {
     case 'wizard_confirm': {
       const result = await validateAndSaveWizardConfig(userId, storageContextId)
@@ -241,17 +261,6 @@ export function routeInteraction(
   interaction: IncomingInteraction,
   reply: ReplyFn,
   auth: AuthorizationResult,
-): Promise<boolean>
-export function routeInteraction(
-  interaction: IncomingInteraction,
-  reply: ReplyFn,
-  auth: AuthorizationResult,
-  deps: InteractionRouteDeps,
-): Promise<boolean>
-export function routeInteraction(
-  interaction: IncomingInteraction,
-  reply: ReplyFn,
-  auth: AuthorizationResult,
   ...rest: [] | [InteractionRouteDeps]
 ): Promise<boolean> {
   const deps = rest[0]
@@ -262,7 +271,6 @@ export function routeInteraction(
   if (!auth.allowed) {
     return reply.text('You are not authorized to use this bot.').then(() => true)
   }
-
   const { callbackData } = interaction
 
   if (callbackData.startsWith('gsel:')) {

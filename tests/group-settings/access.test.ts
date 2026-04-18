@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
+import { addAuthorizedGroup } from '../../src/authorized-groups.js'
 import { listManageableGroups, matchManageableGroup } from '../../src/group-settings/access.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../src/group-settings/registry.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
@@ -35,8 +36,27 @@ describe('group settings access', () => {
       username: 'alice',
       isAdmin: false,
     })
+    addAuthorizedGroup('group-1', 'admin-1')
+    addAuthorizedGroup('group-2', 'admin-1')
 
     expect(listManageableGroups('user-1').map((group) => group.contextId)).toEqual(['group-1'])
+  })
+
+  test('does not list observed admin groups that are no longer allowlisted', () => {
+    upsertKnownGroupContext({
+      contextId: 'group-1',
+      provider: 'telegram',
+      displayName: 'Operations',
+      parentName: 'Platform',
+    })
+    upsertGroupAdminObservation({
+      contextId: 'group-1',
+      userId: 'user-1',
+      username: 'alice',
+      isAdmin: true,
+    })
+
+    expect(listManageableGroups('user-1')).toEqual([])
   })
 
   test('matches by context id and display name and reports ambiguity', () => {
@@ -64,6 +84,8 @@ describe('group settings access', () => {
       username: 'alice',
       isAdmin: true,
     })
+    addAuthorizedGroup('group-1', 'admin-1')
+    addAuthorizedGroup('group-2', 'admin-1')
 
     const exactMatch = matchManageableGroup('user-1', 'group-1')
     expect(exactMatch.kind).toBe('match')

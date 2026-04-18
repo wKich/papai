@@ -1,3 +1,4 @@
+import { addAuthorizedGroup, listAuthorizedGroups, removeAuthorizedGroup } from '../authorized-groups.js'
 import { supportsUserResolution } from '../chat/capabilities.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn, ResolveUserContext } from '../chat/types.js'
 import { addGroupMember, listGroupMembers, removeGroupMember } from '../groups.js'
@@ -5,42 +6,108 @@ import { logger } from '../logger.js'
 
 const log = logger.child({ scope: 'commands:group' })
 
+const GROUP_CHAT_USAGE = 'Usage: /group adduser <user-id|@username> | /group deluser <user-id|@username> | /group users'
+const DM_ADMIN_USAGE = 'Usage: /group add <group-id> | /group remove <group-id> | /groups'
+
 export function registerGroupCommand(chat: ChatProvider): void {
-  chat.registerCommand('group', async (msg: IncomingMessage, reply: ReplyFn, _auth: AuthorizationResult) => {
-    if (msg.contextType !== 'group') {
-      await reply.text('Group commands can only be used in group chats.')
+  chat.registerCommand('group', async (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => {
+    if (msg.contextType === 'dm') {
+      await handleAuthorizedGroupCommand(msg, reply, auth)
       return
     }
 
-    const match = (msg.commandMatch ?? '').trim()
-    if (!match) {
-      await reply.text('Usage: /group adduser <@username> | /group deluser <@username> | /group users')
-      return
-    }
-
-    const [subcommand, ...args] = match.split(/\s+/)
-    const targetUser = args[0]
-
-    switch (subcommand) {
-      case 'adduser':
-        await handleAddUser(chat, msg, reply, targetUser)
-        break
-      case 'deluser':
-        await handleDelUser(chat, msg, reply, targetUser)
-        break
-      case 'users':
-        await handleListUsers(msg, reply)
-        break
-      case '':
-      case undefined:
-        await reply.text('Usage: /group adduser <@username> | /group deluser <@username> | /group users')
-        break
-      default:
-        await reply.text(
-          'Unknown subcommand. Usage: /group adduser <@username> | /group deluser <@username> | /group users',
-        )
-    }
+    await handleGroupMemberCommand(chat, msg, reply)
   })
+
+  chat.registerCommand('groups', async (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => {
+    if (msg.contextType !== 'dm') {
+      await reply.text('This command is only available in direct messages.')
+      return
+    }
+
+    if (!auth.isBotAdmin) {
+      await reply.text('Only bot admins can list authorized groups.')
+      return
+    }
+
+    const groups = listAuthorizedGroups()
+    if (groups.length === 0) {
+      await reply.text('No authorized groups.')
+      return
+    }
+
+    const lines = groups.map((group) => `${group.group_id} (added by ${group.added_by})`)
+    await reply.text(`Authorized groups:\n${lines.join('\n')}`)
+  })
+}
+
+async function handleGroupMemberCommand(chat: ChatProvider, msg: IncomingMessage, reply: ReplyFn): Promise<void> {
+  const match = typeof msg.commandMatch === 'string' ? msg.commandMatch.trim() : ''
+  if (!match) {
+    await reply.text(GROUP_CHAT_USAGE)
+    return
+  }
+
+  const [subcommand, ...args] = match.split(/\s+/)
+  const targetUser = args[0]
+
+  switch (subcommand) {
+    case 'adduser':
+      await handleAddUser(chat, msg, reply, targetUser)
+      break
+    case 'deluser':
+      await handleDelUser(chat, msg, reply, targetUser)
+      break
+    case 'users':
+      await handleListUsers(msg, reply)
+      break
+    case '':
+    case undefined:
+      await reply.text(GROUP_CHAT_USAGE)
+      break
+    default:
+      await reply.text(`Unknown subcommand. ${GROUP_CHAT_USAGE}`)
+  }
+}
+
+async function handleAuthorizedGroupCommand(
+  msg: IncomingMessage,
+  reply: ReplyFn,
+  auth: AuthorizationResult,
+): Promise<void> {
+  if (!auth.isBotAdmin) {
+    await reply.text('Only bot admins can manage authorized groups.')
+    return
+  }
+
+  const match = typeof msg.commandMatch === 'string' ? msg.commandMatch.trim() : ''
+  if (!match) {
+    await reply.text(DM_ADMIN_USAGE)
+    return
+  }
+
+  const [subcommand, groupId] = match.split(/\s+/, 2)
+
+  if (groupId === undefined || groupId === '') {
+    await reply.text(DM_ADMIN_USAGE)
+    return
+  }
+
+  if (subcommand === 'add') {
+    addAuthorizedGroup(groupId, msg.user.id)
+    await reply.text(`Group ${groupId} authorized.`)
+    log.info({ groupId, userId: msg.user.id }, 'Authorized group added')
+    return
+  }
+
+  if (subcommand === 'remove') {
+    const removed = removeAuthorizedGroup(groupId)
+    await reply.text(removed ? `Group ${groupId} removed.` : `Group ${groupId} was not authorized.`)
+    log.info({ groupId, userId: msg.user.id, removed }, 'Authorized group removal attempted')
+    return
+  }
+
+  await reply.text(`Unknown subcommand. ${DM_ADMIN_USAGE}`)
 }
 
 async function handleAddUser(
@@ -55,7 +122,7 @@ async function handleAddUser(
   }
 
   if (targetUser === undefined) {
-    await reply.text('Usage: /group adduser <@username>')
+    await reply.text('Usage: /group adduser <user-id|@username>')
     return
   }
 
@@ -86,7 +153,7 @@ async function handleDelUser(
   }
 
   if (targetUser === undefined) {
-    await reply.text('Usage: /group deluser <@username>')
+    await reply.text('Usage: /group deluser <user-id|@username>')
     return
   }
 
@@ -126,7 +193,11 @@ async function extractUserId(
     if (!supportsUserResolution(chat)) {
       return { kind: 'error', message: 'This chat provider does not support username lookup. Use an explicit user ID.' }
     }
-    const resolved = await chat.resolveUserId?.(input, context)
+    const resolveUserId = chat.resolveUserId
+    if (resolveUserId === undefined) {
+      return { kind: 'error', message: 'This chat provider does not support username lookup. Use an explicit user ID.' }
+    }
+    const resolved = await resolveUserId(input, context)
     if (resolved === null || resolved === undefined) {
       return { kind: 'error', message: "Couldn't resolve that username. Use an explicit user ID." }
     }

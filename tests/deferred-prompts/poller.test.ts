@@ -353,3 +353,62 @@ describe('pollAlertsOnce', () => {
     expect(sentMessages[0]!.text).toBe('Alert triggered.')
   })
 })
+
+describe('pollScheduledOnce Race Condition', () => {
+  let sentMessages: Array<{ userId: string; text: string }>
+  let chat: ChatProvider
+  let provider: TaskProvider
+  let resolveLlm: (result: GenerateTextResult) => void
+  let llmPromise: Promise<GenerateTextResult>
+
+  beforeEach(async () => {
+    llmPromise = new Promise((resolve) => {
+      resolveLlm = resolve
+    })
+
+    void mock.module('ai', () => ({
+      generateText: (): Promise<GenerateTextResult> => llmPromise,
+      stepCountIs: (): unknown => undefined,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): (() => string) => (): string => 'mock-model',
+    }))
+
+    await setupTestDb()
+    const result = createMockChatWithSentMessages()
+    chat = result.provider
+    sentMessages = result.sentMessages
+    provider = createMockProvider()
+    setupUserConfig(USER_ID)
+  })
+
+  test('bug reproduction: overlapping polls cause multiple executions', async () => {
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(USER_ID, 'Slow task', { fireAt: pastTime })
+
+    // Start first poll (will hang on llmPromise)
+    const poll1 = pollScheduledOnce(chat, () => provider)
+
+    // Wait a bit to ensure it's in-flight but not too much to trigger timeout
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100)
+    })
+
+    // Second poll immediately - it will see the same prompt as 'active' and 'due'
+    // because poll1 hasn't updated its status yet
+    const poll2 = pollScheduledOnce(chat, () => provider)
+
+    // Wait a bit more
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100)
+    })
+
+    // Resolve LLM
+    resolveLlm({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
+
+    await Promise.all([poll1, poll2])
+
+    // With the fix, only one message should be sent even with overlapping polls
+    expect(sentMessages).toHaveLength(1)
+  })
+})

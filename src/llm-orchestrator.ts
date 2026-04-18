@@ -9,6 +9,7 @@ import { emit } from './debug/event-bus.js'
 import { appendHistory, saveHistory } from './history.js'
 import { getIdentityMapping } from './identity/mapping.js'
 import { attemptAutoLink } from './identity/resolver.js'
+import { checkRequiredConfig, getLlmConfig, resolveConfigId, resolveTimezone } from './llm-orchestrator-config.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import { handleOrchestratorMessageError, handleToolCallFinish } from './llm-orchestrator-support.js'
 import type { InvokeModelArgs, LlmOrchestratorDeps } from './llm-orchestrator-types.js'
@@ -20,6 +21,7 @@ import { maybeProvisionKaneo } from './providers/kaneo/provision.js'
 import type { TaskProvider } from './providers/types.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
+import { getKaneoWorkspace } from './users.js'
 import { fetchWithoutTimeout } from './utils/fetch.js'
 
 const log = logger.child({ scope: 'llm-orchestrator' })
@@ -30,28 +32,9 @@ const defaultDeps: LlmOrchestratorDeps = {
   buildOpenAI: (apiKey: string, baseURL: string) =>
     createOpenAICompatible({ name: 'openai-compatible', apiKey, baseURL, fetch: fetchWithoutTimeout }),
   buildProviderForUser: (userId: string) => buildProviderForUser(userId, true),
+  getKaneoWorkspace,
   maybeProvisionKaneo: (reply, contextId, username) => maybeProvisionKaneo(reply, contextId, username),
 }
-
-const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
-
-const checkRequiredConfig = (contextId: string): string[] => {
-  const llmKeys = ['llm_apikey', 'llm_baseurl', 'main_model'] as const
-  const providerKeys = TASK_PROVIDER === 'youtrack' ? (['youtrack_token'] as const) : (['kaneo_apikey'] as const)
-  return [...llmKeys, ...providerKeys].filter((k) => getConfig(contextId, k) === null)
-}
-
-interface LlmConfig {
-  llmApiKey: string
-  llmBaseUrl: string
-  mainModel: string
-}
-
-const getLlmConfig = (contextId: string): LlmConfig => ({
-  llmApiKey: getConfig(contextId, 'llm_apikey')!,
-  llmBaseUrl: getConfig(contextId, 'llm_baseurl')!,
-  mainModel: getConfig(contextId, 'main_model')!,
-})
 
 const persistFactsFromResults = (
   contextId: string,
@@ -90,21 +73,48 @@ const getOrCreateTools = (
   return tools
 }
 
+const emitLlmError = (contextId: string, configContextId: string | undefined, error: unknown): void => {
+  const cfgId = resolveConfigId(contextId, configContextId)
+  const model = getConfig(cfgId, 'main_model')
+  let emittedModel = 'unknown'
+  if (model !== null) {
+    emittedModel = model
+  }
+  emit('llm:error', {
+    userId: contextId,
+    error: error instanceof Error ? error.message : String(error),
+    model: emittedModel,
+  })
+}
+
+const appendAssistantHistory = (
+  contextId: string,
+  history: readonly ModelMessage[],
+  assistantMessages: ModelMessage[],
+): void => {
+  if (assistantMessages.length > 0) {
+    appendHistory(contextId, assistantMessages)
+    log.debug({ contextId, assistantMessagesCount: assistantMessages.length }, 'Assistant response appended to history')
+  }
+  if (shouldTriggerTrim([...history, ...assistantMessages])) {
+    void runTrimInBackground(contextId, [...history, ...assistantMessages])
+  }
+}
+
 const sendLlmResponse = async (
   reply: ReplyFn,
   contextId: string,
-  result: { text?: string; toolCalls?: unknown[]; response: { messages: ModelMessage[] } },
+  result: { text: string | undefined; toolCalls: unknown[] | undefined; response: { messages: ModelMessage[] } },
 ): Promise<void> => {
   const textToFormat = result.text !== undefined && result.text !== '' ? result.text : 'Done.'
+  const responseLength = result.text === undefined ? 0 : result.text.length
+  const toolCallCount = result.toolCalls === undefined ? 0 : result.toolCalls.length
   await reply.formatted(textToFormat)
-  log.info(
-    { contextId, responseLength: result.text?.length ?? 0, toolCalls: result.toolCalls?.length ?? 0 },
-    'Response sent successfully',
-  )
+  log.info({ contextId, responseLength, toolCalls: toolCallCount }, 'Response sent successfully')
 }
 
 const invokeModel = async (
-  args: InvokeModelArgs & { reply?: ReplyFn },
+  args: InvokeModelArgs & { reply: ReplyFn | undefined },
 ): ReturnType<LlmOrchestratorDeps['generateText']> => {
   const { contextId, mainModel, model, provider, tools, messages, deps, reply } = args
   const start = Date.now()
@@ -157,11 +167,13 @@ const callLlm = async (
   history: readonly ModelMessage[],
   contextType: 'dm' | 'group',
   deps: LlmOrchestratorDeps,
-  configContextId?: string,
+  configContextId: string | undefined,
 ): Promise<{ response: { messages: ModelMessage[] } }> => {
-  const configId = configContextId ?? contextId
-  await deps.maybeProvisionKaneo(reply, configId, username)
-  const missing = checkRequiredConfig(configId)
+  const configId = resolveConfigId(contextId, configContextId)
+  if (contextType === 'dm') {
+    await deps.maybeProvisionKaneo(reply, configId, username)
+  }
+  const missing = checkRequiredConfig(configId, deps)
   if (missing.length > 0) {
     log.warn({ contextId, configId, missing }, 'Missing required config keys')
     await reply.text(`Missing configuration: ${missing.join(', ')}.\nUse /setup to configure.`)
@@ -172,7 +184,7 @@ const callLlm = async (
   const provider = deps.buildProviderForUser(configId)
   await maybeAutoLinkIdentity(chatUserId, username, provider)
   const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
-  const timezone = getConfig(configId, 'timezone') ?? 'UTC'
+  const timezone = resolveTimezone(configId)
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
   const validatedMessages = validateToolResults(messagesWithMemory)
   log.debug(
@@ -189,22 +201,33 @@ const callLlm = async (
     deps,
     reply,
   })
-  log.debug({ contextId, toolCalls: result.toolCalls?.length, usage: result.usage }, 'LLM response received')
+  const toolCallCount = result.toolCalls === undefined ? undefined : result.toolCalls.length
+  log.debug({ contextId, toolCalls: toolCallCount, usage: result.usage }, 'LLM response received')
   persistFactsFromResults(contextId, result.toolCalls, result.toolResults)
   await sendLlmResponse(reply, contextId, result)
   return result
 }
 
-export const processMessage = async (
-  reply: ReplyFn,
-  contextId: string,
-  chatUserId: string,
-  username: string | null,
-  userText: string,
-  contextType: 'dm' | 'group',
-  configContextId?: string,
-  deps: LlmOrchestratorDeps = defaultDeps,
-): Promise<void> => {
+type ProcessMessageArgs =
+  | [ReplyFn, string, string, string | null, string, 'dm' | 'group']
+  | [ReplyFn, string, string, string | null, string, 'dm' | 'group', string | undefined]
+  | [
+      ReplyFn,
+      string,
+      string,
+      string | null,
+      string,
+      'dm' | 'group',
+      string | undefined,
+      LlmOrchestratorDeps | undefined,
+    ]
+
+export const processMessage = async (...args: ProcessMessageArgs): Promise<void> => {
+  const [reply, contextId, chatUserId, username, userText, contextType, configContextId, deps] = args
+  let resolvedDeps = defaultDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   log.debug({ contextId, configContextId, chatUserId, userText }, 'processMessage called')
   log.info({ contextId, chatUserId, messageLength: userText.length }, 'Message received from user')
 
@@ -213,26 +236,20 @@ export const processMessage = async (
   const history = [...baseHistory, newMessage]
   appendHistory(contextId, [newMessage])
   try {
-    const result = await callLlm(reply, contextId, chatUserId, username, history, contextType, deps, configContextId)
+    const result = await callLlm(
+      reply,
+      contextId,
+      chatUserId,
+      username,
+      history,
+      contextType,
+      resolvedDeps,
+      configContextId,
+    )
     const assistantMessages = result.response.messages
-    if (assistantMessages.length > 0) {
-      appendHistory(contextId, assistantMessages)
-      log.debug(
-        { contextId, assistantMessagesCount: assistantMessages.length },
-        'Assistant response appended to history',
-      )
-    }
-    if (shouldTriggerTrim([...history, ...assistantMessages])) {
-      void runTrimInBackground(contextId, [...history, ...assistantMessages])
-    }
+    appendAssistantHistory(contextId, history, assistantMessages)
   } catch (error) {
-    // Use configContextId for config lookup if available, otherwise fall back to contextId
-    const cfgId = configContextId ?? contextId
-    emit('llm:error', {
-      userId: contextId,
-      error: error instanceof Error ? error.message : String(error),
-      model: getConfig(cfgId, 'main_model') ?? 'unknown',
-    })
+    emitLlmError(contextId, configContextId, error)
     saveHistory(contextId, baseHistory)
     await handleOrchestratorMessageError(reply, contextId, error)
   }

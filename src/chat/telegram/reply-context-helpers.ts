@@ -1,4 +1,5 @@
 import { logger } from '../../logger.js'
+import { getCachedMessage } from '../../message-cache/index.js'
 import { buildReplyContextChain } from '../../reply-context.js'
 import type { ReplyContext } from '../types.js'
 
@@ -15,7 +16,7 @@ interface ExtractReplyContextInput {
       from?: { id?: number; username?: string } | undefined
       text?: string
     }
-    quote?: { text?: string }
+    quote?: { text?: string; is_manual?: boolean }
   }
 }
 
@@ -32,8 +33,12 @@ export function extractReplyContext(ctx: ExtractReplyContextInput, contextId: st
   const threadId = ctx.message?.message_thread_id
 
   const hasQuote = quote?.text !== undefined && quote.text !== ''
-  const fullMessageLength = replyToMessage.text?.length ?? 0
+  const isManualQuote = quote?.is_manual === true
+  const cached = getCachedMessage(contextId, idStr)
+  const resolvedText = cached?.text ?? replyToMessage.text
   const quoteLength = quote?.text?.length ?? 0
+  const quotedTextTruncated = isManualQuote && quoteLength >= 1024
+  const fullMessageLength = resolvedText?.length ?? 0
 
   log.debug(
     {
@@ -56,8 +61,9 @@ export function extractReplyContext(ctx: ExtractReplyContextInput, contextId: st
     messageId: idStr,
     authorId: fromId === undefined ? undefined : String(fromId),
     authorUsername: replyToMessage.from?.username ?? null,
-    text: replyToMessage.text,
+    text: resolvedText,
     quotedText: quote?.text,
+    quotedTextTruncated: quotedTextTruncated || undefined,
     threadId: threadId === undefined ? undefined : String(threadId),
     chain,
     chainSummary,

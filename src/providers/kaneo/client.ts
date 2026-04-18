@@ -8,11 +8,20 @@ const log = logger.child({ scope: 'kaneo:client' })
 export type KaneoConfig = {
   apiKey: string
   baseUrl: string
+} & Partial<{
   /** Session cookie value (better-auth.session_token=...). When set, sent instead of Authorization: Bearer. */
-  sessionCookie?: string
+  sessionCookie: string
+}>
+
+export function isKaneoSessionCookie(value: string): boolean {
+  if (value.startsWith('better-auth.session_token=')) {
+    return true
+  }
+
+  return value.startsWith('__Secure-better-auth.session_token=')
 }
 
-function buildUrl(config: KaneoConfig, path: string, query?: Record<string, string>): URL {
+function buildUrl(config: KaneoConfig, path: string, query: Record<string, string> | undefined): URL {
   const url = new URL(`${config.baseUrl}/api${path}`)
   if (query !== undefined) {
     for (const [key, value] of Object.entries(query)) {

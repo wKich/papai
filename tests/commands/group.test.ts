@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import type { ChatProvider, CommandHandler, IncomingMessage, ResolveUserContext } from '../../src/chat/types.js'
+import type { ChatProvider, CommandHandler, ResolveUserContext } from '../../src/chat/types.js'
 import { registerGroupCommand } from '../../src/commands/group.js'
 import {
   createAuth,
+  createDmMessage,
   createGroupMessage,
   createMockChat,
   createMockReply,
@@ -11,6 +12,14 @@ import {
   setupTestDb,
   TELEGRAM_LIKE_CAPABILITIES,
 } from '../utils/test-helpers.js'
+
+const getFirstReply = (textCalls: readonly string[]): string | null => {
+  const firstReply = textCalls[0]
+  if (firstReply === undefined) {
+    return null
+  }
+  return firstReply
+}
 
 describe('group commands', () => {
   let mockChat: ChatProvider
@@ -53,7 +62,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('User @user1 added to this group.')
     })
 
@@ -63,7 +72,7 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'adduser @user2', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('Only group admins can add users.')
     })
 
@@ -73,8 +82,8 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('admin1', 'adduser', true), reply, createAuth('admin1', { isGroupAdmin: true }))
 
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Usage: /group adduser <@username>')
+      lastReply = getFirstReply(textCalls)
+      expect(lastReply).toBe('Usage: /group adduser <user-id|@username>')
     })
 
     test('rejects invalid user format', async () => {
@@ -87,7 +96,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('Please provide a valid user mention or ID.')
     })
 
@@ -101,7 +110,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('User 12345 added to this group.')
     })
 
@@ -152,7 +161,7 @@ describe('group commands', () => {
       )
 
       // With users.resolve capability but null result, should error not fall back
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe("Couldn't resolve that username. Use an explicit user ID.")
 
       // No member should have been added
@@ -203,7 +212,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('User user1 removed from this group.')
     })
 
@@ -213,7 +222,7 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'deluser user2', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('Only group admins can remove users.')
     })
 
@@ -223,8 +232,8 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('admin1', 'deluser', true), reply, createAuth('admin1', { isGroupAdmin: true }))
 
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Usage: /group deluser <@username>')
+      lastReply = getFirstReply(textCalls)
+      expect(lastReply).toBe('Usage: /group deluser <user-id|@username>')
     })
 
     test('rejects invalid user format', async () => {
@@ -237,7 +246,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('Please provide a valid user mention or ID.')
     })
 
@@ -251,7 +260,7 @@ describe('group commands', () => {
         createAuth('admin1', { isGroupAdmin: true }),
       )
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('User nonexistent removed from this group.')
     })
 
@@ -282,7 +291,7 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toBe('No members in this group yet.')
     })
 
@@ -297,7 +306,7 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toContain('Group members:')
       expect(lastReply).toContain('user1')
       expect(lastReply).toContain('user2')
@@ -313,33 +322,147 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toContain('Group members:')
     })
   })
 
   describe('context validation', () => {
-    test('rejects in DM context', async () => {
+    test('rejects non-admin DM add', async () => {
       const handler = commandHandlers.get('group')
 
-      const dmMessage: IncomingMessage = {
-        user: {
-          id: 'user1',
-          username: 'testuser',
-          isAdmin: true,
-        },
-        contextId: 'user1',
-        contextType: 'dm',
-        isMentioned: false,
-        text: '/group users',
-        commandMatch: 'users',
-      }
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('user1', 'add group-123'), reply, createAuth('user1'))
+
+      lastReply = getFirstReply(textCalls)
+      expect(lastReply).toBe('Only bot admins can manage authorized groups.')
+    })
+
+    test('rejects non-admin DM list', async () => {
+      const groupsHandler = commandHandlers.get('groups')
+      expect(groupsHandler).toBeDefined()
 
       const { reply, textCalls } = createMockReply()
-      await handler!(dmMessage, reply, createAuth('admin1', { isGroupAdmin: true }))
+      await groupsHandler!(createDmMessage('user1'), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Group commands can only be used in group chats.')
+      lastReply = getFirstReply(textCalls)
+      expect(lastReply).toBe('Only bot admins can list authorized groups.')
+    })
+  })
+
+  describe('DM admin group authorization', () => {
+    test('registers separate /groups command', () => {
+      expect(commandHandlers.has('groups')).toBe(true)
+    })
+
+    test('adds an authorized group in DM for bot admin', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1', 'add group-123'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('Group group-123 authorized.')
+
+      const { isAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      expect(isAuthorizedGroup('group-123')).toBe(true)
+    })
+
+    test('removes an authorized group in DM for bot admin', async () => {
+      const { addAuthorizedGroup, isAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1', 'remove group-123'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('Group group-123 removed.')
+      expect(isAuthorizedGroup('group-123')).toBe(false)
+    })
+
+    test('reports when removing a group that was not authorized', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(
+        createDmMessage('admin1', 'remove missing-group'),
+        reply,
+        createAuth('admin1', { isBotAdmin: true }),
+      )
+
+      expect(textCalls[0]).toBe('Group missing-group was not authorized.')
+    })
+
+    test('lists authorized groups via /groups for bot admin in DM', async () => {
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+      addAuthorizedGroup('group-456', 'admin2')
+
+      const groupsHandler = commandHandlers.get('groups')
+      expect(groupsHandler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await groupsHandler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('Authorized groups:')
+      expect(textCalls[0]).toContain('group-123')
+      expect(textCalls[0]).toContain('group-456')
+    })
+
+    test('shows empty authorized group list via /groups', async () => {
+      const groupsHandler = commandHandlers.get('groups')
+      expect(groupsHandler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await groupsHandler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('No authorized groups.')
+    })
+
+    test('requires group id for DM add', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1', 'add'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('Usage: /group add <group-id> | /group remove <group-id> | /groups')
+    })
+
+    test('requires group id for DM remove', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1', 'remove'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('Usage: /group add <group-id> | /group remove <group-id> | /groups')
+    })
+
+    test('shows DM admin usage for unknown DM subcommand', async () => {
+      const handler = commandHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1', 'unknown group-123'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('Unknown subcommand')
+      expect(textCalls[0]).toContain('/group add <group-id>')
+      expect(textCalls[0]).toContain('/group remove <group-id>')
+      expect(textCalls[0]).toContain('/groups')
+    })
+
+    test('rejects /groups in group chats', async () => {
+      const groupsHandler = commandHandlers.get('groups')
+      expect(groupsHandler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await groupsHandler!(createGroupMessage('admin1', '', true), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toBe('This command is only available in direct messages.')
     })
   })
 
@@ -350,9 +473,9 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(createGroupMessage('user1', 'unknown', false), reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
+      lastReply = getFirstReply(textCalls)
       expect(lastReply).toContain('Unknown subcommand')
-      expect(lastReply).toContain('Usage: /group adduser')
+      expect(lastReply).toContain('Usage: /group adduser <user-id|@username>')
     })
 
     test('shows usage when no subcommand', async () => {
@@ -364,8 +487,8 @@ describe('group commands', () => {
       const { reply, textCalls } = createMockReply()
       await handler!(message, reply, createAuth('user1'))
 
-      lastReply = textCalls[0] ?? null
-      expect(lastReply).toContain('Usage: /group adduser')
+      lastReply = getFirstReply(textCalls)
+      expect(lastReply).toContain('Usage: /group adduser <user-id|@username>')
     })
   })
 

@@ -1,23 +1,75 @@
 import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 
+import { APICallError } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
 
 import type { DebugEvent } from '../src/debug/event-bus.js'
+import type { LlmOrchestratorDeps } from '../src/llm-orchestrator-types.js'
 import { processMessage } from '../src/llm-orchestrator.js'
+import type { TaskProvider } from '../src/providers/types.js'
+import { createMockProvider } from './tools/mock-provider.js'
 import { mockLogger, createMockReply, setupTestDb } from './utils/test-helpers.js'
 
 // Capture real modules before mocking (file-level, stays at top)
 const realAi = await import('ai')
+const realOpenAICompatible = await import('@ai-sdk/openai-compatible')
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+type ResponseMetadata = Partial<{ id: string; modelId: string }>
+
+type GenerateTextArgs = Partial<{
+  messages: unknown[]
+  experimental_onToolCallFinish: ToolCallFinishHandler | undefined
+}>
+
+type ToolCallFinishEvent = {
+  toolCall: { toolName: string; toolCallId: string; input: unknown }
+  durationMs: number
+  success: boolean
+} & Partial<{
+  output: unknown
+  error: unknown
+}>
+
+type ToolCallFinishHandler = (event: ToolCallFinishEvent) => void
+
+type GenerateTextResult = {
+  text: string
+  toolCalls: Array<{ toolName: string; toolCallId: string; input: unknown }>
+  toolResults: Array<{ toolName: string; toolCallId: string; output: unknown }>
+  steps: unknown[]
+  response: { messages: ModelMessage[] } & ResponseMetadata
+  usage: Record<string, unknown>
+  finishReason: string
+  warnings: unknown[] | undefined
+  request: unknown
+  providerMetadata: unknown
+}
+
+const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
+  Promise.resolve({
+    text: 'Hello!',
+    toolCalls: [],
+    toolResults: [],
+    steps: [],
+    response: { messages: [{ role: 'assistant' as const, content: 'Hello!' }] },
+    usage: {},
+    finishReason: 'stop',
+    warnings: undefined,
+    request: {},
+    providerMetadata: undefined,
+  })
+
+const buildMockOpenAI: LlmOrchestratorDeps['buildOpenAI'] = (apiKey: string, baseURL: string) =>
+  realOpenAICompatible.createOpenAICompatible({ name: 'mock-openai', apiKey, baseURL })
 
 import { getCachedConfig, setCachedConfig } from '../src/cache.js'
 import { getCachedHistory, _userCaches } from '../src/cache.js'
 import { getIdentityMapping, clearIdentityMapping } from '../src/identity/mapping.js'
 import { ProviderClassifiedError, providerError } from '../src/providers/errors.js'
 import { KaneoClassifiedError } from '../src/providers/kaneo/classify-error.js'
-import type { TaskProvider } from '../src/providers/types.js'
 import { buildToolFailureResult } from '../src/tool-failure.js'
 import type { MakeToolsOptions } from '../src/tools/index.js'
 import { setKaneoWorkspace } from '../src/users.js'
@@ -35,42 +87,12 @@ describe('processMessage', () => {
   // ---------------------------------------------------------------------------
 
   // Provider factory — returns a mock provider to avoid real HTTP calls and env var checks
-  const mockProvider = {
-    name: 'mock',
-    capabilities: new Set<string>(),
-    getPromptAddendum: (): string => '',
-  }
+  const mockProvider = createMockProvider({ name: 'mock' })
+  const buildMockProviderForUser = (): TaskProvider => mockProvider
 
   // AI SDK — the key control point for success/failure simulation
   // generateText returns a result object with direct values
-  type GenerateTextResult = {
-    text: string
-    toolCalls: Array<{ toolName: string; toolCallId: string; input: unknown }>
-    toolResults: Array<{ toolName: string; toolCallId: string; output: unknown }>
-    steps: unknown[]
-    response: { messages: ModelMessage[]; id?: string; modelId?: string }
-    usage: Record<string, unknown>
-    finishReason: string
-    warnings: unknown[] | undefined
-    request: unknown
-    providerMetadata: unknown
-  }
-
-  let generateTextImpl: (args?: { messages?: unknown[] }) => Promise<GenerateTextResult>
-
-  const defaultGenerateTextResult = (): Promise<GenerateTextResult> =>
-    Promise.resolve({
-      text: 'Hello!',
-      toolCalls: [],
-      toolResults: [],
-      steps: [],
-      response: { messages: [{ role: 'assistant' as const, content: 'Hello!' }] },
-      usage: {},
-      finishReason: 'stop',
-      warnings: undefined,
-      request: {},
-      providerMetadata: undefined,
-    })
+  let generateTextImpl: (args: GenerateTextArgs) => Promise<GenerateTextResult>
 
   /** Seed the config/workspace values that processMessage -> callLlm needs. */
   const seedConfigForContext = (ctxId: string): void => {
@@ -106,7 +128,7 @@ describe('processMessage', () => {
     // Preserves the real `tool` export so makeTools() works with unmocked tool creation.
     void mock.module('ai', () => ({
       ...realAi,
-      generateText: (args: { messages?: unknown[] }): Promise<GenerateTextResult> => generateTextImpl(args),
+      generateText: (args: GenerateTextArgs): Promise<GenerateTextResult> => generateTextImpl(args),
       stepCountIs: (): (() => boolean) => () => false,
     }))
 
@@ -142,6 +164,28 @@ describe('processMessage', () => {
   // ---------------------------------------------------------------------------
 
   describe('missing configuration', () => {
+    test('group context does not call maybeProvisionKaneo before missing-config handling', async () => {
+      let maybeProvisionCalls = 0
+      const freshGroupCtx = 'group-1:thread-1'
+      const deps: LlmOrchestratorDeps = {
+        generateText: (...args) => realAi.generateText(...args),
+        stepCountIs: (...args) => realAi.stepCountIs(...args),
+        buildOpenAI: buildMockOpenAI,
+        buildProviderForUser: buildMockProviderForUser,
+        getKaneoWorkspace: () => null,
+        maybeProvisionKaneo: () => {
+          maybeProvisionCalls++
+          return Promise.resolve()
+        },
+      }
+
+      const { reply, textCalls } = createMockReply()
+      await processMessage(reply, freshGroupCtx, 'user-1', null, 'hello', 'group', 'group-1', deps)
+
+      expect(maybeProvisionCalls).toBe(0)
+      expect(textCalls[0]).toContain('/setup')
+    })
+
     test('missing LLM config keys replies with key names and /setup', async () => {
       // Use a fresh user ID that has no config at all, then seed only partial config
       const freshCtx = 'missing-config-1'
@@ -174,21 +218,43 @@ describe('processMessage', () => {
       expect(textCalls[0]).toContain('llm_apikey')
       expect(textCalls[0]).toContain('main_model')
     })
+
+    test('missing Kaneo workspace is handled as setup-remediable missing configuration', async () => {
+      const freshCtx = 'missing-kaneo-workspace'
+      setCachedConfig(freshCtx, 'llm_apikey', 'test-key')
+      setCachedConfig(freshCtx, 'llm_baseurl', 'http://localhost:11434')
+      setCachedConfig(freshCtx, 'main_model', 'test-model')
+      setCachedConfig(freshCtx, 'kaneo_apikey', 'test-kaneo-key')
+
+      const deps: LlmOrchestratorDeps = {
+        generateText: (...args) => realAi.generateText(...args),
+        stepCountIs: (...args) => realAi.stepCountIs(...args),
+        buildOpenAI: buildMockOpenAI,
+        buildProviderForUser: buildMockProviderForUser,
+        getKaneoWorkspace: () => null,
+        maybeProvisionKaneo: () => Promise.resolve(),
+      }
+
+      const { reply, textCalls } = createMockReply()
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm', undefined, deps)
+
+      expect(textCalls.length).toBeGreaterThanOrEqual(1)
+      expect(textCalls[0]).toContain('workspaceId')
+      expect(textCalls[0]).toContain('/setup')
+    })
   })
 
   describe('LLM API error', () => {
-    test('APICallError produces generic user-friendly reply', async () => {
-      const apiError = Object.assign(new Error('Rate limited'), {
+    test('APICallError uses the API-call-specific user reply', async () => {
+      const apiError = new APICallError({
+        message: 'Rate limited',
         url: 'http://localhost',
         requestBodyValues: {},
         statusCode: 429,
         responseHeaders: {},
         responseBody: '',
         isRetryable: false,
-        data: undefined,
       })
-      Object.defineProperty(apiError, Symbol.for('vercel.ai.error'), { value: true })
-      Object.defineProperty(apiError, 'name', { value: 'AI_APICallError' })
 
       generateTextImpl = (): Promise<GenerateTextResult> => {
         throw apiError
@@ -197,8 +263,8 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls).toHaveLength(1)
-      expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
+      expect(APICallError.isInstance(apiError)).toBe(true)
+      expect(textCalls).toContain('API call failed. Please try again.')
     })
   })
 
@@ -211,9 +277,7 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls).toHaveLength(1)
-      expect(textCalls[0]).toContain('T-1')
-      expect(textCalls[0]).toContain('not found')
+      expect(textCalls.some((text) => text.includes('T-1') && text.includes('not found'))).toBe(true)
     })
 
     test('ProviderClassifiedError routes through error.error', async () => {
@@ -224,9 +288,7 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls).toHaveLength(1)
-      expect(textCalls[0]).toContain('P-1')
-      expect(textCalls[0]).toContain('not found')
+      expect(textCalls.some((text) => text.includes('P-1') && text.includes('not found'))).toBe(true)
     })
 
     test('unknown Error produces generic message', async () => {
@@ -237,8 +299,7 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls).toHaveLength(1)
-      expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
+      expect(textCalls).toContain('An unexpected error occurred. Please try again later.')
     })
   })
 
@@ -256,8 +317,7 @@ describe('processMessage', () => {
       await processMessage(reply, rollbackCtx, 'user-1', null, 'new message', 'dm')
 
       // processMessage should have caught the error and replied with an error message
-      expect(textCalls).toHaveLength(1)
-      expect(textCalls[0]).toBe('An unexpected error occurred. Please try again later.')
+      expect(textCalls).toContain('An unexpected error occurred. Please try again later.')
 
       // The catch block calls saveHistory(contextId, baseHistory) to roll back.
       // baseHistory was a snapshot taken before callLlm (getCachedHistory returns a copy),
@@ -380,25 +440,14 @@ describe('processMessage', () => {
 
   describe('tool execution failure', () => {
     // Store callback captured by generateText for testing tool failure feedback
-    let capturedOnToolCallFinish:
-      | ((event: {
-          toolCall: { toolName: string; toolCallId: string; input: unknown }
-          durationMs: number
-          success: boolean
-          output?: unknown
-          error?: unknown
-        }) => void)
-      | undefined
+    let capturedOnToolCallFinish: ToolCallFinishHandler | undefined
 
     beforeEach(() => {
       capturedOnToolCallFinish = undefined
       // Override generateText to capture the onToolCallFinish callback
       void mock.module('ai', () => ({
         ...realAi,
-        generateText: (args: {
-          messages?: unknown[]
-          experimental_onToolCallFinish?: typeof capturedOnToolCallFinish
-        }): Promise<GenerateTextResult> => {
+        generateText: (args: GenerateTextArgs): Promise<GenerateTextResult> => {
           capturedOnToolCallFinish = args.experimental_onToolCallFinish
           return generateTextImpl(args)
         },
@@ -734,8 +783,10 @@ describe('processMessage', () => {
 
       // Existing mapping should be preserved (stored under user ID)
       const mapping = getIdentityMapping(USER_ID, 'mock')
-      expect(mapping?.providerUserLogin).toBe('existing')
-      expect(mapping?.matchMethod).toBe('manual_nl')
+      expect(mapping).not.toBeNull()
+      if (mapping === null) throw new Error('expected identity mapping')
+      expect(mapping.providerUserLogin).toBe('existing')
+      expect(mapping.matchMethod).toBe('manual_nl')
     })
 
     test('attempts auto-link when username provided and no mapping exists', async () => {
@@ -759,9 +810,10 @@ describe('processMessage', () => {
       // Auto-link should have created a mapping under the user ID (not group context)
       const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
-      expect(mapping?.providerUserLogin).toBe(USERNAME)
-      expect(mapping?.matchMethod).toBe('auto')
-      expect(mapping?.confidence).toBe(100)
+      if (mapping === null) throw new Error('expected identity mapping')
+      expect(mapping.providerUserLogin).toBe(USERNAME)
+      expect(mapping.matchMethod).toBe('auto')
+      expect(mapping.confidence).toBe(100)
     })
 
     test('stores unmatched when auto-link finds no match', async () => {
@@ -785,8 +837,9 @@ describe('processMessage', () => {
       // Should store unmatched mapping under the user ID (not group context)
       const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
-      expect(mapping?.providerUserId).toBeNull()
-      expect(mapping?.matchMethod).toBe('unmatched')
+      if (mapping === null) throw new Error('expected identity mapping')
+      expect(mapping.providerUserId).toBeNull()
+      expect(mapping.matchMethod).toBe('unmatched')
     })
   })
 

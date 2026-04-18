@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { addAuthorizedGroup } from '../../../src/authorized-groups.js'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
+import { setConfig } from '../../../src/config.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
 import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
+import { setKaneoWorkspace } from '../../../src/users.js'
 import { addUser } from '../../../src/users.js'
 import { mockLogger, mockMessageCache, setupTestDb } from '../../utils/test-helpers.js'
 
@@ -746,6 +749,7 @@ describe('DiscordChatProvider', () => {
       const provider = new DiscordChatProvider()
 
       // Authorize the user
+      addAuthorizedGroup('guild-channel-99', 'admin-id')
       addUser('user-88', 'admin-id', 'dave')
 
       const seen: IncomingMessage[] = []
@@ -868,6 +872,7 @@ describe('DiscordChatProvider', () => {
         displayName: 'Operations',
         parentName: 'Platform',
       })
+      addAuthorizedGroup('group-1', 'admin-id')
       upsertGroupAdminObservation({
         contextId: 'group-1',
         userId: 'user-1',
@@ -920,6 +925,9 @@ describe('DiscordChatProvider', () => {
         username: 'alice',
         isAdmin: true,
       })
+      addAuthorizedGroup('group-1', 'admin-id')
+      setConfig('group-1', 'kaneo_apikey', 'existing-key')
+      setKaneoWorkspace('group-1', 'existing-workspace')
       startGroupSettingsSelection('user-1', 'setup', true)
 
       const groupSelectorInteraction: ButtonInteractionLike = {

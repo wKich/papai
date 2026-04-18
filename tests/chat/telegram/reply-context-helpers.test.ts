@@ -15,7 +15,7 @@ interface MockContext {
       from?: { id?: number; username?: string } | undefined
       text?: string
     }
-    quote?: { text?: string }
+    quote?: { text?: string; is_manual?: boolean }
   }
 }
 
@@ -158,6 +158,123 @@ describe('extractReplyContext', () => {
 
     expect(result?.chain).toBeDefined()
     expect(result?.chainSummary).toBeDefined()
+  })
+
+  test('uses full cached text as text when user manually quotes a short portion (is_manual=true, < 1024)', () => {
+    const fullText = 'A'.repeat(2000)
+    const selectedPortion = 'B'.repeat(200)
+
+    cacheMessage({
+      messageId: '50',
+      contextId: 'chat-1',
+      authorId: '123',
+      authorUsername: 'originaluser',
+      text: fullText,
+      timestamp: Date.now(),
+    })
+
+    const ctx: MockContext = {
+      message: {
+        message_id: 100,
+        text: 'Reply to selected portion',
+        reply_to_message: {
+          message_id: 50,
+          from: { id: 123, username: 'originaluser' },
+          text: fullText.slice(0, 100),
+        },
+        quote: { text: selectedPortion, is_manual: true },
+      },
+    }
+
+    const result = extractReplyContext(ctx, 'chat-1')
+
+    // text should always be the full cached message regardless of is_manual
+    expect(result?.text).toBe(fullText)
+    expect(result?.quotedText).toBe(selectedPortion)
+    // 200 chars < 1024 limit — no truncation flag
+    expect(result?.quotedTextTruncated).toBeFalsy()
+  })
+
+  test('sets quotedTextTruncated=true when is_manual=true and quote.text is at API limit (>= 1024)', () => {
+    const fullText = 'A'.repeat(3000)
+    const truncatedQuote = 'B'.repeat(1024)
+
+    cacheMessage({
+      messageId: '50',
+      contextId: 'chat-1',
+      authorId: '123',
+      authorUsername: 'originaluser',
+      text: fullText,
+      timestamp: Date.now(),
+    })
+
+    const ctx: MockContext = {
+      message: {
+        message_id: 100,
+        text: 'Reply to truncated quote',
+        reply_to_message: {
+          message_id: 50,
+          from: { id: 123, username: 'originaluser' },
+          text: fullText.slice(0, 100),
+        },
+        quote: { text: truncatedQuote, is_manual: true },
+      },
+    }
+
+    const result = extractReplyContext(ctx, 'chat-1')
+
+    expect(result?.text).toBe(fullText)
+    expect(result?.quotedText).toBe(truncatedQuote)
+    expect(result?.quotedTextTruncated).toBe(true)
+  })
+
+  test('prefers full cached text over truncated reply_to_message.text', () => {
+    const fullText = 'A'.repeat(2000)
+    const truncatedText = 'A'.repeat(100)
+
+    // Simulate bot having seen the full message previously
+    cacheMessage({
+      messageId: '50',
+      contextId: 'chat-1',
+      authorId: '123',
+      authorUsername: 'originaluser',
+      text: fullText,
+      timestamp: Date.now(),
+    })
+
+    const ctx: MockContext = {
+      message: {
+        message_id: 100,
+        text: 'Reply message',
+        reply_to_message: {
+          message_id: 50,
+          from: { id: 123, username: 'originaluser' },
+          text: truncatedText,
+        },
+      },
+    }
+
+    const result = extractReplyContext(ctx, 'chat-1')
+
+    expect(result?.text).toBe(fullText)
+  })
+
+  test('falls back to reply_to_message.text when message is not in cache', () => {
+    const ctx: MockContext = {
+      message: {
+        message_id: 100,
+        text: 'Reply message',
+        reply_to_message: {
+          message_id: 99,
+          from: { id: 456, username: 'someuser' },
+          text: 'Partial text from API',
+        },
+      },
+    }
+
+    const result = extractReplyContext(ctx, 'chat-1')
+
+    expect(result?.text).toBe('Partial text from API')
   })
 
   test('logs debug information with quote metrics', () => {

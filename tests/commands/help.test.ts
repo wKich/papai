@@ -31,7 +31,11 @@ describe('help command', () => {
     capturedText = null
     lastHandler = null
     registerHelpCommand(mockChat)
-    lastHandler = commandHandlers.get('help') ?? null
+    const registeredHelpHandler = commandHandlers.get('help')
+    if (registeredHelpHandler === undefined) {
+      throw new Error('help handler was not registered')
+    }
+    lastHandler = registeredHelpHandler
   })
 
   test('DM help shows user management commands for admin', async () => {
@@ -49,6 +53,9 @@ describe('help command', () => {
     expect(capturedText).toContain('/user add')
     expect(capturedText).toContain('/user remove')
     expect(capturedText).toContain('/users')
+    expect(capturedText).toContain('/group add <group-id>')
+    expect(capturedText).toContain('/group remove <group-id>')
+    expect(capturedText).toContain('/groups')
     expect(capturedText).toContain('/setup')
     expect(capturedText).toContain('/config')
     expect(capturedText).toContain('/clear')
@@ -71,6 +78,7 @@ describe('help command', () => {
     expect(capturedText).toContain('/setup — Interactive configuration wizard for personal or group settings')
     expect(capturedText).toContain('/config — View or edit personal settings, or choose a group to configure from DM')
     expect(capturedText).toContain('/clear')
+    expect(capturedText).toContain('/context')
     expect(capturedText).not.toContain('/user add')
     expect(capturedText).not.toContain('Admin commands:')
   })
@@ -87,8 +95,8 @@ describe('help command', () => {
 
     await lastHandler!(groupMsg, mockReply, auth)
 
-    expect(capturedText).toContain('/group adduser')
-    expect(capturedText).toContain('/group deluser')
+    expect(capturedText).toContain('/group adduser <user-id|@username>')
+    expect(capturedText).toContain('/group deluser <user-id|@username>')
     expect(capturedText).toContain('/group users')
     expect(capturedText).toContain('@botname')
     // Not shown to regular members
@@ -109,6 +117,7 @@ describe('help command', () => {
     await lastHandler!(groupMsg, mockReply, auth)
 
     expect(capturedText).toContain('Group settings are configured in DM with the bot')
+    expect(capturedText).toContain('The group must be authorized before it can use the bot in the group chat.')
     expect(capturedText).not.toContain('/setup — Interactive configuration wizard')
     expect(capturedText).not.toContain('/config — View group configuration')
     expect(capturedText).toContain('/clear')
@@ -117,23 +126,35 @@ describe('help command', () => {
 })
 
 describe('buildHelpText', () => {
-  test('/help on provider without file support appends a /context deferral note for admin', async () => {
+  test('/help in DM includes /context for non-admin users', async () => {
+    const { buildHelpText } = await import('../../src/commands/help.js')
+    const helpText = buildHelpText(new Set<ChatCapability>(['messages.buttons']), 'dm', {
+      isBotAdmin: false,
+      isGroupAdmin: false,
+    })
+
+    expect(helpText).toContain('/context')
+    expect(helpText).not.toContain('Admin commands:')
+  })
+
+  test('/help on provider without file support does not append stale /context deferral note for admin', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
     const noFileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons', 'users.resolve'])
     const noFileHelp = buildHelpText(noFileCapabilities, 'dm', { isBotAdmin: true, isGroupAdmin: false })
 
     expect(noFileHelp).toContain('/context')
-    expect(noFileHelp).toContain('deferred')
+    expect(noFileHelp).not.toContain('deferred')
   })
 
-  test('/help on provider without file support does NOT mention /context for non-admin', async () => {
+  test('/help on provider without file support still mentions /context for non-admin', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
     const noFileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons'])
     const noFileHelp = buildHelpText(noFileCapabilities, 'dm', { isBotAdmin: false, isGroupAdmin: false })
-    expect(noFileHelp).not.toContain('/context')
+    expect(noFileHelp).toContain('/context')
+    expect(noFileHelp).not.toContain('deferred')
   })
 
-  test('/help on provider with file support does not contain deferral note', async () => {
+  test('/help on provider with file support does not contain stale deferral note', async () => {
     const { buildHelpText } = await import('../../src/commands/help.js')
     const fileCapabilities = new Set<ChatCapability>(['interactions.callbacks', 'messages.buttons', 'messages.files'])
     const fileHelp = buildHelpText(fileCapabilities, 'dm', { isBotAdmin: true, isGroupAdmin: false })

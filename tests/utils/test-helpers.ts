@@ -20,65 +20,13 @@ import type {
   ResolveUserContext,
 } from '../../src/chat/types.js'
 import { _resetDrizzleDb, _setDrizzleDb } from '../../src/db/drizzle.js'
-import type { Migration } from '../../src/db/migrate.js'
-import { migration001Initial } from '../../src/db/migrations/001_initial.js'
-import { migration002ConversationHistory } from '../../src/db/migrations/002_conversation_history.js'
-import { migration003MultiuserSupport } from '../../src/db/migrations/003_multiuser_support.js'
-import { migration004KaneoWorkspace } from '../../src/db/migrations/004_kaneo_workspace.js'
-import { migration005RenameConfigKeys } from '../../src/db/migrations/005_rename_config_keys.js'
-import { migration006VersionAnnouncements } from '../../src/db/migrations/006_version_announcements.js'
-import { migration007PlatformUserId } from '../../src/db/migrations/007_platform_user_id.js'
-import { migration008GroupMembers } from '../../src/db/migrations/008_group_members.js'
-import { migration009RecurringTasks } from '../../src/db/migrations/009_recurring_tasks.js'
-import { migration010RecurringTaskOccurrences } from '../../src/db/migrations/010_recurring_task_occurrences.js'
-import { migration011ProactiveAlerts } from '../../src/db/migrations/011_proactive_alerts.js'
-import { migration012UserInstructions } from '../../src/db/migrations/012_user_instructions.js'
-import { migration013DeferredPrompts } from '../../src/db/migrations/013_deferred_prompts.js'
-import { migration014BackgroundEvents } from '../../src/db/migrations/014_background_events.js'
-import { migration015DropBackgroundEvents } from '../../src/db/migrations/015_drop_background_events.js'
-import { migration016ExecutionMetadata } from '../../src/db/migrations/016_execution_metadata.js'
-import { migration017MessageMetadata } from '../../src/db/migrations/017_message_metadata.js'
-import { migration018Memos } from '../../src/db/migrations/018_memos.js'
-import { migration019UserIdentityMappings } from '../../src/db/migrations/019_user_identity_mappings.js'
-import { migration020GroupSettingsRegistry } from '../../src/db/migrations/020_group_settings_registry.js'
-import { migration021WebFetch } from '../../src/db/migrations/021_web_fetch.js'
-import { migration022DropUnusedLastSeenIndex } from '../../src/db/migrations/022_drop_unused_last_seen_index.js'
-import { migration023AddForeignKeys } from '../../src/db/migrations/023_add_foreign_keys.js'
+import { MIGRATIONS } from '../../src/db/index.js'
 import * as schema from '../../src/db/schema.js'
 import type { AppError } from '../../src/errors.js'
-import { getUserMessage } from '../../src/errors.js'
-
-// Static list of all migrations to avoid dynamic imports with type assertions
-const ALL_MIGRATIONS: readonly Migration[] = [
-  migration001Initial,
-  migration002ConversationHistory,
-  migration003MultiuserSupport,
-  migration004KaneoWorkspace,
-  migration005RenameConfigKeys,
-  migration006VersionAnnouncements,
-  migration007PlatformUserId,
-  migration008GroupMembers,
-  migration009RecurringTasks,
-  migration010RecurringTaskOccurrences,
-  migration011ProactiveAlerts,
-  migration012UserInstructions,
-  migration013DeferredPrompts,
-  migration014BackgroundEvents,
-  migration015DropBackgroundEvents,
-  migration016ExecutionMetadata,
-  migration017MessageMetadata,
-  migration018Memos,
-  migration019UserIdentityMappings,
-  migration020GroupSettingsRegistry,
-  migration021WebFetch,
-  migration022DropUnusedLastSeenIndex,
-  migration023AddForeignKeys,
-]
-
+import { getUserMessage, isAppError } from '../../src/errors.js'
 // ============================================================================
 // MESSAGE CACHE TEST HELPERS
 // ============================================================================
-
 import type { CachedMessage } from '../../src/message-cache/types.js'
 
 // Test-local message cache — fully isolated from production
@@ -162,7 +110,7 @@ export async function setupTestDb(): Promise<ReturnType<typeof drizzle<typeof sc
   testSqlite.run('PRAGMA foreign_keys=ON')
   testDb = drizzle(testSqlite, { schema })
 
-  runMigrations(testSqlite, [...ALL_MIGRATIONS])
+  runMigrations(testSqlite, MIGRATIONS)
   _setDrizzleDb(testDb)
   return testDb
 }
@@ -284,12 +232,17 @@ export function createMockReplyLegacy(): { reply: ReplyFn; getReplies: () => str
  * Create a DM message for testing commands.
  */
 export function createDmMessage(
-  userId: string,
-  commandMatch: string = '',
-  username: string | null = null,
+  ...args:
+    | [userId: string]
+    | [userId: string, commandMatch: string]
+    | [userId: string, commandMatch: string, username: string | null]
 ): IncomingMessage {
+  const userId = args[0]
+  const commandMatch = args.length >= 2 ? args[1] : ''
+  const username = args.length >= 3 ? args[2] : null
+  const resolvedUsername = username === undefined ? null : username
   return {
-    user: { id: userId, username, isAdmin: false },
+    user: { id: userId, username: resolvedUsername, isAdmin: false },
     contextId: userId,
     contextType: 'dm',
     isMentioned: false,
@@ -302,11 +255,18 @@ export function createDmMessage(
  * Create a group message for testing commands.
  */
 export function createGroupMessage(
-  userId: string,
-  text: string,
-  isAdmin: boolean = false,
-  groupId: string = 'group1',
+  ...args:
+    | [userId: string, text: string]
+    | [userId: string, text: string, isAdmin: boolean]
+    | [userId: string, text: string, isAdmin: boolean, groupId: string]
 ): IncomingMessage {
+  const userId = args[0]
+  const text = args[1]
+  const isAdmin = args.length >= 3 ? args[2] === true : false
+  let groupId = 'group1'
+  if (args.length >= 4 && args[3] !== undefined) {
+    groupId = args[3]
+  }
   return {
     user: { id: userId, username: `user${userId}`, isAdmin },
     contextId: groupId,
@@ -324,20 +284,76 @@ export function createGroupMessage(
 /**
  * Create an authorization result for testing.
  */
+type CreateAuthOptions = Partial<
+  Readonly<{
+    allowed: boolean
+    isBotAdmin: boolean
+    isGroupAdmin: boolean
+    reason: AuthorizationResult['reason']
+  }>
+>
+
+type CreateMockChatOptions = Partial<
+  Readonly<{
+    commandHandlers: Map<string, CommandHandler>
+    sendMessage: (userId: string, text: string) => Promise<void>
+    onMessageHandler: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
+    resolveUserId: (username: string, context: ResolveUserContext) => Promise<string | null>
+    onInteractionHandler: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
+    setCommands: (adminUserId: string) => Promise<void>
+    capabilities: Set<ChatCapability>
+    traits: ChatProviderTraits
+    configRequirements: ChatProviderConfigRequirement[]
+  }>
+>
+
+const EMPTY_CREATE_AUTH_OPTIONS: CreateAuthOptions = {}
+const EMPTY_CREATE_MOCK_CHAT_OPTIONS: CreateMockChatOptions = {}
+const DEFAULT_MOCK_CHAT_TRAITS: ChatProviderTraits = { observedGroupMessages: 'all' }
+const DEFAULT_SEND_MESSAGE: (userId: string, text: string) => Promise<void> = (_userId, _text) => Promise.resolve()
+const DEFAULT_SET_COMMANDS: (adminUserId: string) => Promise<void> = (_adminUserId) => Promise.resolve()
+const DEFAULT_RESOLVE_USER_ID = (username: string, _context: ResolveUserContext): Promise<string | null> => {
+  const clean = username.startsWith('@') ? username.slice(1) : username
+  return Promise.resolve(clean)
+}
+
+function hasAppError(error: Error): error is Error & { appError: AppError } {
+  const appError: unknown = Reflect.get(error, 'appError')
+  return isAppError(appError)
+}
+
 export function createAuth(
-  userId: string,
-  options: {
-    allowed?: boolean
-    isBotAdmin?: boolean
-    isGroupAdmin?: boolean
-  } = {},
+  ...args: [userId: string] | [userId: string, options: CreateAuthOptions]
 ): AuthorizationResult {
-  const { allowed = true, isBotAdmin = false, isGroupAdmin = false } = options
+  const userId = args[0]
+  let options: CreateAuthOptions = EMPTY_CREATE_AUTH_OPTIONS
+  if (args.length >= 2 && args[1] !== undefined) {
+    options = args[1]
+  }
+
+  let allowed = true
+  if (options.allowed !== undefined) {
+    allowed = options.allowed
+  }
+
+  let isBotAdmin = false
+  if (options.isBotAdmin !== undefined) {
+    isBotAdmin = options.isBotAdmin
+  }
+
+  let isGroupAdmin = false
+  if (options.isGroupAdmin !== undefined) {
+    isGroupAdmin = options.isGroupAdmin
+  }
+
+  const reason = options.reason
+
   return {
     allowed,
     isBotAdmin,
     isGroupAdmin,
     storageContextId: userId,
+    ...(reason === undefined ? {} : { reason }),
   }
 }
 
@@ -376,28 +392,49 @@ export const TELEGRAM_LIKE_CAPABILITIES = new Set<ChatCapability>([
  * @param options - Optional configuration for the mock provider
  * @returns The mock ChatProvider and any captured state
  */
-export function createMockChat(
-  options: {
-    /** Capture command handlers in this map */
-    commandHandlers?: Map<string, CommandHandler>
-    /** Custom sendMessage implementation */
-    sendMessage?: (userId: string, text: string) => Promise<void>
-    /** Callback when a message handler is registered via onMessage */
-    onMessageHandler?: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
-    /** Custom resolveUserId implementation */
-    resolveUserId?: (username: string, context: ResolveUserContext) => Promise<string | null>
-    /** Callback when an interaction handler is registered via onInteraction */
-    onInteractionHandler?: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
-    /** Custom setCommands implementation */
-    setCommands?: (adminUserId: string) => Promise<void>
-    /** Capability set for this provider (defaults to DEFAULT_CHAT_CAPABILITIES) */
-    capabilities?: Set<ChatCapability>
-    /** Behavioral traits for this provider */
-    traits?: ChatProviderTraits
-    /** Config requirements for this provider */
-    configRequirements?: ChatProviderConfigRequirement[]
-  } = {},
-): ChatProvider {
+export function createMockChat(...args: [] | [options: CreateMockChatOptions]): ChatProvider {
+  let options: CreateMockChatOptions = EMPTY_CREATE_MOCK_CHAT_OPTIONS
+  if (args.length > 0 && args[0] !== undefined) {
+    options = args[0]
+  }
+
+  let capabilities = DEFAULT_CHAT_CAPABILITIES
+  if (options.capabilities !== undefined) {
+    capabilities = options.capabilities
+  }
+
+  let traits: ChatProviderTraits = DEFAULT_MOCK_CHAT_TRAITS
+  if (options.traits !== undefined) {
+    traits = options.traits
+  }
+
+  let configRequirements: ChatProviderConfigRequirement[] = []
+  if (options.configRequirements !== undefined) {
+    configRequirements = options.configRequirements
+  }
+
+  const commandHandlers = options.commandHandlers
+  const onMessageHandler = options.onMessageHandler
+  const onInteractionHandler = options.onInteractionHandler
+  const sendMessage = options.sendMessage
+  const resolveUserId = options.resolveUserId
+  const setCommands = options.setCommands
+
+  let sendMessageImpl: (userId: string, text: string) => Promise<void> = DEFAULT_SEND_MESSAGE
+  if (sendMessage !== undefined) {
+    sendMessageImpl = sendMessage
+  }
+
+  let resolveUserIdImpl = DEFAULT_RESOLVE_USER_ID
+  if (resolveUserId !== undefined) {
+    resolveUserIdImpl = resolveUserId
+  }
+
+  let setCommandsImpl: (adminUserId: string) => Promise<void> = DEFAULT_SET_COMMANDS
+  if (setCommands !== undefined) {
+    setCommandsImpl = setCommands
+  }
+
   return {
     name: 'mock',
     threadCapabilities: {
@@ -405,33 +442,31 @@ export function createMockChat(
       canCreateThreads: false,
       threadScope: 'message',
     },
-    capabilities: options.capabilities ?? DEFAULT_CHAT_CAPABILITIES,
-    traits: options.traits ?? { observedGroupMessages: 'all' },
-    configRequirements: options.configRequirements ?? [],
+    capabilities,
+    traits,
+    configRequirements,
     registerCommand: (name: string, handler: CommandHandler): void => {
-      options.commandHandlers?.set(name, handler)
+      if (commandHandlers !== undefined) {
+        commandHandlers.set(name, handler)
+      }
     },
     onMessage: (handler): void => {
-      options.onMessageHandler?.(handler)
+      if (onMessageHandler !== undefined) {
+        onMessageHandler(handler)
+      }
     },
-    ...(options.onInteractionHandler === undefined
+    ...(onInteractionHandler === undefined
       ? {}
       : (() => {
-          const interactionHandler = options.onInteractionHandler
           return {
             onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void => {
-              interactionHandler(handler)
+              onInteractionHandler(handler)
             },
           }
         })()),
-    sendMessage: options.sendMessage ?? ((): Promise<void> => Promise.resolve()),
-    resolveUserId:
-      options.resolveUserId ??
-      ((username: string, _context: ResolveUserContext): Promise<string | null> => {
-        const clean = username.startsWith('@') ? username.slice(1) : username
-        return Promise.resolve(clean)
-      }),
-    setCommands: options.setCommands ?? ((): Promise<void> => Promise.resolve()),
+    sendMessage: sendMessageImpl,
+    resolveUserId: resolveUserIdImpl,
+    setCommands: setCommandsImpl,
     renderContext: (snapshot: ContextSnapshot): ContextRendered => ({
       method: 'text',
       content: `mock renderContext: ${snapshot.modelName} total=${String(snapshot.totalTokens)}`,
@@ -444,10 +479,14 @@ export function createMockChat(
 /**
  * Create a mock chat provider that captures command registrations.
  */
-export function createMockChatWithCommandHandlers(options: Parameters<typeof createMockChat>[0] = {}): {
+export function createMockChatWithCommandHandlers(...args: [] | [options: CreateMockChatOptions]): {
   provider: ChatProvider
   commandHandlers: Map<string, CommandHandler>
 } {
+  let options: CreateMockChatOptions = EMPTY_CREATE_MOCK_CHAT_OPTIONS
+  if (args.length > 0 && args[0] !== undefined) {
+    options = args[0]
+  }
   const commandHandlers = new Map<string, CommandHandler>()
   const provider = createMockChat({ ...options, commandHandlers })
   return { provider, commandHandlers }
@@ -551,12 +590,11 @@ export function expectAppError(error: unknown, expectedMessage: string | RegExp)
   }
 
   // Check if it's a classified error with appError property
-  const classifiedError = error as Error & { appError?: AppError }
-  if (classifiedError.appError === undefined) {
+  if (!hasAppError(error)) {
     throw new Error(`Error missing appError property: ${error.message}`)
   }
 
-  const userMessage = getUserMessage(classifiedError.appError)
+  const userMessage = getUserMessage(error.appError)
 
   if (typeof expectedMessage === 'string') {
     if (userMessage !== expectedMessage) {
@@ -641,7 +679,8 @@ type Column = {
 }
 
 // Complete task mock matching CreateTaskResponseSchema
-export function createMockTask(overrides: Partial<CreateTaskResponse> = {}): CreateTaskResponse {
+export function createMockTask(...args: [] | [overrides: Partial<CreateTaskResponse>]): CreateTaskResponse {
+  const overrides = args.length === 0 ? {} : args[0]
   return {
     id: 'task-1',
     projectId: 'proj-1',
@@ -659,7 +698,8 @@ export function createMockTask(overrides: Partial<CreateTaskResponse> = {}): Cre
 }
 
 // Complete project mock matching CreateProjectResponseSchema
-export function createMockProject(overrides: Partial<CreateProjectResponse> = {}): CreateProjectResponse {
+export function createMockProject(...args: [] | [overrides: Partial<CreateProjectResponse>]): CreateProjectResponse {
+  const overrides = args.length === 0 ? {} : args[0]
   return {
     id: 'proj-1',
     workspaceId: 'ws-1',
@@ -674,7 +714,8 @@ export function createMockProject(overrides: Partial<CreateProjectResponse> = {}
 }
 
 // Complete label mock matching CreateLabelResponseSchema
-export function createMockLabel(overrides: Partial<CreateLabelResponse> = {}): CreateLabelResponse {
+export function createMockLabel(...args: [] | [overrides: Partial<CreateLabelResponse>]): CreateLabelResponse {
+  const overrides = args.length === 0 ? {} : args[0]
   return {
     id: 'label-1',
     name: 'Bug',
@@ -688,7 +729,8 @@ export function createMockLabel(overrides: Partial<CreateLabelResponse> = {}): C
 
 // Complete activity mock matching CreateCommentResponseSchema (for add/update)
 // or ActivityItemSchema (for list) - both have same structure
-export function createMockActivity(overrides: Partial<ActivityItem> = {}): ActivityItem {
+export function createMockActivity(...args: [] | [overrides: Partial<ActivityItem>]): ActivityItem {
+  const overrides = args.length === 0 ? {} : args[0]
   return {
     id: 'act-1',
     taskId: 'task-1',
@@ -705,7 +747,8 @@ export function createMockActivity(overrides: Partial<ActivityItem> = {}): Activ
 }
 
 // Complete column mock matching ColumnSchema
-export function createMockColumn(overrides: Partial<Column> = {}): Column {
+export function createMockColumn(...args: [] | [overrides: Partial<Column>]): Column {
+  const overrides = args.length === 0 ? {} : args[0]
   return {
     id: 'col-1',
     name: 'To Do',
@@ -732,14 +775,19 @@ export function restoreFetch(): void {
  */
 export function setMockFetch(handler: (url: string, init: RequestInit) => Promise<Response>): void {
   const mocked = mock(handler)
-  const wrapped = Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  const mockedFetch = Object.assign(
+    (...args: Parameters<typeof fetch>): ReturnType<typeof fetch> => {
+      const [input, init] = args
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      return mocked(url, init ?? {})
+      let requestInit: RequestInit = {}
+      if (init !== undefined) {
+        requestInit = init
+      }
+      return mocked(url, requestInit)
     },
     { preconnect: originalFetch.preconnect },
-  )
-  globalThis.fetch = wrapped
+  ) satisfies typeof fetch
+  globalThis.fetch = mockedFetch
 }
 
 // ============================================================================

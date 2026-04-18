@@ -1,20 +1,14 @@
-/**
- * Recurring task scheduler.
- *
- * Runs on a 60-second interval, checks for due recurring tasks,
- * and creates new task instances via the task provider.
- */
-
 import type { ChatProvider } from './chat/types.js'
 import { getConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { logger } from './logger.js'
+import { isKaneoSessionCookie } from './providers/kaneo/client.js'
 import { createProvider as defaultCreateProvider } from './providers/registry.js'
 import type { TaskProvider } from './providers/types.js'
-import type { Task } from './providers/types.js'
 import { recordOccurrence } from './recurring-occurrences.js'
-import { type RecurringTaskRecord, getDueRecurringTasks, getRecurringTask, markExecuted } from './recurring.js'
+import { type RecurringTaskRecord, getDueRecurringTasks, getRecurringTask } from './recurring.js'
 import { scheduler } from './scheduler-instance.js'
+import { applyLabels, buildRecurringTaskInput, finalizeCreatedRecurringTask } from './scheduler-recurring.js'
 import { getKaneoWorkspace } from './users.js'
 
 const log = logger.child({ scope: 'scheduler' })
@@ -27,17 +21,23 @@ const defaultSchedulerDeps: SchedulerDeps = {
   createProvider: (...args): TaskProvider => defaultCreateProvider(...args),
 }
 
-/** Scheduler tick interval: 60 seconds */
 const TICK_INTERVAL_MS = 60 * 1000
 
 let chatProviderRef: ChatProvider | null = null
 let activeTickPromise: Promise<void> | null = null
 let tickCount = 0
 
-/** Heartbeat interval: log at info level every 1 hour (60 ticks). */
 const HEARTBEAT_INTERVAL = 60
 
-const TASK_PROVIDER = process.env['TASK_PROVIDER'] ?? 'kaneo'
+const getTaskProvider = (): string => {
+  const taskProvider = process.env['TASK_PROVIDER']
+  if (taskProvider === undefined || taskProvider === '') {
+    return 'kaneo'
+  }
+  return taskProvider
+}
+
+const TASK_PROVIDER = getTaskProvider()
 
 const buildProviderForUser = (userId: string, deps: SchedulerDeps): TaskProvider | null => {
   log.debug({ userId, providerName: TASK_PROVIDER }, 'Building provider for scheduled task')
@@ -60,7 +60,7 @@ const buildProviderForUser = (userId: string, deps: SchedulerDeps): TaskProvider
       return null
     }
 
-    const isSessionCookie = kaneoKey.startsWith('better-auth.session_token=')
+    const isSessionCookie = isKaneoSessionCookie(kaneoKey)
     const config: Record<string, string> = isSessionCookie
       ? { baseUrl: kaneoBaseUrl, sessionCookie: kaneoKey, workspaceId }
       : { apiKey: kaneoKey, baseUrl: kaneoBaseUrl, workspaceId }
@@ -84,34 +84,6 @@ const buildProviderForUser = (userId: string, deps: SchedulerDeps): TaskProvider
   return null
 }
 
-const applyLabels = async (provider: TaskProvider, taskId: string, labels: readonly string[]): Promise<void> => {
-  if (labels.length === 0) return
-  if (!provider.capabilities.has('labels.assign') || provider.addTaskLabel === undefined) return
-
-  const results = await Promise.allSettled(labels.map((labelId) => provider.addTaskLabel!(taskId, labelId)))
-
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i]!
-    if (result.status === 'fulfilled') {
-      log.debug({ taskId, labelId: labels[i] }, 'Label applied to recurring task instance')
-    } else {
-      log.warn({ taskId, labelId: labels[i], error: result.reason }, 'Failed to apply label')
-    }
-  }
-}
-
-const notifyUser = async (userId: string, created: Task): Promise<void> => {
-  if (chatProviderRef === null) return
-  try {
-    await chatProviderRef.sendMessage(userId, `Recurring task created: **${created.title}** in project.`)
-  } catch (notifyError) {
-    log.warn(
-      { userId, error: notifyError instanceof Error ? notifyError.message : String(notifyError) },
-      'Failed to notify user about recurring task',
-    )
-  }
-}
-
 const executeRecurringTask = async (task: RecurringTaskRecord, deps: SchedulerDeps): Promise<void> => {
   log.debug({ taskId: task.id, title: task.title, userId: task.userId }, 'Executing recurring task')
 
@@ -122,25 +94,8 @@ const executeRecurringTask = async (task: RecurringTaskRecord, deps: SchedulerDe
   }
 
   try {
-    const created = await provider.createTask({
-      projectId: task.projectId,
-      title: task.title,
-      description: task.description ?? undefined,
-      priority: task.priority ?? undefined,
-      status: task.status ?? undefined,
-      assignee: task.assignee ?? undefined,
-    })
-
-    log.info(
-      { recurringTaskId: task.id, createdTaskId: created.id, title: task.title },
-      'Recurring task instance created',
-    )
-    emit('scheduler:task_executed', { userId: task.userId, recurringTaskId: task.id, createdTaskId: created.id })
-
-    await applyLabels(provider, created.id, task.labels)
-    recordOccurrence(task.id, created.id)
-    markExecuted(task.id)
-    await notifyUser(task.userId, created)
+    const created = await provider.createTask(buildRecurringTaskInput(task))
+    await finalizeCreatedRecurringTask(task, provider, created, chatProviderRef)
   } catch (error) {
     log.error(
       { taskId: task.id, error: error instanceof Error ? error.message : String(error) },
@@ -149,18 +104,22 @@ const executeRecurringTask = async (task: RecurringTaskRecord, deps: SchedulerDe
   }
 }
 
-/** Create tasks for missed occurrences (called from resume tool). */
-export const createMissedTasks = async (
-  recurringTaskId: string,
-  missedDates: readonly string[],
-  deps: SchedulerDeps = defaultSchedulerDeps,
-): Promise<number> => {
+export async function createMissedTasks(
+  ...args:
+    | [recurringTaskId: string, missedDates: readonly string[]]
+    | [recurringTaskId: string, missedDates: readonly string[], deps: SchedulerDeps | undefined]
+): Promise<number> {
+  const [recurringTaskId, missedDates, deps] = args
+  let resolvedDeps = defaultSchedulerDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   if (missedDates.length === 0) return 0
 
   const task = getRecurringTask(recurringTaskId)
   if (task === null) return 0
 
-  const provider = buildProviderForUser(task.userId, deps)
+  const provider = buildProviderForUser(task.userId, resolvedDeps)
   if (provider === null) {
     log.error({ recurringTaskId, userId: task.userId }, 'Cannot build provider for missed tasks')
     return 0
@@ -168,15 +127,7 @@ export const createMissedTasks = async (
 
   const createOne = async (dueDate: string): Promise<boolean> => {
     try {
-      const newTask = await provider.createTask({
-        projectId: task.projectId,
-        title: task.title,
-        description: task.description ?? undefined,
-        priority: task.priority ?? undefined,
-        status: task.status ?? undefined,
-        assignee: task.assignee ?? undefined,
-        dueDate,
-      })
+      const newTask = await provider.createTask(buildRecurringTaskInput(task, dueDate))
       await applyLabels(provider, newTask.id, task.labels)
       recordOccurrence(recurringTaskId, newTask.id)
       log.debug({ recurringTaskId, createdTaskId: newTask.id, dueDate }, 'Missed task created')
@@ -199,7 +150,12 @@ export const createMissedTasks = async (
   return results
 }
 
-export const tick = (deps: SchedulerDeps = defaultSchedulerDeps): Promise<void> => {
+export function tick(...args: [] | [deps: SchedulerDeps]): Promise<void> {
+  const [deps] = args
+  let resolvedDeps = defaultSchedulerDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   if (activeTickPromise !== null) {
     log.debug('Tick skipped: previous tick still running')
     return Promise.resolve()
@@ -219,7 +175,10 @@ export const tick = (deps: SchedulerDeps = defaultSchedulerDeps): Promise<void> 
 
       log.info({ count: dueTasks.length, tickCount }, 'Processing due recurring tasks')
 
-      await dueTasks.reduce((chain, task) => chain.then(() => executeRecurringTask(task, deps)), Promise.resolve())
+      await dueTasks.reduce(
+        (chain, task) => chain.then(() => executeRecurringTask(task, resolvedDeps)),
+        Promise.resolve(),
+      )
     } catch (error) {
       log.error({ error: error instanceof Error ? error.message : String(error) }, 'Scheduler tick failed')
     }
@@ -230,7 +189,14 @@ export const tick = (deps: SchedulerDeps = defaultSchedulerDeps): Promise<void> 
   return activeTickPromise
 }
 
-export const startScheduler = (chatProvider: ChatProvider, deps: SchedulerDeps = defaultSchedulerDeps): void => {
+export function startScheduler(
+  ...args: [chatProvider: ChatProvider] | [chatProvider: ChatProvider, deps: SchedulerDeps]
+): void {
+  const [chatProvider, deps] = args
+  let resolvedDeps = defaultSchedulerDeps
+  if (deps !== undefined) {
+    resolvedDeps = deps
+  }
   if (scheduler.hasTask('recurring-tasks')) {
     log.warn('Scheduler already running')
     return
@@ -241,7 +207,7 @@ export const startScheduler = (chatProvider: ChatProvider, deps: SchedulerDeps =
   scheduler.register('recurring-tasks', {
     interval: TICK_INTERVAL_MS,
     handler: async () => {
-      await tick(deps)
+      await tick(resolvedDeps)
     },
     options: { immediate: true },
   })

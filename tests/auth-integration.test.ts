@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
 import { checkAuthorizationExtended } from '../src/auth.js'
+import { addAuthorizedGroup } from '../src/authorized-groups.js'
 import { addGroupMember } from '../src/groups.js'
 import { addUser } from '../src/users.js'
 import { mockLogger, setupTestDb } from './utils/test-helpers.js'
@@ -14,6 +15,8 @@ describe('group context isolation', () => {
   test('two groups have independent storage contexts', () => {
     // Add members to two different groups
     addUser('user1', 'admin1')
+    addAuthorizedGroup('group1', 'admin1')
+    addAuthorizedGroup('group2', 'admin1')
     addGroupMember('group1', 'user1', 'admin1')
     addGroupMember('group2', 'user1', 'admin1')
 
@@ -39,17 +42,27 @@ describe('group context isolation', () => {
     // Should not be allowed but storageContextId should still be group1
     expect(groupAuth.allowed).toBe(false)
     expect(groupAuth.storageContextId).toBe('group1')
+    expect(groupAuth.reason).toBe('group_not_allowed')
   })
 
-  test('bot admin in group uses groupId as storage context', () => {
-    // Add admin as authorized user
+  test('authorized non-admin in group uses groupId as storage context', () => {
+    // Add authorized user who is not the configured bot admin
     addUser('admin1', 'admin1')
-    addGroupMember('group1', 'admin1', 'admin1')
+    addAuthorizedGroup('group1', 'admin1')
 
     const groupAuth = checkAuthorizationExtended('admin1', null, 'group1', 'group', undefined, false)
 
     expect(groupAuth.allowed).toBe(true)
-    expect(groupAuth.isBotAdmin).toBe(true)
+    expect(groupAuth.isBotAdmin).toBe(false)
     expect(groupAuth.storageContextId).toBe('group1')
+  })
+
+  test('allowlisted group still denies non-member non-admin users distinctly', () => {
+    addAuthorizedGroup('group1', 'admin1')
+
+    const groupAuth = checkAuthorizationExtended('user1', null, 'group1', 'group', undefined, false)
+
+    expect(groupAuth.allowed).toBe(false)
+    expect(groupAuth.reason).toBe('group_member_not_allowed')
   })
 })

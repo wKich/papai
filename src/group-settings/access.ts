@@ -1,3 +1,4 @@
+import { isAuthorizedGroup } from '../authorized-groups.js'
 import { logger } from '../logger.js'
 import { listAdminGroupContextsForUser } from './registry.js'
 import type { KnownGroupContext } from './types.js'
@@ -9,19 +10,37 @@ export type GroupMatchResult =
   | { kind: 'ambiguous'; matches: KnownGroupContext[] }
   | { kind: 'not_found' }
 
-const getMatchCandidates = (group: KnownGroupContext): readonly string[] => [
-  group.displayName,
-  group.parentName ?? '',
-  group.parentName === null ? group.displayName : `${group.parentName} / ${group.displayName}`,
-]
+export type GroupTargetAccessResult = { kind: 'ok' } | { kind: 'not_admin' } | { kind: 'not_authorized' }
+
+const getMatchCandidates = (group: KnownGroupContext): readonly string[] => {
+  if (group.parentName === null) {
+    return [group.displayName, '', group.displayName]
+  }
+
+  return [group.displayName, group.parentName, `${group.parentName} / ${group.displayName}`]
+}
 
 export function listManageableGroups(userId: string): KnownGroupContext[] {
   log.debug({ userId }, 'listManageableGroups called')
 
-  const groups = listAdminGroupContextsForUser(userId)
+  const groups = listAdminGroupContextsForUser(userId).filter((group) => isAuthorizedGroup(group.contextId))
 
   log.debug({ userId, groupCount: groups.length }, 'Listed manageable groups')
   return groups
+}
+
+export function validateGroupTargetAccess(userId: string, groupId: string): GroupTargetAccessResult {
+  const adminGroups = listAdminGroupContextsForUser(userId)
+  const isKnownAdmin = adminGroups.some((group) => group.contextId === groupId)
+  if (!isKnownAdmin) {
+    return { kind: 'not_admin' }
+  }
+
+  if (!isAuthorizedGroup(groupId)) {
+    return { kind: 'not_authorized' }
+  }
+
+  return { kind: 'ok' }
 }
 
 export function matchManageableGroup(userId: string, query: string): GroupMatchResult {

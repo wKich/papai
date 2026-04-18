@@ -58,6 +58,24 @@ describe('buildPromptWithReplyContext', () => {
     expect(result).toContain('[Quoted text: "Important detail here"]')
   })
 
+  test('includes truncation note when quotedTextTruncated=true', () => {
+    const msg = makeDmMessage({
+      text: 'Is this the right task?',
+      replyContext: {
+        messageId: 'msg123',
+        authorUsername: 'alice',
+        text: 'Full message text here',
+        quotedText: 'B'.repeat(1024),
+        quotedTextTruncated: true,
+      },
+    })
+
+    const result = buildPromptWithReplyContext(msg)
+
+    expect(result).toContain('[Quoted text (truncated')
+    expect(result).not.toContain('[Quoted text: "')
+  })
+
   test('includes chain summary', () => {
     const msg = makeDmMessage({
       text: 'Follow-up question',

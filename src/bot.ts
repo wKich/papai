@@ -1,6 +1,7 @@
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './auth.js'
-import { supportsInteractiveButtons } from './chat/capabilities.js'
-import { handleConfigEditorMessage } from './chat/config-editor-integration.js'
+import { emitReplyCompletedIfNeeded, trackReplyUsage } from './bot-reply-tracking.js'
+import { maybeInterceptWizard } from './bot-settings.js'
+import { supportsFileReplies, supportsInteractiveButtons } from './chat/capabilities.js'
 import { routeInteraction } from './chat/interaction-router.js'
 import type { AuthorizationResult, ChatProvider, IncomingFile, IncomingMessage, ReplyFn } from './chat/types.js'
 import {
@@ -16,78 +17,115 @@ import {
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
 import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
-import { dispatchGroupSelectorResult } from './group-settings/dispatch.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
-import { handleGroupSettingsSelectorMessage } from './group-settings/selector.js'
-import { getActiveGroupSettingsTarget } from './group-settings/state.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
 import { enqueueMessage } from './message-queue/index.js'
+import type { CoalescedItem as QueuedCoalescedItem } from './message-queue/index.js'
 import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
-import { handleWizardMessage } from './wizard-integration.js'
 import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
-
+type ProcessMessageFn = (
+  reply: ReplyFn,
+  contextId: string,
+  chatUserId: string,
+  username: string | null,
+  userText: string,
+  contextType: 'dm' | 'group',
+  configContextId: string | undefined,
+) => Promise<void>
 export interface BotDeps {
-  processMessage: (
-    reply: ReplyFn,
-    contextId: string,
-    chatUserId: string,
-    username: string | null,
-    userText: string,
-    contextType: 'dm' | 'group',
-  ) => Promise<void>
+  processMessage: ProcessMessageFn
 }
-
 const defaultBotDeps: BotDeps = { processMessage: defaultProcessMessage }
 const log = logger.child({ scope: 'bot' })
-
-const checkAuthorization = (userId: string, username?: string | null): boolean => {
+const checkAuthorization = (userId: string, username: string | null | undefined): boolean => {
   log.debug({ userId }, 'Checking authorization')
   if (isAuthorized(userId)) return true
   if (username !== undefined && username !== null && resolveUserByUsername(userId, username)) return true
   log.warn({ attemptedUserId: userId }, 'Unauthorized access attempt')
   return false
 }
-
 export { checkAuthorizationExtended, getThreadScopedStorageContextId }
-
-function registerCommands(chat: ChatProvider, adminUserId: string): void {
-  const orig = chat.registerCommand.bind(chat)
-  const withObs =
-    (
-      h: (m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>,
-    ): ((m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>) =>
-    async (m, r, a) => {
-      if (m.contextType === 'group' && a.isGroupAdmin) recordGroupObservation(chat, m)
-      await h(m, r, a)
+function getUnauthorizedReplyText(auth: AuthorizationResult): string | null {
+  if (auth.reason === 'group_not_allowed')
+    return 'This group is not authorized to use this bot. Ask the bot admin to run `/group add <group-id>` in a DM with the bot.'
+  if (auth.reason === 'group_member_not_allowed')
+    return "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser <user-id|@username>`"
+  if (auth.reason === 'dm_not_allowed') return 'You are not authorized to use this bot.'
+  return null
+}
+async function replyToUnauthorized(reply: ReplyFn, auth: AuthorizationResult): Promise<void> {
+  const message = getUnauthorizedReplyText(auth)
+  if (message !== null) await reply.text(message)
+}
+function shouldDeferUnauthorizedDmCommand(commandName: string, msg: IncomingMessage): boolean {
+  if (msg.contextType !== 'dm') return false
+  if (commandName === 'group') return true
+  if (commandName === 'groups') return true
+  return false
+}
+function resolveMessageAuth(msg: IncomingMessage): AuthorizationResult {
+  return checkAuthorizationExtended(
+    msg.user.id,
+    msg.user.username,
+    msg.contextId,
+    msg.contextType,
+    msg.threadId,
+    msg.user.isAdmin,
+  )
+}
+function createObservedCommandHandler(
+  chat: ChatProvider,
+  commandName: string,
+  handler: (m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>,
+): (m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void> {
+  return async (msg, reply, _auth): Promise<void> => {
+    const start = Date.now()
+    const tracked = trackReplyUsage(reply, supportsFileReplies(chat))
+    const auth = resolveMessageAuth(msg)
+    if (!auth.allowed) {
+      if (shouldDeferUnauthorizedDmCommand(commandName, msg)) await handler(msg, tracked.reply, auth)
+      else await replyToUnauthorized(tracked.reply, auth)
+      emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
+      return
     }
-  const w: ChatProvider = {
+    if (msg.contextType === 'group' && auth.isGroupAdmin) recordGroupObservation(chat, msg)
+    await handler(msg, tracked.reply, auth)
+    emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
+  }
+}
+function createObservedChatProvider(chat: ChatProvider): ChatProvider {
+  const registerCommand = chat.registerCommand.bind(chat)
+  return {
     ...chat,
     registerCommand: (name, handler): void => {
-      orig(name, withObs(handler))
+      registerCommand(name, createObservedCommandHandler(chat, name, handler))
     },
   }
-  registerHelpCommand(w)
-  registerStartCommand(w)
-  registerSetupCommand(w, checkAuthorization)
-  registerConfigCommand(w, checkAuthorization)
-  registerContextCommand(w)
-  registerClearCommand(w, checkAuthorization, adminUserId)
-  registerAdminCommands(w, adminUserId)
-  registerGroupCommand(w)
 }
-
+function registerCommands(chat: ChatProvider, adminUserId: string): void {
+  const observedChat = createObservedChatProvider(chat)
+  registerHelpCommand(observedChat)
+  registerStartCommand(observedChat)
+  registerSetupCommand(observedChat, checkAuthorization)
+  registerConfigCommand(observedChat, checkAuthorization)
+  registerContextCommand(observedChat)
+  registerClearCommand(observedChat, checkAuthorization, adminUserId)
+  registerAdminCommands(observedChat, adminUserId)
+  registerGroupCommand(observedChat)
+}
 function userNeedsSetup(storageContextId: string, taskProvider: 'kaneo' | 'youtrack'): boolean {
   const config = getAllConfig(storageContextId)
   return getWizardSteps(taskProvider).some((step) => {
     if (step.isOptional === true) return false
     const value = config[step.key]
-    return value === undefined || value === ''
+    if (value === undefined) return true
+    if (value === '') return true
+    return false
   })
 }
-
 async function autoStartWizardIfNeeded(userId: string, storageContextId: string, reply: ReplyFn): Promise<boolean> {
   if (hasActiveWizard(userId, storageContextId)) return false
   if (process.env['DEMO_MODE'] === 'true' && isDemoUser(userId)) return false
@@ -97,46 +135,32 @@ async function autoStartWizardIfNeeded(userId: string, storageContextId: string,
   if (result.success) await reply.text(result.prompt)
   return result.success
 }
-
-async function processCoalescedMessage(
-  coalescedItem: {
-    text: string
-    userId: string
-    username: string | null
-    storageContextId: string
-    contextType: 'dm' | 'group'
-    files: readonly IncomingFile[]
-    reply: ReplyFn
-  },
-  deps: BotDeps,
-): Promise<void> {
+async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps: BotDeps): Promise<void> {
   const start = Date.now()
-  coalescedItem.reply.typing()
-  if (coalescedItem.files.length > 0) {
-    storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
-  } else {
-    clearIncomingFiles(coalescedItem.storageContextId)
-  }
-
+  const tracked = trackReplyUsage(coalescedItem.reply, true)
+  if (coalescedItem.files.length > 0) storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
+  else clearIncomingFiles(coalescedItem.storageContextId)
   try {
+    tracked.reply.typing()
     await deps.processMessage(
-      coalescedItem.reply,
+      tracked.reply,
       coalescedItem.storageContextId,
       coalescedItem.userId,
       coalescedItem.username,
       coalescedItem.text,
       coalescedItem.contextType,
+      coalescedItem.configContextId,
     )
   } finally {
     clearIncomingFiles(coalescedItem.storageContextId)
-    emit('message:replied', {
-      userId: coalescedItem.userId,
-      contextId: coalescedItem.storageContextId,
-      duration: Date.now() - start,
-    })
+    emitReplyCompletedIfNeeded(tracked, coalescedItem.userId, coalescedItem.storageContextId, start)
   }
 }
-
+function shouldIgnoreGroupMessage(msg: IncomingMessage): boolean {
+  if (msg.contextType !== 'group') return false
+  if (msg.commandMatch !== undefined && msg.commandMatch !== '') return false
+  return !msg.isMentioned
+}
 async function handleMessage(
   msg: IncomingMessage,
   reply: ReplyFn,
@@ -144,77 +168,33 @@ async function handleMessage(
   deps: BotDeps,
 ): Promise<void> {
   if (!auth.allowed) {
-    if (msg.isMentioned) {
-      await reply.text(
-        "You're not authorized to use this bot in this group. Ask a group admin to add you with `/group adduser @{username}`",
-      )
-    }
+    if (msg.isMentioned) await replyToUnauthorized(reply, auth)
     return
   }
-
-  if (msg.contextType === 'group' && (msg.commandMatch === undefined || msg.commandMatch === '') && !msg.isMentioned)
-    return
-
-  const queueItem = {
-    text: buildPromptWithReplyContext(msg),
-    userId: msg.user.id,
-    username: msg.user.username,
-    storageContextId: auth.storageContextId,
-    contextType: msg.contextType,
-    files: msg.files ?? [],
-  }
-
-  enqueueMessage(queueItem, reply, (coalescedItem) => processCoalescedMessage(coalescedItem, deps))
-}
-
-async function maybeInterceptWizard(
-  msg: IncomingMessage,
-  reply: ReplyFn,
-  auth: AuthorizationResult,
-  interactiveButtons: boolean,
-): Promise<boolean> {
-  const isCommand = msg.text.startsWith('/')
-
-  if (!isCommand && msg.contextType === 'dm') {
-    const selection = handleGroupSettingsSelectorMessage(msg.user.id, msg.text, interactiveButtons)
-    if (await dispatchGroupSelectorResult(selection, reply, msg.user.id, interactiveButtons)) {
-      return true
-    }
-  }
-
-  const settingsTargetContextId =
-    msg.contextType === 'dm'
-      ? (getActiveGroupSettingsTarget(msg.user.id) ?? auth.storageContextId)
-      : auth.storageContextId
-
-  if (
-    !isCommand &&
-    auth.allowed &&
-    (await handleConfigEditorMessage(msg.user.id, settingsTargetContextId, msg.text, reply))
+  if (shouldIgnoreGroupMessage(msg)) return
+  let files: readonly IncomingFile[] = []
+  if (msg.files !== undefined) files = msg.files
+  enqueueMessage(
+    {
+      text: buildPromptWithReplyContext(msg),
+      userId: msg.user.id,
+      username: msg.user.username,
+      storageContextId: auth.storageContextId,
+      configContextId: auth.configContextId,
+      contextType: msg.contextType,
+      files,
+    },
+    reply,
+    (coalescedItem): Promise<void> => processCoalescedMessage(coalescedItem, deps),
   )
-    return true
-
-  if (
-    !isCommand &&
-    (await handleWizardMessage(msg.user.id, settingsTargetContextId, msg.text, reply, interactiveButtons))
-  )
-    return true
-
-  if (!isCommand && auth.allowed && (await autoStartWizardIfNeeded(msg.user.id, auth.storageContextId, reply)))
-    return true
-
-  return false
 }
-
 function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void {
-  if (msg.contextType !== 'group') return
-  if ((msg.commandMatch === undefined || msg.commandMatch === '') && !msg.isMentioned) return
-  upsertKnownGroupContext({
-    contextId: msg.contextId,
-    provider: chat.name,
-    displayName: msg.contextName ?? msg.contextId,
-    parentName: msg.contextParentName ?? null,
-  })
+  if (msg.contextType !== 'group' || shouldIgnoreGroupMessage(msg)) return
+  let displayName = msg.contextId
+  if (msg.contextName !== undefined) displayName = msg.contextName
+  let parentName: string | null = null
+  if (msg.contextParentName !== undefined) parentName = msg.contextParentName
+  upsertKnownGroupContext({ contextId: msg.contextId, provider: chat.name, displayName, parentName })
   upsertGroupAdminObservation({
     contextId: msg.contextId,
     userId: msg.user.id,
@@ -222,13 +202,20 @@ function recordGroupObservation(chat: ChatProvider, msg: IncomingMessage): void 
     isAdmin: msg.user.isAdmin,
   })
 }
-
+function willQueueAuthorizedMessage(msg: IncomingMessage, auth: AuthorizationResult): boolean {
+  if (!auth.allowed) return false
+  if (msg.contextType !== 'group') return true
+  if (msg.commandMatch !== undefined) return true
+  return msg.isMentioned
+}
 async function onIncomingMessage(
   chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   deps: BotDeps,
 ): Promise<void> {
+  const start = Date.now()
+  const tracked = trackReplyUsage(reply, supportsFileReplies(chat))
   emit('message:received', {
     userId: msg.user.id,
     contextId: msg.contextId,
@@ -237,16 +224,7 @@ async function onIncomingMessage(
     textLength: msg.text.length,
     isCommand: msg.text.startsWith('/'),
   })
-  recordGroupObservation(chat, msg)
-  const auth = checkAuthorizationExtended(
-    msg.user.id,
-    msg.user.username,
-    msg.contextId,
-    msg.contextType,
-    msg.threadId,
-    msg.user.isAdmin,
-  )
-
+  const auth = resolveMessageAuth(msg)
   emit('auth:check', {
     userId: msg.user.id,
     allowed: auth.allowed,
@@ -254,45 +232,52 @@ async function onIncomingMessage(
     isGroupAdmin: auth.isGroupAdmin,
     storageContextId: auth.storageContextId,
   })
-  const interactiveButtons = supportsInteractiveButtons(chat)
-  if (await maybeInterceptWizard(msg, reply, auth, interactiveButtons)) return
-
-  const start = Date.now()
+  if (auth.allowed) recordGroupObservation(chat, msg)
+  if (await maybeInterceptWizard(msg, tracked.reply, auth, supportsInteractiveButtons(chat), autoStartWizardIfNeeded)) {
+    emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
+    return
+  }
+  const willQueue = willQueueAuthorizedMessage(msg, auth)
+  await handleMessage(msg, tracked.reply, auth, deps)
+  if (!willQueue) emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
+}
+type InteractionHandler = NonNullable<ChatProvider['onInteraction']>
+type IncomingInteractionHandler = Parameters<InteractionHandler>[0]
+type IncomingInteraction = Parameters<IncomingInteractionHandler>[0]
+async function routeIncomingInteraction(interaction: IncomingInteraction, reply: ReplyFn): Promise<void> {
   try {
-    await handleMessage(msg, reply, auth, deps)
-  } finally {
-    emit('message:replied', {
-      userId: msg.user.id,
-      contextId: msg.contextId,
-      duration: Date.now() - start,
-    })
+    const auth = checkAuthorizationExtended(
+      interaction.user.id,
+      interaction.user.username,
+      interaction.contextId,
+      interaction.contextType,
+      interaction.threadId,
+      interaction.user.isAdmin,
+    )
+    if (!auth.allowed) {
+      await replyToUnauthorized(reply, auth)
+      return
+    }
+    await routeInteraction(interaction, reply, auth)
+  } catch (error) {
+    logger.error(
+      {
+        callbackData: interaction.callbackData,
+        userId: interaction.user.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'Interaction routing failed',
+    )
+    await reply.text('❌ Something went wrong processing your action. Please try again.')
   }
 }
-
-export function setupBot(chat: ChatProvider, adminUserId: string, deps: BotDeps = defaultBotDeps): void {
+export function setupBot(chat: ChatProvider, adminUserId: string): void
+export function setupBot(chat: ChatProvider, adminUserId: string, depsInput: BotDeps): void
+export function setupBot(chat: ChatProvider, adminUserId: string, ...rest: [] | [BotDeps]): void {
+  const deps = rest.length === 0 ? defaultBotDeps : rest[0]
   registerCommands(chat, adminUserId)
-  chat.onMessage((msg, reply) => onIncomingMessage(chat, msg, reply, deps))
-  chat.onInteraction?.(async (interaction, reply) => {
-    try {
-      const auth = checkAuthorizationExtended(
-        interaction.user.id,
-        interaction.user.username,
-        interaction.contextId,
-        interaction.contextType,
-        interaction.threadId,
-        interaction.user.isAdmin,
-      )
-      await routeInteraction(interaction, reply, auth)
-    } catch (error) {
-      logger.error(
-        {
-          callbackData: interaction.callbackData,
-          userId: interaction.user.id,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'Interaction routing failed',
-      )
-      await reply.text('❌ Something went wrong processing your action. Please try again.')
-    }
-  })
+  chat.onMessage((msg, reply): Promise<void> => onIncomingMessage(chat, msg, reply, deps))
+  const onInteraction = chat.onInteraction
+  if (onInteraction !== undefined)
+    onInteraction((interaction, reply): Promise<void> => routeIncomingInteraction(interaction, reply))
 }

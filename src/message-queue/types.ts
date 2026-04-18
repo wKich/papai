@@ -1,20 +1,32 @@
 import type { ContextType, IncomingFile, ReplyFn } from '../chat/types.js'
 
-export interface QueueItem {
-  readonly text: string
-  readonly userId: string
-  readonly username: string | null
-  readonly storageContextId: string
-  readonly contextType: ContextType
-  readonly files: readonly IncomingFile[]
-}
+type QueueContextInfo = Readonly<{
+  contextType: ContextType
+}>
 
-export interface CoalescedItem {
-  readonly text: string
-  readonly userId: string
-  readonly username: string | null
-  readonly storageContextId: string
-  readonly contextType: ContextType
-  readonly files: readonly IncomingFile[]
-  readonly reply: ReplyFn
-}
+type QueueConfigContextInfo = Partial<
+  Readonly<{
+    configContextId: string | undefined
+  }>
+>
+
+export type QueueItem = Readonly<{
+  text: string
+  userId: string
+  username: string | null
+  storageContextId: string
+  files: readonly IncomingFile[]
+}> &
+  QueueContextInfo &
+  QueueConfigContextInfo
+
+export type CoalescedItem = Readonly<{
+  text: string
+  userId: string
+  username: string | null
+  storageContextId: string
+  files: readonly IncomingFile[]
+  reply: ReplyFn
+}> &
+  QueueContextInfo &
+  QueueConfigContextInfo

@@ -107,7 +107,10 @@ export class MessageQueue {
 
     const texts: string[] = []
     const allFiles: IncomingFile[] = []
-    const lastMessage = this.messages[this.messages.length - 1]!
+    const lastMessage = this.messages.at(-1)
+    if (lastMessage === undefined) {
+      return null
+    }
     const reply = lastMessage.reply
 
     for (const msg of this.messages) {
@@ -126,6 +129,7 @@ export class MessageQueue {
       userId: lastMessage.item.userId,
       username: lastMessage.item.username,
       storageContextId: this.storageContextId,
+      configContextId: lastMessage.item.configContextId,
       contextType: lastMessage.item.contextType,
       files: allFiles,
       reply,

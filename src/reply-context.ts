@@ -78,7 +78,11 @@ function buildReplyContextLines(msg: IncomingMessage): string[] {
   }
 
   if (msg.replyContext.quotedText !== undefined) {
-    lines.push(`[Quoted text: "${msg.replyContext.quotedText}"]`)
+    const label =
+      msg.replyContext.quotedTextTruncated === true
+        ? 'Quoted text (truncated — see full message in reply context above)'
+        : 'Quoted text'
+    lines.push(`[${label}: "${msg.replyContext.quotedText}"]`)
   }
 
   if (msg.replyContext.chainSummary !== undefined && msg.replyContext.chainSummary !== '') {

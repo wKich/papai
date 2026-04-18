@@ -1,4 +1,3 @@
-import { supportsFileReplies } from '../chat/capabilities.js'
 import type { ChatCapability, ChatProvider, CommandHandler, ContextType } from '../chat/types.js'
 import { logger } from '../logger.js'
 
@@ -12,6 +11,7 @@ const DM_USER_HELP = [
   '/setup — Interactive configuration wizard for personal or group settings',
   '/config — View or edit personal settings, or choose a group to configure from DM',
   '/clear — Clear conversation history and memory',
+  '/context — Show current memory context (summary and known entities)',
   '',
   'Any other message is sent to the AI assistant.',
 ].join('\n')
@@ -19,10 +19,12 @@ const DM_USER_HELP = [
 const DM_ADMIN_HELP = [
   '',
   'Admin commands:',
-  '/context — Show current memory context (summary and known entities)',
   '/user add <id|@username> — Authorize a user',
   '/user remove <id|@username> — Revoke access',
   '/users — List authorized users',
+  '/group add <group-id> — Authorize a group',
+  '/group remove <group-id> — Revoke group access',
+  '/groups — List authorized groups',
   "/clear <user_id> — Clear a specific user's history",
   "/clear all — Clear all users' history",
   '/announce <message> — Send announcement to all users',
@@ -38,8 +40,8 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
     '',
     'Group commands:',
     '/help — Show this message',
-    '/group adduser <@username> — Add member to group',
-    '/group deluser <@username> — Remove member from group',
+    '/group adduser <user-id|@username> — Add member to group',
+    '/group deluser <user-id|@username> — Remove member from group',
     '/group users — List group members',
     '',
     'Mention me with @botname for natural language queries',
@@ -52,6 +54,7 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
       '/clear — Clear group conversation history',
       '',
       'Group settings are configured in DM with the bot.',
+      'The group must be authorized before it can use the bot in the group chat.',
     ].join('\n')
   }
 
@@ -59,17 +62,11 @@ function getGroupHelpText(isGroupAdmin: boolean): string {
 }
 
 export function buildHelpText(
-  capabilities: ReadonlySet<ChatCapability>,
+  _capabilities: ReadonlySet<ChatCapability>,
   contextType: ContextType,
   opts: { isBotAdmin: boolean; isGroupAdmin: boolean },
 ): string {
-  let helpText = contextType === 'dm' ? getDmHelpText(opts.isBotAdmin) : getGroupHelpText(opts.isGroupAdmin)
-
-  if (!supportsFileReplies({ capabilities }) && opts.isBotAdmin) {
-    helpText += '\n\nNote: `/context` export is deferred on this platform.'
-  }
-
-  return helpText
+  return contextType === 'dm' ? getDmHelpText(opts.isBotAdmin) : getGroupHelpText(opts.isGroupAdmin)
 }
 
 export function registerHelpCommand(chat: ChatProvider): void {

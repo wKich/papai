@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
+import { addAuthorizedGroup } from '../../src/authorized-groups.js'
 import type { ChatButton } from '../../src/chat/types.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../src/group-settings/registry.js'
 import {
@@ -73,6 +74,7 @@ describe('group settings selector', () => {
       displayName: 'Operations',
       parentName: 'Platform',
     })
+    addAuthorizedGroup('group-1', 'admin-id')
     upsertGroupAdminObservation({
       contextId: 'group-1',
       userId: 'user-1',

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { clearCachedTools } from '../../cache.js'
+import { _userCaches, clearCachedTools } from '../../cache.js'
 import type { ReplyFn } from '../../chat/types.js'
 import { copyAdminLlmConfig, getConfig, isMissingLlmConfig, setConfig } from '../../config.js'
 import { logger } from '../../logger.js'
@@ -24,9 +24,26 @@ type ProvisionResult = {
   workspaceId: string
 }
 
+const REGISTRATION_DISABLED_MARKERS = ['signup_disabled', 'registration disabled', 'sign up is disabled'] as const
+
 function generatePassword(): string {
   const uuid = crypto.randomUUID().replaceAll('-', '')
   return `${uuid.slice(0, 20)}Aa1!`
+}
+
+function isRegistrationDisabledErrorMessage(message: string): boolean {
+  const normalizedMessage = message.toLowerCase()
+  return REGISTRATION_DISABLED_MARKERS.some((marker) => normalizedMessage.includes(marker))
+}
+
+function clearProvisionedContextToolCaches(contextId: string): void {
+  clearCachedTools(contextId)
+  const groupScopedPrefix = `${contextId}:`
+  for (const cacheKey of _userCaches.keys()) {
+    if (cacheKey.startsWith(groupScopedPrefix)) {
+      clearCachedTools(cacheKey)
+    }
+  }
 }
 
 async function doSignUp(baseUrl: string, email: string, password: string, name: string): Promise<string> {
@@ -58,8 +75,16 @@ async function doSignUp(baseUrl: string, email: string, password: string, name: 
   // better-auth may not set a cookie when called from a server-side context
   // (e.g. behind a reverse proxy with no client IP). Fall back to constructing
   // the cookie from the token returned in the JSON body.
-  // Use the __Secure- prefix when the endpoint is HTTPS, matching better-auth behaviour.
-  const cookieName = baseUrl.startsWith('https://') ? '__Secure-better-auth.session_token' : 'better-auth.session_token'
+  // Use the public/auth-facing URL to decide whether better-auth would emit a
+  // secure-prefixed cookie. Internal API traffic may be HTTP behind a proxy.
+  let publicAuthUrl = baseUrl
+  const configuredClientUrl = process.env['KANEO_CLIENT_URL']
+  if (configuredClientUrl !== undefined) {
+    publicAuthUrl = configuredClientUrl
+  }
+  const cookieName = publicAuthUrl.startsWith('https://')
+    ? '__Secure-better-auth.session_token'
+    : 'better-auth.session_token'
   log.debug({ email, cookieName }, 'No session cookie in sign-up response; constructing from JSON token')
   return `${cookieName}=${parsed.data.token}`
 }
@@ -116,7 +141,7 @@ export async function provisionKaneoUser(
   platformUserId: string,
   username: string | null,
 ): Promise<ProvisionResult> {
-  const uniqueSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const uniqueSuffix = crypto.randomUUID().replaceAll('-', '').slice(0, 8)
   const email = username === null ? `${platformUserId}-${uniqueSuffix}@pap.ai` : `${username}-${uniqueSuffix}@pap.ai`
   const password = generatePassword()
   const name = username === null ? `User ${platformUserId}` : `@${username}`
@@ -150,11 +175,15 @@ export async function provisionAndConfigure(userId: string, username: string | n
   if (kaneoUrl === undefined) return { status: 'failed', error: 'KANEO_CLIENT_URL not set' }
 
   try {
-    const kaneoInternalUrl = process.env['KANEO_INTERNAL_URL'] ?? kaneoUrl
+    let kaneoInternalUrl = kaneoUrl
+    const configuredInternalUrl = process.env['KANEO_INTERNAL_URL']
+    if (configuredInternalUrl !== undefined) {
+      kaneoInternalUrl = configuredInternalUrl
+    }
     const result = await provisionKaneoUser(kaneoInternalUrl, kaneoUrl, userId, username)
     setConfig(userId, 'kaneo_apikey', result.kaneoKey)
     setKaneoWorkspace(userId, result.workspaceId)
-    clearCachedTools(userId)
+    clearProvisionedContextToolCaches(userId)
     log.info({ userId }, 'Kaneo account provisioned and configured')
     return {
       status: 'provisioned',
@@ -166,9 +195,8 @@ export async function provisionAndConfigure(userId: string, username: string | n
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    const isRegistrationDisabled = msg.includes('sign-up') || msg.includes('registration') || msg.includes('Sign-up')
     log.warn({ userId, error: msg }, 'Kaneo provisioning failed')
-    if (isRegistrationDisabled) return { status: 'registration_disabled' }
+    if (isRegistrationDisabledErrorMessage(msg)) return { status: 'registration_disabled' }
     return { status: 'failed', error: msg }
   }
 }
@@ -181,7 +209,11 @@ const provLog = logger.child({ scope: 'kaneo:auto-provision' })
  * Skips auto-provisioning if TASK_PROVIDER is not 'kaneo'.
  */
 export async function maybeProvisionKaneo(reply: ReplyFn, contextId: string, username: string | null): Promise<void> {
-  const taskProvider = process.env['TASK_PROVIDER'] ?? 'kaneo'
+  let taskProvider = 'kaneo'
+  const configuredTaskProvider = process.env['TASK_PROVIDER']
+  if (configuredTaskProvider !== undefined) {
+    taskProvider = configuredTaskProvider
+  }
   if (taskProvider !== 'kaneo') {
     return
   }

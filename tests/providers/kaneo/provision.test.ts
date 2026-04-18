@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { _userCaches } from '../../../src/cache.js'
-import { maybeProvisionKaneo, provisionKaneoUser } from '../../../src/providers/kaneo/provision.js'
+import { _userCaches, getCachedTools, setCachedTools } from '../../../src/cache.js'
+import { isKaneoSessionCookie } from '../../../src/providers/kaneo/client.js'
+import {
+  maybeProvisionKaneo,
+  provisionAndConfigure,
+  provisionKaneoUser,
+} from '../../../src/providers/kaneo/provision.js'
+import { createProvider } from '../../../src/providers/registry.js'
 import { mockLogger, restoreFetch, setMockFetch, setupTestDb } from '../../utils/test-helpers.js'
 
 function parseBody(body: unknown): unknown {
@@ -22,9 +28,9 @@ describe('provisionKaneoUser - unique email generation', () => {
     const capturedEmails: string[] = []
     const capturedSlugs: string[] = []
 
-    setMockFetch((url: string, init?: RequestInit) => {
+    setMockFetch((url: string, init: RequestInit | undefined) => {
       if (url.includes('/sign-up')) {
-        const body = parseBody(init?.body)
+        const body = init === undefined ? {} : parseBody(init.body)
         if (typeof body === 'object' && body !== null && 'email' in body && typeof body.email === 'string') {
           capturedEmails.push(body.email)
         }
@@ -38,7 +44,7 @@ describe('provisionKaneoUser - unique email generation', () => {
       }
 
       if (url.includes('/organization/create')) {
-        const body = parseBody(init?.body)
+        const body = init === undefined ? {} : parseBody(init.body)
         let slug = 'test-slug'
         if (typeof body === 'object' && body !== null && 'slug' in body && typeof body.slug === 'string') {
           capturedSlugs.push(body.slug)
@@ -79,9 +85,9 @@ describe('provisionKaneoUser - unique email generation', () => {
   test('generates email with username when provided', async () => {
     let capturedEmail = ''
 
-    setMockFetch((url: string, init?: RequestInit) => {
+    setMockFetch((url: string, init: RequestInit | undefined) => {
       if (url.includes('/sign-up')) {
-        const body = parseBody(init?.body)
+        const body = init === undefined ? {} : parseBody(init.body)
         if (typeof body === 'object' && body !== null && 'email' in body && typeof body.email === 'string') {
           capturedEmail = body.email
         }
@@ -137,6 +143,213 @@ describe('provisionKaneoUser - unique email generation', () => {
     expect(result.workspaceId).toBe('ws-abc')
     expect(result.kaneoKey).toBe('test-api-key')
     expect(result.email).toMatch(/999-[a-z0-9]{8}@pap\.ai$/i)
+  })
+
+  test('preserves __Secure session cookie fallback from Set-Cookie for downstream use', async () => {
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: { id: 'user-123' }, token: 'json-token-123' }), {
+            status: 200,
+            headers: { 'Set-Cookie': '__Secure-better-auth.session_token=secure-cookie-123; Path=/; HttpOnly; Secure' },
+          }),
+        )
+      }
+
+      if (url.includes('/organization/create')) {
+        return Promise.resolve(new Response(JSON.stringify({ id: 'ws-secure', slug: 'papai-secure' }), { status: 200 }))
+      }
+
+      if (url.includes('/api-key/create')) {
+        return Promise.resolve(new Response('missing endpoint', { status: 404 }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionKaneoUser('https://kaneo.test', 'https://kaneo.test', 'secure-user', null)
+
+    expect(result.kaneoKey).toBe('__Secure-better-auth.session_token=secure-cookie-123')
+    expect(isKaneoSessionCookie(result.kaneoKey)).toBe(true)
+
+    const provider = createProvider('kaneo', {
+      baseUrl: 'https://kaneo.test',
+      sessionCookie: result.kaneoKey,
+      workspaceId: result.workspaceId,
+    })
+    let capturedHeaders: Record<string, string> = {}
+    setMockFetch((_url, options) => {
+      const headers = options === undefined ? {} : options.headers
+      let headerEntries: Iterable<[string, string]> = []
+      if (headers instanceof Headers) {
+        headerEntries = headers.entries()
+      } else if (headers !== undefined) {
+        headerEntries = Object.entries(headers)
+      }
+      capturedHeaders = Object.fromEntries(headerEntries)
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+    })
+
+    if (provider.listProjects === undefined) {
+      throw new Error('Expected Kaneo provider to support listProjects')
+    }
+
+    await provider.listProjects()
+
+    expect(capturedHeaders['Cookie']).toBe('__Secure-better-auth.session_token=secure-cookie-123')
+    expect(capturedHeaders['Authorization']).toBeUndefined()
+  })
+
+  test('constructs session cookie from JSON token when Set-Cookie is absent for downstream use', async () => {
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: { id: 'user-123' }, token: 'json-token-456' }), {
+            status: 200,
+          }),
+        )
+      }
+
+      if (url.includes('/organization/create')) {
+        return Promise.resolve(new Response(JSON.stringify({ id: 'ws-json', slug: 'papai-json' }), { status: 200 }))
+      }
+
+      if (url.includes('/api-key/create')) {
+        return Promise.resolve(new Response('missing endpoint', { status: 404 }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionKaneoUser('https://kaneo.test', 'https://kaneo.test', 'json-user', null)
+
+    expect(result.kaneoKey).toBe('__Secure-better-auth.session_token=json-token-456')
+    expect(isKaneoSessionCookie(result.kaneoKey)).toBe(true)
+
+    const provider = createProvider('kaneo', {
+      baseUrl: 'https://kaneo.test',
+      sessionCookie: result.kaneoKey,
+      workspaceId: result.workspaceId,
+    })
+    let capturedHeaders: Record<string, string> = {}
+    setMockFetch((_url, options) => {
+      const headers = options === undefined ? {} : options.headers
+      let headerEntries: Iterable<[string, string]> = []
+      if (headers instanceof Headers) {
+        headerEntries = headers.entries()
+      } else if (headers !== undefined) {
+        headerEntries = Object.entries(headers)
+      }
+      capturedHeaders = Object.fromEntries(headerEntries)
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+    })
+
+    if (provider.listProjects === undefined) {
+      throw new Error('Expected Kaneo provider to support listProjects')
+    }
+
+    await provider.listProjects()
+
+    expect(capturedHeaders['Cookie']).toBe('__Secure-better-auth.session_token=json-token-456')
+    expect(capturedHeaders['Authorization']).toBeUndefined()
+  })
+
+  test('uses public Kaneo URL to choose secure cookie prefix in split deployments without Set-Cookie', async () => {
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: { id: 'user-123' }, token: 'json-token-split' }), {
+            status: 200,
+          }),
+        )
+      }
+
+      if (url.includes('/organization/create')) {
+        return Promise.resolve(new Response(JSON.stringify({ id: 'ws-split', slug: 'papai-split' }), { status: 200 }))
+      }
+
+      if (url.includes('/api-key/create')) {
+        return Promise.resolve(new Response('missing endpoint', { status: 404 }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionKaneoUser('http://kaneo-internal:1337', 'https://kaneo.test', 'split-user', null)
+
+    expect(result.kaneoKey).toBe('__Secure-better-auth.session_token=json-token-split')
+  })
+
+  test('provisionAndConfigure returns registration_disabled for explicit sign-up disabled responses', async () => {
+    process.env['KANEO_CLIENT_URL'] = 'https://kaneo.test'
+
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ code: 'signup_disabled', message: 'Sign up is disabled' }), { status: 403 }),
+        )
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionAndConfigure('user-disabled', 'testuser')
+
+    expect(result).toEqual({ status: 'registration_disabled' })
+  })
+
+  test('provisionAndConfigure keeps generic sign-up failures as failed', async () => {
+    process.env['KANEO_CLIENT_URL'] = 'https://kaneo.test'
+
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(new Response('database unavailable', { status: 500 }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionAndConfigure('user-generic-failure', 'testuser')
+
+    expect(result).toEqual({ status: 'failed', error: 'Sign-up failed (500): database unavailable' })
+  })
+
+  test('provisionAndConfigure clears all group-scoped tool cache variants after success', async () => {
+    process.env['KANEO_CLIENT_URL'] = 'https://kaneo.test'
+
+    setCachedTools('group-1', { scope: 'base' })
+    setCachedTools('group-1:user-a', { scope: 'user-a' })
+    setCachedTools('group-1:user-b', { scope: 'user-b' })
+    setCachedTools('group-2:user-c', { scope: 'other-group' })
+
+    setMockFetch((url: string) => {
+      if (url.includes('/sign-up')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: { id: 'user-123' }, token: 'session-token' }), {
+            status: 200,
+            headers: { 'Set-Cookie': 'better-auth.session_token=abc123; Path=/; HttpOnly' },
+          }),
+        )
+      }
+
+      if (url.includes('/organization/create')) {
+        return Promise.resolve(new Response(JSON.stringify({ id: 'ws-123', slug: 'test-ws' }), { status: 200 }))
+      }
+
+      if (url.includes('/api-key/create')) {
+        return Promise.resolve(new Response(JSON.stringify({ key: 'api-key-123' }), { status: 200 }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
+    })
+
+    const result = await provisionAndConfigure('group-1', null)
+
+    expect(result.status).toBe('provisioned')
+    expect(getCachedTools('group-1')).toBeUndefined()
+    expect(getCachedTools('group-1:user-a')).toBeUndefined()
+    expect(getCachedTools('group-1:user-b')).toBeUndefined()
+    expect(getCachedTools('group-2:user-c')).toEqual({ scope: 'other-group' })
   })
 })
 

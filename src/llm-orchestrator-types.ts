@@ -9,17 +9,33 @@ export interface LlmOrchestratorDeps {
   stepCountIs: typeof stepCountIs
   buildOpenAI: (apiKey: string, baseURL: string) => ReturnType<typeof createOpenAICompatible>
   buildProviderForUser: (userId: string) => TaskProvider
+  getKaneoWorkspace: (userId: string) => string | null
   maybeProvisionKaneo: (reply: ReplyFn, contextId: string, username: string | null) => Promise<void>
 }
 
-export type StepInput = {
-  text?: string
-  finishReason?: string
-  toolCalls?: Array<{ toolName: string; toolCallId: string; input: unknown }>
-  toolResults?: ReadonlyArray<{ toolCallId: string; output: unknown }>
-  content?: ReadonlyArray<unknown>
-  usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
-}
+type TokenUsage = { inputTokens: number | undefined; outputTokens: number | undefined }
+
+type StepToolCall = { toolName: string; toolCallId: string; input: unknown }
+
+type StepToolResult = { toolCallId: string; output: unknown }
+
+type StepOutputToolCall = {
+  toolName: string
+  toolCallId: string
+  args: unknown
+} & Partial<{
+  result: unknown
+  error: string
+}>
+
+export type StepInput = Partial<{
+  text: string
+  finishReason: string
+  toolCalls: Array<StepToolCall>
+  toolResults: ReadonlyArray<StepToolResult>
+  content: ReadonlyArray<unknown>
+  usage: TokenUsage
+}>
 
 export type InvokeModelArgs = {
   contextId: string
@@ -33,14 +49,9 @@ export type InvokeModelArgs = {
 
 export type StepOutput = {
   stepNumber: number
-  text?: string
-  finishReason?: string
-  toolCalls?: Array<{
-    toolName: string
-    toolCallId: string
-    args: unknown
-    result?: unknown
-    error?: string
-  }>
-  usage?: { inputTokens: number | undefined; outputTokens: number | undefined }
-}
+} & Partial<{
+  text: string
+  finishReason: string
+  toolCalls: Array<StepOutputToolCall>
+  usage: TokenUsage
+}>

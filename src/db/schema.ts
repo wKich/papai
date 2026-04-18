@@ -10,7 +10,6 @@ export const users = sqliteTable('users', {
   addedBy: text('added_by').notNull(),
   kaneoWorkspaceId: text('kaneo_workspace_id'),
 })
-
 export const userConfig = sqliteTable(
   'user_config',
   {
@@ -25,13 +24,11 @@ export const conversationHistory = sqliteTable('conversation_history', {
   userId: text('user_id').primaryKey(),
   messages: text('messages').notNull(),
 })
-
 export const memorySummary = sqliteTable('memory_summary', {
   userId: text('user_id').primaryKey(),
   summary: text('summary').notNull(),
   updatedAt: text('updated_at').notNull(),
 })
-
 export const memoryFacts = sqliteTable(
   'memory_facts',
   {
@@ -46,12 +43,10 @@ export const memoryFacts = sqliteTable(
     index('idx_memory_facts_user_lastseen').on(table.userId, table.lastSeen),
   ],
 )
-
 export const versionAnnouncements = sqliteTable('version_announcements', {
   version: text('version').primaryKey(),
   announcedAt: text('announced_at').notNull(),
 })
-
 export const groupMembers = sqliteTable(
   'group_members',
   {
@@ -68,7 +63,17 @@ export const groupMembers = sqliteTable(
     index('idx_group_members_user').on(table.userId),
   ],
 )
-
+export const authorizedGroups = sqliteTable(
+  'authorized_groups',
+  {
+    groupId: text('group_id').primaryKey(),
+    addedBy: text('added_by').notNull(),
+    addedAt: text('added_at')
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [index('idx_authorized_groups_added_by').on(table.addedBy)],
+)
 export const recurringTasks = sqliteTable(
   'recurring_tasks',
   {
@@ -102,7 +107,6 @@ export const recurringTasks = sqliteTable(
     index('idx_recurring_tasks_enabled_next').on(table.enabled, table.nextRun),
   ],
 )
-
 export const recurringTaskOccurrences = sqliteTable(
   'recurring_task_occurrences',
   {
@@ -120,7 +124,6 @@ export const recurringTaskOccurrences = sqliteTable(
     index('idx_recurring_occurrences_task').on(table.taskId),
   ],
 )
-
 export const scheduledPrompts = sqliteTable(
   'scheduled_prompts',
   {
@@ -141,7 +144,6 @@ export const scheduledPrompts = sqliteTable(
     index('idx_scheduled_prompts_status_fire').on(table.status, table.fireAt),
   ],
 )
-
 export const alertPrompts = sqliteTable(
   'alert_prompts',
   {
@@ -159,7 +161,6 @@ export const alertPrompts = sqliteTable(
   },
   (table) => [index('idx_alert_prompts_user').on(table.userId), index('idx_alert_prompts_status').on(table.status)],
 )
-
 export const taskSnapshots = sqliteTable(
   'task_snapshots',
   {
@@ -182,7 +183,6 @@ export type RecurringTaskOccurrence = typeof recurringTaskOccurrences.$inferSele
 export type ScheduledPromptRow = typeof scheduledPrompts.$inferSelect
 export type AlertPromptRow = typeof alertPrompts.$inferSelect
 export type TaskSnapshotRow = typeof taskSnapshots.$inferSelect
-
 export const userInstructions = sqliteTable(
   'user_instructions',
   {
@@ -195,9 +195,9 @@ export const userInstructions = sqliteTable(
   },
   (table) => [index('idx_user_instructions_context').on(table.contextId)],
 )
-
 export type UserInstruction = typeof userInstructions.$inferSelect
 export type GroupMember = typeof groupMembers.$inferSelect
+export type AuthorizedGroup = typeof authorizedGroups.$inferSelect
 export const messageMetadata = sqliteTable(
   'message_metadata',
   {

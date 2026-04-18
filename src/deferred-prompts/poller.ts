@@ -2,17 +2,17 @@ import pLimit from 'p-limit'
 
 import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
-import { nextCronOccurrence, parseCron } from '../cron.js'
 import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
 import type { Task } from '../providers/types.js'
 import { scheduler } from '../scheduler-instance.js'
 import { describeCondition, evaluateCondition, getEligibleAlertPrompts, updateAlertTriggerTime } from './alerts.js'
 import { alertsNeedFullTasks, enrichTasks, fetchAllTasks } from './fetch-tasks.js'
+import { finalizeAllPrompts, mergeExecutionMetadata } from './poller-scheduled.js'
 import { dispatchExecution, type BuildProviderFn } from './proactive-llm.js'
-import { advanceScheduledPrompt, completeScheduledPrompt, getScheduledPromptsDue } from './scheduled.js'
+import { getScheduledPromptsDue } from './scheduled.js'
 import { getSnapshotsForUser, updateSnapshots } from './snapshots.js'
-import type { ExecutionMetadata, ExecutionMode, ScheduledPrompt } from './types.js'
+import type { ScheduledPrompt } from './types.js'
 
 const log = logger.child({ scope: 'deferred:poller' })
 const SCHEDULED_POLL_MS = 60_000
@@ -21,6 +21,9 @@ const MAX_CONCURRENT_LLM_CALLS = 5
 const MAX_CONCURRENT_USERS = 10
 let isRunning = false
 
+// In-flight prompt tracking to prevent multiple executions if poller interval is short or task is slow
+const inFlightPrompts = new Set<string>()
+
 function formatTaskStatus(status: string | undefined): string {
   if (status === undefined) return ''
   return ` (${status})`
@@ -28,58 +31,6 @@ function formatTaskStatus(status: string | undefined): string {
 function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
   for (const r of results) {
     if (r.status === 'rejected') log.error({ error: String(r.reason) }, context)
-  }
-}
-function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
-  const parsed = parseCron(prompt.cronExpression!)
-  if (parsed === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
-    log.warn(
-      { id: prompt.id, cronExpression: prompt.cronExpression },
-      'Invalid cron expression on recurring prompt, completing',
-    )
-    return
-  }
-  const next = nextCronOccurrence(parsed, new Date(), timezone)
-  if (next === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
-    log.warn({ id: prompt.id, userId: prompt.userId }, 'Could not compute next cron occurrence, completing prompt')
-    return
-  }
-
-  advanceScheduledPrompt(prompt.id, prompt.userId, next.toISOString(), now)
-  log.info(
-    { id: prompt.id, userId: prompt.userId, nextFireAt: next.toISOString() },
-    'Recurring scheduled prompt advanced',
-  )
-}
-
-const MODE_PRIORITY: Record<ExecutionMode, number> = { lightweight: 0, context: 1, full: 2 }
-const MODE_BY_PRIORITY: ExecutionMode[] = ['lightweight', 'context', 'full']
-function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMetadata {
-  let maxPriority = 0
-  const briefs: string[] = []
-  const snapshots: string[] = []
-  for (const p of prompts) {
-    const m = p.executionMetadata
-    maxPriority = Math.max(maxPriority, MODE_PRIORITY[m.mode])
-    if (m.delivery_brief !== '') briefs.push(m.delivery_brief)
-    if (m.context_snapshot !== null) snapshots.push(m.context_snapshot)
-  }
-  return {
-    mode: MODE_BY_PRIORITY[maxPriority]!,
-    delivery_brief: briefs.join('\n---\n'),
-    context_snapshot: snapshots.length > 0 ? snapshots.join('\n---\n') : null,
-  }
-}
-function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
-  for (const prompt of prompts) {
-    if (prompt.cronExpression === null) {
-      completeScheduledPrompt(prompt.id, prompt.userId, now)
-      log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
-    } else {
-      finalizeRecurring(prompt, now, timezone)
-    }
   }
 }
 async function executeScheduledPromptsForUser(
@@ -112,7 +63,7 @@ async function executeScheduledPromptsForUser(
 export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: BuildProviderFn): Promise<void> {
   log.debug('pollScheduledOnce called')
 
-  const duePrompts = getScheduledPromptsDue()
+  const duePrompts = getScheduledPromptsDue().filter((p) => !inFlightPrompts.has(p.id))
   emit('poller:scheduled', { dueCount: duePrompts.length })
   log.debug({ count: duePrompts.length }, 'Due scheduled prompts found')
 
@@ -120,6 +71,7 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
 
   const byUser = new Map<string, ScheduledPrompt[]>()
   for (const prompt of duePrompts) {
+    inFlightPrompts.add(prompt.id)
     const existing = byUser.get(prompt.userId)
     if (existing === undefined) {
       byUser.set(prompt.userId, [prompt])
@@ -129,12 +81,18 @@ export async function pollScheduledOnce(chat: ChatProvider, buildProviderFn: Bui
   }
 
   const limit = pLimit(MAX_CONCURRENT_LLM_CALLS)
-  const results = await Promise.allSettled(
-    [...byUser.entries()].map(([userId, prompts]) =>
-      limit((): Promise<void> => executeScheduledPromptsForUser(userId, prompts, chat, buildProviderFn)),
-    ),
-  )
-  logSettledErrors(results, 'Error executing scheduled prompts for user')
+  try {
+    const results = await Promise.allSettled(
+      [...byUser.entries()].map(([userId, prompts]) =>
+        limit((): Promise<void> => executeScheduledPromptsForUser(userId, prompts, chat, buildProviderFn)),
+      ),
+    )
+    logSettledErrors(results, 'Error executing scheduled prompts for user')
+  } finally {
+    for (const prompt of duePrompts) {
+      inFlightPrompts.delete(prompt.id)
+    }
+  }
 }
 
 async function executeSingleAlert(
