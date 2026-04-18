@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test'
 
+import type { ReplyFn } from '../src/chat/types.js'
 import { handleWizardMessage } from '../src/wizard-integration.js'
 import { createWizard } from '../src/wizard/engine.js'
 import { deleteWizardSession } from '../src/wizard/state.js'
@@ -35,5 +36,47 @@ describe('wizard-integration', () => {
     expect(handled).toBe(true)
     expect(textCalls.length).toBeGreaterThan(0)
     expect(buttonCalls.length).toBe(0)
+  })
+
+  test('calls deleteMessage when available and step is sensitive', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
+    const deletedIds: string[] = []
+    const reply: ReplyFn = {
+      ...createMockReply().reply,
+      deleteMessage: (messageId: string): Promise<void> => {
+        deletedIds.push(messageId)
+        return Promise.resolve()
+      },
+    }
+
+    const handled = await handleWizardMessage(
+      userId,
+      storageContextId,
+      'sk-test-api-key',
+      reply,
+      false,
+      undefined,
+      'msg-789',
+    )
+    expect(handled).toBe(true)
+    expect(deletedIds).toEqual(['msg-789'])
+  })
+
+  test('appends warning when deleteMessage unavailable and step is sensitive', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
+    const { reply, textCalls } = createMockReply()
+
+    const handled = await handleWizardMessage(
+      userId,
+      storageContextId,
+      'sk-test-api-key',
+      reply,
+      false,
+      undefined,
+      'msg-789',
+    )
+    expect(handled).toBe(true)
+    expect(textCalls.length).toBeGreaterThan(0)
+    expect(textCalls[0]).toContain('manually delete')
   })
 })
