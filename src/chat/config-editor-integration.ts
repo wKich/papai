@@ -1,41 +1,58 @@
-/**
- * Config Editor integration for chat handlers
- * Bridges config-editor with ReplyFn
- */
-
 import { handleEditorMessage, hasActiveEditor, serializeCallbackData } from '../config-editor/index.js'
+import { logger } from '../logger.js'
 import type { ChatButton, ReplyFn } from './types.js'
 
-/**
- * Handle a text message for config editor
- * Returns true if handled by config editor
- */
+const log = logger.child({ scope: 'config-editor-integration' })
+
+const SENSITIVE_DELETE_WARNING =
+  '\n\n⚠️ This platform does not support automatic deletion of messages. Please manually delete your previous message containing the secret value.'
+
 export async function handleConfigEditorMessage(
   userId: string,
   storageContextId: string,
   text: string,
   reply: ReplyFn,
+  messageId?: string,
 ): Promise<boolean> {
   if (!hasActiveEditor(userId, storageContextId)) {
     return false
   }
 
   const result = handleEditorMessage(userId, storageContextId, text)
+  if (!result.handled) {
+    return false
+  }
 
-  if (result.handled) {
-    const buttons = result.buttons
-    if (buttons !== undefined && buttons.length > 0) {
-      const chatButtons: ChatButton[] = buttons.map((btn) => ({
-        text: btn.text,
-        callbackData: serializeCallbackData(btn, storageContextId),
-        style: btn.style ?? 'primary',
-      }))
-      await reply.buttons(result.response ?? '', { buttons: chatButtons })
-    } else if (result.response !== undefined && result.response !== '') {
-      await reply.text(result.response)
+  let response = result.response ?? ''
+  if (result.isSensitiveKey === true) {
+    if (reply.deleteMessage !== undefined && messageId !== undefined) {
+      try {
+        await reply.deleteMessage(messageId)
+        log.info({ userId, messageId }, 'Deleted user message containing sensitive config value')
+      } catch (error) {
+        log.warn(
+          { userId, messageId, error: error instanceof Error ? error.message : String(error) },
+          'Failed to delete user message with sensitive config value',
+        )
+      }
+    } else {
+      response += SENSITIVE_DELETE_WARNING
     }
+  }
+
+  const buttons = result.buttons
+  if (buttons !== undefined && buttons.length > 0) {
+    const chatButtons: ChatButton[] = buttons.map((btn) => ({
+      text: btn.text,
+      callbackData: serializeCallbackData(btn, storageContextId),
+      style: btn.style ?? 'primary',
+    }))
+    await reply.buttons(response, { buttons: chatButtons })
     return true
   }
 
-  return false
+  if (response !== '') {
+    await reply.text(response)
+  }
+  return true
 }
