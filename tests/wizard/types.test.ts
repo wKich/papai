@@ -84,12 +84,14 @@ describe('Wizard Types', () => {
       handled: true,
       response: 'Step completed successfully',
       requiresInput: true,
+      isSensitiveKey: true,
     }
 
     expect(result1.handled).toBe(false)
     expect(result1.response).toBeUndefined()
     expect(result2.response).toBe('Step completed successfully')
     expect(result2.requiresInput).toBe(true)
+    expect(result2.isSensitiveKey).toBe(true)
   })
 
   test('WizardData restricts keys to ConfigKey', () => {

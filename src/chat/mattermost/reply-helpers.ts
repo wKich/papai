@@ -38,6 +38,9 @@ export function createMattermostReplyFn(params: MattermostReplyHelpersParams): R
         await apiFetch('PUT', `/api/v4/posts/${postId}/patch`, { message: replacementText }).catch(() => undefined)
       }
     },
+    deleteMessage: async (messageId: string) => {
+      await apiFetch('DELETE', `/api/v4/posts/${messageId}`, undefined)
+    },
     buttons: (_content: string, _options: ButtonReplyOptions): Promise<void> => {
       return Promise.reject(
         new Error(

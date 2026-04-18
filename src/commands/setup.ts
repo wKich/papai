@@ -1,5 +1,5 @@
 import { isAuthorizedGroup } from '../authorized-groups.js'
-import { supportsInteractiveButtons } from '../chat/capabilities.js'
+import { supportsInteractiveButtons, supportsMessageDeletion } from '../chat/capabilities.js'
 import type { AuthorizationResult, ChatProvider, CommandHandler, ReplyFn } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { startGroupSettingsSelection } from '../group-settings/selector.js'
@@ -13,6 +13,8 @@ const GROUP_SETUP_REDIRECT =
   'Group settings are configured in direct messages with the bot. Open a DM with me and run /setup.'
 const GROUP_SETUP_ADMIN_ONLY =
   'Only group admins can configure group settings, and group settings are configured in direct messages with the bot.'
+const NO_DELETE_WARNING =
+  '⚠️ This platform does not support automatic deletion of messages containing secrets. Please manually delete your messages after entering API keys and tokens.\n\n'
 
 function getUnauthorizedReplyText(auth: AuthorizationResult): string {
   if (auth.reason === 'group_not_allowed') {
@@ -155,6 +157,9 @@ export function registerSetupCommand(
     }
 
     log.info({ userId: msg.user.id, contextId: auth.storageContextId }, '/setup command executed')
+    if (!supportsMessageDeletion(chat)) {
+      await reply.text(NO_DELETE_WARNING)
+    }
     await replyWithSetupSelection(reply, msg.user.id, supportsInteractiveButtons(chat))
   }
 

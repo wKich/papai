@@ -378,6 +378,15 @@ describe('Wizard Engine', () => {
       expect(result.requiresInput).toBe(true)
     })
 
+    test('marks completed sensitive step with isSensitiveKey', async () => {
+      await createWizard(userId, storageContextId, 'kaneo')
+
+      const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
+
+      expect(result.handled).toBe(true)
+      expect(result.isSensitiveKey).toBe(true)
+    })
+
     test('returns requiresInput: false when complete', async () => {
       await createWizard(userId, storageContextId, 'kaneo')
 
