@@ -482,6 +482,36 @@ describe('Bot Authorization Gate (setupBot)', () => {
       }
     })
 
+    test('does not send typing for queued work before the LLM path starts', async () => {
+      addUser('auth-user', ADMIN_ID)
+      setupUserConfig('auth-user')
+
+      const typingCalls: number[] = []
+      const reply: ReplyFn = {
+        text: async (): Promise<void> => {},
+        formatted: async (): Promise<void> => {},
+        typing: (): void => {
+          typingCalls.push(Date.now())
+        },
+        buttons: async (): Promise<void> => {},
+      }
+
+      const { provider: slowChat, getMessageHandler: getSlowHandler } = createMockChatForBot()
+      setupBot(slowChat, ADMIN_ID, {
+        processMessage: async (): Promise<void> => {
+          await new Promise((resolve) => {
+            setTimeout(resolve, 100)
+          })
+        },
+      })
+
+      const messageHandler = getSlowHandler()
+      expect(messageHandler).not.toBeNull()
+
+      await messageHandler!({ ...createDmMessage('auth-user'), text: 'hello' }, reply)
+      expect(typingCalls).toHaveLength(0)
+    }, 1000)
+
     test('emits message:replied when queued authorized messages use replaceText', async () => {
       addUser('auth-user', ADMIN_ID)
       setupUserConfig('auth-user')

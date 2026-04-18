@@ -49,7 +49,7 @@ describe('MessageQueue', () => {
       expect(queue.getBufferedCount()).toBe(1)
     })
 
-    it('should show typing indicator immediately when message arrives', () => {
+    it('should not show typing indicator on enqueue', () => {
       const item: QueueItem = {
         text: 'Hello',
         userId: 'user123',
@@ -59,7 +59,7 @@ describe('MessageQueue', () => {
         files: [],
       }
       queue.enqueue(item, mockReply)
-      expect(typingSpy).toHaveBeenCalledTimes(1)
+      expect(typingSpy).toHaveBeenCalledTimes(0)
     })
 
     it('should buffer multiple items', () => {

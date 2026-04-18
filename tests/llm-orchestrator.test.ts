@@ -3,6 +3,7 @@ import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
 import { APICallError } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
 
+import type { ReplyFn } from '../src/chat/types.js'
 import type { DebugEvent } from '../src/debug/event-bus.js'
 import type { LlmOrchestratorDeps } from '../src/llm-orchestrator-types.js'
 import { processMessage } from '../src/llm-orchestrator.js'
@@ -106,6 +107,21 @@ describe('processMessage', () => {
 
   const seedConfig = (): void => seedConfigForContext(CTX_ID)
 
+  const createReplyWithTypingSpy = (): { reply: ReplyFn; textCalls: string[]; typingCalls: number[] } => {
+    const { reply: baseReply, textCalls } = createMockReply()
+    const typingCalls: number[] = []
+    return {
+      reply: {
+        ...baseReply,
+        typing: (): void => {
+          typingCalls.push(Date.now())
+        },
+      },
+      textCalls,
+      typingCalls,
+    }
+  }
+
   // Partial DI for modules that are easy to mock
   // Complex modules (ai SDK) still use mock.module
   beforeEach(async () => {
@@ -203,6 +219,20 @@ describe('processMessage', () => {
       expect(textCalls[0]).toContain('/setup')
     })
 
+    test('missing configuration does not send typing', async () => {
+      const freshCtx = 'missing-config-no-typing'
+      setCachedConfig(freshCtx, 'llm_baseurl', 'http://localhost:11434')
+      setCachedConfig(freshCtx, 'main_model', 'test-model')
+      setCachedConfig(freshCtx, 'kaneo_apikey', 'test-kaneo-key')
+      setKaneoWorkspace(freshCtx, 'workspace-1')
+
+      const { reply, textCalls, typingCalls } = createReplyWithTypingSpy()
+      await processMessage(reply, freshCtx, 'user-1', null, 'hello', 'dm')
+
+      expect(typingCalls).toHaveLength(0)
+      expect(textCalls[0]).toContain('/setup')
+    })
+
     test('missing multiple config keys lists all in reply', async () => {
       // Use a fresh user ID with only partial config
       const freshCtx = 'missing-config-2'
@@ -245,6 +275,15 @@ describe('processMessage', () => {
   })
 
   describe('LLM API error', () => {
+    test('sends typing when starting the LLM call', async () => {
+      const { reply, textCalls, typingCalls } = createReplyWithTypingSpy()
+
+      await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
+
+      expect(typingCalls.length).toBeGreaterThanOrEqual(1)
+      expect(textCalls).toContain('Hello!')
+    })
+
     test('APICallError uses the API-call-specific user reply', async () => {
       const apiError = new APICallError({
         message: 'Rate limited',

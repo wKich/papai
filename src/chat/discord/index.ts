@@ -32,7 +32,6 @@ import { discordCapabilities, discordConfigRequirements, discordTraits } from '.
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
 import { isDispatchableMessage, isGuildLike, isReadyPayload } from './type-guards.js'
-import { withTypingIndicator } from './typing-indicator.js'
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
@@ -248,7 +247,7 @@ export class DiscordChatProvider implements ChatProvider {
           mapped.contextId,
         )
       }
-      await withTypingIndicator(message.channel, () => this.messageHandler!(mapped, reply))
+      await this.messageHandler(mapped, reply)
     }
   }
 
