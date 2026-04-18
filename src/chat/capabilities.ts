@@ -21,3 +21,8 @@ export function supportsUserResolution(chat: WithCapabilities): boolean {
 export function supportsCommandMenu(chat: WithCapabilities): boolean {
   return chat.capabilities.has('commands.menu')
 }
+
+/** Returns true if the chat platform supports deleting user messages. */
+export function supportsMessageDeletion(chat: WithCapabilities): boolean {
+  return chat.capabilities.has('messages.delete')
+}

@@ -32,6 +32,7 @@ export type ChatCapability =
   | 'commands.menu'
   | 'interactions.callbacks'
   | 'messages.buttons'
+  | 'messages.delete'
   | 'messages.files'
   | 'messages.redact'
   | 'messages.reply-context'
@@ -240,6 +241,7 @@ export type ReplyFn = {
   replaceText: ReplyTextFn
   file: ReplyFileFn
   redactMessage: RedactMessageFn
+  deleteMessage: (messageId: string) => Promise<void>
   /** Replaces the current interactive message in place. Prefer only for button interaction flows; fall back to `buttons` when unavailable. */
   replaceButtons: ReplyButtonsFn
   /** Optional: send a structured embed. Only Discord implements this today. */

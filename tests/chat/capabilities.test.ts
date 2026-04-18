@@ -4,6 +4,7 @@ import {
   supportsCommandMenu,
   supportsFileReplies,
   supportsInteractiveButtons,
+  supportsMessageDeletion,
   supportsUserResolution,
 } from '../../src/chat/capabilities.js'
 import type { ChatCapability } from '../../src/chat/types.js'
@@ -50,5 +51,14 @@ describe('chat capability helpers', () => {
 
   test('supportsCommandMenu returns false when commands.menu is absent', () => {
     expect(supportsCommandMenu(withCapabilities(['messages.buttons']))).toBe(false)
+  })
+
+  test('supportsMessageDeletion returns true when messages.delete is present', () => {
+    expect(supportsMessageDeletion(withCapabilities(['messages.delete']))).toBe(true)
+  })
+
+  test('supportsMessageDeletion returns false when messages.delete is absent', () => {
+    expect(supportsMessageDeletion(withCapabilities(['messages.buttons']))).toBe(false)
+    expect(supportsMessageDeletion(withCapabilities([]))).toBe(false)
   })
 })
