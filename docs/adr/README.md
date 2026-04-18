@@ -76,6 +76,10 @@ ADRs capture the context, options considered, and rationale behind significant a
 | [0070](0070-silent-post-hooks-stop-gate.md)                    | Silent PostToolUse + Stop-Gated Full Check                           | 2026-04-16 | Implemented                           |
 | [0071](0071-wizard-deferred-fixes.md)                          | Wizard Deferred Fixes                                                | 2026-04-16 | Partially Implemented                 |
 | [0072](0072-interaction-menu-replacement.md)                   | Interaction Menu Replacement                                         | 2026-04-16 | Implemented                           |
+| [0073](0073-behavior-audit-incremental-runs.md)                | Behavior Audit Incremental Runs                                      | 2026-04-17 | Accepted                              |
+| [0074](0074-group-kaneo-provisioning.md)                       | Group Kaneo Provisioning with Explicit Authorization                 | 2026-04-17 | Accepted                              |
+| [0075](0075-sensitive-message-cleanup.md)                      | Sensitive Message Cleanup During Setup/Config                        | 2026-04-18 | Implemented                           |
+| [0076](0076-discord-thread-capabilities-documentation.md)      | Discord Thread Capabilities Documentation                            | 2026-04-18 | Implemented                           |
 
 ## Skipped / Not Written
 
