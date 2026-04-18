@@ -1,8 +1,4 @@
-/**
- * Wizard engine - core orchestration for interactive configuration setup
- */
-
-import { getAllConfig, maskValue } from '../config.js'
+import { getAllConfig, isSensitiveKey, maskValue } from '../config.js'
 import { logger } from '../logger.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 
@@ -51,7 +47,6 @@ function normalizeValue(
 ): string {
   const trimmedValue = value.trim().toLowerCase()
   if (trimmedValue === 'same' && key === 'small_model') return data['main_model'] ?? value
-  // If there's an existing value, keep it when user types "skip"
   if (trimmedValue === 'skip') return existingValue !== undefined && existingValue !== '' ? existingValue : ''
   return value.trim()
 }
@@ -63,7 +58,6 @@ export function getNextPrompt(userId: string, storageContextId: string): string 
   const step = getStepByIndex(session.taskProvider, session.currentStep)
   if (step === undefined) return 'Error: Invalid step index'
 
-  // Check if there's an existing value for this step
   const existingValue = session.data[step.key]
   if (existingValue !== undefined && existingValue !== '') {
     const maskedValue = maskValue(step.key, existingValue)
@@ -81,13 +75,52 @@ function showSummary(userId: string, storageContextId: string): string {
   return `${summary}\n\nIs this correct? (yes/confirm to save and validate, or type "edit" to review, or "cancel" to exit)`
 }
 
+function getCompletedStepSensitivity(userId: string, storageContextId: string): boolean {
+  const session = getWizardSession(userId, storageContextId)
+  if (session === null) {
+    return false
+  }
+
+  const completedStep = getStepByIndex(session.taskProvider, session.currentStep - 1)
+  return completedStep !== undefined && isSensitiveKey(completedStep.key)
+}
+
+function buildPendingWizardResponse(
+  userId: string,
+  storageContextId: string,
+  prompt: string,
+  stepIsSensitive: boolean,
+): WizardProcessResult {
+  const session = getWizardSession(userId, storageContextId)
+  if (session === null) {
+    return { handled: true, response: prompt, requiresInput: true, isSensitiveKey: stepIsSensitive }
+  }
+
+  const currentStep = getStepByIndex(session.taskProvider, session.currentStep)
+  if (currentStep === undefined) {
+    return { handled: true, response: prompt, requiresInput: true, isSensitiveKey: stepIsSensitive }
+  }
+
+  const skipButtons = buildSkipButtons(currentStep.key)
+  if (skipButtons === undefined) {
+    return { handled: true, response: prompt, requiresInput: true, isSensitiveKey: stepIsSensitive }
+  }
+
+  return {
+    handled: true,
+    response: prompt,
+    requiresInput: true,
+    buttons: skipButtons,
+    isSensitiveKey: stepIsSensitive,
+  }
+}
+
 function handleSkipCommand(
   session: NonNullable<ReturnType<typeof getWizardSession>>,
   currentStep: NonNullable<ReturnType<typeof getStepByIndex>>,
   userId: string,
   storageContextId: string,
 ): AdvanceStepResult {
-  // Check if there's an existing value - if so, allow skip to keep it
   const existingValue = session.data[currentStep.key]
   const hasExistingValue = existingValue !== undefined && existingValue !== ''
 
@@ -127,9 +160,6 @@ async function validateAndStoreValue(
     return `❌ ${validationError}\n\n${currentStep.prompt}\n\nPlease try again:`
   }
 
-  // Live validation is now done at the end when user confirms
-  // This allows users to quickly fill in all values and only validates on save
-
   return null
 }
 
@@ -167,7 +197,6 @@ function completeStep(
 export function createWizard(userId: string, storageContextId: string, taskProvider: TaskProvider): CreateWizardResult {
   const steps = getWizardSteps(taskProvider)
 
-  // Pre-populate with existing config values
   const existingConfig = getAllConfig(storageContextId)
   const initialData: Partial<Record<ConfigKey, string>> = {}
 
@@ -191,7 +220,6 @@ export function createWizard(userId: string, storageContextId: string, taskProvi
   const firstStep = steps[0]
   if (firstStep === undefined) return { success: false, prompt: 'Error: No wizard steps configured' }
 
-  // Check if there's an existing value for the first step
   const existingValue = initialData[firstStep.key]
   let prompt = firstStep.prompt
   if (existingValue !== undefined && existingValue !== '') {
@@ -252,7 +280,6 @@ export async function processWizardMessage(
 
   const isComplete = session.currentStep >= session.totalSteps
   if (isComplete && (trimmedText === 'yes' || trimmedText === 'confirm')) {
-    // Run validation before saving
     const result = await validateAndSaveWizardConfig(userId, storageContextId)
     const wizardButtons: WizardButton[] | undefined = result.buttons?.map((btn) => ({
       text: btn.text,
@@ -262,20 +289,8 @@ export async function processWizardMessage(
   }
 
   const result = await advanceStep(userId, storageContextId, text)
-
-  // Check if current step has skip buttons
-  const currentSession = getWizardSession(userId, storageContextId)
-  if (currentSession !== null) {
-    const currentStep = getStepByIndex(currentSession.taskProvider, currentSession.currentStep)
-    if (currentStep !== null && currentStep !== undefined) {
-      const skipButtons = buildSkipButtons(currentStep.key)
-      if (skipButtons !== undefined) {
-        return { handled: true, response: result.prompt, requiresInput: true, buttons: skipButtons }
-      }
-    }
-  }
-
-  return { handled: true, response: result.prompt, requiresInput: true }
+  const stepIsSensitive = getCompletedStepSensitivity(userId, storageContextId)
+  return buildPendingWizardResponse(userId, storageContextId, result.prompt, stepIsSensitive)
 }
 
 export { getWizardSteps }

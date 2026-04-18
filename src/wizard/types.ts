@@ -51,4 +51,5 @@ export interface WizardProcessResult {
   response?: string
   requiresInput?: boolean
   buttons?: WizardButton[]
+  isSensitiveKey?: boolean
 }
