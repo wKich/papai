@@ -3,7 +3,7 @@
  * Button callback and message handlers for standalone config editing
  */
 
-import { getConfig, maskValue, setConfig } from '../config.js'
+import { getConfig, isSensitiveKey, maskValue, setConfig } from '../config.js'
 import { logger } from '../logger.js'
 import { isConfigKey, type ConfigKey } from '../types/config.js'
 import { createEditorSession, deleteEditorSession, getEditorSession, updateEditorSession } from './state.js'
@@ -241,17 +241,21 @@ export function handleEditorMessage(userId: string, storageContextId: string, te
 
   const displayName = FIELD_DISPLAY_NAMES[session.editingKey]
   const emoji = getFieldEmoji(session.editingKey)
+  const sensitiveKey = isSensitiveKey(session.editingKey)
+  const trimmedText = text.trim()
+  const maskedOrRaw = sensitiveKey ? maskValue(session.editingKey, trimmedText) : trimmedText
 
   log.info({ userId, storageContextId, key: session.editingKey }, 'Config value entered, awaiting confirmation')
 
   return {
     handled: true,
-    response: `✏️ **${displayName}**\n\nNew value: \`${text.trim()}\`\n\nSave this value?`,
+    response: `✏️ **${displayName}**\n\nNew value: \`${maskedOrRaw}\`\n\nSave this value?`,
     buttons: [
       { text: '❌ Cancel', action: 'cancel', style: 'danger' },
       { text: '⬅️ Back', action: 'back', style: 'secondary' },
       { text: `✅ Save ${emoji}`, action: 'save', key: session.editingKey, style: 'primary' },
     ],
+    isSensitiveKey: sensitiveKey,
   }
 }
 

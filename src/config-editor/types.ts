@@ -45,6 +45,7 @@ export interface EditorProcessResult {
   response?: string
   buttons?: EditorButton[]
   editOriginal?: boolean
+  isSensitiveKey?: boolean
 }
 
 /**
