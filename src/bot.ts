@@ -98,12 +98,16 @@ function createObservedCommandHandler(
 }
 function createObservedChatProvider(chat: ChatProvider): ChatProvider {
   const registerCommand = chat.registerCommand.bind(chat)
-  return {
-    ...chat,
-    registerCommand: (name, handler): void => {
-      registerCommand(name, createObservedCommandHandler(chat, name, handler))
+  return new Proxy(chat, {
+    get(target, prop: keyof ChatProvider) {
+      if (prop === 'registerCommand') {
+        return (name: string, handler: (m: IncomingMessage, r: ReplyFn, a: AuthorizationResult) => Promise<void>) => {
+          registerCommand(name, createObservedCommandHandler(chat, name, handler))
+        }
+      }
+      return target[prop]
     },
-  }
+  })
 }
 function registerCommands(chat: ChatProvider, adminUserId: string): void {
   const observedChat = createObservedChatProvider(chat)

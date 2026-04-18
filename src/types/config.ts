@@ -3,7 +3,8 @@
  */
 
 // Task-tracker specific config keys (filtered by TASK_PROVIDER env var)
-export type TaskProviderConfigKey = 'kaneo_apikey' | 'youtrack_token'
+// Note: kaneo_workspace_id is auto-provisioned and not user-visible in CONFIG_KEYS
+export type TaskProviderConfigKey = 'kaneo_apikey' | 'kaneo_workspace_id' | 'youtrack_token'
 
 // LLM config keys (always available)
 export type LlmConfigKey = 'llm_apikey' | 'llm_baseurl' | 'main_model' | 'small_model' | 'embedding_model'
@@ -28,7 +29,7 @@ function getConfigKeysForProvider(provider: string): readonly ConfigKey[] {
     return [...llmKeys, 'youtrack_token', ...PREFERENCE_KEYS]
   }
 
-  // Default to kaneo
+  // Default to kaneo - note: kaneo_workspace_id is auto-provisioned, not user-visible
   return [...llmKeys, 'kaneo_apikey', ...PREFERENCE_KEYS]
 }
 
@@ -36,13 +37,15 @@ function getConfigKeysForProvider(provider: string): readonly ConfigKey[] {
 export const CONFIG_KEYS: readonly ConfigKey[] = getConfigKeysForProvider(TASK_PROVIDER)
 
 // All valid config keys (not filtered by provider)
-const ALL_CONFIG_KEYS: readonly ConfigKey[] = [
+// Note: kaneo_workspace_id is auto-provisioned and stored separately
+export const ALL_CONFIG_KEYS: readonly ConfigKey[] = [
   'llm_apikey',
   'llm_baseurl',
   'main_model',
   'small_model',
   'embedding_model',
   'kaneo_apikey',
+  'kaneo_workspace_id',
   'youtrack_token',
   'timezone',
 ]

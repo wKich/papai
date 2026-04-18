@@ -5,7 +5,17 @@ import { and, eq } from 'drizzle-orm'
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from '../src/auth.js'
 import { addAuthorizedGroup, removeAuthorizedGroup } from '../src/authorized-groups.js'
 import { setupBot, type BotDeps } from '../src/bot.js'
-import type { ChatProvider, IncomingFile, IncomingInteraction, IncomingMessage, ReplyFn } from '../src/chat/types.js'
+import type {
+  ChatProvider,
+  CommandHandler,
+  ContextRendered,
+  ContextSnapshot,
+  IncomingFile,
+  IncomingInteraction,
+  IncomingMessage,
+  ReplyFn,
+  ResolveUserContext,
+} from '../src/chat/types.js'
 import { getConfig, setConfig } from '../src/config.js'
 import { getDrizzleDb } from '../src/db/drizzle.js'
 import { groupAdminObservations, knownGroupContexts } from '../src/db/schema.js'
@@ -20,6 +30,7 @@ import {
   createAuth,
   createDmMessage,
   createGroupMessage,
+  DEFAULT_CHAT_CAPABILITIES,
   createMockChat,
   createMockChatForBot,
   createMockReply,
@@ -728,6 +739,74 @@ describe('Bot Authorization Gate (setupBot)', () => {
     await setupHandler!(dmMessage, reply, createAuth('dm-user', { isGroupAdmin: false }))
 
     expect(listManageableGroups('dm-user')).toHaveLength(0)
+  })
+
+  test('context command preserves renderContext for class-based chat providers', async () => {
+    addUser('context-user', ADMIN_ID)
+    setupUserConfig('context-user')
+
+    const commandHandlers = new Map<string, CommandHandler>()
+
+    class PrototypeChatProvider implements ChatProvider {
+      readonly name = 'prototype-mock'
+      readonly threadCapabilities = {
+        supportsThreads: true,
+        canCreateThreads: false,
+        threadScope: 'message' as const,
+      }
+      readonly capabilities = DEFAULT_CHAT_CAPABILITIES
+      readonly traits = { observedGroupMessages: 'all' as const }
+      readonly configRequirements: [] = []
+
+      registerCommand(name: string, handler: CommandHandler): void {
+        commandHandlers.set(name, handler)
+      }
+
+      onMessage(_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void {}
+
+      sendMessage(_userId: string, _text: string): Promise<void> {
+        return Promise.resolve()
+      }
+
+      start(): Promise<void> {
+        return Promise.resolve()
+      }
+
+      stop(): Promise<void> {
+        return Promise.resolve()
+      }
+
+      setCommands(_adminUserId: string): Promise<void> {
+        return Promise.resolve()
+      }
+
+      resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
+        return Promise.resolve(username)
+      }
+
+      renderContext(snapshot: ContextSnapshot): ContextRendered {
+        return {
+          method: 'text',
+          content: `Context total=${String(snapshot.totalTokens)}`,
+        }
+      }
+    }
+
+    setupBot(new PrototypeChatProvider(), ADMIN_ID, {
+      processMessage: (): Promise<void> => Promise.resolve(),
+    })
+
+    const contextHandler = commandHandlers.get('context')
+    expect(contextHandler).toBeDefined()
+    if (contextHandler === undefined) {
+      throw new TypeError('Expected context command to be registered')
+    }
+
+    const { reply, textCalls } = createMockReply()
+    await contextHandler(createDmMessage('context-user', '/context'), reply, createAuth('context-user'))
+
+    expect(textCalls.length).toBeGreaterThan(0)
+    expect(textCalls[0]).toContain('Context total=')
   })
 
   test('clears stale DM-selected group target when admin access is lost before text flow continues', async () => {

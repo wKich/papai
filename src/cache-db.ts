@@ -120,8 +120,28 @@ export function syncWorkspaceToDb(userId: string, workspaceId: string): void {
   queueMicrotask(() => {
     try {
       const db = getDrizzleDb()
-      db.update(users).set({ kaneoWorkspaceId: workspaceId }).where(eq(users.platformUserId, userId)).run()
-      log.debug({ userId }, 'Workspace synced to DB')
+      // Check if user/group exists first
+      const existing = db
+        .select({ platformUserId: users.platformUserId })
+        .from(users)
+        .where(eq(users.platformUserId, userId))
+        .get()
+      if (existing === undefined) {
+        // Insert new row for groups that don't exist in users table yet
+        db.insert(users)
+          .values({
+            platformUserId: userId,
+            addedAt: new Date().toISOString(),
+            // System-provisioned workspace
+            addedBy: 'system',
+            kaneoWorkspaceId: workspaceId,
+          })
+          .run()
+        log.debug({ userId }, 'Workspace synced to DB (new row)')
+      } else {
+        db.update(users).set({ kaneoWorkspaceId: workspaceId }).where(eq(users.platformUserId, userId)).run()
+        log.debug({ userId }, 'Workspace synced to DB (updated)')
+      }
     } catch (error) {
       log.error(
         { userId, error: error instanceof Error ? error.message : String(error) },

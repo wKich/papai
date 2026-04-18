@@ -19,6 +19,7 @@ const FIELD_DISPLAY_NAMES: Record<ConfigKey, string> = {
   small_model: 'Small Model',
   embedding_model: 'Embedding Model',
   kaneo_apikey: 'Kaneo API Key',
+  kaneo_workspace_id: 'Kaneo Workspace ID',
   youtrack_token: 'YouTrack Token',
   timezone: 'Timezone',
 }
@@ -55,6 +56,7 @@ function getFieldEmoji(key: ConfigKey): string {
     small_model: '⚡',
     embedding_model: '📊',
     kaneo_apikey: '🔐',
+    kaneo_workspace_id: '📁',
     youtrack_token: '🔐',
     timezone: '🌍',
   }

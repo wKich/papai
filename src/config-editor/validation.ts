@@ -43,6 +43,7 @@ export function validateConfigValue(key: ConfigKey, value: string): ValidationRe
   switch (key) {
     case 'llm_apikey':
     case 'kaneo_apikey':
+    case 'kaneo_workspace_id':
     case 'youtrack_token':
       return validateRequired(value)
 

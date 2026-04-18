@@ -1,6 +1,6 @@
 import { getCachedConfig, setCachedConfig } from './cache.js'
 import { logger } from './logger.js'
-import { CONFIG_KEYS, type ConfigKey } from './types/config.js'
+import { ALL_CONFIG_KEYS, CONFIG_KEYS, type ConfigKey } from './types/config.js'
 
 const log = logger.child({ scope: 'config' })
 
@@ -21,20 +21,9 @@ export function getConfig(userId: string, key: ConfigKey): string | null {
   return getCachedConfig(userId, key)
 }
 
-// All valid config keys regardless of current provider (for type checking)
-const ALL_CONFIG_KEYS: readonly string[] = [
-  'kaneo_apikey',
-  'youtrack_token',
-  'llm_apikey',
-  'llm_baseurl',
-  'main_model',
-  'small_model',
-  'embedding_model',
-  'timezone',
-]
-
 export function isConfigKey(key: string): key is ConfigKey {
-  return ALL_CONFIG_KEYS.includes(key)
+  // Use the canonical list from types/config.ts via ALL_CONFIG_KEYS
+  return (ALL_CONFIG_KEYS as readonly string[]).includes(key)
 }
 
 export function getAllConfig(userId: string): Partial<Record<ConfigKey, string>> {

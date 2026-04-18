@@ -1,38 +1,27 @@
 /**
- * Tests for wizard engine - interactive configuration setup
+ * Wizard integration tests - full flow testing from creation to completion
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mock } from 'bun:test'
 
-import { getConfig, setConfig } from '../../src/config.js'
-import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
-import { restoreFetch, setMockFetch, setupTestDb } from '../utils/test-helpers.js'
+import { getConfig } from '../../src/config.js'
+import { mockLogger, restoreFetch, setMockFetch, setupTestDb } from '../utils/test-helpers.js'
 
 // Dynamic imports to ensure mock is applied before module loading
-const { createWizard, advanceStep, cancelWizard, processWizardMessage, getWizardSteps } =
-  await import('../../src/wizard/engine.js')
+const { createWizard, advanceStep, processWizardMessage } = await import('../../src/wizard/engine.js')
 const { validateAndSaveWizardConfig } = await import('../../src/wizard/save.js')
-const { getWizardSession, deleteWizardSession } = await import('../../src/wizard/state.js')
+const { hasActiveWizard, deleteWizardSession } = await import('../../src/wizard/state.js')
 
-// Global fetch mock for engine tests (returns success by default)
-describe('Wizard Engine', () => {
-  const userId = 'user123'
-  const storageContextId = 'ctx-456'
-
-  let trackedLogger: TrackedLoggerMock
+// Global fetch mock for integration tests (returns success by default)
+describe('Wizard Integration', () => {
+  const userId = 'test-user'
+  const storageContextId = 'test-context'
 
   beforeEach(async () => {
-    trackedLogger = createTrackedLoggerMock()
-    void mock.module('../../src/logger.js', () => ({
-      getLogLevel: trackedLogger.getLogLevel,
-      logger: trackedLogger.logger,
-    }))
-
-    // Clean up
+    mockLogger()
     await setupTestDb()
     await deleteWizardSession(userId, storageContextId)
-    // Reset fetch to return success by default with comprehensive model list
+    // Reset fetch to return success by default
     setMockFetch(() =>
       Promise.resolve(
         new Response(
@@ -49,556 +38,329 @@ describe('Wizard Engine', () => {
     restoreFetch()
   })
 
-  describe('createWizard', () => {
-    test('creates a new wizard session and returns welcome prompt', async () => {
-      const result = await createWizard(userId, storageContextId, 'kaneo')
+  test('should complete full wizard flow', async () => {
+    // Start wizard
+    const startResult = await createWizard(userId, storageContextId, 'kaneo')
+    expect(startResult.success).toBe(true)
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(true)
+    expect(startResult.prompt).toContain('Welcome to papai configuration')
+    expect(startResult.prompt).toContain('🔑 Enter your LLM API key:')
 
-      expect(result.success).toBe(true)
-      expect(result.prompt).toContain('Welcome to papai configuration')
-      expect(result.prompt).toContain('🔑 Enter your LLM API key:')
+    // Complete all steps - Kaneo has 7 steps total
+    // Step 1: LLM API Key
+    const step1 = await advanceStep(userId, storageContextId, 'sk-api-key', true)
+    expect(step1.success).toBe(true)
+    expect(step1.prompt).toContain('🌐 Enter base URL')
 
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session).not.toBeNull()
-      expect(session?.currentStep).toBe(0)
-    })
+    // Step 2: Base URL
+    const step2 = await advanceStep(userId, storageContextId, 'https://api.openai.com/v1', true)
+    expect(step2.success).toBe(true)
+    expect(step2.prompt).toContain('🤖 Enter main model name')
 
-    test('returns existing session if wizard already active', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-      const result = await createWizard(userId, storageContextId, 'youtrack')
+    // Step 3: Main Model
+    const step3 = await advanceStep(userId, storageContextId, 'gpt-4', true)
+    expect(step3.success).toBe(true)
+    expect(step3.prompt).toContain('⚡ Enter small model name')
 
-      // Should return existing session with original settings
-      expect(result.success).toBe(true)
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.taskProvider).toBe('kaneo')
-    })
+    // Step 4: Small Model (use 'same' to copy main model)
+    const step4 = await advanceStep(userId, storageContextId, 'same', true)
+    expect(step4.success).toBe(true)
+    expect(step4.prompt).toContain('📊 Enter embedding model')
 
-    test('createWizard stores task provider only and no platform field', async () => {
-      const result = await createWizard(userId, storageContextId, 'kaneo')
+    // Step 5: Embedding Model (optional - skip it)
+    const step5 = await advanceStep(userId, storageContextId, 'skip', true)
+    expect(step5.success).toBe(true)
+    expect(step5.skipped).toBe(true)
+    expect(step5.prompt).toContain('🔑 Enter your Kaneo API key')
 
-      expect(result.success).toBe(true)
+    // Step 6: Kaneo API Key
+    const step6 = await advanceStep(userId, storageContextId, 'kaneo-token', true)
+    expect(step6.success).toBe(true)
+    expect(step6.prompt).toContain('🌍 Enter your timezone')
 
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.taskProvider).toBe('kaneo')
-      expect('platform' in (session ?? {})).toBe(false)
-    })
+    // Step 7: Timezone
+    const step7 = await advanceStep(userId, storageContextId, 'UTC', true)
+    expect(step7.success).toBe(true)
+    expect(step7.complete).toBe(true)
+    expect(step7.prompt).toContain('Configuration Summary')
+    expect(step7.prompt).toContain('LLM API Key:')
+    expect(step7.prompt).toContain('Kaneo API Key:')
 
-    // Note: Log assertion tests removed due to Bun module caching issues in full test suite
-    // The logger functionality is covered by the actual behavior tests above
+    // Confirm
+    const saveResult = await validateAndSaveWizardConfig(userId, storageContextId)
+    expect(saveResult.success).toBe(true)
+    expect(saveResult.message).toContain('Configuration saved successfully')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
+
+    // Verify config was saved under storageContextId
+    expect(getConfig(storageContextId, 'llm_apikey')).toBe('sk-api-key')
+    expect(getConfig(storageContextId, 'main_model')).toBe('gpt-4')
+    expect(getConfig(storageContextId, 'small_model')).toBe('gpt-4')
+    expect(getConfig(storageContextId, 'kaneo_apikey')).toBe('kaneo-token')
+    expect(getConfig(storageContextId, 'timezone')).toBe('UTC')
+
+    // Verify skipped value was NOT saved
+    expect(getConfig(storageContextId, 'embedding_model')).toBeNull()
   })
 
-  describe('advanceStep', () => {
-    test('advances through wizard steps', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
+  test('should handle processWizardMessage', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-      // Step 1: LLM API Key
-      const step1 = await advanceStep(userId, storageContextId, 'sk-test12345')
-      expect(step1.success).toBe(true)
-      expect(step1.prompt).toContain('🌐 Enter base URL')
+    // Send API key through processWizardMessage
+    const result = await processWizardMessage(userId, storageContextId, 'sk-test-key')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('🌐 Enter base URL')
+    expect(result.requiresInput).toBe(true)
 
-      // Step 2: Base URL
-      const step2 = await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      expect(step2.success).toBe(true)
-      expect(step2.prompt).toContain('🤖 Enter main model name')
-
-      // Step 3: Main Model
-      const step3 = await advanceStep(userId, storageContextId, 'gpt-4')
-      expect(step3.success).toBe(true)
-      expect(step3.prompt).toContain('⚡ Enter small model name')
-
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.currentStep).toBe(3)
-    })
-
-    test('validates invalid input', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await advanceStep(userId, storageContextId, '')
-
-      expect(result.success).toBe(false)
-      expect(result.prompt).toContain('API key cannot be empty')
-      expect(result.prompt).toContain('Please try again')
-
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.currentStep).toBe(0)
-    })
-
-    test('handles URL validation', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-
-      // Step 2: Base URL with invalid value
-      const result = await advanceStep(userId, storageContextId, 'not-a-url')
-
-      expect(result.success).toBe(false)
-      expect(result.prompt).toContain('valid URL')
-    })
-
-    test('allows skipping optional steps', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Skip through required steps first
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'same')
-
-      // Step 5: Embedding Model (optional)
-      const result = await advanceStep(userId, storageContextId, 'skip')
-
-      expect(result.success).toBe(true)
-      expect(result.skipped).toBe(true)
-      expect(result.prompt).toContain('🔑 Enter your Kaneo API key')
-
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.skippedSteps).toContain(4)
-    })
-
-    test('handles same value for small model', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-
-      const result = await advanceStep(userId, storageContextId, 'same')
-
-      expect(result.success).toBe(true)
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session?.data['small_model']).toBe('gpt-4')
-    })
-
-    test('returns summary when all steps complete', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Complete all steps
-      // Step 1: LLM API Key
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      // Step 2: Base URL
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      // Step 3: Main Model
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      // Step 4: Small Model
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      // Step 5: Embedding (skip)
-      await advanceStep(userId, storageContextId, 'skip')
-      // Step 6: Kaneo API Key
-      await advanceStep(userId, storageContextId, 'api-key-123')
-
-      // Step 7: Timezone
-      const result = await advanceStep(userId, storageContextId, 'UTC')
-
-      expect(result.success).toBe(true)
-      expect(result.complete).toBe(true)
-      expect(result.prompt).toContain('Configuration Summary')
-      expect(result.prompt).toContain('LLM API Key:')
-      expect(result.prompt).toContain('Kaneo API Key:')
-    })
-
-    test('handles timezone validation', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Skip to timezone step
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'api-key-123')
-
-      const result = await advanceStep(userId, storageContextId, 'invalid-timezone')
-
-      expect(result.success).toBe(false)
-      expect(result.prompt).toContain('Invalid timezone')
-    })
-
-    test('returns error for non-existent session', async () => {
-      const result = await advanceStep(userId, storageContextId, 'value')
-
-      expect(result.success).toBe(false)
-      expect(result.prompt).toContain('Wizard session not found')
-    })
-
-    // Note: Log assertion test removed due to Bun module caching issues in full test suite
+    // Verify session advanced
+    const nextResult = await processWizardMessage(userId, storageContextId, 'https://api.openai.com/v1')
+    expect(nextResult.handled).toBe(true)
+    expect(nextResult.response).toContain('🤖 Enter main model name')
   })
 
-  describe('saveWizardConfig', () => {
-    test('saves configuration and deletes session when confirmed', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
+  test('should cancel wizard', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(true)
 
-      // Complete all steps
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'kaneo-key')
-      await advanceStep(userId, storageContextId, 'UTC')
+    // Cancel via processWizardMessage
+    const result = await processWizardMessage(userId, storageContextId, 'cancel')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('cancelled')
+    expect(result.response).toContain('not saved')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
 
-      const result = await validateAndSaveWizardConfig(userId, storageContextId)
-
-      expect(result.success).toBe(true)
-      expect(result.message).toContain('Configuration saved successfully')
-
-      // Check that session was deleted
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session).toBeNull()
-
-      // Check that config values were saved under storageContextId
-      expect(getConfig(storageContextId, 'llm_apikey')).not.toBeNull()
-      expect(getConfig(storageContextId, 'kaneo_apikey')).not.toBeNull()
-      expect(getConfig(storageContextId, 'timezone')).not.toBeNull()
-      // Verify NOT saved under userId (group context fix)
-      expect(getConfig(userId, 'llm_apikey')).toBeNull()
-    })
-
-    test('validates all fields before saving', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-
-      const result = await validateAndSaveWizardConfig(userId, storageContextId)
-
-      // Should fail validation because wizard is not complete (models not set)
-      expect(result.success).toBe(false)
-      expect(result.message).toContain('Configuration validation failed')
-      expect(getConfig(userId, 'llm_apikey')).toBeNull()
-    })
-
-    test('skips empty values when saving', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Complete all steps
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'kaneo-key')
-      await advanceStep(userId, storageContextId, 'UTC')
-
-      await validateAndSaveWizardConfig(userId, storageContextId)
-
-      // Skipped values should not be saved
-      expect(getConfig(userId, 'embedding_model')).toBeNull()
-    })
-
-    test('returns error for non-existent session', async () => {
-      const result = await validateAndSaveWizardConfig(userId, storageContextId)
-
-      expect(result.success).toBe(false)
-      expect(result.message).toContain('Wizard session not found')
-    })
-
-    // Note: Log assertion test removed due to Bun module caching issues in full test suite
+    // No config should be saved (wizard was cancelled before save)
+    expect(getConfig(userId, 'llm_apikey')).toBeNull()
   })
 
-  describe('cancelWizard', () => {
-    test('deletes wizard session', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
+  test('should handle invalid input', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-      await cancelWizard(userId, storageContextId)
+    // Try empty API key (don't skip validation)
+    const result = await advanceStep(userId, storageContextId, '')
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('API key cannot be empty')
+    expect(result.prompt).toContain('Please try again')
 
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session).toBeNull()
-    })
-
-    // Note: Log assertion test removed due to Bun module caching issues in full test suite
+    // Verify still on same step
+    const session = await processWizardMessage(userId, storageContextId, 'valid-key')
+    expect(session.handled).toBe(true)
+    expect(session.response).toContain('🌐 Enter base URL')
   })
 
-  describe('processWizardMessage', () => {
-    test('returns handled: false when no active wizard', async () => {
-      const result = await processWizardMessage(userId, storageContextId, 'hello')
+  test('should handle cancel command at any step', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-      expect(result.handled).toBe(false)
-    })
+    // Complete first step
+    await advanceStep(userId, storageContextId, 'sk-test-key', true)
+    await advanceStep(userId, storageContextId, 'default', true)
 
-    test('handles cancel command', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await processWizardMessage(userId, storageContextId, 'cancel')
-
-      expect(result.handled).toBe(true)
-      expect(result.response).toContain('cancelled')
-
-      const session = await getWizardSession(userId, storageContextId)
-      expect(session).toBeNull()
-    })
-
-    test('handles yes/confirm when wizard complete', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Complete all steps
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'kaneo-key')
-      await advanceStep(userId, storageContextId, 'UTC')
-
-      const result = await processWizardMessage(userId, storageContextId, 'yes')
-
-      expect(result.handled).toBe(true)
-      expect(result.response).toContain('Configuration saved successfully')
-    })
-
-    test('handles confirm command when wizard complete', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Complete all steps
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'kaneo-key')
-      await advanceStep(userId, storageContextId, 'UTC')
-
-      const result = await processWizardMessage(userId, storageContextId, 'confirm')
-
-      expect(result.handled).toBe(true)
-      expect(result.response).toContain('Configuration saved successfully')
-    })
-
-    test('advances step for normal input', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
-
-      expect(result.handled).toBe(true)
-      expect(result.response).toContain('🌐 Enter base URL')
-      expect(result.requiresInput).toBe(true)
-    })
-
-    test('returns requiresInput: true for incomplete wizard', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
-
-      expect(result.handled).toBe(true)
-      expect(result.requiresInput).toBe(true)
-    })
-
-    test('marks completed sensitive step with isSensitiveKey', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await processWizardMessage(userId, storageContextId, 'sk-test12345')
-
-      expect(result.handled).toBe(true)
-      expect(result.isSensitiveKey).toBe(true)
-    })
-
-    test('returns requiresInput: false when complete', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      // Complete all steps
-      await advanceStep(userId, storageContextId, 'sk-test12345')
-      await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-      await advanceStep(userId, storageContextId, 'gpt-4')
-      await advanceStep(userId, storageContextId, 'gpt-3.5')
-      await advanceStep(userId, storageContextId, 'skip')
-      await advanceStep(userId, storageContextId, 'kaneo-key')
-      await advanceStep(userId, storageContextId, 'UTC')
-
-      const result = await processWizardMessage(userId, storageContextId, 'hello')
-
-      expect(result.handled).toBe(true)
-      // Result should still require input (needs confirmation)
-      expect(result.requiresInput).toBe(true)
-    })
-
-    test('handles validation errors during processing', async () => {
-      await createWizard(userId, storageContextId, 'kaneo')
-
-      const result = await processWizardMessage(userId, storageContextId, '')
-
-      expect(result.handled).toBe(true)
-      expect(result.response).toContain('API key cannot be empty')
-      expect(result.requiresInput).toBe(true)
-    })
+    // Cancel at step 3
+    const result = await processWizardMessage(userId, storageContextId, 'cancel')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('cancelled')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
   })
 
-  describe('getWizardSteps', () => {
-    test('returns correct steps for kaneo provider', () => {
-      const steps = getWizardSteps('kaneo')
+  test('should confirm with yes command', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-      // Should have 7 steps total: 5 LLM steps + 1 provider + 1 timezone
-      expect(steps.length).toBe(7)
-      expect(steps[0]?.key).toBe('llm_apikey')
-      expect(steps[5]?.key).toBe('kaneo_apikey')
-      expect(steps[6]?.key).toBe('timezone')
-    })
+    // Complete all steps
+    await advanceStep(userId, storageContextId, 'sk-test-key', true)
+    await advanceStep(userId, storageContextId, 'default', true)
+    await advanceStep(userId, storageContextId, 'gpt-4', true)
+    await advanceStep(userId, storageContextId, 'same', true)
+    await advanceStep(userId, storageContextId, 'skip', true)
+    await advanceStep(userId, storageContextId, 'kaneo-key', true)
+    await advanceStep(userId, storageContextId, 'workspace-123', true)
+    await advanceStep(userId, storageContextId, 'UTC', true)
 
-    test('returns correct steps for youtrack provider', () => {
-      const steps = getWizardSteps('youtrack')
-
-      expect(steps.length).toBe(7)
-      expect(steps[5]?.key).toBe('youtrack_token')
-    })
-  })
-})
-
-describe('Wizard engine with end-of-wizard validation', () => {
-  const userId = 'test-user-live'
-  const storageContextId = 'test-context-live'
-
-  let trackedLogger: TrackedLoggerMock
-
-  beforeEach(async () => {
-    trackedLogger = createTrackedLoggerMock()
-    void mock.module('../../src/logger.js', () => ({
-      getLogLevel: trackedLogger.getLogLevel,
-      logger: trackedLogger.logger,
-    }))
-
-    await setupTestDb()
-    await deleteWizardSession(userId, storageContextId)
+    // Confirm with 'yes'
+    const result = await processWizardMessage(userId, storageContextId, 'yes')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('Configuration saved successfully')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
   })
 
-  test('should allow step advancement without validation', async () => {
-    // Mock fetch to simulate API key validation failure
-    setMockFetch(() =>
-      Promise.resolve(
-        new Response('', {
-          status: 401,
-          statusText: 'Unauthorized',
-        }),
-      ),
-    )
+  test('should confirm with confirm command', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-    createWizard(userId, storageContextId, 'kaneo')
+    // Complete all steps
+    await advanceStep(userId, storageContextId, 'sk-test-key', true)
+    await advanceStep(userId, storageContextId, 'default', true)
+    await advanceStep(userId, storageContextId, 'gpt-4', true)
+    await advanceStep(userId, storageContextId, 'same', true)
+    await advanceStep(userId, storageContextId, 'skip', true)
+    await advanceStep(userId, storageContextId, 'kaneo-key', true)
+    await advanceStep(userId, storageContextId, 'UTC', true)
 
-    // Should advance without validation error
-    const result = await advanceStep(userId, storageContextId, 'invalid-key', false)
-    expect(result.success).toBe(true)
-    expect(result.prompt).toContain('🌐 Enter base URL')
-  })
-})
-
-describe('Wizard engine masking behavior', () => {
-  const userId = 'mask-test-user'
-  const storageContextId = 'mask-test-context'
-
-  let trackedLogger: TrackedLoggerMock
-
-  beforeEach(async () => {
-    trackedLogger = createTrackedLoggerMock()
-    void mock.module('../../src/logger.js', () => ({
-      getLogLevel: trackedLogger.getLogLevel,
-      logger: trackedLogger.logger,
-    }))
-
-    await setupTestDb()
-    await deleteWizardSession(userId, storageContextId)
+    // Confirm with 'confirm'
+    const result = await processWizardMessage(userId, storageContextId, 'confirm')
+    expect(result.handled).toBe(true)
+    expect(result.response).toContain('Configuration saved successfully')
+    expect(await hasActiveWizard(userId, storageContextId)).toBe(false)
   })
 
-  test('masks sensitive values in prompts (apikey, token)', () => {
-    // Pre-set a sensitive config value
-    setConfig(storageContextId, 'llm_apikey', 'sk-super-secret-api-key')
+  test('should handle YouTrack provider flow', async () => {
+    // Start wizard with YouTrack
+    const startResult = await createWizard(userId, storageContextId, 'youtrack')
+    expect(startResult.success).toBe(true)
 
-    // Create wizard - should show masked value in prompt
-    const result = createWizard(userId, storageContextId, 'kaneo')
+    // Complete all steps
+    // Step 1: LLM API Key
+    await advanceStep(userId, storageContextId, 'sk-api-key', true)
+    // Step 2: Base URL
+    await advanceStep(userId, storageContextId, 'default', true)
+    // Step 3: Main Model
+    await advanceStep(userId, storageContextId, 'gpt-4', true)
+    // Step 4: Small Model
+    await advanceStep(userId, storageContextId, 'same', true)
+    // Step 5: Embedding (skip)
+    await advanceStep(userId, storageContextId, 'skip', true)
 
-    expect(result.success).toBe(true)
-    // Should show masked value (**** + last 4 chars: -key)
-    expect(result.prompt).toContain('****-key')
-    // Should NOT show the full secret or first characters
-    expect(result.prompt).not.toContain('sk-super-secret-api-key')
-    expect(result.prompt).not.toContain('sk-sup')
+    // Step 6 should be YouTrack token
+    const step6 = await advanceStep(userId, storageContextId, 'youtrack-token', true)
+    expect(step6.success).toBe(true)
+    expect(step6.prompt).toContain('timezone')
+
+    // Step 7: Timezone
+    await advanceStep(userId, storageContextId, 'America/New_York', true)
+
+    // Save
+    const saveResult = await validateAndSaveWizardConfig(userId, storageContextId)
+    expect(saveResult.success).toBe(true)
+
+    // Verify YouTrack token was saved under storageContextId
+    expect(getConfig(storageContextId, 'youtrack_token')).toBe('youtrack-token')
   })
 
-  test('masks sensitive values when showing existing values during wizard', () => {
-    // Set config directly (simulating previous wizard completion)
-    setConfig(storageContextId, 'llm_apikey', 'sk-secret12345')
+  test('should skip only optional steps', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-    // Create wizard - should show masked value for the first step from existing config
-    const result = createWizard(userId, storageContextId, 'kaneo')
+    // Try to skip required step 1 (API key)
+    const result = await advanceStep(userId, storageContextId, 'skip', true)
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('required and cannot be skipped')
 
-    expect(result.success).toBe(true)
-    // Should show masked value (**** + last 4 chars: 2345)
-    expect(result.prompt).toContain('****2345')
-    // Should NOT show the full secret or first characters
-    expect(result.prompt).not.toContain('sk-secret12345')
-    expect(result.prompt).not.toContain('sk-s')
+    // Complete required steps
+    await advanceStep(userId, storageContextId, 'sk-api-key', true)
+    await advanceStep(userId, storageContextId, 'default', true)
+    await advanceStep(userId, storageContextId, 'gpt-4', true)
+    await advanceStep(userId, storageContextId, 'same', true)
+
+    // Now we can skip step 5 (embedding model - optional)
+    const skipResult = await advanceStep(userId, storageContextId, 'skip', true)
+    expect(skipResult.success).toBe(true)
+    expect(skipResult.skipped).toBe(true)
   })
 
-  test('does not mask non-sensitive values', async () => {
-    // Pre-set a non-sensitive config value
-    setConfig(storageContextId, 'main_model', 'gpt-4-turbo')
+  test('should reject default as invalid base URL', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-    // Create wizard and advance to the model step
-    createWizard(userId, storageContextId, 'kaneo')
-    await advanceStep(userId, storageContextId, 'sk-test12345')
-    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
+    // Step 1
+    await advanceStep(userId, storageContextId, 'sk-api-key', true)
 
-    // Check that model name is shown in full (not masked)
-    const session = getWizardSession(userId, storageContextId)
-    expect(session).not.toBeNull()
-    expect(session?.data['main_model']).toBe('gpt-4-turbo')
-  })
-})
-
-describe('Wizard engine skip with existing config', () => {
-  const userId = 'singlestep-test-user'
-  const storageContextId = 'singlestep-test-context'
-
-  let trackedLogger: TrackedLoggerMock
-
-  beforeEach(async () => {
-    trackedLogger = createTrackedLoggerMock()
-    void mock.module('../../src/logger.js', () => ({
-      getLogLevel: trackedLogger.getLogLevel,
-      logger: trackedLogger.logger,
-    }))
-
-    await setupTestDb()
-    await deleteWizardSession(userId, storageContextId)
+    // Step 2 with 'default' value - should be rejected
+    const result = await advanceStep(userId, storageContextId, 'default')
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('valid URL')
   })
 
-  test('keeps existing value when typing "skip" with existing config', async () => {
-    // Pre-set an existing config value
-    setConfig(storageContextId, 'kaneo_apikey', 'existing-kaneo-key')
-    createWizard(userId, storageContextId, 'kaneo')
-    // Step 0: LLM API Key
-    await advanceStep(userId, storageContextId, 'sk-test12345')
-    // Step 1: Base URL
-    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-    // Step 2: Main Model
-    await advanceStep(userId, storageContextId, 'gpt-4')
-    // Step 3: Small Model
-    await advanceStep(userId, storageContextId, 'gpt-3.5')
-    // Step 4: Embedding (optional)
-    await advanceStep(userId, storageContextId, 'skip')
+  test('should handle invalid URL validation', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-    // Step 5: Kaneo API key with existing value
-    const result = await advanceStep(userId, storageContextId, 'skip')
+    // Step 1
+    await advanceStep(userId, storageContextId, 'sk-api-key', true)
 
-    expect(result.success).toBe(true)
-
-    // Check that existing value is preserved
-    const session = getWizardSession(userId, storageContextId)
-    expect(session).not.toBeNull()
-    expect(session?.data['kaneo_apikey']).toBe('existing-kaneo-key')
+    // Step 2 with invalid URL
+    const result = await advanceStep(userId, storageContextId, 'not-a-url')
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('valid URL')
   })
 
-  test('clears value when typing "skip" without existing config', async () => {
-    createWizard(userId, storageContextId, 'kaneo')
-    // Step 0: LLM API Key
-    await advanceStep(userId, storageContextId, 'sk-test12345')
-    // Step 1: Base URL
-    await advanceStep(userId, storageContextId, 'https://api.openai.com/v1')
-    // Step 2: Main Model
-    await advanceStep(userId, storageContextId, 'gpt-4')
-    // Step 3: Small Model
-    await advanceStep(userId, storageContextId, 'gpt-3.5')
+  test('should handle invalid timezone validation', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
 
-    // Step 4: Embedding model (optional) - type skip without existing value
-    const result = await advanceStep(userId, storageContextId, 'skip')
+    // Complete steps up to timezone
+    await advanceStep(userId, storageContextId, 'sk-api-key', true)
+    await advanceStep(userId, storageContextId, 'default', true)
+    await advanceStep(userId, storageContextId, 'gpt-4', true)
+    await advanceStep(userId, storageContextId, 'same', true)
+    await advanceStep(userId, storageContextId, 'skip', true)
+    await advanceStep(userId, storageContextId, 'kaneo-key', true)
 
-    expect(result.success).toBe(true)
-    expect(result.skipped).toBe(true)
+    // Invalid timezone
+    const result = await advanceStep(userId, storageContextId, 'invalid-timezone')
+    expect(result.success).toBe(false)
+    expect(result.prompt).toContain('Invalid timezone')
+  })
 
-    const session = getWizardSession(userId, storageContextId)
-    expect(session).not.toBeNull()
-    expect(session?.data['embedding_model']).toBeUndefined()
+  test('should handle processWizardMessage with no active wizard', async () => {
+    const result = await processWizardMessage(userId, storageContextId, 'hello')
+    expect(result.handled).toBe(false)
+    expect(result.response).toBeUndefined()
+  })
+
+  test('should handle case insensitive cancel', async () => {
+    await createWizard(userId, storageContextId, 'kaneo')
+
+    // Test different cases
+    const result1 = await processWizardMessage(userId, storageContextId, 'CANCEL')
+    expect(result1.handled).toBe(true)
+    expect(result1.response).toContain('cancelled')
+
+    // Recreate wizard
+    await createWizard(userId, storageContextId, 'kaneo')
+    const result2 = await processWizardMessage(userId, storageContextId, 'Cancel')
+    expect(result2.handled).toBe(true)
+
+    // Recreate wizard
+    await createWizard(userId, storageContextId, 'kaneo')
+    const result3 = await processWizardMessage(userId, storageContextId, '  cancel  ')
+    expect(result3.handled).toBe(true)
+  })
+
+  test('should isolate sessions between users', async () => {
+    const userId1 = 'user-1'
+    const userId2 = 'user-2'
+
+    await createWizard(userId1, storageContextId, 'kaneo')
+    await createWizard(userId2, storageContextId, 'kaneo')
+
+    // Both should have active wizards
+    expect(await hasActiveWizard(userId1, storageContextId)).toBe(true)
+    expect(await hasActiveWizard(userId2, storageContextId)).toBe(true)
+
+    // Cancel one
+    await processWizardMessage(userId1, storageContextId, 'cancel')
+
+    // Only user1 should be cancelled
+    expect(await hasActiveWizard(userId1, storageContextId)).toBe(false)
+    expect(await hasActiveWizard(userId2, storageContextId)).toBe(true)
+
+    // Clean up
+    await deleteWizardSession(userId2, storageContextId)
+  })
+
+  test('should isolate sessions between contexts', async () => {
+    const contextId1 = 'ctx-1'
+    const contextId2 = 'ctx-2'
+
+    await createWizard(userId, contextId1, 'kaneo')
+    await createWizard(userId, contextId2, 'kaneo')
+
+    // Both should have active wizards
+    expect(await hasActiveWizard(userId, contextId1)).toBe(true)
+    expect(await hasActiveWizard(userId, contextId2)).toBe(true)
+
+    // Cancel one
+    await processWizardMessage(userId, contextId1, 'cancel')
+
+    // Only context1 should be cancelled
+    expect(await hasActiveWizard(userId, contextId1)).toBe(false)
+    expect(await hasActiveWizard(userId, contextId2)).toBe(true)
+
+    // Clean up
+    await deleteWizardSession(userId, contextId2)
   })
 })

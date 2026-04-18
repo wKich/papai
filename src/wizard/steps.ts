@@ -81,6 +81,7 @@ export function validateStep(stepId: string, value: string): Promise<string | nu
     switch (stepId) {
       case 'llm_apikey':
       case 'kaneo_apikey':
+      case 'kaneo_workspace_id':
         return validateApiKey(value)
       case 'youtrack_token':
         return validateToken(value)
@@ -131,6 +132,7 @@ export function formatSummary(data: Record<string, string | undefined>, taskProv
   // Provider-specific
   if (taskProvider === 'kaneo') {
     lines.push(`Kaneo API Key: ${getDisplayValue('kaneo_apikey', data['kaneo_apikey'])}`)
+    lines.push(`Kaneo Workspace ID: ${getDisplayValue('kaneo_workspace_id', data['kaneo_workspace_id'])}`)
   } else if (taskProvider === 'youtrack') {
     lines.push(`YouTrack Token: ${getDisplayValue('youtrack_token', data['youtrack_token'])}`)
   }
