@@ -27,7 +27,6 @@ import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits 
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
 import { ChannelSchema, extractReplyId, MattermostWsEventSchema, type MattermostPost, UserMeSchema } from './schema.js'
-import { withTypingIndicator } from './typing-indicator.js'
 
 const log = logger.child({ scope: 'chat:mattermost' })
 
@@ -215,9 +214,7 @@ export class MattermostChatProvider implements ChatProvider {
       return
     }
     if (this.messageHandler !== null) {
-      const getSeq = (): number => this.wsSeq++
-      const send = this.wsSend.bind(this)
-      await withTypingIndicator(msg.contextId, getSeq, send, () => this.messageHandler!(msg, reply))
+      await this.messageHandler(msg, reply)
     }
   }
 

@@ -145,7 +145,6 @@ async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps:
   if (coalescedItem.files.length > 0) storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
   else clearIncomingFiles(coalescedItem.storageContextId)
   try {
-    tracked.reply.typing()
     await deps.processMessage(
       tracked.reply,
       coalescedItem.storageContextId,

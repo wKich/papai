@@ -33,8 +33,6 @@ export class MessageQueue {
   }
 
   enqueue(item: QueueItem, reply: ReplyFn): CoalescedItem | null {
-    reply.typing()
-
     const isGroup = item.contextType === 'group'
     const hasBufferedItems = this.messages.length > 0
     const isDifferentUser = this.lastUserId !== null && this.lastUserId !== item.userId

@@ -19,6 +19,7 @@ import { extractFactsFromSdkResults, upsertFact } from './memory.js'
 import { buildProviderForUser } from './providers/factory.js'
 import { maybeProvisionKaneo } from './providers/kaneo/provision.js'
 import type { TaskProvider } from './providers/types.js'
+import { withReplyTypingHeartbeat } from './reply-typing-heartbeat.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
 import { getKaneoWorkspace } from './users.js'
@@ -142,6 +143,13 @@ const invokeModel = async (
   return result
 }
 
+const invokeModelWithTyping = (
+  reply: ReplyFn,
+  args: InvokeModelArgs,
+): ReturnType<LlmOrchestratorDeps['generateText']> => {
+  return withReplyTypingHeartbeat(reply, (typingReply) => invokeModel({ ...args, reply: typingReply }))
+}
+
 const maybeAutoLinkIdentity = async (
   chatUserId: string,
   username: string | null,
@@ -191,7 +199,7 @@ const callLlm = async (
     { contextId, historyLength: history.length, hasMemory: memoryMsg !== null, timezone },
     'Calling generateText',
   )
-  const result = await invokeModel({
+  const result = await invokeModelWithTyping(reply, {
     contextId,
     mainModel,
     model,
@@ -199,7 +207,6 @@ const callLlm = async (
     tools,
     messages: validatedMessages,
     deps,
-    reply,
   })
   const toolCallCount = result.toolCalls === undefined ? undefined : result.toolCalls.length
   log.debug({ contextId, toolCalls: toolCallCount, usage: result.usage }, 'LLM response received')

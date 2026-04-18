@@ -88,7 +88,7 @@ export class TelegramChatProvider implements ChatProvider {
       const msg = await this.extractMessage(ctx, isAdmin)
       if (msg === null) return
       const reply = this.buildReplyFn(ctx, msg.threadId, false)
-      await this.withTypingIndicator(ctx, () => handler(msg, reply))
+      await handler(msg, reply)
     })
 
     this.bot.on(
@@ -100,7 +100,7 @@ export class TelegramChatProvider implements ChatProvider {
         const files = await this.fetchFilesFromContext(ctx)
         if (files.length > 0) msg.files = files
         const reply = this.buildReplyFn(ctx, msg.threadId, false)
-        await this.withTypingIndicator(ctx, () => handler(msg, reply))
+        await handler(msg, reply)
       },
     )
   }
@@ -239,18 +239,6 @@ export class TelegramChatProvider implements ChatProvider {
     }
 
     return replyFn
-  }
-  private async withTypingIndicator<T>(ctx: Context, fn: () => Promise<T>): Promise<T> {
-    const send = (): void => {
-      void ctx.replyWithChatAction('typing').catch(ignoreTelegramTypingError)
-    }
-    send()
-    const interval = setInterval(send, 4500)
-    try {
-      return await fn()
-    } finally {
-      clearInterval(interval)
-    }
   }
   private async dispatchCallbackQuery(ctx: Context): Promise<void> {
     await ctx.answerCallbackQuery()
