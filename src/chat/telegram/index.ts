@@ -8,6 +8,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingFile,
   IncomingInteraction,
   IncomingMessage,
@@ -107,9 +108,18 @@ export class TelegramChatProvider implements ChatProvider {
   onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
     this.interactionHandler = handler
   }
-  async sendMessage(userId: string, markdown: string): Promise<void> {
-    const formatted = formatLlmOutput(markdown)
-    await this.bot.api.sendMessage(parseInt(userId, 10), formatted.text, { entities: formatted.entities })
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
+    const chatId = parseInt(target.contextId, 10)
+    let content = markdown
+    if (target.contextType === 'group' && target.audience === 'personal' && target.createdByUsername !== null) {
+      content = `@${target.createdByUsername} ${markdown}`
+    }
+    const formatted = formatLlmOutput(content)
+    const options: Parameters<typeof this.bot.api.sendMessage>[2] = { entities: formatted.entities }
+    if (target.contextType === 'group' && target.threadId !== null) {
+      options.message_thread_id = parseInt(target.threadId, 10)
+    }
+    await this.bot.api.sendMessage(chatId, formatted.text, options)
   }
   start(): Promise<void> {
     this.bot.on('callback_query:data', (ctx) => this.dispatchCallbackQuery(ctx))

@@ -30,7 +30,7 @@ export function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMet
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
   const parsed = parseCron(prompt.cronExpression!)
   if (parsed === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
+    completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
     log.warn(
       { id: prompt.id, cronExpression: prompt.cronExpression },
       'Invalid cron expression on recurring prompt, completing',
@@ -40,14 +40,17 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
 
   const next = nextCronOccurrence(parsed, new Date(), timezone)
   if (next === null) {
-    completeScheduledPrompt(prompt.id, prompt.userId, now)
-    log.warn({ id: prompt.id, userId: prompt.userId }, 'Could not compute next cron occurrence, completing prompt')
+    completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
+    log.warn(
+      { id: prompt.id, userId: prompt.createdByUserId },
+      'Could not compute next cron occurrence, completing prompt',
+    )
     return
   }
 
-  advanceScheduledPrompt(prompt.id, prompt.userId, next.toISOString(), now)
+  advanceScheduledPrompt(prompt.id, prompt.createdByUserId, next.toISOString(), now)
   log.info(
-    { id: prompt.id, userId: prompt.userId, nextFireAt: next.toISOString() },
+    { id: prompt.id, userId: prompt.createdByUserId, nextFireAt: next.toISOString() },
     'Recurring scheduled prompt advanced',
   )
 }
@@ -55,8 +58,8 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
 export function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
   for (const prompt of prompts) {
     if (prompt.cronExpression === null) {
-      completeScheduledPrompt(prompt.id, prompt.userId, now)
-      log.info({ id: prompt.id, userId: prompt.userId }, 'One-shot scheduled prompt completed')
+      completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
+      log.info({ id: prompt.id, userId: prompt.createdByUserId }, 'One-shot scheduled prompt completed')
       continue
     }
 

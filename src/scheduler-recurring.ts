@@ -1,4 +1,5 @@
 import type { ChatProvider } from './chat/types.js'
+import { dmTarget } from './chat/types.js'
 import { emit } from './debug/event-bus.js'
 import { logger } from './logger.js'
 import type { Task, TaskProvider } from './providers/types.js'
@@ -50,7 +51,7 @@ export const notifyUser = async (
   if (chatProviderRef === null) return
 
   try {
-    await chatProviderRef.sendMessage(userId, `Recurring task created: **${created.title}** in project.`)
+    await chatProviderRef.sendMessage(dmTarget(userId), `Recurring task created: **${created.title}** in project.`)
   } catch (notifyError) {
     log.warn(
       { userId, error: notifyError instanceof Error ? notifyError.message : String(notifyError) },

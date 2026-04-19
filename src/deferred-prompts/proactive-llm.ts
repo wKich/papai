@@ -2,6 +2,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 
 import { getCachedHistory } from '../cache.js'
+import type { DeferredDeliveryTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { buildMessagesWithMemory, runTrimInBackground, shouldTriggerTrim } from '../conversation.js'
 import { appendHistory } from '../history.js'
@@ -16,12 +17,15 @@ import type { ExecutionMetadata } from './types.js'
 
 const log = logger.child({ scope: 'deferred:proactive-llm' })
 
-// Minimal toolset for lightweight/context modes - just get_current_time
-function makeMinimalTools(userId: string): { get_current_time: ReturnType<typeof makeGetCurrentTimeTool> } {
-  return {
-    get_current_time: makeGetCurrentTimeTool(userId),
-  }
+/** Execution context for a deferred prompt: who created it and where to deliver. */
+export type DeferredExecutionContext = {
+  createdByUserId: string
+  deliveryTarget: DeferredDeliveryTarget
 }
+
+const makeMinimalTools = (userId: string): { get_current_time: ReturnType<typeof makeGetCurrentTimeTool> } => ({
+  get_current_time: makeGetCurrentTimeTool(userId),
+})
 
 export interface ProactiveLlmDeps {
   generateText: typeof generateText
@@ -56,21 +60,31 @@ function getLlmConfig(userId: string): LlmConfig | string {
   return { apiKey, baseURL, mainModel }
 }
 
+const getStorageContextId = (target: DeferredDeliveryTarget): string =>
+  target.contextType === 'group' && target.threadId !== null
+    ? `${target.contextId}:${target.threadId}`
+    : target.contextId
+
 type LlmResult = Awaited<ReturnType<typeof generateText>>
 
-function persistProactiveResults(userId: string, result: LlmResult, history: readonly ModelMessage[]): void {
+function persistProactiveResults(
+  creatorId: string,
+  storageContextId: string,
+  result: LlmResult,
+  history: readonly ModelMessage[],
+): void {
   const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
-  for (const fact of newFacts) upsertFact(userId, fact)
+  for (const fact of newFacts) upsertFact(creatorId, fact)
   if (newFacts.length > 0)
-    log.info({ userId, factsExtracted: newFacts.length }, 'Facts persisted from proactive results')
+    log.info({ userId: creatorId, factsExtracted: newFacts.length }, 'Facts persisted from proactive results')
 
   const msgs = result.response.messages
   if (msgs.length > 0) {
-    appendHistory(userId, msgs)
+    appendHistory(storageContextId, msgs)
     const updated = [...history, ...msgs]
-    if (shouldTriggerTrim(updated)) void runTrimInBackground(userId, updated)
+    if (shouldTriggerTrim(updated)) void runTrimInBackground(storageContextId, updated)
   }
-  log.debug({ userId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
+  log.debug({ userId: creatorId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
 }
 
 // --- Minimal system prompt (shared by lightweight and context modes) ---
@@ -100,99 +114,111 @@ const wrapPrompt = (prompt: string): string => `===DEFERRED_TASK===\n${prompt}\n
 // --- Three execution functions ---
 
 async function invokeLightweight(
-  userId: string,
+  execCtx: DeferredExecutionContext,
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
   deps: ProactiveLlmDeps,
 ): Promise<string> {
-  log.debug({ userId, mode: 'lightweight' }, 'invokeLightweight called')
-  const config = getLlmConfig(userId)
+  const { createdByUserId } = execCtx
+  log.debug({ userId: createdByUserId, mode: 'lightweight' }, 'invokeLightweight called')
+  const config = getLlmConfig(createdByUserId)
   if (typeof config === 'string') return config
 
-  const smallModel = getConfig(userId, 'small_model')
+  const smallModel = getConfig(createdByUserId, 'small_model')
   const modelId = smallModel ?? config.mainModel
   const model = deps.buildModel(config, modelId)
   const messages: ModelMessage[] = [...buildMetadataMessages(metadata), { role: 'user', content: wrapPrompt(prompt) }]
 
-  log.debug({ userId, modelId, mode: 'lightweight' }, 'Calling generateText')
+  log.debug({ userId: createdByUserId, modelId, mode: 'lightweight' }, 'Calling generateText')
   const result = await deps.generateText({
     model,
     system: buildMinimalSystemPrompt(type),
     messages,
-    tools: makeMinimalTools(userId),
+    tools: makeMinimalTools(createdByUserId),
     timeout: 1_200_000,
   })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
-    const history = getCachedHistory(userId)
-    appendHistory(userId, assistantMessages)
-    log.debug({ userId, count: assistantMessages.length }, 'Lightweight response appended to history')
+    const history = getCachedHistory(createdByUserId)
+    appendHistory(createdByUserId, assistantMessages)
+    log.debug({ userId: createdByUserId, count: assistantMessages.length }, 'Lightweight response appended to history')
     const updatedHistory = [...history, ...assistantMessages]
-    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(userId, updatedHistory)
+    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(createdByUserId, updatedHistory)
   }
   return result.text ?? 'Done.'
 }
 
 async function invokeWithContext(
-  userId: string,
+  execCtx: DeferredExecutionContext,
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
   deps: ProactiveLlmDeps,
 ): Promise<string> {
-  log.debug({ userId, mode: 'context' }, 'invokeWithContext called')
-  const config = getLlmConfig(userId)
+  const { createdByUserId, deliveryTarget } = execCtx
+  const storageContextId = getStorageContextId(deliveryTarget)
+  log.debug({ userId: createdByUserId, mode: 'context' }, 'invokeWithContext called')
+  const config = getLlmConfig(createdByUserId)
   if (typeof config === 'string') return config
 
   const model = deps.buildModel(config, config.mainModel)
-  const history = getCachedHistory(userId)
-  const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
+  const history = getCachedHistory(storageContextId)
+  const { messages: messagesWithMemory } = buildMessagesWithMemory(storageContextId, history)
   const messages: ModelMessage[] = [
     ...messagesWithMemory,
     ...buildMetadataMessages(metadata),
     { role: 'user', content: wrapPrompt(prompt) },
   ]
 
-  log.debug({ userId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' }, 'generateText')
+  log.debug(
+    { userId: createdByUserId, mainModel: config.mainModel, historyLength: history.length, mode: 'context' },
+    'generateText',
+  )
   const result = await deps.generateText({
     model,
     system: buildMinimalSystemPrompt(type),
     messages,
-    tools: makeMinimalTools(userId),
+    tools: makeMinimalTools(createdByUserId),
     timeout: 1_200_000,
   })
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
-    appendHistory(userId, assistantMessages)
+    appendHistory(storageContextId, assistantMessages)
     const updatedHistory = [...history, ...assistantMessages]
-    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(userId, updatedHistory)
+    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(storageContextId, updatedHistory)
   }
   return result.text ?? 'Done.'
 }
 
-function buildFullToolSet(provider: TaskProvider, userId: string): ToolSet {
+function buildFullToolSet(
+  provider: TaskProvider,
+  createdByUserId: string,
+  storageContextId: string,
+  contextType: 'dm' | 'group',
+): ToolSet {
   return makeTools(provider, {
-    storageContextId: userId,
-    chatUserId: userId,
+    storageContextId,
+    chatUserId: createdByUserId,
     mode: 'proactive',
-    contextType: 'dm',
+    contextType,
   })
 }
 
 function buildFullMessages(
-  userId: string,
+  createdByUserId: string,
+  storageContextId: string,
   type: 'scheduled' | 'alert',
   prompt: string,
   matchedTasksSummary: string | undefined,
   metadata: ExecutionMetadata,
 ): { messages: ModelMessage[]; systemPrompt: string } {
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
+  const timezone = getConfig(createdByUserId, 'timezone') ?? 'UTC'
   const trigger = buildProactiveTrigger(type, prompt, timezone, matchedTasksSummary)
-  const history = getCachedHistory(userId)
-  const { messages: messagesWithMemory } = buildMessagesWithMemory(userId, history)
+  const history = getCachedHistory(storageContextId)
+  const { messages: messagesWithMemory } = buildMessagesWithMemory(storageContextId, history)
   return {
     messages: [
       ...messagesWithMemory,
@@ -205,7 +231,7 @@ function buildFullMessages(
 }
 
 async function invokeFull(
-  userId: string,
+  execCtx: DeferredExecutionContext,
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
@@ -213,22 +239,27 @@ async function invokeFull(
   matchedTasksSummary: string | undefined,
   deps: ProactiveLlmDeps,
 ): Promise<string> {
-  log.debug({ userId, mode: 'full' }, 'invokeFull called')
-  const config = getLlmConfig(userId)
+  const { createdByUserId, deliveryTarget } = execCtx
+  const storageContextId = getStorageContextId(deliveryTarget)
+  log.debug({ userId: createdByUserId, mode: 'full' }, 'invokeFull called')
+  const config = getLlmConfig(createdByUserId)
   if (typeof config === 'string') return config
 
-  const provider = buildProviderFn(userId)
+  const provider = buildProviderFn(createdByUserId)
   if (provider === null) {
-    log.warn({ userId }, 'Could not build task provider for deferred prompt')
+    log.warn({ userId: createdByUserId }, 'Could not build task provider for deferred prompt')
     return 'Deferred prompt skipped: task provider not configured.'
   }
 
   const model = deps.buildModel(config, config.mainModel)
-  const tools = buildFullToolSet(provider, userId)
-  const systemPrompt = buildSystemPrompt(provider, userId)
-  const { messages } = buildFullMessages(userId, type, prompt, matchedTasksSummary, metadata)
+  const tools = buildFullToolSet(provider, createdByUserId, storageContextId, deliveryTarget.contextType)
+  const systemPrompt = buildSystemPrompt(provider, createdByUserId)
+  const { messages } = buildFullMessages(createdByUserId, storageContextId, type, prompt, matchedTasksSummary, metadata)
 
-  log.debug({ userId, mainModel: config.mainModel, historyLength: messages.length, mode: 'full' }, 'generateText')
+  log.debug(
+    { userId: createdByUserId, mainModel: config.mainModel, historyLength: messages.length, mode: 'full' },
+    'generateText',
+  )
   const result = await deps.generateText({
     model,
     system: systemPrompt,
@@ -237,14 +268,14 @@ async function invokeFull(
     stopWhen: deps.stepCountIs(25),
     timeout: 1_200_000,
   })
-  persistProactiveResults(userId, result, getCachedHistory(userId))
+  persistProactiveResults(createdByUserId, storageContextId, result, getCachedHistory(storageContextId))
   return result.text ?? 'Done.'
 }
 
 // --- Dispatcher ---
 
 export function dispatchExecution(
-  userId: string,
+  execCtx: DeferredExecutionContext,
   type: 'scheduled' | 'alert',
   prompt: string,
   metadata: ExecutionMetadata,
@@ -252,15 +283,16 @@ export function dispatchExecution(
   matchedTasksSummary?: string,
   deps: ProactiveLlmDeps = defaultProactiveLlmDeps,
 ): Promise<string> {
-  log.debug({ userId, mode: metadata.mode }, 'dispatchExecution called')
+  const { createdByUserId } = execCtx
+  log.debug({ userId: createdByUserId, mode: metadata.mode }, 'dispatchExecution called')
   switch (metadata.mode) {
     case 'lightweight':
-      return invokeLightweight(userId, type, prompt, metadata, deps)
+      return invokeLightweight(execCtx, type, prompt, metadata, deps)
     case 'context':
-      return invokeWithContext(userId, type, prompt, metadata, deps)
+      return invokeWithContext(execCtx, type, prompt, metadata, deps)
     case 'full':
-      return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
+      return invokeFull(execCtx, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
     default:
-      return invokeFull(userId, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
+      return invokeFull(execCtx, type, prompt, metadata, buildProviderFn, matchedTasksSummary, deps)
   }
 }

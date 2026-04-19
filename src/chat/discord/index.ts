@@ -6,6 +6,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
@@ -36,6 +37,15 @@ export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
+type SendableChannel = { send: (opts: { content: string }) => Promise<unknown> }
+function isSendableChannel(val: unknown): val is SendableChannel {
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'send' in val &&
+    typeof (val as Record<string, unknown>)['send'] === 'function'
+  )
+}
 
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
@@ -76,18 +86,38 @@ export class DiscordChatProvider implements ChatProvider {
     this.interactionHandler = handler
   }
 
-  async sendMessage(userId: string, markdown: string): Promise<void> {
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
     if (this.client === null || this.client.users === undefined) {
       throw new Error('DiscordChatProvider.sendMessage called before start()')
     }
-    const user = await this.client.users.fetch(userId)
-    const dm = await user.createDM()
-    const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
+    if (target.contextType === 'dm') {
+      const user = await this.client.users.fetch(target.contextId)
+      const dm = await user.createDM()
+      const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
+      await chunks.reduce<Promise<unknown>>(
+        (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
+        Promise.resolve(null),
+      )
+      log.info({ userId: target.contextId }, 'Discord DM sent')
+      return
+    }
+    let content = markdown
+    if (target.audience === 'personal' && target.mentionUserIds.length > 0) {
+      const mentions = target.mentionUserIds.map((id) => `<@${id}>`).join(' ')
+      content = `${mentions} ${markdown}`
+    }
+    const fetchChannel = this.client.channels?.fetch
+    const channel = fetchChannel ? await fetchChannel.call(this.client.channels, target.contextId) : undefined
+    if (!isSendableChannel(channel)) {
+      log.warn({ channelId: target.contextId }, 'Discord channel not sendable')
+      return
+    }
+    const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
     await chunks.reduce<Promise<unknown>>(
-      (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
+      (prev, chunk) => prev.then(() => channel.send({ content: chunk })),
       Promise.resolve(null),
     )
-    log.info({ userId }, 'Discord DM sent')
+    log.info({ channelId: target.contextId }, 'Discord channel message sent')
   }
 
   async resolveUserId(username: string, context: ResolveUserContext): Promise<string | null> {

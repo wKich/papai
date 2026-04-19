@@ -32,7 +32,7 @@ describe('alert prompt CRUD', () => {
 
     expect(result.type).toBe('alert')
     expect(result.id).toBeTruthy()
-    expect(result.userId).toBe('user1')
+    expect(result.createdByUserId).toBe('user1')
     expect(result.prompt).toBe('Notify when done')
     expect(result.condition).toEqual(condition)
     expect(result.status).toBe('active')
@@ -212,6 +212,67 @@ describe('alert prompt CRUD', () => {
     const eligible = getEligibleAlertPrompts()
     expect(eligible).toHaveLength(1)
     expect(eligible[0]!.prompt).toBe('Past cooldown alert')
+  })
+})
+
+describe('alerts delivery target', () => {
+  beforeEach(async () => {
+    await setupTestDb()
+  })
+
+  test('creates alert prompt with explicit creator and delivery target', () => {
+    const alert = createAlertPrompt(
+      'user-1',
+      'notify channel',
+      { field: 'task.status', op: 'eq', value: 'done' },
+      60,
+      undefined,
+      {
+        contextId: 'chan-1',
+        contextType: 'group',
+        threadId: 'root-1',
+        audience: 'shared',
+        mentionUserIds: [],
+        createdByUserId: 'user-1',
+        createdByUsername: 'ki',
+      },
+    )
+
+    expect(alert.createdByUserId).toBe('user-1')
+    expect(alert.deliveryTarget.contextId).toBe('chan-1')
+    expect(alert.deliveryTarget.audience).toBe('shared')
+  })
+
+  test('lists alerts by creator identity after schema rename', () => {
+    createAlertPrompt('user-1', 'mine', { field: 'task.status', op: 'eq', value: 'done' }, 60, undefined, {
+      contextId: 'chan-1',
+      contextType: 'group',
+      threadId: null,
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: 'user-1',
+      createdByUsername: null,
+    })
+    createAlertPrompt('user-2', 'not mine', { field: 'task.status', op: 'eq', value: 'done' }, 60, undefined, {
+      contextId: 'chan-1',
+      contextType: 'group',
+      threadId: null,
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: 'user-2',
+      createdByUsername: null,
+    })
+
+    expect(listAlertPrompts('user-1')).toHaveLength(1)
+  })
+
+  test('defaults to dm delivery when no delivery provided', () => {
+    const condition: AlertCondition = { field: 'task.status', op: 'eq', value: 'done' }
+    const alert = createAlertPrompt('user1', 'Default delivery', condition)
+
+    expect(alert.deliveryTarget.contextType).toBe('dm')
+    expect(alert.deliveryTarget.contextId).toBe('user1')
+    expect(alert.deliveryTarget.audience).toBe('personal')
   })
 })
 

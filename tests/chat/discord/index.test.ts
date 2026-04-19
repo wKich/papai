@@ -4,6 +4,7 @@ import { addAuthorizedGroup } from '../../../src/authorized-groups.js'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
+import { dmTarget } from '../../../src/chat/types.js'
 import { setConfig } from '../../../src/config.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
 import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
@@ -179,7 +180,7 @@ describe('DiscordChatProvider', () => {
     }
     provider.testSetClient(fakeClient)
 
-    await provider.sendMessage('user-42', 'hello discord')
+    await provider.sendMessage(dmTarget('user-42'), 'hello discord')
     expect(sends).toHaveLength(1)
     expect(sends[0]!.content).toBe('hello discord')
   })

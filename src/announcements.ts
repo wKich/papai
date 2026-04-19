@@ -1,6 +1,7 @@
 import packageJson from '../package.json' with { type: 'json' }
 import { readChangelogFile as defaultReadChangelogFile } from './changelog-reader.js'
 import type { ChatProvider } from './chat/types.js'
+import { dmTarget } from './chat/types.js'
 import { getDrizzleDb } from './db/drizzle.js'
 import { versionAnnouncements } from './db/schema.js'
 import { logger } from './logger.js'
@@ -31,7 +32,7 @@ function markVersionAnnounced(version: string): boolean {
 
 async function sendAnnouncementToAdmin(adminUserId: string, markdown: string, chat: ChatProvider): Promise<boolean> {
   try {
-    await chat.sendMessage(adminUserId, markdown)
+    await chat.sendMessage(dmTarget(adminUserId), markdown)
     log.debug({ version: VERSION }, 'Announcement sent to admin')
     return true
   } catch (error) {

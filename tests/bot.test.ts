@@ -10,6 +10,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingFile,
   IncomingInteraction,
   IncomingMessage,
@@ -794,7 +795,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
       onMessage(_handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void {}
 
-      sendMessage(_userId: string, _text: string): Promise<void> {
+      sendMessage(_target: DeferredDeliveryTarget, _text: string): Promise<void> {
         return Promise.resolve()
       }
 

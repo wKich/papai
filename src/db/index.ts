@@ -30,6 +30,7 @@ import { migration021WebFetch } from './migrations/021_web_fetch.js'
 import { migration022DropUnusedLastSeenIndex } from './migrations/022_drop_unused_last_seen_index.js'
 import { migration023AddForeignKeys } from './migrations/023_add_foreign_keys.js'
 import { migration024AuthorizedGroups } from './migrations/024_authorized_groups.js'
+import { migration025DeferredPromptDeliveryTargets } from './migrations/025_deferred_prompt_delivery_targets.js'
 
 const getDbPath = (): string => {
   const dbPath = process.env['DB_PATH']
@@ -89,6 +90,7 @@ export const MIGRATIONS: readonly Migration[] = [
   migration022DropUnusedLastSeenIndex,
   migration023AddForeignKeys,
   migration024AuthorizedGroups,
+  migration025DeferredPromptDeliveryTargets,
 ]
 
 export const initDb = (): void => {

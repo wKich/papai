@@ -1,5 +1,34 @@
 import { z } from 'zod'
 
+import type { ContextType, DeferredAudience } from '../chat/types.js'
+
+// --- Delivery domain types ---
+
+/** Domain-layer delivery spec stored with each prompt (mirrors DeferredDeliveryTarget). */
+export type DeferredPromptDelivery = {
+  contextId: string
+  contextType: ContextType
+  threadId: string | null
+  audience: DeferredAudience
+  mentionUserIds: string[]
+  createdByUserId: string
+  createdByUsername: string | null
+}
+
+/** Input shape for delivery spec at creation time (same fields as DeferredPromptDelivery). */
+export type DeferredPromptDeliveryInput = DeferredPromptDelivery
+
+/** Tool-level delivery policy schema (audience + mention targets chosen by the LLM). */
+export const deliveryPolicySchema = z
+  .object({
+    audience: z.enum(['personal', 'shared']).describe("'personal' to @mention the creator, 'shared' for no mention"),
+    mention_user_ids: z
+      .array(z.string())
+      .describe('User IDs to @mention in the delivery message (personal audience only)'),
+  })
+  .optional()
+  .describe('Delivery policy for group contexts. Omit for DM prompts.')
+
 // --- Condition fields and operators ---
 
 export const CONDITION_FIELDS = [
@@ -145,7 +174,9 @@ export const executionInputSchema = z
 export type ScheduledPrompt = {
   type: 'scheduled'
   id: string
-  userId: string
+  createdByUserId: string
+  createdByUsername: string | null
+  deliveryTarget: DeferredPromptDelivery
   prompt: string
   fireAt: string
   cronExpression: string | null
@@ -158,7 +189,9 @@ export type ScheduledPrompt = {
 export type AlertPrompt = {
   type: 'alert'
   id: string
-  userId: string
+  createdByUserId: string
+  createdByUsername: string | null
+  deliveryTarget: DeferredPromptDelivery
   prompt: string
   condition: AlertCondition
   status: 'active' | 'cancelled'
