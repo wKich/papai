@@ -120,7 +120,7 @@ Source files
 
 ## Data Model
 
-Tier 1 uses five primary tables plus one FTS5 virtual table.
+Tier 1 uses five primary tables (`files`, `module_aliases`, `symbols`, `module_exports`, `symbol_references`) plus one FTS5 virtual table (`symbol_fts`).
 
 ### `files`
 
@@ -230,12 +230,12 @@ CREATE INDEX idx_module_exports_resolved_file_id ON module_exports(resolved_file
 
 This table is what makes barrel files, aliased exports, and re-export chains queryable without fuzzy heuristics.
 
-### `references`
+### `symbol_references`
 
-Resolver-backed edges between symbols.
+Resolver-backed edges between symbols. The table is named `symbol_references` rather than `references` because `REFERENCES` is a reserved constraint keyword in SQLite and unquoted use of it as a table identifier is brittle across SQLite versions and query parsers.
 
 ```sql
-CREATE TABLE references (
+CREATE TABLE symbol_references (
   id INTEGER PRIMARY KEY,
   source_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
   source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -248,11 +248,11 @@ CREATE TABLE references (
   line_number INTEGER NOT NULL
 );
 
-CREATE INDEX idx_references_source_symbol_id ON references(source_symbol_id);
-CREATE INDEX idx_references_target_symbol_id ON references(target_symbol_id);
-CREATE INDEX idx_references_target_name ON references(target_name);
-CREATE INDEX idx_references_edge_type ON references(edge_type);
-CREATE INDEX idx_references_confidence ON references(confidence);
+CREATE INDEX idx_symbol_references_source_symbol_id ON symbol_references(source_symbol_id);
+CREATE INDEX idx_symbol_references_target_symbol_id ON symbol_references(target_symbol_id);
+CREATE INDEX idx_symbol_references_target_name ON symbol_references(target_name);
+CREATE INDEX idx_symbol_references_edge_type ON symbol_references(edge_type);
+CREATE INDEX idx_symbol_references_confidence ON symbol_references(confidence);
 ```
 
 `confidence` is mandatory. Tier 1 must distinguish exact resolution from fallback hints.
@@ -358,7 +358,7 @@ Collect resolver candidates for:
 - `implements`
 - general named symbol references inside bodies
 
-Tier 1 should prefer one accurate `references` edge over many overly-specific but unreliable subtypes.
+Tier 1 should prefer one accurate `symbol_references` edge over many overly-specific but unreliable subtypes.
 
 ### 6. Resolution
 
@@ -376,7 +376,7 @@ The result is always stored with a `confidence` value. Name-only fallback is use
 ### 7. Persist
 
 - upsert changed `files`
-- replace that file's `symbols`, `module_exports`, and `references` in a transaction
+- replace that file's `symbols`, `module_exports`, and `symbol_references` in a transaction
 - update `symbol_fts` through external-content triggers
 - mark parse failures explicitly instead of leaving stale rows in place
 
@@ -748,7 +748,7 @@ Candidate additions:
 
 ### Layer 3: Richer Dependency Graph
 
-Future graph work should build on `references`, not replace it.
+Future graph work should build on `symbol_references`, not replace it.
 
 Candidate additions:
 
@@ -774,6 +774,8 @@ Candidate additions:
 
 ## Implementation Notes For Later Planning
 
-- validate the final MCP SDK package surface at implementation time and use the current official TypeScript MCP server package, not stale snippets
+- validate the final MCP SDK package surface at implementation time and use the current official TypeScript MCP server package, not stale snippets; verify version and export layout via `context7` before pinning
+- source tree-sitter grammars as **WASM** (for example `tree-sitter-wasms` or `@vscode/tree-sitter-wasm`), not the native `tree-sitter-typescript` / `tree-sitter-javascript` Node bindings; the native packages do not ship the `.wasm` files required by `web-tree-sitter`
 - validate final host integration examples against current Claude Code and OpenCode docs before shipping install instructions
 - benchmark against representative query fixtures, not just raw indexing speed
+- never name a table `references` — it collides with SQLite's reserved `REFERENCES` keyword; use `symbol_references`

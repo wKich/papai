@@ -6,7 +6,16 @@
 
 **Architecture:** Implement `codeindex/` as a real nested Bun workspace package so it can own its dependencies, tests, and scripts while still living in the papai monorepo. Build the feature vertically: package scaffolding and parser loading first, then schema and storage, then extraction and resolution, then search and MCP, and finally incremental reindexing plus repo-level quality-gate integration.
 
-**Tech Stack:** Bun, TypeScript, `bun:sqlite`, `web-tree-sitter`, `tree-sitter-javascript`, `tree-sitter-typescript`, `ignore`, `zod`, `@modelcontextprotocol/sdk` v1.x, Bun test, oxlint, oxfmt, knip
+**Tech Stack:** Bun, TypeScript, `bun:sqlite`, `web-tree-sitter` + `tree-sitter-wasms` (prebuilt WASM grammars for ts/tsx/js), `ignore`, `zod`, `@modelcontextprotocol/sdk` v1.x, Bun test, oxlint, oxfmt, knip
+
+**Alignment notes (applied during spec/plan sync):**
+
+- the `symbol_references` table is named with a `symbol_` prefix because `REFERENCES` is a reserved keyword in SQLite; unquoted use of `references` as a table identifier is brittle
+- grammars are loaded from `tree-sitter-wasms/out/*.wasm` (prebuilt WASM) because the native `tree-sitter-typescript` / `tree-sitter-javascript` npm packages do not ship `.wasm` files
+- `codeindex/bunfig.toml` overrides the root preloads so codeindex tests do not pull in `tests/setup.ts` / `tests/mock-reset.ts`
+- `typescript` and `@typescript/native-preview` live under `devDependencies` in `codeindex/package.json` (developer-only)
+- context7 verification is a required step before pinning `web-tree-sitter`, `tree-sitter-wasms`, and `@modelcontextprotocol/sdk`
+- TDD hooks (`.hooks/tdd/test-resolver.mjs`) and agent guidance (`CLAUDE.md`, `codeindex/CLAUDE.md`) are updated explicitly in Task 13 so the workspace is not silently exempt
 
 ---
 
@@ -23,6 +32,11 @@ This should stay as one implementation plan. The workspace packaging, parser/run
 | `.gitignore`                                   | Ignore `codeindex/.codeindex/` database artifacts                                               |
 | `codeindex/package.json`                       | Workspace-local dependencies and scripts                                                        |
 | `codeindex/tsconfig.json`                      | Workspace TypeScript config extending the repo base                                             |
+| `codeindex/bunfig.toml`                        | Override root preloads so codeindex tests do not pull in papai-only test setup                  |
+| `codeindex/CLAUDE.md`                          | Workspace-scoped agent guidance for codeindex                                                   |
+| `CLAUDE.md`                                    | Add `codeindex/` row to the Path-Scoped Conventions table and list `codeindex:*` scripts        |
+| `.hooks/tdd/test-resolver.mjs`                 | Extend resolver to map `codeindex/src/**` ↔ `tests/codeindex/**` (or document exemption)        |
+| `scripts/check.sh`                             | Extend full-check run to include codeindex workspace checks                                     |
 | `codeindex/src/cli.ts`                         | CLI entrypoint for `index`, `reindex`, `search`, `symbol`, `impact`, `stats`, and `mcp`         |
 | `codeindex/src/config.ts`                      | Zod-backed `.codeindex.json` parsing and defaults                                               |
 | `codeindex/src/types.ts`                       | Shared readonly data shapes for files, symbols, references, search results, and index summaries |
@@ -137,8 +151,9 @@ Expected: FAIL with `Cannot find module '../../codeindex/src/config.js'`.
 
 - [ ] **Step 3: Add root workspace, ignore, and knip wiring**
 
-```json
-// package.json
+```jsonc
+// package.json — merge into the existing root package.json; do not overwrite.
+// Add `workspaces` if not present and merge the `codeindex:*` scripts into the existing `scripts` block.
 {
   "private": true,
   "workspaces": ["codeindex"],
@@ -146,18 +161,18 @@ Expected: FAIL with `Cannot find module '../../codeindex/src/config.js'`.
     "codeindex:test": "bun run --filter codeindex test",
     "codeindex:typecheck": "bun run --filter codeindex typecheck",
     "codeindex:lint": "bun run --filter codeindex lint",
-    "codeindex:format:check": "bun run --filter codeindex format:check"
-  }
+    "codeindex:format:check": "bun run --filter codeindex format:check",
+  },
 }
 ```
 
 ```gitignore
-# .gitignore
+# .gitignore — append this line to the existing file; do not overwrite surrounding rules.
 codeindex/.codeindex/
 ```
 
 ```jsonc
-// knip.jsonc
+// knip.jsonc (merge with existing file — do not overwrite the surrounding keys)
 {
   "entry": [
     "src/scripts/*.ts!",
@@ -167,6 +182,8 @@ codeindex/.codeindex/
     "codeindex/src/cli.ts!",
   ],
   "project": ["src/**/*.ts!", "client/**/*.ts!", "codeindex/src/**/*.ts!"],
+  // Extend the existing ignore list so codeindex runtime artifacts never trip knip under `--no-gitignore`.
+  "ignore": ["src/db/migrations/**", "codeindex/.codeindex/**"],
 }
 ```
 
@@ -189,14 +206,20 @@ codeindex/.codeindex/
   "dependencies": {
     "ignore": "^7.0.5",
     "web-tree-sitter": "^0.26.8",
-    "tree-sitter-javascript": "^0.25.0",
-    "tree-sitter-typescript": "^0.23.2",
-    "typescript": "^6.0.0",
+    "tree-sitter-wasms": "^0.1.13",
     "zod": "^4.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "@typescript/native-preview": "^7.0.0-dev.20260409.1"
   }
 }
 ```
+
+> **Dependency rationale:** `tree-sitter-wasms` publishes prebuilt `.wasm` grammar files under `tree-sitter-wasms/out/` for both `typescript`, `tsx`, and `javascript`. The native `tree-sitter-javascript` / `tree-sitter-typescript` packages do **not** ship `.wasm` files and would require a `tree-sitter build --wasm` step per grammar. `typescript` and `@typescript/native-preview` are devDependencies because the resolver uses `ts.readConfigFile` (developer-only) and typecheck runs via `tsgo`.
+>
+> Before committing these versions, verify current release metadata via `context7` (per workflow protocol): resolve `tree-sitter-wasms`, `web-tree-sitter`, and `@modelcontextprotocol/sdk` and confirm the exports surface still matches what this plan assumes.
 
 ```json
 // codeindex/tsconfig.json
@@ -207,6 +230,15 @@ codeindex/.codeindex/
   },
   "include": ["src/**/*.ts"]
 }
+```
+
+```toml
+# codeindex/bunfig.toml
+# Override the root bunfig.toml preloads so codeindex tests do not pull in
+# ./tests/setup.ts and ./tests/mock-reset.ts (which depend on papai-only modules).
+[test]
+preload = []
+pathIgnorePatterns = []
 ```
 
 ```json
@@ -294,7 +326,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add package.json .gitignore knip.jsonc codeindex/package.json codeindex/tsconfig.json codeindex/.codeindex.json.example codeindex/src/config.ts tests/codeindex/config.test.ts
+git add package.json .gitignore knip.jsonc codeindex/package.json codeindex/tsconfig.json codeindex/bunfig.toml codeindex/.codeindex.json.example codeindex/src/config.ts tests/codeindex/config.test.ts
 git commit -m "feat(codeindex): scaffold workspace package"
 ```
 
@@ -307,6 +339,15 @@ git commit -m "feat(codeindex): scaffold workspace package"
 - Create: `codeindex/src/types.ts`
 - Create: `codeindex/src/indexer/parser.ts`
 - Test: `tests/codeindex/parser.test.ts`
+
+- [ ] **Step 0: Verify current versions and export surface via `context7`**
+
+Resolve these library IDs and confirm the published surface still matches what this plan assumes (grammar wasm paths under `tree-sitter-wasms/out/`, named exports `Parser` + `Language` from `web-tree-sitter`, `Parser.init()` + `Language.load()`). Adjust versions and imports if upstream has moved. As of verification, `web-tree-sitter@^0.26` exposes `Parser` and `Language` as named exports; the older `Parser.Language.load(...)` path is no longer the documented surface.
+
+- `web-tree-sitter`
+- `tree-sitter-wasms`
+
+Record the resolved versions in `codeindex/package.json` before proceeding.
 
 - [ ] **Step 1: Write the failing parser bootstrap test**
 
@@ -328,18 +369,17 @@ describe('createParserLoader', () => {
     // Delayed import is required because Bun evaluates static imports before mock.module().
     void mock.module('web-tree-sitter', () => {
       class FakeParser {
+        static init = parserInit
         setLanguage(language: unknown): void {
           setLanguage(language)
         }
       }
 
       return {
-        default: Object.assign(FakeParser, {
-          init: parserInit,
-          Language: {
-            load: loadLanguage,
-          },
-        }),
+        Parser: FakeParser,
+        Language: {
+          load: loadLanguage,
+        },
       }
     })
   })
@@ -354,9 +394,9 @@ describe('createParserLoader', () => {
 
     expect(parserInit).toHaveBeenCalledTimes(1)
     expect(loadLanguage.mock.calls.map((call) => String(call[0]))).toEqual([
-      expect.stringContaining('tree-sitter-typescript.wasm'),
-      expect.stringContaining('tree-sitter-tsx.wasm'),
-      expect.stringContaining('tree-sitter-javascript.wasm'),
+      expect.stringContaining('tree-sitter-wasms/out/tree-sitter-typescript.wasm'),
+      expect.stringContaining('tree-sitter-wasms/out/tree-sitter-tsx.wasm'),
+      expect.stringContaining('tree-sitter-wasms/out/tree-sitter-javascript.wasm'),
     ])
     expect(setLanguage).toHaveBeenCalledTimes(3)
   })
@@ -418,7 +458,7 @@ export interface SearchResult {
 
 ```typescript
 // codeindex/src/indexer/parser.ts
-import Parser from 'web-tree-sitter'
+import { Language, Parser } from 'web-tree-sitter'
 
 import type { SupportedLanguage } from '../types.js'
 
@@ -449,12 +489,12 @@ const extensionToLanguage = (extension: string): SupportedLanguage => {
 const wasmSpecifierFor = (language: SupportedLanguage): string => {
   switch (language) {
     case 'ts':
-      return 'tree-sitter-typescript/tree-sitter-typescript.wasm'
+      return 'tree-sitter-wasms/out/tree-sitter-typescript.wasm'
     case 'tsx':
-      return 'tree-sitter-typescript/tree-sitter-tsx.wasm'
+      return 'tree-sitter-wasms/out/tree-sitter-tsx.wasm'
     case 'js':
     case 'jsx':
-      return 'tree-sitter-javascript/tree-sitter-javascript.wasm'
+      return 'tree-sitter-wasms/out/tree-sitter-javascript.wasm'
   }
 }
 
@@ -463,13 +503,13 @@ const resolveWasmPath = (language: SupportedLanguage): string =>
 
 export const createParserLoader = async (): Promise<ParserLoader> => {
   await Parser.init()
-  const cache = new Map<SupportedLanguage, Promise<Parser.Language>>()
+  const cache = new Map<SupportedLanguage, Promise<Language>>()
 
-  const loadLanguage = (language: SupportedLanguage): Promise<Parser.Language> => {
+  const loadLanguage = (language: SupportedLanguage): Promise<Language> => {
     const cached = cache.get(language)
     if (cached !== undefined) return cached
 
-    const resolved = Promise.resolve(Parser.Language.load(resolveWasmPath(language)))
+    const resolved = Promise.resolve(Language.load(resolveWasmPath(language)))
     cache.set(language, resolved)
     return resolved
   }
@@ -703,7 +743,7 @@ describe('ensureSchema', () => {
     expect(tableNames).toContain('module_aliases')
     expect(tableNames).toContain('symbols')
     expect(tableNames).toContain('module_exports')
-    expect(tableNames).toContain('references')
+    expect(tableNames).toContain('symbol_references')
     expect(tableNames).toContain('symbol_fts')
     expect(triggerNames).toEqual(expect.arrayContaining(['symbols_ad', 'symbols_ai', 'symbols_au']))
   })
@@ -792,7 +832,7 @@ export const ensureSchema = (db: Database): void => {
       resolved_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL
     );
 
-    CREATE TABLE IF NOT EXISTS references (
+    CREATE TABLE IF NOT EXISTS symbol_references (
       id INTEGER PRIMARY KEY,
       source_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
       source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -816,11 +856,11 @@ export const ensureSchema = (db: Database): void => {
     CREATE INDEX IF NOT EXISTS idx_module_exports_export_name ON module_exports(export_name);
     CREATE INDEX IF NOT EXISTS idx_module_exports_symbol_id ON module_exports(symbol_id);
     CREATE INDEX IF NOT EXISTS idx_module_exports_resolved_file_id ON module_exports(resolved_file_id);
-    CREATE INDEX IF NOT EXISTS idx_references_source_symbol_id ON references(source_symbol_id);
-    CREATE INDEX IF NOT EXISTS idx_references_target_symbol_id ON references(target_symbol_id);
-    CREATE INDEX IF NOT EXISTS idx_references_target_name ON references(target_name);
-    CREATE INDEX IF NOT EXISTS idx_references_edge_type ON references(edge_type);
-    CREATE INDEX IF NOT EXISTS idx_references_confidence ON references(confidence);
+    CREATE INDEX IF NOT EXISTS idx_symbol_references_source_symbol_id ON symbol_references(source_symbol_id);
+    CREATE INDEX IF NOT EXISTS idx_symbol_references_target_symbol_id ON symbol_references(target_symbol_id);
+    CREATE INDEX IF NOT EXISTS idx_symbol_references_target_name ON symbol_references(target_name);
+    CREATE INDEX IF NOT EXISTS idx_symbol_references_edge_type ON symbol_references(edge_type);
+    CREATE INDEX IF NOT EXISTS idx_symbol_references_confidence ON symbol_references(confidence);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS symbol_fts USING fts5(
       local_name,
@@ -864,7 +904,7 @@ import type { Database } from 'bun:sqlite'
 export const clearFileRows = (db: Database, fileId: number): void => {
   db.query('DELETE FROM module_aliases WHERE file_id = ?').run(fileId)
   db.query('DELETE FROM module_exports WHERE file_id = ?').run(fileId)
-  db.query('DELETE FROM references WHERE source_file_id = ?').run(fileId)
+  db.query('DELETE FROM symbol_references WHERE source_file_id = ?').run(fileId)
   db.query('DELETE FROM symbols WHERE file_id = ?').run(fileId)
 }
 ```
@@ -1145,6 +1185,10 @@ git commit -m "feat(codeindex): add module resolution helpers"
 - Create: `codeindex/src/indexer/extract-symbols.ts`
 - Test: `tests/codeindex/extract-symbols.test.ts`
 
+> **Tier 1 fixture scope (accepted gaps, tracked as follow-up):** the extraction fixture below covers exported top-level declarations, member definitions, and local block scope on plain TS. Tier 1 intentionally does **not** cover: TypeScript decorators (`@Injectable` etc.), ambient declarations (`declare function`, `declare class`), `declare module 'name' { ... }` augmentations, standalone `.d.ts` files, and type-only `export type` / `import type` statements. These should still parse without throwing (tree-sitter-typescript handles the syntax), but they may be skipped, mis-tiered, or under-indexed. File a Tier 2 follow-up before relying on the index for decorator-heavy code or declaration-file workflows.
+>
+> When a fixture gap bites during implementation, add a dedicated test case rather than silently expanding `extractSymbolsFromSource` scope.
+
 - [ ] **Step 1: Write the failing symbol extraction test**
 
 ```typescript
@@ -1206,7 +1250,7 @@ Expected: FAIL with `Cannot find module '../../codeindex/src/indexer/extract-sym
 
 ```typescript
 // codeindex/src/indexer/extract-symbols.ts
-import type Parser from 'web-tree-sitter'
+import type { Node as SyntaxNode, Tree } from 'web-tree-sitter'
 
 import type { ScopeTier } from '../types.js'
 
@@ -1230,7 +1274,7 @@ export interface ExtractedSymbol {
 
 export interface ExtractSymbolsInput {
   readonly source: string
-  readonly tree: Parser.Tree
+  readonly tree: Tree
   readonly relativeFilePath: string
   readonly moduleKey: string
   readonly maxStoredBodyLines: number
@@ -1262,7 +1306,7 @@ const normalizeIdentifierTerms = (name: string): string =>
     .toLowerCase()
     .trim()
 
-const sliceNodeText = (source: string, node: Parser.SyntaxNode): string => source.slice(node.startIndex, node.endIndex)
+const sliceNodeText = (source: string, node: SyntaxNode): string => source.slice(node.startIndex, node.endIndex)
 
 const clipBody = (body: string, maxLines: number): string => body.split('\n').slice(0, maxLines).join('\n')
 
@@ -1280,12 +1324,12 @@ const readLeadingDocComment = (sourceLines: readonly string[], startLine: number
   return ''
 }
 
-const nameForNode = (node: Parser.SyntaxNode): string | null => {
+const nameForNode = (node: SyntaxNode): string | null => {
   if (node.type === 'lexical_declaration') return null
   return node.childForFieldName('name')?.text ?? null
 }
 
-const scopeTierForNode = (node: Parser.SyntaxNode, context: Readonly<WalkContext>): ScopeTier => {
+const scopeTierForNode = (node: SyntaxNode, context: Readonly<WalkContext>): ScopeTier => {
   if (context.exported) return 'exported'
   if (memberTypes.has(node.type)) return 'member'
   return context.parentQualifiedName === null ? 'module' : 'local'
@@ -1295,7 +1339,7 @@ export const extractSymbolsFromSource = (input: Readonly<ExtractSymbolsInput>): 
   const symbols: ExtractedSymbol[] = []
   const sourceLines = input.source.split('\n')
 
-  const visit = (node: Parser.SyntaxNode, context: Readonly<WalkContext>): void => {
+  const visit = (node: SyntaxNode, context: Readonly<WalkContext>): void => {
     if (node.type === 'export_statement') {
       for (let index = 0; index < node.namedChildCount; index += 1) {
         const child = node.namedChild(index)
@@ -1450,7 +1494,7 @@ Expected: FAIL with `Cannot find module '../../codeindex/src/indexer/extract-ref
 
 ```typescript
 // codeindex/src/indexer/extract-references.ts
-import type Parser from 'web-tree-sitter'
+import type { Node as SyntaxNode, Tree } from 'web-tree-sitter'
 
 export interface ModuleExportCandidate {
   readonly exportName: string
@@ -1470,7 +1514,7 @@ export interface ReferenceCandidate {
 
 export interface ExtractReferenceCandidatesInput {
   readonly source: string
-  readonly tree: Parser.Tree
+  readonly tree: Tree
   readonly relativeFilePath: string
   readonly moduleKey: string
 }
@@ -1486,7 +1530,7 @@ export const extractReferenceCandidates = (
   const moduleExports: ModuleExportCandidate[] = []
   const references: ReferenceCandidate[] = []
 
-  const visit = (node: Parser.SyntaxNode, enclosingSymbol: string | null): void => {
+  const visit = (node: SyntaxNode, enclosingSymbol: string | null): void => {
     if (node.type === 'export_statement') {
       const sourceSpecifier = node.childForFieldName('source')?.text.replaceAll("'", '').replaceAll('"', '') ?? null
 
@@ -2126,7 +2170,7 @@ export const indexCodebase = async (input: Readonly<IndexCodebaseInput>): Promis
 
     for (const reference of resolvedReferences) {
       db.query(
-        'INSERT INTO references (source_symbol_id, source_file_id, target_symbol_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO symbol_references (source_symbol_id, source_file_id, target_symbol_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).run(
         reference.sourceSymbolId,
         parsedFile.fileId,
@@ -2481,6 +2525,16 @@ git commit -m "feat(codeindex): add ranked symbol search"
 - Test: `tests/codeindex/impact.test.ts`
 - Test: `tests/codeindex/mcp.test.ts`
 
+- [ ] **Step 0: Verify MCP SDK surface via `context7`**
+
+Resolve `@modelcontextprotocol/sdk` via `context7` and confirm:
+
+- `McpServer` still lives at `@modelcontextprotocol/sdk/server/mcp.js`
+- `StdioServerTransport` still lives at `@modelcontextprotocol/sdk/server/stdio.js`
+- `server.registerTool(name, { description, inputSchema }, handler)` is the documented registration API; the legacy `server.tool(name, description, zodShape, handler)` signature still works in `@modelcontextprotocol/sdk@^1.29` but is deprecated. The plan below uses `registerTool` with a full Zod object (not `.shape`) as the `inputSchema`.
+
+Pin the actual installed version in `codeindex/package.json`.
+
 - [ ] **Step 1: Write the failing impact and MCP tests**
 
 ```typescript
@@ -2503,7 +2557,7 @@ describe('symbol resolution and impact', () => {
       `INSERT INTO symbols (id, file_id, file_path, module_key, symbol_key, local_name, qualified_name, kind, scope_tier, parent_symbol_id, is_exported, export_names, signature_text, doc_text, body_text, identifier_terms, start_line, end_line, start_byte, end_byte) VALUES (1, 1, 'src/helper.ts', 'src/helper', 'src/helper.ts#0-20', 'helper', 'src/helper#helper', 'function_declaration', 'exported', NULL, 1, '["helper"]', 'export function helper()', '', 'export function helper() {}', 'helper', 1, 1, 0, 20)`,
     ).run()
     db.query(
-      `INSERT INTO references (source_symbol_id, source_file_id, target_symbol_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (NULL, 1, 1, 'helper', 'helper', './helper', 'imports', 'resolved', 1)`,
+      `INSERT INTO symbol_references (source_symbol_id, source_file_id, target_symbol_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (NULL, 1, 1, 'helper', 'helper', './helper', 'imports', 'resolved', 1)`,
     ).run()
 
     expect(findSymbolCandidates(db, 'helper', 5)[0]?.qualifiedName).toBe('src/helper#helper')
@@ -2617,14 +2671,14 @@ export const findIncomingReferences = (db: Database, input: Readonly<ImpactLooku
     >(
       `SELECT source_symbols.qualified_name AS source_qualified_name,
               source_files.file_path AS source_file_path,
-              references.edge_type,
-              references.confidence,
-              references.line_number
-       FROM references
-       JOIN files AS source_files ON source_files.id = references.source_file_id
-       LEFT JOIN symbols AS source_symbols ON source_symbols.id = references.source_symbol_id
-       WHERE references.target_symbol_id = ?
-       ORDER BY references.confidence = 'resolved' DESC, references.line_number ASC
+              symbol_references.edge_type,
+              symbol_references.confidence,
+              symbol_references.line_number
+       FROM symbol_references
+       JOIN files AS source_files ON source_files.id = symbol_references.source_file_id
+       LEFT JOIN symbols AS source_symbols ON source_symbols.id = symbol_references.source_symbol_id
+       WHERE symbol_references.target_symbol_id = ?
+       ORDER BY symbol_references.confidence = 'resolved' DESC, symbol_references.line_number ASC
        LIMIT ?`,
     )
     .all(targetRow.id, input.limit)
@@ -2708,10 +2762,9 @@ import {
 export const createCodeindexServer = (deps: Readonly<CodeindexToolDeps>): McpServer => {
   const server = new McpServer({ name: 'codeindex', version: '0.1.0' })
 
-  server.tool(
+  server.registerTool(
     'code_search',
-    'Search indexed symbols',
-    CodeSearchInputSchema.shape,
+    { description: 'Search indexed symbols', inputSchema: CodeSearchInputSchema },
     async ({ query, limit, kinds, scopeTiers, pathPrefix }) => ({
       content: [
         { type: 'text', text: JSON.stringify(await deps.codeSearch({ query, limit, kinds, scopeTiers, pathPrefix })) },
@@ -2719,19 +2772,17 @@ export const createCodeindexServer = (deps: Readonly<CodeindexToolDeps>): McpSer
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'code_symbol',
-    'Resolve a query to candidate symbols',
-    CodeSymbolInputSchema.shape,
+    { description: 'Resolve a query to candidate symbols', inputSchema: CodeSymbolInputSchema },
     async ({ query, limit }) => ({
       content: [{ type: 'text', text: JSON.stringify(await deps.codeSymbol(query, limit)) }],
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'code_impact',
-    'Find incoming references for a symbol',
-    CodeImpactInputSchema.shape,
+    { description: 'Find incoming references for a symbol', inputSchema: CodeImpactInputSchema },
     async ({ symbolKey, qualifiedName, limit }) => ({
       content: [
         {
@@ -2742,9 +2793,13 @@ export const createCodeindexServer = (deps: Readonly<CodeindexToolDeps>): McpSer
     }),
   )
 
-  server.tool('code_index', 'Run full or incremental indexing', CodeIndexInputSchema.shape, async ({ path, mode }) => ({
-    content: [{ type: 'text', text: JSON.stringify(await deps.codeIndex({ path, mode })) }],
-  }))
+  server.registerTool(
+    'code_index',
+    { description: 'Run full or incremental indexing', inputSchema: CodeIndexInputSchema },
+    async ({ path, mode }) => ({
+      content: [{ type: 'text', text: JSON.stringify(await deps.codeIndex({ path, mode })) }],
+    }),
+  )
 
   return server
 }
@@ -2847,9 +2902,9 @@ const findIncrementalFileSet = async (db: Database, files: readonly DiscoveredFi
     db
       .query<{ file_path: string }, [string]>(
         `SELECT DISTINCT source_files.file_path
-         FROM references
-         JOIN files AS source_files ON source_files.id = references.source_file_id
-         JOIN symbols AS target_symbols ON target_symbols.id = references.target_symbol_id
+         FROM symbol_references
+         JOIN files AS source_files ON source_files.id = symbol_references.source_file_id
+         JOIN symbols AS target_symbols ON target_symbols.id = symbol_references.target_symbol_id
          JOIN files AS target_files ON target_files.id = target_symbols.file_id
          WHERE target_files.file_path = ?`,
       )
@@ -2861,11 +2916,11 @@ const findIncrementalFileSet = async (db: Database, files: readonly DiscoveredFi
 }
 
 // replace the source-file selection in indexCodebase()
-const filesToProcess =
-  input.mode === 'incremental'
-    ? files.filter((file) => (await findIncrementalFileSet(db, files)).has(file.relativePath))
-    : files
+const incrementalSet = input.mode === 'incremental' ? await findIncrementalFileSet(db, files) : null
+const filesToProcess = incrementalSet === null ? files : files.filter((file) => incrementalSet.has(file.relativePath))
 ```
+
+> **Note:** `.filter()` callbacks are synchronous — computing the set inside a `.filter` with `await` is a syntax error. Compute `incrementalSet` once before filtering.
 
 ```typescript
 // codeindex/src/cli.ts
@@ -2922,11 +2977,11 @@ const main = async (): Promise<void> => {
     case 'stats': {
       const db = openDatabase(config.dbPath)
       const stats = db
-        .query<{ files: number; symbols: number; references: number }, []>(
+        .query<{ files: number; symbols: number; symbol_references: number }, []>(
           `SELECT
              (SELECT COUNT(*) FROM files WHERE parse_status = 'indexed') AS files,
              (SELECT COUNT(*) FROM symbols) AS symbols,
-             (SELECT COUNT(*) FROM references) AS references`,
+             (SELECT COUNT(*) FROM symbol_references) AS symbol_references`,
         )
         .get()
       console.log(JSON.stringify(stats, null, 2))
@@ -2990,11 +3045,56 @@ git commit -m "feat(codeindex): add cli and incremental reindexing"
 
 ---
 
-### Task 13: Run workspace verification and root quality gates
+### Task 13: Extend TDD hooks and agent guidance for the codeindex workspace
+
+**Files:**
+
+- Modify: `.hooks/tdd/test-resolver.mjs`
+- Create: `codeindex/CLAUDE.md`
+- Modify: `CLAUDE.md`
+
+The TDD pipeline in `.hooks/tdd/test-resolver.mjs` currently only gates files under `src/` and `client/`. Writes to `codeindex/src/**` would silently skip the TDD pipeline. Decide one of the following and apply it:
+
+**Option A — extend the resolver (recommended if the workspace is meant to follow TDD).**
+
+Update `isGateableImplementation()` and the impl-to-test-path mapping so that `codeindex/src/foo/bar.ts` maps to `tests/codeindex/foo/bar.test.ts` (mirroring the existing `src/ → tests/` rule). Add a corresponding reverse mapping for test-file writes.
+
+**Option B — document the exemption.**
+
+If the workspace is intentionally exempted from TDD hook enforcement (for instance because it is local dev tooling), add a comment block at the top of `.hooks/tdd/test-resolver.mjs` that explicitly lists `codeindex/` as exempt, and call it out in `codeindex/CLAUDE.md` so future agents do not assume the pipeline is running.
+
+- [ ] **Step 1: Pick Option A or Option B and apply the corresponding change**
+
+- [ ] **Step 2: Add `codeindex/CLAUDE.md` describing the workspace**
+
+Topics to cover:
+
+- purpose (symbol-first TS/JS code index + MCP server for agents)
+- local-dev-only (not a papai runtime dependency)
+- database location (`codeindex/.codeindex/index.db`) and WAL behavior
+- workspace scripts (`bun run --filter codeindex ...`)
+- whether TDD hooks apply (reference the Option chosen above)
+- SQL table names (especially that the table is `symbol_references`, not `references`)
+
+- [ ] **Step 3: Update root `CLAUDE.md`**
+
+Add a row for `codeindex/` to the "Path-Scoped Conventions" table, and add the new `codeindex:test`, `codeindex:typecheck`, `codeindex:lint`, and `codeindex:format:check` scripts to the "Commands" section.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .hooks/tdd/test-resolver.mjs codeindex/CLAUDE.md CLAUDE.md
+git commit -m "chore(codeindex): wire workspace into TDD hooks and agent guidance"
+```
+
+---
+
+### Task 14: Run workspace verification and root quality gates
 
 **Files:**
 
 - Modify: `package.json`
+- Modify: `scripts/check.sh`
 - Test: existing repo and workspace commands
 
 - [ ] **Step 1: Extend root verification scripts to cover `codeindex/`**
@@ -3008,7 +3108,11 @@ git commit -m "feat(codeindex): add cli and incremental reindexing"
 }
 ```
 
-- [ ] **Step 2: Run the workspace-local checks**
+- [ ] **Step 2: Extend `scripts/check.sh` (non-staged / full mode) to run codeindex checks**
+
+`bun check:full` delegates to `scripts/check.sh`. Add `codeindex:lint`, `codeindex:typecheck`, `codeindex:format:check`, and `codeindex:test` to the parallel check set in that script so the repo-wide pre-push gate covers the workspace. Keep the staged-mode path unchanged.
+
+- [ ] **Step 3: Run the workspace-local checks**
 
 Run:
 
@@ -3021,21 +3125,22 @@ bun run codeindex:test
 
 Expected: PASS for all four commands.
 
-- [ ] **Step 3: Run repo-wide checks that should now include codeindex**
+- [ ] **Step 4: Run repo-wide checks that should now include codeindex**
 
 Run:
 
 ```bash
 bun knip
 bun run check:verbose
+bun run check:full
 ```
 
-Expected: PASS. `knip` should not report unused `codeindex` exports, unresolved dependencies, or unlisted binaries.
+Expected: PASS. `knip` should not report unused `codeindex` exports, unresolved dependencies, or unlisted binaries. `check:full` should invoke the codeindex scripts alongside the existing ones.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add package.json knip.jsonc
+git add package.json knip.jsonc scripts/check.sh
 git commit -m "chore(codeindex): wire workspace into repo checks"
 ```
 
@@ -3045,19 +3150,20 @@ git commit -m "chore(codeindex): wire workspace into repo checks"
 
 ### Spec coverage
 
-- Workspace package and repo fit: Task 1, Task 13
-- Parser loading and TS/JS-first scope: Task 2
+- Workspace package and repo fit: Task 1, Task 14
+- Parser loading and TS/JS-first scope: Task 2 (WASM grammars via `tree-sitter-wasms`, `context7`-verified)
 - Discovery and ignore handling: Task 3
-- SQLite schema and FTS5 triggers: Task 4
+- SQLite schema and FTS5 triggers, including `symbol_references` (renamed from `references` to avoid the SQLite reserved keyword): Task 4
 - Module aliases and `tsconfig` path handling, including JSONC-safe `tsconfig` parsing: Task 5
 - Symbol extraction, doc comments, and identifier normalization: Task 6
 - Reference extraction and export metadata: Task 7
 - Resolver-backed confidence scoring: Task 8
 - Full indexing and persistence with repo-wide second-pass reference resolution: Task 9
 - Exact search, FTS search, search filters, and structural reranking: Task 10
-- `code_symbol`, `code_impact`, MCP tool surface: Task 11
+- `code_symbol`, `code_impact`, MCP tool surface (`context7`-verified SDK surface): Task 11
 - Incremental reindexing, narrow dependent fan-out, CLI, and `stats`: Task 12
-- Root quality-gate integration: Task 13
+- TDD hook wiring and agent-guidance docs: Task 13
+- Root quality-gate integration (including `scripts/check.sh`): Task 14
 
 No spec sections are intentionally uncovered.
 

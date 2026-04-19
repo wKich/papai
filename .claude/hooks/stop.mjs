@@ -20,6 +20,7 @@ try {
   if (result) {
     state.setNeedsRecheck(false)
     console.log(JSON.stringify({ decision: 'block', reason: result.reason }))
+    process.exit(1)
   }
 } catch (err) {
   console.error(
