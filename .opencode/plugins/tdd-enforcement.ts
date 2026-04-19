@@ -32,7 +32,7 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       if (!EDIT_TOOLS.has(input.tool)) return
 
       const toolArgs = output.args as Record<string, unknown>
-      const filePath = toolArgs.filePath as string
+      const filePath = toolArgs['filePath'] as string
       if (!filePath) return
 
       const ctx = {
@@ -67,7 +67,7 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
     'tool.execute.after': async (input) => {
       if (!EDIT_TOOLS.has(input.tool)) return
 
-      const filePath = input.args.filePath as string
+      const filePath = input.args['filePath'] as string
       if (!filePath) return
 
       // Delegate to hook checks with OpenCode-compatible context shape
@@ -96,28 +96,37 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       // They now run in the Stop hook instead (ADR-0070)
     },
 
-    // STOP HOOK (runs when session stops)
-    'session.stop': async (session) => {
-      const state = new SessionState(session.id, getSessionsDir(directory))
+    // IDLE HOOK (runs when session becomes idle - after agent stops)
+    // Note: OpenCode does not currently support blocking agent stop.
+    // See: https://github.com/anomalyco/opencode/issues/16626
+    // The check still runs to surface issues to the user.
+    'session.idle': async () => {
+      const state = new SessionState('', getSessionsDir(directory))
 
-      // If needsRecheck is false, LLM was blocked and did nothing → user interrupt → allow stop
+      // If needsRecheck is false, LLM was blocked and did nothing → skip check
       if (!state.getNeedsRecheck()) {
         state.setNeedsRecheck(true)
-        return { allow: true }
+        return
       }
 
       // Run full check
-      const result = checkFull({ cwd: directory, session_id: session.id })
+      const result = checkFull({ cwd: directory, session_id: '' })
 
       if (result) {
-        // Block with concise failure summary, set needsRecheck false for escape hatch
+        // Cannot block here, but we can notify via prompt
+        // Note: session.idle runs after the loop breaks, so this creates a follow-up
+        void client.session.promptAsync({
+          path: { id: '' },
+          body: {
+            parts: [{ type: 'text', text: result.reason }],
+          },
+        })
         state.setNeedsRecheck(false)
-        return { allow: false, reason: result.reason }
+        return
       }
 
       // All checks passed
       state.setNeedsRecheck(true)
-      return { allow: true }
     },
   }
 }
