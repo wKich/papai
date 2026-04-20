@@ -1,6 +1,7 @@
 import pLimit from 'p-limit'
 
 import type { ChatProvider, CommandHandler, IncomingMessage, ReplyFn } from '../chat/types.js'
+import { dmTarget } from '../chat/types.js'
 import { logger } from '../logger.js'
 import {
   provisionAndConfigure as defaultProvisionAndConfigure,
@@ -208,7 +209,7 @@ async function handleAnnounce(chat: ChatProvider, reply: ReplyFn, msg: IncomingM
   const results = await Promise.allSettled(
     users.map((user) =>
       limit(async () => {
-        await chat.sendMessage(user.platform_user_id, message)
+        await chat.sendMessage(dmTarget(user.platform_user_id), message)
         return user.platform_user_id
       }),
     ),

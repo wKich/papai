@@ -7,6 +7,7 @@ import type {
   ContextRendered,
   ContextSnapshot,
   ContextType,
+  DeferredDeliveryTarget,
   IncomingFile,
   IncomingMessage,
   ReplyFn,
@@ -16,6 +17,7 @@ import { checkChannelAdmin } from './channel-helpers.js'
 import { fetchMattermostChannelInfo, fetchMattermostTeamInfo, type MattermostChannelInfo } from './context-metadata.js'
 import { renderMattermostContext } from './context-renderer.js'
 import {
+  buildMattermostMentionPrefix,
   cacheIncomingPost,
   downloadMattermostFile,
   fetchMattermostFiles,
@@ -71,9 +73,24 @@ export class MattermostChatProvider implements ChatProvider {
     this.messageHandler = handler
   }
 
-  async sendMessage(userId: string, markdown: string): Promise<void> {
-    const channelId = await this.getOrCreateDmChannel(userId)
-    await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: markdown })
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
+    if (target.contextType === 'dm') {
+      if (this.botUserId === null) throw new Error('Bot not started')
+      const dmData = await this.apiFetch('POST', '/api/v4/channels/direct', [this.botUserId, target.contextId])
+      const channelId = ChannelSchema.parse(dmData).id
+      await this.apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: markdown })
+      return
+    }
+    const mention =
+      target.audience === 'personal'
+        ? await buildMattermostMentionPrefix(target.mentionUserIds, target.createdByUsername, this.apiFetch.bind(this))
+        : ''
+    const post = {
+      channel_id: target.contextId,
+      message: `${mention}${markdown}`,
+      ...(target.threadId === null ? {} : { root_id: target.threadId }),
+    }
+    await this.apiFetch('POST', '/api/v4/posts', post)
   }
 
   async start(): Promise<void> {
@@ -144,8 +161,6 @@ export class MattermostChatProvider implements ChatProvider {
       downloadMattermostFile(this.baseUrl, this.token, fileId),
     )
   }
-
-  /** @package Visible for testing */
   async buildPostedMessage(
     post: MattermostPost,
     senderName: string | undefined,
@@ -215,21 +230,17 @@ export class MattermostChatProvider implements ChatProvider {
     }
   }
 
-  private isBotMentioned = (message: string): boolean =>
-    this.botUsername !== null && message.includes(`@${this.botUsername}`)
-
+  private isBotMentioned(message: string): boolean {
+    return this.botUsername !== null && message.includes(`@${this.botUsername}`)
+  }
   private determineThreadId(
     post: MattermostPost,
     isMentioned: boolean,
     contextType: ContextType,
     replyToMessageId: string | undefined,
   ): string | undefined {
-    if (post.root_id !== undefined && post.root_id !== '') {
-      return post.root_id
-    }
-    if (isMentioned && contextType === 'group') {
-      return post.id
-    }
+    if (post.root_id !== undefined && post.root_id !== '') return post.root_id
+    if (isMentioned && contextType === 'group') return post.id
     return replyToMessageId
   }
 
@@ -259,25 +270,18 @@ export class MattermostChatProvider implements ChatProvider {
     })
   }
 
-  private async getOrCreateDmChannel(userId: string): Promise<string> {
-    if (this.botUserId === null) throw new Error('Bot not started')
-    const data = await this.apiFetch('POST', '/api/v4/channels/direct', [this.botUserId, userId])
-    return ChannelSchema.parse(data).id
+  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
+    return resolveMattermostUserId(username, this.apiFetch.bind(this))
   }
-
-  resolveUserId = (username: string, _context: ResolveUserContext): Promise<string | null> =>
-    resolveMattermostUserId(username, this.apiFetch.bind(this))
-  resolveGroupLabel = (groupId: string): Promise<string | null> =>
-    resolveMattermostGroupLabel(this.apiFetch.bind(this), groupId)
-  resolveUserLabel = (userId: string): Promise<string | null> =>
-    resolveMattermostUserLabel(this.apiFetch.bind(this), userId)
-
+  resolveGroupLabel(groupId: string): Promise<string | null> {
+    return resolveMattermostGroupLabel(this.apiFetch.bind(this), groupId)
+  }
+  resolveUserLabel(userId: string, _context?: ResolveUserContext): Promise<string | null> {
+    return resolveMattermostUserLabel(this.apiFetch.bind(this), userId)
+  }
   private wsSend(data: unknown): void {
-    if (this.ws !== null && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data))
-    }
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data))
   }
-
   private async apiFetch(method: string, path: string, body: unknown): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
@@ -285,10 +289,8 @@ export class MattermostChatProvider implements ChatProvider {
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!res.ok) throw new Error(`Mattermost API ${method} ${path} failed: ${res.status}`)
-    const data: unknown = await res.json()
-    return data
+    return res.json() as Promise<unknown>
   }
-
   renderContext(snapshot: ContextSnapshot): ContextRendered {
     return renderMattermostContext(snapshot)
   }

@@ -24,6 +24,11 @@ export type MakeToolsOptions = {
    */
   chatUserId: string
   /**
+   * The chat username for the current actor when the platform provides one.
+   * Used by tools that persist delivery metadata for later platform-native mentions.
+   */
+  username?: string | null
+  /**
    * Tool mode: 'normal' (default) includes deferred prompt tools,
    * 'proactive' excludes them for proactive delivery contexts.
    */

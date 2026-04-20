@@ -9,6 +9,10 @@ export type ChatUser = {
 /** Context type for messages - DM or group chat. */
 export type ContextType = 'dm' | 'group'
 
+import type { DeferredDeliveryTarget } from './deferred-target.js'
+export type { DeferredAudience, DeferredDeliveryTarget } from './deferred-target.js'
+export { dmTarget } from './deferred-target.js'
+
 /** Context passed to resolveUserId so adapters can scope searches. */
 export type ResolveUserContext = {
   /** Storage key of the conversation where the lookup originated (userId in DMs, channel/group ID in groups). */
@@ -272,8 +276,8 @@ export type ChatProvider = {
   /** Register the catch-all handler for non-command messages. */
   onMessage(handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>): void
 
-  /** Send a formatted markdown message to a user by ID (for announcements). */
-  sendMessage(userId: string, markdown: string): Promise<void>
+  /** Send a formatted markdown message to a delivery target (for proactive/announcement sends). */
+  sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void>
   /** Render a context snapshot into a platform-native representation. */
   renderContext(snapshot: ContextSnapshot): ContextRendered
 

@@ -1,13 +1,20 @@
 import { describe, expect, it, test, mock, beforeEach } from 'bun:test'
 
+import { setConfig } from '../../src/config.js'
+import { getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import { makeTools, type MakeToolsOptions } from '../../src/tools/index.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { getToolExecutor, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
 describe('makeTools', () => {
   beforeEach(() => {
     mockLogger()
     mock.restore()
+  })
+
+  beforeEach(async () => {
+    await setupTestDb()
+    setConfig('user-1', 'timezone', 'UTC')
   })
 
   const provider = createMockProvider()
@@ -126,6 +133,40 @@ describe('makeTools', () => {
     expect(tools).toHaveProperty('list_deferred_prompts')
     expect(tools).toHaveProperty('cancel_deferred_prompt')
     expect(tools).toHaveProperty('get_deferred_prompt')
+  })
+
+  test('group deferred prompts created via makeTools preserve creator username for personal delivery', async () => {
+    const tools = makeTools(provider, {
+      storageContextId: '-1001:42',
+      chatUserId: 'user-1',
+      contextType: 'group',
+      username: 'ki',
+    })
+    const execute = getToolExecutor(tools['create_deferred_prompt'])
+
+    const future = new Date(Date.now() + 3_600_000)
+    const date = future.toISOString().slice(0, 10)
+    const time = future.toISOString().slice(11, 16)
+
+    const result = await execute(
+      {
+        prompt: 'Ping me later',
+        schedule: { fire_at: { date, time } },
+        delivery: { audience: 'personal' },
+        execution: { mode: 'context', delivery_brief: 'Personal reminder in thread' },
+      },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    )
+
+    if (typeof result !== 'object' || result === null || !('id' in result)) {
+      throw new Error('Expected create_deferred_prompt result with id')
+    }
+    const id = result['id']
+    if (typeof id !== 'string') throw new Error('Expected id to be string')
+
+    const created = getScheduledPrompt(id, 'user-1')
+    expect(created).not.toBeNull()
+    expect(created?.deliveryTarget.createdByUsername).toBe('ki')
   })
 
   test('proactive mode excludes deferred prompt tools', () => {

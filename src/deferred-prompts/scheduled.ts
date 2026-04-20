@@ -1,5 +1,6 @@
 import { and, asc, eq, lte } from 'drizzle-orm'
 
+import { dmTarget } from '../chat/types.js'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { scheduledPrompts } from '../db/schema.js'
 import type { ScheduledPromptRow } from '../db/schema.js'
@@ -7,6 +8,8 @@ import { logger } from '../logger.js'
 import {
   DEFAULT_EXECUTION_METADATA,
   parseExecutionMetadata,
+  type DeferredPromptDelivery,
+  type DeferredPromptDeliveryInput,
   type ExecutionMetadata,
   type ScheduledPrompt,
 } from './types.js'
@@ -21,11 +24,40 @@ function toStatus(value: string): ScheduledPrompt['status'] {
   return isValidStatus(value) ? value : 'active'
 }
 
+function rowToDeliveryTarget(row: ScheduledPromptRow): DeferredPromptDelivery {
+  if (row.deliveryContextId !== null) {
+    const contextType = row.deliveryContextType === 'group' ? 'group' : 'dm'
+    const audience = row.audience === 'shared' ? 'shared' : 'personal'
+    let mentionUserIds: string[] = []
+    try {
+      const parsed: unknown = JSON.parse(row.mentionUserIds)
+      if (Array.isArray(parsed)) mentionUserIds = parsed.filter((x): x is string => typeof x === 'string')
+    } catch {
+      mentionUserIds = []
+    }
+    return {
+      contextId: row.deliveryContextId,
+      contextType,
+      threadId: row.deliveryThreadId,
+      audience,
+      mentionUserIds,
+      createdByUserId: row.createdByUserId,
+      createdByUsername: row.createdByUsername,
+    }
+  }
+  return {
+    ...dmTarget(row.createdByUserId),
+    createdByUsername: row.createdByUsername,
+  }
+}
+
 function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
   return {
     type: 'scheduled',
     id: row.id,
-    userId: row.userId,
+    createdByUserId: row.createdByUserId,
+    createdByUsername: row.createdByUsername,
+    deliveryTarget: rowToDeliveryTarget(row),
     prompt: row.prompt,
     fireAt: row.fireAt,
     cronExpression: row.cronExpression,
@@ -41,6 +73,7 @@ export function createScheduledPrompt(
   prompt: string,
   schedule: { fireAt: string; cronExpression?: string },
   executionMetadata?: ExecutionMetadata,
+  delivery?: DeferredPromptDeliveryInput,
 ): ScheduledPrompt {
   log.debug({ userId, hasCron: schedule.cronExpression !== undefined }, 'createScheduledPrompt called')
 
@@ -48,10 +81,18 @@ export function createScheduledPrompt(
   const id = crypto.randomUUID()
   const fireAt = new Date(schedule.fireAt).toISOString()
 
+  const target = delivery ?? dmTarget(userId)
+
   db.insert(scheduledPrompts)
     .values({
       id,
-      userId,
+      createdByUserId: target.createdByUserId,
+      createdByUsername: target.createdByUsername,
+      deliveryContextId: target.contextType === 'group' ? target.contextId : null,
+      deliveryContextType: target.contextType === 'group' ? 'group' : null,
+      deliveryThreadId: target.threadId,
+      audience: target.audience,
+      mentionUserIds: JSON.stringify(target.mentionUserIds),
       prompt,
       fireAt,
       cronExpression: schedule.cronExpression ?? null,
@@ -71,7 +112,7 @@ export function listScheduledPrompts(userId: string, status?: string): Scheduled
 
   const db = getDrizzleDb()
 
-  const conditions = [eq(scheduledPrompts.userId, userId)]
+  const conditions = [eq(scheduledPrompts.createdByUserId, userId)]
   if (status !== undefined) {
     conditions.push(eq(scheduledPrompts.status, status))
   }
@@ -93,7 +134,7 @@ export function getScheduledPrompt(id: string, userId: string): ScheduledPrompt 
   const row = db
     .select()
     .from(scheduledPrompts)
-    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId)))
     .get()
 
   if (row === undefined) {
@@ -125,7 +166,7 @@ export function updateScheduledPrompt(
   log.debug({ id, userId }, 'updateScheduledPrompt called')
 
   const db = getDrizzleDb()
-  const ownerFilter = and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId))
+  const ownerFilter = and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId))
 
   const existing = db.select().from(scheduledPrompts).where(ownerFilter).get()
   if (existing === undefined) return null
@@ -148,7 +189,7 @@ export function cancelScheduledPrompt(id: string, userId: string): ScheduledProm
   const existing = db
     .select()
     .from(scheduledPrompts)
-    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId)))
     .get()
 
   if (existing === undefined) {
@@ -157,7 +198,7 @@ export function cancelScheduledPrompt(id: string, userId: string): ScheduledProm
 
   db.update(scheduledPrompts)
     .set({ status: 'cancelled' })
-    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId)))
     .run()
 
   const row = db.select().from(scheduledPrompts).where(eq(scheduledPrompts.id, id)).get()
@@ -193,7 +234,7 @@ export function advanceScheduledPrompt(id: string, userId: string, nextFireAt: s
       fireAt: new Date(nextFireAt).toISOString(),
       lastExecutedAt: new Date(lastExecutedAt).toISOString(),
     })
-    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId)))
     .run()
 
   log.info({ id, userId }, 'Scheduled prompt advanced')
@@ -209,7 +250,7 @@ export function completeScheduledPrompt(id: string, userId: string, lastExecuted
       status: 'completed',
       lastExecutedAt: new Date(lastExecutedAt).toISOString(),
     })
-    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.userId, userId)))
+    .where(and(eq(scheduledPrompts.id, id), eq(scheduledPrompts.createdByUserId, userId)))
     .run()
 
   log.info({ id, userId }, 'Scheduled prompt completed')

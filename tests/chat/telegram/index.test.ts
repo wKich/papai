@@ -14,10 +14,15 @@ import {
   type CacheContext,
   type MinimalContext,
 } from '../../../src/chat/telegram/message-extraction.js'
-import type { IncomingMessage, ReplyFn } from '../../../src/chat/types.js'
+import type { DeferredDeliveryTarget, IncomingMessage, ReplyFn } from '../../../src/chat/types.js'
 import { mockLogger } from '../../utils/test-helpers.js'
 
 type EditMessageCall = [text: string, options: Partial<{ reply_markup: unknown }> | undefined]
+type SendMessageCall = [
+  chatId: number,
+  text: string,
+  options: Partial<{ entities: unknown[]; message_thread_id: number }> | undefined,
+]
 
 const isBotMentionedFalse = (): boolean => false
 const includesTestBotMention = (text: string): boolean => text.includes('@testbot')
@@ -44,6 +49,22 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
 
 function isReplyFn(value: unknown): value is ReplyFn {
   return typeof value === 'object' && value !== null && 'text' in value && 'buttons' in value && 'formatted' in value
+}
+
+function isBotWithSendMessage(
+  value: unknown,
+): value is { api: { sendMessage: (...args: SendMessageCall) => Promise<unknown> } } {
+  return typeof value === 'object' && value !== null && 'api' in value
+}
+
+function getProviderBot(provider: TelegramChatProvider): {
+  api: { sendMessage: (...args: SendMessageCall) => Promise<unknown> }
+} {
+  const value = Reflect.get(provider as object, 'bot') as unknown
+  if (!isBotWithSendMessage(value)) {
+    throw new TypeError('Expected provider bot to expose api.sendMessage')
+  }
+  return value
 }
 
 // Mock the auth module to provide getThreadScopedStorageContextId
@@ -76,6 +97,186 @@ describe('TelegramChatProvider', () => {
       expect(provider.threadCapabilities.supportsThreads).toBe(true)
       expect(provider.threadCapabilities.canCreateThreads).toBe(true)
       expect(provider.threadCapabilities.threadScope).toBe('message')
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+  })
+
+  describe('sendMessage', () => {
+    test('uses an ID-based text mention with username label for personal group delivery', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const bot = getProviderBot(provider)
+
+      const calls: SendMessageCall[] = []
+      bot.api.sendMessage = (...args: SendMessageCall): Promise<unknown> => {
+        calls.push(args)
+        return Promise.resolve(undefined)
+      }
+
+      const target: DeferredDeliveryTarget = {
+        contextId: '99',
+        contextType: 'group',
+        threadId: '123',
+        audience: 'personal',
+        mentionUserIds: ['42'],
+        createdByUserId: '42',
+        createdByUsername: 'alice',
+      }
+
+      await provider.sendMessage(target, 'hello')
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual([
+        99,
+        '@alice hello',
+        {
+          entities: [
+            {
+              offset: 0,
+              length: 6,
+              type: 'text_mention',
+              user: { id: 42, is_bot: false, first_name: 'alice' },
+            },
+          ],
+          message_thread_id: 123,
+        },
+      ])
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('falls back to a generic ID-based mention and shifts markdown entities', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const bot = getProviderBot(provider)
+
+      const calls: SendMessageCall[] = []
+      bot.api.sendMessage = (...args: SendMessageCall): Promise<unknown> => {
+        calls.push(args)
+        return Promise.resolve(undefined)
+      }
+
+      const target: DeferredDeliveryTarget = {
+        contextId: '99',
+        contextType: 'group',
+        threadId: null,
+        audience: 'personal',
+        mentionUserIds: ['42'],
+        createdByUserId: '42',
+        createdByUsername: null,
+      }
+
+      await provider.sendMessage(target, '**hi**')
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual([
+        99,
+        'you hi',
+        {
+          entities: [
+            {
+              offset: 0,
+              length: 3,
+              type: 'text_mention',
+              user: { id: 42, is_bot: false, first_name: 'you' },
+            },
+            {
+              offset: 4,
+              length: 2,
+              type: 'bold',
+            },
+          ],
+        },
+      ])
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('does not fall back to username text when mentionUserIds are invalid', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const bot = getProviderBot(provider)
+
+      const calls: SendMessageCall[] = []
+      bot.api.sendMessage = (...args: SendMessageCall): Promise<unknown> => {
+        calls.push(args)
+        return Promise.resolve(undefined)
+      }
+
+      const target: DeferredDeliveryTarget = {
+        contextId: '99',
+        contextType: 'group',
+        threadId: null,
+        audience: 'personal',
+        mentionUserIds: ['not-a-number'],
+        createdByUserId: '42',
+        createdByUsername: 'alice',
+      }
+
+      await provider.sendMessage(target, 'hello')
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual([
+        99,
+        'hello',
+        {
+          entities: [],
+        },
+      ])
+
+      delete process.env['TELEGRAM_BOT_TOKEN']
+    })
+
+    test('creates text mentions for multiple IDs and shifts following entities', async () => {
+      process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+      const provider = new TelegramChatProvider()
+      const bot = getProviderBot(provider)
+
+      const calls: SendMessageCall[] = []
+      bot.api.sendMessage = (...args: SendMessageCall): Promise<unknown> => {
+        calls.push(args)
+        return Promise.resolve(undefined)
+      }
+
+      const target: DeferredDeliveryTarget = {
+        contextId: '99',
+        contextType: 'group',
+        threadId: null,
+        audience: 'personal',
+        mentionUserIds: ['42', '7'],
+        createdByUserId: '42',
+        createdByUsername: 'alice',
+      }
+
+      await provider.sendMessage(target, '**hi**')
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual([
+        99,
+        '@alice user hi',
+        {
+          entities: [
+            {
+              offset: 0,
+              length: 6,
+              type: 'text_mention',
+              user: { id: 42, is_bot: false, first_name: 'alice' },
+            },
+            {
+              offset: 7,
+              length: 4,
+              type: 'text_mention',
+              user: { id: 7, is_bot: false, first_name: 'user' },
+            },
+            {
+              offset: 12,
+              length: 2,
+              type: 'bold',
+            },
+          ],
+        },
+      ])
+
       delete process.env['TELEGRAM_BOT_TOKEN']
     })
   })

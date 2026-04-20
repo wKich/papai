@@ -6,6 +6,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingInteraction,
   IncomingMessage,
   ReplyFn,
@@ -37,7 +38,15 @@ export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
+type SendableChannel = { send: (opts: { content: string }) => Promise<unknown>; isSendable?: () => boolean }
 
+function isSendableChannel(val: unknown): val is SendableChannel {
+  if (typeof val !== 'object' || val === null) return false
+  const candidate = val as Partial<SendableChannel>
+  if (typeof candidate.send !== 'function') return false
+  if (candidate.isSendable === undefined) return true
+  return candidate.isSendable()
+}
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
   readonly threadCapabilities: ThreadCapabilities = {
@@ -54,8 +63,7 @@ export class DiscordChatProvider implements ChatProvider {
   private messageHandler: OnMessageHandler | null = null
   private interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null = null
   private client: DiscordClientLike | null = null
-
-  constructor(clientFactory: DiscordClientFactory | undefined) {
+  constructor(clientFactory?: DiscordClientFactory) {
     const token = process.env['DISCORD_BOT_TOKEN']
     if (token === undefined || token.trim() === '') {
       throw new Error('DISCORD_BOT_TOKEN environment variable is required')
@@ -72,23 +80,42 @@ export class DiscordChatProvider implements ChatProvider {
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
   }
-
   onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
     this.interactionHandler = handler
   }
 
-  async sendMessage(userId: string, markdown: string): Promise<void> {
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
     if (this.client === null || this.client.users === undefined) {
       throw new Error('DiscordChatProvider.sendMessage called before start()')
     }
-    const user = await this.client.users.fetch(userId)
-    const dm = await user.createDM()
-    const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
+    if (target.contextType === 'dm') {
+      const user = await this.client.users.fetch(target.contextId)
+      const dm = await user.createDM()
+      const chunks = chunkForDiscord(markdown, discordTraits.maxMessageLength!)
+      await chunks.reduce<Promise<unknown>>(
+        (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
+        Promise.resolve(null),
+      )
+      log.info({ userId: target.contextId }, 'Discord DM sent')
+      return
+    }
+    let content = markdown
+    if (target.audience === 'personal' && target.mentionUserIds.length > 0) {
+      const mentions = target.mentionUserIds.map((id) => `<@${id}>`).join(' ')
+      content = `${mentions} ${markdown}`
+    }
+    const fetchChannel = this.client.channels?.fetch
+    const channel = fetchChannel ? await fetchChannel.call(this.client.channels, target.contextId) : undefined
+    if (!isSendableChannel(channel)) {
+      log.warn({ channelId: target.contextId }, 'Discord channel not sendable')
+      throw new Error('Discord channel not sendable')
+    }
+    const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
     await chunks.reduce<Promise<unknown>>(
-      (prev, chunk) => prev.then(() => dm.send({ content: chunk })),
+      (prev, chunk) => prev.then(() => channel.send({ content: chunk })),
       Promise.resolve(null),
     )
-    log.info({ userId }, 'Discord DM sent')
+    log.info({ channelId: target.contextId }, 'Discord channel message sent')
   }
 
   async resolveUserId(username: string, context: ResolveUserContext): Promise<string | null> {
@@ -96,10 +123,8 @@ export class DiscordChatProvider implements ChatProvider {
     if (/^\d+$/.test(clean)) return clean
     if (context.contextType !== 'group') return null
     if (this.client === null) return null
-
     const resolvedGuild = await resolveDiscordGuildFromContext(this.client, context.contextId)
     if (resolvedGuild === null) return null
-
     try {
       const members = await resolvedGuild.guild.members.search({ query: clean, limit: 1 })
       for (const m of members.values()) {
@@ -133,7 +158,6 @@ export class DiscordChatProvider implements ChatProvider {
     const adminUserId = typeof process.env['ADMIN_USER_ID'] === 'string' ? process.env['ADMIN_USER_ID'] : ''
     const client = this.clientFactory()
     this.client = client
-
     client.on('messageCreate', (rawMsg) => {
       if (!isDispatchableMessage(rawMsg)) return
       this.dispatchMessage(rawMsg, client.user === null ? '' : client.user.id, adminUserId).catch((error: unknown) => {
@@ -228,12 +252,10 @@ export class DiscordChatProvider implements ChatProvider {
   private async dispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
     const mapped = mapDiscordMessage(message, botId, adminUserId)
     if (mapped === null) return
-
     const reply = createDiscordReplyFn({
       channel: message.channel,
       replyToMessageId: mapped.messageId,
     })
-
     const auth = checkAuthorizationExtended(
       mapped.user.id,
       mapped.user.username,
@@ -242,7 +264,6 @@ export class DiscordChatProvider implements ChatProvider {
       mapped.threadId,
       mapped.user.isAdmin,
     )
-
     const command = this.matchCommand(mapped.text)
     if (command !== null) {
       mapped.commandMatch = command.match

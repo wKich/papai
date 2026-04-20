@@ -124,65 +124,10 @@ export const recurringTaskOccurrences = sqliteTable(
     index('idx_recurring_occurrences_task').on(table.taskId),
   ],
 )
-export const scheduledPrompts = sqliteTable(
-  'scheduled_prompts',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    prompt: text('prompt').notNull(),
-    fireAt: text('fire_at').notNull(),
-    cronExpression: text('cron_expression'),
-    status: text('status').notNull().default('active'),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`(datetime('now'))`),
-    lastExecutedAt: text('last_executed_at'),
-    executionMetadata: text('execution_metadata').notNull().default('{}'),
-  },
-  (table) => [
-    index('idx_scheduled_prompts_user').on(table.userId),
-    index('idx_scheduled_prompts_status_fire').on(table.status, table.fireAt),
-  ],
-)
-export const alertPrompts = sqliteTable(
-  'alert_prompts',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    prompt: text('prompt').notNull(),
-    condition: text('condition').notNull(),
-    status: text('status').notNull().default('active'),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`(datetime('now'))`),
-    lastTriggeredAt: text('last_triggered_at'),
-    cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
-    executionMetadata: text('execution_metadata').notNull().default('{}'),
-  },
-  (table) => [index('idx_alert_prompts_user').on(table.userId), index('idx_alert_prompts_status').on(table.status)],
-)
-export const taskSnapshots = sqliteTable(
-  'task_snapshots',
-  {
-    userId: text('user_id').notNull(),
-    taskId: text('task_id').notNull(),
-    field: text('field').notNull(),
-    value: text('value').notNull(),
-    capturedAt: text('captured_at')
-      .notNull()
-      .default(sql`(datetime('now'))`),
-  },
-  (table) => [
-    primaryKey({ columns: [table.userId, table.taskId, table.field] }),
-    index('idx_task_snapshots_user').on(table.userId),
-  ],
-)
-
 export type RecurringTask = typeof recurringTasks.$inferSelect
 export type RecurringTaskOccurrence = typeof recurringTaskOccurrences.$inferSelect
-export type ScheduledPromptRow = typeof scheduledPrompts.$inferSelect
-export type AlertPromptRow = typeof alertPrompts.$inferSelect
-export type TaskSnapshotRow = typeof taskSnapshots.$inferSelect
+export { scheduledPrompts, alertPrompts, taskSnapshots } from './deferred-schema.js'
+export type { ScheduledPromptRow, AlertPromptRow, TaskSnapshotRow } from './deferred-schema.js'
 export const userInstructions = sqliteTable(
   'user_instructions',
   {

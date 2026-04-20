@@ -8,6 +8,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingFile,
   IncomingInteraction,
   IncomingMessage,
@@ -30,6 +31,7 @@ import {
 } from './message-extraction.js'
 import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
 import {
+  buildTelegramMentionPrefix,
   checkTelegramAdminStatus,
   createReplyParamsBuilder,
   getTelegramUsername,
@@ -39,10 +41,10 @@ import {
   sendReplacementButtonReply,
   sendReplacementTextReply,
   sendTextReply,
+  shiftTelegramEntity,
   telegramIsBotMentioned,
 } from './reply-helpers.js'
 export { extractReplyContext } from './message-extraction.js'
-
 const log = logger.child({ scope: 'chat:telegram' })
 const ignoreTelegramTypingError = (): null => null
 
@@ -108,9 +110,20 @@ export class TelegramChatProvider implements ChatProvider {
   onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
     this.interactionHandler = handler
   }
-  async sendMessage(userId: string, markdown: string): Promise<void> {
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
+    const chatId = parseInt(target.contextId, 10)
+    const mentionPrefix = buildTelegramMentionPrefix(target)
     const formatted = formatLlmOutput(markdown)
-    await this.bot.api.sendMessage(parseInt(userId, 10), formatted.text, { entities: formatted.entities })
+    const options: Parameters<typeof this.bot.api.sendMessage>[2] = {
+      entities: [
+        ...mentionPrefix.entities,
+        ...formatted.entities.map((entity) => shiftTelegramEntity(entity, mentionPrefix.text.length)),
+      ],
+    }
+    if (target.contextType === 'group' && target.threadId !== null) {
+      options.message_thread_id = parseInt(target.threadId, 10)
+    }
+    await this.bot.api.sendMessage(chatId, `${mentionPrefix.text}${formatted.text}`, options)
   }
   start(): Promise<void> {
     this.bot.on('callback_query:data', (ctx) => this.dispatchCallbackQuery(ctx))
@@ -137,15 +150,12 @@ export class TelegramChatProvider implements ChatProvider {
     const clean = username.startsWith('@') ? username.slice(1) : username
     return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
-
   resolveGroupLabel(groupId: string): Promise<string | null> {
     return resolveTelegramGroupLabel((chatId) => this.bot.api.getChat(chatId), groupId)
   }
-
   resolveUserLabel(userId: string, context: ResolveUserContext | undefined): Promise<string | null> {
     return resolveTelegramUserLabel((chatId, uid) => this.bot.api.getChatMember(chatId, uid), userId, context)
   }
-
   async setCommands(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },
@@ -171,20 +181,16 @@ export class TelegramChatProvider implements ChatProvider {
       telegramIsBotMentioned(text, entities, this.botUsername),
     )
     if (contextInfo === null) return null
-
     const { id, contextId, contextType, text, isMentioned } = contextInfo
     const { messageIdStr, replyToMessageIdStr, replyToMessageText, quoteText } = extractMessageIds(ctx)
-
     logMessageExtraction(id, contextId, messageIdStr, replyToMessageIdStr, replyToMessageText, quoteText)
     cacheTelegramMessage(ctx, id, contextId, messageIdStr, text, replyToMessageIdStr)
-
     const replyContext = extractReplyContext(ctx, contextId)
     const threadId = await resolveThreadId(ctx, isMentioned, contextType, this.bot.api)
     const from = ctx.from
     const chat = ctx.chat
     const username = from === undefined ? null : getTelegramUsername(from.username)
     const contextName = contextType === 'group' && chat !== undefined && 'title' in chat ? chat.title : undefined
-
     return {
       user: { id: String(id), username, isAdmin },
       contextId,
@@ -240,14 +246,12 @@ export class TelegramChatProvider implements ChatProvider {
       },
       buttons: (content: string, options) => sendButtonReply(ctx, content, buildReplyParams, options),
     }
-
     if (allowReplacement) {
       replyFn.replaceText = (content: string, ..._rest: [] | [ReplyOptions]): Promise<void> =>
         sendReplacementTextReply(ctx, content)
       replyFn.replaceButtons = (content: string, options): Promise<void> =>
         sendReplacementButtonReply(ctx, content, options)
     }
-
     return replyFn
   }
   private async dispatchCallbackQuery(ctx: Context): Promise<void> {
@@ -268,7 +272,6 @@ export class TelegramChatProvider implements ChatProvider {
     }
     await this.interactionHandler(interaction, reply)
   }
-
   private fetchFilesFromContext(ctx: Context): Promise<IncomingFile[]> {
     const envToken = process.env['TELEGRAM_BOT_TOKEN']
     let token = ''

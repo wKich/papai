@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import type { ToolSet } from 'ai'
 
 import { setConfig } from '../../src/config.js'
+import { getAlertPrompt } from '../../src/deferred-prompts/alerts.js'
+import { getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import { makeCancelDeferredPromptTool } from '../../src/tools/cancel-deferred-prompt.js'
 import { makeCreateDeferredPromptTool } from '../../src/tools/create-deferred-prompt.js'
 import { makeGetDeferredPromptTool } from '../../src/tools/get-deferred-prompt.js'
@@ -15,7 +17,7 @@ const toolCtx = { toolCallId: 'tc1', messages: [] as never[], abortSignal: new A
 
 function getTools(): ToolSet {
   return {
-    create_deferred_prompt: makeCreateDeferredPromptTool(USER_ID),
+    create_deferred_prompt: makeCreateDeferredPromptTool(USER_ID, USER_ID, 'dm'),
     list_deferred_prompts: makeListDeferredPromptsTool(USER_ID),
     get_deferred_prompt: makeGetDeferredPromptTool(USER_ID),
     update_deferred_prompt: makeUpdateDeferredPromptTool(USER_ID),
@@ -446,5 +448,95 @@ describe('execution metadata', () => {
     const detail: unknown = await get.execute({ id }, toolCtx)
     expect(detail).toHaveProperty('executionMetadata.mode', 'lightweight')
     expect(detail).toHaveProperty('executionMetadata.delivery_brief', 'Updated brief')
+  })
+})
+
+describe('delivery classification persistence', () => {
+  beforeEach(async () => {
+    await setupTestDb()
+    setConfig(USER_ID, 'timezone', 'UTC')
+  })
+
+  test('group scheduled prompt persists personal audience and mention target chosen at creation', async () => {
+    const tool = makeCreateDeferredPromptTool(USER_ID, '-1001:42', 'group')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    const result: unknown = await tool.execute(
+      {
+        prompt: 'Remind me to send the report',
+        schedule: { fire_at: futureFireAt() },
+        delivery: {
+          audience: 'personal',
+          mention_user_ids: [USER_ID],
+        },
+        execution: {
+          mode: 'context',
+          delivery_brief: 'Personal reminder in the same group thread',
+          context_snapshot: 'Discussed weekly reporting in this thread.',
+        },
+      },
+      toolCtx,
+    )
+
+    const created = getScheduledPrompt(extractId(result), USER_ID)
+    expect(created).not.toBeNull()
+    expect(created!.deliveryTarget.contextId).toBe('-1001')
+    expect(created!.deliveryTarget.audience).toBe('personal')
+    expect(created!.deliveryTarget.mentionUserIds).toEqual([USER_ID])
+  })
+
+  test('group alert persists shared audience and no mention targets chosen at creation', async () => {
+    const tool = makeCreateDeferredPromptTool(USER_ID, 'chan-1', 'group')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    const result: unknown = await tool.execute(
+      {
+        prompt: 'Notify this channel when a task becomes overdue',
+        condition: { field: 'task.dueDate', op: 'overdue' },
+        delivery: {
+          audience: 'shared',
+          mention_user_ids: [],
+        },
+        execution: {
+          mode: 'full',
+          delivery_brief: 'Shared group alert for the whole channel',
+          context_snapshot: 'Group operations alert for overdue work.',
+        },
+      },
+      toolCtx,
+    )
+
+    const created = getAlertPrompt(extractId(result), USER_ID)
+    expect(created).not.toBeNull()
+    expect(created!.deliveryTarget.contextId).toBe('chan-1')
+    expect(created!.deliveryTarget.audience).toBe('shared')
+    expect(created!.deliveryTarget.mentionUserIds).toEqual([])
+  })
+
+  test('group shared delivery drops stale mention targets chosen by the model', async () => {
+    const tool = makeCreateDeferredPromptTool(USER_ID, 'chan-1', 'group')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    const result: unknown = await tool.execute(
+      {
+        prompt: 'Notify this channel when a task becomes overdue',
+        condition: { field: 'task.dueDate', op: 'overdue' },
+        delivery: {
+          audience: 'shared',
+          mention_user_ids: [USER_ID, 'stale-user-id'],
+        },
+        execution: {
+          mode: 'full',
+          delivery_brief: 'Shared group alert for the whole channel',
+          context_snapshot: 'Group operations alert for overdue work.',
+        },
+      },
+      toolCtx,
+    )
+
+    const created = getAlertPrompt(extractId(result), USER_ID)
+    expect(created).not.toBeNull()
+    expect(created!.deliveryTarget.audience).toBe('shared')
+    expect(created!.deliveryTarget.mentionUserIds).toEqual([])
   })
 })

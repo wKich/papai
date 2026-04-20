@@ -1,17 +1,18 @@
 import { and, eq } from 'drizzle-orm'
 
+import { dmTarget } from '../chat/types.js'
 import { getDrizzleDb } from '../db/drizzle.js'
 import { alertPrompts, type AlertPromptRow } from '../db/schema.js'
 import { logger } from '../logger.js'
-import type { Task } from '../providers/types.js'
 import {
   alertConditionSchema,
   DEFAULT_EXECUTION_METADATA,
   parseExecutionMetadata,
   type AlertCondition,
   type AlertPrompt,
+  type DeferredPromptDelivery,
+  type DeferredPromptDeliveryInput,
   type ExecutionMetadata,
-  type LeafCondition,
 } from './types.js'
 
 const log = logger.child({ scope: 'deferred:alerts' })
@@ -20,10 +21,39 @@ const log = logger.child({ scope: 'deferred:alerts' })
 
 const parseStatus = (raw: string): AlertPrompt['status'] => (raw === 'cancelled' ? 'cancelled' : 'active')
 
+function rowToDeliveryTarget(row: AlertPromptRow): DeferredPromptDelivery {
+  if (row.deliveryContextId !== null) {
+    const contextType = row.deliveryContextType === 'group' ? 'group' : 'dm'
+    const audience = row.audience === 'shared' ? 'shared' : 'personal'
+    let mentionUserIds: string[] = []
+    try {
+      const parsed: unknown = JSON.parse(row.mentionUserIds)
+      if (Array.isArray(parsed)) mentionUserIds = parsed.filter((x): x is string => typeof x === 'string')
+    } catch {
+      mentionUserIds = []
+    }
+    return {
+      contextId: row.deliveryContextId,
+      contextType,
+      threadId: row.deliveryThreadId,
+      audience,
+      mentionUserIds,
+      createdByUserId: row.createdByUserId,
+      createdByUsername: row.createdByUsername,
+    }
+  }
+  return {
+    ...dmTarget(row.createdByUserId),
+    createdByUsername: row.createdByUsername,
+  }
+}
+
 const toAlertPrompt = (row: AlertPromptRow): AlertPrompt => ({
   type: 'alert',
   id: row.id,
-  userId: row.userId,
+  createdByUserId: row.createdByUserId,
+  createdByUsername: row.createdByUsername,
+  deliveryTarget: rowToDeliveryTarget(row),
   prompt: row.prompt,
   condition: alertConditionSchema.parse(JSON.parse(row.condition)),
   status: parseStatus(row.status),
@@ -41,15 +71,24 @@ export const createAlertPrompt = (
   condition: AlertCondition,
   cooldownMinutes?: number,
   executionMetadata?: ExecutionMetadata,
+  delivery?: DeferredPromptDeliveryInput,
 ): AlertPrompt => {
   log.debug({ userId, cooldownMinutes }, 'createAlertPrompt called')
   const id = crypto.randomUUID()
   const db = getDrizzleDb()
 
+  const target = delivery ?? dmTarget(userId)
+
   db.insert(alertPrompts)
     .values({
       id,
-      userId,
+      createdByUserId: target.createdByUserId,
+      createdByUsername: target.createdByUsername,
+      deliveryContextId: target.contextType === 'group' ? target.contextId : null,
+      deliveryContextType: target.contextType === 'group' ? 'group' : null,
+      deliveryThreadId: target.threadId,
+      audience: target.audience,
+      mentionUserIds: JSON.stringify(target.mentionUserIds),
       prompt,
       condition: JSON.stringify(condition),
       status: 'active',
@@ -67,7 +106,7 @@ export const createAlertPrompt = (
 export const listAlertPrompts = (userId: string, status?: string): AlertPrompt[] => {
   log.debug({ userId, status }, 'listAlertPrompts called')
   const db = getDrizzleDb()
-  const conditions = [eq(alertPrompts.userId, userId)]
+  const conditions = [eq(alertPrompts.createdByUserId, userId)]
   if (status !== undefined) conditions.push(eq(alertPrompts.status, status))
 
   const rows = db
@@ -85,7 +124,7 @@ export const getAlertPrompt = (id: string, userId: string): AlertPrompt | null =
   const row = db
     .select()
     .from(alertPrompts)
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .get()
 
   if (row === undefined) {
@@ -110,7 +149,7 @@ export const updateAlertPrompt = (
   const existing = db
     .select()
     .from(alertPrompts)
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .get()
 
   if (existing === undefined) {
@@ -129,7 +168,7 @@ export const updateAlertPrompt = (
 
   db.update(alertPrompts)
     .set(set)
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .run()
   log.info({ id, userId }, 'Alert prompt updated')
   return getAlertPrompt(id, userId)
@@ -141,7 +180,7 @@ export const cancelAlertPrompt = (id: string, userId: string): AlertPrompt | nul
   const existing = db
     .select()
     .from(alertPrompts)
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .get()
 
   if (existing === undefined) {
@@ -151,7 +190,7 @@ export const cancelAlertPrompt = (id: string, userId: string): AlertPrompt | nul
 
   db.update(alertPrompts)
     .set({ status: 'cancelled' })
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .run()
   log.info({ id, userId }, 'Alert prompt cancelled')
   return getAlertPrompt(id, userId)
@@ -162,7 +201,7 @@ export const updateAlertTriggerTime = (id: string, userId: string, lastTriggered
   const db = getDrizzleDb()
   db.update(alertPrompts)
     .set({ lastTriggeredAt })
-    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.userId, userId)))
+    .where(and(eq(alertPrompts.id, id), eq(alertPrompts.createdByUserId, userId)))
     .run()
   log.info({ id, userId }, 'Alert trigger time updated')
 }
@@ -189,86 +228,4 @@ export const getEligibleAlertPrompts = (): AlertPrompt[] => {
   return eligible.map(toAlertPrompt)
 }
 
-// --- Condition evaluation ---
-
-const getFieldValue = (task: Task, field: string): string | string[] | null | undefined => {
-  switch (field) {
-    case 'task.status':
-      return task.status ?? null
-    case 'task.priority':
-      return task.priority ?? null
-    case 'task.assignee':
-      return task.assignee ?? null
-    case 'task.dueDate':
-      return task.dueDate ?? null
-    case 'task.project':
-      return task.projectId ?? null
-    case 'task.labels':
-      return (task.labels ?? []).map((l) => l.name)
-    default:
-      return undefined
-  }
-}
-
-const evaluateLeaf = (leaf: LeafCondition, task: Task, snapshots: Map<string, string>, now: Date): boolean => {
-  const { field, op, value } = leaf
-  const fieldValue = getFieldValue(task, field)
-
-  switch (op) {
-    case 'eq':
-      return fieldValue === String(value)
-    case 'neq':
-      return fieldValue !== String(value)
-    case 'changed_to': {
-      const prev = snapshots.get(`${task.id}:${field.replace('task.', '')}`)
-      if (prev === undefined) return false
-      return prev !== String(value) && fieldValue === String(value)
-    }
-    case 'overdue': {
-      if (typeof fieldValue !== 'string' || fieldValue === '') return false
-      return new Date(fieldValue) < now
-    }
-    case 'gt': {
-      if (typeof fieldValue !== 'string' || fieldValue === '') return false
-      return new Date(fieldValue) > new Date(String(value))
-    }
-    case 'lt': {
-      if (typeof fieldValue !== 'string' || fieldValue === '') return false
-      return new Date(fieldValue) < new Date(String(value))
-    }
-    case 'contains':
-      return Array.isArray(fieldValue) && fieldValue.includes(String(value))
-    case 'not_contains':
-      return Array.isArray(fieldValue) && !fieldValue.includes(String(value))
-    default:
-      log.warn({ op, field }, 'Unknown operator')
-      return false
-  }
-}
-
-export const evaluateCondition = (
-  condition: AlertCondition,
-  task: Task,
-  snapshots: Map<string, string>,
-  now: Date = new Date(),
-): boolean => {
-  if ('and' in condition) return condition.and.every((c) => evaluateCondition(c, task, snapshots, now))
-  if ('or' in condition) return condition.or.some((c) => evaluateCondition(c, task, snapshots, now))
-  return evaluateLeaf(condition, task, snapshots, now)
-}
-
-// --- Human-readable description ---
-
-/** Sanitize a condition value for safe inclusion in LLM prompts. */
-const sanitizeValue = (value: string | number): string => {
-  const str = String(value)
-  const clean = str.replaceAll(/[\n\r]/g, ' ').slice(0, 200)
-  return `"${clean}"`
-}
-
-export const describeCondition = (condition: AlertCondition): string => {
-  if ('and' in condition) return `(${condition.and.map(describeCondition).join(' AND ')})`
-  if ('or' in condition) return `(${condition.or.map(describeCondition).join(' OR ')})`
-  const { field, op, value } = condition
-  return value === undefined ? `${field} ${op}` : `${field} ${op} ${sanitizeValue(value)}`
-}
+export { evaluateCondition, describeCondition } from './condition-eval.js'
