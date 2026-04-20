@@ -191,7 +191,7 @@ describe('behavior-audit incremental manifest', () => {
       runPhase3: async (): Promise<void> => {},
     }))
     void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2: async (): Promise<IncrementalModule.ConsolidatedManifest> => ({ version: 1, entries: {} }),
+      runPhase2: (): Promise<IncrementalModule.ConsolidatedManifest> => Promise.resolve({ version: 1, entries: {} }),
     }))
   })
 

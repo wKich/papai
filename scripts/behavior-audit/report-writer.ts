@@ -6,6 +6,14 @@ import { z } from 'zod'
 import { BEHAVIORS_DIR, CONSOLIDATED_DIR, STORIES_DIR } from './config.js'
 import { getDomain } from './domain-map.js'
 import type { IncrementalManifest } from './incremental.js'
+import {
+  buildFailedSection,
+  buildSummaryHeader,
+  buildTopItemsSection,
+  type DomainSummary,
+  type FailedItem,
+} from './report-index-helpers.js'
+export type { DomainSummary, FailedItem } from './report-index-helpers.js'
 
 export interface ExtractedBehavior {
   readonly testName: string
@@ -49,22 +57,6 @@ const ConsolidatedBehaviorSchema = z.object({
 })
 
 const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).readonly()
-
-interface DomainSummary {
-  readonly domain: string
-  readonly count: number
-  readonly avgDiscover: number
-  readonly avgUse: number
-  readonly avgRetain: number
-  readonly worstPersona: string
-}
-
-interface FailedItem {
-  readonly testFile: string
-  readonly testName: string
-  readonly error: string
-  readonly attempts: number
-}
 
 interface RebuildReportsInput {
   readonly manifest: IncrementalManifest
@@ -153,17 +145,7 @@ export async function writeStoryFile(domain: string, evaluations: readonly Evalu
   await Bun.write(outPath, lines.join('\n'))
 }
 
-function buildSummary(
-  domain: string,
-  evals: readonly EvaluatedBehavior[],
-): {
-  readonly domain: string
-  readonly count: number
-  readonly avgDiscover: number
-  readonly avgUse: number
-  readonly avgRetain: number
-  readonly worstPersona: string
-} {
+function buildSummary(domain: string, evals: readonly EvaluatedBehavior[]): DomainSummary {
   const avg = (fn: (e: EvaluatedBehavior) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
   const pAvg = (p: 'maria' | 'dani' | 'viktor'): number => avg((e) => (e[p].discover + e[p].use + e[p].retain) / 3)
   const personaScores: ReadonlyArray<readonly [string, number]> = [
@@ -182,96 +164,34 @@ function buildSummary(
   }
 }
 
-function buildSummaryHeader(
-  summaries: readonly DomainSummary[],
-  totalProcessed: number,
-  totalFailed: number,
-): readonly string[] {
-  const lines: string[] = [
-    '# Behavior Audit Summary\n',
-    `**Generated:** ${new Date().toISOString()}`,
-    `**Tests processed:** ${totalProcessed}`,
-    `**Behaviors failed:** ${totalFailed}\n`,
-    '| Domain | Behaviors | Avg Discover | Avg Use | Avg Retain | Worst Persona |',
-    '|--------|-----------|-------------|---------|------------|---------------|',
-  ]
-  for (const s of summaries) {
-    lines.push(
-      `| ${s.domain} | ${s.count} | ${s.avgDiscover.toFixed(1)} | ${s.avgUse.toFixed(1)} | ${s.avgRetain.toFixed(1)} | ${s.worstPersona} |`,
-    )
-  }
-  lines.push('')
-  return lines
-}
-
-function buildTopItemsSection(title: string, items: ReadonlyMap<string, number>): readonly string[] {
-  const sorted = [...items.entries()].toSorted((a, b) => b[1] - a[1]).slice(0, 10)
-  if (sorted.length === 0) return []
-  return [`## ${title}\n`, ...sorted.map(([item, count], i) => `${i + 1}. "${item}" (${count})`), '']
-}
-
-function buildFailedSection(failedItems: readonly FailedItem[]): readonly string[] {
-  if (failedItems.length === 0) return []
-  return [
-    '## Failed Extractions\n',
-    '| Test File | Test Name | Error | Attempts |',
-    '|-----------|-----------|-------|----------|',
-    ...failedItems.map((f) => `| ${f.testFile} | ${f.testName} | ${f.error} | ${f.attempts} |`),
-    '',
-  ]
+function countFrequency(items: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const item of items) counts.set(item, (counts.get(item) ?? 0) + 1)
+  return counts
 }
 
 function groupExtractedBehaviorsByFile(
   manifest: IncrementalManifest,
   extractedBehaviorsByKey: Readonly<Record<string, ExtractedBehavior>>,
 ): Readonly<Record<string, readonly ExtractedBehavior[]>> {
-  const extractedByFile: Record<string, ExtractedBehavior[]> = {}
+  const result: Record<string, ExtractedBehavior[]> = {}
   for (const [testKey, entry] of Object.entries(manifest.tests)) {
-    const extractedBehavior = extractedBehaviorsByKey[testKey]
-    if (extractedBehavior === undefined) {
-      continue
-    }
-    const existing = extractedByFile[entry.testFile]
-    if (existing === undefined) {
-      extractedByFile[entry.testFile] = [extractedBehavior]
-      continue
-    }
-    existing.push(extractedBehavior)
+    const behavior = extractedBehaviorsByKey[testKey]
+    if (behavior !== undefined) (result[entry.testFile] ??= []).push(behavior)
   }
-  return extractedByFile
+  return result
 }
 
 function groupEvaluationsByDomain(
   manifest: IncrementalManifest,
   evaluationsByKey: Readonly<Record<string, EvaluatedBehavior>>,
 ): Readonly<Record<string, readonly EvaluatedBehavior[]>> {
-  const evaluationsByDomain: Record<string, EvaluatedBehavior[]> = {}
+  const result: Record<string, EvaluatedBehavior[]> = {}
   for (const [testKey, entry] of Object.entries(manifest.tests)) {
     const evaluation = evaluationsByKey[testKey]
-    if (evaluation === undefined) {
-      continue
-    }
-    const existing = evaluationsByDomain[entry.domain]
-    if (existing === undefined) {
-      evaluationsByDomain[entry.domain] = [evaluation]
-      continue
-    }
-    existing.push(evaluation)
+    if (evaluation !== undefined) (result[entry.domain] ??= []).push(evaluation)
   }
-  return evaluationsByDomain
-}
-
-function countFrequency(items: readonly string[]): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const item of items) {
-    const existing = counts.get(item)
-    if (existing === undefined) {
-      counts.set(item, 1)
-      continue
-    }
-    counts.set(item, existing + 1)
-  }
-  return counts
+  return result
 }
 
 async function writeRebuiltBehaviorFiles(
@@ -331,22 +251,14 @@ export async function rebuildReportsFromStoredResults({
   await writeRebuiltBehaviorFiles(extractedByFile)
 
   const evaluationsByDomain: Record<string, EvaluatedBehavior[]> = {}
-
-  if (consolidatedManifest !== null) {
-    for (const [consolidatedId, entry] of Object.entries(consolidatedManifest.entries)) {
-      const evaluation = evaluationsByKey[consolidatedId]
-      if (evaluation === undefined) continue
-      const existing = evaluationsByDomain[entry.domain]
-      if (existing === undefined) {
-        evaluationsByDomain[entry.domain] = [evaluation]
-      } else {
-        existing.push(evaluation)
-      }
+  if (consolidatedManifest === null) {
+    for (const [domain, evals] of Object.entries(groupEvaluationsByDomain(manifest, evaluationsByKey))) {
+      evaluationsByDomain[domain] = [...evals]
     }
   } else {
-    const legacyGrouped = groupEvaluationsByDomain(manifest, evaluationsByKey)
-    for (const [domain, evals] of Object.entries(legacyGrouped)) {
-      evaluationsByDomain[domain] = [...evals]
+    for (const [consolidatedId, entry] of Object.entries(consolidatedManifest.entries)) {
+      const evaluation = evaluationsByKey[consolidatedId]
+      if (evaluation !== undefined) (evaluationsByDomain[entry.domain] ??= []).push(evaluation)
     }
   }
 

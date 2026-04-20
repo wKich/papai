@@ -30,10 +30,6 @@ type ResetModuleShape = typeof ResetModule
 type SelectIncrementalWorkInput = Parameters<IncrementalModuleShape['selectIncrementalWork']>[0]
 type CaptureRunStartResult = ReturnType<IncrementalModuleShape['captureRunStart']>
 type ManifestTestEntry = IncrementalManifest['tests'][string]
-type MockGenerateTextResult = {
-  readonly text: string
-  readonly steps: readonly { readonly toolCalls: readonly unknown[] }[]
-}
 type MockEvaluationResult = Awaited<
   ReturnType<(typeof import('../../scripts/behavior-audit/evaluate-agent.js'))['evaluateWithRetry']>
 >
@@ -622,7 +618,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       },
     }))
     void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2: async (): Promise<IncrementalModule.ConsolidatedManifest> => ({ version: 1, entries: {} }),
+      runPhase2: (): Promise<IncrementalModule.ConsolidatedManifest> => Promise.resolve({ version: 1, entries: {} }),
     }))
   })
 

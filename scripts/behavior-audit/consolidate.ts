@@ -62,46 +62,11 @@ function groupByPrimaryKeyword(
   return [...grouped.entries()].map(([batchKey, inputs]) => ({ batchKey, primaryKeyword: batchKey, inputs }))
 }
 
-async function consolidateBatch(
-  group: KeywordBatch,
-  idx: number,
-  total: number,
-  progress: Progress,
-  consolidatedManifest: ConsolidatedManifest,
-  phase2Version: string,
-): Promise<ConsolidatedManifest> {
-  const { batchKey, primaryKeyword, inputs } = group
-
-  if (isBatchCompleted(progress, batchKey)) {
-    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (already done)`)
-    return consolidatedManifest
-  }
-
-  const failedAttempts = getFailedBatchAttempts(progress, batchKey)
-  if (failedAttempts >= MAX_RETRIES) {
-    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (max retries exceeded)`)
-    return consolidatedManifest
-  }
-
-  console.log(`[Phase 2] [${idx}/${total}] ${batchKey} (${inputs.length} behaviors)...`)
-
-  const result = await consolidateWithRetry(primaryKeyword, inputs, failedAttempts)
-
-  if (result === null) {
-    markBatchFailed(progress, batchKey, 'consolidation failed after retries', failedAttempts + 1)
-    await saveProgress(progress)
-    return consolidatedManifest
-  }
-
-  const fingerprint = buildPhase2ConsolidationFingerprint({
-    sourceTestKeys: inputs.map((i) => i.testKey),
-    behaviors: inputs.map((i) => i.behavior),
-    phaseVersion: phase2Version,
-  })
-
-  const sourceDomains = [...new Set(inputs.map((i) => i.domain))].toSorted()
-
-  const consolidations: ConsolidatedBehavior[] = result.map(({ id, item }) => ({
+function buildConsolidations(
+  result: Awaited<ReturnType<typeof consolidateWithRetry>>,
+  primaryKeyword: string,
+): ConsolidatedBehavior[] {
+  return result!.map(({ id, item }) => ({
     id,
     domain: primaryKeyword,
     featureName: item.featureName,
@@ -111,11 +76,17 @@ async function consolidateBatch(
     context: item.context,
     sourceTestKeys: item.sourceTestKeys,
   }))
+}
 
-  await writeConsolidatedFile(primaryKeyword, consolidations)
-  markBatchDone(progress, batchKey, consolidations)
-
-  const updatedEntries = { ...consolidatedManifest.entries }
+function applyConsolidationsToManifest(
+  consolidations: ConsolidatedBehavior[],
+  inputs: readonly ConsolidateBehaviorInput[],
+  primaryKeyword: string,
+  sourceDomains: readonly string[],
+  fingerprint: string,
+  currentEntries: ConsolidatedManifest['entries'],
+): ConsolidatedManifest['entries'] {
+  const updatedEntries = { ...currentEntries }
   for (const cb of consolidations) {
     updatedEntries[cb.id] = {
       consolidatedId: cb.id,
@@ -130,12 +101,55 @@ async function consolidateBatch(
       lastConsolidatedAt: new Date().toISOString(),
     }
   }
+  return updatedEntries
+}
 
+async function consolidateBatch(
+  group: KeywordBatch,
+  idx: number,
+  total: number,
+  progress: Progress,
+  consolidatedManifest: ConsolidatedManifest,
+  phase2Version: string,
+): Promise<ConsolidatedManifest> {
+  const { batchKey, primaryKeyword, inputs } = group
+  if (isBatchCompleted(progress, batchKey)) {
+    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (already done)`)
+    return consolidatedManifest
+  }
+  const failedAttempts = getFailedBatchAttempts(progress, batchKey)
+  if (failedAttempts >= MAX_RETRIES) {
+    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (max retries exceeded)`)
+    return consolidatedManifest
+  }
+  console.log(`[Phase 2] [${idx}/${total}] ${batchKey} (${inputs.length} behaviors)...`)
+  const result = await consolidateWithRetry(primaryKeyword, inputs, failedAttempts)
+  if (result === null) {
+    markBatchFailed(progress, batchKey, 'consolidation failed after retries', failedAttempts + 1)
+    await saveProgress(progress)
+    return consolidatedManifest
+  }
+  const fingerprint = buildPhase2ConsolidationFingerprint({
+    sourceTestKeys: inputs.map((i) => i.testKey),
+    behaviors: inputs.map((i) => i.behavior),
+    phaseVersion: phase2Version,
+  })
+  const sourceDomains = [...new Set(inputs.map((i) => i.domain))].toSorted()
+  const consolidations = buildConsolidations(result, primaryKeyword)
+  await writeConsolidatedFile(primaryKeyword, consolidations)
+  markBatchDone(progress, batchKey, consolidations)
+  const updatedEntries = applyConsolidationsToManifest(
+    consolidations,
+    inputs,
+    primaryKeyword,
+    sourceDomains,
+    fingerprint,
+    consolidatedManifest.entries,
+  )
   const userFacingCount = consolidations.filter((b) => b.isUserFacing).length
   console.log(
     `[Phase 2] [${idx}/${total}] ${batchKey} — done (${consolidations.length} consolidated, ${userFacingCount} user-facing)`,
   )
-
   return { ...consolidatedManifest, entries: updatedEntries }
 }
 

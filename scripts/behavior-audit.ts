@@ -169,14 +169,9 @@ async function main(): Promise<void> {
     return
   }
 
-  if (progress.phase1.status === 'not-started' || progress.phase1.status === 'in-progress') {
-    await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
-  } else {
-    console.log('[Phase 1] Already complete, skipping.\n')
-  }
+  await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
 
-  const phase2Version = updatedManifest.phaseVersions.phase2
-  const consolidatedManifest = await runPhase2IfNeeded(progress, phase2Version)
+  const consolidatedManifest = await runPhase2IfNeeded(progress, updatedManifest.phaseVersions.phase2)
   await saveConsolidatedManifest(consolidatedManifest)
 
   await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)

@@ -14,8 +14,7 @@ const ExtractionResultSchema = z.object({
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>
 
 function getEnvOrFallback(name: string, fallback: string): string {
-  const value = process.env[name]
-  return value === undefined ? fallback : value
+  return process.env[name] ?? fallback
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
@@ -55,14 +54,13 @@ async function extractSingle(prompt: string, attempt: number): Promise<Extractio
   }
 }
 
-export async function extractWithRetry(prompt: string, attemptOffset: number): Promise<ExtractionResult | null> {
-  for (let attempt = attemptOffset; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > attemptOffset) {
-      const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
-      await sleep(backoff)
-    }
-    const result = await extractSingle(prompt, attempt)
-    if (result !== null) return result
+export async function extractWithRetry(prompt: string, attempt: number): Promise<ExtractionResult | null> {
+  if (attempt > 0) {
+    const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
+    await sleep(backoff)
   }
-  return null
+  const result = await extractSingle(prompt, attempt)
+  if (result !== null) return result
+  if (attempt >= MAX_RETRIES - 1) return null
+  return extractWithRetry(prompt, attempt + 1)
 }

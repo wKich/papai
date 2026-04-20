@@ -20,8 +20,7 @@ const ResolverResultSchema = z.object({
 export type ResolverResult = z.infer<typeof ResolverResultSchema>
 
 function getEnvOrFallback(name: string, fallback: string): string {
-  const value = process.env[name]
-  return value === undefined ? fallback : value
+  return process.env[name] ?? fallback
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
@@ -50,14 +49,13 @@ async function resolveSingle(prompt: string, attempt: number): Promise<ResolverR
   }
 }
 
-export async function resolveKeywordsWithRetry(prompt: string, attemptOffset: number): Promise<ResolverResult | null> {
-  for (let attempt = attemptOffset; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > attemptOffset) {
-      const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
-      await sleep(backoff)
-    }
-    const result = await resolveSingle(prompt, attempt)
-    if (result !== null) return result
+export async function resolveKeywordsWithRetry(prompt: string, attempt: number): Promise<ResolverResult | null> {
+  if (attempt > 0) {
+    const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
+    await sleep(backoff)
   }
-  return null
+  const result = await resolveSingle(prompt, attempt)
+  if (result !== null) return result
+  if (attempt >= MAX_RETRIES - 1) return null
+  return resolveKeywordsWithRetry(prompt, attempt + 1)
 }

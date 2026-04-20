@@ -38,9 +38,9 @@ interface ParsedConsolidatedBehavior {
 }
 
 async function parseConsolidatedFiles(domains: readonly string[]): Promise<readonly ParsedConsolidatedBehavior[]> {
+  const results = await Promise.all(domains.map((domain) => readConsolidatedFile(domain)))
   const behaviors: ParsedConsolidatedBehavior[] = []
-  for (const domain of domains) {
-    const consolidated = await readConsolidatedFile(domain)
+  for (const consolidated of results) {
     if (consolidated === null) continue
     for (const item of consolidated) {
       if (!item.isUserFacing || item.userStory === null) continue
