@@ -31,10 +31,11 @@ function wrapToolSet(tools: ToolSet): ToolSet {
 export function makeTools(provider: TaskProvider, options?: MakeToolsOptions): ToolSet {
   const storageContextId = options?.storageContextId
   const chatUserId = options?.chatUserId
+  const username = options?.username
   const contextId = storageContextId
   const mode = options?.mode ?? 'normal'
   const contextType = options?.contextType
 
-  const tools = buildTools(provider, chatUserId, contextId, mode, contextType)
+  const tools = buildTools(provider, chatUserId, contextId, mode, contextType, username)
   return wrapToolSet(tools)
 }
