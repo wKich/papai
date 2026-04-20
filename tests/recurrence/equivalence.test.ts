@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test'
 
-import { nextCronOccurrence, parseCron } from '../../src/cron.js'
 import { cronToRrule } from '../../src/recurrence-translator.js'
 import { nextOccurrence } from '../../src/recurrence.js'
+import { nextCronOccurrence, parseCron } from './legacy-cron-oracle.js'
 
 const patterns = [
   { cron: '0 9 * * *', name: 'every day 09:00' },

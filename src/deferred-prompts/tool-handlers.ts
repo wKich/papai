@@ -1,9 +1,9 @@
 import type { ContextType } from '../chat/types.js'
 import { dmTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
-import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
 import { cronToRrule } from '../recurrence-translator.js'
+import { nextOccurrence } from '../recurrence.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
 import {
@@ -104,16 +104,19 @@ function createScheduled(
   }
 
   let cronExpression: string | undefined
+  let cronCompiled: { rrule: string; dtstartUtc: string; timezone: string } | undefined
   if (hasCron) {
-    if (parseCron(schedule.cron!) === null) return { error: `Invalid cron expression: '${schedule.cron!}'` }
+    const translated = cronToRrule(schedule.cron!, 'UTC', new Date().toISOString())
+    if (translated === null) return { error: `Invalid cron expression: '${schedule.cron!}'` }
     cronExpression = schedule.cron!
+    cronCompiled = translated
   }
 
   let fireAt: string
   if (hasFireAt) {
     fireAt = localDatetimeToUtc(schedule.fire_at!.date, schedule.fire_at!.time, timezone)
   } else if (hasCron) {
-    const next = nextCronOccurrence(parseCron(cronExpression!)!, new Date(), timezone)
+    const next = nextOccurrence(cronCompiled!, new Date())
     if (next === null) return { error: 'Could not compute next occurrence for the given cron expression.' }
     fireAt = next.toISOString()
   } else {
@@ -214,13 +217,11 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
       updates.fireAt = utcStr
     }
     if (input.schedule.cron !== undefined) {
-      if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
       const fireAt = updates.fireAt ?? new Date().toISOString()
       const translated = cronToRrule(input.schedule.cron, 'UTC', fireAt)
-      if (translated !== null) {
-        updates.rrule = translated.rrule
-        updates.dtstartUtc = translated.dtstartUtc
-      }
+      if (translated === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
+      updates.rrule = translated.rrule
+      updates.dtstartUtc = translated.dtstartUtc
     }
   }
   if (input.execution !== undefined) {
