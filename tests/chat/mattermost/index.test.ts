@@ -112,6 +112,124 @@ describe('MattermostChatProvider', () => {
     })
   })
 
+  describe('sendMessage', () => {
+    test('mentions stored target usernames for personal group delivery', async () => {
+      const requests: Array<{ readonly path: string; readonly body: unknown }> = []
+
+      provider = new MattermostChatProvider()
+      Reflect.set(provider, 'apiFetch', (method: string, path: string, body: unknown) => {
+        requests.push({ path, body })
+
+        if (method === 'GET' && path === '/api/v4/users/user-2') {
+          return Promise.resolve({ id: 'user-2', username: 'alex' })
+        }
+
+        if (method === 'POST' && path === '/api/v4/posts') {
+          return Promise.resolve({ id: 'post-1' })
+        }
+
+        return Promise.resolve({})
+      })
+
+      await provider.sendMessage(
+        {
+          contextId: 'chan-1',
+          contextType: 'group',
+          threadId: null,
+          audience: 'personal',
+          mentionUserIds: ['user-2'],
+          createdByUserId: 'user-1',
+          createdByUsername: 'creator',
+        },
+        'hello',
+      )
+
+      expect(requests).toContainEqual({
+        path: '/api/v4/posts',
+        body: {
+          channel_id: 'chan-1',
+          message: '@alex hello',
+        },
+      })
+    })
+
+    test('falls back to creator username for legacy personal group delivery without mention targets', async () => {
+      const requests: Array<{ readonly path: string; readonly body: unknown }> = []
+
+      provider = new MattermostChatProvider()
+      Reflect.set(provider, 'apiFetch', (method: string, path: string, body: unknown) => {
+        requests.push({ path, body })
+
+        if (method === 'POST' && path === '/api/v4/posts') {
+          return Promise.resolve({ id: 'post-1' })
+        }
+
+        return Promise.resolve({})
+      })
+
+      await provider.sendMessage(
+        {
+          contextId: 'chan-1',
+          contextType: 'group',
+          threadId: null,
+          audience: 'personal',
+          mentionUserIds: [],
+          createdByUserId: 'user-1',
+          createdByUsername: 'creator',
+        },
+        'hello',
+      )
+
+      expect(requests).toContainEqual({
+        path: '/api/v4/posts',
+        body: {
+          channel_id: 'chan-1',
+          message: '@creator hello',
+        },
+      })
+    })
+
+    test('mentions stored targets even when createdByUsername is null', async () => {
+      const requests: Array<{ readonly path: string; readonly body: unknown }> = []
+
+      provider = new MattermostChatProvider()
+      Reflect.set(provider, 'apiFetch', (method: string, path: string, body: unknown) => {
+        requests.push({ path, body })
+
+        if (method === 'GET' && path === '/api/v4/users/user-2') {
+          return Promise.resolve({ id: 'user-2', username: 'alex' })
+        }
+
+        if (method === 'POST' && path === '/api/v4/posts') {
+          return Promise.resolve({ id: 'post-1' })
+        }
+
+        return Promise.resolve({})
+      })
+
+      await provider.sendMessage(
+        {
+          contextId: 'chan-1',
+          contextType: 'group',
+          threadId: null,
+          audience: 'personal',
+          mentionUserIds: ['user-2'],
+          createdByUserId: 'user-1',
+          createdByUsername: null,
+        },
+        'hello',
+      )
+
+      expect(requests).toContainEqual({
+        path: '/api/v4/posts',
+        body: {
+          channel_id: 'chan-1',
+          message: '@alex hello',
+        },
+      })
+    })
+  })
+
   test('buildPostedMessage includes channel and team names', async () => {
     const { reply } = createMockReply()
 

@@ -17,6 +17,7 @@ import { checkChannelAdmin } from './channel-helpers.js'
 import { fetchMattermostChannelInfo, fetchMattermostTeamInfo, type MattermostChannelInfo } from './context-metadata.js'
 import { renderMattermostContext } from './context-renderer.js'
 import {
+  buildMattermostMentionPrefix,
   cacheIncomingPost,
   downloadMattermostFile,
   fetchMattermostFiles,
@@ -80,7 +81,9 @@ export class MattermostChatProvider implements ChatProvider {
       return
     }
     const mention =
-      target.audience === 'personal' && target.createdByUsername !== null ? `@${target.createdByUsername} ` : ''
+      target.audience === 'personal'
+        ? await buildMattermostMentionPrefix(target.mentionUserIds, target.createdByUsername, this.apiFetch.bind(this))
+        : ''
     const post = {
       channel_id: target.contextId,
       message: `${mention}${markdown}`,

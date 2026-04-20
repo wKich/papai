@@ -26,6 +26,35 @@ export async function resolveMattermostUserId(username: string, apiFetch: Matter
   }
 }
 
+export async function buildMattermostMentionPrefix(
+  mentionUserIds: readonly string[],
+  createdByUsername: string | null,
+  apiFetch: MattermostApiFetch,
+): Promise<string> {
+  const usernames = await Promise.all(
+    mentionUserIds.map(async (userId): Promise<string | null> => {
+      try {
+        const data = await apiFetch('GET', `/api/v4/users/${encodeURIComponent(userId)}`, undefined)
+        const parsed = UserMeSchema.safeParse(data)
+        return parsed.success && parsed.data.username !== undefined ? parsed.data.username : null
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  const mentions = usernames.flatMap((username) => (username === null ? [] : [`@${username}`]))
+  if (mentions.length > 0) {
+    return `${mentions.join(' ')} `
+  }
+
+  if (createdByUsername === null) {
+    return ''
+  }
+
+  return `@${createdByUsername} `
+}
+
 export async function fetchMattermostFiles(
   fileIds: string[],
   apiFetch: (method: string, path: string, body: unknown) => Promise<unknown>,
