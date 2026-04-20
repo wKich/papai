@@ -1,0 +1,24 @@
+{
+  "name": "codeindex",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ../tests/codeindex",
+    "typecheck": "tsgo --project tsconfig.json --noEmit",
+    "lint": "oxlint --config ../.oxlintrc.json src ../tests/codeindex",
+    "format": "oxfmt --write src ../tests/codeindex",
+    "format:check": "oxfmt --check src ../tests/codeindex",
+    "start": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ignore": "^7.0.5",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.26.8",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260409.1",
+    "typescript": "^6.0.0"
+  }
+}
