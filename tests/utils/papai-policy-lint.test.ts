@@ -4,7 +4,6 @@ import os from 'node:os'
 import path from 'node:path'
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../..')
-const OXLINT_BIN = path.join(REPO_ROOT, 'node_modules/.bin/oxlint')
 const PLUGIN_PATH = path.join(REPO_ROOT, 'lint-plugins/papai-policy.js')
 
 const eslintDirective = ['eslint', 'disable'].join('-')
@@ -47,7 +46,7 @@ function runRule(ruleName: string, source: string): LintResult {
     )
     fs.writeFileSync(filePath, source)
 
-    const proc = Bun.spawnSync([OXLINT_BIN, '--config', configPath, filePath], {
+    const proc = Bun.spawnSync([process.execPath, 'x', 'oxlint', '--config', configPath, filePath], {
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
