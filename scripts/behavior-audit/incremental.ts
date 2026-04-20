@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { INCREMENTAL_MANIFEST_PATH, PROJECT_ROOT } from './config.js'
+import { CONSOLIDATED_MANIFEST_PATH, INCREMENTAL_MANIFEST_PATH, PROJECT_ROOT } from './config.js'
 
 export interface ManifestTestEntry {
   readonly testFile: string
@@ -34,6 +34,7 @@ export interface IncrementalManifest {
 export interface IncrementalSelection {
   readonly phase1SelectedTestKeys: readonly string[]
   readonly phase2SelectedTestKeys: readonly string[]
+  readonly phase3SelectedConsolidatedIds: readonly string[]
   readonly reportRebuildOnly: boolean
 }
 
@@ -42,6 +43,22 @@ interface SelectIncrementalWorkInput {
   readonly previousManifest: IncrementalManifest
   readonly currentPhaseVersions: IncrementalManifest['phaseVersions']
   readonly discoveredTestKeys: readonly string[]
+  readonly previousConsolidatedManifest: ConsolidatedManifest | null
+}
+
+export interface ConsolidatedManifestEntry {
+  readonly consolidatedId: string
+  readonly domain: string
+  readonly featureName: string
+  readonly sourceTestKeys: readonly string[]
+  readonly isUserFacing: boolean
+  readonly phase2Fingerprint: string | null
+  readonly lastConsolidatedAt: string | null
+}
+
+export interface ConsolidatedManifest {
+  readonly version: 1
+  readonly entries: Record<string, ConsolidatedManifestEntry>
 }
 
 interface Phase1FingerprintInput {
@@ -86,6 +103,21 @@ const IncrementalManifestSchema = z.object({
   tests: z.record(z.string(), ManifestTestEntrySchema).default({}),
 })
 
+const ConsolidatedManifestEntrySchema = z.object({
+  consolidatedId: z.string(),
+  domain: z.string(),
+  featureName: z.string(),
+  sourceTestKeys: z.array(z.string()),
+  isUserFacing: z.boolean(),
+  phase2Fingerprint: z.string().nullable(),
+  lastConsolidatedAt: z.string().nullable(),
+})
+
+const ConsolidatedManifestSchema = z.object({
+  version: z.literal(1),
+  entries: z.record(z.string(), ConsolidatedManifestEntrySchema),
+})
+
 export function createEmptyManifest(): IncrementalManifest {
   return {
     version: 1,
@@ -95,6 +127,10 @@ export function createEmptyManifest(): IncrementalManifest {
     phaseVersions: { phase1: '', phase2: '', reports: '' },
     tests: {},
   }
+}
+
+export function createEmptyConsolidatedManifest(): ConsolidatedManifest {
+  return { version: 1, entries: {} }
 }
 
 export function captureRunStart(
@@ -146,6 +182,7 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
     return {
       phase1SelectedTestKeys: allDiscoveredTestKeys,
       phase2SelectedTestKeys: allDiscoveredTestKeys,
+      phase3SelectedConsolidatedIds: [],
       reportRebuildOnly: false,
     }
   }
@@ -171,11 +208,32 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
 
   const reportVersionChanged = previousPhaseVersions.reports !== input.currentPhaseVersions.reports
 
+  const consolidatedManifest = input.previousConsolidatedManifest
+  const phase3SelectedConsolidatedIds: string[] = []
+
+  if (phase1SelectedTestKeys.length > 0 && consolidatedManifest !== null) {
+    const phase1Set = new Set(phase1SelectedTestKeys)
+    for (const [id, entry] of Object.entries(consolidatedManifest.entries)) {
+      if (entry.sourceTestKeys.some((tk) => phase1Set.has(tk))) {
+        phase3SelectedConsolidatedIds.push(id)
+      }
+    }
+  }
+
+  if (phase2VersionChanged && consolidatedManifest !== null) {
+    for (const [id] of Object.entries(consolidatedManifest.entries)) {
+      if (!phase3SelectedConsolidatedIds.includes(id)) {
+        phase3SelectedConsolidatedIds.push(id)
+      }
+    }
+  }
+
   return {
     phase1SelectedTestKeys,
     phase2SelectedTestKeys,
+    phase3SelectedConsolidatedIds,
     reportRebuildOnly:
-      reportVersionChanged && phase1SelectedTestKeys.length === 0 && phase2SelectedTestKeys.length === 0,
+      reportVersionChanged && phase1SelectedTestKeys.length === 0 && phase2SelectedTestKeys.length === 0 && phase3SelectedConsolidatedIds.length === 0,
   }
 }
 
@@ -244,4 +302,28 @@ export async function saveManifest(manifest: IncrementalManifest): Promise<void>
   await mkdir(manifestDir, { recursive: true })
   await Bun.write(tempManifestPath, JSON.stringify(parsedManifest, null, 2) + '\n')
   await rename(tempManifestPath, INCREMENTAL_MANIFEST_PATH)
+}
+
+export async function loadConsolidatedManifest(): Promise<ConsolidatedManifest | null> {
+  const manifestFile = Bun.file(CONSOLIDATED_MANIFEST_PATH)
+  if (!(await manifestFile.exists())) return null
+  const text = await manifestFile.text()
+  return ConsolidatedManifestSchema.parse(JSON.parse(text))
+}
+
+export async function saveConsolidatedManifest(manifest: ConsolidatedManifest): Promise<void> {
+  const parsed = ConsolidatedManifestSchema.parse(manifest)
+  const manifestDir = dirname(CONSOLIDATED_MANIFEST_PATH)
+  const tempPath = join(manifestDir, `.${basename(CONSOLIDATED_MANIFEST_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`)
+  await mkdir(manifestDir, { recursive: true })
+  await Bun.write(tempPath, JSON.stringify(parsed, null, 2) + '\n')
+  await rename(tempPath, CONSOLIDATED_MANIFEST_PATH)
+}
+
+export function buildPhase2ConsolidationFingerprint(input: {
+  readonly sourceTestKeys: readonly string[]
+  readonly behaviors: readonly string[]
+  readonly phaseVersion: string
+}): string {
+  return sha256Json(input)
 }
