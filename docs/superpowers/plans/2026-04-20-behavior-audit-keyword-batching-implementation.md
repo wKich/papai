@@ -94,7 +94,14 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     MAX_RETRIES: 3,
     RETRY_BACKOFF_MS: [0, 0, 0] as const,
     MAX_STEPS: 20,
-    EXCLUDED_PREFIXES: ['tests/e2e/', 'tests/client/', 'tests/helpers/', 'tests/scripts/', 'tests/review-loop/', 'tests/types/'] as const,
+    EXCLUDED_PREFIXES: [
+      'tests/e2e/',
+      'tests/client/',
+      'tests/helpers/',
+      'tests/scripts/',
+      'tests/review-loop/',
+      'tests/types/',
+    ] as const,
   }))
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
@@ -496,14 +503,15 @@ export async function recordKeywordUsage(keywords: readonly string[]): Promise<v
   const keywordSet = new Set(keywords)
   const now = new Date().toISOString()
   const updated = existing.map((entry) =>
-    keywordSet.has(entry.slug)
-      ? { ...entry, timesUsed: entry.timesUsed + 1, updatedAt: now }
-      : entry,
+    keywordSet.has(entry.slug) ? { ...entry, timesUsed: entry.timesUsed + 1, updatedAt: now } : entry,
   )
   await saveKeywordVocabulary(updated)
 }
 
-export function findExactKeyword(entries: readonly KeywordVocabularyEntry[], slug: string): KeywordVocabularyEntry | null {
+export function findExactKeyword(
+  entries: readonly KeywordVocabularyEntry[],
+  slug: string,
+): KeywordVocabularyEntry | null {
   return entries.find((entry) => entry.slug === slug) ?? null
 }
 ```
@@ -609,12 +617,12 @@ export interface ExtractedBehavior {
 And update `writeBehaviorFile`:
 
 ```typescript
-  for (const b of behaviors) {
-    lines.push(`## Test: "${b.fullPath}"\n`)
-    lines.push(`**Behavior:** ${b.behavior}`)
-    lines.push(`**Context:** ${b.context}`)
-    lines.push(`**Keywords:** ${b.keywords.join(', ')}\n`)
-  }
+for (const b of behaviors) {
+  lines.push(`## Test: "${b.fullPath}"\n`)
+  lines.push(`**Behavior:** ${b.behavior}`)
+  lines.push(`**Context:** ${b.context}`)
+  lines.push(`**Keywords:** ${b.keywords.join(', ')}\n`)
+}
 ```
 
 - [ ] **Step 4: Reset stale Phase 1 extracted behavior during migration**
@@ -634,13 +642,13 @@ const ExtractedBehaviorSchema = z.object({
 And in `migrateV1toV2`, reset Phase 1 extracted progress:
 
 ```typescript
-  return ProgressV2Schema.parse({
-    version: 2,
-    startedAt,
-    phase1: emptyPhase1(),
-    phase2: emptyPhase2(),
-    phase3: emptyPhase3(),
-  })
+return ProgressV2Schema.parse({
+  version: 2,
+  startedAt,
+  phase1: emptyPhase1(),
+  phase2: emptyPhase2(),
+  phase3: emptyPhase3(),
+})
 ```
 
 - [ ] **Step 5: Run the focused test to verify it passes**
@@ -757,7 +765,9 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
 
   const savedVocabulary = JSON.parse(await Bun.file(vocabularyPath).text()) as readonly { readonly slug: string }[]
   expect(savedVocabulary[0]?.slug).toBe('group-targeting')
-  expect(progress.phase1.completedTests['tests/tools/sample.test.ts']?.['tests/tools/sample.test.ts::suite > case']).toBe('done')
+  expect(
+    progress.phase1.completedTests['tests/tools/sample.test.ts']?.['tests/tools/sample.test.ts::suite > case'],
+  ).toBe('done')
 })
 ```
 
@@ -806,34 +816,31 @@ function buildResolverPrompt(candidateKeywords: readonly string[], vocabularyTex
 And in `processSingleTestCase`, replace the extraction block with:
 
 ```typescript
-  const extracted = await extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
-  if (extracted === null) {
-    markTestFailed(progress, testKey, 'extraction failed')
-    return null
-  }
+const extracted = await extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
+if (extracted === null) {
+  markTestFailed(progress, testKey, 'extraction failed')
+  return null
+}
 
-  const existingVocabulary = (await loadKeywordVocabulary()) ?? []
-  const vocabularyText = existingVocabulary.length === 0 ? '(empty)' : JSON.stringify(existingVocabulary, null, 2)
-  const resolved = await resolveKeywordsWithRetry(
-    buildResolverPrompt(extracted.candidateKeywords, vocabularyText),
-    0,
-  )
-  if (resolved === null) {
-    markTestFailed(progress, testKey, 'keyword resolution failed')
-    return null
-  }
+const existingVocabulary = (await loadKeywordVocabulary()) ?? []
+const vocabularyText = existingVocabulary.length === 0 ? '(empty)' : JSON.stringify(existingVocabulary, null, 2)
+const resolved = await resolveKeywordsWithRetry(buildResolverPrompt(extracted.candidateKeywords, vocabularyText), 0)
+if (resolved === null) {
+  markTestFailed(progress, testKey, 'keyword resolution failed')
+  return null
+}
 
-  const nextVocabulary = [...existingVocabulary, ...resolved.appendedEntries]
-  await saveKeywordVocabulary(nextVocabulary)
-  await recordKeywordUsage(resolved.keywords)
+const nextVocabulary = [...existingVocabulary, ...resolved.appendedEntries]
+await saveKeywordVocabulary(nextVocabulary)
+await recordKeywordUsage(resolved.keywords)
 
-  const behavior: ExtractedBehavior = {
-    testName: testCase.name,
-    fullPath: testCase.fullPath,
-    behavior: extracted.behavior,
-    context: extracted.context,
-    keywords: resolved.keywords,
-  }
+const behavior: ExtractedBehavior = {
+  testName: testCase.name,
+  fullPath: testCase.fullPath,
+  behavior: extracted.behavior,
+  context: extracted.context,
+  keywords: resolved.keywords,
+}
 ```
 
 - [ ] **Step 4: Run the focused test to verify it passes**
@@ -938,13 +945,13 @@ Update the Zod schema to match those new fields.
 Edit the `buildPhase2Fingerprint` call in `scripts/behavior-audit/extract-incremental.ts`:
 
 ```typescript
-  const phase2Fingerprint = buildPhase2Fingerprint({
-    testKey,
-    behavior: extractedBehavior.behavior,
-    context: extractedBehavior.context,
-    keywords: extractedBehavior.keywords,
-    phaseVersion: manifest.phaseVersions.phase2,
-  })
+const phase2Fingerprint = buildPhase2Fingerprint({
+  testKey,
+  behavior: extractedBehavior.behavior,
+  context: extractedBehavior.context,
+  keywords: extractedBehavior.keywords,
+  phaseVersion: manifest.phaseVersions.phase2,
+})
 ```
 
 - [ ] **Step 5: Run the focused incremental test to verify it passes**
@@ -1153,7 +1160,9 @@ function getPrimaryKeyword(keywords: readonly string[], cardinality: ReadonlyMap
   })[0]!
 }
 
-function groupByPrimaryKeyword(extractedBehaviors: Readonly<Record<string, ExtractedBehavior>>): readonly KeywordBatch[] {
+function groupByPrimaryKeyword(
+  extractedBehaviors: Readonly<Record<string, ExtractedBehavior>>,
+): readonly KeywordBatch[] {
   const keywordCounts = new Map<string, number>()
   for (const behavior of Object.values(extractedBehaviors)) {
     for (const keyword of behavior.keywords) {
@@ -1258,18 +1267,18 @@ Expected: FAIL because the current provenance storage and evaluation traversal s
 Edit `scripts/behavior-audit/consolidate.ts` when building `updatedEntries`:
 
 ```typescript
-      updatedEntries[cb.id] = {
-        consolidatedId: cb.id,
-        domain: cb.domain,
-        featureName: cb.featureName,
-        sourceTestKeys: cb.sourceTestKeys,
-        isUserFacing: cb.isUserFacing,
-        primaryKeyword: group.primaryKeyword,
-        keywords: [...new Set(group.inputs.flatMap((input) => input.keywords))].toSorted(),
-        sourceDomains: [...new Set(group.inputs.map((input) => input.domain))].toSorted(),
-        phase2Fingerprint: fingerprint,
-        lastConsolidatedAt: new Date().toISOString(),
-      }
+updatedEntries[cb.id] = {
+  consolidatedId: cb.id,
+  domain: cb.domain,
+  featureName: cb.featureName,
+  sourceTestKeys: cb.sourceTestKeys,
+  isUserFacing: cb.isUserFacing,
+  primaryKeyword: group.primaryKeyword,
+  keywords: [...new Set(group.inputs.flatMap((input) => input.keywords))].toSorted(),
+  sourceDomains: [...new Set(group.inputs.map((input) => input.domain))].toSorted(),
+  phase2Fingerprint: fingerprint,
+  lastConsolidatedAt: new Date().toISOString(),
+}
 ```
 
 - [ ] **Step 4: Adapt `evaluate.ts` to traverse consolidated entries from the manifest rather than `completedDomains`**
@@ -1279,7 +1288,9 @@ Edit `scripts/behavior-audit/evaluate.ts` so `runPhase3` derives its readable co
 Use this helper shape:
 
 ```typescript
-function getDomainsFromManifestEntries(entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>): readonly string[] {
+function getDomainsFromManifestEntries(
+  entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>,
+): readonly string[] {
   return [...new Set(Object.values(entries).map((entry) => entry.domain))].toSorted()
 }
 ```
@@ -1301,7 +1312,11 @@ function getDomainsFromManifestEntries(
   return [...new Set(Object.values(entries).map((entry) => entry.domain))].toSorted()
 }
 
-export async function runPhase3({ progress, selectedConsolidatedIds, consolidatedManifest }: Phase3RunInput): Promise<void> {
+export async function runPhase3({
+  progress,
+  selectedConsolidatedIds,
+  consolidatedManifest,
+}: Phase3RunInput): Promise<void> {
   console.log('\n[Phase 3] Reading consolidated behavior files...')
   const domains = consolidatedManifest === null ? [] : getDomainsFromManifestEntries(consolidatedManifest.entries)
   const allBehaviors = await parseConsolidatedFiles(domains)
@@ -1391,15 +1406,18 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
 
-  await Bun.write(path.join(reportsDir, 'keyword-vocabulary.json'), JSON.stringify([
-    {
-      slug: 'group-targeting',
-      description: 'Targeting work at a group context.',
-      createdAt: '2026-04-20T12:00:00.000Z',
-      updatedAt: '2026-04-20T12:00:00.000Z',
-      timesUsed: 1,
-    },
-  ]))
+  await Bun.write(
+    path.join(reportsDir, 'keyword-vocabulary.json'),
+    JSON.stringify([
+      {
+        slug: 'group-targeting',
+        description: 'Targeting work at a group context.',
+        createdAt: '2026-04-20T12:00:00.000Z',
+        updatedAt: '2026-04-20T12:00:00.000Z',
+        timesUsed: 1,
+      },
+    ]),
+  )
   await Bun.write(path.join(reportsDir, 'consolidated', 'tools.md'), '# consolidated')
   await Bun.write(path.join(reportsDir, 'stories', 'tools.md'), '# stories')
 
@@ -1464,11 +1482,11 @@ async function runPhase3IfNeeded(
 And in `main()` replace the Phase 3 call site with:
 
 ```typescript
-  const phase2Version = updatedManifest.phaseVersions.phase2
-  const consolidatedManifest = await runPhase2IfNeeded(progress, phase2Version)
-  await saveConsolidatedManifest(consolidatedManifest)
+const phase2Version = updatedManifest.phaseVersions.phase2
+const consolidatedManifest = await runPhase2IfNeeded(progress, phase2Version)
+await saveConsolidatedManifest(consolidatedManifest)
 
-  await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
+await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
 ```
 
 - [ ] **Step 4: Create `scripts/behavior-audit-reset.ts`**

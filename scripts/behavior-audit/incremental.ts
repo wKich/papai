@@ -38,13 +38,8 @@ export interface IncrementalSelection {
   readonly reportRebuildOnly: boolean
 }
 
-interface SelectIncrementalWorkInput {
-  readonly changedFiles: readonly string[]
-  readonly previousManifest: IncrementalManifest
-  readonly currentPhaseVersions: IncrementalManifest['phaseVersions']
-  readonly discoveredTestKeys: readonly string[]
-  readonly previousConsolidatedManifest: ConsolidatedManifest | null
-}
+export type { SelectIncrementalWorkInput } from './incremental-selection.js'
+export { selectIncrementalWork } from './incremental-selection.js'
 
 export interface ConsolidatedManifestEntry {
   readonly consolidatedId: string
@@ -52,6 +47,9 @@ export interface ConsolidatedManifestEntry {
   readonly featureName: string
   readonly sourceTestKeys: readonly string[]
   readonly isUserFacing: boolean
+  readonly primaryKeyword: string | null
+  readonly keywords: readonly string[]
+  readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
   readonly lastConsolidatedAt: string | null
 }
@@ -73,6 +71,7 @@ interface Phase2FingerprintInput {
   readonly testKey: string
   readonly behavior: string
   readonly context: string
+  readonly keywords: readonly string[]
   readonly phaseVersion: string
 }
 
@@ -109,6 +108,9 @@ const ConsolidatedManifestEntrySchema = z.object({
   featureName: z.string(),
   sourceTestKeys: z.array(z.string()),
   isUserFacing: z.boolean(),
+  primaryKeyword: z.string().nullable().default(null),
+  keywords: z.array(z.string()).default([]),
+  sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),
   lastConsolidatedAt: z.string().nullable(),
 })
@@ -167,79 +169,6 @@ export function buildPhase2Fingerprint(input: Phase2FingerprintInput): string {
   return sha256Json(input)
 }
 
-function toSortedUnique(values: readonly string[]): readonly string[] {
-  return [...new Set(values)].toSorted()
-}
-
-export function selectIncrementalWork(input: SelectIncrementalWorkInput): IncrementalSelection {
-  const discoveredSet = new Set(input.discoveredTestKeys)
-  const changedFilesSet = new Set(input.changedFiles)
-  const previousPhaseVersions = input.previousManifest.phaseVersions
-
-  const phase1VersionChanged = previousPhaseVersions.phase1 !== input.currentPhaseVersions.phase1
-  if (phase1VersionChanged) {
-    const allDiscoveredTestKeys = toSortedUnique(input.discoveredTestKeys)
-    return {
-      phase1SelectedTestKeys: allDiscoveredTestKeys,
-      phase2SelectedTestKeys: allDiscoveredTestKeys,
-      phase3SelectedConsolidatedIds: [],
-      reportRebuildOnly: false,
-    }
-  }
-
-  const discoveredManifestEntries = Object.entries(input.previousManifest.tests).filter(([testKey]) =>
-    discoveredSet.has(testKey),
-  )
-
-  const dependencySelectedTestKeys = discoveredManifestEntries
-    .filter(([, entry]) => entry.dependencyPaths.some((dependencyPath) => changedFilesSet.has(dependencyPath)))
-    .map(([testKey]) => testKey)
-
-  const newTestKeys = input.discoveredTestKeys.filter((testKey) => input.previousManifest.tests[testKey] === undefined)
-
-  const phase1SelectedTestKeys = toSortedUnique([...dependencySelectedTestKeys, ...newTestKeys])
-
-  const phase2VersionChanged = previousPhaseVersions.phase2 !== input.currentPhaseVersions.phase2
-  const phase2VersionSelectedTestKeys = phase2VersionChanged
-    ? discoveredManifestEntries.filter(([, entry]) => entry.extractedBehaviorPath !== null).map(([testKey]) => testKey)
-    : []
-
-  const phase2SelectedTestKeys = toSortedUnique([...phase1SelectedTestKeys, ...phase2VersionSelectedTestKeys])
-
-  const reportVersionChanged = previousPhaseVersions.reports !== input.currentPhaseVersions.reports
-
-  const consolidatedManifest = input.previousConsolidatedManifest
-  const phase3SelectedConsolidatedIds: string[] = []
-
-  if (phase1SelectedTestKeys.length > 0 && consolidatedManifest !== null) {
-    const phase1Set = new Set(phase1SelectedTestKeys)
-    for (const [id, entry] of Object.entries(consolidatedManifest.entries)) {
-      if (entry.sourceTestKeys.some((tk) => phase1Set.has(tk))) {
-        phase3SelectedConsolidatedIds.push(id)
-      }
-    }
-  }
-
-  if (phase2VersionChanged && consolidatedManifest !== null) {
-    for (const [id] of Object.entries(consolidatedManifest.entries)) {
-      if (!phase3SelectedConsolidatedIds.includes(id)) {
-        phase3SelectedConsolidatedIds.push(id)
-      }
-    }
-  }
-
-  return {
-    phase1SelectedTestKeys,
-    phase2SelectedTestKeys,
-    phase3SelectedConsolidatedIds,
-    reportRebuildOnly:
-      reportVersionChanged &&
-      phase1SelectedTestKeys.length === 0 &&
-      phase2SelectedTestKeys.length === 0 &&
-      phase3SelectedConsolidatedIds.length === 0,
-  }
-}
-
 function splitGitPathOutput(output: Uint8Array): readonly string[] {
   const decodedOutput = new TextDecoder().decode(output)
   return decodedOutput.split('\u0000').filter((line) => line.length > 0)
@@ -286,12 +215,8 @@ export async function collectChangedFiles(previousLastStartCommit: string | null
 
 export async function loadManifest(): Promise<IncrementalManifest | null> {
   const manifestFile = Bun.file(INCREMENTAL_MANIFEST_PATH)
-  if (!(await manifestFile.exists())) {
-    return null
-  }
-
-  const text = await manifestFile.text()
-  return IncrementalManifestSchema.parse(JSON.parse(text))
+  if (!(await manifestFile.exists())) return null
+  return IncrementalManifestSchema.parse(JSON.parse(await manifestFile.text()))
 }
 
 export async function saveManifest(manifest: IncrementalManifest): Promise<void> {

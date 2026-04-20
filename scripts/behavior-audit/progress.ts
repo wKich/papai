@@ -26,10 +26,10 @@ interface Phase1Progress {
 
 export interface Phase2Progress {
   status: PhaseStatus
-  completedDomains: Record<string, 'done'>
+  completedBatches: Record<string, 'done'>
   consolidations: Record<string, readonly ConsolidatedBehavior[]>
-  failedDomains: Record<string, FailedEntry>
-  stats: { domainsTotal: number; domainsDone: number; domainsFailed: number; behaviorsConsolidated: number }
+  failedBatches: Record<string, FailedEntry>
+  stats: { batchesTotal: number; batchesDone: number; batchesFailed: number; behaviorsConsolidated: number }
 }
 
 export interface Phase3Progress {
@@ -51,10 +51,10 @@ export interface Progress {
 function emptyPhase2(): Phase2Progress {
   return {
     status: 'not-started',
-    completedDomains: {},
+    completedBatches: {},
     consolidations: {},
-    failedDomains: {},
-    stats: { domainsTotal: 0, domainsDone: 0, domainsFailed: 0, behaviorsConsolidated: 0 },
+    failedBatches: {},
+    stats: { batchesTotal: 0, batchesDone: 0, batchesFailed: 0, behaviorsConsolidated: 0 },
   }
 }
 
@@ -140,29 +140,29 @@ export function getFailedTestAttempts(progress: Progress, testKey: string): numb
   return progress.phase1.failedTests[testKey]?.attempts ?? 0
 }
 
-export function isDomainCompleted(progress: Progress, domain: string): boolean {
-  return progress.phase2.completedDomains[domain] === 'done'
+export function isBatchCompleted(progress: Progress, batchKey: string): boolean {
+  return progress.phase2.completedBatches[batchKey] === 'done'
 }
 
-export function markDomainDone(
+export function markBatchDone(
   progress: Progress,
-  domain: string,
+  batchKey: string,
   consolidations: readonly ConsolidatedBehavior[],
 ): void {
-  if (progress.phase2.completedDomains[domain] === 'done') return
-  progress.phase2.completedDomains[domain] = 'done'
-  progress.phase2.consolidations[domain] = consolidations
-  progress.phase2.stats.domainsDone++
+  if (progress.phase2.completedBatches[batchKey] === 'done') return
+  progress.phase2.completedBatches[batchKey] = 'done'
+  progress.phase2.consolidations[batchKey] = consolidations
+  progress.phase2.stats.batchesDone++
   progress.phase2.stats.behaviorsConsolidated += consolidations.length
 }
 
-export function markDomainFailed(progress: Progress, domain: string, error: string, attempts: number): void {
-  progress.phase2.failedDomains[domain] = { error, attempts, lastAttempt: new Date().toISOString() }
-  progress.phase2.stats.domainsFailed++
+export function markBatchFailed(progress: Progress, batchKey: string, error: string, attempts: number): void {
+  progress.phase2.failedBatches[batchKey] = { error, attempts, lastAttempt: new Date().toISOString() }
+  progress.phase2.stats.batchesFailed++
 }
 
-export function getFailedDomainAttempts(progress: Progress, domain: string): number {
-  return progress.phase2.failedDomains[domain]?.attempts ?? 0
+export function getFailedBatchAttempts(progress: Progress, batchKey: string): number {
+  return progress.phase2.failedBatches[batchKey]?.attempts ?? 0
 }
 
 export function isBehaviorCompleted(progress: Progress, key: string): boolean {

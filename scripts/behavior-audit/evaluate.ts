@@ -3,6 +3,7 @@ import pLimit from 'p-limit'
 import { MAX_RETRIES } from './config.js'
 import { evaluateWithRetry } from './evaluate-agent.js'
 import { recordEval, recordStoredEvaluation, writeReports } from './evaluate-reporting.js'
+import type { ConsolidatedManifest } from './incremental.js'
 import { ALL_PERSONAS } from './personas.js'
 import type { Progress } from './progress.js'
 import {
@@ -18,6 +19,13 @@ import { readConsolidatedFile } from './report-writer.js'
 interface Phase3RunInput {
   readonly progress: Progress
   readonly selectedConsolidatedIds: ReadonlySet<string>
+  readonly consolidatedManifest: ConsolidatedManifest | null
+}
+
+function getDomainsFromManifestEntries(
+  entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>,
+): readonly string[] {
+  return [...new Set(Object.values(entries).map((entry) => entry.domain))].toSorted()
 }
 
 interface ParsedConsolidatedBehavior {
@@ -30,9 +38,9 @@ interface ParsedConsolidatedBehavior {
 }
 
 async function parseConsolidatedFiles(domains: readonly string[]): Promise<readonly ParsedConsolidatedBehavior[]> {
+  const results = await Promise.all(domains.map((domain) => readConsolidatedFile(domain)))
   const behaviors: ParsedConsolidatedBehavior[] = []
-  for (const domain of domains) {
-    const consolidated = await readConsolidatedFile(domain)
+  for (const consolidated of results) {
     if (consolidated === null) continue
     for (const item of consolidated) {
       if (!item.isUserFacing || item.userStory === null) continue
@@ -175,9 +183,13 @@ function processSingleBehavior(
   })
 }
 
-export async function runPhase3({ progress, selectedConsolidatedIds }: Phase3RunInput): Promise<void> {
+export async function runPhase3({
+  progress,
+  selectedConsolidatedIds,
+  consolidatedManifest,
+}: Phase3RunInput): Promise<void> {
   console.log('\n[Phase 3] Reading consolidated behavior files...')
-  const domains = Object.keys(progress.phase2.completedDomains)
+  const domains = consolidatedManifest === null ? [] : getDomainsFromManifestEntries(consolidatedManifest.entries)
   const allBehaviors = await parseConsolidatedFiles(domains)
   progress.phase3.status = 'in-progress'
   progress.phase3.stats.behaviorsTotal = allBehaviors.length

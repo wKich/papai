@@ -1,0 +1,43 @@
+import { rm } from 'node:fs/promises'
+
+import { CONSOLIDATED_DIR, CONSOLIDATED_MANIFEST_PATH, REPORTS_DIR, STORIES_DIR } from './behavior-audit/config.js'
+import { loadProgress, resetPhase2AndPhase3, resetPhase3, saveProgress } from './behavior-audit/progress.js'
+
+export type ResetTarget = 'phase2' | 'phase3' | 'all'
+
+export async function resetBehaviorAudit(target: ResetTarget): Promise<void> {
+  if (target === 'all') {
+    await rm(REPORTS_DIR, { recursive: true, force: true })
+    return
+  }
+
+  if (target === 'phase2') {
+    await rm(CONSOLIDATED_DIR, { recursive: true, force: true })
+    await rm(STORIES_DIR, { recursive: true, force: true })
+    await rm(CONSOLIDATED_MANIFEST_PATH, { force: true })
+
+    const progress = await loadProgress()
+    if (progress !== null) {
+      resetPhase2AndPhase3(progress)
+      await saveProgress(progress)
+    }
+    return
+  }
+
+  await rm(STORIES_DIR, { recursive: true, force: true })
+
+  const progress = await loadProgress()
+  if (progress !== null) {
+    resetPhase3(progress)
+    await saveProgress(progress)
+  }
+}
+
+const target = process.argv[2]
+
+if (target === 'phase2' || target === 'phase3' || target === 'all') {
+  await resetBehaviorAudit(target)
+} else if (target !== undefined) {
+  console.error('Usage: bun scripts/behavior-audit-reset.ts <phase2|phase3|all>')
+  process.exit(1)
+}
