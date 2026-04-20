@@ -1,3 +1,2 @@
 [test]
-preload = []
-pathIgnorePatterns = []
+preload = ["./test-preload.ts"]

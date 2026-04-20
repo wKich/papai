@@ -8,6 +8,7 @@
     "client/debug/index.ts!",
     "tests/providers/youtrack/test-helpers.ts!",
     "codeindex/src/cli.ts!",
+    "tests/codeindex/**/*.test.ts!",
   ],
 
   // All source files (production only)
@@ -42,5 +43,5 @@
   "ignoreExportsUsedInFile": true,
 
   // Ignore migration files (executed at runtime, not imported)
-  "ignore": ["src/db/migrations/**", "codeindex/.codeindex/**"],
+  "ignore": ["src/db/migrations/**", "codeindex/.codeindex/**", "codeindex/test-preload.ts"],
 }

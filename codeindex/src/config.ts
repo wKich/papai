@@ -5,7 +5,9 @@ import { z } from 'zod'
 
 const CodeindexConfigSchema = z.object({
   roots: z.array(z.string().min(1)).default(['src']),
-  exclude: z.array(z.string().min(1)).default(['node_modules', 'dist', '.git', 'coverage', '**/*.test.*', '**/*.spec.*']),
+  exclude: z
+    .array(z.string().min(1))
+    .default(['node_modules', 'dist', '.git', 'coverage', '**/*.test.*', '**/*.spec.*']),
   languages: z.array(z.enum(['ts', 'tsx', 'js', 'jsx'])).default(['ts', 'tsx', 'js', 'jsx']),
   dbPath: z.string().min(1).default('.codeindex/index.db'),
   indexLocals: z.boolean().default(true),
