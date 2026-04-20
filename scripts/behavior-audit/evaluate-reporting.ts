@@ -21,17 +21,18 @@ export function recordEval(
   evalResult: EvalResult,
   input: {
     readonly domain: string
-    readonly testName: string
+    readonly featureName: string
     readonly behavior: string
+    readonly userStory: string
   },
   evaluationsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
 ): void {
   const evaluated: EvaluatedBehavior = {
-    testName: input.testName,
+    testName: input.featureName,
     behavior: input.behavior,
-    userStory: evalResult.userStory,
+    userStory: input.userStory,
     maria: evalResult.maria,
     dani: evalResult.dani,
     viktor: evalResult.viktor,
@@ -98,23 +99,16 @@ export async function writeReports(
     [...evaluationsByDomain.entries()].map(([domain, evaluations]) => writeStoryFile(domain, evaluations)),
   )
   const summaries = [...evaluationsByDomain.entries()].map(([domain, evaluations]) => buildSummary(domain, evaluations))
-  const failedItems = Object.entries(progress.phase2.failedBehaviors).map(([key, entry]) => {
-    const parts = key.split('::')
-    let testFile = 'unknown'
-    if (parts[0] !== undefined) {
-      testFile = parts[0]
-    }
-    return {
-      testFile,
-      testName: parts.slice(1).join('::'),
-      error: entry.error,
-      attempts: entry.attempts,
-    }
-  })
+  const failedItems = Object.entries(progress.phase3.failedBehaviors).map(([key, entry]) => ({
+    testFile: key.split('::')[0] ?? 'unknown',
+    testName: key.split('::').slice(1).join('::'),
+    error: entry.error,
+    attempts: entry.attempts,
+  }))
   await writeIndexFile(
     summaries,
-    progress.phase2.stats.behaviorsDone,
-    progress.phase2.stats.behaviorsFailed,
+    progress.phase3.stats.behaviorsDone,
+    progress.phase3.stats.behaviorsFailed,
     flawFreq,
     impFreq,
     failedItems,

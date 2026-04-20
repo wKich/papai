@@ -233,7 +233,10 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
     phase2SelectedTestKeys,
     phase3SelectedConsolidatedIds,
     reportRebuildOnly:
-      reportVersionChanged && phase1SelectedTestKeys.length === 0 && phase2SelectedTestKeys.length === 0 && phase3SelectedConsolidatedIds.length === 0,
+      reportVersionChanged &&
+      phase1SelectedTestKeys.length === 0 &&
+      phase2SelectedTestKeys.length === 0 &&
+      phase3SelectedConsolidatedIds.length === 0,
   }
 }
 
@@ -314,7 +317,10 @@ export async function loadConsolidatedManifest(): Promise<ConsolidatedManifest |
 export async function saveConsolidatedManifest(manifest: ConsolidatedManifest): Promise<void> {
   const parsed = ConsolidatedManifestSchema.parse(manifest)
   const manifestDir = dirname(CONSOLIDATED_MANIFEST_PATH)
-  const tempPath = join(manifestDir, `.${basename(CONSOLIDATED_MANIFEST_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`)
+  const tempPath = join(
+    manifestDir,
+    `.${basename(CONSOLIDATED_MANIFEST_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  )
   await mkdir(manifestDir, { recursive: true })
   await Bun.write(tempPath, JSON.stringify(parsed, null, 2) + '\n')
   await rename(tempPath, CONSOLIDATED_MANIFEST_PATH)

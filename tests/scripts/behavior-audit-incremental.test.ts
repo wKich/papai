@@ -161,11 +161,14 @@ describe('behavior-audit incremental manifest', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
       PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
       INCREMENTAL_MANIFEST_PATH: manifestPath,
+      CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
       PHASE1_TIMEOUT_MS: 1_200_000,
-      PHASE2_TIMEOUT_MS: 600_000,
+      PHASE2_TIMEOUT_MS: 300_000,
+      PHASE3_TIMEOUT_MS: 600_000,
       MAX_RETRIES: 3,
       RETRY_BACKOFF_MS: [100_000, 300_000, 900_000] as const,
       MAX_STEPS: 20,
@@ -185,7 +188,10 @@ describe('behavior-audit incremental manifest', () => {
       },
     }))
     void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
-      runPhase2: async (): Promise<void> => {},
+      runPhase3: async (): Promise<void> => {},
+    }))
+    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
+      runPhase2: async (): Promise<IncrementalModule.ConsolidatedManifest> => ({ version: 1, entries: {} }),
     }))
   })
 
@@ -422,10 +428,12 @@ describe('behavior-audit incremental manifest', () => {
       },
       currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
       discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+      previousConsolidatedManifest: null,
     })
 
     expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
     expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
 
@@ -470,10 +478,12 @@ describe('behavior-audit incremental manifest', () => {
         'tests/tools/create-task.test.ts::suite > case',
         'tests/tools/no-behavior.test.ts::suite > pending',
       ],
+      previousConsolidatedManifest: null,
     })
 
     expect(selection.phase1SelectedTestKeys).toEqual([])
     expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
 
@@ -504,10 +514,12 @@ describe('behavior-audit incremental manifest', () => {
       },
       currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1-new' },
       discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+      previousConsolidatedManifest: null,
     })
 
     expect(selection.phase1SelectedTestKeys).toEqual([])
     expect(selection.phase2SelectedTestKeys).toEqual([])
+    expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(true)
   })
 
@@ -526,10 +538,12 @@ describe('behavior-audit incremental manifest', () => {
       },
       currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
       discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > new case'],
+      previousConsolidatedManifest: null,
     })
 
     expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
     expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
+    expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
 

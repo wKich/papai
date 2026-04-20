@@ -2,14 +2,18 @@ import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 
 import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './behavior-audit/config.js'
-import { runPhase2 } from './behavior-audit/evaluate.js'
+import { runPhase2 } from './behavior-audit/consolidate.js'
+import { runPhase3 } from './behavior-audit/evaluate.js'
 import { runPhase1 } from './behavior-audit/extract.js'
 import type { IncrementalManifest } from './behavior-audit/incremental.js'
 import {
   captureRunStart,
   collectChangedFiles,
+  createEmptyConsolidatedManifest,
   createEmptyManifest,
+  loadConsolidatedManifest,
   loadManifest,
+  saveConsolidatedManifest,
   saveManifest,
   selectIncrementalWork,
 } from './behavior-audit/incremental.js'
@@ -82,12 +86,29 @@ async function runPhase1IfNeeded(
   await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest })
 }
 
-async function runPhase2IfNeeded(progress: Progress, selectedTestKeys: ReadonlySet<string>): Promise<void> {
+async function runPhase2IfNeeded(
+  progress: Progress,
+  phase2Version: string,
+): Promise<import('./behavior-audit/incremental.js').ConsolidatedManifest> {
   if (progress.phase2.status === 'done') {
-    console.log('[Phase 2] Already complete.\n')
+    const existing = await loadConsolidatedManifest()
+    if (existing !== null) {
+      console.log('[Phase 2] Already complete, skipping.\n')
+      return existing
+    }
+  }
+
+  const existingManifest = await loadConsolidatedManifest()
+  const consolidatedManifest = existingManifest ?? createEmptyConsolidatedManifest()
+  return runPhase2(progress, consolidatedManifest, phase2Version)
+}
+
+async function runPhase3IfNeeded(progress: Progress, selectedConsolidatedIds: ReadonlySet<string>): Promise<void> {
+  if (progress.phase3.status === 'done') {
+    console.log('[Phase 3] Already complete.\n')
     return
   }
-  await runPhase2({ progress, selectedTestKeys })
+  await runPhase3({ progress, selectedConsolidatedIds })
 }
 
 async function resolveHeadCommit(): Promise<string> {
@@ -121,11 +142,14 @@ async function main(): Promise<void> {
   const parsedFiles = await parseDiscoveredTestFiles(testFilePaths)
   const discoveredTestKeys = getDiscoveredTestKeys(parsedFiles)
   const changedFiles = await collectChangedFiles(previousLastStartCommit)
+
+  const previousConsolidatedManifest = await loadConsolidatedManifest()
   const selection = selectIncrementalWork({
     changedFiles,
     previousManifest,
     currentPhaseVersions: previousManifest.phaseVersions,
     discoveredTestKeys,
+    previousConsolidatedManifest,
   })
 
   const progress = await loadOrCreateProgress(testFilePaths.length)
@@ -134,7 +158,8 @@ async function main(): Promise<void> {
     await rebuildReportsFromStoredResults({
       manifest: updatedManifest,
       extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
-      evaluationsByKey: progress.phase2.evaluations,
+      evaluationsByKey: progress.phase3.evaluations,
+      consolidatedManifest: previousConsolidatedManifest,
     })
     console.log('\nBehavior audit complete.')
     return
@@ -146,7 +171,11 @@ async function main(): Promise<void> {
     console.log('[Phase 1] Already complete, skipping.\n')
   }
 
-  await runPhase2IfNeeded(progress, new Set(selection.phase2SelectedTestKeys))
+  const phase2Version = updatedManifest.phaseVersions.phase2
+  const consolidatedManifest = await runPhase2IfNeeded(progress, phase2Version)
+  await saveConsolidatedManifest(consolidatedManifest)
+
+  await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds))
 
   console.log('\nBehavior audit complete.')
 }

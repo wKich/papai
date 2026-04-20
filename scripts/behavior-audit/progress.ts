@@ -1,15 +1,15 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { z } from 'zod'
-
 import { PROGRESS_PATH } from './config.js'
+import { validateOrMigrateProgress } from './progress-migrate.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
 import type { EvaluatedBehavior } from './report-writer.js'
+import type { ExtractedBehavior } from './report-writer.js'
 
-type PhaseStatus = 'not-started' | 'in-progress' | 'done'
+export type PhaseStatus = 'not-started' | 'in-progress' | 'done'
 
-interface FailedEntry {
+export interface FailedEntry {
   readonly error: string
   readonly attempts: number
   readonly lastAttempt: string
@@ -18,13 +18,13 @@ interface FailedEntry {
 interface Phase1Progress {
   status: PhaseStatus
   completedTests: Record<string, Record<string, 'done'>>
-  extractedBehaviors: Record<string, EvaluatedBehavior>
+  extractedBehaviors: Record<string, ExtractedBehavior>
   failedTests: Record<string, FailedEntry>
   completedFiles: string[]
   stats: { filesTotal: number; filesDone: number; testsExtracted: number; testsFailed: number }
 }
 
-interface Phase2Progress {
+export interface Phase2Progress {
   status: PhaseStatus
   completedDomains: Record<string, 'done'>
   consolidations: Record<string, readonly ConsolidatedBehavior[]>
@@ -32,7 +32,7 @@ interface Phase2Progress {
   stats: { domainsTotal: number; domainsDone: number; domainsFailed: number; behaviorsConsolidated: number }
 }
 
-interface Phase3Progress {
+export interface Phase3Progress {
   status: PhaseStatus
   completedBehaviors: Record<string, 'done'>
   evaluations: Record<string, EvaluatedBehavior>
@@ -48,80 +48,13 @@ export interface Progress {
   phase3: Phase3Progress
 }
 
-const Phase1StatsSchema = z.object({
-  filesTotal: z.number(),
-  filesDone: z.number(),
-  testsExtracted: z.number(),
-  testsFailed: z.number(),
-})
-
-const FailedEntrySchema = z.object({
-  error: z.string(),
-  attempts: z.number(),
-  lastAttempt: z.string(),
-})
-
-const Phase1ProgressSchema = z.object({
-  status: z.enum(['not-started', 'in-progress', 'done']),
-  completedTests: z.record(z.string(), z.record(z.string(), z.literal('done'))),
-  extractedBehaviors: z.record(z.string(), z.unknown()),
-  failedTests: z.record(z.string(), FailedEntrySchema),
-  completedFiles: z.array(z.string()),
-  stats: Phase1StatsSchema,
-})
-
-const Phase2StatsSchema = z.object({
-  domainsTotal: z.number(),
-  domainsDone: z.number(),
-  domainsFailed: z.number(),
-  behaviorsConsolidated: z.number(),
-})
-
-const Phase2ProgressSchema = z.object({
-  status: z.enum(['not-started', 'in-progress', 'done']),
-  completedDomains: z.record(z.string(), z.literal('done')),
-  consolidations: z.record(z.string(), z.unknown()),
-  failedDomains: z.record(z.string(), FailedEntrySchema),
-  stats: Phase2StatsSchema,
-})
-
-const Phase3StatsSchema = z.object({
-  behaviorsTotal: z.number(),
-  behaviorsDone: z.number(),
-  behaviorsFailed: z.number(),
-})
-
-const Phase3ProgressSchema = z.object({
-  status: z.enum(['not-started', 'in-progress', 'done']),
-  completedBehaviors: z.record(z.string(), z.literal('done')),
-  evaluations: z.record(z.string(), z.unknown()),
-  failedBehaviors: z.record(z.string(), FailedEntrySchema),
-  stats: Phase3StatsSchema,
-})
-
-const ProgressV2Schema = z.object({
-  version: z.literal(2),
-  startedAt: z.string(),
-  phase1: Phase1ProgressSchema,
-  phase2: Phase2ProgressSchema,
-  phase3: Phase3ProgressSchema,
-})
-
-function emptyPhase2Stats(): Phase2Progress['stats'] {
-  return { domainsTotal: 0, domainsDone: 0, domainsFailed: 0, behaviorsConsolidated: 0 }
-}
-
-function emptyPhase3Stats(): Phase3Progress['stats'] {
-  return { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 }
-}
-
 function emptyPhase2(): Phase2Progress {
   return {
     status: 'not-started',
     completedDomains: {},
     consolidations: {},
     failedDomains: {},
-    stats: emptyPhase2Stats(),
+    stats: { domainsTotal: 0, domainsDone: 0, domainsFailed: 0, behaviorsConsolidated: 0 },
   }
 }
 
@@ -131,50 +64,8 @@ function emptyPhase3(): Phase3Progress {
     completedBehaviors: {},
     evaluations: {},
     failedBehaviors: {},
-    stats: emptyPhase3Stats(),
+    stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
   }
-}
-
-function migratePhase3FromLegacy(raw: Record<string, unknown>): Phase3Progress {
-  const legacyPhase2 = raw['phase2']
-  if (typeof legacyPhase2 === 'object' && legacyPhase2 !== null && 'evaluations' in legacyPhase2) {
-    const lp = legacyPhase2 as Record<string, unknown>
-    return {
-      status: (lp['status'] as PhaseStatus | undefined) ?? 'not-started',
-      completedBehaviors: (lp['completedBehaviors'] as Record<string, 'done'> | undefined) ?? {},
-      evaluations: (lp['evaluations'] as Record<string, EvaluatedBehavior> | undefined) ?? {},
-      failedBehaviors: (lp['failedBehaviors'] as Record<string, FailedEntry> | undefined) ?? {},
-      stats: (lp['stats'] as Phase3Progress['stats'] | undefined) ?? emptyPhase3Stats(),
-    }
-  }
-  return emptyPhase3()
-}
-
-function migrateV1toV2(raw: unknown): Progress {
-  const r = raw as Record<string, unknown>
-  const phase1 = r['phase1'] as Phase1Progress
-  const extractedBehaviors =
-    typeof phase1['extractedBehaviors'] === 'object' && phase1['extractedBehaviors'] !== null
-      ? phase1['extractedBehaviors']
-      : {}
-  return {
-    version: 2,
-    startedAt: (r['startedAt'] as string) ?? new Date().toISOString(),
-    phase1: { ...phase1, extractedBehaviors },
-    phase2: emptyPhase2(),
-    phase3: migratePhase3FromLegacy(r),
-  }
-}
-
-function validateOrMigrateProgress(raw: unknown): Progress | null {
-  const v2Result = ProgressV2Schema.safeParse(raw)
-  if (v2Result.success) return v2Result.data as unknown as Progress
-
-  if (typeof raw === 'object' && raw !== null && 'startedAt' in raw && 'phase1' in raw) {
-    return migrateV1toV2(raw)
-  }
-
-  return null
 }
 
 export function createEmptyProgress(filesTotal: number): Progress {
@@ -220,7 +111,7 @@ function ensureCompletedTestsForFile(progress: Progress, filePath: string): Reco
   return created
 }
 
-export function markTestDone(progress: Progress, filePath: string, testKey: string, behavior: unknown): void {
+export function markTestDone(progress: Progress, filePath: string, testKey: string, behavior: ExtractedBehavior): void {
   const completedTests = ensureCompletedTestsForFile(progress, filePath)
   progress.phase1.extractedBehaviors[testKey] = behavior
   if (completedTests[testKey] === 'done') return

@@ -35,7 +35,7 @@ export async function updateManifestForExtractedTest(input: {
   readonly testFile: ParsedTestFile
   readonly testCase: TestCase
   readonly extractedBehavior: ExtractedBehavior
-}): Promise<IncrementalManifest> {
+}): Promise<{ readonly manifest: IncrementalManifest; readonly phase1Changed: boolean }> {
   const testKey = `${input.testFile.filePath}::${input.testCase.fullPath}`
   const testFileHash = hashText(await Bun.file(join(PROJECT_ROOT, input.testFile.filePath)).text())
   const mirroredPath = deriveImplPath(input.testFile.filePath)
@@ -51,27 +51,28 @@ export async function updateManifestForExtractedTest(input: {
     mirroredSourceHash,
     phaseVersion: input.manifest.phaseVersions.phase1,
   })
-  const phase2Fingerprint =
-    previousEntry !== undefined && previousEntry.phase1Fingerprint === phase1Fingerprint
-      ? previousEntry.phase2Fingerprint
-      : null
+  const phase1Changed = previousEntry === undefined || previousEntry.phase1Fingerprint !== phase1Fingerprint
+  const phase2Fingerprint = phase1Changed ? null : previousEntry.phase2Fingerprint
   const lastPhase2CompletedAt = phase2Fingerprint === null ? null : previousEntry!.lastPhase2CompletedAt
 
   return {
-    ...input.manifest,
-    tests: {
-      ...input.manifest.tests,
-      [testKey]: {
-        testFile: input.testFile.filePath,
-        testName: input.testCase.fullPath,
-        dependencyPaths,
-        phase1Fingerprint,
-        phase2Fingerprint,
-        extractedBehaviorPath,
-        domain: getDomain(input.testFile.filePath),
-        lastPhase1CompletedAt: new Date().toISOString(),
-        lastPhase2CompletedAt,
+    manifest: {
+      ...input.manifest,
+      tests: {
+        ...input.manifest.tests,
+        [testKey]: {
+          testFile: input.testFile.filePath,
+          testName: input.testCase.fullPath,
+          dependencyPaths,
+          phase1Fingerprint,
+          phase2Fingerprint,
+          extractedBehaviorPath,
+          domain: getDomain(input.testFile.filePath),
+          lastPhase1CompletedAt: new Date().toISOString(),
+          lastPhase2CompletedAt,
+        },
       },
     },
+    phase1Changed,
   }
 }

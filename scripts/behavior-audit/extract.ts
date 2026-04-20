@@ -7,7 +7,14 @@ import { updateManifestForExtractedTest } from './extract-incremental.js'
 import type { IncrementalManifest } from './incremental.js'
 import { saveManifest } from './incremental.js'
 import type { Progress } from './progress.js'
-import { getFailedTestAttempts, markFileDone, markTestDone, markTestFailed, saveProgress } from './progress.js'
+import {
+  getFailedTestAttempts,
+  markFileDone,
+  markTestDone,
+  markTestFailed,
+  resetPhase2AndPhase3,
+  saveProgress,
+} from './progress.js'
 import type { ExtractedBehavior } from './report-writer.js'
 import { writeBehaviorFile } from './report-writer.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
@@ -140,11 +147,15 @@ async function processSingleTestCase(
   totalTests: number,
   progress: Progress,
   manifest: IncrementalManifest,
-): Promise<{ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null> {
+): Promise<{
+  readonly behavior: ExtractedBehavior
+  readonly manifest: IncrementalManifest
+  readonly phase1Changed: boolean
+} | null> {
   const testKey = `${testFilePath}::${testCase.fullPath}`
   const existing = progress.phase1.extractedBehaviors[testKey]
   if (existing !== undefined) {
-    return { behavior: existing, manifest }
+    return { behavior: existing, manifest, phase1Changed: false }
   }
   if (getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
     console.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
@@ -163,14 +174,14 @@ async function processSingleTestCase(
     context: extracted.context,
   }
   markTestDone(progress, testFilePath, testKey, behavior)
-  const updatedManifest = await updateManifestForExtractedTest({
+  const { manifest: updatedManifest, phase1Changed } = await updateManifestForExtractedTest({
     manifest,
     testFile,
     testCase,
     extractedBehavior: behavior,
   })
   await saveManifest(updatedManifest)
-  return { behavior, manifest: updatedManifest }
+  return { behavior, manifest: updatedManifest, phase1Changed }
 }
 
 async function runSelectedExtractions(input: {
@@ -179,10 +190,16 @@ async function runSelectedExtractions(input: {
   readonly progress: Progress
   readonly manifest: IncrementalManifest
 }): Promise<{
-  readonly results: readonly ({ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null)[]
+  readonly results: readonly ({
+    readonly behavior: ExtractedBehavior
+    readonly manifest: IncrementalManifest
+    readonly phase1Changed: boolean
+  } | null)[]
   readonly manifest: IncrementalManifest
+  readonly anyPhase1Changed: boolean
 }> {
   let currentManifest = input.manifest
+  let anyPhase1Changed = false
   const limit = pLimit(1)
   const results = await Promise.all(
     input.selectedTests.map((testCase, index) =>
@@ -198,12 +215,13 @@ async function runSelectedExtractions(input: {
         )
         if (result !== null) {
           currentManifest = result.manifest
+          if (result.phase1Changed) anyPhase1Changed = true
         }
         return result
       }),
     ),
   )
-  return { results, manifest: currentManifest }
+  return { results, manifest: currentManifest, anyPhase1Changed }
 }
 
 function getSelectedTests(testFile: ParsedTestFile, selectedTestKeys: ReadonlySet<string>): readonly TestCase[] {
@@ -211,11 +229,19 @@ function getSelectedTests(testFile: ParsedTestFile, selectedTestKeys: ReadonlySe
 }
 
 function collectValidBehaviors(
-  results: readonly ({ readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } | null)[],
+  results: readonly ({
+    readonly behavior: ExtractedBehavior
+    readonly manifest: IncrementalManifest
+    readonly phase1Changed: boolean
+  } | null)[],
 ): readonly ExtractedBehavior[] {
   return results
     .filter(
-      (result): result is { readonly behavior: ExtractedBehavior; readonly manifest: IncrementalManifest } =>
+      (result): result is {
+        readonly behavior: ExtractedBehavior
+        readonly manifest: IncrementalManifest
+        readonly phase1Changed: boolean
+      } =>
         result !== null,
     )
     .map((result) => result.behavior)
@@ -228,10 +254,10 @@ async function processTestFile(
   totalFiles: number,
   selectedTestKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
-): Promise<IncrementalManifest> {
+): Promise<{ readonly manifest: IncrementalManifest; readonly anyPhase1Changed: boolean }> {
   if (progress.phase1.completedFiles.includes(testFile.filePath)) {
     console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, already done)`)
-    return manifest
+    return { manifest, anyPhase1Changed: false }
   }
   console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath}`)
   const selectedTests = getSelectedTests(testFile, selectedTestKeys)
@@ -248,7 +274,7 @@ async function processTestFile(
   }
   markFileDone(progress, testFile.filePath)
   await saveProgress(progress)
-  return extractionResult.manifest
+  return { manifest: extractionResult.manifest, anyPhase1Changed: extractionResult.anyPhase1Changed }
 }
 
 export async function runPhase1({ testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput): Promise<void> {
@@ -256,13 +282,19 @@ export async function runPhase1({ testFiles, progress, selectedTestKeys, manifes
   await saveProgress(progress)
   const limit = pLimit(1)
   let currentManifest = manifest
+  let anyPhase1Changed = false
   await Promise.all(
     testFiles.map((f, i) =>
       limit(async () => {
-        currentManifest = await processTestFile(f, progress, i + 1, testFiles.length, selectedTestKeys, currentManifest)
+        const result = await processTestFile(f, progress, i + 1, testFiles.length, selectedTestKeys, currentManifest)
+        currentManifest = result.manifest
+        if (result.anyPhase1Changed) anyPhase1Changed = true
       }),
     ),
   )
+  if (anyPhase1Changed) {
+    resetPhase2AndPhase3(progress)
+  }
   progress.phase1.status = 'done'
   await saveProgress(progress)
   console.log(

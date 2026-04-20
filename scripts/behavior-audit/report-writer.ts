@@ -69,6 +69,7 @@ interface RebuildReportsInput {
   readonly manifest: IncrementalManifest
   readonly extractedBehaviorsByKey: Readonly<Record<string, ExtractedBehavior>>
   readonly evaluationsByKey: Readonly<Record<string, EvaluatedBehavior>>
+  readonly consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
 }
 
 export async function writeBehaviorFile(testFilePath: string, behaviors: readonly ExtractedBehavior[]): Promise<void> {
@@ -322,11 +323,31 @@ export async function rebuildReportsFromStoredResults({
   manifest,
   extractedBehaviorsByKey,
   evaluationsByKey,
+  consolidatedManifest,
 }: RebuildReportsInput): Promise<void> {
   const extractedByFile = groupExtractedBehaviorsByFile(manifest, extractedBehaviorsByKey)
   await writeRebuiltBehaviorFiles(extractedByFile)
 
-  const evaluationsByDomain = groupEvaluationsByDomain(manifest, evaluationsByKey)
+  const evaluationsByDomain: Record<string, EvaluatedBehavior[]> = {}
+
+  if (consolidatedManifest !== null) {
+    for (const [consolidatedId, entry] of Object.entries(consolidatedManifest.entries)) {
+      const evaluation = evaluationsByKey[consolidatedId]
+      if (evaluation === undefined) continue
+      const existing = evaluationsByDomain[entry.domain]
+      if (existing === undefined) {
+        evaluationsByDomain[entry.domain] = [evaluation]
+      } else {
+        existing.push(evaluation)
+      }
+    }
+  } else {
+    const legacyGrouped = groupEvaluationsByDomain(manifest, evaluationsByKey)
+    for (const [domain, evals] of Object.entries(legacyGrouped)) {
+      evaluationsByDomain[domain] = [...evals]
+    }
+  }
+
   await writeRebuiltStoryFiles(evaluationsByDomain)
 
   const summaries = Object.entries(evaluationsByDomain)

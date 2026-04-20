@@ -264,6 +264,7 @@ Important current points:
 - Error extraction: `error instanceof Error ? error.message : String(error)`
 - Use `p-limit` for bounded concurrency instead of unbounded `Promise.all` over remote operations
 - Never add lint-disable or type-ignore comments; hook policy blocks them and the underlying issue must be fixed instead
+- If a `max-lines` or `max-lines-per-function` lint rule fails, treat it as a design signal: split the file or extract smaller focused functions instead of deleting blank lines, compressing formatting, or otherwise gaming the limit
 
 ## Path-Scoped Conventions
 

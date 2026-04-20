@@ -3,9 +3,9 @@ import pLimit from 'p-limit'
 import { MAX_RETRIES } from './config.js'
 import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
 import { consolidateWithRetry } from './consolidate-agent.js'
+import { getDomain } from './domain-map.js'
 import type { ConsolidatedManifest } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
-import { getDomain } from './domain-map.js'
 import type { Progress } from './progress.js'
 import {
   getFailedDomainAttempts,
