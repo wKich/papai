@@ -1,3 +1,5 @@
+import { RRuleTemporal } from 'rrule-temporal'
+
 import { logger } from './logger.js'
 import type { RecurrenceSpec } from './types/recurrence.js'
 
@@ -30,4 +32,43 @@ export const recurrenceSpecToRrule = (spec: RecurrenceSpec): CompiledRecurrence 
     dtstartUtc: spec.dtstart,
     timezone: spec.timezone,
   }
+}
+
+export type ParseResult = { ok: true; iter: RRuleTemporal } | { ok: false; reason: string }
+
+const buildIcs = (args: CompiledRecurrence): string => {
+  const dt = args.dtstartUtc
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '')
+    .replace(/Z$/, '')
+  return `DTSTART;TZID=${args.timezone}:${dt}\nRRULE:${args.rrule}`
+}
+
+export const parseRrule = (args: CompiledRecurrence): ParseResult => {
+  try {
+    const iter = new RRuleTemporal({ rruleString: buildIcs(args) })
+    return { ok: true, iter }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    log.warn({ rrule: args.rrule, reason }, 'parseRrule failed')
+    return { ok: false, reason }
+  }
+}
+
+export const nextOccurrence = (args: CompiledRecurrence, after: Date): Date | null => {
+  const parsed = parseRrule(args)
+  if (!parsed.ok) return null
+  const next = parsed.iter.next(after)
+  return next === null ? null : new Date(next.epochMilliseconds)
+}
+
+export const occurrencesBetween = (args: CompiledRecurrence, after: Date, before: Date, limit = 100): Date[] => {
+  const parsed = parseRrule(args)
+  if (!parsed.ok) return []
+  const results: Date[] = []
+  for (const dt of parsed.iter.between(after, before, true)) {
+    results.push(new Date(dt.epochMilliseconds))
+    if (results.length >= limit) break
+  }
+  return results
 }
