@@ -21,8 +21,32 @@ export function getDiscordUserDisplayName(
     username: string
   }>,
 ): string | null {
-  if (user.displayName !== undefined && user.displayName !== '') return user.displayName
   if (user.globalName !== undefined && user.globalName !== null && user.globalName !== '') return user.globalName
+  return null
+}
+
+export function getDiscordMemberDisplayName(
+  member: Partial<{
+    displayName: string
+    nickname: string | null
+    user:
+      | Partial<{
+          displayName: string
+          globalName: string | null
+          username: string
+        }>
+      | undefined
+  }>,
+): string | null {
+  if (member.nickname !== undefined && member.nickname !== null && member.nickname !== '') return member.nickname
+  if (
+    member.user !== undefined &&
+    member.user.globalName !== undefined &&
+    member.user.globalName !== null &&
+    member.user.globalName !== ''
+  ) {
+    return member.user.globalName
+  }
   return null
 }
 
@@ -63,7 +87,7 @@ async function tryGuildMemberLabel(
   if (!isGuildLike(rawGuild) || rawGuild.members.fetch === undefined) return null
   try {
     const member = await rawGuild.members.fetch(userId)
-    const displayName = member.displayName !== undefined && member.displayName !== '' ? member.displayName : null
+    const displayName = getDiscordMemberDisplayName(member)
     const userNode = member.user
     const username =
       userNode !== undefined && userNode.username !== undefined && userNode.username !== '' ? userNode.username : null

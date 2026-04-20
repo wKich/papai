@@ -44,6 +44,7 @@ export type GuildLike = {
   } & Partial<{
     fetch: (id: string) => Promise<{
       displayName: string | undefined
+      nickname: string | null | undefined
       user:
         | { username: string | undefined; displayName: string | undefined; globalName: string | null | undefined }
         | undefined

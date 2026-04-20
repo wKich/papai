@@ -1098,9 +1098,19 @@ describe('DiscordChatProvider', () => {
                 members: {
                   search: (): Promise<Map<string, { id: string }>> =>
                     Promise.resolve(new Map<string, { id: string }>()),
-                  fetch: (id: string): Promise<{ displayName: string; user: { username: string } }> => {
+                  fetch: (
+                    id: string,
+                  ): Promise<{
+                    displayName: string
+                    nickname: string
+                    user: { username: string; globalName: null; displayName: string }
+                  }> => {
                     expect(id).toBe('user-9')
-                    return Promise.resolve({ displayName: 'John Johnson', user: { username: 'itsmike' } })
+                    return Promise.resolve({
+                      displayName: 'John Johnson',
+                      nickname: 'John Johnson',
+                      user: { username: 'itsmike', globalName: null, displayName: 'itsmike' },
+                    })
                   },
                 },
               },
@@ -1124,12 +1134,14 @@ describe('DiscordChatProvider', () => {
             id: string,
           ): Promise<{
             displayName: string
+            globalName: string | null
             username: string
             createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
           }> => {
             expect(id).toBe('user-12')
             return Promise.resolve({
               displayName: 'Jane Admin',
+              globalName: 'Jane Admin',
               username: 'janeadmin',
               createDM: () => Promise.resolve({ send: (): Promise<unknown> => Promise.resolve(null) }),
             })
