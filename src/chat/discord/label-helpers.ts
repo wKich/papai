@@ -6,7 +6,7 @@ import { isGuildLike } from './type-guards.js'
 const log = logger.child({ scope: 'chat:discord:labels' })
 
 export function formatDiscordUserLabel(displayName: string | null, username: string | null): string | null {
-  if (displayName !== null && username !== null && displayName !== username) {
+  if (displayName !== null && username !== null) {
     return `${displayName} (@${username})`
   }
   if (displayName !== null) return displayName

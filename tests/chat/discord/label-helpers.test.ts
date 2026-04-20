@@ -23,8 +23,8 @@ test('formatDiscordUserLabel returns null when both are null', () => {
   expect(formatDiscordUserLabel(null, null)).toBeNull()
 })
 
-test('formatDiscordUserLabel returns just display name when it equals username', () => {
-  expect(formatDiscordUserLabel('itsmike', 'itsmike')).toBe('itsmike')
+test('formatDiscordUserLabel includes @username when display name equals username', () => {
+  expect(formatDiscordUserLabel('itsmike', 'itsmike')).toBe('itsmike (@itsmike)')
 })
 
 test('getDiscordUserDisplayName returns globalName when set', () => {
