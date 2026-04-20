@@ -3,11 +3,11 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
-import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { describeCompiledRecurrence } from '../recurrence.js'
 import { createRecurringTask as defaultCreateRecurringTask } from '../recurring.js'
 import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from '../types/recurring.js'
-import { semanticScheduleToCron, utcToLocal } from '../utils/datetime.js'
+import { semanticScheduleToCompiled, utcToLocal } from '../utils/datetime.js'
 
 export interface CreateRecurringTaskDeps {
   createRecurringTask: (input: RecurringTaskInput) => RecurringTaskRecord
@@ -56,8 +56,10 @@ function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDe
 
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
 
-  const cronExpression =
-    input.triggerType === 'cron' && input.schedule !== undefined ? semanticScheduleToCron(input.schedule) : undefined
+  const compiled =
+    input.triggerType === 'cron' && input.schedule !== undefined
+      ? semanticScheduleToCompiled(input.schedule, timezone)
+      : undefined
 
   const record = deps.createRecurringTask({
     userId,
@@ -69,14 +71,15 @@ function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDe
     assignee: input.assignee,
     labels: input.labels,
     triggerType: input.triggerType satisfies TriggerType,
-    cronExpression,
+    rrule: compiled?.rrule,
+    dtstartUtc: compiled?.dtstartUtc,
     catchUp: input.catchUp,
     timezone,
   })
 
   const schedule =
-    record.triggerType === 'cron' && record.cronExpression !== null
-      ? describeCron(record.cronExpression, record.timezone)
+    record.triggerType === 'cron' && record.rrule !== null && record.dtstartUtc !== null
+      ? describeCompiledRecurrence({ rrule: record.rrule, dtstartUtc: record.dtstartUtc, timezone: record.timezone })
       : 'after completion of current instance'
 
   log.info({ id: record.id, title: input.title, schedule }, 'Recurring task created via tool')

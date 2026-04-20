@@ -10,7 +10,8 @@ export type RecurringTaskInput = {
   assignee?: string
   labels?: string[]
   triggerType: TriggerType
-  cronExpression?: string
+  rrule?: string
+  dtstartUtc?: string
   timezone?: string
   catchUp?: boolean
 }
@@ -26,7 +27,8 @@ export type RecurringTaskRecord = {
   assignee: string | null
   labels: string[]
   triggerType: TriggerType
-  cronExpression: string | null
+  rrule: string | null
+  dtstartUtc: string | null
   timezone: string
   enabled: boolean
   catchUp: boolean

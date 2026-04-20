@@ -20,7 +20,8 @@ const makeTemplate = (overrides: Partial<RecurringTaskRecord> = {}): RecurringTa
   assignee: 'alice',
   labels: ['label-1'],
   triggerType: 'on_complete',
-  cronExpression: null,
+  rrule: null,
+  dtstartUtc: null,
   timezone: 'UTC',
   enabled: true,
   catchUp: false,
@@ -127,7 +128,7 @@ describe('completionHook', () => {
   test('does not fire for cron-based templates', async () => {
     const template = makeTemplate({
       triggerType: 'cron',
-      cronExpression: '0 9 * * 1',
+      rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
     })
     const deps = createDeps({
       findTemplateByTaskId: (): RecurringTaskRecord => template,

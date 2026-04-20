@@ -117,6 +117,49 @@ const localTimeOfDay = (spec: RecurrenceSpec): { hour: number; minute: number } 
   return { hour: hh === 24 ? 0 : hh, minute: mm }
 }
 
+const parseRruleParts = (rruleStr: string): Record<string, string> => {
+  const parts: Record<string, string> = {}
+  for (const part of rruleStr.split(';')) {
+    const idx = part.indexOf('=')
+    if (idx === -1) continue
+    parts[part.slice(0, idx).toUpperCase()] = part.slice(idx + 1)
+  }
+  return parts
+}
+
+export const describeCompiledRecurrence = (compiled: CompiledRecurrence): string => {
+  const parts = parseRruleParts(compiled.rrule)
+  const descParts: string[] = []
+
+  const byHourStr = parts['BYHOUR']
+  const byMinuteStr = parts['BYMINUTE']
+  const byDayStr = parts['BYDAY']
+  const byMonthDayStr = parts['BYMONTHDAY']
+  const byMonthStr = parts['BYMONTH']
+
+  const hour = byHourStr === undefined ? 0 : Number.parseInt(byHourStr.split(',')[0] ?? '0', 10)
+  const minute = byMinuteStr === undefined ? 0 : Number.parseInt(byMinuteStr.split(',')[0] ?? '0', 10)
+
+  descParts.push(`at ${pad2(hour)}:${pad2(minute)} ${compiled.timezone}`)
+
+  if (byDayStr !== undefined) {
+    const names = byDayStr.split(',').map((d) => DAY_NAMES[d] ?? d)
+    descParts.push(`on ${names.join(', ')}`)
+  }
+
+  if (byMonthDayStr !== undefined) {
+    descParts.push(`on day ${byMonthDayStr} of the month`)
+  }
+
+  if (byMonthStr !== undefined) {
+    const nums = byMonthStr.split(',').map((n) => Number.parseInt(n, 10))
+    const names = nums.map((m) => MONTH_NAMES[m] ?? String(m))
+    descParts.push(`in ${names.join(', ')}`)
+  }
+
+  return descParts.join(' ')
+}
+
 export const describeRecurrence = (spec: RecurrenceSpec): string => {
   const parts: string[] = []
   const { hour, minute } = localTimeOfDay(spec)

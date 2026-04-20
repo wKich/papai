@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { logger } from '../logger.js'
 import { updateRecurringTask as defaultUpdateRecurringTask } from '../recurring.js'
 import type { RecurringTaskRecord } from '../types/recurring.js'
-import { semanticScheduleToCron, utcToLocal } from '../utils/datetime.js'
+import { semanticScheduleToCompiled, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:update-recurring-task' })
 
@@ -37,16 +37,17 @@ const inputSchema = z.object({
     })
     .optional()
     .describe('Updated schedule configuration'),
+  timezone: z.string().optional().describe('IANA timezone for the schedule (e.g. America/New_York)'),
   catchUp: z.boolean().optional().describe('Whether to create missed occurrences on resume'),
 })
 
 type Input = z.infer<typeof inputSchema>
 
 function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
-  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, catchUp } = input
+  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, timezone, catchUp } = input
   log.debug({ recurringTaskId }, 'Updating recurring task')
 
-  const cronExpression = schedule === undefined ? undefined : semanticScheduleToCron(schedule)
+  const compiled = schedule === undefined ? undefined : semanticScheduleToCompiled(schedule, timezone ?? 'UTC')
 
   const updated = deps.updateRecurringTask(recurringTaskId, {
     title,
@@ -55,7 +56,8 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
     status,
     assignee,
     labels,
-    cronExpression,
+    rrule: compiled?.rrule,
+    dtstartUtc: compiled?.dtstartUtc,
     catchUp,
   })
 

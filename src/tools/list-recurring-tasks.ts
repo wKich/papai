@@ -2,8 +2,8 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { describeCompiledRecurrence } from '../recurrence.js'
 import { listRecurringTasks as defaultListRecurringTasks } from '../recurring.js'
 import type { RecurringTaskRecord } from '../types/recurring.js'
 import { utcToLocal } from '../utils/datetime.js'
@@ -16,6 +16,13 @@ export interface ListRecurringTasksDeps {
 
 const defaultDeps: ListRecurringTasksDeps = {
   listRecurringTasks: (...args) => defaultListRecurringTasks(...args),
+}
+
+const describeSchedule = (t: RecurringTaskRecord): string => {
+  if (t.triggerType === 'cron' && t.rrule !== null && t.dtstartUtc !== null) {
+    return describeCompiledRecurrence({ rrule: t.rrule, dtstartUtc: t.dtstartUtc, timezone: t.timezone })
+  }
+  return 'after completion'
 }
 
 export function makeListRecurringTasksTool(
@@ -37,11 +44,8 @@ export function makeListRecurringTasksTool(
           title: t.title,
           projectId: t.projectId,
           triggerType: t.triggerType,
-          schedule:
-            t.triggerType === 'cron' && t.cronExpression !== null
-              ? describeCron(t.cronExpression, t.timezone)
-              : 'after completion',
-          cronExpression: t.cronExpression,
+          schedule: describeSchedule(t),
+          rrule: t.rrule,
           enabled: t.enabled,
           nextRun: utcToLocal(t.nextRun, t.timezone),
           lastRun: utcToLocal(t.lastRun, t.timezone),
