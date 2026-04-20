@@ -15,6 +15,8 @@ interface TsconfigJson {
   }
 }
 
+const NO_INPUTS_FOUND_DIAGNOSTIC = 18003
+
 const readConfigCompilerOptions = (config: unknown): TsconfigJson['compilerOptions'] => {
   if (typeof config !== 'object' || config === null || !('compilerOptions' in config)) {
     return undefined
@@ -31,7 +33,7 @@ const readTsconfig = (tsconfigPath: string): TsconfigJson => {
 
   const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(tsconfigPath), {}, tsconfigPath)
   const firstError = parsed.errors[0]
-  if (firstError !== undefined && firstError.code !== 18003) {
+  if (firstError !== undefined && firstError.code !== NO_INPUTS_FOUND_DIAGNOSTIC) {
     throw new Error(ts.flattenDiagnosticMessageText(firstError.messageText, '\n'))
   }
 
@@ -90,7 +92,7 @@ export const expandTsconfigAliasesForFile = (
 
       return [
         {
-          aliasKey: rule.pattern.replace('*', suffix),
+          aliasKey: rule.pattern.replaceAll('*', suffix),
           aliasKind: 'tsconfig_path',
           precedence: 80,
         },

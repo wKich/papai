@@ -30,8 +30,16 @@ export interface ExtractReferenceCandidatesResult {
   readonly references: readonly ReferenceCandidate[]
 }
 
-const normalizeSpecifier = (node: SyntaxNode | null | undefined): string | null =>
-  node?.text.replaceAll("'", '').replaceAll('"', '') ?? null
+const normalizeSpecifier = (node: SyntaxNode | null | undefined): string | null => {
+  const text = node?.text
+  if (text === undefined) {
+    return null
+  }
+  if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith('"') && text.endsWith('"'))) {
+    return text.slice(1, -1)
+  }
+  return text
+}
 
 const pushExportSpecifier = (
   child: SyntaxNode,
