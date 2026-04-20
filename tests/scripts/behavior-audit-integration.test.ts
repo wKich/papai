@@ -65,6 +65,8 @@ async function initializeGitRepo(root: string): Promise<void> {
       'user.name=Test User',
       '-c',
       'user.email=test@example.com',
+      '-c',
+      'commit.gpgsign=false',
       'commit',
       '--allow-empty',
       '-m',
@@ -78,7 +80,19 @@ async function initializeGitRepo(root: string): Promise<void> {
 async function commitAll(root: string, message: string): Promise<void> {
   await runCommand(['git', 'add', '.'], root)
   await runCommand(
-    ['git', '-c', 'user.name=Test User', '-c', 'user.email=test@example.com', 'commit', '-m', message, '-q'],
+    [
+      'git',
+      '-c',
+      'user.name=Test User',
+      '-c',
+      'user.email=test@example.com',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '-m',
+      message,
+      '-q',
+    ],
     root,
   )
 }
