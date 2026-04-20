@@ -1,6 +1,6 @@
 import pLimit from 'p-limit'
 
-import type { ChatProvider, DeferredDeliveryTarget } from '../chat/types.js'
+import type { ChatProvider } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { emit } from '../debug/event-bus.js'
 import { logger } from '../logger.js'
@@ -23,10 +23,8 @@ let isRunning = false
 
 // In-flight prompt tracking to prevent multiple executions if poller interval is short or task is slow
 const inFlightPrompts = new Set<string>()
-
 function formatTaskStatus(status: string | undefined): string {
-  if (status === undefined) return ''
-  return ` (${status})`
+  return status === undefined ? '' : ` (${status})`
 }
 function logSettledErrors(results: PromiseSettledResult<void>[], context: string): void {
   for (const r of results) {
@@ -81,14 +79,18 @@ async function executeScheduledPromptsForGroup(
   let response: string
   try {
     response = await dispatchExecution(execCtx, 'scheduled', mergedPrompt, metadata, buildProviderFn)
-    await chat.sendMessage(execCtx.deliveryTarget, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    log.error({ userId: createdByUserId, promptIds, error: errMsg }, 'Scheduled prompt LLM invocation failed')
-    response = `Failed: ${errMsg}`
+    log.error(
+      { userId: createdByUserId, promptIds, error: errMsg },
+      'Scheduled prompt execution failed before delivery',
+    )
     await chat.sendMessage(execCtx.deliveryTarget, `I ran into an error while working on that: ${errMsg}`)
+    finalizeAllPrompts(prompts, new Date().toISOString(), timezone)
+    return
   }
 
+  await chat.sendMessage(execCtx.deliveryTarget, response)
   finalizeAllPrompts(prompts, new Date().toISOString(), timezone)
 }
 
@@ -155,14 +157,20 @@ async function executeSingleAlert(
       buildProviderFn,
       matchedTasksSummary,
     )
-    await chat.sendMessage(alert.deliveryTarget, response)
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    log.error({ id: alert.id, userId: alert.createdByUserId, error: errMsg }, 'Alert prompt LLM invocation failed')
-    response = `Failed: ${errMsg}`
+    log.error(
+      { id: alert.id, userId: alert.createdByUserId, error: errMsg },
+      'Alert prompt execution failed before delivery',
+    )
     await chat.sendMessage(alert.deliveryTarget, `Sorry, something went wrong while preparing this update: ${errMsg}`)
+    const now = new Date().toISOString()
+    updateAlertTriggerTime(alert.id, alert.createdByUserId, now)
+    log.info({ id: alert.id, userId: alert.createdByUserId, matchedCount: matchedTasks.length }, 'Alert triggered')
+    return
   }
 
+  await chat.sendMessage(alert.deliveryTarget, response)
   const now = new Date().toISOString()
   updateAlertTriggerTime(alert.id, alert.createdByUserId, now)
   log.info({ id: alert.id, userId: alert.createdByUserId, matchedCount: matchedTasks.length }, 'Alert triggered')
@@ -288,5 +296,3 @@ export function getPollerSnapshot(): PollerSnapshot {
     maxConcurrentUsers: MAX_CONCURRENT_USERS,
   }
 }
-
-export type { DeferredDeliveryTarget }

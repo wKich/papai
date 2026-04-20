@@ -37,14 +37,14 @@ export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
 type OnMessageHandler = (msg: IncomingMessage, reply: ReplyFn) => Promise<void>
-type SendableChannel = { send: (opts: { content: string }) => Promise<unknown> }
+type SendableChannel = { send: (opts: { content: string }) => Promise<unknown>; isSendable?: () => boolean }
+
 function isSendableChannel(val: unknown): val is SendableChannel {
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    'send' in val &&
-    typeof (val as Record<string, unknown>)['send'] === 'function'
-  )
+  if (typeof val !== 'object' || val === null) return false
+  const candidate = val as Partial<SendableChannel>
+  if (typeof candidate.send !== 'function') return false
+  if (candidate.isSendable === undefined) return true
+  return candidate.isSendable()
 }
 
 export class DiscordChatProvider implements ChatProvider {
@@ -81,7 +81,6 @@ export class DiscordChatProvider implements ChatProvider {
   onMessage(handler: OnMessageHandler): void {
     this.messageHandler = handler
   }
-
   onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
     this.interactionHandler = handler
   }
@@ -110,7 +109,7 @@ export class DiscordChatProvider implements ChatProvider {
     const channel = fetchChannel ? await fetchChannel.call(this.client.channels, target.contextId) : undefined
     if (!isSendableChannel(channel)) {
       log.warn({ channelId: target.contextId }, 'Discord channel not sendable')
-      return
+      throw new Error('Discord channel not sendable')
     }
     const chunks = chunkForDiscord(content, discordTraits.maxMessageLength!)
     await chunks.reduce<Promise<unknown>>(

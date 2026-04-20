@@ -4,7 +4,7 @@ import type { ModelMessage } from 'ai'
 
 import type { ChatProvider, DeferredDeliveryTarget } from '../../src/chat/types.js'
 import { setConfig } from '../../src/config.js'
-import { createAlertPrompt } from '../../src/deferred-prompts/alerts.js'
+import { createAlertPrompt, getAlertPrompt } from '../../src/deferred-prompts/alerts.js'
 import { pollAlertsOnce, pollScheduledOnce } from '../../src/deferred-prompts/poller.js'
 import { createScheduledPrompt, getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import type { TaskProvider } from '../../src/providers/types.js'
@@ -258,6 +258,32 @@ describe('pollScheduledOnce — error handling', () => {
     expect(updated!.status).toBe('active')
     expect(new Date(updated!.fireAt).getTime()).toBeGreaterThan(Date.now())
   })
+
+  test('keeps one-shot prompt active when delivery fails after LLM succeeds', async () => {
+    const userId = 'delivery-fail-user'
+    setupUserConfig(userId)
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    const created = createScheduledPrompt(userId, 'one-time task', { fireAt: pastTime })
+    let sendCount = 0
+
+    chat = {
+      ...chat,
+      sendMessage: (_target: DeferredDeliveryTarget, text: string): Promise<void> => {
+        sendCount += 1
+        if (sendCount === 1) return Promise.reject(new Error('delivery failed'))
+        sentMessages.push({ target: _target, text })
+        return Promise.resolve()
+      },
+    }
+
+    await pollScheduledOnce(chat, () => createMockProvider())
+
+    const updated = getScheduledPrompt(created.id, userId)
+    expect(updated).not.toBeNull()
+    expect(updated!.status).toBe('active')
+    expect(updated!.lastExecutedAt).toBeNull()
+    expect(sentMessages).toHaveLength(0)
+  })
 })
 
 describe('pollAlertsOnce', () => {
@@ -351,6 +377,35 @@ describe('pollAlertsOnce', () => {
 
     expect(sentMessages).toHaveLength(1)
     expect(sentMessages[0]!.text).toBe('Alert triggered.')
+  })
+
+  test('does not update alert trigger time when delivery fails', async () => {
+    const created = createAlertPrompt(USER_ID, 'Notify on done', { field: 'task.status', op: 'eq', value: 'done' })
+    let sendCount = 0
+
+    chat = {
+      ...chat,
+      sendMessage: (_target: DeferredDeliveryTarget, text: string): Promise<void> => {
+        sendCount += 1
+        if (sendCount === 1) return Promise.reject(new Error('delivery failed'))
+        sentMessages.push({ target: _target, text })
+        return Promise.resolve()
+      },
+    }
+
+    const provider = createMockProvider({
+      listProjects: mock(() => Promise.resolve([{ id: 'proj-1', name: 'Test', url: 'http://test/proj/1' }])),
+      listTasks: mock(() =>
+        Promise.resolve([{ id: 'task-1', title: 'Completed Task', status: 'done', url: 'http://test/1' }]),
+      ),
+    })
+
+    await pollAlertsOnce(chat, () => provider)
+
+    const updated = getAlertPrompt(created.id, USER_ID)
+    expect(updated).not.toBeNull()
+    expect(updated!.lastTriggeredAt).toBeNull()
+    expect(sentMessages).toHaveLength(0)
   })
 })
 
