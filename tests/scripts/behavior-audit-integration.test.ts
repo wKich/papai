@@ -162,6 +162,38 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
 }
 
+function isKeywordVocabularyEntry(value: unknown): value is {
+  readonly slug: string
+  readonly description: string
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly timesUsed: number
+} {
+  return (
+    isObject(value) &&
+    'slug' in value &&
+    typeof value['slug'] === 'string' &&
+    'description' in value &&
+    typeof value['description'] === 'string' &&
+    'createdAt' in value &&
+    typeof value['createdAt'] === 'string' &&
+    'updatedAt' in value &&
+    typeof value['updatedAt'] === 'string' &&
+    'timesUsed' in value &&
+    typeof value['timesUsed'] === 'number'
+  )
+}
+
+function isKeywordVocabulary(value: unknown): value is readonly {
+  readonly slug: string
+  readonly description: string
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly timesUsed: number
+}[] {
+  return Array.isArray(value) && value.every((entry) => isKeywordVocabularyEntry(entry))
+}
+
 function isManifestTestEntry(value: unknown): value is ManifestTestEntry {
   return (
     isObject(value) &&
@@ -690,6 +722,53 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
   })
 
+  test('main reruns selected work even when prior phases are marked done', async () => {
+    await initializeGitRepo(root)
+
+    const selectedKey = 'tests/tools/sample.test.ts::suite > first case'
+    loadProgressImpl = (): Promise<Progress> =>
+      Promise.resolve({
+        ...createEmptyProgress(1),
+        phase1: {
+          ...createEmptyProgress(1).phase1,
+          status: 'done',
+          completedFiles: ['tests/tools/sample.test.ts'],
+        },
+        phase2: {
+          ...createEmptyProgress(1).phase2,
+          status: 'done',
+          completedBatches: { 'group-targeting': 'done' },
+        },
+        phase3: {
+          ...createEmptyProgress(1).phase3,
+          status: 'done',
+          completedBehaviors: { 'tools::selected-case': 'done' },
+        },
+      })
+    selectIncrementalWorkImpl = (input: SelectIncrementalWorkInput): IncrementalSelection => {
+      selectIncrementalWorkCalls = [...selectIncrementalWorkCalls, input]
+      return {
+        phase1SelectedTestKeys: [selectedKey],
+        phase2SelectedTestKeys: [selectedKey],
+        phase3SelectedConsolidatedIds: ['tools::selected-case'],
+        reportRebuildOnly: false,
+      }
+    }
+
+    await loadBehaviorAuditEntryPoint(crypto.randomUUID())
+
+    expect(runPhase1Calls).toEqual([
+      {
+        parsedTestKeys: [
+          'tests/tools/sample.test.ts::suite > first case',
+          'tests/tools/sample.test.ts::suite > second case',
+        ],
+        selectedTestKeys: [selectedKey],
+      },
+    ])
+    expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
+  })
+
   test('report-writer drift rebuilds markdown outputs without phase1 or phase2 model calls', async () => {
     await initializeGitRepo(root)
 
@@ -1099,6 +1178,63 @@ describe('behavior-audit phase 3 incremental selection', () => {
     const progressText = await Bun.file(progressPath).text()
     expect(progressText).toContain('As a user, I get the selected behavior outcome.')
   })
+
+  test('runPhase3 evaluates newly generated consolidated ids even when selection was based on stale ids', async () => {
+    const evaluate = await loadEvaluateModule(crypto.randomUUID())
+    const staleSelectedKey = 'tools::old-selected-case'
+    const freshSelectedKey = 'tools::fresh-selected-case'
+    const progress = createEmptyProgress(1)
+
+    await Bun.write(
+      path.join(consolidatedDir, 'tools.json'),
+      JSON.stringify(
+        [
+          {
+            id: freshSelectedKey,
+            domain: 'tools',
+            featureName: 'fresh selected case',
+            isUserFacing: true,
+            behavior: 'When the fresh behavior runs, the bot returns the regenerated output.',
+            userStory: 'As a user, I get the regenerated selected behavior outcome.',
+            context: 'Fresh context for phase 3.',
+            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+          },
+        ],
+        null,
+        2,
+      ) + '\n',
+    )
+
+    await evaluate.runPhase3({
+      progress,
+      selectedConsolidatedIds: new Set([staleSelectedKey]),
+      consolidatedManifest: {
+        version: 1,
+        entries: {
+          [freshSelectedKey]: {
+            consolidatedId: freshSelectedKey,
+            domain: 'tools',
+            featureName: 'fresh selected case',
+            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+            isUserFacing: true,
+            primaryKeyword: 'group-targeting',
+            keywords: ['group-targeting'],
+            sourceDomains: ['tools'],
+            phase2Fingerprint: null,
+            lastConsolidatedAt: null,
+          },
+        },
+      },
+    })
+
+    expect(evaluateCalls).toBe(1)
+    expect(progress.phase3.completedBehaviors[freshSelectedKey]).toBe('done')
+    const freshEvaluation = progress.phase3.evaluations[freshSelectedKey]
+    if (freshEvaluation === undefined) {
+      throw new Error('Expected fresh evaluation to be stored')
+    }
+    expect(freshEvaluation.userStory).toBe('As a user, I get the regenerated selected behavior outcome.')
+  })
 })
 
 describe('behavior-audit interrupted-run baseline', () => {
@@ -1151,6 +1287,7 @@ describe('behavior-audit interrupted-run baseline', () => {
       INCREMENTAL_MANIFEST_PATH: manifestPath,
       PHASE1_TIMEOUT_MS: 1_200_000,
       PHASE2_TIMEOUT_MS: 600_000,
+      PHASE3_TIMEOUT_MS: 600_000,
       MAX_RETRIES: 3,
       RETRY_BACKOFF_MS: [0, 0, 0] as const,
       MAX_STEPS: 20,
@@ -1350,7 +1487,10 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   })
 
   const stored = progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']
-  expect(stored?.keywords).toEqual(['group-targeting', 'group-routing'])
+  if (stored === undefined) {
+    throw new Error('Expected extracted behavior to be stored')
+  }
+  expect(stored.keywords).toEqual(['group-targeting', 'group-routing'])
 })
 
 test('extract-agent returns behavior, context, and candidateKeywords', async () => {
@@ -1408,7 +1548,14 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
 
   const saved = await typedVocab.loadKeywordVocabulary()
   expect(saved).not.toBeNull()
-  expect(saved?.[0]?.timesUsed).toBe(2)
+  if (saved === null) {
+    throw new Error('Expected saved vocabulary entries')
+  }
+  const firstSavedEntry = saved[0]
+  if (firstSavedEntry === undefined) {
+    throw new Error('Expected first saved vocabulary entry')
+  }
+  expect(firstSavedEntry.timesUsed).toBe(2)
 })
 
 test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
@@ -1538,9 +1685,330 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
 
   const savedVocabText = await Bun.file(vocabularyPath).text()
   expect(savedVocabText).toContain('"group-targeting"')
-  expect(
-    progress.phase1.completedTests['tests/tools/sample.test.ts']?.['tests/tools/sample.test.ts::suite > case'],
-  ).toBe('done')
+  const completedTests = progress.phase1.completedTests['tests/tools/sample.test.ts']
+  if (completedTests === undefined) {
+    throw new Error('Expected completed tests entry for sample test file')
+  }
+  expect(completedTests['tests/tools/sample.test.ts::suite > case']).toBe('done')
+})
+
+test('runPhase1 re-extracts selected changed tests even when prior extraction exists', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+  let extractCalls = 0
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    MODEL: 'qwen3-30b-a3b',
+    BASE_URL: 'http://localhost:1234/v1',
+    PROJECT_ROOT: root,
+    REPORTS_DIR: reportsDir,
+    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
+    STORIES_DIR: path.join(reportsDir, 'stories'),
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    PHASE1_TIMEOUT_MS: 1_200_000,
+    PHASE2_TIMEOUT_MS: 300_000,
+    PHASE3_TIMEOUT_MS: 600_000,
+    MAX_RETRIES: 3,
+    RETRY_BACKOFF_MS: [0, 0, 0] as const,
+    MAX_STEPS: 20,
+    EXCLUDED_PREFIXES: [] as const,
+  }))
+
+  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
+    extractWithRetry: (): Promise<{
+      readonly behavior: string
+      readonly context: string
+      readonly candidateKeywords: readonly string[]
+    }> => {
+      extractCalls += 1
+      return Promise.resolve({
+        behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
+        context: 'Reprocesses changed test dependencies.',
+        candidateKeywords: ['group-targeting-updated'],
+      })
+    },
+  }))
+
+  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
+    resolveKeywordsWithRetry: (): Promise<{
+      readonly keywords: readonly string[]
+      readonly appendedEntries: readonly {
+        readonly slug: string
+        readonly description: string
+        readonly createdAt: string
+        readonly updatedAt: string
+        readonly timesUsed: number
+      }[]
+    }> =>
+      Promise.resolve({
+        keywords: ['group-targeting-updated'],
+        appendedEntries: [
+          {
+            slug: 'group-targeting-updated',
+            description: 'Updated targeting behavior.',
+            createdAt: '2026-04-20T12:00:00.000Z',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+            timesUsed: 1,
+          },
+        ],
+      }),
+  }))
+
+  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-rerun-${tag}`)
+  const progressModule = await loadProgressModule(`phase1-rerun-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-rerun-${tag}`)
+
+  const progress = progressModule.createEmptyProgress(1)
+  progress.phase1.completedFiles.push('tests/tools/sample.test.ts')
+  progress.phase1.completedTests['tests/tools/sample.test.ts'] = {
+    'tests/tools/sample.test.ts::suite > case': 'done',
+  }
+  progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = {
+    testName: 'case',
+    fullPath: 'suite > case',
+    behavior: 'Stale extracted behavior.',
+    context: 'Stale context.',
+    keywords: ['stale-keyword'],
+  }
+
+  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
+  await extract.runPhase1({
+    testFiles: [parsed],
+    progress,
+    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+    manifest: incremental.createEmptyManifest(),
+  })
+
+  expect(extractCalls).toBe(1)
+  expect(progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']).toMatchObject({
+    behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
+    keywords: ['group-targeting-updated'],
+  })
+})
+
+test('runPhase1 keeps first use count at one for newly appended keywords', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    MODEL: 'qwen3-30b-a3b',
+    BASE_URL: 'http://localhost:1234/v1',
+    PROJECT_ROOT: root,
+    REPORTS_DIR: reportsDir,
+    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
+    STORIES_DIR: path.join(reportsDir, 'stories'),
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    PHASE1_TIMEOUT_MS: 1_200_000,
+    PHASE2_TIMEOUT_MS: 300_000,
+    PHASE3_TIMEOUT_MS: 600_000,
+    MAX_RETRIES: 3,
+    RETRY_BACKOFF_MS: [0, 0, 0] as const,
+    MAX_STEPS: 20,
+    EXCLUDED_PREFIXES: [] as const,
+  }))
+
+  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
+    extractWithRetry: (): Promise<{
+      readonly behavior: string
+      readonly context: string
+      readonly candidateKeywords: readonly string[]
+    }> =>
+      Promise.resolve({
+        behavior: 'When a user targets a group, the bot routes the request correctly.',
+        context: 'Routes through group context selection.',
+        candidateKeywords: ['group-targeting'],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
+    resolveKeywordsWithRetry: (): Promise<{
+      readonly keywords: readonly string[]
+      readonly appendedEntries: readonly {
+        readonly slug: string
+        readonly description: string
+        readonly createdAt: string
+        readonly updatedAt: string
+        readonly timesUsed: number
+      }[]
+    }> =>
+      Promise.resolve({
+        keywords: ['group-targeting'],
+        appendedEntries: [
+          {
+            slug: 'group-targeting',
+            description: 'Targeting work at a group context.',
+            createdAt: '2026-04-20T12:00:00.000Z',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+            timesUsed: 1,
+          },
+        ],
+      }),
+  }))
+
+  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-keyword-count-${tag}`)
+  const progressModule = await loadProgressModule(`phase1-keyword-count-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-keyword-count-${tag}`)
+
+  const progress = progressModule.createEmptyProgress(1)
+  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
+  await extract.runPhase1({
+    testFiles: [parsed],
+    progress,
+    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+    manifest: incremental.createEmptyManifest(),
+  })
+
+  const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
+  if (!isKeywordVocabulary(savedVocabularyRaw)) {
+    throw new Error('Expected saved keyword vocabulary')
+  }
+  const savedVocabulary = savedVocabularyRaw
+  expect(savedVocabulary).toHaveLength(1)
+  expect(savedVocabulary[0]).toMatchObject({ slug: 'group-targeting', timesUsed: 1 })
+})
+
+test('runPhase1 does not persist a file as done when behavior-file write fails after manifest save', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    MODEL: 'qwen3-30b-a3b',
+    BASE_URL: 'http://localhost:1234/v1',
+    PROJECT_ROOT: root,
+    REPORTS_DIR: reportsDir,
+    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
+    STORIES_DIR: path.join(reportsDir, 'stories'),
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    PHASE1_TIMEOUT_MS: 1_200_000,
+    PHASE2_TIMEOUT_MS: 300_000,
+    PHASE3_TIMEOUT_MS: 600_000,
+    MAX_RETRIES: 3,
+    RETRY_BACKOFF_MS: [0, 0, 0] as const,
+    MAX_STEPS: 20,
+    EXCLUDED_PREFIXES: [] as const,
+  }))
+
+  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
+    extractWithRetry: (): Promise<{
+      readonly behavior: string
+      readonly context: string
+      readonly candidateKeywords: readonly string[]
+    }> =>
+      Promise.resolve({
+        behavior: 'When a user targets a group, the bot routes the request correctly.',
+        context: 'Routes through group context selection.',
+        candidateKeywords: ['group-targeting'],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
+    resolveKeywordsWithRetry: (): Promise<{
+      readonly keywords: readonly string[]
+      readonly appendedEntries: readonly {
+        readonly slug: string
+        readonly description: string
+        readonly createdAt: string
+        readonly updatedAt: string
+        readonly timesUsed: number
+      }[]
+    }> =>
+      Promise.resolve({
+        keywords: ['group-targeting'],
+        appendedEntries: [
+          {
+            slug: 'group-targeting',
+            description: 'Targeting work at a group context.',
+            createdAt: '2026-04-20T12:00:00.000Z',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+            timesUsed: 1,
+          },
+        ],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/report-writer.js', async () => {
+    const real: unknown = await import(
+      `../../scripts/behavior-audit/report-writer.js?test=phase1-write-fail-${crypto.randomUUID()}`
+    )
+    if (!isReportWriterModule(real)) {
+      throw new Error('Unexpected report writer module shape')
+    }
+    return {
+      ...real,
+      writeBehaviorFile: (): Promise<void> => Promise.reject(new Error('disk full')),
+    }
+  })
+
+  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-write-fail-${tag}`)
+  const progressModule = await loadProgressModule(`phase1-write-fail-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-write-fail-${tag}`)
+
+  const progress = progressModule.createEmptyProgress(1)
+  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
+
+  await expect(
+    extract.runPhase1({
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    }),
+  ).rejects.toThrow('disk full')
+
+  expect(progress.phase1.completedFiles).toEqual([])
+  expect(progress.phase1.status).not.toBe('done')
+  expect(await Bun.file(progressPath).exists()).toBe(true)
+
+  const persistedProgressText = await Bun.file(progressPath).text()
+  const persistedProgress = JSON.parse(persistedProgressText) as unknown
+  if (!isObject(persistedProgress) || !('phase1' in persistedProgress) || !isObject(persistedProgress['phase1'])) {
+    throw new Error('Expected persisted progress shape')
+  }
+  const persistedPhase1 = persistedProgress['phase1']
+  if (!('completedFiles' in persistedPhase1) || !Array.isArray(persistedPhase1['completedFiles'])) {
+    throw new Error('Expected persisted phase1 completedFiles array')
+  }
+  if (!('completedTests' in persistedPhase1) || !isObject(persistedPhase1['completedTests'])) {
+    throw new Error('Expected persisted phase1 completedTests record')
+  }
+  expect(persistedPhase1['completedFiles']).toEqual([])
+  expect(persistedPhase1['completedTests']['tests/tools/sample.test.ts']).toBeUndefined()
 })
 
 test('consolidate-agent prompt contract treats a keyword batch as a candidate pool rather than one feature', async () => {
@@ -1550,6 +2018,92 @@ test('consolidate-agent prompt contract treats a keyword batch as a candidate po
 })
 
 test('runPhase2 groups cross-domain behaviors by primary keyword and preserves provenance', async () => {
+  let capturedPrimaryKeyword: string | null = null
+  let capturedDomains: readonly string[] = []
+  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
+    consolidateWithRetry: (
+      primaryKeyword: string,
+      inputs: readonly { readonly testKey: string; readonly domain: string }[],
+    ): Promise<
+      | readonly {
+          readonly id: string
+          readonly item: {
+            readonly featureName: string
+            readonly isUserFacing: boolean
+            readonly behavior: string
+            readonly userStory: string | null
+            readonly context: string
+            readonly sourceTestKeys: readonly string[]
+          }
+        }[]
+      | null
+    > =>
+      Promise.resolve(
+        ((): readonly {
+          readonly id: string
+          readonly item: {
+            readonly featureName: string
+            readonly isUserFacing: boolean
+            readonly behavior: string
+            readonly userStory: string | null
+            readonly context: string
+            readonly sourceTestKeys: readonly string[]
+          }
+        }[] => {
+          capturedPrimaryKeyword = primaryKeyword
+          capturedDomains = inputs.map((input) => input.domain)
+          return [
+            {
+              id: `${primaryKeyword}::combined-feature`,
+              item: {
+                featureName: 'Combined feature',
+                isUserFacing: true,
+                behavior: 'When a user acts, something happens.',
+                userStory: 'As a user, I can do something.',
+                context: 'Implementation context.',
+                sourceTestKeys: inputs.map((input) => input.testKey),
+              },
+            },
+          ]
+        })(),
+      ),
+  }))
+
+  const consolidate = await loadConsolidateModule(`keyword-batches-${crypto.randomUUID()}`)
+  const progress = createEmptyProgress(2)
+
+  progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > case'] = {
+    testName: 'case',
+    fullPath: 'suite > case',
+    behavior: 'When a user targets a group, the bot routes the request correctly.',
+    context: 'Routes through group context selection.',
+    keywords: ['group-targeting', 'shared-feature'],
+  }
+  progress.phase1.extractedBehaviors['tests/commands/b.test.ts::suite > case'] = {
+    testName: 'case',
+    fullPath: 'suite > case',
+    behavior: 'When a user configures a group action, the bot applies the group target.',
+    context: 'Resolves group target before command execution.',
+    keywords: ['group-targeting', 'shared-feature'],
+  }
+
+  const manifest = { version: 1 as const, entries: {} }
+  const result = await consolidate.runPhase2(progress, manifest, 'phase2-v1', new Set())
+
+  expect(Object.keys(result.entries).length).toBeGreaterThan(0)
+  if (capturedPrimaryKeyword === null) {
+    throw new Error('Expected captured primary keyword')
+  }
+  const capturedPrimaryKeywordValue: string = capturedPrimaryKeyword
+  expect(capturedPrimaryKeywordValue).toBe('group-targeting')
+  expect(capturedDomains).toEqual(['tools', 'commands'])
+  const savedEntries = Object.values(result.entries)
+  expect(savedEntries).toHaveLength(1)
+  expect(getArrayItem(savedEntries, 0).domain).toBe('cross-domain')
+  expect(getArrayItem(savedEntries, 0).sourceDomains).toEqual(['commands', 'tools'])
+})
+
+test('runPhase2 accepts omitted selectedTestKeys for backward compatibility', async () => {
   void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
     consolidateWithRetry: (
       primaryKeyword: string,
@@ -1568,43 +2122,93 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
         }[]
       | null
     > =>
-      Promise.resolve(
-        inputs.map((input) => ({
-          id: `${primaryKeyword}::${input.testKey.replace(/[^a-z0-9]/g, '-')}`,
+      Promise.resolve([
+        {
+          id: `${primaryKeyword}::feature`,
           item: {
-            featureName: `Feature from ${input.testKey}`,
+            featureName: 'Feature',
             isUserFacing: true,
             behavior: 'When a user acts, something happens.',
             userStory: 'As a user, I can do something.',
             context: 'Implementation context.',
-            sourceTestKeys: [input.testKey],
+            sourceTestKeys: inputs.map((input) => input.testKey),
           },
-        })),
-      ),
+        },
+      ]),
   }))
 
-  const consolidate = await loadConsolidateModule(`keyword-batches-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(2)
+  const consolidate = await loadConsolidateModule(`phase2-backcompat-${crypto.randomUUID()}`)
+  const progress = createEmptyProgress(1)
 
   progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > case'] = {
     testName: 'case',
     fullPath: 'suite > case',
     behavior: 'When a user targets a group, the bot routes the request correctly.',
     context: 'Routes through group context selection.',
-    keywords: ['group-targeting', 'group-routing'],
-  }
-  progress.phase1.extractedBehaviors['tests/commands/b.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
-    behavior: 'When a user configures a group action, the bot applies the group target.',
-    context: 'Resolves group target before command execution.',
-    keywords: ['group-targeting', 'command-routing'],
+    keywords: ['group-targeting'],
   }
 
   const manifest = { version: 1 as const, entries: {} }
   const result = await consolidate.runPhase2(progress, manifest, 'phase2-v1')
 
-  expect(Object.keys(result.entries).length).toBeGreaterThan(0)
+  expect(Object.keys(result.entries)).toEqual(['group-targeting::feature'])
+})
+
+test('runPhase2 splits oversized keyword batches before prompt generation', async () => {
+  const capturedBatchSizes: number[] = []
+  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
+    consolidateWithRetry: (
+      primaryKeyword: string,
+      inputs: readonly { readonly testKey: string }[],
+    ): Promise<
+      | readonly {
+          readonly id: string
+          readonly item: {
+            readonly featureName: string
+            readonly isUserFacing: boolean
+            readonly behavior: string
+            readonly userStory: string | null
+            readonly context: string
+            readonly sourceTestKeys: readonly string[]
+          }
+        }[]
+      | null
+    > => {
+      capturedBatchSizes.push(inputs.length)
+      return Promise.resolve([
+        {
+          id: `${primaryKeyword}::feature-${capturedBatchSizes.length}`,
+          item: {
+            featureName: `Feature ${capturedBatchSizes.length}`,
+            isUserFacing: true,
+            behavior: 'When a user acts, something happens.',
+            userStory: 'As a user, I can do something.',
+            context: 'Implementation context.',
+            sourceTestKeys: inputs.map((input) => input.testKey),
+          },
+        },
+      ])
+    },
+  }))
+
+  const consolidate = await loadConsolidateModule(`split-batches-${crypto.randomUUID()}`)
+  const progress = createEmptyProgress(6)
+
+  for (const suffix of ['one', 'two', 'three', 'four', 'five', 'six'] as const) {
+    progress.phase1.extractedBehaviors[`tests/tools/a.test.ts::suite > ${suffix}`] = {
+      testName: suffix,
+      fullPath: `suite > ${suffix}`,
+      behavior: `When a user targets group scenario ${suffix}, the bot routes correctly.`,
+      context: `Context ${suffix}.`,
+      keywords: ['group-targeting', `secondary-${suffix}`],
+    }
+  }
+
+  const manifest = { version: 1 as const, entries: {} }
+  await consolidate.runPhase2(progress, manifest, 'phase2-v1', new Set())
+
+  expect(capturedBatchSizes.length).toBeGreaterThan(1)
+  expect(capturedBatchSizes.every((size) => size < 6)).toBe(true)
 })
 
 test('phase2 can emit multiple feature-level stories from one keyword-owned batch', async () => {
@@ -1660,8 +2264,93 @@ test('phase2 can emit multiple feature-level stories from one keyword-owned batc
   }
 
   const manifest = { version: 1 as const, entries: {} }
-  const result = await consolidate2.runPhase2(progress, manifest, 'phase2-v1')
+  const result = await consolidate2.runPhase2(progress, manifest, 'phase2-v1', new Set())
   expect(Object.keys(result.entries).length).toBeGreaterThan(1)
+})
+
+test('runPhase3 reads consolidated batches by primary keyword from manifest entries', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    MODEL: 'qwen3-30b-a3b',
+    BASE_URL: 'http://localhost:1234/v1',
+    PROJECT_ROOT: root,
+    REPORTS_DIR: reportsDir,
+    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
+    STORIES_DIR: path.join(reportsDir, 'stories'),
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
+    PHASE1_TIMEOUT_MS: 1_200_000,
+    PHASE2_TIMEOUT_MS: 300_000,
+    PHASE3_TIMEOUT_MS: 600_000,
+    MAX_RETRIES: 3,
+    RETRY_BACKOFF_MS: [0, 0, 0] as const,
+    MAX_STEPS: 20,
+    EXCLUDED_PREFIXES: [] as const,
+  }))
+
+  void mock.module('../../scripts/behavior-audit/evaluate-agent.js', () => ({
+    evaluateWithRetry: (): Promise<MockEvaluationResult> =>
+      Promise.resolve({
+        maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+        dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+        viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+        flaws: [],
+        improvements: [],
+      }),
+  }))
+
+  mkdirSync(path.join(reportsDir, 'consolidated'), { recursive: true })
+  await Bun.write(
+    path.join(reportsDir, 'consolidated', 'group-targeting.json'),
+    JSON.stringify([
+      {
+        id: 'group-targeting::feature',
+        domain: 'cross-domain',
+        featureName: 'Shared group targeting',
+        isUserFacing: true,
+        behavior: 'When a user targets a group, the bot routes the request correctly.',
+        userStory: 'As a user, I can target a group.',
+        context: 'Routes through group context selection.',
+        sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
+      },
+    ]),
+  )
+
+  const evaluate = await loadEvaluateModule(`phase3-keyword-files-${crypto.randomUUID()}`)
+  const progress = createEmptyProgress(1)
+  const consolidatedManifest = {
+    version: 1 as const,
+    entries: {
+      'group-targeting::feature': {
+        consolidatedId: 'group-targeting::feature',
+        domain: 'cross-domain',
+        featureName: 'Shared group targeting',
+        sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
+        isUserFacing: true,
+        primaryKeyword: 'group-targeting',
+        keywords: ['group-targeting', 'shared-feature'],
+        sourceDomains: ['commands', 'tools'],
+        phase2Fingerprint: 'phase2-fp',
+        lastConsolidatedAt: '2026-04-20T12:00:00.000Z',
+      },
+    },
+  }
+
+  await evaluate.runPhase3({
+    progress,
+    selectedConsolidatedIds: new Set(),
+    consolidatedManifest,
+  })
+
+  expect(progress.phase3.stats.behaviorsTotal).toBe(1)
+  expect(progress.phase3.stats.behaviorsDone).toBe(1)
+  expect(progress.phase3.evaluations['group-targeting::feature']).toBeDefined()
 })
 
 describe('behavior-audit entrypoint phase3 manifest passthrough', () => {

@@ -3,21 +3,20 @@ import pLimit from 'p-limit'
 import { MAX_RETRIES } from './config.js'
 import { extractWithRetry } from './extract-agent.js'
 import { updateManifestForExtractedTest } from './extract-incremental.js'
+import {
+  getSelectedTests,
+  markFileDoneWhenSelectedTestsPersisted,
+  shouldSkipCompletedFile,
+  writeValidBehaviorsForFile,
+} from './extract-phase1-helpers.js'
 import type { IncrementalManifest } from './incremental.js'
 import { saveManifest } from './incremental.js'
 import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
+import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 import { loadKeywordVocabulary, recordKeywordUsage, saveKeywordVocabulary } from './keyword-vocabulary.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedTestAttempts,
-  markFileDone,
-  markTestDone,
-  markTestFailed,
-  resetPhase2AndPhase3,
-  saveProgress,
-} from './progress.js'
+import { getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3, saveProgress } from './progress.js'
 import type { ExtractedBehavior } from './report-writer.js'
-import { writeBehaviorFile } from './report-writer.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
 interface Phase1RunInput {
@@ -54,7 +53,11 @@ async function resolveKeywords(
   testKey: string,
   progress: Progress,
 ): Promise<readonly string[] | null> {
-  const existingVocabulary = (await loadKeywordVocabulary()) ?? []
+  const loadedVocabulary = await loadKeywordVocabulary()
+  let existingVocabulary: readonly KeywordVocabularyEntry[] = []
+  if (loadedVocabulary !== null) {
+    existingVocabulary = loadedVocabulary
+  }
   const vocabularyText = existingVocabulary.length === 0 ? '(empty)' : JSON.stringify(existingVocabulary, null, 2)
   const resolved = await resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
   if (resolved === null) {
@@ -63,7 +66,7 @@ async function resolveKeywords(
   }
   const nextVocabulary = [...existingVocabulary, ...resolved.appendedEntries]
   await saveKeywordVocabulary(nextVocabulary)
-  await recordKeywordUsage(resolved.keywords)
+  await recordKeywordUsage(resolved.keywords, new Set(resolved.appendedEntries.map((entry) => entry.slug)))
   return resolved.keywords
 }
 
@@ -98,7 +101,6 @@ async function extractAndSave(
     context: extracted.context,
     keywords,
   }
-  markTestDone(progress, testFilePath, testKey, behavior)
   const { manifest: updatedManifest, phase1Changed } = await updateManifestForExtractedTest({
     manifest,
     testFile,
@@ -106,6 +108,7 @@ async function extractAndSave(
     extractedBehavior: behavior,
   })
   await saveManifest(updatedManifest)
+  markTestDone(progress, testFilePath, testKey, behavior)
   console.log(`    ✓`)
   return { behavior, manifest: updatedManifest, phase1Changed }
 }
@@ -120,8 +123,10 @@ function processSingleTestCase(
   manifest: IncrementalManifest,
 ): Promise<SingleTestResult> {
   const testKey = `${testFilePath}::${testCase.fullPath}`
+  const completedTestsForFile = progress.phase1.completedTests[testFilePath]
+  const isSelectedRerun = completedTestsForFile !== undefined && completedTestsForFile[testKey] === 'done'
   const existing = progress.phase1.extractedBehaviors[testKey]
-  if (existing !== undefined) {
+  if (existing !== undefined && !isSelectedRerun) {
     return Promise.resolve({ behavior: existing, manifest, phase1Changed: false })
   }
   if (getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
@@ -171,30 +176,6 @@ async function runSelectedExtractions(input: {
   return { results, manifest: currentManifest, anyPhase1Changed }
 }
 
-function getSelectedTests(testFile: ParsedTestFile, selectedTestKeys: ReadonlySet<string>): readonly TestCase[] {
-  return testFile.tests.filter((testCase) => selectedTestKeys.has(`${testFile.filePath}::${testCase.fullPath}`))
-}
-
-function collectValidBehaviors(
-  results: readonly ({
-    readonly behavior: ExtractedBehavior
-    readonly manifest: IncrementalManifest
-    readonly phase1Changed: boolean
-  } | null)[],
-): readonly ExtractedBehavior[] {
-  return results
-    .filter(
-      (
-        result,
-      ): result is {
-        readonly behavior: ExtractedBehavior
-        readonly manifest: IncrementalManifest
-        readonly phase1Changed: boolean
-      } => result !== null,
-    )
-    .map((result) => result.behavior)
-}
-
 async function processTestFile(
   testFile: ParsedTestFile,
   progress: Progress,
@@ -203,24 +184,24 @@ async function processTestFile(
   selectedTestKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
 ): Promise<{ readonly manifest: IncrementalManifest; readonly anyPhase1Changed: boolean }> {
-  if (progress.phase1.completedFiles.includes(testFile.filePath)) {
+  const selectedTests = getSelectedTests(testFile.filePath, testFile.tests, selectedTestKeys)
+  if (selectedTests.length === 0) {
+    console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, no selected tests)`)
+    return { manifest, anyPhase1Changed: false }
+  }
+  if (shouldSkipCompletedFile({ progress, testFilePath: testFile.filePath, selectedTests, selectedTestKeys })) {
     console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, already done)`)
     return { manifest, anyPhase1Changed: false }
   }
   console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath}`)
-  const selectedTests = getSelectedTests(testFile, selectedTestKeys)
   const extractionResult = await runSelectedExtractions({
     selectedTests,
     testFile,
     progress,
     manifest,
   })
-  const valid = collectValidBehaviors(extractionResult.results)
-  if (valid.length > 0) {
-    await writeBehaviorFile(testFile.filePath, valid)
-    console.log(`  → wrote ${valid.length} behaviors`)
-  }
-  markFileDone(progress, testFile.filePath)
+  await writeValidBehaviorsForFile(testFile.filePath, extractionResult.results)
+  markFileDoneWhenSelectedTestsPersisted(progress, testFile.filePath, selectedTests)
   await saveProgress(progress)
   return { manifest: extractionResult.manifest, anyPhase1Changed: extractionResult.anyPhase1Changed }
 }

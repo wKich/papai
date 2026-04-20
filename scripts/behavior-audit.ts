@@ -79,7 +79,7 @@ async function runPhase1IfNeeded(
   selectedTestKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
 ): Promise<void> {
-  if (progress.phase1.status === 'done') {
+  if (progress.phase1.status === 'done' && selectedTestKeys.size === 0) {
     console.log('[Phase 1] Already complete, skipping.\n')
     return
   }
@@ -89,8 +89,9 @@ async function runPhase1IfNeeded(
 async function runPhase2IfNeeded(
   progress: Progress,
   phase2Version: string,
+  selectedTestKeys: ReadonlySet<string>,
 ): Promise<import('./behavior-audit/incremental.js').ConsolidatedManifest> {
-  if (progress.phase2.status === 'done') {
+  if (progress.phase2.status === 'done' && selectedTestKeys.size === 0) {
     const existing = await loadConsolidatedManifest()
     if (existing !== null) {
       console.log('[Phase 2] Already complete, skipping.\n')
@@ -99,8 +100,51 @@ async function runPhase2IfNeeded(
   }
 
   const existingManifest = await loadConsolidatedManifest()
-  const consolidatedManifest = existingManifest ?? createEmptyConsolidatedManifest()
-  return runPhase2(progress, consolidatedManifest, phase2Version)
+  if (existingManifest === null) {
+    return runPhase2(progress, createEmptyConsolidatedManifest(), phase2Version, selectedTestKeys)
+  }
+  const consolidatedManifest = existingManifest
+  return runPhase2(progress, consolidatedManifest, phase2Version, selectedTestKeys)
+}
+
+async function prepareIncrementalRun(): Promise<{
+  readonly previousManifest: IncrementalManifest
+  readonly previousLastStartCommit: string | null
+  readonly updatedManifest: IncrementalManifest
+}> {
+  const previousManifest = resolveRunStartManifest(await loadManifest())
+  const currentHead = await resolveHeadCommit()
+  const { previousLastStartCommit, updatedManifest } = captureRunStart(
+    previousManifest,
+    currentHead,
+    new Date().toISOString(),
+  )
+  await saveManifest(updatedManifest)
+  return { previousManifest, previousLastStartCommit, updatedManifest }
+}
+
+async function selectIncrementalRunWork(input: {
+  readonly previousManifest: IncrementalManifest
+  readonly previousLastStartCommit: string | null
+}): Promise<{
+  readonly parsedFiles: readonly ParsedTestFile[]
+  readonly previousConsolidatedManifest: import('./behavior-audit/incremental.js').ConsolidatedManifest | null
+  readonly selection: import('./behavior-audit/incremental.js').IncrementalSelection
+}> {
+  const testFilePaths = await discoverTestFiles()
+  console.log(`Found ${testFilePaths.length} test files (after exclusions)\n`)
+  const parsedFiles = await parseDiscoveredTestFiles(testFilePaths)
+  const discoveredTestKeys = getDiscoveredTestKeys(parsedFiles)
+  const changedFiles = await collectChangedFiles(input.previousLastStartCommit)
+  const previousConsolidatedManifest = await loadConsolidatedManifest()
+  const selection = selectIncrementalWork({
+    changedFiles,
+    previousManifest: input.previousManifest,
+    currentPhaseVersions: input.previousManifest.phaseVersions,
+    discoveredTestKeys,
+    previousConsolidatedManifest,
+  })
+  return { parsedFiles, previousConsolidatedManifest, selection }
 }
 
 async function runPhase3IfNeeded(
@@ -108,7 +152,7 @@ async function runPhase3IfNeeded(
   selectedConsolidatedIds: ReadonlySet<string>,
   consolidatedManifest: import('./behavior-audit/incremental.js').ConsolidatedManifest | null,
 ): Promise<void> {
-  if (progress.phase3.status === 'done') {
+  if (progress.phase3.status === 'done' && selectedConsolidatedIds.size === 0) {
     console.log('[Phase 3] Already complete.\n')
     return
   }
@@ -132,31 +176,13 @@ async function resolveHeadCommit(): Promise<string> {
 async function main(): Promise<void> {
   console.log('Behavior Audit — discovering test files...\n')
 
-  const previousManifest = resolveRunStartManifest(await loadManifest())
-  const currentHead = await resolveHeadCommit()
-  const { previousLastStartCommit, updatedManifest } = captureRunStart(
+  const { previousManifest, previousLastStartCommit, updatedManifest } = await prepareIncrementalRun()
+  const { parsedFiles, previousConsolidatedManifest, selection } = await selectIncrementalRunWork({
     previousManifest,
-    currentHead,
-    new Date().toISOString(),
-  )
-  await saveManifest(updatedManifest)
-
-  const testFilePaths = await discoverTestFiles()
-  console.log(`Found ${testFilePaths.length} test files (after exclusions)\n`)
-  const parsedFiles = await parseDiscoveredTestFiles(testFilePaths)
-  const discoveredTestKeys = getDiscoveredTestKeys(parsedFiles)
-  const changedFiles = await collectChangedFiles(previousLastStartCommit)
-
-  const previousConsolidatedManifest = await loadConsolidatedManifest()
-  const selection = selectIncrementalWork({
-    changedFiles,
-    previousManifest,
-    currentPhaseVersions: previousManifest.phaseVersions,
-    discoveredTestKeys,
-    previousConsolidatedManifest,
+    previousLastStartCommit,
   })
 
-  const progress = await loadOrCreateProgress(testFilePaths.length)
+  const progress = await loadOrCreateProgress(parsedFiles.length)
 
   if (selection.reportRebuildOnly) {
     await rebuildReportsFromStoredResults({
@@ -171,7 +197,11 @@ async function main(): Promise<void> {
 
   await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
 
-  const consolidatedManifest = await runPhase2IfNeeded(progress, updatedManifest.phaseVersions.phase2)
+  const consolidatedManifest = await runPhase2IfNeeded(
+    progress,
+    updatedManifest.phaseVersions.phase2,
+    new Set(selection.phase2SelectedTestKeys),
+  )
   await saveConsolidatedManifest(consolidatedManifest)
 
   await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)

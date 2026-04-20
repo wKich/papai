@@ -549,6 +549,60 @@ describe('behavior-audit incremental manifest', () => {
     expect(selection.reportRebuildOnly).toBe(false)
   })
 
+  test('selectIncrementalWork selects all consolidated ids when phase1 changes may produce new consolidated ids', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const previousConsolidatedManifest: IncrementalModule.ConsolidatedManifest = {
+      version: 1,
+      entries: {
+        'tools::old-feature': {
+          consolidatedId: 'tools::old-feature',
+          domain: 'tools',
+          featureName: 'Old feature',
+          sourceTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+          isUserFacing: true,
+          primaryKeyword: 'old-keyword',
+          keywords: ['old-keyword'],
+          sourceDomains: ['tools'],
+          phase2Fingerprint: 'fp',
+          lastConsolidatedAt: '2026-04-20T12:00:00.000Z',
+        },
+      },
+    }
+
+    const selection = incremental.selectIncrementalWork({
+      changedFiles: ['src/tools/create-task.ts'],
+      previousManifest: {
+        version: 1,
+        lastStartCommit: 'abc',
+        lastStartedAt: 'x',
+        lastCompletedAt: 'y',
+        phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+        tests: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testFile: 'tests/tools/create-task.test.ts',
+            testName: 'suite > case',
+            dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
+            phase1Fingerprint: 'fp1',
+            phase2Fingerprint: 'fp2',
+            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            domain: 'tools',
+            lastPhase1CompletedAt: 'x',
+            lastPhase2CompletedAt: 'y',
+          },
+        },
+      },
+      currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+      discoveredTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+      previousConsolidatedManifest,
+    })
+
+    expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.phase2SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
+    expect(selection.phase3SelectedConsolidatedIds).toEqual(['tools::old-feature'])
+    expect(selection.reportRebuildOnly).toBe(false)
+  })
+
   test('saveManifest writes through a temp file and atomically renames it into place', async () => {
     const renameSpy = spyOn(fsPromises, 'rename')
     const incremental = await loadIncrementalModule()
