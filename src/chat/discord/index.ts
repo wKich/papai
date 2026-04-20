@@ -28,11 +28,12 @@ import {
 import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { handleDiscordGroupSettingsSelection } from './group-settings.js'
+import { resolveDiscordGroupLabel, resolveDiscordGuildFromContext, resolveDiscordUserLabel } from './label-helpers.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
-import { isDispatchableMessage, isGuildLike, isReadyPayload } from './type-guards.js'
+import { isDispatchableMessage, isReadyPayload } from './type-guards.js'
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
@@ -46,7 +47,6 @@ function isSendableChannel(val: unknown): val is SendableChannel {
   if (candidate.isSendable === undefined) return true
   return candidate.isSendable()
 }
-
 export class DiscordChatProvider implements ChatProvider {
   readonly name = 'discord'
   readonly threadCapabilities: ThreadCapabilities = {
@@ -61,16 +61,15 @@ export class DiscordChatProvider implements ChatProvider {
   private readonly clientFactory: DiscordClientFactory
   private readonly commands = new Map<string, CommandHandler>()
   private messageHandler: OnMessageHandler | null = null
-  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
+  private interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null = null
   private client: DiscordClientLike | null = null
-
   constructor(clientFactory?: DiscordClientFactory) {
     const token = process.env['DISCORD_BOT_TOKEN']
     if (token === undefined || token.trim() === '') {
       throw new Error('DISCORD_BOT_TOKEN environment variable is required')
     }
     this.token = token
-    this.clientFactory = clientFactory ?? defaultClientFactory
+    this.clientFactory = typeof clientFactory === 'function' ? clientFactory : defaultClientFactory
     log.debug({ tokenLength: this.token.length }, 'DiscordChatProvider constructed')
   }
 
@@ -124,38 +123,44 @@ export class DiscordChatProvider implements ChatProvider {
     if (/^\d+$/.test(clean)) return clean
     if (context.contextType !== 'group') return null
     if (this.client === null) return null
-
-    if (this.client.channels === undefined || this.client.guilds === undefined) return null
-    const raw = this.client.channels.cache.get(context.contextId)
-    if (typeof raw !== 'object' || raw === null || !('guildId' in raw)) return null
-    const guildId = raw.guildId
-    if (typeof guildId !== 'string') return null
-    const rawGuild = this.client.guilds.cache.get(guildId)
-    if (!isGuildLike(rawGuild)) return null
-
+    const resolvedGuild = await resolveDiscordGuildFromContext(this.client, context.contextId)
+    if (resolvedGuild === null) return null
     try {
-      const members = await rawGuild.members.search({ query: clean, limit: 1 })
+      const members = await resolvedGuild.guild.members.search({ query: clean, limit: 1 })
       for (const m of members.values()) {
         return m.id
       }
       return null
     } catch (error) {
       log.warn(
-        { username: clean, guildId, error: error instanceof Error ? error.message : String(error) },
+        {
+          username: clean,
+          guildId: resolvedGuild.guildId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'Discord member search failed',
       )
       return null
     }
   }
 
+  resolveGroupLabel(groupId: string): Promise<string | null> {
+    if (this.client === null) return Promise.resolve(null)
+    return resolveDiscordGroupLabel(this.client, groupId)
+  }
+
+  resolveUserLabel(userId: string, context: ResolveUserContext | undefined): Promise<string | null> {
+    if (this.client === null) return Promise.resolve(null)
+    return resolveDiscordUserLabel(this.client, userId, context)
+  }
+
   start(): Promise<void> {
-    const adminUserId = process.env['ADMIN_USER_ID'] ?? ''
+    const adminUserId = typeof process.env['ADMIN_USER_ID'] === 'string' ? process.env['ADMIN_USER_ID'] : ''
     const client = this.clientFactory()
     this.client = client
-
     client.on('messageCreate', (rawMsg) => {
       if (!isDispatchableMessage(rawMsg)) return
-      this.dispatchMessage(rawMsg, client.user?.id ?? '', adminUserId).catch((error: unknown) => {
+      this.dispatchMessage(rawMsg, client.user === null ? '' : client.user.id, adminUserId).catch((error: unknown) => {
         log.error({ error: error instanceof Error ? error.message : String(error) }, 'messageCreate dispatch failed')
       })
     })
@@ -219,7 +224,7 @@ export class DiscordChatProvider implements ChatProvider {
     // Handle group-settings selector callbacks before standard routing
     if (await handleDiscordGroupSettingsSelection(interaction, incoming.user.id, result.reply)) return
 
-    if (this.interactionHandler === undefined) {
+    if (this.interactionHandler === null) {
       const auth = checkAuthorizationExtended(
         incoming.user.id,
         incoming.user.username,
@@ -247,12 +252,10 @@ export class DiscordChatProvider implements ChatProvider {
   private async dispatchMessage(message: DispatchableMessage, botId: string, adminUserId: string): Promise<void> {
     const mapped = mapDiscordMessage(message, botId, adminUserId)
     if (mapped === null) return
-
     const reply = createDiscordReplyFn({
       channel: message.channel,
       replyToMessageId: mapped.messageId,
     })
-
     const auth = checkAuthorizationExtended(
       mapped.user.id,
       mapped.user.username,
@@ -261,7 +264,6 @@ export class DiscordChatProvider implements ChatProvider {
       mapped.threadId,
       mapped.user.isAdmin,
     )
-
     const command = this.matchCommand(mapped.text)
     if (command !== null) {
       mapped.commandMatch = command.match

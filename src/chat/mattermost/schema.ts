@@ -43,9 +43,17 @@ export const TeamInfoSchema = z.object({
 export const ChannelMemberSchema = z.object({ roles: z.string() })
 export const FileUploadSchema = z.object({ file_infos: z.array(z.object({ id: z.string() })) })
 
+export const MattermostUserSchema = z.object({
+  id: z.string(),
+  username: z.string().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  nickname: z.string().optional(),
+})
+
 export type MattermostPost = z.infer<typeof MattermostPostSchema>
 
-export function extractReplyId(parentId?: string, rootId?: string): string | undefined {
+export function extractReplyId(parentId: string | undefined, rootId: string | undefined): string | undefined {
   if (parentId !== undefined && parentId !== '') return parentId
   if (rootId !== undefined && rootId !== '') return rootId
   return undefined

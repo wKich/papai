@@ -300,6 +300,8 @@ type CreateMockChatOptions = Partial<
     sendMessage: (target: DeferredDeliveryTarget, text: string) => Promise<void>
     onMessageHandler: (handler: (msg: IncomingMessage, reply: ReplyFn) => Promise<void>) => void
     resolveUserId: (username: string, context: ResolveUserContext) => Promise<string | null>
+    resolveUserLabel: (userId: string, context?: ResolveUserContext) => Promise<string | null>
+    resolveGroupLabel: (groupId: string) => Promise<string | null>
     onInteractionHandler: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
     setCommands: (adminUserId: string) => Promise<void>
     capabilities: Set<ChatCapability>
@@ -318,6 +320,9 @@ const DEFAULT_RESOLVE_USER_ID = (username: string, _context: ResolveUserContext)
   const clean = username.startsWith('@') ? username.slice(1) : username
   return Promise.resolve(clean)
 }
+const DEFAULT_RESOLVE_USER_LABEL = (_userId: string, _context?: ResolveUserContext): Promise<string | null> =>
+  Promise.resolve(null)
+const DEFAULT_RESOLVE_GROUP_LABEL = (_groupId: string): Promise<string | null> => Promise.resolve(null)
 
 function hasAppError(error: Error): error is Error & { appError: AppError } {
   const appError: unknown = Reflect.get(error, 'appError')
@@ -420,6 +425,8 @@ export function createMockChat(...args: [] | [options: CreateMockChatOptions]): 
   const onInteractionHandler = options.onInteractionHandler
   const sendMessage = options.sendMessage
   const resolveUserId = options.resolveUserId
+  const resolveUserLabel = options.resolveUserLabel
+  const resolveGroupLabel = options.resolveGroupLabel
   const setCommands = options.setCommands
 
   let sendMessageImpl: (target: DeferredDeliveryTarget, text: string) => Promise<void> = DEFAULT_SEND_MESSAGE
@@ -430,6 +437,16 @@ export function createMockChat(...args: [] | [options: CreateMockChatOptions]): 
   let resolveUserIdImpl = DEFAULT_RESOLVE_USER_ID
   if (resolveUserId !== undefined) {
     resolveUserIdImpl = resolveUserId
+  }
+
+  let resolveUserLabelImpl = DEFAULT_RESOLVE_USER_LABEL
+  if (resolveUserLabel !== undefined) {
+    resolveUserLabelImpl = resolveUserLabel
+  }
+
+  let resolveGroupLabelImpl = DEFAULT_RESOLVE_GROUP_LABEL
+  if (resolveGroupLabel !== undefined) {
+    resolveGroupLabelImpl = resolveGroupLabel
   }
 
   let setCommandsImpl: (adminUserId: string) => Promise<void> = DEFAULT_SET_COMMANDS
@@ -468,6 +485,8 @@ export function createMockChat(...args: [] | [options: CreateMockChatOptions]): 
         })()),
     sendMessage: sendMessageImpl,
     resolveUserId: resolveUserIdImpl,
+    resolveUserLabel: resolveUserLabelImpl,
+    resolveGroupLabel: resolveGroupLabelImpl,
     setCommands: setCommandsImpl,
     renderContext: (snapshot: ContextSnapshot): ContextRendered => ({
       method: 'text',

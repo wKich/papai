@@ -21,6 +21,56 @@ const getFirstReply = (textCalls: readonly string[]): string | null => {
   return firstReply
 }
 
+const flushMicrotasks = async (): Promise<void> => {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+const createBlockingLabelLookup = (): {
+  readonly lookup: () => Promise<string | null>
+  readonly getMaxInFlight: () => number
+  readonly stopBlocking: () => void
+  readonly releaseAll: () => void
+} => {
+  let shouldBlock = true
+  let inFlight = 0
+  let maxInFlight = 0
+  let releases: Array<() => void> = []
+
+  return {
+    lookup: () => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+
+      if (!shouldBlock) {
+        inFlight -= 1
+        return Promise.resolve(null)
+      }
+
+      return new Promise((resolve) => {
+        releases = [
+          ...releases,
+          (): void => {
+            inFlight -= 1
+            resolve(null)
+          },
+        ]
+      })
+    },
+    getMaxInFlight: () => maxInFlight,
+    stopBlocking: () => {
+      shouldBlock = false
+    },
+    releaseAll: () => {
+      const currentReleases = releases
+      releases = []
+      currentReleases.forEach((release) => {
+        release()
+      })
+    },
+  }
+}
+
 describe('group commands', () => {
   let mockChat: ChatProvider
   let commandHandlers: Map<string, CommandHandler>
@@ -548,6 +598,232 @@ describe('group commands', () => {
       )
 
       expect(textCalls[0]).toBe('User 12345 added to this group.')
+    })
+  })
+
+  describe('readable label resolution', () => {
+    test('lists authorized groups with resolved group and user labels', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (groupId: string): Promise<string | null> => {
+          if (groupId === 'group-123') return Promise.resolve('Engineering Chat')
+          return Promise.resolve(null)
+        },
+        resolveUserLabel: (userId: string): Promise<string | null> => {
+          if (userId === 'admin1') return Promise.resolve('John Johnson (@itsmike)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('Engineering Chat')
+      expect(textCalls[0]).toContain('John Johnson (@itsmike)')
+      expect(textCalls[0]).not.toContain('group-123 (added by admin1)')
+    })
+
+    test('resolves added-by labels separately for each authorized group context', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (groupId: string): Promise<string | null> => Promise.resolve(groupId),
+        resolveUserLabel: (userId: string, context: ResolveUserContext | undefined): Promise<string | null> => {
+          if (userId !== 'admin1') return Promise.resolve(null)
+          if (context !== undefined && context.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
+          if (context !== undefined && context.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+      addAuthorizedGroup('group-456', 'admin1')
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by Alice One (@admin1))')
+      expect(textCalls[0]).toContain('group-456 (added by Alice Two (@admin1))')
+    })
+
+    test('lists group users with resolved member and adder labels', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveUserLabel: (userId: string): Promise<string | null> => {
+          if (userId === 'user1') return Promise.resolve('John Johnson (@itsmike)')
+          if (userId === 'admin1') return Promise.resolve('Jane Admin (@janeadmin)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = labeledHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('John Johnson (@itsmike)')
+      expect(textCalls[0]).toContain('added by Jane Admin (@janeadmin)')
+    })
+
+    test('bounds concurrent /groups label lookups', async () => {
+      const blockingLookup = createBlockingLabelLookup()
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (): Promise<string | null> => blockingLookup.lookup(),
+        resolveUserLabel: (): Promise<string | null> => blockingLookup.lookup(),
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      for (const index of [1, 2, 3, 4, 5, 6]) {
+        addAuthorizedGroup(`group-${index}`, `admin-${index}`)
+      }
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      const handlerPromise = handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      await flushMicrotasks()
+
+      expect(blockingLookup.getMaxInFlight()).toBe(5)
+
+      blockingLookup.stopBlocking()
+      blockingLookup.releaseAll()
+      await handlerPromise
+    })
+
+    test('bounds concurrent /group users label lookups', async () => {
+      const blockingLookup = createBlockingLabelLookup()
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveUserLabel: (): Promise<string | null> => blockingLookup.lookup(),
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      for (const index of [1, 2, 3, 4, 5, 6]) {
+        addGroupMember('group1', `user-${index}`, `admin-${index}`)
+      }
+
+      const handler = labeledHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      const handlerPromise = handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      await flushMicrotasks()
+
+      expect(blockingLookup.getMaxInFlight()).toBe(5)
+
+      blockingLookup.stopBlocking()
+      blockingLookup.releaseAll()
+      await handlerPromise
+    })
+
+    test('falls back to raw IDs when /groups label resolution returns null', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveGroupLabel: (_groupId: string): Promise<string | null> => Promise.resolve(null),
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.resolve(null),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = fallbackHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by admin1)')
+    })
+
+    test('falls back to raw IDs when /groups label resolution rejects', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveGroupLabel: (_groupId: string): Promise<string | null> =>
+          Promise.reject(new Error('group lookup failed')),
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.reject(new Error('user lookup failed')),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = fallbackHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by admin1)')
+    })
+
+    test('falls back to raw IDs when /group users label resolution returns null', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.resolve(null),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = fallbackHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('- user1 (added by admin1)')
+    })
+
+    test('falls back to raw IDs when /group users label resolution rejects', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.reject(new Error('user lookup failed')),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = fallbackHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('- user1 (added by admin1)')
     })
   })
 })

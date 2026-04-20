@@ -290,6 +290,8 @@ export type ChatProvider = {
   /** Register the handler for button/callback interactions (optional). */
   onInteraction: (handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) => void
   resolveUserId: (username: string, context: ResolveUserContext) => Promise<string | null>
+  resolveUserLabel: (userId: string, context: ResolveUserContext | undefined) => Promise<string | null>
+  resolveGroupLabel: (groupId: string) => Promise<string | null>
   /** Register the bot's command list with the platform (for command menus). */
   setCommands: (adminUserId: string) => Promise<void>
 }>

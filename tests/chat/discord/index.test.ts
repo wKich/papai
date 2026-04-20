@@ -36,24 +36,24 @@ describe('DiscordChatProvider', () => {
   test('constructor throws when DISCORD_BOT_TOKEN is missing', async () => {
     delete process.env['DISCORD_BOT_TOKEN']
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    expect(() => new DiscordChatProvider()).toThrow('DISCORD_BOT_TOKEN environment variable is required')
+    expect(() => new DiscordChatProvider(undefined)).toThrow('DISCORD_BOT_TOKEN environment variable is required')
   })
 
   test('constructor throws when DISCORD_BOT_TOKEN is whitespace only', async () => {
     process.env['DISCORD_BOT_TOKEN'] = '   '
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    expect(() => new DiscordChatProvider()).toThrow('DISCORD_BOT_TOKEN environment variable is required')
+    expect(() => new DiscordChatProvider(undefined)).toThrow('DISCORD_BOT_TOKEN environment variable is required')
   })
 
   test('constructor succeeds with a non-empty token and exposes name="discord"', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
     expect(provider.name).toBe('discord')
   })
 
   test('registerCommand routes a matching /help text through the command handler', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
 
     const captured: IncomingMessage[] = []
     provider.registerCommand('help', (msg): Promise<void> => {
@@ -84,7 +84,7 @@ describe('DiscordChatProvider', () => {
 
   test('onMessage receives non-command messages after mapping', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
 
     const seen: IncomingMessage[] = []
     provider.onMessage((msg): Promise<void> => {
@@ -115,7 +115,7 @@ describe('DiscordChatProvider', () => {
 
   test('bot-authored messages are ignored', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
     const seen: IncomingMessage[] = []
     provider.onMessage((msg): Promise<void> => {
       seen.push(msg)
@@ -142,7 +142,7 @@ describe('DiscordChatProvider', () => {
 
   test('stop() calls client.destroy when a client exists', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
     let destroyed = false
     provider.testSetClient({
       destroy: (): Promise<void> => {
@@ -156,7 +156,7 @@ describe('DiscordChatProvider', () => {
 
   test('sendMessage creates a DM channel and sends the markdown', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
 
     const sends: Array<Partial<{ content: string }>> = []
     const dmChannel = {
@@ -259,21 +259,21 @@ describe('DiscordChatProvider', () => {
 
   test('resolveUserId returns snowflake as-is when the input is numeric', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
     const result = await provider.resolveUserId('1234567890', { contextId: 'c1', contextType: 'group' })
     expect(result).toBe('1234567890')
   })
 
   test('resolveUserId returns null in DMs (no guild context)', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
     const result = await provider.resolveUserId('@alice', { contextId: 'u1', contextType: 'dm' })
     expect(result).toBeNull()
   })
 
   test('resolveUserId searches members in the channel guild for group context', async () => {
     const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-    const provider = new DiscordChatProvider()
+    const provider = new DiscordChatProvider(undefined)
 
     const fakeGuild = {
       members: {
@@ -299,10 +299,42 @@ describe('DiscordChatProvider', () => {
     expect(result).toBe('u-9')
   })
 
+  test('resolveUserId fetches an uncached channel before searching the guild', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider(undefined)
+
+    const fakeGuild = {
+      members: {
+        search: (arg: { query: string; limit: number }): Promise<Map<string, { id: string }>> => {
+          expect(arg.query).toBe('alice')
+          expect(arg.limit).toBe(1)
+          return Promise.resolve(new Map([['u-10', { id: 'u-10' }]]))
+        },
+      },
+    }
+    const fakeClient = {
+      destroy: (): Promise<void> => Promise.resolve(),
+      channels: {
+        cache: new Map(),
+        fetch: (id: string): Promise<{ guildId: string }> => {
+          expect(id).toBe('chan-8')
+          return Promise.resolve({ guildId: 'guild-4' })
+        },
+      },
+      guilds: {
+        cache: new Map([['guild-4', fakeGuild]]),
+      },
+    }
+    provider.testSetClient(fakeClient)
+
+    const result = await provider.resolveUserId('@alice', { contextId: 'chan-8', contextType: 'group' })
+    expect(result).toBe('u-10')
+  })
+
   describe('renderContext', () => {
     test('returns embed method result with context snapshot', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       const snapshot: ContextSnapshot = {
         modelName: 'gpt-4o',
@@ -592,7 +624,7 @@ describe('DiscordChatProvider', () => {
   describe('testDispatchButtonInteraction', () => {
     test('calls deferUpdate and routes customId to message handler', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       // Authorize the user
       addUser('u1', 'admin-id', 'alice')
@@ -631,7 +663,7 @@ describe('DiscordChatProvider', () => {
 
     test('builds interaction replies around the clicked editable message', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       const sends: SendCapture[] = []
       const edits: SendCapture[] = []
@@ -691,7 +723,7 @@ describe('DiscordChatProvider', () => {
 
     test('falls back to new messages when the clicked message is not editable', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       const sends: SendCapture[] = []
       const edits: SendCapture[] = []
@@ -751,7 +783,7 @@ describe('DiscordChatProvider', () => {
 
     test('routes slash-prefixed customId to registered command handler', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       // Authorize the user
       addUser('u2', 'admin-id', 'bob')
@@ -785,7 +817,7 @@ describe('DiscordChatProvider', () => {
 
     test('uses user ID as contextId in DM channels (type=1)', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       // Authorize the user
       addUser('user-77', 'admin-id', 'carol')
@@ -819,7 +851,7 @@ describe('DiscordChatProvider', () => {
 
     test('uses channelId as contextId in guild channels (type=0)', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       // Authorize the user
       addAuthorizedGroup('guild-channel-99', 'admin-id')
@@ -854,7 +886,7 @@ describe('DiscordChatProvider', () => {
 
     test('skips dispatch when channel is null', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       const seen: IncomingMessage[] = []
       provider.onMessage((msg): Promise<void> => {
@@ -879,7 +911,7 @@ describe('DiscordChatProvider', () => {
     test('handles cfg: callback when no active editor (no-op)', async () => {
       await setupTestDb()
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       let deferred = false
       const fakeInteraction: ButtonInteractionLike = {
@@ -908,7 +940,7 @@ describe('DiscordChatProvider', () => {
     test('handles wizard_ callback when no active wizard (no-op)', async () => {
       await setupTestDb()
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       let deferred = false
       const fakeInteraction: ButtonInteractionLike = {
@@ -936,7 +968,7 @@ describe('DiscordChatProvider', () => {
 
     test('Discord DM group-settings callback opens config for the selected group', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
       await setupTestDb()
 
       upsertKnownGroupContext({
@@ -983,7 +1015,7 @@ describe('DiscordChatProvider', () => {
 
     test('Discord DM selector continues into setup when the selector command is setup', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
       await setupTestDb()
 
       upsertKnownGroupContext({
@@ -1048,7 +1080,7 @@ describe('DiscordChatProvider', () => {
 
     test('handles deferUpdate failure gracefully', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
-      const provider = new DiscordChatProvider()
+      const provider = new DiscordChatProvider(undefined)
 
       // Authorize the user
       addUser('u-def', 'admin-id', 'defer-fail')
@@ -1133,6 +1165,97 @@ describe('DiscordChatProvider', () => {
         setTimeout(resolve, 0)
       })
       // No assertion needed: reaching here without an unhandled rejection is the proof
+    })
+
+    test('resolveGroupLabel returns the fetched channel name', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider(undefined)
+
+      provider.testSetClient({
+        destroy: (): Promise<void> => Promise.resolve(),
+        channels: {
+          cache: new Map(),
+          fetch: (id: string): Promise<{ name: string }> => {
+            expect(id).toBe('chan-7')
+            return Promise.resolve({ name: 'engineering-chat' })
+          },
+        },
+      })
+
+      const label = await provider.resolveGroupLabel?.('chan-7')
+      expect(label).toBe('engineering-chat')
+    })
+
+    test('resolveUserLabel prefers guild member display name and username', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider(undefined)
+
+      provider.testSetClient({
+        destroy: (): Promise<void> => Promise.resolve(),
+        channels: {
+          cache: new Map([['chan-7', { guildId: 'guild-3' }]]),
+        },
+        guilds: {
+          cache: new Map([
+            [
+              'guild-3',
+              {
+                members: {
+                  search: (): Promise<Map<string, { id: string }>> =>
+                    Promise.resolve(new Map<string, { id: string }>()),
+                  fetch: (
+                    id: string,
+                  ): Promise<{
+                    displayName: string
+                    nickname: string
+                    user: { username: string; globalName: null; displayName: string }
+                  }> => {
+                    expect(id).toBe('user-9')
+                    return Promise.resolve({
+                      displayName: 'John Johnson',
+                      nickname: 'John Johnson',
+                      user: { username: 'itsmike', globalName: null, displayName: 'itsmike' },
+                    })
+                  },
+                },
+              },
+            ],
+          ]),
+        },
+      })
+
+      const label = await provider.resolveUserLabel?.('user-9', { contextId: 'chan-7', contextType: 'group' })
+      expect(label).toBe('John Johnson (@itsmike)')
+    })
+
+    test('resolveUserLabel falls back to global user fetch when guild context is unavailable', async () => {
+      const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+      const provider = new DiscordChatProvider(undefined)
+
+      provider.testSetClient({
+        destroy: (): Promise<void> => Promise.resolve(),
+        users: {
+          fetch: (
+            id: string,
+          ): Promise<{
+            displayName: string
+            globalName: string | null
+            username: string
+            createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
+          }> => {
+            expect(id).toBe('user-12')
+            return Promise.resolve({
+              displayName: 'Jane Admin',
+              globalName: 'Jane Admin',
+              username: 'janeadmin',
+              createDM: () => Promise.resolve({ send: (): Promise<unknown> => Promise.resolve(null) }),
+            })
+          },
+        },
+      })
+
+      const label = await provider.resolveUserLabel?.('user-12', { contextId: 'dm-user', contextType: 'dm' })
+      expect(label).toBe('Jane Admin (@janeadmin)')
     })
 
     test('interactionCreate listener catches and does not rethrow when handleButtonInteraction rejects', async () => {

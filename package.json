@@ -44,7 +44,6 @@
     "@gramio/format": "^0.6.0",
     "ai": "^6.0.154",
     "ai-tokenizer": "^1.0.6",
-    "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "defuddle": "^0.16.0",
     "discord.js": "^14.25.1",
