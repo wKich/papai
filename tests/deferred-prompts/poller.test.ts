@@ -513,4 +513,38 @@ describe('delivery target routing', () => {
 
     expect(callCount).toBe(2)
   })
+
+  test('same creator and thread but different delivery semantics do not merge into one scheduled execution batch', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    }
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(USER_ID, 'Personal reminder', { fireAt: pastTime }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'personal',
+      mentionUserIds: [USER_ID],
+      createdByUserId: USER_ID,
+      createdByUsername: 'alice',
+    })
+    createScheduledPrompt(USER_ID, 'Shared reminder', { fireAt: pastTime }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: USER_ID,
+      createdByUsername: 'alice',
+    })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    expect(callCount).toBe(2)
+    expect(sentMessages).toHaveLength(2)
+    expect(sentMessages.map((message) => message.target.audience).sort()).toEqual(['personal', 'shared'])
+  })
 })

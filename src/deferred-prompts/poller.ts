@@ -36,7 +36,15 @@ function logSettledErrors(results: PromiseSettledResult<void>[], context: string
 
 function deliveryGroupKey(prompt: ScheduledPrompt): string {
   const t = prompt.deliveryTarget
-  return `${prompt.createdByUserId}|${t.contextId}|${t.contextType}|${t.threadId ?? ''}`
+  return [
+    prompt.createdByUserId,
+    t.contextId,
+    t.contextType,
+    t.threadId ?? '',
+    t.audience,
+    t.createdByUsername ?? '',
+    [...t.mentionUserIds].sort().join(','),
+  ].join('|')
 }
 
 function promptToExecCtx(prompt: ScheduledPrompt): DeferredExecutionContext {
