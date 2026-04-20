@@ -27,7 +27,8 @@ function resolveUserLabelCached(
   userId: string,
   cache: Map<string, Promise<string | null>>,
 ): Promise<string | null> {
-  const existing = cache.get(userId)
+  const cacheKey = `${resolverContext.contextType}:${resolverContext.contextId}:${userId}`
+  const existing = cache.get(cacheKey)
   if (existing !== undefined) {
     return existing
   }
@@ -38,7 +39,7 @@ function resolveUserLabelCached(
       ? Promise.resolve(null)
       : fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType })
 
-  cache.set(userId, pending)
+  cache.set(cacheKey, pending)
   return pending
 }
 

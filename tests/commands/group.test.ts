@@ -581,6 +581,34 @@ describe('group commands', () => {
       expect(textCalls[0]).not.toContain('group-123 (added by admin1)')
     })
 
+    test('resolves added-by labels separately for each authorized group context', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (groupId: string): Promise<string | null> => Promise.resolve(groupId),
+        resolveUserLabel: (userId: string, context?: ResolveUserContext): Promise<string | null> => {
+          if (userId !== 'admin1') return Promise.resolve(null)
+          if (context?.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
+          if (context?.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+      addAuthorizedGroup('group-456', 'admin1')
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by Alice One (@admin1))')
+      expect(textCalls[0]).toContain('group-456 (added by Alice Two (@admin1))')
+    })
+
     test('lists group users with resolved member and adder labels', async () => {
       const labeledHandlers = new Map<string, CommandHandler>()
       const labeledChat = createMockChat({
