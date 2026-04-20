@@ -52,6 +52,9 @@ export interface ConsolidatedManifestEntry {
   readonly featureName: string
   readonly sourceTestKeys: readonly string[]
   readonly isUserFacing: boolean
+  readonly primaryKeyword: string | null
+  readonly keywords: readonly string[]
+  readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
   readonly lastConsolidatedAt: string | null
 }
@@ -73,6 +76,7 @@ interface Phase2FingerprintInput {
   readonly testKey: string
   readonly behavior: string
   readonly context: string
+  readonly keywords: readonly string[]
   readonly phaseVersion: string
 }
 
@@ -109,6 +113,9 @@ const ConsolidatedManifestEntrySchema = z.object({
   featureName: z.string(),
   sourceTestKeys: z.array(z.string()),
   isUserFacing: z.boolean(),
+  primaryKeyword: z.string().nullable().default(null),
+  keywords: z.array(z.string()).default([]),
+  sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),
   lastConsolidatedAt: z.string().nullable(),
 })

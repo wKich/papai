@@ -8,76 +8,102 @@ import type { ConsolidatedManifest } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
 import type { Progress } from './progress.js'
 import {
-  getFailedDomainAttempts,
-  isDomainCompleted,
-  markDomainDone,
-  markDomainFailed,
+  getFailedBatchAttempts,
+  isBatchCompleted,
+  markBatchDone,
+  markBatchFailed,
   resetPhase3,
   saveProgress,
 } from './progress.js'
 import type { ConsolidatedBehavior, ExtractedBehavior } from './report-writer.js'
 import { writeConsolidatedFile } from './report-writer.js'
 
-interface DomainGroup {
-  readonly domain: string
+interface KeywordBatch {
+  readonly batchKey: string
+  readonly primaryKeyword: string
   readonly inputs: readonly ConsolidateBehaviorInput[]
 }
 
-function groupByDomain(extractedBehaviors: Readonly<Record<string, ExtractedBehavior>>): readonly DomainGroup[] {
-  const map = new Map<string, ConsolidateBehaviorInput[]>()
-  for (const [testKey, behavior] of Object.entries(extractedBehaviors)) {
-    const domain = getDomain(behavior.fullPath)
-    let group = map.get(domain)
-    if (group === undefined) {
-      group = []
-      map.set(domain, group)
-    }
-    group.push({ testKey, behavior: behavior.behavior, context: behavior.context })
-  }
-  return [...map.entries()].map(([domain, inputs]) => ({ domain, inputs }))
+function getPrimaryKeyword(keywords: readonly string[], cardinality: ReadonlyMap<string, number>): string {
+  return [...keywords].toSorted((a, b) => {
+    const countA = cardinality.get(a) ?? Number.MAX_SAFE_INTEGER
+    const countB = cardinality.get(b) ?? Number.MAX_SAFE_INTEGER
+    return countA === countB ? a.localeCompare(b) : countA - countB
+  })[0]!
 }
 
-async function consolidateDomain(
-  group: DomainGroup,
+function groupByPrimaryKeyword(
+  extractedBehaviors: Readonly<Record<string, ExtractedBehavior>>,
+): readonly KeywordBatch[] {
+  const keywordCounts = new Map<string, number>()
+  for (const behavior of Object.values(extractedBehaviors)) {
+    for (const keyword of behavior.keywords) {
+      keywordCounts.set(keyword, (keywordCounts.get(keyword) ?? 0) + 1)
+    }
+  }
+
+  const grouped = new Map<string, ConsolidateBehaviorInput[]>()
+  for (const [testKey, behavior] of Object.entries(extractedBehaviors)) {
+    const primaryKeyword = getPrimaryKeyword(behavior.keywords, keywordCounts)
+    const existing = grouped.get(primaryKeyword) ?? []
+    grouped.set(primaryKeyword, [
+      ...existing,
+      {
+        testKey,
+        behavior: behavior.behavior,
+        context: behavior.context,
+        keywords: behavior.keywords,
+        primaryKeyword,
+        domain: getDomain(behavior.fullPath),
+      },
+    ])
+  }
+
+  return [...grouped.entries()].map(([batchKey, inputs]) => ({ batchKey, primaryKeyword: batchKey, inputs }))
+}
+
+async function consolidateBatch(
+  group: KeywordBatch,
   idx: number,
   total: number,
   progress: Progress,
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
 ): Promise<ConsolidatedManifest> {
-  const { domain, inputs } = group
+  const { batchKey, primaryKeyword, inputs } = group
 
-  if (isDomainCompleted(progress, domain)) {
-    console.log(`[Phase 2] [${idx}/${total}] ${domain} — skipped (already done)`)
+  if (isBatchCompleted(progress, batchKey)) {
+    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (already done)`)
     return consolidatedManifest
   }
 
-  const failedAttempts = getFailedDomainAttempts(progress, domain)
+  const failedAttempts = getFailedBatchAttempts(progress, batchKey)
   if (failedAttempts >= MAX_RETRIES) {
-    console.log(`[Phase 2] [${idx}/${total}] ${domain} — skipped (max retries exceeded)`)
+    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (max retries exceeded)`)
     return consolidatedManifest
   }
 
-  console.log(`[Phase 2] [${idx}/${total}] ${domain} (${inputs.length} behaviors)...`)
+  console.log(`[Phase 2] [${idx}/${total}] ${batchKey} (${inputs.length} behaviors)...`)
 
-  const result = await consolidateWithRetry(domain, inputs, failedAttempts)
+  const result = await consolidateWithRetry(primaryKeyword, inputs, failedAttempts)
 
   if (result === null) {
-    markDomainFailed(progress, domain, 'consolidation failed after retries', failedAttempts + 1)
+    markBatchFailed(progress, batchKey, 'consolidation failed after retries', failedAttempts + 1)
     await saveProgress(progress)
     return consolidatedManifest
   }
 
-  const behaviors: string[] = inputs.map((i) => i.behavior)
   const fingerprint = buildPhase2ConsolidationFingerprint({
     sourceTestKeys: inputs.map((i) => i.testKey),
-    behaviors,
+    behaviors: inputs.map((i) => i.behavior),
     phaseVersion: phase2Version,
   })
 
+  const sourceDomains = [...new Set(inputs.map((i) => i.domain))].toSorted()
+
   const consolidations: ConsolidatedBehavior[] = result.map(({ id, item }) => ({
     id,
-    domain,
+    domain: primaryKeyword,
     featureName: item.featureName,
     isUserFacing: item.isUserFacing,
     behavior: item.behavior,
@@ -86,8 +112,8 @@ async function consolidateDomain(
     sourceTestKeys: item.sourceTestKeys,
   }))
 
-  await writeConsolidatedFile(domain, consolidations)
-  markDomainDone(progress, domain, consolidations)
+  await writeConsolidatedFile(primaryKeyword, consolidations)
+  markBatchDone(progress, batchKey, consolidations)
 
   const updatedEntries = { ...consolidatedManifest.entries }
   for (const cb of consolidations) {
@@ -97,6 +123,9 @@ async function consolidateDomain(
       featureName: cb.featureName,
       sourceTestKeys: cb.sourceTestKeys,
       isUserFacing: cb.isUserFacing,
+      primaryKeyword,
+      keywords: [...new Set(inputs.flatMap((input) => input.keywords))].toSorted(),
+      sourceDomains,
       phase2Fingerprint: fingerprint,
       lastConsolidatedAt: new Date().toISOString(),
     }
@@ -104,7 +133,7 @@ async function consolidateDomain(
 
   const userFacingCount = consolidations.filter((b) => b.isUserFacing).length
   console.log(
-    `[Phase 2] [${idx}/${total}] ${domain} — done (${consolidations.length} consolidated, ${userFacingCount} user-facing)`,
+    `[Phase 2] [${idx}/${total}] ${batchKey} — done (${consolidations.length} consolidated, ${userFacingCount} user-facing)`,
   )
 
   return { ...consolidatedManifest, entries: updatedEntries }
@@ -115,22 +144,22 @@ export async function runPhase2(
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
 ): Promise<ConsolidatedManifest> {
-  console.log('\n[Phase 2] Grouping extracted behaviors by domain...')
-  const groups = groupByDomain(progress.phase1.extractedBehaviors)
+  console.log('\n[Phase 2] Grouping extracted behaviors by primary keyword...')
+  const groups = groupByPrimaryKeyword(progress.phase1.extractedBehaviors)
   progress.phase2.status = 'in-progress'
-  progress.phase2.stats.domainsTotal = groups.length
+  progress.phase2.stats.batchesTotal = groups.length
 
   resetPhase3(progress)
   await saveProgress(progress)
 
-  console.log(`[Phase 2] Consolidating ${groups.length} domains...\n`)
+  console.log(`[Phase 2] Consolidating ${groups.length} keyword batches...\n`)
 
   const limit = pLimit(1)
   let currentManifest = consolidatedManifest
   await Promise.all(
     groups.map((group, i) =>
       limit(async () => {
-        currentManifest = await consolidateDomain(group, i + 1, groups.length, progress, currentManifest, phase2Version)
+        currentManifest = await consolidateBatch(group, i + 1, groups.length, progress, currentManifest, phase2Version)
       }),
     ),
   )
@@ -138,7 +167,7 @@ export async function runPhase2(
   progress.phase2.status = 'done'
   await saveProgress(progress)
   console.log(
-    `\n[Phase 2 complete] ${progress.phase2.stats.domainsDone} domains consolidated, ${progress.phase2.stats.domainsFailed} failed`,
+    `\n[Phase 2 complete] ${progress.phase2.stats.batchesDone} batches consolidated, ${progress.phase2.stats.batchesFailed} failed`,
   )
   return currentManifest
 }

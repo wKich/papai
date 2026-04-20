@@ -12,6 +12,7 @@ export const STORIES_DIR = resolve(REPORTS_DIR, 'stories')
 export const PROGRESS_PATH = resolve(REPORTS_DIR, 'progress.json')
 export const INCREMENTAL_MANIFEST_PATH = resolve(REPORTS_DIR, 'incremental-manifest.json')
 export const CONSOLIDATED_MANIFEST_PATH = resolve(REPORTS_DIR, 'consolidated-manifest.json')
+export const KEYWORD_VOCABULARY_PATH = resolve(REPORTS_DIR, 'keyword-vocabulary.json')
 
 export const PHASE1_TIMEOUT_MS = 1_200_000
 export const PHASE2_TIMEOUT_MS = 300_000

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { PROJECT_ROOT } from './config.js'
 import { getDomain } from './domain-map.js'
 import type { IncrementalManifest } from './incremental.js'
-import { buildPhase1Fingerprint, hashText } from './incremental.js'
+import { buildPhase1Fingerprint, buildPhase2Fingerprint, hashText } from './incremental.js'
 import type { ExtractedBehavior } from './report-writer.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
@@ -30,6 +30,43 @@ async function loadMirroredSourceHash(testFilePath: string): Promise<string | nu
   return hashText(await Bun.file(absoluteMirroredPath).text())
 }
 
+function buildManifestEntry(input: {
+  readonly testKey: string
+  readonly testFile: ParsedTestFile
+  readonly testCase: TestCase
+  readonly dependencyPaths: readonly string[]
+  readonly extractedBehaviorPath: string
+  readonly phase1Fingerprint: string
+  readonly phase2Fingerprint: string
+  readonly lastPhase2CompletedAt: string | null
+}): IncrementalManifest['tests'][string] {
+  return {
+    testFile: input.testFile.filePath,
+    testName: input.testCase.fullPath,
+    dependencyPaths: input.dependencyPaths,
+    phase1Fingerprint: input.phase1Fingerprint,
+    phase2Fingerprint: input.phase2Fingerprint,
+    extractedBehaviorPath: input.extractedBehaviorPath,
+    domain: getDomain(input.testFile.filePath),
+    lastPhase1CompletedAt: new Date().toISOString(),
+    lastPhase2CompletedAt: input.lastPhase2CompletedAt,
+  }
+}
+
+async function loadFileDependencies(testFile: ParsedTestFile): Promise<{
+  readonly testFileHash: string
+  readonly mirroredSourceHash: string | null
+  readonly dependencyPaths: readonly string[]
+  readonly extractedBehaviorPath: string
+}> {
+  const testFileHash = hashText(await Bun.file(join(PROJECT_ROOT, testFile.filePath)).text())
+  const mirroredPath = deriveImplPath(testFile.filePath)
+  const mirroredSourceHash = await loadMirroredSourceHash(testFile.filePath)
+  const dependencyPaths = mirroredSourceHash === null ? [testFile.filePath] : [testFile.filePath, mirroredPath]
+  const extractedBehaviorPath = `reports/behaviors/${getDomain(testFile.filePath)}/${testFile.filePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')}`
+  return { testFileHash, mirroredSourceHash, dependencyPaths, extractedBehaviorPath }
+}
+
 export async function updateManifestForExtractedTest(input: {
   readonly manifest: IncrementalManifest
   readonly testFile: ParsedTestFile
@@ -37,40 +74,40 @@ export async function updateManifestForExtractedTest(input: {
   readonly extractedBehavior: ExtractedBehavior
 }): Promise<{ readonly manifest: IncrementalManifest; readonly phase1Changed: boolean }> {
   const testKey = `${input.testFile.filePath}::${input.testCase.fullPath}`
-  const testFileHash = hashText(await Bun.file(join(PROJECT_ROOT, input.testFile.filePath)).text())
-  const mirroredPath = deriveImplPath(input.testFile.filePath)
-  const mirroredSourceHash = await loadMirroredSourceHash(input.testFile.filePath)
-  const dependencyPaths =
-    mirroredSourceHash === null ? [input.testFile.filePath] : [input.testFile.filePath, mirroredPath]
-  const extractedBehaviorPath = `reports/behaviors/${getDomain(input.testFile.filePath)}/${input.testFile.filePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')}`
+  const deps = await loadFileDependencies(input.testFile)
   const previousEntry = input.manifest.tests[testKey]
   const phase1Fingerprint = buildPhase1Fingerprint({
     testKey,
-    testFileHash,
+    testFileHash: deps.testFileHash,
     testSource: input.testCase.source,
-    mirroredSourceHash,
+    mirroredSourceHash: deps.mirroredSourceHash,
     phaseVersion: input.manifest.phaseVersions.phase1,
   })
   const phase1Changed = previousEntry === undefined || previousEntry.phase1Fingerprint !== phase1Fingerprint
-  const phase2Fingerprint = phase1Changed ? null : previousEntry.phase2Fingerprint
-  const lastPhase2CompletedAt = phase2Fingerprint === null ? null : previousEntry!.lastPhase2CompletedAt
-
+  const phase2Fingerprint = buildPhase2Fingerprint({
+    testKey,
+    behavior: input.extractedBehavior.behavior,
+    context: input.extractedBehavior.context,
+    keywords: input.extractedBehavior.keywords,
+    phaseVersion: input.manifest.phaseVersions.phase2,
+  })
+  const phase2FingerprintChanged = previousEntry === undefined || previousEntry.phase2Fingerprint !== phase2Fingerprint
+  const lastPhase2CompletedAt = phase2FingerprintChanged ? null : previousEntry.lastPhase2CompletedAt
   return {
     manifest: {
       ...input.manifest,
       tests: {
         ...input.manifest.tests,
-        [testKey]: {
-          testFile: input.testFile.filePath,
-          testName: input.testCase.fullPath,
-          dependencyPaths,
+        [testKey]: buildManifestEntry({
+          testKey,
+          testFile: input.testFile,
+          testCase: input.testCase,
+          dependencyPaths: deps.dependencyPaths,
+          extractedBehaviorPath: deps.extractedBehaviorPath,
           phase1Fingerprint,
           phase2Fingerprint,
-          extractedBehaviorPath,
-          domain: getDomain(input.testFile.filePath),
-          lastPhase1CompletedAt: new Date().toISOString(),
           lastPhase2CompletedAt,
-        },
+        }),
       },
     },
     phase1Changed,

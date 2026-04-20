@@ -15,25 +15,19 @@ const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
 const provider = createOpenAICompatible({ name: 'behavior-audit-consolidate', apiKey, baseURL: BASE_URL })
 const model = provider(MODEL)
 
-const SYSTEM_PROMPT = `You are a senior software analyst reviewing extracted test behaviors from a Telegram/Discord/Mattermost chat bot called "papai". Your job is to consolidate per-test behaviors into feature-level descriptions.
+const SYSTEM_PROMPT = `You are a senior software analyst reviewing extracted test behaviors from a Telegram/Discord/Mattermost chat bot called "papai".
 
-For the list of behaviors you receive (all from the same domain), you must:
+The batch you receive is a candidate pool formed for context-size control and candidate similarity. It is not guaranteed to describe only one feature.
 
-1. CLASSIFY each behavior as either:
-   - "user_facing": the behavior describes something a user can discover, trigger, or observe as a real product feature
-   - "internal": the behavior describes implementation details, internal routing, string parsing edge cases, data format correctness, or pure utility function behavior
+You must:
+1. classify each consolidation as user-facing or internal
+2. merge only behaviors that describe the same user-facing capability
+3. never force one output per batch or one output per keyword
+4. emit multiple consolidated outputs when the batch contains multiple distinct features
+5. generate user stories only for user-facing consolidated features
+6. keep internal-only consolidations separate and use userStory: null for them
 
-2. CONSOLIDATE related behaviors. Multiple tests that cover the same feature from different angles (happy path, error cases, edge cases, boundary conditions) should be merged into a single feature-level entry. A single consolidated entry can reference many source tests.
-
-3. For each consolidated behavior, produce:
-   - featureName: a short (3-6 word) name for the feature
-   - isUserFacing: true or false
-   - behavior: a single plain-language description starting with "When..." that covers the full feature (not just one test case)
-   - userStory: "As a [user type], I want [action] so that [benefit]." — required only when isUserFacing=true, null otherwise
-   - context: one paragraph describing the implementation chain (relevant functions, DB tables, key logic)
-   - sourceTestKeys: array of original test keys that were merged into this entry (pass through exactly as provided)
-
-You have tools to read source files, search the codebase, find files, and list directories. Use them to understand the implementation if needed.`
+Every user story must be feature-level, user-observable, complete in actor/action/benefit, and free of test names, function names, and implementation jargon.`
 
 const ConsolidationItemSchema = z.object({
   featureName: z.string(),
@@ -54,13 +48,19 @@ export interface ConsolidateBehaviorInput {
   readonly testKey: string
   readonly behavior: string
   readonly context: string
+  readonly keywords: readonly string[]
+  readonly primaryKeyword: string
+  readonly domain: string
 }
 
-function buildPrompt(domain: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
+function buildPrompt(primaryKeyword: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
   const behaviorList = behaviors
-    .map((b, i) => `${i + 1}. TestKey: "${b.testKey}"\n   Behavior: ${b.behavior}\n   Context: ${b.context}`)
+    .map(
+      (b, i) =>
+        `${i + 1}. TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Primary keyword: ${b.primaryKeyword}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
+    )
     .join('\n\n')
-  return `Domain: ${domain}\n\nExtracted behaviors:\n\n${behaviorList}`
+  return `Primary keyword: ${primaryKeyword}\n\nCandidate behavior pool:\n\n${behaviorList}`
 }
 
 function sleep(ms: number): Promise<void> {
@@ -106,7 +106,7 @@ function slugify(name: string): string {
 
 async function attemptConsolidation(
   prompt: string,
-  domain: string,
+  primaryKeyword: string,
   attempt: number,
   remaining: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
@@ -121,20 +121,20 @@ async function attemptConsolidation(
   const result = await consolidateSingle(prompt, attempt)
   if (result !== null) {
     return result.consolidations.map((item) => ({
-      id: `${domain}::${slugify(item.featureName)}`,
+      id: `${primaryKeyword}::${slugify(item.featureName)}`,
       item,
     }))
   }
 
-  return attemptConsolidation(prompt, domain, attempt + 1, remaining - 1)
+  return attemptConsolidation(prompt, primaryKeyword, attempt + 1, remaining - 1)
 }
 
 export function consolidateWithRetry(
-  domain: string,
+  primaryKeyword: string,
   behaviors: readonly ConsolidateBehaviorInput[],
   attemptOffset: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
-  const prompt = buildPrompt(domain, behaviors)
+  const prompt = buildPrompt(primaryKeyword, behaviors)
   const remaining = MAX_RETRIES - attemptOffset
-  return attemptConsolidation(prompt, domain, attemptOffset, remaining)
+  return attemptConsolidation(prompt, primaryKeyword, attemptOffset, remaining)
 }

@@ -7,6 +7,7 @@ const ExtractedBehaviorSchema = z.object({
   fullPath: z.string(),
   behavior: z.string(),
   context: z.string(),
+  keywords: z.array(z.string()).readonly(),
 })
 
 const PersonaScoreSchema = z.object({
@@ -62,13 +63,13 @@ const Phase1ProgressSchema = z.object({
 
 const Phase2ProgressSchema = z.object({
   status: z.enum(['not-started', 'in-progress', 'done']),
-  completedDomains: z.record(z.string(), z.literal('done')),
+  completedBatches: z.record(z.string(), z.literal('done')),
   consolidations: z.record(z.string(), ConsolidatedBehaviorArraySchema),
-  failedDomains: z.record(z.string(), FailedEntrySchema),
+  failedBatches: z.record(z.string(), FailedEntrySchema),
   stats: z.object({
-    domainsTotal: z.number(),
-    domainsDone: z.number(),
-    domainsFailed: z.number(),
+    batchesTotal: z.number(),
+    batchesDone: z.number(),
+    batchesFailed: z.number(),
     behaviorsConsolidated: z.number(),
   }),
 })
@@ -93,20 +94,6 @@ const ProgressV2Schema = z.object({
   phase3: Phase3ProgressSchema,
 })
 
-const LegacyPhase2AsPhase3Schema = z.object({
-  status: z.enum(['not-started', 'in-progress', 'done']).default('not-started'),
-  completedBehaviors: z.record(z.string(), z.literal('done')).default({}),
-  evaluations: z.record(z.string(), EvaluatedBehaviorSchema).default({}),
-  failedBehaviors: z.record(z.string(), FailedEntrySchema).default({}),
-  stats: z
-    .object({
-      behaviorsTotal: z.number(),
-      behaviorsDone: z.number(),
-      behaviorsFailed: z.number(),
-    })
-    .default({ behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 }),
-})
-
 function emptyPhase3(): Phase3Progress {
   return Phase3ProgressSchema.parse({
     status: 'not-started',
@@ -117,22 +104,13 @@ function emptyPhase3(): Phase3Progress {
   })
 }
 
-function migratePhase3FromLegacy(obj: Record<string, unknown>): Phase3Progress {
-  const legacyPhase2 = obj['phase2']
-  if (typeof legacyPhase2 === 'object' && legacyPhase2 !== null && 'evaluations' in legacyPhase2) {
-    const parsed = LegacyPhase2AsPhase3Schema.safeParse(legacyPhase2)
-    if (parsed.success) return Phase3ProgressSchema.parse(parsed.data)
-  }
-  return emptyPhase3()
-}
-
 function emptyPhase2(): Phase2Progress {
   return Phase2ProgressSchema.parse({
     status: 'not-started',
-    completedDomains: {},
+    completedBatches: {},
     consolidations: {},
-    failedDomains: {},
-    stats: { domainsTotal: 0, domainsDone: 0, domainsFailed: 0, behaviorsConsolidated: 0 },
+    failedBatches: {},
+    stats: { batchesTotal: 0, batchesDone: 0, batchesFailed: 0, behaviorsConsolidated: 0 },
   })
 }
 
@@ -145,10 +123,6 @@ function emptyPhase1(): Progress['phase1'] {
     completedFiles: [],
     stats: { filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
   })
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 const LegacyPhase1Schema = z.looseObject({
@@ -173,25 +147,13 @@ const V1ProgressSchema = z.looseObject({
 
 function migrateV1toV2(raw: unknown): Progress {
   const parsed = V1ProgressSchema.safeParse(raw)
-  if (!parsed.success) {
-    return ProgressV2Schema.parse({
-      version: 2,
-      startedAt: new Date().toISOString(),
-      phase1: emptyPhase1(),
-      phase2: emptyPhase2(),
-      phase3: emptyPhase3(),
-    })
-  }
-  const { startedAt, phase1 } = parsed.data
-  const extractedBehaviors = isRecord(phase1.extractedBehaviors) ? phase1.extractedBehaviors : {}
-  const migratedPhase1 = Phase1ProgressSchema.parse({ ...phase1, extractedBehaviors })
-  const migratedPhase3 = isRecord(raw) ? migratePhase3FromLegacy(raw) : emptyPhase3()
+  const startedAt = parsed.success ? parsed.data.startedAt : new Date().toISOString()
   return ProgressV2Schema.parse({
     version: 2,
     startedAt,
-    phase1: migratedPhase1,
+    phase1: emptyPhase1(),
     phase2: emptyPhase2(),
-    phase3: migratedPhase3,
+    phase3: emptyPhase3(),
   })
 }
 

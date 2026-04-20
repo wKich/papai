@@ -103,12 +103,16 @@ async function runPhase2IfNeeded(
   return runPhase2(progress, consolidatedManifest, phase2Version)
 }
 
-async function runPhase3IfNeeded(progress: Progress, selectedConsolidatedIds: ReadonlySet<string>): Promise<void> {
+async function runPhase3IfNeeded(
+  progress: Progress,
+  selectedConsolidatedIds: ReadonlySet<string>,
+  consolidatedManifest: import('./behavior-audit/incremental.js').ConsolidatedManifest | null,
+): Promise<void> {
   if (progress.phase3.status === 'done') {
     console.log('[Phase 3] Already complete.\n')
     return
   }
-  await runPhase3({ progress, selectedConsolidatedIds })
+  await runPhase3({ progress, selectedConsolidatedIds, consolidatedManifest })
 }
 
 async function resolveHeadCommit(): Promise<string> {
@@ -175,7 +179,7 @@ async function main(): Promise<void> {
   const consolidatedManifest = await runPhase2IfNeeded(progress, phase2Version)
   await saveConsolidatedManifest(consolidatedManifest)
 
-  await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds))
+  await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
 
   console.log('\nBehavior audit complete.')
 }

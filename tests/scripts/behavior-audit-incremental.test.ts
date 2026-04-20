@@ -389,12 +389,14 @@ describe('behavior-audit incremental manifest', () => {
       testKey: 'tests/tools/a.test.ts::suite > case',
       behavior: 'When the user creates a task, the bot saves it.',
       context: 'Calls createTask and persists provider output.',
+      keywords: ['task-create'],
       phaseVersion: 'v1',
     })
     const b = incremental.buildPhase2Fingerprint({
       testKey: 'tests/tools/a.test.ts::suite > case',
       behavior: 'When the user creates a task, the bot saves it.',
       context: 'Calls createTask, enriches metadata, and persists provider output.',
+      keywords: ['task-create'],
       phaseVersion: 'v1',
     })
 
@@ -641,5 +643,26 @@ describe('behavior-audit incremental manifest', () => {
 
     consoleErrorSpy.mockRestore()
     processExitSpy.mockRestore()
+  })
+
+  test('buildPhase2Fingerprint changes when canonical keywords change', async () => {
+    const incremental = await loadIncrementalModule()
+
+    const a = incremental.buildPhase2Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls createTask and persists provider output.',
+      keywords: ['task-create', 'task-save'],
+      phaseVersion: 'v1',
+    })
+    const b = incremental.buildPhase2Fingerprint({
+      testKey: 'tests/tools/a.test.ts::suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls createTask and persists provider output.',
+      keywords: ['task-create', 'task-persist'],
+      phaseVersion: 'v1',
+    })
+
+    expect(a).not.toBe(b)
   })
 })

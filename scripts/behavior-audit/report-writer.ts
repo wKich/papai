@@ -12,6 +12,7 @@ export interface ExtractedBehavior {
   readonly fullPath: string
   readonly behavior: string
   readonly context: string
+  readonly keywords: readonly string[]
 }
 
 export interface EvaluatedBehavior {
@@ -82,7 +83,8 @@ export async function writeBehaviorFile(testFilePath: string, behaviors: readonl
   for (const b of behaviors) {
     lines.push(`## Test: "${b.fullPath}"\n`)
     lines.push(`**Behavior:** ${b.behavior}`)
-    lines.push(`**Context:** ${b.context}\n`)
+    lines.push(`**Context:** ${b.context}`)
+    lines.push(`**Keywords:** ${b.keywords.join(', ')}\n`)
   }
 
   await Bun.write(outPath, lines.join('\n'))
