@@ -11,6 +11,8 @@ import { dispatchExecution } from '../../src/deferred-prompts/proactive-llm.js'
 import type { DeferredExecutionContext } from '../../src/deferred-prompts/proactive-llm.js'
 import type { ExecutionMetadata } from '../../src/deferred-prompts/types.js'
 import { appendHistory } from '../../src/history.js'
+import { loadHistory } from '../../src/history.js'
+import { loadFacts } from '../../src/memory.js'
 import { createMockProvider } from '../tools/mock-provider.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
@@ -34,6 +36,21 @@ function makeExecCtx(userId: string = USER_ID): DeferredExecutionContext {
       threadId: null,
       audience: 'personal',
       mentionUserIds: [],
+      createdByUserId: userId,
+      createdByUsername: null,
+    },
+  }
+}
+
+function makeGroupThreadExecCtx(userId: string = USER_ID): DeferredExecutionContext {
+  return {
+    createdByUserId: userId,
+    deliveryTarget: {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'personal',
+      mentionUserIds: [userId],
       createdByUserId: userId,
       createdByUsername: null,
     },
@@ -166,6 +183,24 @@ describe('dispatchExecution', () => {
         messages.some((m) => typeof m.content === 'string' && m.content.includes('[CONTEXT FROM CREATION TIME]')),
       ).toBe(false)
     })
+
+    test('persists lightweight history to group thread delivery context instead of creator DM', async () => {
+      setupUserConfig()
+      generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
+        generateTextCalls.push(args)
+        return Promise.resolve({
+          text: 'Thread reminder',
+          toolCalls: [],
+          toolResults: [],
+          response: { messages: [{ role: 'assistant', content: 'Thread reminder' }] },
+        })
+      }
+
+      await dispatchExecution(makeGroupThreadExecCtx(), 'scheduled', 'drink water', metadata, () => null)
+
+      expect(loadHistory('-1001:42')).toEqual([{ role: 'assistant', content: 'Thread reminder' }])
+      expect(loadHistory(USER_ID)).toEqual([])
+    })
   })
 
   describe('context mode', () => {
@@ -252,6 +287,27 @@ describe('dispatchExecution', () => {
       setupUserConfig()
       const result = await dispatchExecution(makeExecCtx(), 'scheduled', 'check overdue', metadata, () => null)
       expect(result).toContain('task provider not configured')
+    })
+
+    test('stores extracted facts in group thread delivery context instead of creator DM', async () => {
+      setupUserConfig()
+      const provider = createMockProvider()
+      generateTextImpl = (args: GenerateTextCall): Promise<GenerateTextResult> => {
+        generateTextCalls.push(args)
+        return Promise.resolve({
+          text: 'Created task',
+          toolCalls: [],
+          toolResults: [{ toolName: 'create_task', output: { id: 'task-1', title: 'Thread task', number: 17 } }],
+          response: { messages: [] },
+        })
+      }
+
+      await dispatchExecution(makeGroupThreadExecCtx(), 'scheduled', 'check overdue', metadata, () => provider)
+
+      expect(loadFacts('-1001:42')).toEqual([
+        expect.objectContaining({ identifier: '#17', title: 'Thread task', url: '' }),
+      ])
+      expect(loadFacts(USER_ID)).toEqual([])
     })
   })
 

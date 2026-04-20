@@ -74,9 +74,12 @@ function persistProactiveResults(
   history: readonly ModelMessage[],
 ): void {
   const newFacts = extractFactsFromSdkResults(result.toolCalls, result.toolResults)
-  for (const fact of newFacts) upsertFact(creatorId, fact)
+  for (const fact of newFacts) upsertFact(storageContextId, fact)
   if (newFacts.length > 0)
-    log.info({ userId: creatorId, factsExtracted: newFacts.length }, 'Facts persisted from proactive results')
+    log.info(
+      { userId: creatorId, storageContextId, factsExtracted: newFacts.length },
+      'Facts persisted from proactive results',
+    )
 
   const msgs = result.response.messages
   if (msgs.length > 0) {
@@ -86,8 +89,6 @@ function persistProactiveResults(
   }
   log.debug({ userId: creatorId, toolCalls: result.toolCalls?.length }, 'Proactive LLM response received')
 }
-
-// --- Minimal system prompt (shared by lightweight and context modes) ---
 
 function buildMinimalSystemPrompt(type: 'scheduled' | 'alert'): string {
   return [
@@ -100,8 +101,6 @@ function buildMinimalSystemPrompt(type: 'scheduled' | 'alert'): string {
   ].join('\n')
 }
 
-// --- Message construction helpers ---
-
 function buildMetadataMessages(m: ExecutionMetadata): ModelMessage[] {
   const msgs: ModelMessage[] = [{ role: 'system', content: `[DELIVERY BRIEF]\n${m.delivery_brief}` }]
   if (m.context_snapshot !== null)
@@ -111,8 +110,6 @@ function buildMetadataMessages(m: ExecutionMetadata): ModelMessage[] {
 
 const wrapPrompt = (prompt: string): string => `===DEFERRED_TASK===\n${prompt}\n===END_DEFERRED_TASK===`
 
-// --- Three execution functions ---
-
 async function invokeLightweight(
   execCtx: DeferredExecutionContext,
   type: 'scheduled' | 'alert',
@@ -120,7 +117,8 @@ async function invokeLightweight(
   metadata: ExecutionMetadata,
   deps: ProactiveLlmDeps,
 ): Promise<string> {
-  const { createdByUserId } = execCtx
+  const { createdByUserId, deliveryTarget } = execCtx
+  const storageContextId = getStorageContextId(deliveryTarget)
   log.debug({ userId: createdByUserId, mode: 'lightweight' }, 'invokeLightweight called')
   const config = getLlmConfig(createdByUserId)
   if (typeof config === 'string') return config
@@ -141,11 +139,14 @@ async function invokeLightweight(
 
   const assistantMessages = result.response.messages
   if (assistantMessages.length > 0) {
-    const history = getCachedHistory(createdByUserId)
-    appendHistory(createdByUserId, assistantMessages)
-    log.debug({ userId: createdByUserId, count: assistantMessages.length }, 'Lightweight response appended to history')
+    const history = getCachedHistory(storageContextId)
+    appendHistory(storageContextId, assistantMessages)
+    log.debug(
+      { userId: createdByUserId, storageContextId, count: assistantMessages.length },
+      'Lightweight response appended to history',
+    )
     const updatedHistory = [...history, ...assistantMessages]
-    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(createdByUserId, updatedHistory)
+    if (shouldTriggerTrim(updatedHistory)) void runTrimInBackground(storageContextId, updatedHistory)
   }
   return result.text ?? 'Done.'
 }
@@ -271,8 +272,6 @@ async function invokeFull(
   persistProactiveResults(createdByUserId, storageContextId, result, getCachedHistory(storageContextId))
   return result.text ?? 'Done.'
 }
-
-// --- Dispatcher ---
 
 export function dispatchExecution(
   execCtx: DeferredExecutionContext,
