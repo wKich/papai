@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.3] - 2026-04-20
+
+### Added
+
+- Add readable group and user labels to /group and /groups commands
+- Implement deferred prompt delivery targets
+
+### Documentation
+
+- Add rrule-temporal adoption spec and implementation plan
+- Add readable label design and implementation plan
+- Add deferred prompt delivery design and plan
+- **codeindex:** Update tier1 implementation plan and design spec
+- Add debug dashboard expansion design spec
+
+### Fixed
+
+- **opencode:** Use session.idle hook instead of non-existent session.stop
+- Restore local check suite
+- Scope /groups user label cache by context
+- Preserve @username labels for Discord users
+- Preserve Discord guild lookups on channel cache misses
+- Keep group label lookups best-effort
+- Bound group label lookups
+- Include @username when Discord labels match
+- Resolve pre-existing test failures in debug-server and behavior-audit suites
+- Preserve deferred prompt usernames for personal mentions
+- Keep deferred prompt delivery semantics isolated
+- Align deferred proactive state with delivery context
+- Honor Telegram ID mentions for deferred delivery
+- Keep deferred prompts retryable on Discord send failures
+- Normalize shared deferred prompt batching
+- Honor Mattermost deferred delivery mentions
+
+### Merge
+
+- Sync readable-labels branch with origin/master
 ## [5.1.2] - 2026-04-18
 
 ### Changed
