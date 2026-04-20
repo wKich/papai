@@ -30,6 +30,7 @@ import {
 } from './message-extraction.js'
 import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
 import {
+  buildTelegramMentionPrefix,
   checkTelegramAdminStatus,
   createReplyParamsBuilder,
   getTelegramUsername,
@@ -39,10 +40,10 @@ import {
   sendReplacementButtonReply,
   sendReplacementTextReply,
   sendTextReply,
+  shiftTelegramEntity,
   telegramIsBotMentioned,
 } from './reply-helpers.js'
 export { extractReplyContext } from './message-extraction.js'
-
 const log = logger.child({ scope: 'chat:telegram' })
 const ignoreTelegramTypingError = (): null => null
 
@@ -110,16 +111,18 @@ export class TelegramChatProvider implements ChatProvider {
   }
   async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
     const chatId = parseInt(target.contextId, 10)
-    let content = markdown
-    if (target.contextType === 'group' && target.audience === 'personal' && target.createdByUsername !== null) {
-      content = `@${target.createdByUsername} ${markdown}`
+    const mentionPrefix = buildTelegramMentionPrefix(target)
+    const formatted = formatLlmOutput(markdown)
+    const options: Parameters<typeof this.bot.api.sendMessage>[2] = {
+      entities: [
+        ...mentionPrefix.entities,
+        ...formatted.entities.map((entity) => shiftTelegramEntity(entity, mentionPrefix.text.length)),
+      ],
     }
-    const formatted = formatLlmOutput(content)
-    const options: Parameters<typeof this.bot.api.sendMessage>[2] = { entities: formatted.entities }
     if (target.contextType === 'group' && target.threadId !== null) {
       options.message_thread_id = parseInt(target.threadId, 10)
     }
-    await this.bot.api.sendMessage(chatId, formatted.text, options)
+    await this.bot.api.sendMessage(chatId, `${mentionPrefix.text}${formatted.text}`, options)
   }
   start(): Promise<void> {
     this.bot.on('callback_query:data', (ctx) => this.dispatchCallbackQuery(ctx))
