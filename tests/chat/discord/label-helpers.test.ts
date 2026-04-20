@@ -139,3 +139,48 @@ test('resolveDiscordUserLabel formats username-only guild members as @username',
 
   expect(label).toBe('@itsmike')
 })
+
+test('resolveDiscordUserLabel fetches an uncached channel to resolve guild nicknames', async () => {
+  const label = await resolveDiscordUserLabel(
+    {
+      destroy: (): Promise<void> => Promise.resolve(),
+      channels: {
+        cache: new Map(),
+        fetch: (id: string): Promise<{ guildId: string }> => {
+          expect(id).toBe('chan-8')
+          return Promise.resolve({ guildId: 'guild-3' })
+        },
+      },
+      guilds: {
+        cache: new Map([
+          [
+            'guild-3',
+            {
+              members: {
+                search: (): Promise<Map<string, { id: string }>> => Promise.resolve(new Map<string, { id: string }>()),
+                fetch: (
+                  id: string,
+                ): Promise<{
+                  displayName: string
+                  nickname: string
+                  user: { username: string; displayName: string; globalName: null }
+                }> => {
+                  expect(id).toBe('user-9')
+                  return Promise.resolve({
+                    displayName: 'John Johnson',
+                    nickname: 'Ops Mike',
+                    user: { username: 'itsmike', displayName: 'itsmike', globalName: null },
+                  })
+                },
+              },
+            },
+          ],
+        ]),
+      },
+    },
+    'user-9',
+    { contextId: 'chan-8', contextType: 'group' },
+  )
+
+  expect(label).toBe('Ops Mike (@itsmike)')
+})

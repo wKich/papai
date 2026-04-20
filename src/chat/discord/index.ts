@@ -27,12 +27,12 @@ import {
 import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { handleDiscordGroupSettingsSelection } from './group-settings.js'
-import { resolveDiscordGroupLabel, resolveDiscordUserLabel } from './label-helpers.js'
+import { resolveDiscordGroupLabel, resolveDiscordGuildFromContext, resolveDiscordUserLabel } from './label-helpers.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
 import { createDiscordReplyFn } from './reply-helpers.js'
-import { isDispatchableMessage, isGuildLike, isReadyPayload } from './type-guards.js'
+import { isDispatchableMessage, isReadyPayload } from './type-guards.js'
 export type { DiscordClientFactory, DiscordClientLike, DispatchableMessage }
 export { defaultClientFactory }
 const log = logger.child({ scope: 'chat:discord' })
@@ -97,23 +97,22 @@ export class DiscordChatProvider implements ChatProvider {
     if (context.contextType !== 'group') return null
     if (this.client === null) return null
 
-    if (this.client.channels === undefined || this.client.guilds === undefined) return null
-    const raw = this.client.channels.cache.get(context.contextId)
-    if (typeof raw !== 'object' || raw === null || !('guildId' in raw)) return null
-    const guildId = raw.guildId
-    if (typeof guildId !== 'string') return null
-    const rawGuild = this.client.guilds.cache.get(guildId)
-    if (!isGuildLike(rawGuild)) return null
+    const resolvedGuild = await resolveDiscordGuildFromContext(this.client, context.contextId)
+    if (resolvedGuild === null) return null
 
     try {
-      const members = await rawGuild.members.search({ query: clean, limit: 1 })
+      const members = await resolvedGuild.guild.members.search({ query: clean, limit: 1 })
       for (const m of members.values()) {
         return m.id
       }
       return null
     } catch (error) {
       log.warn(
-        { username: clean, guildId, error: error instanceof Error ? error.message : String(error) },
+        {
+          username: clean,
+          guildId: resolvedGuild.guildId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'Discord member search failed',
       )
       return null

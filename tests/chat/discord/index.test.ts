@@ -226,6 +226,38 @@ describe('DiscordChatProvider', () => {
     expect(result).toBe('u-9')
   })
 
+  test('resolveUserId fetches an uncached channel before searching the guild', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider(undefined)
+
+    const fakeGuild = {
+      members: {
+        search: (arg: { query: string; limit: number }): Promise<Map<string, { id: string }>> => {
+          expect(arg.query).toBe('alice')
+          expect(arg.limit).toBe(1)
+          return Promise.resolve(new Map([['u-10', { id: 'u-10' }]]))
+        },
+      },
+    }
+    const fakeClient = {
+      destroy: (): Promise<void> => Promise.resolve(),
+      channels: {
+        cache: new Map(),
+        fetch: (id: string): Promise<{ guildId: string }> => {
+          expect(id).toBe('chan-8')
+          return Promise.resolve({ guildId: 'guild-4' })
+        },
+      },
+      guilds: {
+        cache: new Map([['guild-4', fakeGuild]]),
+      },
+    }
+    provider.testSetClient(fakeClient)
+
+    const result = await provider.resolveUserId('@alice', { contextId: 'chan-8', contextType: 'group' })
+    expect(result).toBe('u-10')
+  })
+
   describe('renderContext', () => {
     test('returns embed method result with context snapshot', async () => {
       const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
