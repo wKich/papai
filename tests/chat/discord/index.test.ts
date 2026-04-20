@@ -4,6 +4,7 @@ import { addAuthorizedGroup } from '../../../src/authorized-groups.js'
 import type { ButtonInteractionLike } from '../../../src/chat/discord/buttons.js'
 import type { DiscordClientFactory } from '../../../src/chat/discord/index.js'
 import type { ContextSnapshot, IncomingMessage } from '../../../src/chat/types.js'
+import { dmTarget } from '../../../src/chat/types.js'
 import { setConfig } from '../../../src/config.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from '../../../src/group-settings/registry.js'
 import { startGroupSettingsSelection } from '../../../src/group-settings/selector.js'
@@ -179,9 +180,81 @@ describe('DiscordChatProvider', () => {
     }
     provider.testSetClient(fakeClient)
 
-    await provider.sendMessage('user-42', 'hello discord')
+    await provider.sendMessage(dmTarget('user-42'), 'hello discord')
     expect(sends).toHaveLength(1)
     expect(sends[0]!.content).toBe('hello discord')
+  })
+
+  test('sendMessage throws when a group channel is not sendable', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+
+    provider.testSetClient({
+      destroy: (): Promise<void> => Promise.resolve(),
+      users: {
+        fetch: (
+          _id: string,
+        ): Promise<{ createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }> }> =>
+          Promise.reject(new Error('not used')),
+      },
+      channels: {
+        cache: new Map<string, unknown>(),
+        fetch: (_id: string): Promise<unknown> => Promise.resolve(null),
+      },
+    })
+
+    await expect(
+      provider.sendMessage(
+        {
+          contextId: 'chan-404',
+          contextType: 'group',
+          threadId: null,
+          audience: 'shared',
+          mentionUserIds: [],
+          createdByUserId: 'user-1',
+          createdByUsername: null,
+        },
+        'hello group',
+      ),
+    ).rejects.toThrow('Discord channel not sendable')
+  })
+
+  test('sendMessage throws when a fetched group channel reports isSendable() false', async () => {
+    const { DiscordChatProvider } = await import('../../../src/chat/discord/index.js')
+    const provider = new DiscordChatProvider()
+
+    provider.testSetClient({
+      destroy: (): Promise<void> => Promise.resolve(),
+      users: {
+        fetch: (
+          _id: string,
+        ): Promise<{ createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }> }> =>
+          Promise.reject(new Error('not used')),
+      },
+      channels: {
+        cache: new Map<string, unknown>(),
+        fetch: (_id: string): Promise<unknown> =>
+          Promise.resolve({
+            send: (_arg: { content: string }): Promise<unknown> => Promise.resolve(undefined),
+            isSendable: (): boolean => false,
+          }),
+      },
+    })
+
+    await expect(
+      provider.sendMessage(
+        {
+          contextId: 'chan-stage',
+          contextType: 'group',
+          threadId: null,
+          audience: 'shared',
+          mentionUserIds: [],
+          createdByUserId: 'user-1',
+          createdByUsername: null,
+        },
+        'hello group',
+      ),
+    ).rejects.toThrow('Discord channel not sendable')
   })
 
   test('resolveUserId returns snowflake as-is when the input is numeric', async () => {

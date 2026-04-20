@@ -1,3 +1,5 @@
+import type { ContextType } from '../chat/types.js'
+import { dmTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
@@ -17,6 +19,7 @@ import {
   type AlertCondition,
   type CancelResult,
   type CreateResult,
+  type DeferredPromptDeliveryInput,
   type ExecutionMetadata,
   type GetResult,
   type ListResult,
@@ -28,12 +31,43 @@ const log = logger.child({ scope: 'deferred:tools' })
 
 // --- Input types ---
 
+export type CreateDeliveryContext = {
+  userId: string
+  storageContextId: string
+  contextType: ContextType
+  username?: string | null
+}
+
 export type CreateInput = {
   prompt: string
   schedule?: ScheduleInput
   condition?: AlertCondition
   cooldown_minutes?: number
   execution?: { mode: 'lightweight' | 'context' | 'full'; delivery_brief: string; context_snapshot?: string }
+  delivery?: { audience?: 'personal' | 'shared'; mention_user_ids?: string[] }
+}
+
+function buildDeliveryInput(
+  ctx: CreateDeliveryContext,
+  policy?: { audience?: 'personal' | 'shared'; mention_user_ids?: string[] },
+): DeferredPromptDeliveryInput {
+  if (ctx.contextType === 'dm') {
+    return { ...dmTarget(ctx.userId), createdByUsername: ctx.username ?? null }
+  }
+  const colonIdx = ctx.storageContextId.indexOf(':')
+  const contextId = colonIdx >= 0 ? ctx.storageContextId.slice(0, colonIdx) : ctx.storageContextId
+  const threadId = colonIdx >= 0 ? ctx.storageContextId.slice(colonIdx + 1) : null
+  const audience = policy?.audience === 'shared' ? 'shared' : 'personal'
+  const mentionUserIds = audience === 'shared' ? [] : (policy?.mention_user_ids ?? [ctx.userId])
+  return {
+    contextId,
+    contextType: 'group',
+    threadId,
+    audience,
+    mentionUserIds,
+    createdByUserId: ctx.userId,
+    createdByUsername: ctx.username ?? null,
+  }
 }
 
 export type UpdateInput = {
@@ -54,6 +88,7 @@ function createScheduled(
   prompt: string,
   schedule: ScheduleInput,
   executionMetadata: ExecutionMetadata,
+  delivery?: DeferredPromptDeliveryInput,
 ): CreateResult {
   const hasFireAt = schedule.fire_at !== undefined
   const hasCron = schedule.cron !== undefined && schedule.cron !== ''
@@ -84,7 +119,7 @@ function createScheduled(
     return { error: 'Schedule must include either fire_at or cron.' }
   }
 
-  const result = createScheduledPrompt(userId, prompt, { fireAt, cronExpression }, executionMetadata)
+  const result = createScheduledPrompt(userId, prompt, { fireAt, cronExpression }, executionMetadata, delivery)
   log.info({ id: result.id, userId, type: 'scheduled' }, 'Deferred prompt created')
   return {
     status: 'created',
@@ -101,11 +136,12 @@ function createAlert(
   condition: unknown,
   cooldownMinutes: number | undefined,
   executionMetadata: ExecutionMetadata,
+  delivery?: DeferredPromptDeliveryInput,
 ): CreateResult {
   const parseResult = alertConditionSchema.safeParse(condition)
   if (!parseResult.success) return { error: `Invalid condition: ${parseResult.error.message}` }
 
-  const result = createAlertPrompt(userId, prompt, parseResult.data, cooldownMinutes, executionMetadata)
+  const result = createAlertPrompt(userId, prompt, parseResult.data, cooldownMinutes, executionMetadata, delivery)
   log.info({ id: result.id, userId, type: 'alert' }, 'Deferred prompt created')
   return { status: 'created', type: 'alert', id: result.id, cooldownMinutes: result.cooldownMinutes }
 }
@@ -120,7 +156,7 @@ function parseExecution(
   return DEFAULT_EXECUTION_METADATA
 }
 
-export function executeCreate(userId: string, input: CreateInput): CreateResult {
+export function executeCreate(userId: string, input: CreateInput, deliveryCtx?: CreateDeliveryContext): CreateResult {
   const hasSchedule = input.schedule !== undefined
   const hasCondition = input.condition !== undefined
   log.debug({ userId, hasSchedule, hasCondition }, 'create_deferred_prompt called')
@@ -130,9 +166,10 @@ export function executeCreate(userId: string, input: CreateInput): CreateResult 
   }
 
   const executionMetadata = parseExecution(input.execution)
+  const delivery = deliveryCtx === undefined ? undefined : buildDeliveryInput(deliveryCtx, input.delivery)
 
-  if (hasSchedule) return createScheduled(userId, input.prompt, input.schedule!, executionMetadata)
-  return createAlert(userId, input.prompt, input.condition, input.cooldown_minutes, executionMetadata)
+  if (hasSchedule) return createScheduled(userId, input.prompt, input.schedule!, executionMetadata, delivery)
+  return createAlert(userId, input.prompt, input.condition, input.cooldown_minutes, executionMetadata, delivery)
 }
 
 export function executeList(

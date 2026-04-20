@@ -30,7 +30,7 @@ describe('createScheduledPrompt', () => {
 
     expect(prompt.type).toBe('scheduled')
     expect(prompt.id).toBeDefined()
-    expect(prompt.userId).toBe(USER_ID)
+    expect(prompt.createdByUserId).toBe(USER_ID)
     expect(prompt.prompt).toBe('Remind me to check tasks')
     expect(prompt.fireAt).toBe(fireAt)
     expect(prompt.cronExpression).toBeNull()
@@ -65,7 +65,7 @@ describe('listScheduledPrompts', () => {
 
     const prompts = listScheduledPrompts(USER_ID)
     expect(prompts).toHaveLength(2)
-    expect(prompts.every((p) => p.userId === USER_ID)).toBe(true)
+    expect(prompts.every((p) => p.createdByUserId === USER_ID)).toBe(true)
   })
 
   test('filters by status', () => {
@@ -218,5 +218,66 @@ describe('completeScheduledPrompt', () => {
     expect(updated).not.toBeNull()
     expect(updated!.status).toBe('completed')
     expect(updated!.lastExecutedAt).toBe(executedAt)
+  })
+})
+
+describe('delivery target persistence', () => {
+  beforeEach(async () => {
+    await setupTestDb()
+  })
+
+  test('creates scheduled prompt with explicit creator and delivery target', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const prompt = createScheduledPrompt('user-1', 'remind me', { fireAt }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'personal',
+      mentionUserIds: ['user-1'],
+      createdByUserId: 'user-1',
+      createdByUsername: 'ki',
+    })
+
+    expect(prompt.createdByUserId).toBe('user-1')
+    expect(prompt.createdByUsername).toBe('ki')
+    expect(prompt.deliveryTarget.contextId).toBe('-1001')
+    expect(prompt.deliveryTarget.threadId).toBe('42')
+    expect(prompt.deliveryTarget.audience).toBe('personal')
+    expect(prompt.deliveryTarget.mentionUserIds).toEqual(['user-1'])
+  })
+
+  test('lists scheduled prompts by creator identity after schema rename', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    createScheduledPrompt('user-1', 'mine', { fireAt }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: null,
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: 'user-1',
+      createdByUsername: null,
+    })
+    createScheduledPrompt('user-2', 'not mine', { fireAt }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: null,
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: 'user-2',
+      createdByUsername: null,
+    })
+
+    const prompts = listScheduledPrompts('user-1')
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.createdByUserId).toBe('user-1')
+  })
+
+  test('defaults to dm delivery when no delivery provided', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const prompt = createScheduledPrompt(USER_ID, 'default delivery', { fireAt })
+
+    expect(prompt.deliveryTarget.contextType).toBe('dm')
+    expect(prompt.deliveryTarget.contextId).toBe(USER_ID)
+    expect(prompt.deliveryTarget.audience).toBe('personal')
   })
 })

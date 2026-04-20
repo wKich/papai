@@ -52,9 +52,9 @@ describe('debug-server', () => {
     ensurePublicBuilt()
     restoreFetch()
     process.env['DEBUG_PORT'] = String(TEST_PORT)
-    // Capture the log level that will be used for the stream
+    // Capture the log level and pass it explicitly to avoid mock-binding interference
     capturedLogLevel = getLogLevel()
-    startDebugServer('test-admin')
+    startDebugServer('test-admin', capturedLogLevel)
     seedLogBuffer()
   })
 

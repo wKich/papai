@@ -57,19 +57,20 @@ const isToolSet = (value: unknown): value is ToolSet =>
 const getOrCreateTools = (
   contextId: string,
   chatUserId: string,
+  username: string | null,
   provider: TaskProvider,
   contextType: 'dm' | 'group' | undefined,
 ): ToolSet => {
   // Security fix: In group chats, tools embed chatUserId-specific closures for "me" resolution.
   // The cache key must include chatUserId to prevent cross-user contamination.
-  const cacheKey = contextType === 'group' ? `${contextId}:${chatUserId}` : contextId
+  const cacheKey = contextType === 'group' ? `${contextId}:${chatUserId}:${username ?? ''}` : contextId
   const cachedTools = getCachedTools(cacheKey)
   if (cachedTools !== undefined && cachedTools !== null && isToolSet(cachedTools)) {
-    log.debug({ contextId, chatUserId }, 'Using cached tools')
+    log.debug({ contextId, chatUserId, hasUsername: username !== null }, 'Using cached tools')
     return cachedTools
   }
-  log.debug({ contextId, chatUserId }, 'Building tools (cache miss)')
-  const tools = makeTools(provider, { storageContextId: contextId, chatUserId, contextType })
+  log.debug({ contextId, chatUserId, hasUsername: username !== null }, 'Building tools (cache miss)')
+  const tools = makeTools(provider, { storageContextId: contextId, chatUserId, username, contextType })
   setCachedTools(cacheKey, tools)
   return tools
 }
@@ -191,7 +192,7 @@ const callLlm = async (
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(configId)
   await maybeAutoLinkIdentity(chatUserId, username, provider)
-  const tools = getOrCreateTools(contextId, chatUserId, provider, contextType)
+  const tools = getOrCreateTools(contextId, chatUserId, username, provider, contextType)
   const timezone = resolveTimezone(configId)
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
   const validatedMessages = validateToolResults(messagesWithMemory)

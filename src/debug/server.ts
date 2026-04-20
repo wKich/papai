@@ -99,9 +99,9 @@ function handleDashboardFile(pathname: string): Response {
   return new Response('Not found', { status: 404 })
 }
 
-export function startDebugServer(adminUserId: string): void {
+export function startDebugServer(adminUserId: string, logLevel = getLogLevel()): void {
   init(adminUserId)
-  logMultistream.add({ stream: logBufferStream, level: getLogLevel() })
+  logMultistream.add({ stream: logBufferStream, level: logLevel })
 
   const port = getPort()
   const hostname = getHostname()
@@ -147,6 +147,14 @@ export function stopDebugServer(): void {
   if (server !== null) {
     void server.stop()
     server = null
+    const streams: unknown = Reflect.get(logMultistream, 'streams')
+    if (Array.isArray(streams)) {
+      const idx = streams.findIndex(
+        (entry: unknown) =>
+          typeof entry === 'object' && entry !== null && Reflect.get(entry, 'stream') === logBufferStream,
+      )
+      if (idx !== -1) streams.splice(idx, 1)
+    }
     log.info('Debug server stopped')
   }
 }

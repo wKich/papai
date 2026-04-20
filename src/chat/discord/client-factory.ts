@@ -21,7 +21,7 @@ export type DiscordClientLike = {
       createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
     }>
   }
-  channels?: { cache: { get(id: string): unknown } }
+  channels?: { cache: { get(id: string): unknown }; fetch?: (id: string) => Promise<unknown> }
   guilds?: { cache: { get(id: string): unknown } }
 }
 

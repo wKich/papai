@@ -8,6 +8,7 @@ import type {
   CommandHandler,
   ContextRendered,
   ContextSnapshot,
+  DeferredDeliveryTarget,
   IncomingFile,
   IncomingInteraction,
   IncomingMessage,
@@ -29,6 +30,7 @@ import {
 } from './message-extraction.js'
 import { telegramCapabilities, telegramConfigRequirements, telegramTraits } from './metadata.js'
 import {
+  buildTelegramMentionPrefix,
   checkTelegramAdminStatus,
   createReplyParamsBuilder,
   getTelegramUsername,
@@ -38,10 +40,10 @@ import {
   sendReplacementButtonReply,
   sendReplacementTextReply,
   sendTextReply,
+  shiftTelegramEntity,
   telegramIsBotMentioned,
 } from './reply-helpers.js'
 export { extractReplyContext } from './message-extraction.js'
-
 const log = logger.child({ scope: 'chat:telegram' })
 const ignoreTelegramTypingError = (): null => null
 
@@ -107,9 +109,20 @@ export class TelegramChatProvider implements ChatProvider {
   onInteraction(handler: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>): void {
     this.interactionHandler = handler
   }
-  async sendMessage(userId: string, markdown: string): Promise<void> {
+  async sendMessage(target: DeferredDeliveryTarget, markdown: string): Promise<void> {
+    const chatId = parseInt(target.contextId, 10)
+    const mentionPrefix = buildTelegramMentionPrefix(target)
     const formatted = formatLlmOutput(markdown)
-    await this.bot.api.sendMessage(parseInt(userId, 10), formatted.text, { entities: formatted.entities })
+    const options: Parameters<typeof this.bot.api.sendMessage>[2] = {
+      entities: [
+        ...mentionPrefix.entities,
+        ...formatted.entities.map((entity) => shiftTelegramEntity(entity, mentionPrefix.text.length)),
+      ],
+    }
+    if (target.contextType === 'group' && target.threadId !== null) {
+      options.message_thread_id = parseInt(target.threadId, 10)
+    }
+    await this.bot.api.sendMessage(chatId, `${mentionPrefix.text}${formatted.text}`, options)
   }
   start(): Promise<void> {
     this.bot.on('callback_query:data', (ctx) => this.dispatchCallbackQuery(ctx))
