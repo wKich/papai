@@ -72,3 +72,81 @@ export const occurrencesBetween = (args: CompiledRecurrence, after: Date, before
   }
   return results
 }
+
+const DAY_NAMES: Record<string, string> = {
+  MO: 'Monday',
+  TU: 'Tuesday',
+  WE: 'Wednesday',
+  TH: 'Thursday',
+  FR: 'Friday',
+  SA: 'Saturday',
+  SU: 'Sunday',
+}
+
+const MONTH_NAMES = [
+  '',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+
+const localTimeOfDay = (spec: RecurrenceSpec): { hour: number; minute: number } => {
+  if (spec.byHour !== undefined && spec.byMinute !== undefined) {
+    return { hour: spec.byHour[0] ?? 0, minute: spec.byMinute[0] ?? 0 }
+  }
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: spec.timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = fmt.formatToParts(new Date(spec.dtstart))
+  const hh = Number.parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10)
+  const mm = Number.parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10)
+  return { hour: hh === 24 ? 0 : hh, minute: mm }
+}
+
+export const describeRecurrence = (spec: RecurrenceSpec): string => {
+  const parts: string[] = []
+  const { hour, minute } = localTimeOfDay(spec)
+
+  const FREQ_WORD: Record<string, string> = {
+    DAILY: 'day',
+    WEEKLY: 'week',
+    MONTHLY: 'month',
+    YEARLY: 'year',
+  }
+
+  if (spec.byDay === undefined && spec.byMonthDay === undefined && spec.byMonth === undefined) {
+    parts.push(`every ${FREQ_WORD[spec.freq] ?? spec.freq.toLowerCase()}`)
+  }
+
+  parts.push(`at ${pad2(hour)}:${pad2(minute)} ${spec.timezone}`)
+
+  if (spec.byDay !== undefined) {
+    const names = spec.byDay.map((d) => DAY_NAMES[d] ?? d)
+    parts.push(`on ${names.join(', ')}`)
+  }
+
+  if (spec.byMonthDay !== undefined) {
+    parts.push(`on day ${spec.byMonthDay.join(', ')} of the month`)
+  }
+
+  if (spec.byMonth !== undefined) {
+    const names = spec.byMonth.map((m) => MONTH_NAMES[m] ?? String(m))
+    parts.push(`in ${names.join(', ')}`)
+  }
+
+  return parts.join(' ')
+}

@@ -161,3 +161,57 @@ describe('occurrencesBetween', () => {
     expect(occ.length).toBe(3)
   })
 })
+
+import { describeRecurrence } from '../../src/recurrence.js'
+
+describe('describeRecurrence', () => {
+  it('describes a weekly MO/WE/FR at 09:00 in Europe/London', () => {
+    expect(
+      describeRecurrence({
+        freq: 'WEEKLY',
+        byDay: ['MO', 'WE', 'FR'],
+        byHour: [9],
+        byMinute: [0],
+        dtstart: '2026-04-20T09:00:00Z',
+        timezone: 'Europe/London',
+      }),
+    ).toBe('at 09:00 Europe/London on Monday, Wednesday, Friday')
+  })
+
+  it('describes a daily spec with DTSTART time as default', () => {
+    expect(
+      describeRecurrence({
+        freq: 'DAILY',
+        dtstart: '2026-04-20T14:30:00Z',
+        timezone: 'UTC',
+      }),
+    ).toBe('every day at 14:30 UTC')
+  })
+
+  it('describes a monthly-on-day-15 spec', () => {
+    expect(
+      describeRecurrence({
+        freq: 'MONTHLY',
+        byMonthDay: [15],
+        byHour: [8],
+        byMinute: [0],
+        dtstart: '2026-04-15T08:00:00Z',
+        timezone: 'UTC',
+      }),
+    ).toBe('at 08:00 UTC on day 15 of the month')
+  })
+
+  it('describes a yearly spec in January, April, July, October', () => {
+    expect(
+      describeRecurrence({
+        freq: 'YEARLY',
+        byMonth: [1, 4, 7, 10],
+        byMonthDay: [1],
+        byHour: [9],
+        byMinute: [0],
+        dtstart: '2026-01-01T09:00:00Z',
+        timezone: 'UTC',
+      }),
+    ).toBe('at 09:00 UTC on day 1 of the month in January, April, July, October')
+  })
+})
