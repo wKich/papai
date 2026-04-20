@@ -1,7 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import { BEHAVIORS_DIR, STORIES_DIR } from './config.js'
+import { z } from 'zod'
+
+import { BEHAVIORS_DIR, CONSOLIDATED_DIR, STORIES_DIR } from './config.js'
 import { getDomain } from './domain-map.js'
 import type { IncrementalManifest } from './incremental.js'
 
@@ -22,6 +24,30 @@ export interface EvaluatedBehavior {
   readonly flaws: readonly string[]
   readonly improvements: readonly string[]
 }
+
+export interface ConsolidatedBehavior {
+  readonly id: string
+  readonly domain: string
+  readonly featureName: string
+  readonly isUserFacing: boolean
+  readonly behavior: string
+  readonly userStory: string | null
+  readonly context: string
+  readonly sourceTestKeys: readonly string[]
+}
+
+const ConsolidatedBehaviorSchema = z.object({
+  id: z.string(),
+  domain: z.string(),
+  featureName: z.string(),
+  isUserFacing: z.boolean(),
+  behavior: z.string(),
+  userStory: z.string().nullable(),
+  context: z.string(),
+  sourceTestKeys: z.array(z.string()),
+})
+
+const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).readonly()
 
 interface DomainSummary {
   readonly domain: string
@@ -59,6 +85,28 @@ export async function writeBehaviorFile(testFilePath: string, behaviors: readonl
   }
 
   await Bun.write(outPath, lines.join('\n'))
+}
+
+export async function writeConsolidatedFile(
+  domain: string,
+  consolidations: readonly ConsolidatedBehavior[],
+): Promise<void> {
+  const outPath = join(CONSOLIDATED_DIR, `${domain}.json`)
+  await mkdir(dirname(outPath), { recursive: true })
+  const sorted = [...consolidations].toSorted((a, b) => a.id.localeCompare(b.id))
+  await Bun.write(outPath, JSON.stringify(sorted, null, 2) + '\n')
+}
+
+export async function readConsolidatedFile(domain: string): Promise<readonly ConsolidatedBehavior[] | null> {
+  const filePath = join(CONSOLIDATED_DIR, `${domain}.json`)
+  try {
+    const text = await Bun.file(filePath).text()
+    const raw: unknown = JSON.parse(text)
+    if (!Array.isArray(raw)) return null
+    return ConsolidatedBehaviorArraySchema.parse(raw)
+  } catch {
+    return null
+  }
 }
 
 function domainTitle(domain: string): string {
