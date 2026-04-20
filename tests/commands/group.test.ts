@@ -21,6 +21,56 @@ const getFirstReply = (textCalls: readonly string[]): string | null => {
   return firstReply
 }
 
+const flushMicrotasks = async (): Promise<void> => {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+const createBlockingLabelLookup = (): {
+  readonly lookup: () => Promise<string | null>
+  readonly getMaxInFlight: () => number
+  readonly stopBlocking: () => void
+  readonly releaseAll: () => void
+} => {
+  let shouldBlock = true
+  let inFlight = 0
+  let maxInFlight = 0
+  let releases: Array<() => void> = []
+
+  return {
+    lookup: () => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+
+      if (!shouldBlock) {
+        inFlight -= 1
+        return Promise.resolve(null)
+      }
+
+      return new Promise((resolve) => {
+        releases = [
+          ...releases,
+          (): void => {
+            inFlight -= 1
+            resolve(null)
+          },
+        ]
+      })
+    },
+    getMaxInFlight: () => maxInFlight,
+    stopBlocking: () => {
+      shouldBlock = false
+    },
+    releaseAll: () => {
+      const currentReleases = releases
+      releases = []
+      currentReleases.forEach((release) => {
+        release()
+      })
+    },
+  }
+}
+
 describe('group commands', () => {
   let mockChat: ChatProvider
   let commandHandlers: Map<string, CommandHandler>
@@ -586,10 +636,10 @@ describe('group commands', () => {
       const labeledChat = createMockChat({
         commandHandlers: labeledHandlers,
         resolveGroupLabel: (groupId: string): Promise<string | null> => Promise.resolve(groupId),
-        resolveUserLabel: (userId: string, context?: ResolveUserContext): Promise<string | null> => {
+        resolveUserLabel: (userId: string, context: ResolveUserContext | undefined): Promise<string | null> => {
           if (userId !== 'admin1') return Promise.resolve(null)
-          if (context?.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
-          if (context?.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
+          if (context !== undefined && context.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
+          if (context !== undefined && context.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
           return Promise.resolve(null)
         },
       })
@@ -632,6 +682,65 @@ describe('group commands', () => {
 
       expect(textCalls[0]).toContain('John Johnson (@itsmike)')
       expect(textCalls[0]).toContain('added by Jane Admin (@janeadmin)')
+    })
+
+    test('bounds concurrent /groups label lookups', async () => {
+      const blockingLookup = createBlockingLabelLookup()
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (): Promise<string | null> => blockingLookup.lookup(),
+        resolveUserLabel: (): Promise<string | null> => blockingLookup.lookup(),
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      for (const index of [1, 2, 3, 4, 5, 6]) {
+        addAuthorizedGroup(`group-${index}`, `admin-${index}`)
+      }
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      const handlerPromise = handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      await flushMicrotasks()
+
+      expect(blockingLookup.getMaxInFlight()).toBe(5)
+
+      blockingLookup.stopBlocking()
+      blockingLookup.releaseAll()
+      await handlerPromise
+    })
+
+    test('bounds concurrent /group users label lookups', async () => {
+      const blockingLookup = createBlockingLabelLookup()
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveUserLabel: (): Promise<string | null> => blockingLookup.lookup(),
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      for (const index of [1, 2, 3, 4, 5, 6]) {
+        addGroupMember('group1', `user-${index}`, `admin-${index}`)
+      }
+
+      const handler = labeledHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply } = createMockReply()
+      const handlerPromise = handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      await flushMicrotasks()
+
+      expect(blockingLookup.getMaxInFlight()).toBe(5)
+
+      blockingLookup.stopBlocking()
+      blockingLookup.releaseAll()
+      await handlerPromise
     })
 
     test('falls back to raw IDs when /groups label resolution returns null', async () => {

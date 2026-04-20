@@ -1,3 +1,5 @@
+import pLimit from 'p-limit'
+
 import { addAuthorizedGroup, listAuthorizedGroups, removeAuthorizedGroup } from '../authorized-groups.js'
 import { supportsUserResolution } from '../chat/capabilities.js'
 import type { AuthorizationResult, ChatProvider, IncomingMessage, ReplyFn, ResolveUserContext } from '../chat/types.js'
@@ -8,6 +10,7 @@ const log = logger.child({ scope: 'commands:group' })
 
 const GROUP_CHAT_USAGE = 'Usage: /group adduser <user-id|@username> | /group deluser <user-id|@username> | /group users'
 const DM_ADMIN_USAGE = 'Usage: /group add <group-id> | /group remove <group-id> | /groups'
+const MAX_CONCURRENT_LABEL_LOOKUPS = 5
 
 type LabelResolverContext = {
   readonly chat: ChatProvider
@@ -15,36 +18,41 @@ type LabelResolverContext = {
   readonly contextType: 'dm' | 'group'
 }
 
+type ScheduleLookup = (lookup: () => Promise<string | null>) => Promise<string | null>
+
 function makeDisplayLabel(label: string | null, fallback: string): string {
-  return label ?? fallback
+  if (label === null) return fallback
+  return label
 }
 
 function resolveUserLabelCached(
   resolverContext: LabelResolverContext,
   userId: string,
   cache: Map<string, Promise<string | null>>,
+  scheduleLookup: ScheduleLookup,
 ): Promise<string | null> {
   const cacheKey = `${resolverContext.contextType}:${resolverContext.contextId}:${userId}`
   const existing = cache.get(cacheKey)
   if (existing !== undefined) return existing
-
   const fn = resolverContext.chat.resolveUserLabel
   const pending =
     fn === undefined
       ? Promise.resolve(null)
-      : fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType }).catch(
-          (error: unknown): string | null => {
-            log.warn(
-              {
-                userId,
-                contextId: resolverContext.contextId,
-                contextType: resolverContext.contextType,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              'User label lookup failed in group command',
-            )
-            return null
-          },
+      : scheduleLookup(() =>
+          fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType }).catch(
+            (error: unknown): string | null => {
+              log.warn(
+                {
+                  userId,
+                  contextId: resolverContext.contextId,
+                  contextType: resolverContext.contextType,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                'User label lookup failed in group command',
+              )
+              return null
+            },
+          ),
         )
 
   cache.set(cacheKey, pending)
@@ -55,21 +63,23 @@ function resolveGroupLabelCached(
   chat: ChatProvider,
   groupId: string,
   cache: Map<string, Promise<string | null>>,
+  scheduleLookup: ScheduleLookup,
 ): Promise<string | null> {
   const existing = cache.get(groupId)
   if (existing !== undefined) return existing
-
   const fn = chat.resolveGroupLabel
   const pending =
     fn === undefined
       ? Promise.resolve(null)
-      : fn(groupId).catch((error: unknown): string | null => {
-          log.warn(
-            { groupId, error: error instanceof Error ? error.message : String(error) },
-            'Group label lookup failed in group command',
-          )
-          return null
-        })
+      : scheduleLookup(() =>
+          fn(groupId).catch((error: unknown): string | null => {
+            log.warn(
+              { groupId, error: error instanceof Error ? error.message : String(error) },
+              'Group label lookup failed in group command',
+            )
+            return null
+          }),
+        )
   cache.set(groupId, pending)
   return pending
 }
@@ -80,38 +90,34 @@ export function registerGroupCommand(chat: ChatProvider): void {
       await handleAuthorizedGroupCommand(msg, reply, auth)
       return
     }
-
     await handleGroupMemberCommand(chat, msg, reply)
   })
-
   chat.registerCommand('groups', async (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => {
     if (msg.contextType !== 'dm') {
       await reply.text('This command is only available in direct messages.')
       return
     }
-
     if (!auth.isBotAdmin) {
       await reply.text('Only bot admins can list authorized groups.')
       return
     }
-
     const groups = listAuthorizedGroups()
     if (groups.length === 0) {
       await reply.text('No authorized groups.')
       return
     }
-
     const groupLabelCache = new Map<string, Promise<string | null>>()
     const userLabelCache = new Map<string, Promise<string | null>>()
-
+    const limit = pLimit(MAX_CONCURRENT_LABEL_LOOKUPS)
     const lines = await Promise.all(
       groups.map(async (group) => {
         const [resolvedGroupLabel, resolvedUserLabel] = await Promise.all([
-          resolveGroupLabelCached(chat, group.group_id, groupLabelCache),
+          resolveGroupLabelCached(chat, group.group_id, groupLabelCache, limit),
           resolveUserLabelCached(
             { chat, contextId: group.group_id, contextType: 'group' },
             group.added_by,
             userLabelCache,
+            limit,
           ),
         ])
 
@@ -241,19 +247,18 @@ async function handleListUsers(chat: ChatProvider, msg: IncomingMessage, reply: 
     await reply.text('No members in this group yet.')
     return
   }
-
   const userLabelCache = new Map<string, Promise<string | null>>()
+  const limit = pLimit(MAX_CONCURRENT_LABEL_LOOKUPS)
   const resolverContext: LabelResolverContext = {
     chat,
     contextId: msg.contextId,
     contextType: msg.contextType,
   }
-
   const lines = await Promise.all(
     members.map(async (member) => {
       const [resolvedMemberLabel, resolvedAdderLabel] = await Promise.all([
-        resolveUserLabelCached(resolverContext, member.user_id, userLabelCache),
-        resolveUserLabelCached(resolverContext, member.added_by, userLabelCache),
+        resolveUserLabelCached(resolverContext, member.user_id, userLabelCache, limit),
+        resolveUserLabelCached(resolverContext, member.added_by, userLabelCache, limit),
       ])
 
       const memberLabel = makeDisplayLabel(resolvedMemberLabel, member.user_id)
@@ -261,7 +266,6 @@ async function handleListUsers(chat: ChatProvider, msg: IncomingMessage, reply: 
       return `- ${memberLabel} (added by ${adderLabel})`
     }),
   )
-
   await reply.text(`Group members:\n${lines.join('\n')}`)
 }
 
