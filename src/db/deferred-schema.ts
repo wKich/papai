@@ -14,7 +14,8 @@ export const scheduledPrompts = sqliteTable(
     mentionUserIds: text('mention_user_ids').notNull().default('[]'),
     prompt: text('prompt').notNull(),
     fireAt: text('fire_at').notNull(),
-    cronExpression: text('cron_expression'),
+    rrule: text('rrule'),
+    dtstartUtc: text('dtstart_utc'),
     status: text('status').notNull().default('active'),
     createdAt: text('created_at')
       .notNull()

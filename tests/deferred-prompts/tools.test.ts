@@ -94,7 +94,7 @@ describe('create_deferred_prompt', () => {
     const result: unknown = await t.execute({ prompt: 'Daily', schedule: { cron: '0 9 * * *' } }, toolCtx)
     expect(result).toHaveProperty('status', 'created')
     expect(result).toHaveProperty('type', 'scheduled')
-    expect(result).toHaveProperty('cronExpression', '0 9 * * *')
+    expect(result).toHaveProperty('rrule', 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0')
   })
 
   test('creates with condition (returns type alert)', async () => {

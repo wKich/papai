@@ -1,5 +1,5 @@
-import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { nextOccurrence } from '../recurrence.js'
 import { advanceScheduledPrompt, completeScheduledPrompt } from './scheduled.js'
 import type { ExecutionMetadata, ExecutionMode, ScheduledPrompt } from './types.js'
 
@@ -28,23 +28,10 @@ export function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMet
 }
 
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
-  const parsed = parseCron(prompt.cronExpression!)
-  if (parsed === null) {
-    completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
-    log.warn(
-      { id: prompt.id, cronExpression: prompt.cronExpression },
-      'Invalid cron expression on recurring prompt, completing',
-    )
-    return
-  }
-
-  const next = nextCronOccurrence(parsed, new Date(), timezone)
+  const next = nextOccurrence({ rrule: prompt.rrule!, dtstartUtc: prompt.dtstartUtc!, timezone }, new Date())
   if (next === null) {
     completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
-    log.warn(
-      { id: prompt.id, userId: prompt.createdByUserId },
-      'Could not compute next cron occurrence, completing prompt',
-    )
+    log.warn({ id: prompt.id, userId: prompt.createdByUserId }, 'Could not compute next occurrence, completing prompt')
     return
   }
 
@@ -57,7 +44,7 @@ function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: strin
 
 export function finalizeAllPrompts(prompts: ScheduledPrompt[], now: string, timezone: string): void {
   for (const prompt of prompts) {
-    if (prompt.cronExpression === null) {
+    if (prompt.rrule === null) {
       completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)
       log.info({ id: prompt.id, userId: prompt.createdByUserId }, 'One-shot scheduled prompt completed')
       continue

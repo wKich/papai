@@ -3,6 +3,7 @@ import { dmTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { cronToRrule } from '../recurrence-translator.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
 import {
@@ -126,7 +127,7 @@ function createScheduled(
     type: 'scheduled',
     id: result.id,
     fireAt: utcToLocal(result.fireAt, timezone) ?? result.fireAt,
-    cronExpression: result.cronExpression,
+    rrule: result.rrule,
   }
 }
 
@@ -194,8 +195,13 @@ export function executeGet(userId: string, input: { id: string }): GetResult {
 function updateScheduledFields(id: string, userId: string, input: UpdateInput): UpdateResult {
   if (input.condition !== undefined)
     return { error: 'Cannot apply a condition to a scheduled prompt. Use schedule fields instead.' }
-  const updates: { prompt?: string; fireAt?: string; cronExpression?: string; executionMetadata?: ExecutionMetadata } =
-    {}
+  const updates: {
+    prompt?: string
+    fireAt?: string
+    rrule?: string
+    dtstartUtc?: string
+    executionMetadata?: ExecutionMetadata
+  } = {}
   if (input.prompt !== undefined) updates.prompt = input.prompt
   if (input.schedule !== undefined) {
     if (input.schedule.fire_at !== undefined) {
@@ -209,7 +215,12 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
     }
     if (input.schedule.cron !== undefined) {
       if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
-      updates.cronExpression = input.schedule.cron
+      const fireAt = updates.fireAt ?? new Date().toISOString()
+      const translated = cronToRrule(input.schedule.cron, 'UTC', fireAt)
+      if (translated !== null) {
+        updates.rrule = translated.rrule
+        updates.dtstartUtc = translated.dtstartUtc
+      }
     }
   }
   if (input.execution !== undefined) {

@@ -56,7 +56,7 @@ const migrateRecurringTasks = (db: Database): void => {
   db.run(`
     CREATE TABLE recurring_tasks_new (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(platform_user_id) ON DELETE CASCADE,
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,

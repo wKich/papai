@@ -179,7 +179,8 @@ export type ScheduledPrompt = {
   deliveryTarget: DeferredPromptDelivery
   prompt: string
   fireAt: string
-  cronExpression: string | null
+  rrule: string | null
+  dtstartUtc: string | null
   status: 'active' | 'completed' | 'cancelled'
   createdAt: string
   lastExecutedAt: string | null
@@ -206,7 +207,7 @@ export type AlertPrompt = {
 type ToolError = { error: string }
 
 export type CreateResult =
-  | { status: 'created'; type: 'scheduled'; id: string; fireAt: string; cronExpression: string | null }
+  | { status: 'created'; type: 'scheduled'; id: string; fireAt: string; rrule: string | null }
   | { status: 'created'; type: 'alert'; id: string; cooldownMinutes: number }
   | ToolError
 

@@ -33,7 +33,7 @@ describe('createScheduledPrompt', () => {
     expect(prompt.createdByUserId).toBe(USER_ID)
     expect(prompt.prompt).toBe('Remind me to check tasks')
     expect(prompt.fireAt).toBe(fireAt)
-    expect(prompt.cronExpression).toBeNull()
+    expect(prompt.rrule).toBeNull()
     expect(prompt.status).toBe('active')
     expect(prompt.createdAt).toBeDefined()
     expect(prompt.lastExecutedAt).toBeNull()
@@ -47,7 +47,7 @@ describe('createScheduledPrompt', () => {
     })
 
     expect(prompt.type).toBe('scheduled')
-    expect(prompt.cronExpression).toBe('0 9 * * *')
+    expect(prompt.rrule).toBe('FREQ=DAILY;BYHOUR=9;BYMINUTE=0')
     expect(prompt.status).toBe('active')
   })
 })
