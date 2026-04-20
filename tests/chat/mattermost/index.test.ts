@@ -622,3 +622,64 @@ describe('fetchMattermostFiles', () => {
     expect(result[0]?.fileId).toBe('f1')
   })
 })
+
+describe('MattermostChatProvider reverse label resolution', () => {
+  test('resolveGroupLabel returns channel display name', async () => {
+    setMockFetch((url: string) => {
+      if (url.includes('/api/v4/channels/chan-1')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ type: 'O', display_name: 'Operations', name: 'operations' }), { status: 200 }),
+        )
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    process.env['MATTERMOST_URL'] = 'http://localhost:8065'
+    process.env['MATTERMOST_BOT_TOKEN'] = 'test-token'
+    const provider = new MattermostChatProvider()
+    const label = await provider.resolveGroupLabel?.('chan-1')
+
+    expect(label).toBe('Operations')
+    restoreFetch()
+  })
+
+  test('resolveUserLabel returns display name and username', async () => {
+    setMockFetch((url: string) => {
+      if (url.includes('/api/v4/users/user-1')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'user-1',
+              username: 'itsmike',
+              first_name: 'John',
+              last_name: 'Johnson',
+              nickname: '',
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    process.env['MATTERMOST_URL'] = 'http://localhost:8065'
+    process.env['MATTERMOST_BOT_TOKEN'] = 'test-token'
+    const provider = new MattermostChatProvider()
+    const label = await provider.resolveUserLabel?.('user-1')
+
+    expect(label).toBe('John Johnson (@itsmike)')
+    restoreFetch()
+  })
+
+  test('resolveUserLabel returns null when user lookup fails', async () => {
+    setMockFetch(() => Promise.resolve(new Response(null, { status: 404 })))
+
+    process.env['MATTERMOST_URL'] = 'http://localhost:8065'
+    process.env['MATTERMOST_BOT_TOKEN'] = 'test-token'
+    const provider = new MattermostChatProvider()
+    const label = await provider.resolveUserLabel?.('missing-user')
+
+    expect(label).toBeNull()
+    restoreFetch()
+  })
+})

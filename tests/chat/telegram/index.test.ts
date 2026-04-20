@@ -595,3 +595,58 @@ describe('extractFilesFromContext', () => {
     expect(first.filename).toBe('document')
   })
 })
+
+describe('TelegramChatProvider reverse label resolution', () => {
+  test('resolveGroupLabel returns chat title from getChat', async () => {
+    process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+    const provider = new TelegramChatProvider()
+    Reflect.set(provider, 'bot', {
+      api: {
+        getChat: (chatId: number): Promise<{ title: string | undefined }> => {
+          expect(chatId).toBe(-1003768634358)
+          return Promise.resolve({ title: 'Engineering Chat' })
+        },
+      },
+    })
+
+    const label = await provider.resolveGroupLabel?.('-1003768634358')
+    expect(label).toBe('Engineering Chat')
+    delete process.env['TELEGRAM_BOT_TOKEN']
+  })
+
+  test('resolveUserLabel returns full name and username from getChatMember', async () => {
+    process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+    const provider = new TelegramChatProvider()
+    Reflect.set(provider, 'bot', {
+      api: {
+        getChatMember: (
+          _chatId: number | string,
+          userId: number,
+        ): Promise<{
+          user:
+            | { first_name: string | undefined; last_name: string | undefined; username: string | undefined }
+            | undefined
+        }> => {
+          expect(userId).toBe(164696606)
+          return Promise.resolve({ user: { first_name: 'John', last_name: 'Johnson', username: 'itsmike' } })
+        },
+      },
+    })
+
+    const label = await provider.resolveUserLabel?.('164696606', { contextId: '-1003768634358', contextType: 'group' })
+    expect(label).toBe('John Johnson (@itsmike)')
+    delete process.env['TELEGRAM_BOT_TOKEN']
+  })
+
+  test('resolveUserLabel returns null for non-numeric Telegram user IDs', async () => {
+    process.env['TELEGRAM_BOT_TOKEN'] = 'test-token'
+    const provider = new TelegramChatProvider()
+
+    const label = await provider.resolveUserLabel?.('not-a-number', {
+      contextId: '-1003768634358',
+      contextType: 'group',
+    })
+    expect(label).toBeNull()
+    delete process.env['TELEGRAM_BOT_TOKEN']
+  })
+})

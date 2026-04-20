@@ -4,11 +4,12 @@ import type { DiscordMessageLike } from './map-message.js'
 import type { SendableChannel } from './reply-helpers.js'
 
 export type DispatchableMessage = DiscordMessageLike & {
-  channel: SendableChannel & {
-    messages?: {
-      fetch: (id: string) => Promise<{ id: string; author: { id: string; username: string }; content: string }>
-    }
-  }
+  channel: SendableChannel &
+    Partial<{
+      messages: {
+        fetch: (id: string) => Promise<{ id: string; author: { id: string; username: string }; content: string }>
+      }
+    }>
 }
 
 type EventListener = (...args: unknown[]) => void
@@ -16,18 +17,38 @@ type EventListener = (...args: unknown[]) => void
 /** Structural type covering the discord.js Client API surface we use. */
 export type DiscordClientLike = {
   destroy: () => Promise<void>
-  users?: {
-    fetch: (id: string) => Promise<{
-      createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
-    }>
+} & Partial<{
+  users: {
+    fetch: (id: string) => Promise<
+      {
+        createDM: () => Promise<{ send: (arg: { content: string }) => Promise<unknown> }>
+      } & Partial<{
+        username: string
+        displayName: string
+        globalName: string | null
+      }>
+    >
   }
-  channels?: { cache: { get(id: string): unknown } }
-  guilds?: { cache: { get(id: string): unknown } }
-}
+  channels: {
+    cache: { get(id: string): unknown }
+  } & Partial<{
+    fetch: (id: string) => Promise<unknown>
+  }>
+  guilds: { cache: { get(id: string): unknown } }
+}>
 
-/** Narrowed guild shape returned by cache.get — used in resolveUserId. */
+/** Narrowed guild shape returned by cache.get — used in resolveUserId and resolveUserLabel. */
 export type GuildLike = {
-  members: { search: (arg: { query: string; limit: number }) => Promise<Map<string, { id: string }>> }
+  members: {
+    search: (arg: { query: string; limit: number }) => Promise<Map<string, { id: string }>>
+  } & Partial<{
+    fetch: (id: string) => Promise<{
+      displayName: string | undefined
+      user:
+        | { username: string | undefined; displayName: string | undefined; globalName: string | null | undefined }
+        | undefined
+    }>
+  }>
 }
 
 /** Payload type for Discord ready event. */

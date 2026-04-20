@@ -550,4 +550,101 @@ describe('group commands', () => {
       expect(textCalls[0]).toBe('User 12345 added to this group.')
     })
   })
+
+  describe('readable label resolution', () => {
+    test('lists authorized groups with resolved group and user labels', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveGroupLabel: (groupId: string): Promise<string | null> => {
+          if (groupId === 'group-123') return Promise.resolve('Engineering Chat')
+          return Promise.resolve(null)
+        },
+        resolveUserLabel: (userId: string): Promise<string | null> => {
+          if (userId === 'admin1') return Promise.resolve('John Johnson (@itsmike)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = labeledHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('Engineering Chat')
+      expect(textCalls[0]).toContain('John Johnson (@itsmike)')
+      expect(textCalls[0]).not.toContain('group-123 (added by admin1)')
+    })
+
+    test('lists group users with resolved member and adder labels', async () => {
+      const labeledHandlers = new Map<string, CommandHandler>()
+      const labeledChat = createMockChat({
+        commandHandlers: labeledHandlers,
+        resolveUserLabel: (userId: string): Promise<string | null> => {
+          if (userId === 'user1') return Promise.resolve('John Johnson (@itsmike)')
+          if (userId === 'admin1') return Promise.resolve('Jane Admin (@janeadmin)')
+          return Promise.resolve(null)
+        },
+      })
+      registerGroupCommand(labeledChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = labeledHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('John Johnson (@itsmike)')
+      expect(textCalls[0]).toContain('added by Jane Admin (@janeadmin)')
+    })
+
+    test('falls back to raw IDs when /groups label resolution returns null', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveGroupLabel: (_groupId: string): Promise<string | null> => Promise.resolve(null),
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.resolve(null),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = fallbackHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by admin1)')
+    })
+
+    test('falls back to raw IDs when /group users label resolution returns null', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.resolve(null),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = fallbackHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('- user1 (added by admin1)')
+    })
+  })
 })

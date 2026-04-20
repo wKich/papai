@@ -27,6 +27,7 @@ import {
 import { renderDiscordContext } from './context-renderer.js'
 import { chunkForDiscord } from './format-chunking.js'
 import { handleDiscordGroupSettingsSelection } from './group-settings.js'
+import { resolveDiscordGroupLabel, resolveDiscordUserLabel } from './label-helpers.js'
 import { mapDiscordMessage } from './map-message.js'
 import { discordCapabilities, discordConfigRequirements, discordTraits } from './metadata.js'
 import { buildDiscordReplyContext } from './reply-context.js'
@@ -51,16 +52,16 @@ export class DiscordChatProvider implements ChatProvider {
   private readonly clientFactory: DiscordClientFactory
   private readonly commands = new Map<string, CommandHandler>()
   private messageHandler: OnMessageHandler | null = null
-  private interactionHandler?: (interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>
+  private interactionHandler: ((interaction: IncomingInteraction, reply: ReplyFn) => Promise<void>) | null = null
   private client: DiscordClientLike | null = null
 
-  constructor(clientFactory?: DiscordClientFactory) {
+  constructor(clientFactory: DiscordClientFactory | undefined) {
     const token = process.env['DISCORD_BOT_TOKEN']
     if (token === undefined || token.trim() === '') {
       throw new Error('DISCORD_BOT_TOKEN environment variable is required')
     }
     this.token = token
-    this.clientFactory = clientFactory ?? defaultClientFactory
+    this.clientFactory = typeof clientFactory === 'function' ? clientFactory : defaultClientFactory
     log.debug({ tokenLength: this.token.length }, 'DiscordChatProvider constructed')
   }
 
@@ -119,14 +120,24 @@ export class DiscordChatProvider implements ChatProvider {
     }
   }
 
+  resolveGroupLabel(groupId: string): Promise<string | null> {
+    if (this.client === null) return Promise.resolve(null)
+    return resolveDiscordGroupLabel(this.client, groupId)
+  }
+
+  resolveUserLabel(userId: string, context: ResolveUserContext | undefined): Promise<string | null> {
+    if (this.client === null) return Promise.resolve(null)
+    return resolveDiscordUserLabel(this.client, userId, context)
+  }
+
   start(): Promise<void> {
-    const adminUserId = process.env['ADMIN_USER_ID'] ?? ''
+    const adminUserId = typeof process.env['ADMIN_USER_ID'] === 'string' ? process.env['ADMIN_USER_ID'] : ''
     const client = this.clientFactory()
     this.client = client
 
     client.on('messageCreate', (rawMsg) => {
       if (!isDispatchableMessage(rawMsg)) return
-      this.dispatchMessage(rawMsg, client.user?.id ?? '', adminUserId).catch((error: unknown) => {
+      this.dispatchMessage(rawMsg, client.user === null ? '' : client.user.id, adminUserId).catch((error: unknown) => {
         log.error({ error: error instanceof Error ? error.message : String(error) }, 'messageCreate dispatch failed')
       })
     })
@@ -190,7 +201,7 @@ export class DiscordChatProvider implements ChatProvider {
     // Handle group-settings selector callbacks before standard routing
     if (await handleDiscordGroupSettingsSelection(interaction, incoming.user.id, result.reply)) return
 
-    if (this.interactionHandler === undefined) {
+    if (this.interactionHandler === null) {
       const auth = checkAuthorizationExtended(
         incoming.user.id,
         incoming.user.username,

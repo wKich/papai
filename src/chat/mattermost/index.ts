@@ -23,6 +23,7 @@ import {
   resolveMattermostUserId,
   uploadMattermostFile,
 } from './file-helpers.js'
+import { resolveMattermostGroupLabel, resolveMattermostUserLabel } from './label-helpers.js'
 import { mattermostCapabilities, mattermostConfigRequirements, mattermostTraits } from './metadata.js'
 import { buildMattermostReplyContext } from './reply-context.js'
 import { createMattermostReplyFn } from './reply-helpers.js'
@@ -76,16 +77,16 @@ export class MattermostChatProvider implements ChatProvider {
   }
 
   async start(): Promise<void> {
-    const data = await this.apiFetch('GET', '/api/v4/users/me', undefined)
+    const data = await this.apiFetch('GET', '/api/v4/users/me', void 0)
     const user = UserMeSchema.parse(data)
     this.botUserId = user.id
-    this.botUsername = user.username ?? null
+    this.botUsername = typeof user.username === 'string' ? user.username : null
     log.info({ botUserId: this.botUserId, botUsername: this.botUsername }, 'Mattermost bot started')
     this.connectWebSocket()
   }
 
   stop(): Promise<void> {
-    this.ws?.close()
+    if (this.ws !== null) this.ws.close()
     this.ws = null
     log.info('Mattermost bot stopped')
     return Promise.resolve()
@@ -131,7 +132,6 @@ export class MattermostChatProvider implements ChatProvider {
     if (parsed === null) return
     const { post, senderName } = parsed
     if (post.user_id === this.botUserId) return
-
     const replyToMessageId = extractReplyId(post.parent_id, post.root_id)
     cacheIncomingPost(post, replyToMessageId, senderName)
     const { msg, reply, command, isAdmin } = await this.buildPostedMessage(post, senderName, replyToMessageId)
@@ -139,7 +139,7 @@ export class MattermostChatProvider implements ChatProvider {
   }
 
   private fetchFilesForPost(post: MattermostPost): Promise<IncomingFile[] | undefined> {
-    if (post.file_ids === undefined || post.file_ids.length === 0) return Promise.resolve(undefined)
+    if (post.file_ids === undefined || post.file_ids.length === 0) return Promise.resolve(void 0)
     return fetchMattermostFiles(post.file_ids, this.apiFetch.bind(this), (fileId) =>
       downloadMattermostFile(this.baseUrl, this.token, fileId),
     )
@@ -156,28 +156,25 @@ export class MattermostChatProvider implements ChatProvider {
     command: { handler: CommandHandler; match: string } | null
     isAdmin: boolean
   }> {
+    const api = this.apiFetch.bind(this)
     const replyContext =
-      replyToMessageId === undefined
-        ? undefined
-        : await buildMattermostReplyContext(post, replyToMessageId, this.apiFetch.bind(this))
-    const channelInfo: MattermostChannelInfo = await fetchMattermostChannelInfo(
-      this.apiFetch.bind(this),
-      post.channel_id,
-    )
+      replyToMessageId === undefined ? undefined : await buildMattermostReplyContext(post, replyToMessageId, api)
+    const channelInfo: MattermostChannelInfo = await fetchMattermostChannelInfo(api, post.channel_id)
     const contextType: ContextType = channelInfo.type === 'D' ? 'dm' : 'group'
-    const teamInfo =
-      contextType === 'group' && channelInfo.team_id !== undefined
-        ? await fetchMattermostTeamInfo(this.apiFetch.bind(this), channelInfo.team_id)
-        : null
-    const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, this.apiFetch.bind(this))
+    const teamId = contextType === 'group' ? channelInfo.team_id : undefined
+    const teamInfo = teamId === undefined ? null : await fetchMattermostTeamInfo(api, teamId)
+    const isAdmin = await checkChannelAdmin(post.channel_id, post.user_id, api)
     const isMentioned = this.isBotMentioned(post.message)
     const threadId = this.determineThreadId(post, isMentioned, contextType, replyToMessageId)
     const reply = this.buildReplyFn(post.channel_id, post.id, threadId)
     const command = this.matchCommand(post.message)
-    const username = post.user_name ?? senderName ?? null
+    const uname = post.user_name
+    const username = typeof uname === 'string' ? uname : typeof senderName === 'string' ? senderName : null
+    const dispName = typeof channelInfo.display_name === 'string' ? channelInfo.display_name : channelInfo.name
     const contextName =
-      contextType === 'group' ? (channelInfo.display_name ?? channelInfo.name ?? post.channel_id) : undefined
-    const contextParentName = contextType === 'group' ? (teamInfo?.display_name ?? teamInfo?.name) : undefined
+      contextType === 'group' ? (typeof dispName === 'string' ? dispName : post.channel_id) : undefined
+    const pt = contextType === 'group' ? teamInfo : null
+    const contextParentName = pt === null ? undefined : typeof pt.display_name === 'string' ? pt.display_name : pt.name
     const files = await this.fetchFilesForPost(post)
     const msg: IncomingMessage = {
       user: { id: post.user_id, username, isAdmin },
@@ -187,7 +184,7 @@ export class MattermostChatProvider implements ChatProvider {
       contextParentName,
       isMentioned,
       text: post.message,
-      commandMatch: command?.match,
+      commandMatch: command === null ? undefined : command.match,
       messageId: post.id,
       replyToMessageId,
       replyContext,
@@ -218,10 +215,8 @@ export class MattermostChatProvider implements ChatProvider {
     }
   }
 
-  private isBotMentioned(message: string): boolean {
-    if (this.botUsername === null) return false
-    return message.includes(`@${this.botUsername}`)
-  }
+  private isBotMentioned = (message: string): boolean =>
+    this.botUsername !== null && message.includes(`@${this.botUsername}`)
 
   private determineThreadId(
     post: MattermostPost,
@@ -250,7 +245,7 @@ export class MattermostChatProvider implements ChatProvider {
     return null
   }
 
-  private buildReplyFn(channelId: string, postId?: string, threadId?: string): ReplyFn {
+  private buildReplyFn(channelId: string, postId: string | undefined, threadId: string | undefined): ReplyFn {
     return createMattermostReplyFn({
       channelId,
       postId,
@@ -270,12 +265,15 @@ export class MattermostChatProvider implements ChatProvider {
     return ChannelSchema.parse(data).id
   }
 
-  resolveUserId(username: string, _context: ResolveUserContext): Promise<string | null> {
-    return resolveMattermostUserId(username, this.apiFetch.bind(this))
-  }
+  resolveUserId = (username: string, _context: ResolveUserContext): Promise<string | null> =>
+    resolveMattermostUserId(username, this.apiFetch.bind(this))
+  resolveGroupLabel = (groupId: string): Promise<string | null> =>
+    resolveMattermostGroupLabel(this.apiFetch.bind(this), groupId)
+  resolveUserLabel = (userId: string): Promise<string | null> =>
+    resolveMattermostUserLabel(this.apiFetch.bind(this), userId)
 
   private wsSend(data: unknown): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws !== null && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data))
     }
   }

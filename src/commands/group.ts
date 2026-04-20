@@ -9,6 +9,55 @@ const log = logger.child({ scope: 'commands:group' })
 const GROUP_CHAT_USAGE = 'Usage: /group adduser <user-id|@username> | /group deluser <user-id|@username> | /group users'
 const DM_ADMIN_USAGE = 'Usage: /group add <group-id> | /group remove <group-id> | /groups'
 
+type LabelResolverContext = {
+  readonly chat: ChatProvider
+  readonly contextId: string
+  readonly contextType: 'dm' | 'group'
+}
+
+function makeDisplayLabel(label: string | null, fallback: string): string {
+  if (label !== null) {
+    return label
+  }
+  return fallback
+}
+
+function resolveUserLabelCached(
+  resolverContext: LabelResolverContext,
+  userId: string,
+  cache: Map<string, Promise<string | null>>,
+): Promise<string | null> {
+  const existing = cache.get(userId)
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const fn = resolverContext.chat.resolveUserLabel
+  const pending =
+    fn === undefined
+      ? Promise.resolve(null)
+      : fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType })
+
+  cache.set(userId, pending)
+  return pending
+}
+
+function resolveGroupLabelCached(
+  chat: ChatProvider,
+  groupId: string,
+  cache: Map<string, Promise<string | null>>,
+): Promise<string | null> {
+  const existing = cache.get(groupId)
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const fn = chat.resolveGroupLabel
+  const pending = fn === undefined ? Promise.resolve(null) : fn(groupId)
+  cache.set(groupId, pending)
+  return pending
+}
+
 export function registerGroupCommand(chat: ChatProvider): void {
   chat.registerCommand('group', async (msg: IncomingMessage, reply: ReplyFn, auth: AuthorizationResult) => {
     if (msg.contextType === 'dm') {
@@ -36,7 +85,25 @@ export function registerGroupCommand(chat: ChatProvider): void {
       return
     }
 
-    const lines = groups.map((group) => `${group.group_id} (added by ${group.added_by})`)
+    const groupLabelCache = new Map<string, Promise<string | null>>()
+    const userLabelCache = new Map<string, Promise<string | null>>()
+
+    const lines = await Promise.all(
+      groups.map(async (group) => {
+        const [resolvedGroupLabel, resolvedUserLabel] = await Promise.all([
+          resolveGroupLabelCached(chat, group.group_id, groupLabelCache),
+          resolveUserLabelCached(
+            { chat, contextId: group.group_id, contextType: 'group' },
+            group.added_by,
+            userLabelCache,
+          ),
+        ])
+
+        const groupLabel = makeDisplayLabel(resolvedGroupLabel, group.group_id)
+        const userLabel = makeDisplayLabel(resolvedUserLabel, group.added_by)
+        return `${groupLabel} (added by ${userLabel})`
+      }),
+    )
     await reply.text(`Authorized groups:\n${lines.join('\n')}`)
   })
 }
@@ -59,7 +126,7 @@ async function handleGroupMemberCommand(chat: ChatProvider, msg: IncomingMessage
       await handleDelUser(chat, msg, reply, targetUser)
       break
     case 'users':
-      await handleListUsers(msg, reply)
+      await handleListUsers(chat, msg, reply)
       break
     case '':
     case undefined:
@@ -172,7 +239,7 @@ async function handleDelUser(
   log.info({ groupId: msg.contextId, userId }, 'Group member removed')
 }
 
-async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<void> {
+async function handleListUsers(chat: ChatProvider, msg: IncomingMessage, reply: ReplyFn): Promise<void> {
   const members = listGroupMembers(msg.contextId)
 
   if (members.length === 0) {
@@ -180,8 +247,27 @@ async function handleListUsers(msg: IncomingMessage, reply: ReplyFn): Promise<vo
     return
   }
 
-  const memberList = members.map((m) => `- ${m.user_id} (added by ${m.added_by})`).join('\n')
-  await reply.text(`Group members:\n${memberList}`)
+  const userLabelCache = new Map<string, Promise<string | null>>()
+  const resolverContext: LabelResolverContext = {
+    chat,
+    contextId: msg.contextId,
+    contextType: msg.contextType,
+  }
+
+  const lines = await Promise.all(
+    members.map(async (member) => {
+      const [resolvedMemberLabel, resolvedAdderLabel] = await Promise.all([
+        resolveUserLabelCached(resolverContext, member.user_id, userLabelCache),
+        resolveUserLabelCached(resolverContext, member.added_by, userLabelCache),
+      ])
+
+      const memberLabel = makeDisplayLabel(resolvedMemberLabel, member.user_id)
+      const adderLabel = makeDisplayLabel(resolvedAdderLabel, member.added_by)
+      return `- ${memberLabel} (added by ${adderLabel})`
+    }),
+  )
+
+  await reply.text(`Group members:\n${lines.join('\n')}`)
 }
 
 async function extractUserId(

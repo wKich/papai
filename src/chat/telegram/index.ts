@@ -19,6 +19,7 @@ import { renderTelegramContext } from './context-renderer.js'
 import { extractFilesFromContext, type TelegramFileFetcher } from './file-helpers.js'
 import { formatLlmOutput } from './format.js'
 import { buildTelegramInteraction } from './interaction-helpers.js'
+import { resolveTelegramGroupLabel, resolveTelegramUserLabel } from './label-helpers.js'
 import {
   cacheTelegramMessage,
   extractContextInfo,
@@ -136,6 +137,15 @@ export class TelegramChatProvider implements ChatProvider {
     const clean = username.startsWith('@') ? username.slice(1) : username
     return Promise.resolve(/^\d+$/.test(clean) ? clean : null)
   }
+
+  resolveGroupLabel(groupId: string): Promise<string | null> {
+    return resolveTelegramGroupLabel((chatId) => this.bot.api.getChat(chatId), groupId)
+  }
+
+  resolveUserLabel(userId: string, context: ResolveUserContext | undefined): Promise<string | null> {
+    return resolveTelegramUserLabel((chatId, uid) => this.bot.api.getChatMember(chatId, uid), userId, context)
+  }
+
   async setCommands(adminUserId: string): Promise<void> {
     const userCmds = [
       { command: 'help', description: 'Show available commands' },

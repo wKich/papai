@@ -19,7 +19,7 @@ const providers = new Map<string, ChatProviderFactory>()
 
 registerChatProvider('telegram', () => new TelegramChatProvider())
 registerChatProvider('mattermost', () => new MattermostChatProvider())
-registerChatProvider('discord', () => new DiscordChatProvider())
+registerChatProvider('discord', () => new DiscordChatProvider(undefined))
 
 function registerChatProvider(name: string, factory: ChatProviderFactory): void {
   providers.set(name, factory)
