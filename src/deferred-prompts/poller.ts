@@ -34,6 +34,7 @@ function logSettledErrors(results: PromiseSettledResult<void>[], context: string
 
 function deliveryGroupKey(prompt: ScheduledPrompt): string {
   const t = prompt.deliveryTarget
+  const mentionKey = t.audience === 'shared' ? '' : [...t.mentionUserIds].sort().join(',')
   return [
     prompt.createdByUserId,
     t.contextId,
@@ -41,7 +42,7 @@ function deliveryGroupKey(prompt: ScheduledPrompt): string {
     t.threadId ?? '',
     t.audience,
     t.createdByUsername ?? '',
-    [...t.mentionUserIds].sort().join(','),
+    mentionKey,
   ].join('|')
 }
 

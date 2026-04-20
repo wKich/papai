@@ -58,7 +58,7 @@ function buildDeliveryInput(
   const contextId = colonIdx >= 0 ? ctx.storageContextId.slice(0, colonIdx) : ctx.storageContextId
   const threadId = colonIdx >= 0 ? ctx.storageContextId.slice(colonIdx + 1) : null
   const audience = policy?.audience === 'shared' ? 'shared' : 'personal'
-  const mentionUserIds = policy?.mention_user_ids ?? (audience === 'personal' ? [ctx.userId] : [])
+  const mentionUserIds = audience === 'shared' ? [] : (policy?.mention_user_ids ?? [ctx.userId])
   return {
     contextId,
     contextType: 'group',

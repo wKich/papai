@@ -512,4 +512,31 @@ describe('delivery classification persistence', () => {
     expect(created!.deliveryTarget.audience).toBe('shared')
     expect(created!.deliveryTarget.mentionUserIds).toEqual([])
   })
+
+  test('group shared delivery drops stale mention targets chosen by the model', async () => {
+    const tool = makeCreateDeferredPromptTool(USER_ID, 'chan-1', 'group')
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    const result: unknown = await tool.execute(
+      {
+        prompt: 'Notify this channel when a task becomes overdue',
+        condition: { field: 'task.dueDate', op: 'overdue' },
+        delivery: {
+          audience: 'shared',
+          mention_user_ids: [USER_ID, 'stale-user-id'],
+        },
+        execution: {
+          mode: 'full',
+          delivery_brief: 'Shared group alert for the whole channel',
+          context_snapshot: 'Group operations alert for overdue work.',
+        },
+      },
+      toolCtx,
+    )
+
+    const created = getAlertPrompt(extractId(result), USER_ID)
+    expect(created).not.toBeNull()
+    expect(created!.deliveryTarget.audience).toBe('shared')
+    expect(created!.deliveryTarget.mentionUserIds).toEqual([])
+  })
 })

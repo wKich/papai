@@ -602,4 +602,38 @@ describe('delivery target routing', () => {
     expect(sentMessages).toHaveLength(2)
     expect(sentMessages.map((message) => message.target.audience).sort()).toEqual(['personal', 'shared'])
   })
+
+  test('shared scheduled prompts still batch together when one stored target has stale mention ids', async () => {
+    let callCount = 0
+    generateTextImpl = (): Promise<GenerateTextResult> => {
+      callCount++
+      return Promise.resolve({ text: 'Done.', toolCalls: [], toolResults: [], response: { messages: [] } })
+    }
+
+    const pastTime = new Date(Date.now() - 60_000).toISOString()
+    createScheduledPrompt(USER_ID, 'Shared reminder one', { fireAt: pastTime }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'shared',
+      mentionUserIds: ['stale-user-id'],
+      createdByUserId: USER_ID,
+      createdByUsername: 'alice',
+    })
+    createScheduledPrompt(USER_ID, 'Shared reminder two', { fireAt: pastTime }, undefined, {
+      contextId: '-1001',
+      contextType: 'group',
+      threadId: '42',
+      audience: 'shared',
+      mentionUserIds: [],
+      createdByUserId: USER_ID,
+      createdByUsername: 'alice',
+    })
+
+    await pollScheduledOnce(chat, () => provider)
+
+    expect(callCount).toBe(1)
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.target.audience).toBe('shared')
+  })
 })
