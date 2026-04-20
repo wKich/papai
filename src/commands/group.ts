@@ -16,10 +16,7 @@ type LabelResolverContext = {
 }
 
 function makeDisplayLabel(label: string | null, fallback: string): string {
-  if (label !== null) {
-    return label
-  }
-  return fallback
+  return label ?? fallback
 }
 
 function resolveUserLabelCached(
@@ -29,15 +26,26 @@ function resolveUserLabelCached(
 ): Promise<string | null> {
   const cacheKey = `${resolverContext.contextType}:${resolverContext.contextId}:${userId}`
   const existing = cache.get(cacheKey)
-  if (existing !== undefined) {
-    return existing
-  }
+  if (existing !== undefined) return existing
 
   const fn = resolverContext.chat.resolveUserLabel
   const pending =
     fn === undefined
       ? Promise.resolve(null)
-      : fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType })
+      : fn(userId, { contextId: resolverContext.contextId, contextType: resolverContext.contextType }).catch(
+          (error: unknown): string | null => {
+            log.warn(
+              {
+                userId,
+                contextId: resolverContext.contextId,
+                contextType: resolverContext.contextType,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              'User label lookup failed in group command',
+            )
+            return null
+          },
+        )
 
   cache.set(cacheKey, pending)
   return pending
@@ -49,12 +57,19 @@ function resolveGroupLabelCached(
   cache: Map<string, Promise<string | null>>,
 ): Promise<string | null> {
   const existing = cache.get(groupId)
-  if (existing !== undefined) {
-    return existing
-  }
+  if (existing !== undefined) return existing
 
   const fn = chat.resolveGroupLabel
-  const pending = fn === undefined ? Promise.resolve(null) : fn(groupId)
+  const pending =
+    fn === undefined
+      ? Promise.resolve(null)
+      : fn(groupId).catch((error: unknown): string | null => {
+          log.warn(
+            { groupId, error: error instanceof Error ? error.message : String(error) },
+            'Group label lookup failed in group command',
+          )
+          return null
+        })
   cache.set(groupId, pending)
   return pending
 }
@@ -121,10 +136,10 @@ async function handleGroupMemberCommand(chat: ChatProvider, msg: IncomingMessage
 
   switch (subcommand) {
     case 'adduser':
-      await handleAddUser(chat, msg, reply, targetUser)
+      await handleGroupMemberUpdate(chat, msg, reply, targetUser, 'add')
       break
     case 'deluser':
-      await handleDelUser(chat, msg, reply, targetUser)
+      await handleGroupMemberUpdate(chat, msg, reply, targetUser, 'remove')
       break
     case 'users':
       await handleListUsers(chat, msg, reply)
@@ -178,19 +193,22 @@ async function handleAuthorizedGroupCommand(
   await reply.text(`Unknown subcommand. ${DM_ADMIN_USAGE}`)
 }
 
-async function handleAddUser(
+async function handleGroupMemberUpdate(
   chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   targetUser: string | undefined,
+  action: 'add' | 'remove',
 ): Promise<void> {
   if (!msg.user.isAdmin) {
-    await reply.text('Only group admins can add users.')
+    await reply.text(action === 'add' ? 'Only group admins can add users.' : 'Only group admins can remove users.')
     return
   }
 
   if (targetUser === undefined) {
-    await reply.text('Usage: /group adduser <user-id|@username>')
+    await reply.text(
+      action === 'add' ? 'Usage: /group adduser <user-id|@username>' : 'Usage: /group deluser <user-id|@username>',
+    )
     return
   }
 
@@ -204,37 +222,13 @@ async function handleAddUser(
   }
 
   const { userId } = result
-  addGroupMember(msg.contextId, userId, msg.user.id)
-  await reply.text(`User ${targetUser} added to this group.`)
-  log.info({ groupId: msg.contextId, userId }, 'Group member added')
-}
-
-async function handleDelUser(
-  chat: ChatProvider,
-  msg: IncomingMessage,
-  reply: ReplyFn,
-  targetUser: string | undefined,
-): Promise<void> {
-  if (!msg.user.isAdmin) {
-    await reply.text('Only group admins can remove users.')
+  if (action === 'add') {
+    addGroupMember(msg.contextId, userId, msg.user.id)
+    await reply.text(`User ${targetUser} added to this group.`)
+    log.info({ groupId: msg.contextId, userId }, 'Group member added')
     return
   }
 
-  if (targetUser === undefined) {
-    await reply.text('Usage: /group deluser <user-id|@username>')
-    return
-  }
-
-  const result = await extractUserId(chat, targetUser, {
-    contextId: msg.contextId,
-    contextType: msg.contextType,
-  })
-  if (result.kind === 'error') {
-    await reply.text(result.message)
-    return
-  }
-
-  const { userId } = result
   removeGroupMember(msg.contextId, userId)
   await reply.text(`User ${targetUser} removed from this group.`)
   log.info({ groupId: msg.contextId, userId }, 'Group member removed')

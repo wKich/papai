@@ -655,11 +655,53 @@ describe('group commands', () => {
       expect(textCalls[0]).toContain('group-123 (added by admin1)')
     })
 
+    test('falls back to raw IDs when /groups label resolution rejects', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveGroupLabel: (_groupId: string): Promise<string | null> =>
+          Promise.reject(new Error('group lookup failed')),
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.reject(new Error('user lookup failed')),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addAuthorizedGroup } = await import('../../src/authorized-groups.js')
+      addAuthorizedGroup('group-123', 'admin1')
+
+      const handler = fallbackHandlers.get('groups')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createDmMessage('admin1'), reply, createAuth('admin1', { isBotAdmin: true }))
+
+      expect(textCalls[0]).toContain('group-123 (added by admin1)')
+    })
+
     test('falls back to raw IDs when /group users label resolution returns null', async () => {
       const fallbackHandlers = new Map<string, CommandHandler>()
       const fallbackChat = createMockChat({
         commandHandlers: fallbackHandlers,
         resolveUserLabel: (_userId: string): Promise<string | null> => Promise.resolve(null),
+      })
+      registerGroupCommand(fallbackChat)
+
+      const { addGroupMember } = await import('../../src/groups.js')
+      addGroupMember('group1', 'user1', 'admin1')
+
+      const handler = fallbackHandlers.get('group')
+      expect(handler).toBeDefined()
+
+      const { reply, textCalls } = createMockReply()
+      await handler!(createGroupMessage('user1', 'users', false), reply, createAuth('user1'))
+
+      expect(textCalls[0]).toContain('- user1 (added by admin1)')
+    })
+
+    test('falls back to raw IDs when /group users label resolution rejects', async () => {
+      const fallbackHandlers = new Map<string, CommandHandler>()
+      const fallbackChat = createMockChat({
+        commandHandlers: fallbackHandlers,
+        resolveUserLabel: (_userId: string): Promise<string | null> => Promise.reject(new Error('user lookup failed')),
       })
       registerGroupCommand(fallbackChat)
 
