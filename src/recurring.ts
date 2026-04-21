@@ -87,7 +87,16 @@ export const listRecurringTasks = (userId: string): RecurringTaskRecord[] => {
 
 type UpdateFields = Pick<
   RecurringTaskInput,
-  'title' | 'description' | 'priority' | 'status' | 'assignee' | 'labels' | 'rrule' | 'dtstartUtc' | 'catchUp'
+  | 'title'
+  | 'description'
+  | 'priority'
+  | 'status'
+  | 'assignee'
+  | 'labels'
+  | 'rrule'
+  | 'dtstartUtc'
+  | 'timezone'
+  | 'catchUp'
 >
 
 export const updateRecurringTask = (id: string, updates: Partial<UpdateFields>): RecurringTaskRecord | null => {
@@ -110,11 +119,14 @@ export const updateRecurringTask = (id: string, updates: Partial<UpdateFields>):
   if (updates.labels !== undefined) set.labels = JSON.stringify(updates.labels)
   if (updates.catchUp !== undefined) set.catchUp = updates.catchUp ? '1' : '0'
 
+  if (updates.timezone !== undefined) set.timezone = updates.timezone
+
   if (updates.rrule !== undefined) {
     set.rrule = updates.rrule
     const newDtstart = updates.dtstartUtc ?? existing.dtstartUtc
+    const tz = updates.timezone ?? existing.timezone
     if (newDtstart !== null) {
-      set.nextRun = computeNextRun({ rrule: updates.rrule, dtstartUtc: newDtstart, timezone: existing.timezone })
+      set.nextRun = computeNextRun({ rrule: updates.rrule, dtstartUtc: newDtstart, timezone: tz })
     }
   }
 

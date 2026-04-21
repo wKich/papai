@@ -1,6 +1,5 @@
 import { describe, expect, test, beforeEach } from 'bun:test'
 
-import { setCachedConfig } from '../../src/cache.js'
 import type { UpdateRecurringTaskDeps } from '../../src/tools/update-recurring-task.js'
 import { makeUpdateRecurringTaskTool } from '../../src/tools/update-recurring-task.js'
 import type { RecurringTaskRecord } from '../../src/types/recurring.js'
@@ -44,7 +43,6 @@ describe('makeUpdateRecurringTaskTool — timezone resolution', () => {
     getRecurringTaskResult = makeRecord()
     getRecurringTaskCalls = []
     updateRecurringTaskCalls = []
-    setCachedConfig('user-1', 'timezone', 'UTC')
 
     deps = {
       getRecurringTask: (id: string): RecurringTaskRecord | null => {
