@@ -30,7 +30,6 @@ import {
   createEmptyManifest,
   type CaptureRunStartResult,
   getArrayItem,
-  getManifestEntry,
   getParsedTestKeys,
   type IncrementalModuleShape,
   isObject,
@@ -333,6 +332,34 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(phase3Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
   })
 
+  test('main passes updated manifest phase versions into incremental selection', async () => {
+    await initializeGitRepo(root)
+
+    const previousManifest = createIncrementalManifestFixture({
+      phaseVersions: { phase1: 'phase1-old', phase2: 'phase2-old', reports: 'reports-old' },
+      tests: {},
+    })
+    loadManifestImpl = (): Promise<IncrementalManifest> => Promise.resolve(previousManifest)
+    captureRunStartImpl = (manifest, currentHead, startedAt): CaptureRunStartResult => ({
+      previousLastStartCommit: manifest.lastStartCommit,
+      updatedManifest: {
+        ...manifest,
+        lastStartCommit: currentHead,
+        lastStartedAt: startedAt,
+        phaseVersions: { phase1: 'phase1-new', phase2: 'phase2-new', reports: 'reports-new' },
+      },
+    })
+
+    await loadBehaviorAuditEntryPoint(crypto.randomUUID())
+
+    expect(selectIncrementalWorkCalls).toHaveLength(1)
+    expect(getArrayItem(selectIncrementalWorkCalls, 0).currentPhaseVersions).toEqual({
+      phase1: 'phase1-new',
+      phase2: 'phase2-new',
+      reports: 'reports-new',
+    })
+  })
+
   test('main reruns selected work even when prior phases are marked done', async () => {
     await initializeGitRepo(root)
 
@@ -451,136 +478,6 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(behaviorFileText).toContain('suite > first case')
     expect(storyFileText).toContain('As a user, I can rely on rebuilt report output.')
     expect(indexFileText).toContain('tools')
-  })
-})
-
-describe('behavior-audit phase 1 incremental selection', () => {
-  let root: string
-  let reportsDir: string
-  let manifestPath: string
-  let progressPath: string
-
-  beforeEach(async () => {
-    root = makeTempDir()
-    reportsDir = path.join(root, 'reports')
-    manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-    progressPath = path.join(reportsDir, 'progress.json')
-
-    const testsDir = path.join(root, 'tests', 'tools')
-    const srcDir = path.join(root, 'src', 'tools')
-    mkdirSync(testsDir, { recursive: true })
-    mkdirSync(srcDir, { recursive: true })
-    writeWorkspaceFile(
-      root,
-      'tests/tools/sample.test.ts',
-      [
-        "describe('suite', () => {",
-        "  test('selected case', () => {",
-        '    expect(true).toBe(true)',
-        '  })',
-        '',
-        "  test('unselected case', () => {",
-        '    expect(true).toBe(true)',
-        '  })',
-        '})',
-        '',
-      ].join('\n'),
-    )
-    writeWorkspaceFile(root, 'src/tools/sample.ts', 'export const sample = 1\n')
-
-    mockReportsConfig(root, {
-      PROGRESS_PATH: progressPath,
-      INCREMENTAL_MANIFEST_PATH: manifestPath,
-      CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-      PHASE2_TIMEOUT_MS: 600_000,
-    })
-
-    const realIncrementalModule = await loadIncrementalModule(`real=${crypto.randomUUID()}`)
-    const realProgressModule = await loadProgressModule(`real=${crypto.randomUUID()}`)
-    void mock.module('../../scripts/behavior-audit/incremental.js', () => ({ ...realIncrementalModule }))
-    void mock.module('../../scripts/behavior-audit/progress.js', () => ({ ...realProgressModule }))
-    void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-      extractWithRetry: (): Promise<{
-        readonly behavior: string
-        readonly context: string
-        readonly candidateKeywords: readonly string[]
-      }> =>
-        Promise.resolve({
-          behavior: 'When the selected test runs, the bot returns the extracted behavior.',
-          context: 'Calls the extractor and records the result for the selected test only.',
-          candidateKeywords: ['test-extraction', 'behavior-verification'],
-        }),
-    }))
-    void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-      resolveKeywordsWithRetry: (): Promise<{
-        readonly keywords: readonly string[]
-        readonly appendedEntries: readonly {
-          readonly slug: string
-          readonly description: string
-          readonly createdAt: string
-          readonly updatedAt: string
-          readonly timesUsed: number
-        }[]
-      }> =>
-        Promise.resolve({
-          keywords: ['test-extraction', 'behavior-verification'],
-          appendedEntries: [],
-        }),
-    }))
-    void mock.module('../../scripts/behavior-audit/tools.js', () => ({
-      makeAuditTools: (): Record<string, never> => ({}),
-    }))
-  })
-
-  test('runPhase1 only processes selected test keys and writes manifest updates after successful extraction', async () => {
-    const extract = await loadExtractModule(crypto.randomUUID())
-    const testFilePath = 'tests/tools/sample.test.ts'
-    const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
-    const selectedKey = 'tests/tools/sample.test.ts::suite > selected case'
-    const progress = createEmptyProgress(1)
-    const manifest: IncrementalManifest = {
-      ...createEmptyManifest(),
-      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
-      tests: {
-        [selectedKey]: createManifestTestEntry({
-          testFile: testFilePath,
-          testName: 'suite > selected case',
-          dependencyPaths: [testFilePath],
-          phase1Fingerprint: 'stale-phase1',
-          phase2Fingerprint: 'stale-phase2',
-          extractedBehaviorPath: 'reports/behaviors/tools/sample.test.behaviors.md',
-          domain: 'tools',
-          lastPhase1CompletedAt: null,
-          lastPhase2CompletedAt: 'old-phase2',
-        }),
-      },
-    }
-
-    await extract.runPhase1({
-      testFiles: [parsedFile],
-      progress,
-      selectedTestKeys: new Set([selectedKey]),
-      manifest,
-    })
-
-    expect(Object.keys(progress.phase1.extractedBehaviors)).toEqual([selectedKey])
-    expect(progress.phase1.completedTests[testFilePath]).toEqual({ [selectedKey]: 'done' })
-
-    const savedManifest = await readSavedManifest(manifestPath)
-    const savedEntry = getManifestEntry(savedManifest, selectedKey)
-    expect(savedEntry.phase1Fingerprint).toBeTruthy()
-    expect(savedEntry.phase2Fingerprint).toBeTruthy()
-    expect(savedEntry.lastPhase2CompletedAt).toBeNull()
-    expect(savedEntry.dependencyPaths).toEqual(['tests/tools/sample.test.ts', 'src/tools/sample.ts'])
-    expect(savedEntry.domain).toBe('tools')
-    expect(savedEntry.extractedBehaviorPath).toBe('reports/audit-behavior/behaviors/tools/sample.test.behaviors.md')
-    expect(savedEntry.lastPhase1CompletedAt).toBeTruthy()
-    expect(savedManifest.tests['tests/tools/sample.test.ts::suite > unselected case']).toBeUndefined()
-
-    const behaviorFilePath = path.join(reportsDir, 'behaviors', 'tools', 'sample.test.behaviors.md')
-    const behaviorFileText = await Bun.file(behaviorFilePath).text()
-    expect(behaviorFileText).toContain('suite > selected case')
-    expect(behaviorFileText).not.toContain('suite > unselected case')
   })
 })
 

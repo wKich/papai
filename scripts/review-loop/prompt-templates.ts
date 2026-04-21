@@ -13,9 +13,9 @@ export function buildReviewPrompt(planPath: string, ledgerRecords: readonly Ledg
   return [
     `Review the current implementation against the implementation plan at: ${planPath}.`,
     'Return JSON only.',
-    'Only include severity critical or high findings.',
+    'Include all severity levels: critical, high, medium, low.',
     'Use this exact schema:',
-    '{"round": number, "issues": [{"title": string, "severity": "critical" | "high", "summary": string, "whyItMatters": string, "evidence": string, "file": string, "lineStart": number, "lineEnd": number, "suggestedFix": string, "confidence": number}]}',
+    '{"round": number, "issues": [{"title": string, "severity": "critical" | "high" | "medium" | "low", "summary": string, "whyItMatters": string, "evidence": string, "file": string, "lineStart": number, "lineEnd": number, "suggestedFix": string, "confidence": number}]}',
     'Prior issue ledger:',
     summarizeLedger(ledgerRecords),
   ].join('\n\n')
@@ -26,16 +26,17 @@ export function buildVerifyPrompt(planPath: string, issue: ReviewerIssue): strin
     `Verify this issue against the implementation plan at: ${planPath}.`,
     'Return JSON only.',
     'Use this exact schema:',
-    '{"verdict": "valid" | "invalid" | "already_fixed" | "needs_human", "fixability": "auto" | "manual", "reasoning": string, "targetFiles": string[], "fixPlan": string}',
+    '{"verdict": "valid" | "invalid" | "already_fixed" | "needs_human", "fixability": "auto" | "manual", "reasoning": string, "targetFiles": string[], "needsPlanning": boolean}',
+    'Set needsPlanning to true if the fix touches multiple files, changes public APIs, or requires non-trivial refactoring.',
     JSON.stringify(issue, null, 2),
   ].join('\n\n')
 }
 
-export function buildFixPrompt(issue: ReviewerIssue, decision: VerifierDecision): string {
+export function buildPlanningPrompt(issue: ReviewerIssue, decision: VerifierDecision): string {
   return [
-    'Fix exactly the verified issue below.',
-    'Keep the fix minimal and do not broaden scope unless required for correctness.',
-    'You may run targeted repo-safe tests or formatters.',
+    'Produce a step-by-step plan to fix the verified issue below.',
+    'The plan should be specific enough that a developer can follow it without re-reading the original issue.',
+    'Return the plan as plain text.',
     'Issue:',
     JSON.stringify(issue, null, 2),
     'Verifier decision:',
@@ -43,11 +44,36 @@ export function buildFixPrompt(issue: ReviewerIssue, decision: VerifierDecision)
   ].join('\n\n')
 }
 
+export function buildFixPrompt(issue: ReviewerIssue, decision: VerifierDecision, plan?: string): string {
+  const sections = [
+    'Fix exactly the verified issue below.',
+    'Keep the fix minimal and do not broaden scope unless required for correctness.',
+  ]
+
+  if (plan !== undefined) {
+    sections.push('Fix Plan:', plan)
+  }
+
+  sections.push(
+    'After applying the fix:',
+    '1. Run `bun check:full` to validate (lint, typecheck, format, tests).',
+    '2. If any check fails, fix the failure.',
+    '3. Commit with message: fix(review-loop): <issue title>',
+    '4. Leave a clean worktree with no uncommitted changes.',
+    'Issue:',
+    JSON.stringify(issue, null, 2),
+    'Verifier decision:',
+    JSON.stringify(decision, null, 2),
+  )
+
+  return sections.join('\n\n')
+}
+
 export function buildRereviewPrompt(planPath: string, ledgerRecords: readonly LedgerIssueRecord[]): string {
   return [
     `Re-review the current implementation against the implementation plan at: ${planPath}.`,
-    'Return JSON only with remaining critical/high issues.',
-    'Confirm whether previously fixed issues are resolved and report only unresolved or newly introduced critical/high issues.',
+    'Return JSON only with remaining critical/high/medium/low issues.',
+    'Confirm whether previously fixed issues are resolved and report only unresolved or newly introduced issues.',
     'Use the same schema as the original review prompt.',
     'Current issue ledger:',
     summarizeLedger(ledgerRecords),
