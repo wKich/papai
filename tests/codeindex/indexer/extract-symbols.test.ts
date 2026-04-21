@@ -19,6 +19,8 @@ describe('extractSymbolsFromSource', () => {
       moduleKey: 'src/helper',
       maxStoredBodyLines: 10,
       includeDocComments: false,
+      indexLocals: true,
+      indexVariables: true,
     })
 
     const helper = symbols.find((s) => s.localName === 'helper')
@@ -42,6 +44,8 @@ describe('extractSymbolsFromSource', () => {
       moduleKey: 'src/helper',
       maxStoredBodyLines: 10,
       includeDocComments: false,
+      indexLocals: true,
+      indexVariables: true,
     })
 
     const helper = symbols.find((s) => s.localName === 'helper')
@@ -65,6 +69,8 @@ describe('extractSymbolsFromSource', () => {
       moduleKey: 'src/base',
       maxStoredBodyLines: 10,
       includeDocComments: false,
+      indexLocals: true,
+      indexVariables: true,
     })
 
     const base = symbols.find((s) => s.localName === 'Base')
@@ -88,6 +94,8 @@ describe('extractSymbolsFromSource', () => {
       moduleKey: 'src/direction',
       maxStoredBodyLines: 10,
       includeDocComments: false,
+      indexLocals: true,
+      indexVariables: true,
     })
 
     const direction = symbols.find((s) => s.localName === 'Direction')
@@ -111,6 +119,8 @@ describe('extractSymbolsFromSource', () => {
       moduleKey: 'src/handler',
       maxStoredBodyLines: 10,
       includeDocComments: false,
+      indexLocals: true,
+      indexVariables: true,
     })
 
     const defaultSymbol = symbols.find((s) => s.localName === 'default')

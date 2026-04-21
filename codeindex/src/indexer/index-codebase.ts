@@ -109,6 +109,8 @@ const parseFile = async (
         moduleKey,
         maxStoredBodyLines: config.maxStoredBodyLines,
         includeDocComments: config.includeDocComments,
+        indexLocals: config.indexLocals,
+        indexVariables: config.indexVariables,
       }),
     }
   } catch (error) {

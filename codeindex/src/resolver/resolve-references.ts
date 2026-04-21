@@ -98,7 +98,12 @@ const findResolvedSymbol = (
     matchedFileId === null ? null : (input.files.find((file) => file.id === matchedFileId)?.moduleKey ?? null)
   const resolvedByName = input.symbols.find(
     (symbol) =>
-      symbol.localName === reference.targetName && (matchedModuleKey === null || symbol.moduleKey === matchedModuleKey),
+      symbol.localName === reference.targetName &&
+      (matchedModuleKey === null
+        ? reference.targetModuleSpecifier === null
+          ? symbol.moduleKey === input.currentModuleKey
+          : true
+        : symbol.moduleKey === matchedModuleKey),
   )
   if (resolvedByName !== undefined) {
     return {

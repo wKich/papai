@@ -27,6 +27,8 @@ export interface ExtractSymbolsInput {
   readonly moduleKey: string
   readonly maxStoredBodyLines: number
   readonly includeDocComments: boolean
+  readonly indexLocals: boolean
+  readonly indexVariables: boolean
 }
 
 interface WalkContext {
@@ -165,5 +167,10 @@ export const extractSymbolsFromSource = (input: Readonly<ExtractSymbolsInput>): 
   }
 
   visit(input.tree.rootNode, { exported: false, isDefaultExport: false, parentQualifiedName: null })
-  return symbols.filter((symbol) => symbol.kind !== 'program')
+  return symbols.filter(
+    (symbol) =>
+      symbol.kind !== 'program' &&
+      (input.indexLocals || symbol.scopeTier !== 'local') &&
+      (input.indexVariables || symbol.kind !== 'variable_declarator' || symbol.scopeTier === 'exported'),
+  )
 }

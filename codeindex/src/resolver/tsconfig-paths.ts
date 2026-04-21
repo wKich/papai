@@ -17,14 +17,6 @@ interface TsconfigJson {
 
 const NO_INPUTS_FOUND_DIAGNOSTIC = 18003
 
-const readConfigCompilerOptions = (config: unknown): TsconfigJson['compilerOptions'] => {
-  if (typeof config !== 'object' || config === null || !('compilerOptions' in config)) {
-    return undefined
-  }
-  const compilerOptions = config.compilerOptions
-  return typeof compilerOptions === 'object' && compilerOptions !== null ? compilerOptions : undefined
-}
-
 const readTsconfig = (tsconfigPath: string): TsconfigJson => {
   const configFile = ts.readConfigFile(tsconfigPath, (configPath) => ts.sys.readFile(configPath))
   if (configFile.error !== undefined) {
@@ -37,9 +29,14 @@ const readTsconfig = (tsconfigPath: string): TsconfigJson => {
     throw new Error(ts.flattenDiagnosticMessageText(firstError.messageText, '\n'))
   }
 
+  // pathsBasePath is the non-deprecated runtime property for resolving paths aliases;
+  // it follows the extends chain and is always absolute. Not in public TS d.ts, hence the lookup.
+  const opts = parsed.options as Record<string, unknown>
+  const pathsBasePath = typeof opts['pathsBasePath'] === 'string' ? opts['pathsBasePath'] : undefined
+
   return {
     compilerOptions: {
-      baseUrl: readConfigCompilerOptions(configFile.config)?.baseUrl,
+      baseUrl: pathsBasePath,
       paths: parsed.options.paths,
     },
   }
@@ -51,8 +48,7 @@ const expandTsconfigPathRules = (tsconfigPath: string): readonly TsconfigAliasRu
   }
   const parsed = readTsconfig(tsconfigPath)
   const baseDir = path.dirname(tsconfigPath)
-  const baseUrl = parsed.compilerOptions?.baseUrl ?? baseDir
-  const resolvedBase = path.resolve(baseDir, baseUrl)
+  const resolvedBase = parsed.compilerOptions?.baseUrl ?? baseDir
   const paths = parsed.compilerOptions?.paths ?? {}
 
   return Object.entries(paths).map(([pattern, replacements]) => ({

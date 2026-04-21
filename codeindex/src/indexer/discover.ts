@@ -29,8 +29,15 @@ const readGitignore = async (repoRoot: string): Promise<string> => {
   }
 }
 
+const isEnoent = (err: unknown): boolean =>
+  err !== null && typeof err === 'object' && 'code' in err && err.code === 'ENOENT'
+
 const walk = async (dir: string, repoRoot: string, matcher: ReturnType<typeof ignore>): Promise<readonly string[]> => {
-  const entries = await readdir(dir, { withFileTypes: true })
+  const entries = await readdir(dir, { withFileTypes: true }).catch((err: unknown) => {
+    if (isEnoent(err)) return null
+    throw err
+  })
+  if (entries === null) return []
   const discovered = await Promise.all(
     entries.map((entry): Promise<readonly string[]> => {
       const absolutePath = path.join(dir, entry.name)
