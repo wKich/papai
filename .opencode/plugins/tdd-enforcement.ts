@@ -1,6 +1,9 @@
 // .opencode/plugins/tdd-enforcement.ts
-// OpenCode plugin — TDD enforcement following ADR-0070: Silent PostToolUse + Stop-Gated Full Check
+// OpenCode plugin TDD enforcement following ADR-0070: Silent PostToolUse + Stop-Gated Full Check
 // Delegates to .hooks/tdd/checks/* for all check implementations
+//
+// NOTE: session.idle is used because OpenCode does not provide a blocking session.stop hook.
+// The full check runs after the agent loop breaks and sends a follow-up prompt on failure.
 
 import type { Plugin } from '@opencode-ai/plugin'
 
@@ -18,9 +21,15 @@ import { SessionState } from '../../.hooks/tdd/session-state.mjs'
 const EDIT_TOOLS = new Set(['write', 'edit', 'multiedit'])
 
 export const TddEnforcement: Plugin = async ({ client, directory }) => {
+  // Track active session ID across tool events so session.idle has the correct ID
+  let currentSessionID = ''
+
   return {
     // PRE-WRITE HOOK (runs before Write/Edit/MultiEdit)
     'tool.execute.before': async (input, output) => {
+      // Capture session ID from every tool call so session.idle always knows it
+      currentSessionID = input.sessionID
+
       // Block git stash regardless of tool type
       if (input.tool === 'bash') {
         const command = (output.args?.command as string) ?? ''
@@ -65,6 +74,8 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
 
     // POST-WRITE HOOK (runs after Write/Edit/MultiEdit)
     'tool.execute.after': async (input) => {
+      currentSessionID = input.sessionID
+
       if (!EDIT_TOOLS.has(input.tool)) return
 
       const filePath = input.args['filePath'] as string
@@ -101,7 +112,8 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
     // See: https://github.com/anomalyco/opencode/issues/16626
     // The check still runs to surface issues to the user.
     'session.idle': async () => {
-      const state = new SessionState('', getSessionsDir(directory))
+      const sessionID = currentSessionID
+      const state = new SessionState(sessionID, getSessionsDir(directory))
 
       // If needsRecheck is false, LLM was blocked and did nothing → skip check
       if (!state.getNeedsRecheck()) {
@@ -110,13 +122,13 @@ export const TddEnforcement: Plugin = async ({ client, directory }) => {
       }
 
       // Run full check
-      const result = checkFull({ cwd: directory, session_id: '' })
+      const result = checkFull({ cwd: directory, session_id: sessionID })
 
       if (result) {
         // Cannot block here, but we can notify via prompt
         // Note: session.idle runs after the loop breaks, so this creates a follow-up
         void client.session.promptAsync({
-          path: { id: '' },
+          path: { id: sessionID },
           body: {
             parts: [{ type: 'text', text: result.reason }],
           },
