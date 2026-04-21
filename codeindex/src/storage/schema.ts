@@ -54,6 +54,7 @@ const schemaStatements = [
     source_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
     source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
     target_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
+    target_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
     target_name TEXT NOT NULL,
     target_export_name TEXT,
     target_module_specifier TEXT,
@@ -74,6 +75,7 @@ const schemaStatements = [
   'CREATE INDEX IF NOT EXISTS idx_module_exports_resolved_file_id ON module_exports(resolved_file_id)',
   'CREATE INDEX IF NOT EXISTS idx_symbol_references_source_symbol_id ON symbol_references(source_symbol_id)',
   'CREATE INDEX IF NOT EXISTS idx_symbol_references_target_symbol_id ON symbol_references(target_symbol_id)',
+  'CREATE INDEX IF NOT EXISTS idx_symbol_references_target_file_id ON symbol_references(target_file_id)',
   'CREATE INDEX IF NOT EXISTS idx_symbol_references_target_name ON symbol_references(target_name)',
   'CREATE INDEX IF NOT EXISTS idx_symbol_references_edge_type ON symbol_references(edge_type)',
   'CREATE INDEX IF NOT EXISTS idx_symbol_references_confidence ON symbol_references(confidence)',
@@ -110,6 +112,11 @@ const ftsStatements = [
   END`,
 ]
 
+// Bump when any table/column/index definition changes; ensureSchema will wipe and rebuild.
+const SCHEMA_VERSION = 1
+
+const DROP_ORDER = ['symbol_fts', 'symbol_references', 'module_exports', 'symbols', 'module_aliases', 'files']
+
 const runStatements = (db: Database, statements: readonly string[]): void => {
   for (const statement of statements) {
     db.run(statement)
@@ -117,6 +124,15 @@ const runStatements = (db: Database, statements: readonly string[]): void => {
 }
 
 export const ensureSchema = (db: Database): void => {
+  const row = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!
+  if (row.user_version < SCHEMA_VERSION) {
+    db.run('PRAGMA foreign_keys = OFF')
+    for (const table of DROP_ORDER) {
+      db.run(`DROP TABLE IF EXISTS ${table}`)
+    }
+    db.run('PRAGMA foreign_keys = ON')
+  }
   runStatements(db, schemaStatements)
   runStatements(db, ftsStatements)
+  db.run(`PRAGMA user_version = ${SCHEMA_VERSION}`)
 }

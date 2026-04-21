@@ -13,11 +13,13 @@ import {
 import { openDatabase } from '../storage/db.js'
 import {
   clearFileRows,
+  findDependentsOfDeletedFiles,
   insertFile,
   markParseFailure,
   persistAliases,
   persistModuleExports,
   persistSymbols,
+  pruneDeletedFiles,
   selectAllFiles,
   selectAllModuleAliases,
   selectAllSymbols,
@@ -32,6 +34,7 @@ import { createParserLoader, type ParserLoader } from './parser.js'
 export interface IndexSummary {
   readonly filesIndexed: number
   readonly filesFailed: number
+  readonly filesPruned: number
   readonly symbolsIndexed: number
   readonly referencesIndexed: number
   readonly referencesUnresolved: number
@@ -160,15 +163,45 @@ const findIncrementalFileSet = async (db: Database, files: readonly DiscoveredFi
         `SELECT DISTINCT source_files.file_path
          FROM symbol_references
          JOIN files AS source_files ON source_files.id = symbol_references.source_file_id
-         JOIN symbols AS target_symbols ON target_symbols.id = symbol_references.target_symbol_id
-         JOIN files AS target_files ON target_files.id = target_symbols.file_id
-         WHERE target_files.file_path = ?`,
+         JOIN files AS target_files ON target_files.file_path = ?
+         LEFT JOIN symbols AS target_symbols ON target_symbols.id = symbol_references.target_symbol_id
+         WHERE target_symbols.file_id = target_files.id
+            OR symbol_references.target_file_id = target_files.id`,
       )
       .all(changedFilePath)
       .map((row) => row.file_path),
   )
 
   return new Set([...changedFiles, ...dependentFiles])
+}
+
+const applyProcessedFiles = (
+  db: Database,
+  processedFiles: readonly ProcessedFile[],
+): Readonly<{
+  filesIndexed: number
+  filesFailed: number
+  symbolsIndexed: number
+  parsedFiles: ParsedFileWorkItem[]
+}> => {
+  let filesIndexed = 0
+  let filesFailed = 0
+  let symbolsIndexed = 0
+  const parsedFiles: ParsedFileWorkItem[] = []
+
+  for (const processedFile of processedFiles) {
+    if (processedFile.status === 'error') {
+      filesFailed += 1
+      markParseFailure(db, processedFile.file, processedFile.message)
+      continue
+    }
+
+    parsedFiles.push(persistProcessedFile(db, processedFile))
+    filesIndexed += 1
+    symbolsIndexed += processedFile.symbols.length
+  }
+
+  return { filesIndexed, filesFailed, symbolsIndexed, parsedFiles }
 }
 
 const persistResolvedReferences = (
@@ -192,11 +225,12 @@ const persistResolvedReferences = (
 
     for (const reference of resolvedReferences) {
       db.query(
-        'INSERT INTO symbol_references (source_symbol_id, source_file_id, target_symbol_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO symbol_references (source_symbol_id, source_file_id, target_symbol_id, target_file_id, target_name, target_export_name, target_module_specifier, edge_type, confidence, line_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).run(
         reference.sourceSymbolId,
         parsedFile.fileId,
         reference.targetSymbolId,
+        reference.targetFileId,
         reference.targetName,
         reference.targetExportName,
         reference.targetModuleSpecifier,
@@ -227,36 +261,29 @@ export const indexCodebase = async (input: Readonly<IndexCodebaseInput>): Promis
     exclude: input.config.exclude,
     languages: input.config.languages,
   })
-  const incrementalSet = input.mode === 'incremental' ? await findIncrementalFileSet(db, discoveredFiles) : null
+  const discoveredPathSet = new Set(discoveredFiles.map((f) => f.relativePath))
+  const deletedFileDependents =
+    input.mode === 'incremental' ? findDependentsOfDeletedFiles(db, discoveredPathSet) : null
+  const filesPruned = pruneDeletedFiles(db, discoveredPathSet)
+  const baseIncrementalSet = input.mode === 'incremental' ? await findIncrementalFileSet(db, discoveredFiles) : null
+  const incrementalSet =
+    baseIncrementalSet !== null && deletedFileDependents !== null
+      ? new Set([...baseIncrementalSet, ...deletedFileDependents])
+      : baseIncrementalSet
   const filesToProcess =
     incrementalSet === null ? discoveredFiles : discoveredFiles.filter((file) => incrementalSet.has(file.relativePath))
   const processedFiles = await Promise.all(
     filesToProcess.map((file) => parseFile(input.config, file, parserLoader, tsconfigAliases)),
   )
 
-  let filesIndexed = 0
-  let filesFailed = 0
-  let symbolsIndexed = 0
-  const parsedFiles: ParsedFileWorkItem[] = []
-
-  for (const processedFile of processedFiles) {
-    if (processedFile.status === 'error') {
-      filesFailed += 1
-      markParseFailure(db, processedFile.file, processedFile.message)
-      continue
-    }
-
-    parsedFiles.push(persistProcessedFile(db, processedFile))
-    filesIndexed += 1
-    symbolsIndexed += processedFile.symbols.length
-  }
-
+  const { filesIndexed, filesFailed, symbolsIndexed, parsedFiles } = applyProcessedFiles(db, processedFiles)
   const { referencesIndexed, referencesUnresolved } = persistResolvedReferences(db, parsedFiles)
   db.close()
 
   return {
     filesIndexed,
     filesFailed,
+    filesPruned,
     symbolsIndexed,
     referencesIndexed,
     referencesUnresolved,

@@ -43,6 +43,7 @@ export interface ResolvedReference {
   readonly targetExportName: string | null
   readonly targetModuleSpecifier: string | null
   readonly targetSymbolId: number | null
+  readonly targetFileId: number | null
   readonly confidence: 'resolved' | 'file_resolved' | 'name_only'
   readonly lineNumber: number
 }
@@ -93,7 +94,12 @@ const findResolvedSymbol = (
     return { targetSymbolId: resolvedByExport.id, confidence: 'resolved' }
   }
 
-  const resolvedByName = input.symbols.find((symbol) => symbol.localName === reference.targetName)
+  const matchedModuleKey =
+    matchedFileId === null ? null : (input.files.find((file) => file.id === matchedFileId)?.moduleKey ?? null)
+  const resolvedByName = input.symbols.find(
+    (symbol) =>
+      symbol.localName === reference.targetName && (matchedModuleKey === null || symbol.moduleKey === matchedModuleKey),
+  )
   if (resolvedByName !== undefined) {
     return {
       targetSymbolId: resolvedByName.id,
@@ -126,6 +132,7 @@ export const resolveReferenceCandidates = (
         reference.sourceQualifiedName === null ? null : (sourceSymbols.get(reference.sourceQualifiedName) ?? null),
       ...reference,
       targetSymbolId,
+      targetFileId: matchedFileId,
       confidence,
     }
   })

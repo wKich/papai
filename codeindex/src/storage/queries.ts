@@ -16,6 +16,58 @@ export const clearFileRows = (db: Database, fileId: number): void => {
   db.query('DELETE FROM symbols WHERE file_id = ?').run(fileId)
 }
 
+export const pruneDeletedFiles = (db: Database, discoveredPaths: ReadonlySet<string>): number => {
+  const storedPaths = db
+    .query<{ file_path: string }, []>('SELECT file_path FROM files')
+    .all()
+    .map((row) => row.file_path)
+
+  let pruned = 0
+  for (const filePath of storedPaths) {
+    if (!discoveredPaths.has(filePath)) {
+      db.query('DELETE FROM files WHERE file_path = ?').run(filePath)
+      pruned += 1
+    }
+  }
+  return pruned
+}
+
+export const findDependentsOfDeletedFiles = (
+  db: Database,
+  discoveredPaths: ReadonlySet<string>,
+): ReadonlySet<string> => {
+  const storedPaths = db
+    .query<{ file_path: string }, []>('SELECT file_path FROM files')
+    .all()
+    .map((row) => row.file_path)
+
+  const dependents = new Set<string>()
+
+  for (const filePath of storedPaths) {
+    if (discoveredPaths.has(filePath)) continue
+
+    const rows = db
+      .query<{ file_path: string }, [string]>(
+        `SELECT DISTINCT source_files.file_path
+         FROM symbol_references
+         JOIN files AS source_files ON source_files.id = symbol_references.source_file_id
+         JOIN files AS target_files ON target_files.file_path = ?
+         LEFT JOIN symbols AS target_symbols ON target_symbols.id = symbol_references.target_symbol_id
+         WHERE target_symbols.file_id = target_files.id
+            OR symbol_references.target_file_id = target_files.id`,
+      )
+      .all(filePath)
+
+    for (const row of rows) {
+      if (discoveredPaths.has(row.file_path)) {
+        dependents.add(row.file_path)
+      }
+    }
+  }
+
+  return dependents
+}
+
 export const insertFile = (
   db: Database,
   values: Readonly<{ filePath: string; moduleKey: string; language: string; fileHash: string }>,
@@ -40,6 +92,10 @@ export const insertFile = (
 }
 
 export const markParseFailure = (db: Database, file: Readonly<{ relativePath: string }>, message: string): void => {
+  const existing = db.query<{ id: number }, [string]>('SELECT id FROM files WHERE file_path = ?').get(file.relativePath)
+  if (existing !== null) {
+    clearFileRows(db, existing.id)
+  }
   db.query(
     `INSERT INTO files (file_path, module_key, language, file_hash, parse_status, parse_error, indexed_at)
        VALUES (?, ?, ?, '', 'parse_failed', ?, datetime('now'))
@@ -95,7 +151,22 @@ export const persistSymbols = (
     )
     count += 1
   }
+
+  linkParentSymbols(db, fileId, symbols)
   return count
+}
+
+const linkParentSymbols = (db: Database, fileId: number, symbols: readonly ExtractedSymbol[]): void => {
+  const stmt = db.query<never, [string, number, string]>(
+    `UPDATE symbols SET parent_symbol_id = (
+       SELECT id FROM symbols WHERE qualified_name = ? AND file_id = ?
+     ) WHERE symbol_key = ?`,
+  )
+  for (const symbol of symbols) {
+    if (symbol.parentQualifiedName !== null) {
+      stmt.run(symbol.parentQualifiedName, fileId, symbol.symbolKey)
+    }
+  }
 }
 
 export const selectStoredSymbols = (

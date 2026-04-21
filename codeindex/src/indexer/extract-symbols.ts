@@ -31,11 +31,14 @@ export interface ExtractSymbolsInput {
 
 interface WalkContext {
   readonly exported: boolean
+  readonly isDefaultExport: boolean
   readonly parentQualifiedName: string | null
 }
 
 const declarationTypes = new Set([
+  'abstract_class_declaration',
   'class_declaration',
+  'enum_declaration',
   'function_declaration',
   'interface_declaration',
   'lexical_declaration',
@@ -117,7 +120,7 @@ const buildSymbol = (
   qualifiedName,
   kind: node.type,
   scopeTier: scopeTierForNode(node, context),
-  exportNames: context.exported ? [localName] : [],
+  exportNames: context.exported ? (context.isDefaultExport ? ['default'] : [localName]) : [],
   signatureText: sourceLines[node.startPosition.row]?.trim() ?? localName,
   docText: input.includeDocComments ? readLeadingDocComment(sourceLines, node.startPosition.row) : '',
   bodyText: clipBody(sliceNodeText(input.source, node), input.maxStoredBodyLines),
@@ -138,11 +141,19 @@ export const extractSymbolsFromSource = (input: Readonly<ExtractSymbolsInput>): 
 
   const visit = (node: SyntaxNode, context: Readonly<WalkContext>): void => {
     if (node.type === 'export_statement') {
-      visitChildren(node, { ...context, exported: true }, visit)
+      let isDefaultExport = false
+      for (let i = 0; i < node.childCount; i += 1) {
+        if (node.child(i)?.type === 'default') {
+          isDefaultExport = true
+          break
+        }
+      }
+      visitChildren(node, { ...context, exported: true, isDefaultExport }, visit)
       return
     }
 
-    const localName = declarationTypes.has(node.type) ? nameForNode(node) : null
+    const rawName = declarationTypes.has(node.type) ? nameForNode(node) : null
+    const localName = rawName === null && context.isDefaultExport ? 'default' : rawName
     if (localName === null) {
       visitChildren(node, context, visit)
       return
@@ -150,9 +161,9 @@ export const extractSymbolsFromSource = (input: Readonly<ExtractSymbolsInput>): 
 
     const qualifiedName = qualifiedNameFor(input.moduleKey, context, localName)
     symbols.push(buildSymbol(node, input, context, sourceLines, qualifiedName, localName))
-    visitChildren(node, { exported: false, parentQualifiedName: qualifiedName }, visit)
+    visitChildren(node, { exported: false, isDefaultExport: false, parentQualifiedName: qualifiedName }, visit)
   }
 
-  visit(input.tree.rootNode, { exported: false, parentQualifiedName: null })
+  visit(input.tree.rootNode, { exported: false, isDefaultExport: false, parentQualifiedName: null })
   return symbols.filter((symbol) => symbol.kind !== 'program')
 }

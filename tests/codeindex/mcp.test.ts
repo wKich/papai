@@ -12,6 +12,7 @@ describe('createCodeindexServer', () => {
         Promise.resolve({
           filesIndexed: 0,
           filesFailed: 0,
+          filesPruned: 0,
           symbolsIndexed: 0,
           referencesIndexed: 0,
           referencesUnresolved: 0,
