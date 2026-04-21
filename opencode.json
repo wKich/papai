@@ -1,4 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@ekroon/opencode-copilot-instructions", "./.opencode/plugins/tdd-enforcement.ts"]
+  "plugin": [
+    "@ekroon/opencode-copilot-instructions",
+    "./.opencode/plugins/tdd-enforcement.ts",
+    "./.opencode/plugins/opencode-tps-meter"
+  ]
 }
