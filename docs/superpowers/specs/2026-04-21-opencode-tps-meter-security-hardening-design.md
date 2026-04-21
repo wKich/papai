@@ -40,7 +40,7 @@ The `opencode-tps-meter` plugin was cloned into `.opencode/plugins/opencode-tps-
 
 1. Add `Array.isArray(parsed)` rejection in `loadConfigFile()`.
 
-2. Add `sanitizeConfigKeys()` utility that strips `__proto__`, `constructor`, and `prototype` keys from the parsed object recursively (single level is sufficient since config is flat).
+2. Add `sanitizeConfigKeys()` utility that strips `__proto__`, `constructor`, and `prototype` keys from the parsed object (single level only — the config schema is flat).
 
 ### M3 — Env var validation co-location
 
@@ -105,7 +105,7 @@ Add `TimerRegistry` class in `src/timer-registry.ts`:
 - `clearAll(): void`
 - Installs a single `process.on('exit')` handler that calls `clearAll()`
 
-Replace ad-hoc `pendingDisplayTimers` map in `index.ts` and `flushTimer` variable in `ui.ts` with the unified registry. Call `timerRegistry.clearAll()` from `cleanup()` and `handleSessionIdle()`.
+Replace ad-hoc `pendingDisplayTimers` map in `index.ts` and `flushTimer` variable in `ui.ts` with the unified registry. The `TimerRegistry` instance is created in `index.ts` during plugin initialization and passed to `createUIManager()` as a parameter. Call `timerRegistry.clearAll()` from `cleanup()` and `handleSessionIdle()`.
 
 ### New files
 
@@ -188,7 +188,7 @@ Move `@opencode-ai/plugin` from `dependencies` to `peerDependencies` with range 
 
 **Fix:**
 
-1. Ensure `bun.lock` is tracked in git (already is) and remove any exclusion from `.npmignore`.
+1. Ensure `bun.lock` is tracked in git (already is). `bun.lock` is not currently excluded by `.npmignore` so no change needed there — just verify it stays that way.
 
 2. Add `scripts/verify-build.sh`:
    - Run `bun install` from lockfile
