@@ -25,7 +25,7 @@ const FixerConfigSchema = z.object({
 export const ReviewLoopConfigSchema = z.object({
   repoRoot: z.string().min(1),
   workDir: z.string().min(1),
-  maxRounds: z.number().int().positive().default(5),
+  maxRounds: z.number().int().positive().default(10),
   maxNoProgressRounds: z.number().int().positive().default(2),
   reviewer: ReviewerConfigSchema,
   fixer: FixerConfigSchema,

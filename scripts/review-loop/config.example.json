@@ -1,22 +1,27 @@
 {
   "repoRoot": ".",
   "workDir": ".review-loop",
-  "maxRounds": 5,
+  "maxRounds": 10,
   "maxNoProgressRounds": 2,
   "reviewer": {
-    "command": "/usr/local/bin/claude-acp-adapter",
-    "args": [],
+    "command": "opencode",
+    "args": ["acp"],
     "env": {},
-    "sessionConfig": {},
+    "sessionConfig": {
+      "model": "kimi-k2-0711-ollama-cloud"
+    },
     "invocationPrefix": "/review-code",
     "requireInvocationPrefix": false
   },
   "fixer": {
-    "command": "opencode",
-    "args": ["acp"],
+    "command": "/usr/local/bin/claude-acp-adapter",
+    "args": [],
     "env": {},
-    "sessionConfig": {},
-    "verifyInvocationPrefix": "/verify-issue",
+    "sessionConfig": {
+      "model": "claude-sonnet-4-20250514",
+      "thinking_effort": "high"
+    },
+    "verifyInvocationPrefix": null,
     "fixInvocationPrefix": null,
     "requireVerifyInvocation": false
   }
