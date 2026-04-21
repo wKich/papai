@@ -2512,3 +2512,84 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
   expect(await Bun.file(path.join(reportsDir, 'consolidated', 'tools.md')).exists()).toBe(false)
   expect(await Bun.file(path.join(reportsDir, 'stories', 'tools.md')).exists()).toBe(false)
 })
+
+test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserves keyword vocabulary', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const consolidatedDir = path.join(auditRoot, 'consolidated')
+  const classifiedDir = path.join(auditRoot, 'classified')
+  const storiesDir = path.join(auditRoot, 'stories')
+  const vocabularyPath = path.join(auditRoot, 'keyword-vocabulary.json')
+  const progressPath = path.join(auditRoot, 'progress.json')
+
+  mkdirSync(consolidatedDir, { recursive: true })
+  mkdirSync(classifiedDir, { recursive: true })
+  mkdirSync(storiesDir, { recursive: true })
+
+  await Bun.write(path.join(consolidatedDir, 'group-routing.json'), '[]\n')
+  await Bun.write(path.join(classifiedDir, 'tools.json'), '[]\n')
+  await Bun.write(path.join(storiesDir, 'tools.md'), '# tools\n')
+  await Bun.write(vocabularyPath, '[]\n')
+  await Bun.write(
+    progressPath,
+    JSON.stringify({
+      version: 3,
+      startedAt: '2026-04-21T12:00:00.000Z',
+      phase1: {
+        status: 'done',
+        completedTests: {},
+        extractedBehaviors: {},
+        failedTests: {},
+        completedFiles: [],
+        stats: { filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+      },
+      phase2a: {
+        status: 'done',
+        completedBehaviors: {},
+        classifiedBehaviors: {},
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+      },
+      phase2b: {
+        status: 'done',
+        completedCandidateFeatures: {},
+        consolidations: {},
+        failedCandidateFeatures: {},
+        stats: {
+          candidateFeaturesTotal: 0,
+          candidateFeaturesDone: 0,
+          candidateFeaturesFailed: 0,
+          behaviorsConsolidated: 0,
+        },
+      },
+      phase3: {
+        status: 'done',
+        completedBehaviors: {},
+        evaluations: {},
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+      },
+    }) + '\n',
+  )
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    REPORTS_DIR: path.join(root, 'reports'),
+    AUDIT_BEHAVIOR_DIR: auditRoot,
+    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+    CLASSIFIED_DIR: classifiedDir,
+    CONSOLIDATED_DIR: consolidatedDir,
+    STORIES_DIR: storiesDir,
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+  }))
+
+  const mod = await import(`../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`)
+  await mod.resetBehaviorAudit('phase2')
+
+  expect(await Bun.file(vocabularyPath).exists()).toBe(true)
+  expect(await Bun.file(path.join(consolidatedDir, 'group-routing.json')).exists()).toBe(false)
+  expect(await Bun.file(path.join(classifiedDir, 'tools.json')).exists()).toBe(false)
+  expect(await Bun.file(path.join(storiesDir, 'tools.md')).exists()).toBe(false)
+})

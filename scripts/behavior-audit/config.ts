@@ -6,13 +6,16 @@ export const BASE_URL = 'http://localhost:8000/v1'
 export const PROJECT_ROOT = resolve(import.meta.dir, '../..')
 
 export const REPORTS_DIR = resolve(PROJECT_ROOT, 'reports')
-export const BEHAVIORS_DIR = resolve(REPORTS_DIR, 'behaviors')
-export const CONSOLIDATED_DIR = resolve(REPORTS_DIR, 'consolidated')
-export const STORIES_DIR = resolve(REPORTS_DIR, 'stories')
-export const PROGRESS_PATH = resolve(REPORTS_DIR, 'progress.json')
-export const INCREMENTAL_MANIFEST_PATH = resolve(REPORTS_DIR, 'incremental-manifest.json')
-export const CONSOLIDATED_MANIFEST_PATH = resolve(REPORTS_DIR, 'consolidated-manifest.json')
-export const KEYWORD_VOCABULARY_PATH = resolve(REPORTS_DIR, 'keyword-vocabulary.json')
+export const AUDIT_BEHAVIOR_DIR = resolve(REPORTS_DIR, 'audit-behavior')
+
+export const BEHAVIORS_DIR = resolve(AUDIT_BEHAVIOR_DIR, 'behaviors')
+export const CLASSIFIED_DIR = resolve(AUDIT_BEHAVIOR_DIR, 'classified')
+export const CONSOLIDATED_DIR = resolve(AUDIT_BEHAVIOR_DIR, 'consolidated')
+export const STORIES_DIR = resolve(AUDIT_BEHAVIOR_DIR, 'stories')
+export const PROGRESS_PATH = resolve(AUDIT_BEHAVIOR_DIR, 'progress.json')
+export const INCREMENTAL_MANIFEST_PATH = resolve(AUDIT_BEHAVIOR_DIR, 'incremental-manifest.json')
+export const CONSOLIDATED_MANIFEST_PATH = resolve(AUDIT_BEHAVIOR_DIR, 'consolidated-manifest.json')
+export const KEYWORD_VOCABULARY_PATH = resolve(AUDIT_BEHAVIOR_DIR, 'keyword-vocabulary.json')
 
 export const PHASE1_TIMEOUT_MS = 1_200_000
 export const PHASE2_TIMEOUT_MS = 300_000

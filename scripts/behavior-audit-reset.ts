@@ -1,17 +1,24 @@
 import { rm } from 'node:fs/promises'
 
-import { CONSOLIDATED_DIR, CONSOLIDATED_MANIFEST_PATH, REPORTS_DIR, STORIES_DIR } from './behavior-audit/config.js'
+import {
+  AUDIT_BEHAVIOR_DIR,
+  CLASSIFIED_DIR,
+  CONSOLIDATED_DIR,
+  CONSOLIDATED_MANIFEST_PATH,
+  STORIES_DIR,
+} from './behavior-audit/config.js'
 import { loadProgress, resetPhase2AndPhase3, resetPhase3, saveProgress } from './behavior-audit/progress.js'
 
 export type ResetTarget = 'phase2' | 'phase3' | 'all'
 
 export async function resetBehaviorAudit(target: ResetTarget): Promise<void> {
   if (target === 'all') {
-    await rm(REPORTS_DIR, { recursive: true, force: true })
+    await rm(AUDIT_BEHAVIOR_DIR, { recursive: true, force: true })
     return
   }
 
   if (target === 'phase2') {
+    await rm(CLASSIFIED_DIR, { recursive: true, force: true })
     await rm(CONSOLIDATED_DIR, { recursive: true, force: true })
     await rm(STORIES_DIR, { recursive: true, force: true })
     await rm(CONSOLIDATED_MANIFEST_PATH, { force: true })
