@@ -1,527 +1,90 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
-import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
-import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
-import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
-import type * as ExtractModule from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
 import type * as IncrementalModule from '../../scripts/behavior-audit/incremental.js'
-import type * as KeywordVocabularyModule from '../../scripts/behavior-audit/keyword-vocabulary.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
-import type * as ProgressModule from '../../scripts/behavior-audit/progress.js'
-import type * as ReportWriterModule from '../../scripts/behavior-audit/report-writer.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import type { ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
-
-const tempDirs: string[] = []
-const originalProcessExit = process.exit.bind(process)
-const originalOpenAiApiKey = process.env['OPENAI_API_KEY']
-
-type IncrementalModuleShape = typeof IncrementalModule
-type ProgressModuleShape = typeof ProgressModule
-type ExtractModuleShape = typeof ExtractModule
-type EvaluateModuleShape = typeof EvaluateModule
-type ConsolidateModuleShape = typeof ConsolidateModule
-type ClassifiedStoreModuleShape = typeof ClassifiedStoreModule
-type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
-type ReportWriterModuleShape = typeof ReportWriterModule
-type ResetModuleShape = typeof ResetModule
-type SelectIncrementalWorkInput = Parameters<IncrementalModuleShape['selectIncrementalWork']>[0]
-type CaptureRunStartResult = ReturnType<IncrementalModuleShape['captureRunStart']>
-type ManifestTestEntry = IncrementalManifest['tests'][string]
-type MockEvaluationResult = Awaited<
-  ReturnType<(typeof import('../../scripts/behavior-audit/evaluate-agent.js'))['evaluateWithRetry']>
->
-
-function hasFunctionProperty(value: Record<string, unknown>, key: string): boolean {
-  return key in value && typeof value[key] === 'function'
-}
-
-function makeTempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'behavior-audit-integration-'))
-  tempDirs.push(dir)
-  return dir
-}
-
-async function runCommand(command: string[], cwd: string): Promise<string> {
-  const proc = Bun.spawn(command, {
-    cwd,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  const exitCode = await proc.exited
-  if (exitCode !== 0) {
-    const errorMessage = stderr.trim()
-    throw new Error(errorMessage.length > 0 ? errorMessage : `Command failed: ${command.join(' ')}`)
-  }
-  return stdout.trim()
-}
-
-async function initializeGitRepo(root: string): Promise<void> {
-  await runCommand(['git', 'init', '-q'], root)
-  await runCommand(
-    [
-      'git',
-      '-c',
-      'user.name=Test User',
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'commit.gpgsign=false',
-      'commit',
-      '--allow-empty',
-      '-m',
-      'init',
-      '-q',
-    ],
-    root,
-  )
-}
-
-async function commitAll(root: string, message: string): Promise<void> {
-  await runCommand(['git', 'add', '.'], root)
-  await runCommand(
-    [
-      'git',
-      '-c',
-      'user.name=Test User',
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'commit.gpgsign=false',
-      'commit',
-      '-m',
-      message,
-      '-q',
-    ],
-    root,
-  )
-}
+import {
+  createAuditBehaviorPaths,
+  createClassifiedBehaviorFixture,
+  createConsolidatedManifestEntry,
+  createEmptyProgressFixture,
+  createExtractedBehaviorFixture,
+  createIncrementalManifestFixture,
+  createManifestTestEntry,
+  createReportsPaths,
+  mockAuditBehaviorConfig,
+  mockReportsConfig,
+  writeWorkspaceFile,
+} from './behavior-audit-integration.helpers.js'
+import {
+  cleanupTempDirs,
+  commitAll,
+  initializeGitRepo,
+  makeTempDir,
+  originalOpenAiApiKey,
+  originalProcessExit,
+  resolveExitCode,
+  restoreOpenAiApiKey,
+  runCommand,
+} from './behavior-audit-integration.runtime-helpers.js'
+import {
+  createEmptyManifest,
+  type CaptureRunStartResult,
+  type ClassifyAgentModuleShape,
+  getArrayItem,
+  getManifestEntry,
+  getParsedTestKeys,
+  importWithGuard,
+  type IncrementalModuleShape,
+  isClassifyModule,
+  isKeywordVocabulary,
+  isObject,
+  isReportWriterModule,
+  isResetModule,
+  loadBehaviorAuditEntryPoint,
+  loadClassifiedStoreModule,
+  loadClassifyAgentModule,
+  loadConsolidateModule,
+  loadEvaluateModule,
+  loadExtractModule,
+  loadIncrementalModule,
+  loadKeywordVocabularyModule,
+  loadProgressModule,
+  loadReportWriterModule,
+  loadResetModule,
+  type MockClassificationResult,
+  type MockEvaluationResult,
+  normalizePhase1Call,
+  normalizePhase2Call,
+  readSavedManifest,
+  resolveNullableManifest,
+  type ResetModuleShape,
+  type SelectIncrementalWorkInput,
+} from './behavior-audit-integration.support.js'
 
 function createEmptyProgress(filesTotal: number): Progress {
-  return {
-    version: 2,
-    startedAt: '2026-04-17T12:00:00.000Z',
-    phase1: {
-      status: 'not-started',
-      completedTests: {},
-      extractedBehaviors: {},
-      failedTests: {},
-      completedFiles: [],
-      stats: { filesTotal, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
-    },
-    phase2: {
-      status: 'not-started',
-      completedBatches: {},
-      consolidations: {},
-      failedBatches: {},
-      stats: { batchesTotal: 0, batchesDone: 0, batchesFailed: 0, behaviorsConsolidated: 0 },
-    },
-    phase3: {
-      status: 'not-started',
-      completedBehaviors: {},
-      evaluations: {},
-      failedBehaviors: {},
-      stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
-    },
-  }
+  return createEmptyProgressFixture(filesTotal)
 }
 
-function createEmptyManifest(): IncrementalManifest {
-  return {
-    version: 1,
-    lastStartCommit: null,
-    lastStartedAt: null,
-    lastCompletedAt: null,
-    phaseVersions: { phase1: '', phase2: '', reports: '' },
-    tests: {},
-  }
-}
-
-function getParsedTestKeys(testFiles: readonly ParsedTestFile[]): readonly string[] {
-  return testFiles
-    .flatMap((testFile) => testFile.tests.map((testCase) => `${testFile.filePath}::${testCase.fullPath}`))
-    .toSorted()
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function isStringOrNull(value: unknown): value is string | null {
-  if (typeof value === 'string') {
-    return true
-  }
-  return value === null
-}
-
-function isStringArray(value: unknown): value is readonly string[] {
-  return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
-}
-
-function isKeywordVocabularyEntry(value: unknown): value is {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-  readonly timesUsed: number
-} {
-  return (
-    isObject(value) &&
-    'slug' in value &&
-    typeof value['slug'] === 'string' &&
-    'description' in value &&
-    typeof value['description'] === 'string' &&
-    'createdAt' in value &&
-    typeof value['createdAt'] === 'string' &&
-    'updatedAt' in value &&
-    typeof value['updatedAt'] === 'string' &&
-    'timesUsed' in value &&
-    typeof value['timesUsed'] === 'number'
-  )
-}
-
-function isKeywordVocabulary(value: unknown): value is readonly {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-  readonly timesUsed: number
-}[] {
-  return Array.isArray(value) && value.every((entry) => isKeywordVocabularyEntry(entry))
-}
-
-function isManifestTestEntry(value: unknown): value is ManifestTestEntry {
-  return (
-    isObject(value) &&
-    'testFile' in value &&
-    typeof value['testFile'] === 'string' &&
-    'testName' in value &&
-    typeof value['testName'] === 'string' &&
-    'dependencyPaths' in value &&
-    isStringArray(value['dependencyPaths']) &&
-    'phase1Fingerprint' in value &&
-    isStringOrNull(value['phase1Fingerprint']) &&
-    'phase2Fingerprint' in value &&
-    isStringOrNull(value['phase2Fingerprint']) &&
-    'extractedBehaviorPath' in value &&
-    isStringOrNull(value['extractedBehaviorPath']) &&
-    'domain' in value &&
-    typeof value['domain'] === 'string' &&
-    'lastPhase1CompletedAt' in value &&
-    isStringOrNull(value['lastPhase1CompletedAt']) &&
-    'lastPhase2CompletedAt' in value &&
-    isStringOrNull(value['lastPhase2CompletedAt'])
-  )
-}
-
-function isIncrementalManifest(value: unknown): value is IncrementalManifest {
-  if (!isObject(value)) {
-    return false
-  }
-  if (!('version' in value) || value['version'] !== 1) {
-    return false
-  }
-  if (!('lastStartCommit' in value) || !isStringOrNull(value['lastStartCommit'])) {
-    return false
-  }
-  if (!('lastStartedAt' in value) || !isStringOrNull(value['lastStartedAt'])) {
-    return false
-  }
-  if (!('lastCompletedAt' in value) || !isStringOrNull(value['lastCompletedAt'])) {
-    return false
-  }
-  if (!('phaseVersions' in value) || !isObject(value['phaseVersions'])) {
-    return false
-  }
-  const phaseVersions = value['phaseVersions']
-  if (
-    !('phase1' in phaseVersions) ||
-    typeof phaseVersions['phase1'] !== 'string' ||
-    !('phase2' in phaseVersions) ||
-    typeof phaseVersions['phase2'] !== 'string' ||
-    !('reports' in phaseVersions) ||
-    typeof phaseVersions['reports'] !== 'string'
-  ) {
-    return false
-  }
-  if (!('tests' in value) || !isObject(value['tests'])) {
-    return false
-  }
-  return Object.values(value['tests']).every((entry) => isManifestTestEntry(entry))
-}
-
-function isIncrementalModule(value: unknown): value is IncrementalModuleShape {
-  return (
-    isObject(value) &&
-    hasFunctionProperty(value, 'createEmptyManifest') &&
-    hasFunctionProperty(value, 'captureRunStart') &&
-    hasFunctionProperty(value, 'loadManifest') &&
-    hasFunctionProperty(value, 'saveManifest') &&
-    hasFunctionProperty(value, 'collectChangedFiles') &&
-    hasFunctionProperty(value, 'selectIncrementalWork')
-  )
-}
-
-function isProgressModule(value: unknown): value is ProgressModuleShape {
-  return (
-    isObject(value) &&
-    hasFunctionProperty(value, 'loadProgress') &&
-    hasFunctionProperty(value, 'createEmptyProgress') &&
-    hasFunctionProperty(value, 'saveProgress')
-  )
-}
-
-function isExtractModule(value: unknown): value is ExtractModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'runPhase1')
-}
-
-function isEvaluateModule(value: unknown): value is EvaluateModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'runPhase3')
-}
-
-async function importWithGuard<T>(
-  specifier: string,
-  guard: (value: unknown) => value is T,
-  errorMessage: string,
-): Promise<T> {
-  const mod: unknown = await import(specifier)
-  if (!guard(mod)) {
-    throw new Error(errorMessage)
-  }
-  return mod
-}
-
-function getArrayItem<T>(values: readonly T[], index: number): T {
-  const value = values[index]
-  if (value === undefined) {
-    throw new Error(`Expected array item at index ${index}`)
-  }
-  return value
-}
-
-function getManifestEntry(manifest: IncrementalManifest, key: string): ManifestTestEntry {
-  const entry = manifest.tests[key]
-  if (entry === undefined) {
-    throw new Error(`Expected manifest entry for ${key}`)
-  }
-  return entry
-}
-
-async function readSavedManifest(filePath: string): Promise<IncrementalManifest> {
-  const raw: unknown = JSON.parse(await Bun.file(filePath).text())
-  if (!isIncrementalManifest(raw)) {
-    throw new Error('Unexpected manifest shape')
-  }
-  return raw
-}
-
-function resolveNullableManifest(manifest: IncrementalManifest | null): IncrementalManifest {
-  if (manifest === null) {
-    return createEmptyManifest()
-  }
-  return manifest
-}
-
-function resolveExitCode(code: number | undefined): number {
-  if (code === undefined) {
-    return 0
-  }
-  return code
-}
-
-function isParsedTestFile(value: unknown): value is ParsedTestFile {
-  return (
-    isObject(value) &&
-    'filePath' in value &&
-    'tests' in value &&
-    typeof value['filePath'] === 'string' &&
-    Array.isArray(value['tests'])
-  )
-}
-
-function isPhase1Input(value: unknown): value is {
-  readonly testFiles: readonly ParsedTestFile[]
-  readonly progress: Progress
-  readonly selectedTestKeys: ReadonlySet<string>
-} {
-  return (
-    isObject(value) &&
-    'testFiles' in value &&
-    Array.isArray(value['testFiles']) &&
-    value['testFiles'].every((item) => isParsedTestFile(item)) &&
-    'selectedTestKeys' in value &&
-    value['selectedTestKeys'] instanceof Set &&
-    'progress' in value
-  )
-}
-
-function isPhase2Input(value: unknown): value is {
-  readonly progress: Progress
-  readonly selectedConsolidatedIds: ReadonlySet<string>
-} {
-  return (
-    isObject(value) &&
-    'selectedConsolidatedIds' in value &&
-    value['selectedConsolidatedIds'] instanceof Set &&
-    'progress' in value
-  )
-}
-
-function normalizePhase1Call(args: readonly unknown[]): {
-  readonly parsedTestKeys: readonly string[]
-  readonly selectedTestKeys: readonly string[]
-} {
-  const firstArg = args[0]
-  if (isPhase1Input(firstArg)) {
-    return {
-      parsedTestKeys: getParsedTestKeys(firstArg.testFiles),
-      selectedTestKeys: [...firstArg.selectedTestKeys].toSorted(),
-    }
-  }
-
-  if (Array.isArray(firstArg) && firstArg.every((item) => isParsedTestFile(item))) {
-    return {
-      parsedTestKeys: getParsedTestKeys(firstArg),
-      selectedTestKeys: [],
-    }
-  }
-
-  return { parsedTestKeys: [], selectedTestKeys: [] }
-}
-
-function normalizePhase2Call(args: readonly unknown[]): { readonly selectedConsolidatedIds: readonly string[] } {
-  const firstArg = args[0]
-  if (isPhase2Input(firstArg)) {
-    return { selectedConsolidatedIds: [...firstArg.selectedConsolidatedIds].toSorted() }
-  }
-  return { selectedConsolidatedIds: [] }
-}
-
-async function loadBehaviorAuditEntryPoint(tag: string): Promise<void> {
-  await import(`../../scripts/behavior-audit.ts?test=${tag}`)
-}
-
-function loadIncrementalModule(tag: string): Promise<IncrementalModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/incremental.js?test=${tag}`,
-    isIncrementalModule,
-    'Unexpected incremental module shape',
-  )
-}
-
-function loadProgressModule(tag: string): Promise<ProgressModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/progress.js?test=${tag}`,
-    isProgressModule,
-    'Unexpected progress module shape',
-  )
-}
-
-function loadExtractModule(tag: string): Promise<ExtractModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/extract.js?test=${tag}`,
-    isExtractModule,
-    'Unexpected extract module shape',
-  )
-}
-
-function loadEvaluateModule(tag: string): Promise<EvaluateModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/evaluate.js?test=${tag}`,
-    isEvaluateModule,
-    'Unexpected evaluate module shape',
-  )
-}
-
-function isConsolidateModule(value: unknown): value is ConsolidateModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'runPhase2')
-}
-
-function isClassifiedStoreModule(value: unknown): value is ClassifiedStoreModuleShape {
-  return (
-    isObject(value) &&
-    hasFunctionProperty(value, 'writeClassifiedFile') &&
-    hasFunctionProperty(value, 'readClassifiedFile')
-  )
-}
-
-function isKeywordVocabularyModule(value: unknown): value is KeywordVocabularyModuleShape {
-  return (
-    isObject(value) &&
-    hasFunctionProperty(value, 'loadKeywordVocabulary') &&
-    hasFunctionProperty(value, 'saveKeywordVocabulary') &&
-    hasFunctionProperty(value, 'recordKeywordUsage')
-  )
-}
-
-function isReportWriterModule(value: unknown): value is ReportWriterModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'writeBehaviorFile')
-}
-
-function isResetModule(value: unknown): value is ResetModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'resetBehaviorAudit')
-}
-
-function loadConsolidateModule(tag: string): Promise<ConsolidateModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/consolidate.js?test=${tag}`,
-    isConsolidateModule,
-    'Unexpected consolidate module shape',
-  )
-}
-
-function loadClassifiedStoreModule(tag: string): Promise<ClassifiedStoreModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/classified-store.js?test=${tag}`,
-    isClassifiedStoreModule,
-    'Unexpected classified-store module shape',
-  )
-}
-
-function loadKeywordVocabularyModule(tag: string): Promise<KeywordVocabularyModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/keyword-vocabulary.js?test=${tag}`,
-    isKeywordVocabularyModule,
-    'Unexpected keyword vocabulary module shape',
-  )
-}
-
-function loadReportWriterModule(tag: string): Promise<ReportWriterModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit/report-writer.js?test=${tag}`,
-    isReportWriterModule,
-    'Unexpected report writer module shape',
-  )
-}
-
-function loadResetModule(tag: string): Promise<ResetModuleShape> {
-  return importWithGuard(
-    `../../scripts/behavior-audit-reset.js?test=${tag}`,
-    isResetModule,
-    'Unexpected reset module shape',
-  )
+function isCallableTimerHandler(value: TimerHandler): value is (...args: unknown[]) => void {
+  return typeof value === 'function'
 }
 
 beforeEach(() => {
-  process.env['OPENAI_API_KEY'] = originalOpenAiApiKey ?? 'test-openai-api-key'
+  if (originalOpenAiApiKey === undefined) {
+    process.env['OPENAI_API_KEY'] = 'test-openai-api-key'
+    return
+  }
+  process.env['OPENAI_API_KEY'] = originalOpenAiApiKey
 })
 
 afterEach(() => {
-  if (originalOpenAiApiKey === undefined) {
-    delete process.env['OPENAI_API_KEY']
-  } else {
-    process.env['OPENAI_API_KEY'] = originalOpenAiApiKey
-  }
-  for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  restoreOpenAiApiKey()
+  cleanupTempDirs()
 })
 
 describe('behavior-audit entrypoint incremental selection', () => {
@@ -560,7 +123,9 @@ describe('behavior-audit entrypoint incremental selection', () => {
     readonly parsedTestKeys: readonly string[]
     readonly selectedTestKeys: readonly string[]
   }[]
-  let runPhase2Calls: readonly { readonly selectedConsolidatedIds: readonly string[] }[]
+  let runPhase2aCalls: readonly string[][]
+  let runPhase2bCalls: readonly string[][]
+  let phase3Calls: readonly { readonly selectedConsolidatedIds: readonly string[] }[]
 
   beforeEach(async () => {
     root = makeTempDir()
@@ -586,7 +151,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
       selectIncrementalWorkCalls = [...selectIncrementalWorkCalls, input]
       return {
         phase1SelectedTestKeys: [...input.discoveredTestKeys].toSorted(),
-        phase2SelectedTestKeys: [...input.discoveredTestKeys].toSorted(),
+        phase2aSelectedTestKeys: [...input.discoveredTestKeys].toSorted(),
+        phase2bSelectedCandidateFeatureKeys: [],
         phase3SelectedConsolidatedIds: [],
         reportRebuildOnly: false,
       }
@@ -594,45 +160,27 @@ describe('behavior-audit entrypoint incremental selection', () => {
     loadProgressImpl = (): Promise<Progress | null> => Promise.resolve(null)
     createEmptyProgressCalls = []
     runPhase1Calls = []
-    runPhase2Calls = []
+    runPhase2aCalls = []
+    runPhase2bCalls = []
+    phase3Calls = []
 
     const testsDir = path.join(root, 'tests', 'tools')
     mkdirSync(testsDir, { recursive: true })
-    writeFileSync(
-      path.join(testsDir, 'sample.test.ts'),
+    writeWorkspaceFile(
+      root,
+      'tests/tools/sample.test.ts',
       ["describe('suite', () => {", "  test('first case', () => {})", "  test('second case', () => {})", '})', ''].join(
         '\n',
       ),
     )
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: reportsDir,
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-      CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-      STORIES_DIR: path.join(reportsDir, 'stories'),
+    mockReportsConfig(root, {
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
       CONSOLIDATED_MANIFEST_PATH: consolidatedManifestPath,
-      KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-      PHASE1_TIMEOUT_MS: 1_200_000,
       PHASE2_TIMEOUT_MS: 300_000,
-      PHASE3_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
       RETRY_BACKOFF_MS: [100_000, 300_000, 900_000] as const,
-      MAX_STEPS: 20,
-      EXCLUDED_PREFIXES: [
-        'tests/e2e/',
-        'tests/client/',
-        'tests/helpers/',
-        'tests/scripts/',
-        'tests/review-loop/',
-        'tests/types/',
-      ] as const,
-    }))
+    })
     const realIncrementalModule = await loadIncrementalModule(`entrypoint=${crypto.randomUUID()}`)
     void mock.module('../../scripts/behavior-audit/incremental.js', () => ({
       ...realIncrementalModule,
@@ -674,12 +222,26 @@ describe('behavior-audit entrypoint incremental selection', () => {
     }))
     void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
       runPhase3: (...args: readonly unknown[]): Promise<void> => {
-        runPhase2Calls = [...runPhase2Calls, normalizePhase2Call(args)]
+        phase3Calls = [...phase3Calls, normalizePhase2Call(args)]
         return Promise.resolve()
       },
     }))
+    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
+      runPhase2a: (input: { readonly selectedTestKeys: ReadonlySet<string> }): Promise<ReadonlySet<string>> => {
+        runPhase2aCalls = [...runPhase2aCalls, [...input.selectedTestKeys].toSorted()]
+        return Promise.resolve(new Set())
+      },
+    }))
     void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2: (): Promise<IncrementalModule.ConsolidatedManifest> => Promise.resolve({ version: 1, entries: {} }),
+      runPhase2b: (
+        _progress: unknown,
+        _manifest: IncrementalModule.ConsolidatedManifest,
+        _phaseVersion: string,
+        selectedCandidateFeatureKeys: ReadonlySet<string>,
+      ): Promise<IncrementalModule.ConsolidatedManifest> => {
+        runPhase2bCalls = [...runPhase2bCalls, [...selectedCandidateFeatureKeys].toSorted()]
+        return Promise.resolve({ version: 1, entries: {} })
+      },
     }))
   })
 
@@ -697,7 +259,9 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(selectIncrementalWorkCalls).toHaveLength(1)
     expect(getArrayItem(selectIncrementalWorkCalls, 0).discoveredTestKeys).toEqual(expectedKeys)
     expect(runPhase1Calls).toEqual([{ parsedTestKeys: expectedKeys, selectedTestKeys: expectedKeys }])
-    expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: [] }])
+    expect(runPhase2aCalls).toEqual([expectedKeys])
+    expect(runPhase2bCalls).toEqual([[]])
+    expect(phase3Calls).toEqual([{ selectedConsolidatedIds: [] }])
   })
 
   test('main fails fast when OPENAI_API_KEY is missing', async () => {
@@ -728,18 +292,19 @@ describe('behavior-audit entrypoint incremental selection', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('Fatal error:', 'Behavior audit requires OPENAI_API_KEY to be set')
     expect(runPhase1Calls).toHaveLength(0)
-    expect(runPhase2Calls).toHaveLength(0)
+    expect(runPhase2aCalls).toHaveLength(0)
+    expect(runPhase2bCalls).toHaveLength(0)
+    expect(phase3Calls).toHaveLength(0)
   })
 
   test('main passes incremental selection through to both phases', async () => {
     await initializeGitRepo(root)
 
-    const previousManifest = {
-      ...createEmptyManifest(),
+    const previousManifest = createIncrementalManifestFixture({
       lastStartCommit: 'previous-start',
       phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
       tests: {
-        'tests/tools/sample.test.ts::suite > first case': {
+        'tests/tools/sample.test.ts::suite > first case': createManifestTestEntry({
           testFile: 'tests/tools/sample.test.ts',
           testName: 'suite > first case',
           dependencyPaths: ['tests/tools/sample.test.ts'],
@@ -749,9 +314,9 @@ describe('behavior-audit entrypoint incremental selection', () => {
           domain: 'tools',
           lastPhase1CompletedAt: 'x',
           lastPhase2CompletedAt: 'y',
-        },
+        }),
       },
-    }
+    })
     const selectedKeys = ['tests/tools/sample.test.ts::suite > first case']
     loadManifestImpl = (): Promise<IncrementalManifest> => Promise.resolve(previousManifest)
     collectChangedFilesImpl = (): Promise<readonly string[]> => Promise.resolve(['tests/tools/sample.test.ts'])
@@ -759,7 +324,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
       selectIncrementalWorkCalls = [...selectIncrementalWorkCalls, input]
       return {
         phase1SelectedTestKeys: selectedKeys,
-        phase2SelectedTestKeys: selectedKeys,
+        phase2aSelectedTestKeys: selectedKeys,
+        phase2bSelectedCandidateFeatureKeys: [],
         phase3SelectedConsolidatedIds: ['tools::selected-case'],
         reportRebuildOnly: false,
       }
@@ -779,7 +345,9 @@ describe('behavior-audit entrypoint incremental selection', () => {
         selectedTestKeys: selectedKeys,
       },
     ])
-    expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
+    expect(runPhase2aCalls).toEqual([selectedKeys])
+    expect(runPhase2bCalls).toEqual([[]])
+    expect(phase3Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
   })
 
   test('main reruns selected work even when prior phases are marked done', async () => {
@@ -794,10 +362,10 @@ describe('behavior-audit entrypoint incremental selection', () => {
           status: 'done',
           completedFiles: ['tests/tools/sample.test.ts'],
         },
-        phase2: {
-          ...createEmptyProgress(1).phase2,
+        phase2b: {
+          ...createEmptyProgress(1).phase2b,
           status: 'done',
-          completedBatches: { 'group-targeting': 'done' },
+          completedCandidateFeatures: { 'group-targeting': 'done' },
         },
         phase3: {
           ...createEmptyProgress(1).phase3,
@@ -809,7 +377,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
       selectIncrementalWorkCalls = [...selectIncrementalWorkCalls, input]
       return {
         phase1SelectedTestKeys: [selectedKey],
-        phase2SelectedTestKeys: [selectedKey],
+        phase2aSelectedTestKeys: [selectedKey],
+        phase2bSelectedCandidateFeatureKeys: [],
         phase3SelectedConsolidatedIds: ['tools::selected-case'],
         reportRebuildOnly: false,
       }
@@ -826,19 +395,20 @@ describe('behavior-audit entrypoint incremental selection', () => {
         selectedTestKeys: [selectedKey],
       },
     ])
-    expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
+    expect(runPhase2aCalls).toEqual([[selectedKey]])
+    expect(runPhase2bCalls).toEqual([[]])
+    expect(phase3Calls).toEqual([{ selectedConsolidatedIds: ['tools::selected-case'] }])
   })
 
   test('report-writer drift rebuilds markdown outputs without phase1 or phase2 model calls', async () => {
     await initializeGitRepo(root)
 
     const selectedKey = 'tests/tools/sample.test.ts::suite > first case'
-    const previousManifest: IncrementalManifest = {
-      ...createEmptyManifest(),
+    const previousManifest: IncrementalManifest = createIncrementalManifestFixture({
       lastStartCommit: 'previous-start',
       phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'reports-old' },
       tests: {
-        [selectedKey]: {
+        [selectedKey]: createManifestTestEntry({
           testFile: 'tests/tools/sample.test.ts',
           testName: 'suite > first case',
           dependencyPaths: ['tests/tools/sample.test.ts'],
@@ -848,17 +418,17 @@ describe('behavior-audit entrypoint incremental selection', () => {
           domain: 'tools',
           lastPhase1CompletedAt: 'old-phase1',
           lastPhase2CompletedAt: 'old-phase2',
-        },
+        }),
       },
-    }
+    })
     const progress = createEmptyProgress(1)
-    progress.phase1.extractedBehaviors[selectedKey] = {
+    progress.phase1.extractedBehaviors[selectedKey] = createExtractedBehaviorFixture({
       testName: 'first case',
       fullPath: 'suite > first case',
       behavior: 'When the user triggers the first case, the stored behavior is reused.',
       context: 'Stored extracted context for the first case.',
       keywords: [],
-    }
+    })
     progress.phase3.evaluations[selectedKey] = {
       testName: 'suite > first case',
       behavior: 'When the user triggers the first case, the stored behavior is reused.',
@@ -876,7 +446,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
       selectIncrementalWorkCalls = [...selectIncrementalWorkCalls, input]
       return {
         phase1SelectedTestKeys: [],
-        phase2SelectedTestKeys: [],
+        phase2aSelectedTestKeys: [],
+        phase2bSelectedCandidateFeatureKeys: [],
         phase3SelectedConsolidatedIds: [],
         reportRebuildOnly: true,
       }
@@ -885,7 +456,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
     await loadBehaviorAuditEntryPoint(crypto.randomUUID())
 
     expect(runPhase1Calls).toHaveLength(0)
-    expect(runPhase2Calls).toHaveLength(0)
+    expect(runPhase2aCalls).toHaveLength(0)
+    expect(runPhase2bCalls).toHaveLength(0)
 
     const behaviorFileText = await Bun.file(
       path.join(reportsDir, 'behaviors', 'tools', 'sample.test.behaviors.md'),
@@ -915,8 +487,9 @@ describe('behavior-audit phase 1 incremental selection', () => {
     const srcDir = path.join(root, 'src', 'tools')
     mkdirSync(testsDir, { recursive: true })
     mkdirSync(srcDir, { recursive: true })
-    writeFileSync(
-      path.join(testsDir, 'sample.test.ts'),
+    writeWorkspaceFile(
+      root,
+      'tests/tools/sample.test.ts',
       [
         "describe('suite', () => {",
         "  test('selected case', () => {",
@@ -930,34 +503,14 @@ describe('behavior-audit phase 1 incremental selection', () => {
         '',
       ].join('\n'),
     )
-    writeFileSync(path.join(srcDir, 'sample.ts'), 'export const sample = 1\n')
+    writeWorkspaceFile(root, 'src/tools/sample.ts', 'export const sample = 1\n')
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: reportsDir,
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-      STORIES_DIR: path.join(reportsDir, 'stories'),
+    mockReportsConfig(root, {
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
       CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-      KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-      PHASE1_TIMEOUT_MS: 1_200_000,
       PHASE2_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
-      RETRY_BACKOFF_MS: [0, 0, 0] as const,
-      MAX_STEPS: 20,
-      EXCLUDED_PREFIXES: [
-        'tests/e2e/',
-        'tests/client/',
-        'tests/helpers/',
-        'tests/scripts/',
-        'tests/review-loop/',
-        'tests/types/',
-      ] as const,
-    }))
+    })
 
     const realIncrementalModule = await loadIncrementalModule(`real=${crypto.randomUUID()}`)
     const realProgressModule = await loadProgressModule(`real=${crypto.randomUUID()}`)
@@ -1006,7 +559,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
       ...createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
-        [selectedKey]: {
+        [selectedKey]: createManifestTestEntry({
           testFile: testFilePath,
           testName: 'suite > selected case',
           dependencyPaths: [testFilePath],
@@ -1016,7 +569,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
           domain: 'tools',
           lastPhase1CompletedAt: null,
           lastPhase2CompletedAt: 'old-phase2',
-        },
+        }),
       },
     }
 
@@ -1037,7 +590,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
     expect(savedEntry.lastPhase2CompletedAt).toBeNull()
     expect(savedEntry.dependencyPaths).toEqual(['tests/tools/sample.test.ts', 'src/tools/sample.ts'])
     expect(savedEntry.domain).toBe('tools')
-    expect(savedEntry.extractedBehaviorPath).toBe('reports/behaviors/tools/sample.test.behaviors.md')
+    expect(savedEntry.extractedBehaviorPath).toBe('reports/audit-behavior/behaviors/tools/sample.test.behaviors.md')
     expect(savedEntry.lastPhase1CompletedAt).toBeTruthy()
     expect(savedManifest.tests['tests/tools/sample.test.ts::suite > unselected case']).toBeUndefined()
 
@@ -1053,76 +606,564 @@ describe('behavior-audit phase 2a classification', () => {
   let auditRoot: string
   let progressPath: string
   let manifestPath: string
+  let classifyBehaviorWithRetryCalls: number
+  let classifyBehaviorWithRetryImpl: ClassifyAgentModuleShape['classifyBehaviorWithRetry']
 
   beforeEach(() => {
     root = makeTempDir()
-    auditRoot = path.join(root, 'reports', 'audit-behavior')
-    progressPath = path.join(auditRoot, 'progress.json')
-    manifestPath = path.join(auditRoot, 'incremental-manifest.json')
+    const paths = createAuditBehaviorPaths(root)
+    auditRoot = paths.auditBehaviorDir
+    progressPath = paths.progressPath
+    manifestPath = paths.incrementalManifestPath
+    classifyBehaviorWithRetryCalls = 0
+    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+      Promise.resolve({
+        visibility: 'user-facing',
+        candidateFeatureKey: 'task-creation',
+        candidateFeatureLabel: 'Task creation',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Matches task creation flow.',
+      })
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: path.join(root, 'reports'),
-      AUDIT_BEHAVIOR_DIR: auditRoot,
-      BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
-      CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
-      CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
-      STORIES_DIR: path.join(auditRoot, 'stories'),
+    mockAuditBehaviorConfig(root, {
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
-      CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
-      KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
-      PHASE1_TIMEOUT_MS: 1_200_000,
-      PHASE2_TIMEOUT_MS: 300_000,
-      PHASE3_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
-      RETRY_BACKOFF_MS: [0, 0, 0] as const,
-      MAX_STEPS: 20,
       EXCLUDED_PREFIXES: [] as const,
-    }))
+    })
 
     void mock.module('../../scripts/behavior-audit/classify-agent.js', () => ({
-      classifyBehaviorWithRetry: (): Promise<
-        import('../../scripts/behavior-audit/classify-agent.js').ClassificationResult
-      > =>
-        Promise.resolve({
-          visibility: 'user-facing',
-          candidateFeatureKey: 'task-creation',
-          candidateFeatureLabel: 'Task creation',
-          supportingBehaviorRefs: [],
-          relatedBehaviorHints: [],
-          classificationNotes: 'Matches task creation flow.',
-        }),
+      classifyBehaviorWithRetry: (
+        ...args: Parameters<ClassifyAgentModuleShape['classifyBehaviorWithRetry']>
+      ): Promise<MockClassificationResult> => {
+        classifyBehaviorWithRetryCalls += 1
+        return classifyBehaviorWithRetryImpl(...args)
+      },
     }))
   })
 
   test('runPhase2a classifies selected extracted behaviors and returns dirty candidate feature keys', async () => {
-    const classify = await import(`../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`)
-    const progressModule = await import(`../../scripts/behavior-audit/progress.js?test=${crypto.randomUUID()}`)
-    const incremental = await import(`../../scripts/behavior-audit/incremental.js?test=${crypto.randomUUID()}`)
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
 
     const progress = progressModule.createEmptyProgress(1)
-    progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = {
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        'tests/tools/sample.test.ts::suite > case': createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > case',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: 'stale-phase2-fp',
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = createExtractedBehaviorFixture({
+      testName: 'case',
+      fullPath: 'suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+    })
+
+    const dirty = await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest,
+    })
+
+    expect([...dirty]).toEqual(['task-creation'])
+    const classifiedBehavior = progress.phase2a.classifiedBehaviors['tests/tools/sample.test.ts::suite > case']
+    if (classifiedBehavior === undefined) {
+      throw new Error('Expected classified behavior to be stored')
+    }
+    expect(classifiedBehavior.candidateFeatureKey).toBe('task-creation')
+
+    const classifiedPath = path.join(auditRoot, 'classified', 'tools.json')
+    expect(await Bun.file(classifiedPath).exists()).toBe(true)
+
+    const classifiedRaw: unknown = JSON.parse(await Bun.file(classifiedPath).text())
+    expect(classifiedRaw).toEqual([
+      {
+        behaviorId: 'tests/tools/sample.test.ts::suite > case',
+        testKey: 'tests/tools/sample.test.ts::suite > case',
+        domain: 'tools',
+        behavior: 'When the user creates a task, the bot saves it.',
+        context: 'Calls create_task and returns the new task.',
+        keywords: ['task-create'],
+        visibility: 'user-facing',
+        candidateFeatureKey: 'task-creation',
+        candidateFeatureLabel: 'Task creation',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Matches task creation flow.',
+      },
+    ])
+
+    const savedManifest = await readSavedManifest(manifestPath)
+    const savedEntry = getManifestEntry(savedManifest, 'tests/tools/sample.test.ts::suite > case')
+    expect(savedEntry.phase2aFingerprint).toBeTruthy()
+    expect(savedEntry.phase2Fingerprint).toBe('stale-phase2-fp')
+    expect(savedEntry.lastPhase2CompletedAt).toBeTruthy()
+
+    const progressText = await Bun.file(progressPath).text()
+    expect(progressText).toContain('task-creation')
+  })
+
+  test('runPhase2a skips already-completed classifications on resumed runs', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > case'
+    const existingClassified: Progress['phase2a']['classifiedBehaviors'][string] = {
+      behaviorId: testKey,
+      testKey,
+      domain: 'tools',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+      visibility: 'user-facing',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'Persisted from a prior run.',
+    }
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > case',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: 'phase2-fp',
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: '2026-04-21T12:05:00.000Z',
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = {
       testName: 'case',
       fullPath: 'suite > case',
       behavior: 'When the user creates a task, the bot saves it.',
       context: 'Calls create_task and returns the new task.',
       keywords: ['task-create'],
     }
+    progress.phase2a.completedBehaviors[testKey] = 'done'
+    progress.phase2a.classifiedBehaviors[testKey] = existingClassified
 
     const dirty = await classify.runPhase2a({
       progress,
-      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-      manifest: incremental.createEmptyManifest(),
+      selectedTestKeys: new Set([testKey]),
+      manifest,
     })
 
+    expect(classifyBehaviorWithRetryCalls).toBe(0)
     expect([...dirty]).toEqual(['task-creation'])
-    expect(progress.phase2a.classifiedBehaviors['tests/tools/sample.test.ts::suite > case']?.candidateFeatureKey).toBe(
-      'task-creation',
+    expect(progress.phase2a.classifiedBehaviors[testKey]).toEqual(existingClassified)
+    expect(await Bun.file(path.join(auditRoot, 'classified', 'tools.json')).exists()).toBe(false)
+  })
+
+  test('runPhase2a passes persisted retry attempt offset through to the classifier on resumed failures', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
     )
-    expect(await Bun.file(path.join(auditRoot, 'classified', 'tools.json')).exists()).toBe(true)
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > case'
+    const classifierArgs: Array<readonly [string, number]> = []
+
+    classifyBehaviorWithRetryImpl = (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
+      classifierArgs.push([prompt, attemptOffset])
+      return Promise.resolve({
+        visibility: 'user-facing',
+        candidateFeatureKey: 'task-creation',
+        candidateFeatureLabel: 'Task creation',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Resumed from prior failed attempt.',
+      })
+    }
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > case',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: null,
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = {
+      testName: 'case',
+      fullPath: 'suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+    }
+    progress.phase2a.failedBehaviors[testKey] = {
+      error: 'classification failed after retries',
+      attempts: 2,
+      lastAttempt: '2026-04-21T12:04:00.000Z',
+    }
+
+    await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect(classifyBehaviorWithRetryCalls).toBe(1)
+    expect(classifierArgs).toHaveLength(1)
+    const classifierArgsEntry = classifierArgs[0]
+    if (classifierArgsEntry === undefined) {
+      throw new Error('Expected classifier args entry')
+    }
+    expect(classifierArgsEntry[1]).toBe(2)
+  })
+
+  test('runPhase2a clears stale phase2a failure state after a later successful classification', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > recovery case'
+
+    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+      Promise.resolve({
+        visibility: 'user-facing',
+        candidateFeatureKey: 'task-recovery',
+        candidateFeatureLabel: 'Task recovery',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Recovered successfully.',
+      })
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > recovery case',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: null,
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = {
+      testName: 'recovery case',
+      fullPath: 'suite > recovery case',
+      behavior: 'When the user retries task creation, the bot recovers successfully.',
+      context: 'Repeats the classification after a transient failure.',
+      keywords: ['task-recovery'],
+    }
+    progress.phase2a.failedBehaviors[testKey] = {
+      error: 'classification failed after retries',
+      attempts: 1,
+      lastAttempt: '2026-04-21T12:04:00.000Z',
+    }
+    progress.phase2a.stats.behaviorsFailed = 1
+
+    const dirty = await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect([...dirty]).toEqual(['task-recovery'])
+    expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
+    expect(progress.phase2a.stats.behaviorsFailed).toBe(0)
+    const recoveredBehavior = progress.phase2a.classifiedBehaviors[testKey]
+    if (recoveredBehavior === undefined) {
+      throw new Error('Expected recovered classified behavior')
+    }
+    expect(recoveredBehavior.candidateFeatureKey).toBe('task-recovery')
+  })
+
+  test('runPhase2a does not exceed total retry budget across resumed failed runs', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > exhausted retries'
+
+    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> => Promise.resolve(null)
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > exhausted retries',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: null,
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = {
+      testName: 'exhausted retries',
+      fullPath: 'suite > exhausted retries',
+      behavior: 'When classification keeps failing, retries should stop at the total budget.',
+      context: 'Exercises resume behavior after all classifier attempts are consumed.',
+      keywords: ['classification-retries'],
+    }
+
+    await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect(classifyBehaviorWithRetryCalls).toBe(1)
+    const firstFailure = progress.phase2a.failedBehaviors[testKey]
+    if (firstFailure === undefined) {
+      throw new Error('Expected failed behavior entry')
+    }
+    expect(firstFailure.attempts).toBe(3)
+
+    await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect(classifyBehaviorWithRetryCalls).toBe(1)
+    const repeatedFailure = progress.phase2a.failedBehaviors[testKey]
+    if (repeatedFailure === undefined) {
+      throw new Error('Expected repeated failed behavior entry')
+    }
+    expect(repeatedFailure.attempts).toBe(3)
+  })
+})
+
+test('runPhase2b consolidates user-facing candidate features and preserves supporting internal refs', async () => {
+  const root = makeTempDir()
+  const paths = createAuditBehaviorPaths(root)
+  const auditRoot = paths.auditBehaviorDir
+  const progressPath = paths.progressPath
+
+  mockAuditBehaviorConfig(root, {
+    PROGRESS_PATH: progressPath,
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
+    consolidateWithRetry: (): Promise<
+      readonly {
+        readonly id: string
+        readonly item: {
+          readonly featureName: string
+          readonly isUserFacing: boolean
+          readonly behavior: string
+          readonly userStory: string | null
+          readonly context: string
+          readonly sourceBehaviorIds: readonly string[]
+          readonly sourceTestKeys: readonly string[]
+          readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
+        }
+      }[]
+    > =>
+      Promise.resolve([
+        {
+          id: 'task-creation::task-creation',
+          item: {
+            featureName: 'Task creation',
+            isUserFacing: true,
+            behavior: 'When a user asks to create a task, the bot saves it and confirms success.',
+            userStory: 'As a user, I want to create a task in chat so I can track work quickly.',
+            context: 'Calls create_task and formats the confirmation.',
+            sourceBehaviorIds: [
+              'tests/tools/create-task.test.ts::suite > create task',
+              'tests/tools/create-task.test.ts::suite > validate input',
+            ],
+            sourceTestKeys: [
+              'tests/tools/create-task.test.ts::suite > create task',
+              'tests/tools/create-task.test.ts::suite > validate input',
+            ],
+            supportingInternalRefs: [
+              {
+                behaviorId: 'tests/tools/create-task.test.ts::suite > validate input',
+                summary: 'Validation guards prevent malformed task creation inputs.',
+              },
+            ],
+          },
+        },
+      ]),
+  }))
+
+  const consolidate = await loadConsolidateModule(crypto.randomUUID())
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const incremental = await loadIncrementalModule(crypto.randomUUID())
+
+  const progress = progressModule.createEmptyProgress(1)
+  progress.phase2a.classifiedBehaviors['tests/tools/create-task.test.ts::suite > create task'] =
+    createClassifiedBehaviorFixture({
+      behaviorId: 'tests/tools/create-task.test.ts::suite > create task',
+      testKey: 'tests/tools/create-task.test.ts::suite > create task',
+      domain: 'tools',
+      behavior: 'When a user asks to create a task, the bot saves it.',
+      context: 'Calls create_task.',
+      keywords: ['task-create'],
+      visibility: 'user-facing',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      classificationNotes: 'User-facing task creation.',
+    })
+  progress.phase2a.classifiedBehaviors['tests/tools/create-task.test.ts::suite > validate input'] =
+    createClassifiedBehaviorFixture({
+      behaviorId: 'tests/tools/create-task.test.ts::suite > validate input',
+      testKey: 'tests/tools/create-task.test.ts::suite > validate input',
+      domain: 'tools',
+      behavior: 'When input is malformed, the bot blocks task creation.',
+      context: 'Runs validation guards.',
+      keywords: ['task-create'],
+      visibility: 'internal',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      classificationNotes: 'Supporting validation behavior.',
+    })
+
+  const manifest = await consolidate.runPhase2b(
+    progress,
+    incremental.createEmptyConsolidatedManifest(),
+    'phase2-v2',
+    new Set(['task-creation']),
+  )
+
+  const entry = manifest.entries['task-creation::task-creation']
+  if (entry === undefined) {
+    throw new Error('Expected consolidated entry')
+  }
+  expect(entry.candidateFeatureKey).toBe('task-creation')
+  expect(entry.sourceBehaviorIds).toEqual([
+    'tests/tools/create-task.test.ts::suite > create task',
+    'tests/tools/create-task.test.ts::suite > validate input',
+  ])
+
+  const fileText = await Bun.file(path.join(auditRoot, 'consolidated', 'task-creation.json')).text()
+  expect(fileText).toContain('supportingInternalRefs')
+})
+
+describe('behavior-audit phase 2a classify agent', () => {
+  test('classifyBehaviorWithRetry does not sleep before the first resumed retry attempt', async () => {
+    const events: string[] = []
+    const originalSetTimeout = globalThis.setTimeout
+    const mockSetTimeout = (
+      handler: TimerHandler,
+      _timeout: number | undefined,
+      ...args: unknown[]
+    ): ReturnType<typeof setTimeout> => {
+      events.push('sleep')
+      if (isCallableTimerHandler(handler)) {
+        handler(...args)
+      }
+      return originalSetTimeout((): void => {}, 0)
+    }
+
+    void mock.module('../../scripts/behavior-audit/config.js', () => ({
+      MODEL: 'qwen3-30b-a3b',
+      BASE_URL: 'http://localhost:1234/v1',
+      PHASE2_TIMEOUT_MS: 300_000,
+      MAX_RETRIES: 3,
+      RETRY_BACKOFF_MS: [25, 50, 75] as const,
+      MAX_STEPS: 20,
+    }))
+    void mock.module('@ai-sdk/openai-compatible', () => ({
+      createOpenAICompatible: (): (() => string) => {
+        return (): string => 'mock-model'
+      },
+    }))
+    void mock.module('ai', () => ({
+      generateText: (): Promise<{ readonly output: MockClassificationResult }> => {
+        events.push('generate')
+        return Promise.resolve({
+          output: {
+            visibility: 'user-facing',
+            candidateFeatureKey: 'task-creation',
+            candidateFeatureLabel: 'Task creation',
+            supportingBehaviorRefs: [],
+            relatedBehaviorHints: [],
+            classificationNotes: 'Immediate resumed success.',
+          },
+        })
+      },
+      Output: {
+        object: ({ schema }: { readonly schema: unknown }): { readonly schema: unknown } => ({ schema }),
+      },
+      stepCountIs: (value: number): number => value,
+    }))
+
+    Object.defineProperty(globalThis, 'setTimeout', {
+      configurable: true,
+      writable: true,
+      value: mockSetTimeout,
+    })
+
+    try {
+      const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
+      const result = await classifyAgent.classifyBehaviorWithRetry('prompt', 1)
+
+      expect(result === null ? null : result.candidateFeatureKey).toBe('task-creation')
+      expect(events).toEqual(['generate'])
+    } finally {
+      Object.defineProperty(globalThis, 'setTimeout', {
+        configurable: true,
+        writable: true,
+        value: originalSetTimeout,
+      })
+    }
   })
 })
 
@@ -1135,9 +1176,10 @@ describe('behavior-audit phase 3 incremental selection', () => {
 
   beforeEach(async () => {
     root = makeTempDir()
-    reportsDir = path.join(root, 'reports')
-    progressPath = path.join(reportsDir, 'progress.json')
-    consolidatedDir = path.join(reportsDir, 'consolidated')
+    const paths = createReportsPaths(root)
+    reportsDir = paths.reportsDir
+    progressPath = paths.progressPath
+    consolidatedDir = paths.consolidatedDir
     evaluateCalls = 0
 
     mkdirSync(consolidatedDir, { recursive: true })
@@ -1171,33 +1213,10 @@ describe('behavior-audit phase 3 incremental selection', () => {
       ) + '\n',
     )
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: reportsDir,
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-      CONSOLIDATED_DIR: consolidatedDir,
-      STORIES_DIR: path.join(reportsDir, 'stories'),
+    mockReportsConfig(root, {
       PROGRESS_PATH: progressPath,
-      INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
-      CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-      PHASE1_TIMEOUT_MS: 1_200_000,
-      PHASE2_TIMEOUT_MS: 300_000,
-      PHASE3_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
-      RETRY_BACKOFF_MS: [0, 0, 0] as const,
-      MAX_STEPS: 20,
-      EXCLUDED_PREFIXES: [
-        'tests/e2e/',
-        'tests/client/',
-        'tests/helpers/',
-        'tests/scripts/',
-        'tests/review-loop/',
-        'tests/types/',
-      ] as const,
-    }))
+      CONSOLIDATED_DIR: consolidatedDir,
+    })
 
     const realProgressModule = await loadProgressModule(`real=${crypto.randomUUID()}`)
     void mock.module('../../scripts/behavior-audit/progress.js', () => ({ ...realProgressModule }))
@@ -1222,7 +1241,7 @@ describe('behavior-audit phase 3 incremental selection', () => {
     const unselectedKey = 'tools::unselected-case'
     const progress = createEmptyProgress(1)
 
-    progress.phase2.completedBatches['tools'] = 'done'
+    progress.phase2b.completedCandidateFeatures['tools'] = 'done'
     progress.phase3.evaluations[unselectedKey] = {
       testName: 'suite > unselected case',
       behavior: 'When the unselected behavior runs, the bot keeps prior results.',
@@ -1246,8 +1265,10 @@ describe('behavior-audit phase 3 incremental selection', () => {
             domain: 'tools',
             featureName: 'selected case',
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+            supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            primaryKeyword: null,
+            candidateFeatureKey: null,
             keywords: [],
             sourceDomains: ['tools'],
             phase2Fingerprint: null,
@@ -1258,8 +1279,10 @@ describe('behavior-audit phase 3 incremental selection', () => {
             domain: 'tools',
             featureName: 'unselected case',
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > unselected case'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > unselected case'],
+            supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            primaryKeyword: null,
+            candidateFeatureKey: null,
             keywords: [],
             sourceDomains: ['tools'],
             phase2Fingerprint: null,
@@ -1291,7 +1314,7 @@ describe('behavior-audit phase 3 incremental selection', () => {
     const evaluate = await loadEvaluateModule(crypto.randomUUID())
     const selectedKey = 'tools::selected-case'
     const progress = createEmptyProgress(1)
-    progress.phase2.completedBatches['tools'] = 'done'
+    progress.phase2b.completedCandidateFeatures['tools'] = 'done'
 
     await evaluate.runPhase3({
       progress,
@@ -1304,8 +1327,10 @@ describe('behavior-audit phase 3 incremental selection', () => {
             domain: 'tools',
             featureName: 'selected case',
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+            supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            primaryKeyword: null,
+            candidateFeatureKey: null,
             keywords: [],
             sourceDomains: ['tools'],
             phase2Fingerprint: null,
@@ -1338,6 +1363,8 @@ describe('behavior-audit phase 3 incremental selection', () => {
             userStory: 'As a user, I get the regenerated selected behavior outcome.',
             context: 'Fresh context for phase 3.',
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+            supportingInternalRefs: [],
           },
         ],
         null,
@@ -1356,9 +1383,11 @@ describe('behavior-audit phase 3 incremental selection', () => {
             domain: 'tools',
             featureName: 'fresh selected case',
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+            supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            primaryKeyword: 'group-targeting',
-            keywords: ['group-targeting'],
+            candidateFeatureKey: null,
+            keywords: [],
             sourceDomains: ['tools'],
             phase2Fingerprint: null,
             lastConsolidatedAt: null,
@@ -1413,34 +1442,11 @@ describe('behavior-audit interrupted-run baseline', () => {
     await initializeGitRepo(root)
     await commitAll(root, 'seed tracked behavior audit files')
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: reportsDir,
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-      STORIES_DIR: path.join(reportsDir, 'stories'),
-      CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-      CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-      KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
+    mockReportsConfig(root, {
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
-      PHASE1_TIMEOUT_MS: 1_200_000,
       PHASE2_TIMEOUT_MS: 600_000,
-      PHASE3_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
-      RETRY_BACKOFF_MS: [0, 0, 0] as const,
-      MAX_STEPS: 20,
-      EXCLUDED_PREFIXES: [
-        'tests/e2e/',
-        'tests/client/',
-        'tests/helpers/',
-        'tests/scripts/',
-        'tests/review-loop/',
-        'tests/types/',
-      ] as const,
-    }))
+    })
 
     const realIncrementalModule = await loadIncrementalModule(`interrupted=${crypto.randomUUID()}`)
     const realProgressModule = await loadProgressModule(`interrupted=${crypto.randomUUID()}`)
@@ -1485,19 +1491,26 @@ describe('behavior-audit interrupted-run baseline', () => {
               testFile: 'tests/tools/sample.test.ts',
               testName: 'suite > case',
               dependencyPaths: ['tests/tools/sample.test.ts', 'src/tools/sample.ts'],
+              phase2aFingerprint: null,
               phase1Fingerprint: 'phase1-fingerprint',
+              behaviorId: null,
+              candidateFeatureKey: null,
               phase2Fingerprint: null,
-              extractedBehaviorPath: 'reports/behaviors/tools/sample.test.behaviors.md',
+              extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
               domain: 'tools',
               lastPhase1CompletedAt: '2026-04-17T12:00:00.000Z',
+              lastPhase2aCompletedAt: null,
               lastPhase2CompletedAt: null,
             },
           },
         })
       },
     }))
+    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
+      runPhase2a: (): Promise<ReadonlySet<string>> => Promise.resolve(new Set()),
+    }))
     void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2: (): Promise<
+      runPhase2b: (): Promise<
         IncrementalModuleShape['createEmptyConsolidatedManifest'] extends () => infer TResult ? TResult : never
       > => {
         if (shouldInterruptPhase2) {
@@ -1549,34 +1562,11 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
-    EXCLUDED_PREFIXES: [
-      'tests/e2e/',
-      'tests/client/',
-      'tests/helpers/',
-      'tests/scripts/',
-      'tests/review-loop/',
-      'tests/types/',
-    ] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -1669,27 +1659,10 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
   const reportsDir = path.join(root, 'reports')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
-    PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+  mockReportsConfig(root, {
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   const typedVocab = await loadKeywordVocabularyModule(`vocab-${crypto.randomUUID()}`)
   await typedVocab.saveKeywordVocabulary([
@@ -1720,27 +1693,9 @@ test('writeBehaviorFile renders canonical keywords for each extracted behavior',
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
-    PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
+  mockReportsConfig(root, {
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   const typedWriter = await loadReportWriterModule(`keywords-${crypto.randomUUID()}`)
   await typedWriter.writeBehaviorFile('tests/tools/sample.test.ts', [
@@ -1764,27 +1719,12 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -1860,27 +1800,12 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   let extractCalls = 0
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -1966,27 +1891,12 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -2061,27 +1971,12 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   let capturedResolverPrompt = ''
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -2172,27 +2067,12 @@ test('runPhase1 does not persist a file as done when behavior-file write fails a
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
     extractWithRetry: (): Promise<{
@@ -2292,13 +2172,13 @@ test('consolidate-agent prompt contract treats a keyword batch as a candidate po
   expect(source).toContain('never force one output per batch or one output per keyword')
 })
 
-test('runPhase2 groups cross-domain behaviors by primary keyword and preserves provenance', async () => {
-  let capturedPrimaryKeyword: string | null = null
+test('runPhase2b groups classified behaviors by candidate feature and preserves provenance', async () => {
+  let capturedCandidateFeatureKey: string | null = null
   let capturedDomains: readonly string[] = []
   void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
     consolidateWithRetry: (
-      primaryKeyword: string,
-      inputs: readonly { readonly testKey: string; readonly domain: string }[],
+      candidateFeatureKey: string,
+      inputs: readonly { readonly testKey: string; readonly domain: string; readonly behaviorId: string }[],
     ): Promise<
       | readonly {
           readonly id: string
@@ -2309,6 +2189,8 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
             readonly userStory: string | null
             readonly context: string
             readonly sourceTestKeys: readonly string[]
+            readonly sourceBehaviorIds: readonly string[]
+            readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
           }
         }[]
       | null
@@ -2323,13 +2205,15 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
             readonly userStory: string | null
             readonly context: string
             readonly sourceTestKeys: readonly string[]
+            readonly sourceBehaviorIds: readonly string[]
+            readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
           }
         }[] => {
-          capturedPrimaryKeyword = primaryKeyword
+          capturedCandidateFeatureKey = candidateFeatureKey
           capturedDomains = inputs.map((input) => input.domain)
           return [
             {
-              id: `${primaryKeyword}::combined-feature`,
+              id: `${candidateFeatureKey}::combined-feature`,
               item: {
                 featureName: 'Combined feature',
                 isUserFacing: true,
@@ -2337,6 +2221,8 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
                 userStory: 'As a user, I can do something.',
                 context: 'Implementation context.',
                 sourceTestKeys: inputs.map((input) => input.testKey),
+                sourceBehaviorIds: inputs.map((input) => input.behaviorId),
+                supportingInternalRefs: [],
               },
             },
           ]
@@ -2344,33 +2230,42 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
       ),
   }))
 
-  const consolidate = await loadConsolidateModule(`keyword-batches-${crypto.randomUUID()}`)
+  const consolidate = await loadConsolidateModule(`candidate-features-${crypto.randomUUID()}`)
   const progress = createEmptyProgress(2)
 
-  progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
+  progress.phase2a.classifiedBehaviors['tests/tools/a.test.ts::suite > case'] = createClassifiedBehaviorFixture({
+    behaviorId: 'tests/tools/a.test.ts::suite > case',
+    testKey: 'tests/tools/a.test.ts::suite > case',
+    domain: 'tools',
     behavior: 'When a user targets a group, the bot routes the request correctly.',
     context: 'Routes through group context selection.',
     keywords: ['group-targeting', 'shared-feature'],
-  }
-  progress.phase1.extractedBehaviors['tests/commands/b.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
+    visibility: 'user-facing',
+    candidateFeatureKey: 'group-targeting',
+    candidateFeatureLabel: 'Group targeting',
+    classificationNotes: 'User-facing feature.',
+  })
+  progress.phase2a.classifiedBehaviors['tests/commands/b.test.ts::suite > case'] = createClassifiedBehaviorFixture({
+    behaviorId: 'tests/commands/b.test.ts::suite > case',
+    testKey: 'tests/commands/b.test.ts::suite > case',
+    domain: 'commands',
     behavior: 'When a user configures a group action, the bot applies the group target.',
     context: 'Resolves group target before command execution.',
     keywords: ['group-targeting', 'shared-feature'],
-  }
+    visibility: 'internal',
+    candidateFeatureKey: 'group-targeting',
+    candidateFeatureLabel: 'Group targeting',
+    classificationNotes: 'Supporting internal behavior.',
+  })
 
   const manifest = { version: 1 as const, entries: {} }
-  const result = await consolidate.runPhase2(progress, manifest, 'phase2-v1', new Set())
+  const result = await consolidate.runPhase2b(progress, manifest, 'phase2-v1', new Set(['group-targeting']))
 
   expect(Object.keys(result.entries).length).toBeGreaterThan(0)
-  if (capturedPrimaryKeyword === null) {
-    throw new Error('Expected captured primary keyword')
+  if (capturedCandidateFeatureKey === null) {
+    throw new Error('Expected captured candidate feature key')
   }
-  const capturedPrimaryKeywordValue: string = capturedPrimaryKeyword
-  expect(capturedPrimaryKeywordValue).toBe('group-targeting')
+  expect(capturedCandidateFeatureKey === 'group-targeting').toBe(true)
   expect(capturedDomains).toEqual(['tools', 'commands'])
   const savedEntries = Object.values(result.entries)
   expect(savedEntries).toHaveLength(1)
@@ -2378,196 +2273,15 @@ test('runPhase2 groups cross-domain behaviors by primary keyword and preserves p
   expect(getArrayItem(savedEntries, 0).sourceDomains).toEqual(['commands', 'tools'])
 })
 
-test('runPhase2 accepts omitted selectedTestKeys for backward compatibility', async () => {
-  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
-    consolidateWithRetry: (
-      primaryKeyword: string,
-      inputs: readonly { readonly testKey: string }[],
-    ): Promise<
-      | readonly {
-          readonly id: string
-          readonly item: {
-            readonly featureName: string
-            readonly isUserFacing: boolean
-            readonly behavior: string
-            readonly userStory: string | null
-            readonly context: string
-            readonly sourceTestKeys: readonly string[]
-          }
-        }[]
-      | null
-    > =>
-      Promise.resolve([
-        {
-          id: `${primaryKeyword}::feature`,
-          item: {
-            featureName: 'Feature',
-            isUserFacing: true,
-            behavior: 'When a user acts, something happens.',
-            userStory: 'As a user, I can do something.',
-            context: 'Implementation context.',
-            sourceTestKeys: inputs.map((input) => input.testKey),
-          },
-        },
-      ]),
-  }))
-
-  const consolidate = await loadConsolidateModule(`phase2-backcompat-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(1)
-
-  progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
-    behavior: 'When a user targets a group, the bot routes the request correctly.',
-    context: 'Routes through group context selection.',
-    keywords: ['group-targeting'],
-  }
-
-  const manifest = { version: 1 as const, entries: {} }
-  const result = await consolidate.runPhase2(progress, manifest, 'phase2-v1')
-
-  expect(Object.keys(result.entries)).toEqual(['group-targeting::feature'])
-})
-
-test('runPhase2 splits oversized keyword batches before prompt generation', async () => {
-  const capturedBatchSizes: number[] = []
-  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
-    consolidateWithRetry: (
-      primaryKeyword: string,
-      inputs: readonly { readonly testKey: string }[],
-    ): Promise<
-      | readonly {
-          readonly id: string
-          readonly item: {
-            readonly featureName: string
-            readonly isUserFacing: boolean
-            readonly behavior: string
-            readonly userStory: string | null
-            readonly context: string
-            readonly sourceTestKeys: readonly string[]
-          }
-        }[]
-      | null
-    > => {
-      capturedBatchSizes.push(inputs.length)
-      return Promise.resolve([
-        {
-          id: `${primaryKeyword}::feature-${capturedBatchSizes.length}`,
-          item: {
-            featureName: `Feature ${capturedBatchSizes.length}`,
-            isUserFacing: true,
-            behavior: 'When a user acts, something happens.',
-            userStory: 'As a user, I can do something.',
-            context: 'Implementation context.',
-            sourceTestKeys: inputs.map((input) => input.testKey),
-          },
-        },
-      ])
-    },
-  }))
-
-  const consolidate = await loadConsolidateModule(`split-batches-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(6)
-
-  for (const suffix of ['one', 'two', 'three', 'four', 'five', 'six'] as const) {
-    progress.phase1.extractedBehaviors[`tests/tools/a.test.ts::suite > ${suffix}`] = {
-      testName: suffix,
-      fullPath: `suite > ${suffix}`,
-      behavior: `When a user targets group scenario ${suffix}, the bot routes correctly.`,
-      context: `Context ${suffix}.`,
-      keywords: ['group-targeting', `secondary-${suffix}`],
-    }
-  }
-
-  const manifest = { version: 1 as const, entries: {} }
-  await consolidate.runPhase2(progress, manifest, 'phase2-v1', new Set())
-
-  expect(capturedBatchSizes.length).toBeGreaterThan(1)
-  expect(capturedBatchSizes.every((size) => size < 6)).toBe(true)
-})
-
-test('phase2 can emit multiple feature-level stories from one keyword-owned batch', async () => {
-  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
-    consolidateWithRetry: (
-      primaryKeyword: string,
-      inputs: readonly { readonly testKey: string }[],
-    ): Promise<
-      | readonly {
-          readonly id: string
-          readonly item: {
-            readonly featureName: string
-            readonly isUserFacing: boolean
-            readonly behavior: string
-            readonly userStory: string | null
-            readonly context: string
-            readonly sourceTestKeys: readonly string[]
-          }
-        }[]
-      | null
-    > =>
-      Promise.resolve(
-        inputs.map((input, idx) => ({
-          id: `${primaryKeyword}::feature-${idx}`,
-          item: {
-            featureName: `Feature ${idx}`,
-            isUserFacing: true,
-            behavior: 'When a user acts, something happens.',
-            userStory: `As a user, I can do feature ${idx}.`,
-            context: 'Implementation context.',
-            sourceTestKeys: [input.testKey],
-          },
-        })),
-      ),
-  }))
-
-  const consolidate2 = await loadConsolidateModule(`multi-story-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(2)
-
-  progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > one'] = {
-    testName: 'one',
-    fullPath: 'suite > one',
-    behavior: 'When a user targets a group, the bot routes the request correctly.',
-    context: 'Routes through group context selection.',
-    keywords: ['group-targeting', 'group-routing'],
-  }
-  progress.phase1.extractedBehaviors['tests/tools/a.test.ts::suite > two'] = {
-    testName: 'two',
-    fullPath: 'suite > two',
-    behavior: 'When a user manages group access, the bot shows authorization state.',
-    context: 'Reads group authorization records and formats output.',
-    keywords: ['group-targeting', 'group-authorization'],
-  }
-
-  const manifest = { version: 1 as const, entries: {} }
-  const result = await consolidate2.runPhase2(progress, manifest, 'phase2-v1', new Set())
-  expect(Object.keys(result.entries).length).toBeGreaterThan(1)
-})
-
-test('runPhase3 reads consolidated batches by primary keyword from manifest entries', async () => {
+test('runPhase3 reads consolidated batches by candidate feature from manifest entries', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
   const progressPath = path.join(reportsDir, 'progress.json')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
+  mockReportsConfig(root, {
     PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   void mock.module('../../scripts/behavior-audit/evaluate-agent.js', () => ({
     evaluateWithRetry: (): Promise<MockEvaluationResult> =>
@@ -2593,6 +2307,8 @@ test('runPhase3 reads consolidated batches by primary keyword from manifest entr
         userStory: 'As a user, I can target a group.',
         context: 'Routes through group context selection.',
         sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
+        sourceBehaviorIds: ['tests/tools/a.test.ts::suite > case'],
+        supportingInternalRefs: [],
       },
     ]),
   )
@@ -2607,8 +2323,10 @@ test('runPhase3 reads consolidated batches by primary keyword from manifest entr
         domain: 'cross-domain',
         featureName: 'Shared group targeting',
         sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
+        sourceBehaviorIds: ['tests/tools/a.test.ts::suite > case'],
+        supportingInternalBehaviorIds: [],
         isUserFacing: true,
-        primaryKeyword: 'group-targeting',
+        candidateFeatureKey: 'group-targeting',
         keywords: ['group-targeting', 'shared-feature'],
         sourceDomains: ['commands', 'tools'],
         phase2Fingerprint: 'phase2-fp',
@@ -2647,34 +2365,10 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       ["describe('suite', () => {", "  test('first case', () => {})", '})', ''].join('\n'),
     )
 
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
-      MODEL: 'qwen3-30b-a3b',
-      BASE_URL: 'http://localhost:1234/v1',
-      PROJECT_ROOT: root,
-      REPORTS_DIR: reportsDir,
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-      CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-      STORIES_DIR: path.join(reportsDir, 'stories'),
+    mockReportsConfig(root, {
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
-      CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-      KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-      PHASE1_TIMEOUT_MS: 1_200_000,
-      PHASE2_TIMEOUT_MS: 300_000,
-      PHASE3_TIMEOUT_MS: 600_000,
-      MAX_RETRIES: 3,
-      RETRY_BACKOFF_MS: [0, 0, 0] as const,
-      MAX_STEPS: 20,
-      EXCLUDED_PREFIXES: [
-        'tests/e2e/',
-        'tests/client/',
-        'tests/helpers/',
-        'tests/scripts/',
-        'tests/review-loop/',
-        'tests/types/',
-      ] as const,
-    }))
+    })
 
     const realIncrementalModule = await loadIncrementalModule(`passthrough=${crypto.randomUUID()}`)
     const realProgressModule = await loadProgressModule(`passthrough=${crypto.randomUUID()}`)
@@ -2684,7 +2378,8 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       collectChangedFiles: (): Promise<readonly string[]> => Promise.resolve([]),
       selectIncrementalWork: (input: SelectIncrementalWorkInput): IncrementalSelection => ({
         phase1SelectedTestKeys: [...input.discoveredTestKeys],
-        phase2SelectedTestKeys: [...input.discoveredTestKeys],
+        phase2aSelectedTestKeys: [...input.discoveredTestKeys],
+        phase2bSelectedCandidateFeatureKeys: ['group-targeting'],
         phase3SelectedConsolidatedIds: [],
         reportRebuildOnly: false,
       }),
@@ -2701,25 +2396,30 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
     const consolidatedManifest = {
       version: 1 as const,
       entries: {
-        'tools::selected-case': {
+        'tools::selected-case': createConsolidatedManifestEntry({
           consolidatedId: 'tools::selected-case',
           domain: 'tools',
           featureName: 'Selected case',
           sourceTestKeys: ['tests/tools/sample.test.ts::suite > first case'],
+          sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > first case'],
+          supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          primaryKeyword: 'group-targeting' as string | null,
+          candidateFeatureKey: 'group-targeting' as string | null,
           keywords: ['group-targeting'] as readonly string[],
           sourceDomains: ['tools'] as readonly string[],
           phase2Fingerprint: 'phase2-fp' as string | null,
           lastConsolidatedAt: '2026-04-20T12:00:00.000Z' as string | null,
-        },
+        }),
       },
     }
 
     let phase3ManifestArg: typeof consolidatedManifest | null = null
 
+    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
+      runPhase2a: (): Promise<ReadonlySet<string>> => Promise.resolve(new Set(['group-targeting'])),
+    }))
     void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2: (): Promise<typeof consolidatedManifest> => Promise.resolve(consolidatedManifest),
+      runPhase2b: (): Promise<typeof consolidatedManifest> => Promise.resolve(consolidatedManifest),
     }))
     void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
       runPhase3: (input: {
@@ -2760,27 +2460,9 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
   await Bun.write(path.join(reportsDir, 'consolidated', 'tools.md'), '# consolidated')
   await Bun.write(path.join(reportsDir, 'stories', 'tools.md'), '# stories')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    MODEL: 'qwen3-30b-a3b',
-    BASE_URL: 'http://localhost:1234/v1',
-    PROJECT_ROOT: root,
-    REPORTS_DIR: reportsDir,
-    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
-    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
-    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
-    STORIES_DIR: path.join(reportsDir, 'stories'),
-    PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(reportsDir, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(reportsDir, 'keyword-vocabulary.json'),
-    PHASE1_TIMEOUT_MS: 1_200_000,
-    PHASE2_TIMEOUT_MS: 300_000,
-    PHASE3_TIMEOUT_MS: 600_000,
-    MAX_RETRIES: 3,
-    RETRY_BACKOFF_MS: [0, 0, 0] as const,
-    MAX_STEPS: 20,
+  mockReportsConfig(root, {
     EXCLUDED_PREFIXES: [] as const,
-  }))
+  })
 
   const reset = await loadResetModule(`phase2-reset-${crypto.randomUUID()}`)
   await reset.resetBehaviorAudit('phase2')
@@ -2792,21 +2474,8 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
 
 test('classified-store round-trips sorted classified behaviors under audit root', async () => {
   const root = makeTempDir()
-  const auditRoot = path.join(root, 'reports', 'audit-behavior')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    PROJECT_ROOT: root,
-    REPORTS_DIR: path.join(root, 'reports'),
-    AUDIT_BEHAVIOR_DIR: auditRoot,
-    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
-    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
-    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
-    STORIES_DIR: path.join(auditRoot, 'stories'),
-    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
-  }))
+  mockAuditBehaviorConfig(root, null)
 
   const store = await loadClassifiedStoreModule(crypto.randomUUID())
   await store.writeClassifiedFile('tools', [
@@ -2841,7 +2510,10 @@ test('classified-store round-trips sorted classified behaviors under audit root'
   ])
 
   const loaded = await store.readClassifiedFile('tools')
-  expect(loaded?.map((item) => item.behaviorId)).toEqual([
+  if (loaded === null) {
+    throw new Error('Expected classified data')
+  }
+  expect(loaded.map((item) => item.behaviorId)).toEqual([
     'tests/tools/sample.test.ts::suite > alpha',
     'tests/tools/sample.test.ts::suite > beta',
   ])
@@ -2852,19 +2524,9 @@ test('classified-store throws for malformed classified data but returns null whe
   const auditRoot = path.join(root, 'reports', 'audit-behavior')
   const classifiedDir = path.join(auditRoot, 'classified')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    PROJECT_ROOT: root,
-    REPORTS_DIR: path.join(root, 'reports'),
-    AUDIT_BEHAVIOR_DIR: auditRoot,
-    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+  mockAuditBehaviorConfig(root, {
     CLASSIFIED_DIR: classifiedDir,
-    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
-    STORIES_DIR: path.join(auditRoot, 'stories'),
-    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
-  }))
+  })
 
   const store = await loadClassifiedStoreModule(crypto.randomUUID())
 
@@ -2878,21 +2540,8 @@ test('classified-store throws for malformed classified data but returns null whe
 
 test('report-writer round-trips supporting internal refs as readonly consolidated data', async () => {
   const root = makeTempDir()
-  const auditRoot = path.join(root, 'reports', 'audit-behavior')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    PROJECT_ROOT: root,
-    REPORTS_DIR: path.join(root, 'reports'),
-    AUDIT_BEHAVIOR_DIR: auditRoot,
-    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
-    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
-    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
-    STORIES_DIR: path.join(auditRoot, 'stories'),
-    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
-  }))
+  mockAuditBehaviorConfig(root, null)
 
   const writer = await loadReportWriterModule(crypto.randomUUID())
   await writer.writeConsolidatedFile('tools', [
@@ -2920,6 +2569,9 @@ test('report-writer round-trips supporting internal refs as readonly consolidate
   expect(loaded).toHaveLength(1)
 
   const item = loaded![0]
+  if (item === undefined) {
+    throw new Error('Expected consolidated item to exist')
+  }
   expect(item.supportingInternalRefs).toEqual([
     {
       behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
@@ -2935,19 +2587,9 @@ test('report-writer throws for malformed consolidated data but returns null when
   const auditRoot = path.join(root, 'reports', 'audit-behavior')
   const consolidatedDir = path.join(auditRoot, 'consolidated')
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    PROJECT_ROOT: root,
-    REPORTS_DIR: path.join(root, 'reports'),
-    AUDIT_BEHAVIOR_DIR: auditRoot,
-    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
-    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
+  mockAuditBehaviorConfig(root, {
     CONSOLIDATED_DIR: consolidatedDir,
-    STORIES_DIR: path.join(auditRoot, 'stories'),
-    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
-    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
-    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
-  }))
+  })
 
   const writer = await loadReportWriterModule(crypto.randomUUID())
 
@@ -3018,18 +2660,13 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
     }) + '\n',
   )
 
-  void mock.module('../../scripts/behavior-audit/config.js', () => ({
-    REPORTS_DIR: path.join(root, 'reports'),
-    AUDIT_BEHAVIOR_DIR: auditRoot,
-    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+  mockAuditBehaviorConfig(root, {
     CLASSIFIED_DIR: classifiedDir,
     CONSOLIDATED_DIR: consolidatedDir,
     STORIES_DIR: storiesDir,
     PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
-    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
-  }))
+  })
 
   const mod: ResetModuleShape = await importWithGuard(
     `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
