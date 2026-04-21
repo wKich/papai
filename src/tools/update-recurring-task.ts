@@ -2,18 +2,25 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { rruleInputSchema } from '../deferred-prompts/types.js'
 import { logger } from '../logger.js'
-import { updateRecurringTask as defaultUpdateRecurringTask } from '../recurring.js'
+import { recurrenceSpecToRrule } from '../recurrence.js'
+import {
+  getRecurringTask as defaultGetRecurringTask,
+  updateRecurringTask as defaultUpdateRecurringTask,
+} from '../recurring.js'
 import type { RecurringTaskRecord } from '../types/recurring.js'
-import { semanticScheduleToCompiled, utcToLocal } from '../utils/datetime.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:update-recurring-task' })
 
 export interface UpdateRecurringTaskDeps {
+  getRecurringTask: (id: string) => RecurringTaskRecord | null
   updateRecurringTask: (id: string, updates: Record<string, unknown>) => RecurringTaskRecord | null
 }
 
 const defaultDeps: UpdateRecurringTaskDeps = {
+  getRecurringTask: (...args) => defaultGetRecurringTask(...args),
   updateRecurringTask: (...args) => defaultUpdateRecurringTask(...args),
 }
 
@@ -25,29 +32,26 @@ const inputSchema = z.object({
   status: z.string().optional().describe('New initial status'),
   assignee: z.string().optional().describe('New assignee'),
   labels: z.array(z.string()).optional().describe('New label IDs'),
-  schedule: z
-    .object({
-      frequency: z.enum(['daily', 'weekly', 'monthly', 'weekdays', 'weekends']).describe('How often the task repeats'),
-      time: z.string().describe("Time of day in HH:MM 24-hour format (user's local time)"),
-      days_of_week: z
-        .array(z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']))
-        .optional()
-        .describe('Which days for weekly frequency'),
-      day_of_month: z.number().int().min(1).max(31).optional().describe('Day of month for monthly frequency (1–31)'),
-    })
+  schedule: rruleInputSchema
     .optional()
-    .describe('Updated schedule configuration'),
-  timezone: z.string().optional().describe('IANA timezone for the schedule (e.g. America/New_York)'),
+    .describe("Updated schedule. Call get_current_time first to obtain the user's IANA timezone."),
   catchUp: z.boolean().optional().describe('Whether to create missed occurrences on resume'),
 })
 
 type Input = z.infer<typeof inputSchema>
 
 function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
-  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, timezone, catchUp } = input
+  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, catchUp } = input
   log.debug({ recurringTaskId }, 'Updating recurring task')
 
-  const compiled = schedule === undefined ? undefined : semanticScheduleToCompiled(schedule, timezone ?? 'UTC')
+  const existing = deps.getRecurringTask(recurringTaskId)
+  if (existing === null) {
+    log.warn({ recurringTaskId }, 'Recurring task not found for update')
+    return { error: 'Recurring task not found' }
+  }
+
+  const compiled =
+    schedule === undefined ? undefined : recurrenceSpecToRrule({ ...schedule, dtstart: new Date().toISOString() })
 
   const updated = deps.updateRecurringTask(recurringTaskId, {
     title,
@@ -58,6 +62,7 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
     labels,
     rrule: compiled?.rrule,
     dtstartUtc: compiled?.dtstartUtc,
+    timezone: compiled?.timezone,
     catchUp,
   })
 
@@ -76,7 +81,10 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
   }
 }
 
-export function makeUpdateRecurringTaskTool(deps: UpdateRecurringTaskDeps = defaultDeps): ToolSet[string] {
+export function makeUpdateRecurringTaskTool(
+  _userId: string,
+  deps: UpdateRecurringTaskDeps = defaultDeps,
+): ToolSet[string] {
   return tool({
     description:
       'Update a recurring task definition (title, description, priority, assignee, labels, schedule, catch-up setting).',

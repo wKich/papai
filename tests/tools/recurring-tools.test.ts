@@ -403,14 +403,14 @@ describe('recurring-tools', () => {
       expect(updateRecurringTaskCalls).toHaveLength(0)
     })
 
-    test('converts semantic schedule to rrule when updating', async () => {
+    test('converts RRULE schedule input to compiled recurrence when updating', async () => {
       updateRecurringTaskResult = makeRecord()
       const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
           recurringTaskId: 'rec-1',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
         },
         toolCtx,
       )
