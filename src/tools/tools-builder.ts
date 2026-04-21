@@ -1,5 +1,12 @@
 import type { ToolSet } from 'ai'
 
+import {
+  makeCancelDeferredPromptTool,
+  makeCreateDeferredPromptTool,
+  makeGetDeferredPromptTool,
+  makeListDeferredPromptsTool,
+  makeUpdateDeferredPromptTool,
+} from '../deferred-prompts/tools.js'
 import type { TaskProvider } from '../providers/types.js'
 import { makeAddCommentReactionTool } from './add-comment-reaction.js'
 import { makeAddCommentTool } from './add-comment.js'
@@ -11,11 +18,9 @@ import { makeAddWatcherTool } from './add-watcher.js'
 import { makeApplyYouTrackCommandTool } from './apply-youtrack-command.js'
 import { makeArchiveMemosTool } from './archive-memos.js'
 import { makeAssignTaskToSprintTool } from './assign-task-to-sprint.js'
-import { makeCancelDeferredPromptTool } from './cancel-deferred-prompt.js'
 import { makeClearMyIdentityTool } from './clear-my-identity.js'
 import { makeCoreTools } from './core-tools.js'
 import { makeCountTasksTool } from './count-tasks.js'
-import { makeCreateDeferredPromptTool } from './create-deferred-prompt.js'
 import { makeCreateLabelTool } from './create-label.js'
 import { makeCreateProjectTool } from './create-project.js'
 import { makeCreateRecurringTaskTool } from './create-recurring-task.js'
@@ -28,13 +33,11 @@ import { makeDeleteTaskTool } from './delete-task.js'
 import { makeFindUserTool } from './find-user.js'
 import { makeGetCommentsTool } from './get-comments.js'
 import { makeGetCurrentUserTool } from './get-current-user.js'
-import { makeGetDeferredPromptTool } from './get-deferred-prompt.js'
 import { makeGetProjectTool } from './get-project.js'
 import { makeGetTaskHistoryTool } from './get-task-history.js'
 import { makeDeleteInstructionTool, makeListInstructionsTool, makeSaveInstructionTool } from './instructions.js'
 import { makeListAgilesTool } from './list-agiles.js'
 import { makeListAttachmentsTool } from './list-attachments.js'
-import { makeListDeferredPromptsTool } from './list-deferred-prompts.js'
 import { makeListLabelsTool } from './list-labels.js'
 import { makeListMemosTool } from './list-memos.js'
 import { makeListProjectTeamTool } from './list-project-team.js'
@@ -49,6 +52,7 @@ import { makeLogWorkTool } from './log-work.js'
 import { makeLookupGroupHistoryTool } from './lookup-group-history.js'
 import { makePauseRecurringTaskTool } from './pause-recurring-task.js'
 import { makePromoteMemoTool } from './promote-memo.js'
+import { makeUpdateRecurringTaskTool } from './recurring-tools.js'
 import { makeRemoveAttachmentTool } from './remove-attachment.js'
 import { makeRemoveCommentReactionTool } from './remove-comment-reaction.js'
 import { makeRemoveCommentTool } from './remove-comment.js'
@@ -69,10 +73,8 @@ import { makeSetVisibilityTool } from './set-visibility.js'
 import { makeSkipRecurringTaskTool } from './skip-recurring-task.js'
 import type { ContextType, ToolMode } from './types.js'
 import { makeUpdateCommentTool } from './update-comment.js'
-import { makeUpdateDeferredPromptTool } from './update-deferred-prompt.js'
 import { makeUpdateLabelTool } from './update-label.js'
 import { makeUpdateProjectTool } from './update-project.js'
-import { makeUpdateRecurringTaskTool } from './update-recurring-task.js'
 import { makeUpdateSprintTool } from './update-sprint.js'
 import { makeUpdateStatusTool } from './update-status.js'
 import { makeUpdateTaskRelationTool } from './update-task-relation.js'
@@ -230,7 +232,7 @@ function addRecurringTools(tools: ToolSet, userId: string | undefined): void {
   if (userId === undefined) return
   tools['create_recurring_task'] = makeCreateRecurringTaskTool(userId)
   tools['list_recurring_tasks'] = makeListRecurringTasksTool(userId)
-  tools['update_recurring_task'] = makeUpdateRecurringTaskTool()
+  tools['update_recurring_task'] = makeUpdateRecurringTaskTool(userId)
   tools['pause_recurring_task'] = makePauseRecurringTaskTool()
   tools['resume_recurring_task'] = makeResumeRecurringTaskTool()
   tools['skip_recurring_task'] = makeSkipRecurringTaskTool()

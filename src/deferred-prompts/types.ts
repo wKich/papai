@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { ContextType, DeferredAudience } from '../chat/types.js'
+import { isValidTimezone } from '../types/recurrence.js'
 
 // --- Delivery domain types ---
 
@@ -129,18 +130,54 @@ export function parseExecutionMetadata(raw: string): ExecutionMetadata {
 // --- Tool input schemas ---
 
 export type FireAtInput = { date: string; time: string }
-export type ScheduleInput = { fire_at?: FireAtInput; cron?: string }
 
-export const scheduleSchema = z.object({
-  fire_at: z
-    .object({
-      date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
-      time: z.string().describe("Time in HH:MM 24-hour format (user's local time)"),
-    })
-    .optional()
-    .describe("One-time trigger in user's local time — tool handles UTC conversion"),
-  cron: z.string().optional().describe('5-field cron expression for recurring execution in local time'),
-})
+export const rruleInputSchema = z
+  .object({
+    freq: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).describe('Recurrence frequency.'),
+    interval: z.number().int().min(1).optional().describe('Interval between occurrences (default 1).'),
+    byDay: z
+      .array(z.enum(['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']))
+      .optional()
+      .describe('Weekdays e.g. ["MO","WE","FR"].'),
+    byMonthDay: z.array(z.number().int().min(1).max(31)).optional().describe('Days of month (1–31).'),
+    byMonth: z.array(z.number().int().min(1).max(12)).optional().describe('Months (1–12).'),
+    byHour: z.array(z.number().int().min(0).max(23)).optional().describe('Hours in local time (0–23).'),
+    byMinute: z.array(z.number().int().min(0).max(59)).optional().describe('Minutes (0–59).'),
+    until: z.iso.datetime().optional().describe('End datetime in UTC ISO 8601. Mutually exclusive with count.'),
+    count: z.number().int().min(1).optional().describe('Total occurrences. Mutually exclusive with until.'),
+    timezone: z.string().describe('IANA timezone (e.g. "America/New_York"). Call get_current_time to obtain it.'),
+  })
+  .refine((v) => !(v.until !== undefined && v.count !== undefined), {
+    message: 'until and count are mutually exclusive',
+    path: ['count'],
+  })
+  .refine((v) => isValidTimezone(v.timezone), {
+    message: 'invalid IANA timezone',
+    path: ['timezone'],
+  })
+
+export type RruleInput = z.infer<typeof rruleInputSchema>
+export type ScheduleInput = { fire_at?: FireAtInput; rrule?: RruleInput }
+
+export const scheduleSchema = z
+  .object({
+    fire_at: z
+      .object({
+        date: z.string().describe("Date in YYYY-MM-DD format (user's local date)"),
+        time: z.string().describe("Time in HH:MM 24-hour format (user's local time)"),
+      })
+      .optional()
+      .describe("One-time trigger in user's local time — tool handles UTC conversion"),
+    rrule: rruleInputSchema.optional().describe('Recurring schedule spec.'),
+  })
+  .refine((v) => !(v.fire_at !== undefined && v.rrule !== undefined), {
+    message: 'fire_at and rrule are mutually exclusive — provide exactly one',
+    path: ['rrule'],
+  })
+  .refine((v) => v.fire_at !== undefined || v.rrule !== undefined, {
+    message: 'provide exactly one of fire_at or rrule',
+    path: ['fire_at'],
+  })
 
 export const cooldownSchema = z
   .number()
@@ -181,6 +218,7 @@ export type ScheduledPrompt = {
   fireAt: string
   rrule: string | null
   dtstartUtc: string | null
+  timezone: string | null
   status: 'active' | 'completed' | 'cancelled'
   createdAt: string
   lastExecutedAt: string | null

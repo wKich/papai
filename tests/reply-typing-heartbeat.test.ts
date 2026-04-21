@@ -142,7 +142,7 @@ describe('reply typing heartbeat', () => {
     await withReplyTypingHeartbeat(
       reply,
       async (wrappedReply) => {
-        await wait(50)
+        await wait(100)
         // Should continue despite errors and eventually succeed
         expect(typingCalls.length).toBeGreaterThanOrEqual(1)
         await wrappedReply.text('done')

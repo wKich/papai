@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 const BY_DAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const
 
-const isValidTimezone = (tz: string): boolean => {
+export const isValidTimezone = (tz: string): boolean => {
   try {
     const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz })
     return fmt !== null
@@ -49,15 +49,3 @@ export const recurrenceSpecSchema = z
   })
 
 export type RecurrenceSpec = z.infer<typeof recurrenceSpecSchema>
-
-export const recurringTriggerSchema = z.discriminatedUnion('triggerType', [
-  z.object({
-    triggerType: z.literal('cron'),
-    recurrence: recurrenceSpecSchema,
-  }),
-  z.object({
-    triggerType: z.literal('on_complete'),
-  }),
-])
-
-export type RecurringTrigger = z.infer<typeof recurringTriggerSchema>

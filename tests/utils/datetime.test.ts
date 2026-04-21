@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { localDatetimeToUtc, semanticScheduleToCron, utcToLocal } from '../../src/utils/datetime.js'
+import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
 
 describe('localDatetimeToUtc', () => {
   test('converts date+time in UTC (no offset)', () => {
@@ -52,46 +52,6 @@ describe('localDatetimeToUtc', () => {
     // America/New_York in summer is UTC-4
     // 2026-07-15 09:00 EDT = 13:00 UTC
     expect(localDatetimeToUtc('2026-07-15', '09:00', 'America/New_York')).toBe('2026-07-15T13:00:00.000Z')
-  })
-})
-
-describe('semanticScheduleToCron', () => {
-  test('daily', () => {
-    expect(semanticScheduleToCron({ frequency: 'daily', time: '09:00' })).toBe('0 9 * * *')
-  })
-
-  test('daily with leading-zero hours', () => {
-    expect(semanticScheduleToCron({ frequency: 'daily', time: '09:05' })).toBe('5 9 * * *')
-  })
-
-  test('weekdays', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekdays', time: '09:00' })).toBe('0 9 * * 1-5')
-  })
-
-  test('weekends', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekends', time: '10:00' })).toBe('0 10 * * 0,6')
-  })
-
-  test('weekly on a single day', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekly', time: '09:00', days_of_week: ['mon'] })).toBe('0 9 * * 1')
-  })
-
-  test('weekly on multiple days', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekly', time: '09:00', days_of_week: ['mon', 'wed', 'fri'] })).toBe(
-      '0 9 * * 1,3,5',
-    )
-  })
-
-  test('weekly with no days_of_week defaults to Monday', () => {
-    expect(semanticScheduleToCron({ frequency: 'weekly', time: '09:00' })).toBe('0 9 * * 1')
-  })
-
-  test('monthly with explicit day', () => {
-    expect(semanticScheduleToCron({ frequency: 'monthly', time: '10:00', day_of_month: 15 })).toBe('0 10 15 * *')
-  })
-
-  test('monthly without day defaults to 1st', () => {
-    expect(semanticScheduleToCron({ frequency: 'monthly', time: '10:00' })).toBe('0 10 1 * *')
   })
 })
 

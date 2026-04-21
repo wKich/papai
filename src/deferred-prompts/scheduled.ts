@@ -5,7 +5,6 @@ import { getDrizzleDb } from '../db/drizzle.js'
 import { scheduledPrompts } from '../db/schema.js'
 import type { ScheduledPromptRow } from '../db/schema.js'
 import { logger } from '../logger.js'
-import { cronToRrule } from '../recurrence-translator.js'
 import {
   DEFAULT_EXECUTION_METADATA,
   parseExecutionMetadata,
@@ -63,6 +62,7 @@ function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
     fireAt: row.fireAt,
     rrule: row.rrule,
     dtstartUtc: row.dtstartUtc,
+    timezone: row.timezone,
     status: toStatus(row.status),
     createdAt: row.createdAt,
     lastExecutedAt: row.lastExecutedAt,
@@ -73,16 +73,16 @@ function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
 export function createScheduledPrompt(
   userId: string,
   prompt: string,
-  schedule: { fireAt: string; cronExpression?: string },
+  schedule: { fireAt: string; cronCompiled?: { rrule: string; dtstartUtc: string; timezone?: string } },
   executionMetadata?: ExecutionMetadata,
   delivery?: DeferredPromptDeliveryInput,
 ): ScheduledPrompt {
-  log.debug({ userId, hasCron: schedule.cronExpression !== undefined }, 'createScheduledPrompt called')
+  log.debug({ userId, hasCron: schedule.cronCompiled !== undefined }, 'createScheduledPrompt called')
 
   const db = getDrizzleDb()
   const id = crypto.randomUUID()
   const fireAt = new Date(schedule.fireAt).toISOString()
-  const translated = schedule.cronExpression === undefined ? null : cronToRrule(schedule.cronExpression, 'UTC', fireAt)
+  const translated = schedule.cronCompiled ?? null
 
   const target = delivery ?? dmTarget(userId)
 
@@ -100,6 +100,7 @@ export function createScheduledPrompt(
       fireAt,
       rrule: translated?.rrule ?? null,
       dtstartUtc: translated?.dtstartUtc ?? null,
+      timezone: translated?.timezone ?? null,
       status: 'active',
       executionMetadata: JSON.stringify(executionMetadata ?? DEFAULT_EXECUTION_METADATA),
     })
@@ -153,6 +154,7 @@ function buildUpdateValues(updates: {
   fireAt?: string
   rrule?: string
   dtstartUtc?: string
+  timezone?: string
   executionMetadata?: ExecutionMetadata
 }): Partial<typeof scheduledPrompts.$inferInsert> {
   const values: Partial<typeof scheduledPrompts.$inferInsert> = {}
@@ -160,6 +162,7 @@ function buildUpdateValues(updates: {
   if (updates.fireAt !== undefined) values.fireAt = new Date(updates.fireAt).toISOString()
   if (updates.rrule !== undefined) values.rrule = updates.rrule
   if (updates.dtstartUtc !== undefined) values.dtstartUtc = updates.dtstartUtc
+  if (updates.timezone !== undefined) values.timezone = updates.timezone
   if (updates.executionMetadata !== undefined) values.executionMetadata = JSON.stringify(updates.executionMetadata)
   return values
 }
@@ -172,6 +175,7 @@ export function updateScheduledPrompt(
     fireAt?: string
     rrule?: string
     dtstartUtc?: string
+    timezone?: string
     executionMetadata?: ExecutionMetadata
   },
 ): ScheduledPrompt | null {

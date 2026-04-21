@@ -51,7 +51,9 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
   }
 
   const compiled =
-    schedule === undefined ? undefined : recurrenceSpecToRrule({ ...schedule, dtstart: new Date().toISOString() })
+    schedule === undefined
+      ? undefined
+      : recurrenceSpecToRrule({ ...schedule, dtstart: existing.dtstartUtc ?? new Date().toISOString() })
 
   const updated = deps.updateRecurringTask(recurringTaskId, {
     title,

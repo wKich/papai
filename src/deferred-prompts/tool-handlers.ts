@@ -2,8 +2,8 @@ import type { ContextType } from '../chat/types.js'
 import { dmTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
 import { logger } from '../logger.js'
-import { cronToRrule } from '../recurrence-translator.js'
-import { nextOccurrence } from '../recurrence.js'
+import type { CompiledRecurrence } from '../recurrence.js'
+import { nextOccurrence, recurrenceSpecToRrule } from '../recurrence.js'
 import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
 import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
 import {
@@ -92,7 +92,7 @@ function createScheduled(
   delivery?: DeferredPromptDeliveryInput,
 ): CreateResult {
   const hasFireAt = schedule.fire_at !== undefined
-  const hasCron = schedule.cron !== undefined && schedule.cron !== ''
+  const hasRrule = schedule.rrule !== undefined
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
 
   if (hasFireAt) {
@@ -103,27 +103,23 @@ function createScheduled(
     if (fireDate.getTime() <= Date.now()) return { error: 'fire_at must be a future date and time.' }
   }
 
-  let cronExpression: string | undefined
-  let cronCompiled: { rrule: string; dtstartUtc: string; timezone: string } | undefined
-  if (hasCron) {
-    const translated = cronToRrule(schedule.cron!, 'UTC', new Date().toISOString())
-    if (translated === null) return { error: `Invalid cron expression: '${schedule.cron!}'` }
-    cronExpression = schedule.cron!
-    cronCompiled = translated
+  let cronCompiled: CompiledRecurrence | undefined
+  if (hasRrule) {
+    cronCompiled = recurrenceSpecToRrule({ ...schedule.rrule!, dtstart: new Date().toISOString() })
   }
 
   let fireAt: string
   if (hasFireAt) {
     fireAt = localDatetimeToUtc(schedule.fire_at!.date, schedule.fire_at!.time, timezone)
-  } else if (hasCron) {
+  } else if (hasRrule) {
     const next = nextOccurrence(cronCompiled!, new Date())
-    if (next === null) return { error: 'Could not compute next occurrence for the given cron expression.' }
+    if (next === null) return { error: 'Could not compute next occurrence for the given rrule spec.' }
     fireAt = next.toISOString()
   } else {
-    return { error: 'Schedule must include either fire_at or cron.' }
+    return { error: 'Schedule must include either fire_at or rrule.' }
   }
 
-  const result = createScheduledPrompt(userId, prompt, { fireAt, cronExpression }, executionMetadata, delivery)
+  const result = createScheduledPrompt(userId, prompt, { fireAt, cronCompiled }, executionMetadata, delivery)
   log.info({ id: result.id, userId, type: 'scheduled' }, 'Deferred prompt created')
   return {
     status: 'created',
@@ -203,25 +199,33 @@ function updateScheduledFields(id: string, userId: string, input: UpdateInput): 
     fireAt?: string
     rrule?: string
     dtstartUtc?: string
+    timezone?: string
     executionMetadata?: ExecutionMetadata
   } = {}
   if (input.prompt !== undefined) updates.prompt = input.prompt
   if (input.schedule !== undefined) {
+    const timezone = getConfig(userId, 'timezone') ?? 'UTC'
     if (input.schedule.fire_at !== undefined) {
       const { date, time } = input.schedule.fire_at
-      const timezone = getConfig(userId, 'timezone') ?? 'UTC'
       const utcStr = localDatetimeToUtc(date, time, timezone)
       const fireAtDate = new Date(utcStr)
       if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${date}T${time}'` }
       if (fireAtDate.getTime() <= Date.now()) return { error: 'fire_at must be in the future.' }
       updates.fireAt = utcStr
     }
-    if (input.schedule.cron !== undefined) {
-      const fireAt = updates.fireAt ?? new Date().toISOString()
-      const translated = cronToRrule(input.schedule.cron, 'UTC', fireAt)
-      if (translated === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
-      updates.rrule = translated.rrule
-      updates.dtstartUtc = translated.dtstartUtc
+    if (input.schedule.rrule !== undefined) {
+      const existing = getScheduledPrompt(id, userId)
+      if (existing === null) return { error: 'Deferred prompt not found.' }
+      const anchor = updates.fireAt ?? existing.dtstartUtc ?? existing.fireAt
+      const compiled = recurrenceSpecToRrule({ ...input.schedule.rrule, dtstart: anchor })
+      updates.rrule = compiled.rrule
+      updates.dtstartUtc = compiled.dtstartUtc
+      updates.timezone = compiled.timezone
+      if (updates.fireAt === undefined) {
+        const next = nextOccurrence(compiled, new Date())
+        if (next === null) return { error: 'Could not compute next occurrence for the given rrule spec.' }
+        updates.fireAt = next.toISOString()
+      }
     }
   }
   if (input.execution !== undefined) {

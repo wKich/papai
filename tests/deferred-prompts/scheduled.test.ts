@@ -43,12 +43,39 @@ describe('createScheduledPrompt', () => {
     const fireAt = new Date(Date.now() + 60_000).toISOString()
     const prompt = createScheduledPrompt(USER_ID, 'Daily standup summary', {
       fireAt,
-      cronExpression: '0 9 * * *',
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: fireAt },
     })
 
     expect(prompt.type).toBe('scheduled')
     expect(prompt.rrule).toBe('FREQ=DAILY;BYHOUR=9;BYMINUTE=0')
     expect(prompt.status).toBe('active')
+  })
+
+  test('persists timezone from cronCompiled', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const prompt = createScheduledPrompt(USER_ID, 'Morning report', {
+      fireAt,
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: fireAt, timezone: 'America/New_York' },
+    })
+
+    expect(prompt.timezone).toBe('America/New_York')
+  })
+
+  test('stores null timezone when cronCompiled has no timezone', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const prompt = createScheduledPrompt(USER_ID, 'Legacy prompt', {
+      fireAt,
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: fireAt },
+    })
+
+    expect(prompt.timezone).toBeNull()
+  })
+
+  test('stores null timezone for one-shot prompts', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const prompt = createScheduledPrompt(USER_ID, 'One-shot', { fireAt })
+
+    expect(prompt.timezone).toBeNull()
   })
 })
 
@@ -126,6 +153,19 @@ describe('updateScheduledPrompt', () => {
     const result = updateScheduledPrompt('nonexistent-id', USER_ID, { prompt: 'X' })
     expect(result).toBeNull()
   })
+
+  test('persists timezone when updating rrule', () => {
+    const fireAt = new Date(Date.now() + 60_000).toISOString()
+    const created = createScheduledPrompt(USER_ID, 'Old text', { fireAt })
+
+    const updated = updateScheduledPrompt(created.id, USER_ID, {
+      rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+      dtstartUtc: fireAt,
+      timezone: 'Asia/Tokyo',
+    })
+    expect(updated).not.toBeNull()
+    expect(updated!.timezone).toBe('Asia/Tokyo')
+  })
 })
 
 describe('cancelScheduledPrompt', () => {
@@ -187,7 +227,7 @@ describe('advanceScheduledPrompt', () => {
     const fireAt = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Recurring', {
       fireAt,
-      cronExpression: '0 9 * * *',
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: fireAt },
     })
 
     const nextFireAt = new Date(Date.now() + 86_400_000).toISOString()

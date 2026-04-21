@@ -16,6 +16,7 @@ export const scheduledPrompts = sqliteTable(
     fireAt: text('fire_at').notNull(),
     rrule: text('rrule'),
     dtstartUtc: text('dtstart_utc'),
+    timezone: text('timezone'),
     status: text('status').notNull().default('active'),
     createdAt: text('created_at')
       .notNull()

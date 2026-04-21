@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import { recurrenceSpecSchema, recurringTriggerSchema } from '../../src/types/recurrence.js'
+import { recurrenceSpecSchema } from '../../src/types/recurrence.js'
 
 describe('recurrenceSpecSchema', () => {
   it('accepts a minimal weekly spec', () => {
@@ -50,30 +50,6 @@ describe('recurrenceSpecSchema', () => {
       dtstart: '2026-04-20T09:00:00Z',
       timezone: 'UTC',
     })
-    expect(result.success).toBe(false)
-  })
-})
-
-describe('recurringTriggerSchema (discriminated union)', () => {
-  it('accepts on_complete with no recurrence', () => {
-    const result = recurringTriggerSchema.safeParse({ triggerType: 'on_complete' })
-    expect(result.success).toBe(true)
-  })
-
-  it('accepts cron with a valid spec', () => {
-    const result = recurringTriggerSchema.safeParse({
-      triggerType: 'cron',
-      recurrence: {
-        freq: 'DAILY',
-        dtstart: '2026-04-20T09:00:00Z',
-        timezone: 'UTC',
-      },
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects cron without a recurrence', () => {
-    const result = recurringTriggerSchema.safeParse({ triggerType: 'cron' })
     expect(result.success).toBe(false)
   })
 })
