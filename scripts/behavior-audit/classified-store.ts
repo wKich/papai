@@ -1,4 +1,6 @@
+import { constants } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
@@ -24,16 +26,20 @@ export interface ClassifiedBehavior {
   readonly classificationNotes: string
 }
 
-const RelatedBehaviorHintSchema = z.object({
-  testKey: z.string(),
-  relation: z.enum(['same-feature', 'supporting-detail', 'possibly-related']),
-  reason: z.string(),
-})
+const RelatedBehaviorHintSchema = z
+  .object({
+    testKey: z.string(),
+    relation: z.enum(['same-feature', 'supporting-detail', 'possibly-related']),
+    reason: z.string(),
+  })
+  .readonly()
 
-const SupportingBehaviorRefSchema = z.object({
-  behaviorId: z.string(),
-  reason: z.string(),
-})
+const SupportingBehaviorRefSchema = z
+  .object({
+    behaviorId: z.string(),
+    reason: z.string(),
+  })
+  .readonly()
 
 const ClassifiedBehaviorSchema = z.object({
   behaviorId: z.string(),
@@ -62,9 +68,14 @@ export async function writeClassifiedFile(domain: string, behaviors: readonly Cl
 export async function readClassifiedFile(domain: string): Promise<readonly ClassifiedBehavior[] | null> {
   const filePath = join(CLASSIFIED_DIR, `${domain}.json`)
   try {
-    const raw: unknown = JSON.parse(await Bun.file(filePath).text())
-    return ClassifiedBehaviorArraySchema.parse(raw)
-  } catch {
-    return null
+    await access(filePath, constants.F_OK)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
   }
+
+  const raw: unknown = JSON.parse(await Bun.file(filePath).text())
+  return ClassifiedBehaviorArraySchema.parse(raw)
 }

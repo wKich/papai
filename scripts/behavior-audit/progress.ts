@@ -172,6 +172,13 @@ export function getFailedTestAttempts(progress: Progress, testKey: string): numb
 }
 
 export function markClassificationDone(progress: Progress, behaviorId: string, classified: ClassifiedBehavior): void {
+  const hadFailedState = progress.phase2a.failedBehaviors[behaviorId] !== undefined
+  if (hadFailedState) {
+    const { [behaviorId]: _removed, ...remainingFailedBehaviors } = progress.phase2a.failedBehaviors
+    progress.phase2a.failedBehaviors = remainingFailedBehaviors
+    progress.phase2a.stats.behaviorsFailed = Math.max(0, progress.phase2a.stats.behaviorsFailed - 1)
+  }
+
   if (progress.phase2a.completedBehaviors[behaviorId] === 'done') {
     progress.phase2a.classifiedBehaviors[behaviorId] = classified
     return
@@ -189,7 +196,26 @@ export function markClassificationFailed(progress: Progress, behaviorId: string,
     attempts: attempts + 1,
     lastAttempt: new Date().toISOString(),
   }
-  progress.phase2a.stats.behaviorsFailed++
+  if (existing === undefined) {
+    progress.phase2a.stats.behaviorsFailed++
+  }
+}
+
+export function setClassificationFailedAttempts(
+  progress: Progress,
+  behaviorId: string,
+  error: string,
+  attempts: number,
+): void {
+  const existing = progress.phase2a.failedBehaviors[behaviorId]
+  progress.phase2a.failedBehaviors[behaviorId] = {
+    error,
+    attempts,
+    lastAttempt: new Date().toISOString(),
+  }
+  if (existing === undefined) {
+    progress.phase2a.stats.behaviorsFailed++
+  }
 }
 
 export function getFailedClassificationAttempts(progress: Progress, behaviorId: string): number {

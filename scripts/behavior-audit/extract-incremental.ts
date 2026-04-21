@@ -45,10 +45,14 @@ function buildManifestEntry(input: {
     testName: input.testCase.fullPath,
     dependencyPaths: input.dependencyPaths,
     phase1Fingerprint: input.phase1Fingerprint,
+    phase2aFingerprint: null,
     phase2Fingerprint: input.phase2Fingerprint,
+    behaviorId: null,
+    candidateFeatureKey: null,
     extractedBehaviorPath: input.extractedBehaviorPath,
     domain: getDomain(input.testFile.filePath),
     lastPhase1CompletedAt: new Date().toISOString(),
+    lastPhase2aCompletedAt: null,
     lastPhase2CompletedAt: input.lastPhase2CompletedAt,
   }
 }
@@ -63,7 +67,7 @@ async function loadFileDependencies(testFile: ParsedTestFile): Promise<{
   const mirroredPath = deriveImplPath(testFile.filePath)
   const mirroredSourceHash = await loadMirroredSourceHash(testFile.filePath)
   const dependencyPaths = mirroredSourceHash === null ? [testFile.filePath] : [testFile.filePath, mirroredPath]
-  const extractedBehaviorPath = `reports/behaviors/${getDomain(testFile.filePath)}/${testFile.filePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')}`
+  const extractedBehaviorPath = `reports/audit-behavior/behaviors/${getDomain(testFile.filePath)}/${testFile.filePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')}`
   return { testFileHash, mirroredSourceHash, dependencyPaths, extractedBehaviorPath }
 }
 

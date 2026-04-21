@@ -12,14 +12,14 @@ function toSortedUnique(values: readonly string[]): readonly string[] {
   return [...new Set(values)].toSorted()
 }
 
-function computePhase1And2Keys(
+function computePhase1And2aKeys(
   input: SelectIncrementalWorkInput,
   discoveredSet: ReadonlySet<string>,
   changedFilesSet: ReadonlySet<string>,
   previousPhaseVersions: IncrementalManifest['phaseVersions'],
 ): {
   readonly phase1Keys: readonly string[]
-  readonly phase2Keys: readonly string[]
+  readonly phase2aKeys: readonly string[]
   readonly phase2VersionChanged: boolean
 } {
   const entries = Object.entries(input.previousManifest.tests).filter(([k]) => discoveredSet.has(k))
@@ -27,30 +27,54 @@ function computePhase1And2Keys(
   const newKeys = input.discoveredTestKeys.filter((k) => input.previousManifest.tests[k] === undefined)
   const phase1Keys = toSortedUnique([...depKeys, ...newKeys])
   const phase2VersionChanged = previousPhaseVersions.phase2 !== input.currentPhaseVersions.phase2
-  const phase2VersionKeys = phase2VersionChanged
+  const phase2aVersionKeys = phase2VersionChanged
     ? entries.filter(([, e]) => e.extractedBehaviorPath !== null).map(([k]) => k)
     : []
-  return { phase1Keys, phase2Keys: toSortedUnique([...phase1Keys, ...phase2VersionKeys]), phase2VersionChanged }
+  return { phase1Keys, phase2aKeys: toSortedUnique([...phase1Keys, ...phase2aVersionKeys]), phase2VersionChanged }
 }
 
-function computePhase3Ids(
-  phase1Keys: readonly string[],
-  phase2Changed: boolean,
+function computePhase2bKeys(phase2aKeys: readonly string[], manifest: IncrementalManifest): readonly string[] {
+  return toSortedUnique(
+    phase2aKeys
+      .map((testKey) => manifest.tests[testKey]?.candidateFeatureKey ?? null)
+      .filter((value): value is string => value !== null),
+  )
+}
+
+function computePhase3IdsFromCandidateFeatures(
+  candidateFeatureKeys: readonly string[],
   manifest: ConsolidatedManifest | null,
 ): readonly string[] {
-  const ids: string[] = []
-  if (phase1Keys.length > 0 && manifest !== null) {
-    const phase1Set = new Set(phase1Keys)
-    for (const [id, entry] of Object.entries(manifest.entries)) {
-      if (entry.sourceTestKeys.some((k) => phase1Set.has(k))) ids.push(id)
-    }
+  if (manifest === null) return []
+  const selected = new Set(candidateFeatureKeys)
+  return Object.values(manifest.entries)
+    .filter((entry) => entry.candidateFeatureKey !== null && selected.has(entry.candidateFeatureKey))
+    .map((entry) => entry.consolidatedId)
+    .toSorted()
+}
+
+function computePhase3IdsFromSourceTests(
+  selectedTestKeys: readonly string[],
+  manifest: ConsolidatedManifest | null,
+): readonly string[] {
+  if (manifest === null) return []
+  const selected = new Set(selectedTestKeys)
+  return Object.values(manifest.entries)
+    .filter((entry) => entry.sourceTestKeys.some((testKey) => selected.has(testKey)))
+    .map((entry) => entry.consolidatedId)
+    .toSorted()
+}
+
+function computePhase3SelectedConsolidatedIds(input: {
+  readonly phase2aKeys: readonly string[]
+  readonly phase2bKeys: readonly string[]
+  readonly manifest: ConsolidatedManifest | null
+}): readonly string[] {
+  const idsFromCandidateFeatures = computePhase3IdsFromCandidateFeatures(input.phase2bKeys, input.manifest)
+  if (idsFromCandidateFeatures.length > 0 || input.phase2aKeys.length === 0) {
+    return idsFromCandidateFeatures
   }
-  if (phase2Changed && manifest !== null) {
-    for (const [id] of Object.entries(manifest.entries)) {
-      if (!ids.includes(id)) ids.push(id)
-    }
-  }
-  return ids
+  return computePhase3IdsFromSourceTests(input.phase2aKeys, input.manifest)
 }
 
 export function selectIncrementalWork(input: SelectIncrementalWorkInput): IncrementalSelection {
@@ -60,33 +84,42 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
   const phase1VersionChanged = previousPhaseVersions.phase1 !== input.currentPhaseVersions.phase1
   if (phase1VersionChanged) {
     const all = toSortedUnique(input.discoveredTestKeys)
+    const phase2bKeys = computePhase2bKeys(all, input.previousManifest)
     return {
       phase1SelectedTestKeys: all,
-      phase2SelectedTestKeys: all,
-      phase3SelectedConsolidatedIds: [],
+      phase2aSelectedTestKeys: all,
+      phase2bSelectedCandidateFeatureKeys: phase2bKeys,
+      phase3SelectedConsolidatedIds: computePhase3SelectedConsolidatedIds({
+        phase2aKeys: all,
+        phase2bKeys,
+        manifest: input.previousConsolidatedManifest,
+      }),
       reportRebuildOnly: false,
     }
   }
-  const { phase1Keys, phase2Keys, phase2VersionChanged } = computePhase1And2Keys(
+  const { phase1Keys, phase2aKeys } = computePhase1And2aKeys(
     input,
     discoveredSet,
     changedFilesSet,
     previousPhaseVersions,
   )
-  const phase3SelectedConsolidatedIds = computePhase3Ids(
-    phase1Keys,
-    phase2VersionChanged,
-    input.previousConsolidatedManifest,
-  )
+  const phase2bKeys = computePhase2bKeys(phase2aKeys, input.previousManifest)
+  const phase3SelectedConsolidatedIds = computePhase3SelectedConsolidatedIds({
+    phase2aKeys,
+    phase2bKeys,
+    manifest: input.previousConsolidatedManifest,
+  })
   const reportVersionChanged = previousPhaseVersions.reports !== input.currentPhaseVersions.reports
   return {
     phase1SelectedTestKeys: phase1Keys,
-    phase2SelectedTestKeys: phase2Keys,
+    phase2aSelectedTestKeys: phase2aKeys,
+    phase2bSelectedCandidateFeatureKeys: phase2bKeys,
     phase3SelectedConsolidatedIds,
     reportRebuildOnly:
       reportVersionChanged &&
       phase1Keys.length === 0 &&
-      phase2Keys.length === 0 &&
+      phase2aKeys.length === 0 &&
+      phase2bKeys.length === 0 &&
       phase3SelectedConsolidatedIds.length === 0,
   }
 }

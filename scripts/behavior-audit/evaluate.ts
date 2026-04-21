@@ -30,16 +30,7 @@ interface Phase3Selection {
 function getConsolidatedFileKeysFromManifestEntries(
   entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>,
 ): readonly string[] {
-  return [
-    ...new Set(
-      Object.values(entries).map((entry) => {
-        if (entry.primaryKeyword !== null) {
-          return entry.primaryKeyword
-        }
-        return entry.domain
-      }),
-    ),
-  ].toSorted()
+  return [...new Set(Object.values(entries).map((entry) => entry.candidateFeatureKey ?? entry.domain))].toSorted()
 }
 
 interface ParsedConsolidatedBehavior {

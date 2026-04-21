@@ -48,6 +48,16 @@ function buildResolverPrompt(candidateKeywords: readonly string[], vocabularyTex
   ].join('\n')
 }
 
+function buildVocabularySlugListText(existingVocabulary: readonly KeywordVocabularyEntry[]): string {
+  return existingVocabulary.length === 0
+    ? '(empty)'
+    : JSON.stringify(
+        existingVocabulary.map((entry) => entry.slug),
+        null,
+        2,
+      )
+}
+
 async function resolveKeywords(
   candidateKeywords: readonly string[],
   testKey: string,
@@ -58,7 +68,7 @@ async function resolveKeywords(
   if (loadedVocabulary !== null) {
     existingVocabulary = loadedVocabulary
   }
-  const vocabularyText = existingVocabulary.length === 0 ? '(empty)' : JSON.stringify(existingVocabulary, null, 2)
+  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
   const resolved = await resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
   if (resolved === null) {
     markTestFailed(progress, testKey, 'keyword resolution failed')

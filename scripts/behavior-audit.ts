@@ -1,8 +1,9 @@
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 
+import { runPhase2a } from './behavior-audit/classify.js'
 import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './behavior-audit/config.js'
-import { runPhase2 } from './behavior-audit/consolidate.js'
+import { runPhase2b } from './behavior-audit/consolidate.js'
 import { runPhase3 } from './behavior-audit/evaluate.js'
 import { runPhase1 } from './behavior-audit/extract.js'
 import type { IncrementalManifest } from './behavior-audit/incremental.js'
@@ -22,6 +23,13 @@ import { createEmptyProgress, loadProgress, saveProgress } from './behavior-audi
 import { rebuildReportsFromStoredResults } from './behavior-audit/report-writer.js'
 import type { ParsedTestFile } from './behavior-audit/test-parser.js'
 import { parseTestFile } from './behavior-audit/test-parser.js'
+
+function requireOpenAiApiKey(): void {
+  if ((process.env['OPENAI_API_KEY'] ?? '').trim().length > 0) {
+    return
+  }
+  throw new Error('Behavior audit requires OPENAI_API_KEY to be set')
+}
 
 async function discoverTestFiles(): Promise<string[]> {
   const testDir = join(PROJECT_ROOT, 'tests')
@@ -86,25 +94,24 @@ async function runPhase1IfNeeded(
   await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest })
 }
 
-async function runPhase2IfNeeded(
+function runPhase2aIfNeeded(
+  progress: Progress,
+  manifest: IncrementalManifest,
+  selectedTestKeys: ReadonlySet<string>,
+): Promise<ReadonlySet<string>> {
+  if (progress.phase2a.status === 'done' && selectedTestKeys.size === 0) {
+    return Promise.resolve(new Set())
+  }
+  return runPhase2a({ progress, selectedTestKeys, manifest })
+}
+
+async function runPhase2bIfNeeded(
   progress: Progress,
   phase2Version: string,
-  selectedTestKeys: ReadonlySet<string>,
+  selectedCandidateFeatureKeys: ReadonlySet<string>,
 ): Promise<import('./behavior-audit/incremental.js').ConsolidatedManifest> {
-  if (progress.phase2.status === 'done' && selectedTestKeys.size === 0) {
-    const existing = await loadConsolidatedManifest()
-    if (existing !== null) {
-      console.log('[Phase 2] Already complete, skipping.\n')
-      return existing
-    }
-  }
-
-  const existingManifest = await loadConsolidatedManifest()
-  if (existingManifest === null) {
-    return runPhase2(progress, createEmptyConsolidatedManifest(), phase2Version, selectedTestKeys)
-  }
-  const consolidatedManifest = existingManifest
-  return runPhase2(progress, consolidatedManifest, phase2Version, selectedTestKeys)
+  const existingManifest = (await loadConsolidatedManifest()) ?? createEmptyConsolidatedManifest()
+  return runPhase2b(progress, existingManifest, phase2Version, selectedCandidateFeatureKeys)
 }
 
 async function prepareIncrementalRun(): Promise<{
@@ -174,6 +181,7 @@ async function resolveHeadCommit(): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  requireOpenAiApiKey()
   console.log('Behavior Audit — discovering test files...\n')
 
   const { previousManifest, previousLastStartCommit, updatedManifest } = await prepareIncrementalRun()
@@ -196,11 +204,16 @@ async function main(): Promise<void> {
   }
 
   await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
-
-  const consolidatedManifest = await runPhase2IfNeeded(
+  const dirtyFromPhase2a = await runPhase2aIfNeeded(
+    progress,
+    updatedManifest,
+    new Set(selection.phase2aSelectedTestKeys),
+  )
+  const phase2bSelectedKeys = new Set([...selection.phase2bSelectedCandidateFeatureKeys, ...dirtyFromPhase2a])
+  const consolidatedManifest = await runPhase2bIfNeeded(
     progress,
     updatedManifest.phaseVersions.phase2,
-    new Set(selection.phase2SelectedTestKeys),
+    phase2bSelectedKeys,
   )
   await saveConsolidatedManifest(consolidatedManifest)
 

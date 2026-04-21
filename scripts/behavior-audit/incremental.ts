@@ -11,10 +11,14 @@ export interface ManifestTestEntry {
   readonly testName: string
   readonly dependencyPaths: readonly string[]
   readonly phase1Fingerprint: string | null
+  readonly phase2aFingerprint: string | null
   readonly phase2Fingerprint: string | null
+  readonly behaviorId: string | null
+  readonly candidateFeatureKey: string | null
   readonly extractedBehaviorPath: string | null
   readonly domain: string
   readonly lastPhase1CompletedAt: string | null
+  readonly lastPhase2aCompletedAt: string | null
   readonly lastPhase2CompletedAt: string | null
 }
 
@@ -33,7 +37,8 @@ export interface IncrementalManifest {
 
 export interface IncrementalSelection {
   readonly phase1SelectedTestKeys: readonly string[]
-  readonly phase2SelectedTestKeys: readonly string[]
+  readonly phase2aSelectedTestKeys: readonly string[]
+  readonly phase2bSelectedCandidateFeatureKeys: readonly string[]
   readonly phase3SelectedConsolidatedIds: readonly string[]
   readonly reportRebuildOnly: boolean
 }
@@ -46,8 +51,10 @@ export interface ConsolidatedManifestEntry {
   readonly domain: string
   readonly featureName: string
   readonly sourceTestKeys: readonly string[]
+  readonly sourceBehaviorIds: readonly string[]
+  readonly supportingInternalBehaviorIds: readonly string[]
   readonly isUserFacing: boolean
-  readonly primaryKeyword: string | null
+  readonly candidateFeatureKey: string | null
   readonly keywords: readonly string[]
   readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
@@ -75,15 +82,27 @@ interface Phase2FingerprintInput {
   readonly phaseVersion: string
 }
 
+interface Phase2aFingerprintInput {
+  readonly testKey: string
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+  readonly phaseVersion: string
+}
+
 const ManifestTestEntrySchema = z.object({
   testFile: z.string(),
   testName: z.string(),
   dependencyPaths: z.array(z.string()),
   phase1Fingerprint: z.string().nullable(),
+  phase2aFingerprint: z.string().nullable().default(null),
   phase2Fingerprint: z.string().nullable(),
+  behaviorId: z.string().nullable().default(null),
+  candidateFeatureKey: z.string().nullable().default(null),
   extractedBehaviorPath: z.string().nullable(),
   domain: z.string(),
   lastPhase1CompletedAt: z.string().nullable(),
+  lastPhase2aCompletedAt: z.string().nullable().default(null),
   lastPhase2CompletedAt: z.string().nullable(),
 })
 
@@ -107,8 +126,10 @@ const ConsolidatedManifestEntrySchema = z.object({
   domain: z.string(),
   featureName: z.string(),
   sourceTestKeys: z.array(z.string()),
+  sourceBehaviorIds: z.array(z.string()).default([]),
+  supportingInternalBehaviorIds: z.array(z.string()).default([]),
   isUserFacing: z.boolean(),
-  primaryKeyword: z.string().nullable().default(null),
+  candidateFeatureKey: z.string().nullable().default(null),
   keywords: z.array(z.string()).default([]),
   sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),
@@ -166,6 +187,10 @@ export function buildPhase1Fingerprint(input: Phase1FingerprintInput): string {
 }
 
 export function buildPhase2Fingerprint(input: Phase2FingerprintInput): string {
+  return sha256Json(input)
+}
+
+export function buildPhase2aFingerprint(input: Phase2aFingerprintInput): string {
   return sha256Json(input)
 }
 
@@ -252,7 +277,8 @@ export async function saveConsolidatedManifest(manifest: ConsolidatedManifest): 
 }
 
 export function buildPhase2ConsolidationFingerprint(input: {
-  readonly sourceTestKeys: readonly string[]
+  readonly candidateFeatureKey: string
+  readonly sourceBehaviorIds: readonly string[]
   readonly behaviors: readonly string[]
   readonly phaseVersion: string
 }): string {

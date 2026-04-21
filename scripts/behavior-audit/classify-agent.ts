@@ -73,19 +73,38 @@ async function classifySingle(prompt: string, attempt: number): Promise<Classifi
   }
 }
 
-export async function classifyBehaviorWithRetry(
+function getRetryBackoff(attempt: number): number {
+  return RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
+}
+
+async function classifyAttempt(
   prompt: string,
+  attempt: number,
   attemptOffset: number,
 ): Promise<ClassificationResult | null> {
-  for (let attempt = attemptOffset; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > attemptOffset) {
-      const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
-      await sleep(backoff)
-    }
-    const result = await classifySingle(prompt, attempt)
+  if (attempt > attemptOffset) {
+    await sleep(getRetryBackoff(attempt))
+  }
+  return classifySingle(prompt, attempt)
+}
+
+function retryClassification(
+  prompt: string,
+  attempt: number,
+  attemptOffset: number,
+): Promise<ClassificationResult | null> {
+  if (attempt >= MAX_RETRIES) {
+    return Promise.resolve(null)
+  }
+
+  return classifyAttempt(prompt, attempt, attemptOffset).then((result) => {
     if (result !== null) {
       return result
     }
-  }
-  return null
+    return retryClassification(prompt, attempt + 1, attemptOffset)
+  })
+}
+
+export function classifyBehaviorWithRetry(prompt: string, attemptOffset: number): Promise<ClassificationResult | null> {
+  return retryClassification(prompt, attemptOffset, attemptOffset)
 }
