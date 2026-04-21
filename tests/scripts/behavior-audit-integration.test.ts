@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
-import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
+import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
 import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
 import type * as ExtractModule from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
@@ -611,6 +611,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
       PROGRESS_PATH: progressPath,
@@ -937,6 +938,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
       PROGRESS_PATH: progressPath,
       INCREMENTAL_MANIFEST_PATH: manifestPath,
@@ -1046,6 +1048,84 @@ describe('behavior-audit phase 1 incremental selection', () => {
   })
 })
 
+describe('behavior-audit phase 2a classification', () => {
+  let root: string
+  let auditRoot: string
+  let progressPath: string
+  let manifestPath: string
+
+  beforeEach(() => {
+    root = makeTempDir()
+    auditRoot = path.join(root, 'reports', 'audit-behavior')
+    progressPath = path.join(auditRoot, 'progress.json')
+    manifestPath = path.join(auditRoot, 'incremental-manifest.json')
+
+    void mock.module('../../scripts/behavior-audit/config.js', () => ({
+      MODEL: 'qwen3-30b-a3b',
+      BASE_URL: 'http://localhost:1234/v1',
+      PROJECT_ROOT: root,
+      REPORTS_DIR: path.join(root, 'reports'),
+      AUDIT_BEHAVIOR_DIR: auditRoot,
+      BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+      CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
+      CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
+      STORIES_DIR: path.join(auditRoot, 'stories'),
+      PROGRESS_PATH: progressPath,
+      INCREMENTAL_MANIFEST_PATH: manifestPath,
+      CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+      KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
+      PHASE1_TIMEOUT_MS: 1_200_000,
+      PHASE2_TIMEOUT_MS: 300_000,
+      PHASE3_TIMEOUT_MS: 600_000,
+      MAX_RETRIES: 3,
+      RETRY_BACKOFF_MS: [0, 0, 0] as const,
+      MAX_STEPS: 20,
+      EXCLUDED_PREFIXES: [] as const,
+    }))
+
+    void mock.module('../../scripts/behavior-audit/classify-agent.js', () => ({
+      classifyBehaviorWithRetry: (): Promise<
+        import('../../scripts/behavior-audit/classify-agent.js').ClassificationResult
+      > =>
+        Promise.resolve({
+          visibility: 'user-facing',
+          candidateFeatureKey: 'task-creation',
+          candidateFeatureLabel: 'Task creation',
+          supportingBehaviorRefs: [],
+          relatedBehaviorHints: [],
+          classificationNotes: 'Matches task creation flow.',
+        }),
+    }))
+  })
+
+  test('runPhase2a classifies selected extracted behaviors and returns dirty candidate feature keys', async () => {
+    const classify = await import(`../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`)
+    const progressModule = await import(`../../scripts/behavior-audit/progress.js?test=${crypto.randomUUID()}`)
+    const incremental = await import(`../../scripts/behavior-audit/incremental.js?test=${crypto.randomUUID()}`)
+
+    const progress = progressModule.createEmptyProgress(1)
+    progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = {
+      testName: 'case',
+      fullPath: 'suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+    }
+
+    const dirty = await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    })
+
+    expect([...dirty]).toEqual(['task-creation'])
+    expect(progress.phase2a.classifiedBehaviors['tests/tools/sample.test.ts::suite > case']?.candidateFeatureKey).toBe(
+      'task-creation',
+    )
+    expect(await Bun.file(path.join(auditRoot, 'classified', 'tools.json')).exists()).toBe(true)
+  })
+})
+
 describe('behavior-audit phase 3 incremental selection', () => {
   let root: string
   let reportsDir: string
@@ -1097,6 +1177,7 @@ describe('behavior-audit phase 3 incremental selection', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       CONSOLIDATED_DIR: consolidatedDir,
       STORIES_DIR: path.join(reportsDir, 'stories'),
       PROGRESS_PATH: progressPath,
@@ -1338,6 +1419,7 @@ describe('behavior-audit interrupted-run baseline', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
       CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
@@ -1473,6 +1555,7 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -1592,6 +1675,7 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
@@ -1642,6 +1726,7 @@ test('writeBehaviorFile renders canonical keywords for each extracted behavior',
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
@@ -1685,6 +1770,7 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -1780,6 +1866,7 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -1885,6 +1972,7 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -1979,6 +2067,7 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -2089,6 +2178,7 @@ test('runPhase1 does not persist a file as done when behavior-file write fails a
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: progressPath,
@@ -2563,6 +2653,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+      CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
       PROGRESS_PATH: progressPath,
@@ -2675,6 +2766,7 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
     PROJECT_ROOT: root,
     REPORTS_DIR: reportsDir,
     BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
     CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
     STORIES_DIR: path.join(reportsDir, 'stories'),
     PROGRESS_PATH: path.join(reportsDir, 'progress.json'),
@@ -2753,6 +2845,118 @@ test('classified-store round-trips sorted classified behaviors under audit root'
     'tests/tools/sample.test.ts::suite > alpha',
     'tests/tools/sample.test.ts::suite > beta',
   ])
+})
+
+test('classified-store throws for malformed classified data but returns null when file is missing', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const classifiedDir = path.join(auditRoot, 'classified')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    PROJECT_ROOT: root,
+    REPORTS_DIR: path.join(root, 'reports'),
+    AUDIT_BEHAVIOR_DIR: auditRoot,
+    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+    CLASSIFIED_DIR: classifiedDir,
+    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
+    STORIES_DIR: path.join(auditRoot, 'stories'),
+    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
+    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
+  }))
+
+  const store = await loadClassifiedStoreModule(crypto.randomUUID())
+
+  expect(await store.readClassifiedFile('missing')).toBeNull()
+
+  mkdirSync(classifiedDir, { recursive: true })
+  await Bun.write(path.join(classifiedDir, 'tools.json'), '{"not":"an array"}\n')
+
+  await expect(store.readClassifiedFile('tools')).rejects.toThrow()
+})
+
+test('report-writer round-trips supporting internal refs as readonly consolidated data', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    PROJECT_ROOT: root,
+    REPORTS_DIR: path.join(root, 'reports'),
+    AUDIT_BEHAVIOR_DIR: auditRoot,
+    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
+    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
+    STORIES_DIR: path.join(auditRoot, 'stories'),
+    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
+    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
+  }))
+
+  const writer = await loadReportWriterModule(crypto.randomUUID())
+  await writer.writeConsolidatedFile('tools', [
+    {
+      id: 'task-creation::feature',
+      domain: 'tools',
+      featureName: 'Task creation',
+      isUserFacing: true,
+      behavior: 'When a user creates a task, the bot saves it.',
+      userStory: 'As a user, I can create a task through chat.',
+      context: 'Calls provider create flow.',
+      sourceTestKeys: ['tests/tools/sample.test.ts::suite > create task'],
+      sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > create task'],
+      supportingInternalRefs: [
+        {
+          behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
+          summary: 'Validates the task payload before submission.',
+        },
+      ],
+    },
+  ])
+
+  const loaded = await writer.readConsolidatedFile('tools')
+  expect(loaded).not.toBeNull()
+  expect(loaded).toHaveLength(1)
+
+  const item = loaded![0]
+  expect(item.supportingInternalRefs).toEqual([
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
+      summary: 'Validates the task payload before submission.',
+    },
+  ])
+  expect(Object.isFrozen(item.supportingInternalRefs)).toBe(true)
+  expect(Object.isFrozen(item.supportingInternalRefs[0])).toBe(true)
+})
+
+test('report-writer throws for malformed consolidated data but returns null when file is missing', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const consolidatedDir = path.join(auditRoot, 'consolidated')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    PROJECT_ROOT: root,
+    REPORTS_DIR: path.join(root, 'reports'),
+    AUDIT_BEHAVIOR_DIR: auditRoot,
+    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
+    CONSOLIDATED_DIR: consolidatedDir,
+    STORIES_DIR: path.join(auditRoot, 'stories'),
+    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
+    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
+  }))
+
+  const writer = await loadReportWriterModule(crypto.randomUUID())
+
+  expect(await writer.readConsolidatedFile('missing')).toBeNull()
+
+  mkdirSync(consolidatedDir, { recursive: true })
+  await Bun.write(path.join(consolidatedDir, 'tools.json'), '{"not":"an array"}\n')
+
+  await expect(writer.readConsolidatedFile('tools')).rejects.toThrow()
 })
 
 test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserves keyword vocabulary', async () => {
