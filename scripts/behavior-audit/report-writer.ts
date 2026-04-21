@@ -43,6 +43,8 @@ export interface ConsolidatedBehavior {
   readonly userStory: string | null
   readonly context: string
   readonly sourceTestKeys: readonly string[]
+  readonly sourceBehaviorIds: readonly string[]
+  readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
 }
 
 const ConsolidatedBehaviorSchema = z.object({
@@ -54,6 +56,8 @@ const ConsolidatedBehaviorSchema = z.object({
   userStory: z.string().nullable(),
   context: z.string(),
   sourceTestKeys: z.array(z.string()),
+  sourceBehaviorIds: z.array(z.string()),
+  supportingInternalRefs: z.array(z.object({ behaviorId: z.string(), summary: z.string() })),
 })
 
 const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).readonly()

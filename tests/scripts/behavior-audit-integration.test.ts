@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
 import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
+import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
 import type * as ExtractModule from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
@@ -18,12 +19,14 @@ import type { ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js
 
 const tempDirs: string[] = []
 const originalProcessExit = process.exit.bind(process)
+const originalOpenAiApiKey = process.env['OPENAI_API_KEY']
 
 type IncrementalModuleShape = typeof IncrementalModule
 type ProgressModuleShape = typeof ProgressModule
 type ExtractModuleShape = typeof ExtractModule
 type EvaluateModuleShape = typeof EvaluateModule
 type ConsolidateModuleShape = typeof ConsolidateModule
+type ClassifiedStoreModuleShape = typeof ClassifiedStoreModule
 type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
 type ReportWriterModuleShape = typeof ReportWriterModule
 type ResetModuleShape = typeof ResetModule
@@ -441,6 +444,14 @@ function isConsolidateModule(value: unknown): value is ConsolidateModuleShape {
   return isObject(value) && hasFunctionProperty(value, 'runPhase2')
 }
 
+function isClassifiedStoreModule(value: unknown): value is ClassifiedStoreModuleShape {
+  return (
+    isObject(value) &&
+    hasFunctionProperty(value, 'writeClassifiedFile') &&
+    hasFunctionProperty(value, 'readClassifiedFile')
+  )
+}
+
 function isKeywordVocabularyModule(value: unknown): value is KeywordVocabularyModuleShape {
   return (
     isObject(value) &&
@@ -463,6 +474,14 @@ function loadConsolidateModule(tag: string): Promise<ConsolidateModuleShape> {
     `../../scripts/behavior-audit/consolidate.js?test=${tag}`,
     isConsolidateModule,
     'Unexpected consolidate module shape',
+  )
+}
+
+function loadClassifiedStoreModule(tag: string): Promise<ClassifiedStoreModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/classified-store.js?test=${tag}`,
+    isClassifiedStoreModule,
+    'Unexpected classified-store module shape',
   )
 }
 
@@ -490,7 +509,16 @@ function loadResetModule(tag: string): Promise<ResetModuleShape> {
   )
 }
 
+beforeEach(() => {
+  process.env['OPENAI_API_KEY'] = originalOpenAiApiKey ?? 'test-openai-api-key'
+})
+
 afterEach(() => {
+  if (originalOpenAiApiKey === undefined) {
+    delete process.env['OPENAI_API_KEY']
+  } else {
+    process.env['OPENAI_API_KEY'] = originalOpenAiApiKey
+  }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -669,6 +697,37 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(getArrayItem(selectIncrementalWorkCalls, 0).discoveredTestKeys).toEqual(expectedKeys)
     expect(runPhase1Calls).toEqual([{ parsedTestKeys: expectedKeys, selectedTestKeys: expectedKeys }])
     expect(runPhase2Calls).toEqual([{ selectedConsolidatedIds: [] }])
+  })
+
+  test('main fails fast when OPENAI_API_KEY is missing', async () => {
+    await initializeGitRepo(root)
+
+    const previousOpenAiApiKey = process.env['OPENAI_API_KEY']
+    const consoleErrorSpy = mock(() => {})
+    const processExitSpy = mock((code: number | undefined) => {
+      throw new Error(`process.exit:${resolveExitCode(code)}`)
+    })
+
+    const originalConsoleError = console.error
+    console.error = consoleErrorSpy as typeof console.error
+    process.exit = processExitSpy as typeof process.exit
+    delete process.env['OPENAI_API_KEY']
+
+    try {
+      await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
+    } finally {
+      console.error = originalConsoleError
+      process.exit = originalProcessExit
+      if (previousOpenAiApiKey === undefined) {
+        delete process.env['OPENAI_API_KEY']
+      } else {
+        process.env['OPENAI_API_KEY'] = previousOpenAiApiKey
+      }
+    }
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Fatal error:', 'Behavior audit requires OPENAI_API_KEY to be set')
+    expect(runPhase1Calls).toHaveLength(0)
+    expect(runPhase2Calls).toHaveLength(0)
   })
 
   test('main passes incremental selection through to both phases', async () => {
@@ -1507,6 +1566,21 @@ test('keyword-resolver-agent returns canonical keywords and appended entries', a
   expect(mod).toHaveProperty('resolveKeywordsWithRetry')
 })
 
+test('behavior-audit agents enable structured outputs for OpenAI-compatible provider', async () => {
+  const agentPaths = [
+    'scripts/behavior-audit/extract-agent.ts',
+    'scripts/behavior-audit/keyword-resolver-agent.ts',
+    'scripts/behavior-audit/consolidate-agent.ts',
+    'scripts/behavior-audit/evaluate-agent.ts',
+  ] as const
+
+  const sources = await Promise.all(agentPaths.map((filePath) => Bun.file(path.join(process.cwd(), filePath)).text()))
+
+  for (const source of sources) {
+    expect(source).toContain('supportsStructuredOutputs: true')
+  }
+})
+
 test('keyword-vocabulary persists entries and updates usage counts', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
@@ -1889,6 +1963,117 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
   const savedVocabulary = savedVocabularyRaw
   expect(savedVocabulary).toHaveLength(1)
   expect(savedVocabulary[0]).toMatchObject({ slug: 'group-targeting', timesUsed: 1 })
+})
+
+test('runPhase1 sends only existing vocabulary slugs to the keyword resolver prompt', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+  let capturedResolverPrompt = ''
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    MODEL: 'qwen3-30b-a3b',
+    BASE_URL: 'http://localhost:1234/v1',
+    PROJECT_ROOT: root,
+    REPORTS_DIR: reportsDir,
+    BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
+    CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
+    STORIES_DIR: path.join(reportsDir, 'stories'),
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    CONSOLIDATED_MANIFEST_PATH: path.join(reportsDir, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    PHASE1_TIMEOUT_MS: 1_200_000,
+    PHASE2_TIMEOUT_MS: 300_000,
+    PHASE3_TIMEOUT_MS: 600_000,
+    MAX_RETRIES: 3,
+    RETRY_BACKOFF_MS: [0, 0, 0] as const,
+    MAX_STEPS: 20,
+    EXCLUDED_PREFIXES: [] as const,
+  }))
+
+  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
+    extractWithRetry: (): Promise<{
+      readonly behavior: string
+      readonly context: string
+      readonly candidateKeywords: readonly string[]
+    }> =>
+      Promise.resolve({
+        behavior: 'When a user targets a group, the bot routes the request correctly.',
+        context: 'Routes through group context selection.',
+        candidateKeywords: ['group-targeting'],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
+    resolveKeywordsWithRetry: (
+      prompt: string,
+    ): Promise<{
+      readonly keywords: readonly string[]
+      readonly appendedEntries: readonly {
+        readonly slug: string
+        readonly description: string
+        readonly createdAt: string
+        readonly updatedAt: string
+        readonly timesUsed: number
+      }[]
+    }> => {
+      capturedResolverPrompt = prompt
+      return Promise.resolve({
+        keywords: ['group-targeting'],
+        appendedEntries: [],
+      })
+    },
+  }))
+
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(
+    path.join(root, 'tests', 'tools', 'sample.test.ts'),
+    "describe('suite', () => { test('case', () => {}) })",
+  )
+  await Bun.write(
+    vocabularyPath,
+    JSON.stringify(
+      [
+        {
+          slug: 'group-targeting',
+          description: 'Targeting work at a group context.',
+          createdAt: '2026-04-20T12:00:00.000Z',
+          updatedAt: '2026-04-20T12:00:00.000Z',
+          timesUsed: 3,
+        },
+        {
+          slug: 'group-routing',
+          description: 'Routing work inside a group context.',
+          createdAt: '2026-04-20T12:00:00.000Z',
+          updatedAt: '2026-04-20T12:00:00.000Z',
+          timesUsed: 2,
+        },
+      ],
+      null,
+      2,
+    ) + '\n',
+  )
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-slug-prompt-${tag}`)
+  const progressModule = await loadProgressModule(`phase1-slug-prompt-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-slug-prompt-${tag}`)
+
+  await extract.runPhase1({
+    testFiles: [parseTestFile('tests/tools/sample.test.ts', "describe('suite', () => { test('case', () => {}) })")],
+    progress: progressModule.createEmptyProgress(1),
+    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+    manifest: incremental.createEmptyManifest(),
+  })
+
+  expect(capturedResolverPrompt).toContain('Existing vocabulary:')
+  expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')
+  expect(capturedResolverPrompt).toContain('[\n  "group-targeting",\n  "group-routing"\n]')
+  expect(capturedResolverPrompt).not.toContain('"description"')
+  expect(capturedResolverPrompt).not.toContain('"timesUsed"')
 })
 
 test('runPhase1 does not persist a file as done when behavior-file write fails after manifest save', async () => {
@@ -2513,6 +2698,63 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
   expect(await Bun.file(path.join(reportsDir, 'stories', 'tools.md')).exists()).toBe(false)
 })
 
+test('classified-store round-trips sorted classified behaviors under audit root', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+
+  void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    PROJECT_ROOT: root,
+    REPORTS_DIR: path.join(root, 'reports'),
+    AUDIT_BEHAVIOR_DIR: auditRoot,
+    BEHAVIORS_DIR: path.join(auditRoot, 'behaviors'),
+    CLASSIFIED_DIR: path.join(auditRoot, 'classified'),
+    CONSOLIDATED_DIR: path.join(auditRoot, 'consolidated'),
+    STORIES_DIR: path.join(auditRoot, 'stories'),
+    PROGRESS_PATH: path.join(auditRoot, 'progress.json'),
+    INCREMENTAL_MANIFEST_PATH: path.join(auditRoot, 'incremental-manifest.json'),
+    CONSOLIDATED_MANIFEST_PATH: path.join(auditRoot, 'consolidated-manifest.json'),
+    KEYWORD_VOCABULARY_PATH: path.join(auditRoot, 'keyword-vocabulary.json'),
+  }))
+
+  const store = await loadClassifiedStoreModule(crypto.randomUUID())
+  await store.writeClassifiedFile('tools', [
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > beta',
+      testKey: 'tests/tools/sample.test.ts::suite > beta',
+      domain: 'tools',
+      behavior: 'When beta runs, the bot saves a task.',
+      context: 'Calls create_task.',
+      keywords: ['task-create'],
+      visibility: 'user-facing',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'beta',
+    },
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > alpha',
+      testKey: 'tests/tools/sample.test.ts::suite > alpha',
+      domain: 'tools',
+      behavior: 'When alpha runs, the bot validates input.',
+      context: 'Runs guard checks.',
+      keywords: ['task-creation'],
+      visibility: 'internal',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'alpha',
+    },
+  ])
+
+  const loaded = await store.readClassifiedFile('tools')
+  expect(loaded?.map((item) => item.behaviorId)).toEqual([
+    'tests/tools/sample.test.ts::suite > alpha',
+    'tests/tools/sample.test.ts::suite > beta',
+  ])
+})
+
 test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserves keyword vocabulary', async () => {
   const root = makeTempDir()
   const auditRoot = path.join(root, 'reports', 'audit-behavior')
@@ -2585,7 +2827,11 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
   }))
 
-  const mod = await import(`../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`)
+  const mod: ResetModuleShape = await importWithGuard(
+    `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
+    isResetModule,
+    'Unexpected reset module shape',
+  )
   await mod.resetBehaviorAudit('phase2')
 
   expect(await Bun.file(vocabularyPath).exists()).toBe(true)
