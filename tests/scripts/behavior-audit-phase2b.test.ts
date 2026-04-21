@@ -1,14 +1,10 @@
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
 import path from 'node:path'
 
+import type { runPhase2b } from '../../scripts/behavior-audit/consolidate.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
-import {
-  createAuditBehaviorPaths,
-  createClassifiedBehaviorFixture,
-  createEmptyProgressFixture,
-  mockAuditBehaviorConfig,
-} from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir } from './behavior-audit-integration.runtime-helpers.js'
+import { createClassifiedBehaviorFixture, createEmptyProgressFixture } from './behavior-audit-integration.helpers.js'
+import { cleanupTempDirs } from './behavior-audit-integration.runtime-helpers.js'
 import { getArrayItem, loadConsolidateModule } from './behavior-audit-integration.support.js'
 
 function createEmptyProgress(filesTotal: number): Progress {
@@ -26,62 +22,9 @@ test('consolidate-agent prompt contract treats a keyword batch as a candidate po
 })
 
 test('runPhase2b consolidates user-facing candidate features and preserves supporting internal refs', async () => {
-  const root = makeTempDir()
-  const paths = createAuditBehaviorPaths(root)
-  const auditRoot = paths.auditBehaviorDir
-  const progressPath = paths.progressPath
-
-  mockAuditBehaviorConfig(root, {
-    PROGRESS_PATH: progressPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
-    consolidateWithRetry: (): Promise<
-      readonly {
-        readonly id: string
-        readonly item: {
-          readonly featureName: string
-          readonly isUserFacing: boolean
-          readonly behavior: string
-          readonly userStory: string | null
-          readonly context: string
-          readonly sourceBehaviorIds: readonly string[]
-          readonly sourceTestKeys: readonly string[]
-          readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
-        }
-      }[]
-    > =>
-      Promise.resolve([
-        {
-          id: 'task-creation::task-creation',
-          item: {
-            featureName: 'Task creation',
-            isUserFacing: true,
-            behavior: 'When a user asks to create a task, the bot saves it and confirms success.',
-            userStory: 'As a user, I want to create a task in chat so I can track work quickly.',
-            context: 'Calls create_task and formats the confirmation.',
-            sourceBehaviorIds: [
-              'tests/tools/create-task.test.ts::suite > create task',
-              'tests/tools/create-task.test.ts::suite > validate input',
-            ],
-            sourceTestKeys: [
-              'tests/tools/create-task.test.ts::suite > create task',
-              'tests/tools/create-task.test.ts::suite > validate input',
-            ],
-            supportingInternalRefs: [
-              {
-                behaviorId: 'tests/tools/create-task.test.ts::suite > validate input',
-                summary: 'Validation guards prevent malformed task creation inputs.',
-              },
-            ],
-          },
-        },
-      ]),
-  }))
-
   const consolidate = await loadConsolidateModule(crypto.randomUUID())
   const progress = createEmptyProgress(1)
+  const writtenFiles = new Map<string, string>()
 
   progress.phase2a.classifiedBehaviors['tests/tools/create-task.test.ts::suite > create task'] =
     createClassifiedBehaviorFixture({
@@ -110,11 +53,60 @@ test('runPhase2b consolidates user-facing candidate features and preserves suppo
       classificationNotes: 'Supporting validation behavior.',
     })
 
+  const consolidateWithRetry = (): Promise<
+    readonly {
+      readonly id: string
+      readonly item: {
+        readonly featureName: string
+        readonly isUserFacing: boolean
+        readonly behavior: string
+        readonly userStory: string | null
+        readonly context: string
+        readonly sourceBehaviorIds: string[]
+        readonly sourceTestKeys: string[]
+        readonly supportingInternalRefs: { behaviorId: string; summary: string }[]
+      }
+    }[]
+  > =>
+    Promise.resolve([
+      {
+        id: 'task-creation::task-creation',
+        item: {
+          featureName: 'Task creation',
+          isUserFacing: true,
+          behavior: 'When a user asks to create a task, the bot saves it and confirms success.',
+          userStory: 'As a user, I want to create a task in chat so I can track work quickly.',
+          context: 'Calls create_task and formats the confirmation.',
+          sourceBehaviorIds: [
+            'tests/tools/create-task.test.ts::suite > create task',
+            'tests/tools/create-task.test.ts::suite > validate input',
+          ],
+          sourceTestKeys: [
+            'tests/tools/create-task.test.ts::suite > create task',
+            'tests/tools/create-task.test.ts::suite > validate input',
+          ],
+          supportingInternalRefs: [
+            {
+              behaviorId: 'tests/tools/create-task.test.ts::suite > validate input',
+              summary: 'Validation guards prevent malformed task creation inputs.',
+            },
+          ],
+        },
+      },
+    ])
+
   const manifest = await consolidate.runPhase2b(
     progress,
     { version: 1, entries: {} },
     'phase2-v2',
     new Set(['task-creation']),
+    {
+      consolidateWithRetry,
+      writeConsolidatedFile: (domain, consolidations): Promise<void> => {
+        writtenFiles.set(domain, JSON.stringify(consolidations, null, 2) + '\n')
+        return Promise.resolve()
+      },
+    },
   )
 
   const entry = manifest.entries['task-creation::task-creation']
@@ -127,56 +119,19 @@ test('runPhase2b consolidates user-facing candidate features and preserves suppo
     'tests/tools/create-task.test.ts::suite > validate input',
   ])
 
-  const fileText = await Bun.file(path.join(auditRoot, 'consolidated', 'task-creation.json')).text()
+  const fileText = writtenFiles.get('task-creation')
+  if (fileText === undefined) {
+    throw new Error('Expected consolidated file contents to be captured')
+  }
   expect(fileText).toContain('supportingInternalRefs')
 })
 
 test('runPhase2b groups classified behaviors by candidate feature and preserves provenance', async () => {
+  const consolidate: { readonly runPhase2b: typeof runPhase2b } =
+    await import('../../scripts/behavior-audit/consolidate.js')
+  const progress = createEmptyProgress(2)
   let capturedCandidateFeatureKey: string | null = null
   let capturedDomains: readonly string[] = []
-  void mock.module('../../scripts/behavior-audit/consolidate-agent.js', () => ({
-    consolidateWithRetry: (
-      candidateFeatureKey: string,
-      inputs: readonly { readonly testKey: string; readonly domain: string; readonly behaviorId: string }[],
-    ): Promise<
-      | readonly {
-          readonly id: string
-          readonly item: {
-            readonly featureName: string
-            readonly isUserFacing: boolean
-            readonly behavior: string
-            readonly userStory: string | null
-            readonly context: string
-            readonly sourceTestKeys: readonly string[]
-            readonly sourceBehaviorIds: readonly string[]
-            readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
-          }
-        }[]
-      | null
-    > =>
-      Promise.resolve(
-        ((capturedCandidateFeatureKey = candidateFeatureKey),
-        (capturedDomains = inputs.map((input) => input.domain)),
-        [
-          {
-            id: `${candidateFeatureKey}::combined-feature`,
-            item: {
-              featureName: 'Combined feature',
-              isUserFacing: true,
-              behavior: 'When a user acts, something happens.',
-              userStory: 'As a user, I can do something.',
-              context: 'Implementation context.',
-              sourceTestKeys: inputs.map((input) => input.testKey),
-              sourceBehaviorIds: inputs.map((input) => input.behaviorId),
-              supportingInternalRefs: [],
-            },
-          },
-        ]),
-      ),
-  }))
-
-  const consolidate = await loadConsolidateModule(`candidate-features-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(2)
 
   progress.phase2a.classifiedBehaviors['tests/tools/a.test.ts::suite > case'] = createClassifiedBehaviorFixture({
     behaviorId: 'tests/tools/a.test.ts::suite > case',
@@ -203,11 +158,54 @@ test('runPhase2b groups classified behaviors by candidate feature and preserves 
     classificationNotes: 'Supporting internal behavior.',
   })
 
+  const consolidateWithRetry = (
+    candidateFeatureKey: string,
+    inputs: readonly { readonly testKey: string; readonly domain: string; readonly behaviorId: string }[],
+  ): Promise<
+    | readonly {
+        readonly id: string
+        readonly item: {
+          readonly featureName: string
+          readonly isUserFacing: boolean
+          readonly behavior: string
+          readonly userStory: string | null
+          readonly context: string
+          readonly sourceTestKeys: string[]
+          readonly sourceBehaviorIds: string[]
+          readonly supportingInternalRefs: { behaviorId: string; summary: string }[]
+        }
+      }[]
+    | null
+  > => {
+    capturedCandidateFeatureKey = candidateFeatureKey
+    capturedDomains = inputs.map((input) => input.domain)
+
+    return Promise.resolve([
+      {
+        id: `${candidateFeatureKey}::combined-feature`,
+        item: {
+          featureName: 'Combined feature',
+          isUserFacing: true,
+          behavior: 'When a user acts, something happens.',
+          userStory: 'As a user, I can do something.',
+          context: 'Implementation context.',
+          sourceTestKeys: inputs.map((input) => input.testKey),
+          sourceBehaviorIds: inputs.map((input) => input.behaviorId),
+          supportingInternalRefs: [],
+        },
+      },
+    ])
+  }
+
   const result = await consolidate.runPhase2b(
     progress,
     { version: 1, entries: {} },
     'phase2-v1',
     new Set(['group-targeting']),
+    {
+      consolidateWithRetry,
+      writeConsolidatedFile: async (): Promise<void> => {},
+    },
   )
 
   expect(Object.keys(result.entries).length).toBeGreaterThan(0)

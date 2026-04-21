@@ -27,7 +27,7 @@ const verifierDecision: VerifierDecision = {
   fixability: 'auto',
   reasoning: 'The policy is too permissive and can be tightened safely.',
   targetFiles: ['scripts/review-loop/permission-policy.ts'],
-  fixPlan: 'Add stricter path validation and shell-token checks.',
+  needsPlanning: false,
 }
 
 const ledgerRecord: LedgerIssueRecord = {

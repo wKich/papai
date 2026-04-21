@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const ReviewerIssueSchema = z.object({
   title: z.string().min(1),
-  severity: z.enum(['critical', 'high']),
+  severity: z.enum(['critical', 'high', 'medium', 'low']),
   summary: z.string().min(1),
   whyItMatters: z.string().min(1),
   evidence: z.string().min(1),
@@ -23,7 +23,7 @@ export const VerifierDecisionSchema = z.object({
   fixability: z.enum(['auto', 'manual']),
   reasoning: z.string().min(1),
   targetFiles: z.array(z.string().min(1)),
-  fixPlan: z.string().min(1),
+  needsPlanning: z.boolean(),
 })
 
 export type ReviewerIssue = z.infer<typeof ReviewerIssueSchema>
