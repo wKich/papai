@@ -12,7 +12,13 @@ import {
   type LedgerIssueRecord,
 } from './issue-ledger.js'
 import { parseReviewerIssues, parseVerifierDecision } from './issue-schema.js'
-import { buildFixPrompt, buildReviewPrompt, buildRereviewPrompt, buildVerifyPrompt } from './prompt-templates.js'
+import {
+  buildFixPrompt,
+  buildPlanningPrompt,
+  buildReviewPrompt,
+  buildRereviewPrompt,
+  buildVerifyPrompt,
+} from './prompt-templates.js'
 import { saveRunState, type RunState } from './run-state.js'
 
 export interface PromptingSession {
@@ -61,10 +67,22 @@ async function processIssueVerifyFix(
   recordVerification(deps.ledger, record.fingerprint, verifyDecision)
 
   if (verifyDecision.verdict === 'valid' && verifyDecision.fixability === 'auto') {
+    let plan: string | undefined
+
+    if (verifyDecision.needsPlanning) {
+      const planningPrompt = resolveInvocationText(
+        deps.config.fixer.fixInvocationPrefix,
+        deps.fixer.availableCommands,
+        buildPlanningPrompt(record.issue, verifyDecision),
+        false,
+      )
+      plan = (await deps.fixer.promptText(planningPrompt)).text
+    }
+
     const fixPrompt = resolveInvocationText(
       deps.config.fixer.fixInvocationPrefix,
       deps.fixer.availableCommands,
-      buildFixPrompt(record.issue, verifyDecision),
+      buildFixPrompt(record.issue, verifyDecision, plan),
       false,
     )
     await deps.fixer.promptText(fixPrompt)
