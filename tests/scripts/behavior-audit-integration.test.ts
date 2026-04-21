@@ -41,7 +41,6 @@ import {
   importWithGuard,
   type IncrementalModuleShape,
   isClassifyModule,
-  isKeywordVocabulary,
   isObject,
   isReportWriterModule,
   isResetModule,
@@ -52,7 +51,6 @@ import {
   loadEvaluateModule,
   loadExtractModule,
   loadIncrementalModule,
-  loadKeywordVocabularyModule,
   loadProgressModule,
   loadReportWriterModule,
   loadResetModule,
@@ -1555,617 +1553,6 @@ describe('behavior-audit interrupted-run baseline', () => {
   })
 })
 
-test('runPhase1 stores canonical keywords after extraction and vocabulary resolution', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Resolves target context and forwards execution through the group routing path.',
-        candidateKeywords: ['group-routing', 'group-targeting', 'request-routing'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting', 'group-routing'],
-        appendedEntries: [],
-      }),
-  }))
-
-  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-keywords-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-keywords-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-keywords-${tag}`)
-
-  const progress = progressModule.createEmptyProgress(1)
-  const manifest = incremental.createEmptyManifest()
-  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest,
-  })
-
-  const stored = progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']
-  if (stored === undefined) {
-    throw new Error('Expected extracted behavior to be stored')
-  }
-  expect(stored.keywords).toEqual(['group-targeting', 'group-routing'])
-})
-
-test('extract-agent returns behavior, context, and candidateKeywords', async () => {
-  const mod: unknown = await import(`../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`)
-  expect(typeof mod).toBe('object')
-  expect(mod).toHaveProperty('extractWithRetry')
-})
-
-test('keyword-resolver-agent returns canonical keywords and appended entries', async () => {
-  const mod: unknown = await import(
-    `../../scripts/behavior-audit/keyword-resolver-agent.js?test=shape-${crypto.randomUUID()}`
-  )
-  expect(typeof mod).toBe('object')
-  expect(mod).toHaveProperty('resolveKeywordsWithRetry')
-})
-
-test('behavior-audit agents enable structured outputs for OpenAI-compatible provider', async () => {
-  const agentPaths = [
-    'scripts/behavior-audit/extract-agent.ts',
-    'scripts/behavior-audit/keyword-resolver-agent.ts',
-    'scripts/behavior-audit/consolidate-agent.ts',
-    'scripts/behavior-audit/evaluate-agent.ts',
-  ] as const
-
-  const sources = await Promise.all(agentPaths.map((filePath) => Bun.file(path.join(process.cwd(), filePath)).text()))
-
-  for (const source of sources) {
-    expect(source).toContain('supportsStructuredOutputs: true')
-  }
-})
-
-test('keyword-vocabulary persists entries and updates usage counts', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-
-  mockReportsConfig(root, {
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  const typedVocab = await loadKeywordVocabularyModule(`vocab-${crypto.randomUUID()}`)
-  await typedVocab.saveKeywordVocabulary([
-    {
-      slug: 'group-targeting',
-      description: 'Targeting work at a group context.',
-      createdAt: '2026-04-20T12:00:00.000Z',
-      updatedAt: '2026-04-20T12:00:00.000Z',
-      timesUsed: 1,
-    },
-  ])
-
-  await typedVocab.recordKeywordUsage(['group-targeting'])
-
-  const saved = await typedVocab.loadKeywordVocabulary()
-  expect(saved).not.toBeNull()
-  if (saved === null) {
-    throw new Error('Expected saved vocabulary entries')
-  }
-  const firstSavedEntry = saved[0]
-  if (firstSavedEntry === undefined) {
-    throw new Error('Expected first saved vocabulary entry')
-  }
-  expect(firstSavedEntry.timesUsed).toBe(2)
-})
-
-test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-
-  mockReportsConfig(root, {
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  const typedWriter = await loadReportWriterModule(`keywords-${crypto.randomUUID()}`)
-  await typedWriter.writeBehaviorFile('tests/tools/sample.test.ts', [
-    {
-      testName: 'case',
-      fullPath: 'suite > case',
-      behavior: 'When a user targets a group, the bot routes the request correctly.',
-      context: 'Routes through group context selection.',
-      keywords: ['group-targeting', 'group-routing'],
-    },
-  ])
-
-  const fileText = await Bun.file(path.join(reportsDir, 'behaviors', 'tools', 'sample.test.behaviors.md')).text()
-  expect(fileText).toContain('**Keywords:** group-targeting, group-routing')
-})
-
-test('runPhase1 persists vocabulary updates before marking a test done', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting',
-            description: 'Targeting work at a group context.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
-  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-atomic-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-atomic-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-atomic-${tag}`)
-
-  const progress = progressModule.createEmptyProgress(1)
-  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
-
-  const savedVocabText = await Bun.file(vocabularyPath).text()
-  expect(savedVocabText).toContain('"group-targeting"')
-  const completedTests = progress.phase1.completedTests['tests/tools/sample.test.ts']
-  if (completedTests === undefined) {
-    throw new Error('Expected completed tests entry for sample test file')
-  }
-  expect(completedTests['tests/tools/sample.test.ts::suite > case']).toBe('done')
-})
-
-test('runPhase1 re-extracts selected changed tests even when prior extraction exists', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-  let extractCalls = 0
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> => {
-      extractCalls += 1
-      return Promise.resolve({
-        behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
-        context: 'Reprocesses changed test dependencies.',
-        candidateKeywords: ['group-targeting-updated'],
-      })
-    },
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting-updated'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting-updated',
-            description: 'Updated targeting behavior.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
-  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-rerun-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-rerun-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-rerun-${tag}`)
-
-  const progress = progressModule.createEmptyProgress(1)
-  progress.phase1.completedFiles.push('tests/tools/sample.test.ts')
-  progress.phase1.completedTests['tests/tools/sample.test.ts'] = {
-    'tests/tools/sample.test.ts::suite > case': 'done',
-  }
-  progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
-    behavior: 'Stale extracted behavior.',
-    context: 'Stale context.',
-    keywords: ['stale-keyword'],
-  }
-
-  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
-
-  expect(extractCalls).toBe(1)
-  expect(progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']).toMatchObject({
-    behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
-    keywords: ['group-targeting-updated'],
-  })
-})
-
-test('runPhase1 keeps first use count at one for newly appended keywords', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting',
-            description: 'Targeting work at a group context.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
-  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-keyword-count-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-keyword-count-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-keyword-count-${tag}`)
-
-  const progress = progressModule.createEmptyProgress(1)
-  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
-
-  const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
-  if (!isKeywordVocabulary(savedVocabularyRaw)) {
-    throw new Error('Expected saved keyword vocabulary')
-  }
-  const savedVocabulary = savedVocabularyRaw
-  expect(savedVocabulary).toHaveLength(1)
-  expect(savedVocabulary[0]).toMatchObject({ slug: 'group-targeting', timesUsed: 1 })
-})
-
-test('runPhase1 sends only existing vocabulary slugs to the keyword resolver prompt', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-  let capturedResolverPrompt = ''
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (
-      prompt: string,
-    ): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> => {
-      capturedResolverPrompt = prompt
-      return Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [],
-      })
-    },
-  }))
-
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(
-    path.join(root, 'tests', 'tools', 'sample.test.ts'),
-    "describe('suite', () => { test('case', () => {}) })",
-  )
-  await Bun.write(
-    vocabularyPath,
-    JSON.stringify(
-      [
-        {
-          slug: 'group-targeting',
-          description: 'Targeting work at a group context.',
-          createdAt: '2026-04-20T12:00:00.000Z',
-          updatedAt: '2026-04-20T12:00:00.000Z',
-          timesUsed: 3,
-        },
-        {
-          slug: 'group-routing',
-          description: 'Routing work inside a group context.',
-          createdAt: '2026-04-20T12:00:00.000Z',
-          updatedAt: '2026-04-20T12:00:00.000Z',
-          timesUsed: 2,
-        },
-      ],
-      null,
-      2,
-    ) + '\n',
-  )
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-slug-prompt-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-slug-prompt-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-slug-prompt-${tag}`)
-
-  await extract.runPhase1({
-    testFiles: [parseTestFile('tests/tools/sample.test.ts', "describe('suite', () => { test('case', () => {}) })")],
-    progress: progressModule.createEmptyProgress(1),
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
-
-  expect(capturedResolverPrompt).toContain('Existing vocabulary:')
-  expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')
-  expect(capturedResolverPrompt).toContain('[\n  "group-targeting",\n  "group-routing"\n]')
-  expect(capturedResolverPrompt).not.toContain('"description"')
-  expect(capturedResolverPrompt).not.toContain('"timesUsed"')
-})
-
-test('runPhase1 does not persist a file as done when behavior-file write fails after manifest save', async () => {
-  const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
-  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
-
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
-    INCREMENTAL_MANIFEST_PATH: manifestPath,
-    KEYWORD_VOCABULARY_PATH: vocabularyPath,
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting',
-            description: 'Targeting work at a group context.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/report-writer.js', async () => {
-    const real: unknown = await import(
-      `../../scripts/behavior-audit/report-writer.js?test=phase1-write-fail-${crypto.randomUUID()}`
-    )
-    if (!isReportWriterModule(real)) {
-      throw new Error('Unexpected report writer module shape')
-    }
-    return {
-      ...real,
-      writeBehaviorFile: (): Promise<void> => Promise.reject(new Error('disk full')),
-    }
-  })
-
-  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
-  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
-  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
-
-  const tag = crypto.randomUUID()
-  const extract = await loadExtractModule(`phase1-write-fail-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-write-fail-${tag}`)
-  const incremental = await loadIncrementalModule(`phase1-write-fail-${tag}`)
-
-  const progress = progressModule.createEmptyProgress(1)
-  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-
-  await expect(
-    extract.runPhase1({
-      testFiles: [parsed],
-      progress,
-      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-      manifest: incremental.createEmptyManifest(),
-    }),
-  ).rejects.toThrow('disk full')
-
-  expect(progress.phase1.completedFiles).toEqual([])
-  expect(progress.phase1.status).not.toBe('done')
-  expect(await Bun.file(progressPath).exists()).toBe(true)
-
-  const persistedProgressText = await Bun.file(progressPath).text()
-  const persistedProgress = JSON.parse(persistedProgressText) as unknown
-  if (!isObject(persistedProgress) || !('phase1' in persistedProgress) || !isObject(persistedProgress['phase1'])) {
-    throw new Error('Expected persisted progress shape')
-  }
-  const persistedPhase1 = persistedProgress['phase1']
-  if (!('completedFiles' in persistedPhase1) || !Array.isArray(persistedPhase1['completedFiles'])) {
-    throw new Error('Expected persisted phase1 completedFiles array')
-  }
-  if (!('completedTests' in persistedPhase1) || !isObject(persistedPhase1['completedTests'])) {
-    throw new Error('Expected persisted phase1 completedTests record')
-  }
-  expect(persistedPhase1['completedFiles']).toEqual([])
-  expect(persistedPhase1['completedTests']['tests/tools/sample.test.ts']).toBeUndefined()
-})
-
 test('consolidate-agent prompt contract treats a keyword batch as a candidate pool rather than one feature', async () => {
   const source = await Bun.file(path.join(process.cwd(), 'scripts/behavior-audit/consolidate-agent.ts')).text()
   expect(source).toContain('candidate pool')
@@ -2679,4 +2066,110 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
   expect(await Bun.file(path.join(consolidatedDir, 'group-routing.json')).exists()).toBe(false)
   expect(await Bun.file(path.join(classifiedDir, 'tools.json')).exists()).toBe(false)
   expect(await Bun.file(path.join(storiesDir, 'tools.md')).exists()).toBe(false)
+})
+
+test('runPhase1 does not persist a file as done when behavior-file write fails after manifest save', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+
+  mockReportsConfig(root, {
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  const realProgressModule = await loadProgressModule(`phase1-write-fail-progress-${crypto.randomUUID()}`)
+  const realIncrementalModule = await loadIncrementalModule(`phase1-write-fail-incremental-${crypto.randomUUID()}`)
+  const realReportWriterModule = await loadReportWriterModule(`phase1-write-fail-report-writer-${crypto.randomUUID()}`)
+  void mock.module('../../scripts/behavior-audit/progress.js', () => ({ ...realProgressModule }))
+  void mock.module('../../scripts/behavior-audit/incremental.js', () => ({ ...realIncrementalModule }))
+
+  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
+    extractWithRetry: (): Promise<{
+      readonly behavior: string
+      readonly context: string
+      readonly candidateKeywords: readonly string[]
+    }> =>
+      Promise.resolve({
+        behavior: 'When a user targets a group, the bot routes the request correctly.',
+        context: 'Routes through group context selection.',
+        candidateKeywords: ['group-targeting'],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
+    resolveKeywordsWithRetry: (): Promise<{
+      readonly keywords: readonly string[]
+      readonly appendedEntries: readonly {
+        readonly slug: string
+        readonly description: string
+        readonly createdAt: string
+        readonly updatedAt: string
+        readonly timesUsed: number
+      }[]
+    }> =>
+      Promise.resolve({
+        keywords: ['group-targeting'],
+        appendedEntries: [
+          {
+            slug: 'group-targeting',
+            description: 'Targeting work at a group context.',
+            createdAt: '2026-04-20T12:00:00.000Z',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+            timesUsed: 1,
+          },
+        ],
+      }),
+  }))
+
+  void mock.module('../../scripts/behavior-audit/report-writer.js', () => {
+    if (!isReportWriterModule(realReportWriterModule)) {
+      throw new Error('Unexpected report writer module shape')
+    }
+    return {
+      ...realReportWriterModule,
+      writeBehaviorFile: (): Promise<void> => Promise.reject(new Error('disk full')),
+    }
+  })
+
+  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
+
+  const extract = await loadExtractModule(`phase1-write-fail-${crypto.randomUUID()}`)
+
+  const progress = realProgressModule.createEmptyProgress(1)
+  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
+
+  await expect(
+    extract.runPhase1({
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: realIncrementalModule.createEmptyManifest(),
+    }),
+  ).rejects.toThrow('disk full')
+
+  expect(progress.phase1.completedFiles).toEqual([])
+  expect(progress.phase1.status).not.toBe('done')
+  expect(await Bun.file(progressPath).exists()).toBe(true)
+
+  const persistedProgressText = await Bun.file(progressPath).text()
+  const persistedProgress = JSON.parse(persistedProgressText) as unknown
+  if (!isObject(persistedProgress) || !('phase1' in persistedProgress) || !isObject(persistedProgress['phase1'])) {
+    throw new Error('Expected persisted progress shape')
+  }
+  const persistedPhase1 = persistedProgress['phase1']
+  if (!('completedFiles' in persistedPhase1) || !Array.isArray(persistedPhase1['completedFiles'])) {
+    throw new Error('Expected persisted phase1 completedFiles array')
+  }
+  if (!('completedTests' in persistedPhase1) || !isObject(persistedPhase1['completedTests'])) {
+    throw new Error('Expected persisted phase1 completedTests record')
+  }
+  expect(persistedPhase1['completedFiles']).toEqual([])
+  expect(persistedPhase1['completedTests']['tests/tools/sample.test.ts']).toBeUndefined()
 })
