@@ -10,12 +10,12 @@ import type { ListRecurringTasksDeps } from '../../src/tools/list-recurring-task
 import { makeListRecurringTasksTool } from '../../src/tools/list-recurring-tasks.js'
 import type { PauseRecurringTaskDeps } from '../../src/tools/pause-recurring-task.js'
 import { makePauseRecurringTaskTool } from '../../src/tools/pause-recurring-task.js'
+import { makeUpdateRecurringTaskTool } from '../../src/tools/recurring-tools.js'
 import type { ResumeRecurringTaskDeps } from '../../src/tools/resume-recurring-task.js'
 import { makeResumeRecurringTaskTool } from '../../src/tools/resume-recurring-task.js'
 import type { SkipRecurringTaskDeps } from '../../src/tools/skip-recurring-task.js'
 import { makeSkipRecurringTaskTool } from '../../src/tools/skip-recurring-task.js'
 import type { UpdateRecurringTaskDeps } from '../../src/tools/update-recurring-task.js'
-import { makeUpdateRecurringTaskTool } from '../../src/tools/update-recurring-task.js'
 import type { RecurringTaskInput, RecurringTaskRecord } from '../../src/types/recurring.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -61,6 +61,9 @@ describe('recurring-tools', () => {
   let deleteRecurringTaskResult: boolean
   let deleteRecurringTaskCalls: string[]
 
+  let getRecurringTaskResult: RecurringTaskRecord | null
+  let getRecurringTaskCalls: string[]
+
   let updateRecurringTaskResult: RecurringTaskRecord | null
   let updateRecurringTaskCalls: Array<{ id: string; updates: Record<string, unknown> }>
 
@@ -93,6 +96,8 @@ describe('recurring-tools', () => {
     onMockCall = null
     deleteRecurringTaskResult = true
     deleteRecurringTaskCalls = []
+    getRecurringTaskResult = makeRecord()
+    getRecurringTaskCalls = []
     updateRecurringTaskResult = null
     updateRecurringTaskCalls = []
     resumeRecurringTaskResult = null
@@ -146,6 +151,10 @@ describe('recurring-tools', () => {
     }
 
     updateRecurringTaskDeps = {
+      getRecurringTask: (id: string): RecurringTaskRecord | null => {
+        getRecurringTaskCalls.push(id)
+        return getRecurringTaskResult
+      },
       updateRecurringTask: (id: string, updates: Record<string, unknown>): RecurringTaskRecord | null => {
         updateRecurringTaskCalls.push({ id, updates })
         if (onMockCall) onMockCall()
@@ -227,7 +236,7 @@ describe('recurring-tools', () => {
           title: 'Monday standup',
           projectId: 'p1',
           triggerType: 'cron',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
         },
         toolCtx,
       )
@@ -263,7 +272,7 @@ describe('recurring-tools', () => {
           title: 'Test',
           projectId: 'p-1',
           triggerType: 'on_complete',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
         },
         toolCtx,
       )
@@ -285,7 +294,7 @@ describe('recurring-tools', () => {
             title: 'Task',
             projectId: 'p1',
             triggerType: 'cron',
-            schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+            schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
           },
           toolCtx,
         )
@@ -305,7 +314,7 @@ describe('recurring-tools', () => {
           title: 'Daily',
           projectId: 'p1',
           triggerType: 'cron',
-          schedule: { frequency: 'daily', time: '17:00' },
+          schedule: { freq: 'DAILY', byHour: [17], byMinute: [0], timezone: 'Asia/Karachi' },
         },
         toolCtx,
       )
@@ -374,7 +383,7 @@ describe('recurring-tools', () => {
     test('returns updated record fields when task exists', async () => {
       const record = makeRecord({ id: 'rec-2', title: 'Updated title', projectId: 'p2', enabled: true })
       updateRecurringTaskResult = record
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-2', title: 'Updated title' }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-2')
@@ -386,16 +395,17 @@ describe('recurring-tools', () => {
     })
 
     test('returns error when task not found', async () => {
-      updateRecurringTaskResult = null
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      getRecurringTaskResult = null
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing', title: 'new' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
+      expect(updateRecurringTaskCalls).toHaveLength(0)
     })
 
     test('converts semantic schedule to rrule when updating', async () => {
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
@@ -409,7 +419,7 @@ describe('recurring-tools', () => {
 
     test('passes updates without rrule when no schedule provided', async () => {
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-1', title: 'New title' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-1')
@@ -419,7 +429,7 @@ describe('recurring-tools', () => {
 
     test('calls updateRecurringTask with correct recurringTaskId', async () => {
       updateRecurringTaskResult = makeRecord({ id: 'rec-42' })
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-42', title: 'x' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-42')
@@ -430,7 +440,7 @@ describe('recurring-tools', () => {
         timezone: 'Asia/Karachi',
         nextRun: '2026-03-25T12:00:00.000Z',
       })
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', title: 'Updated' }, toolCtx)
       expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
@@ -735,7 +745,7 @@ describe('recurring-tools', () => {
     })
 
     test('update tool has a non-empty description', () => {
-      expect(makeUpdateRecurringTaskTool(updateRecurringTaskDeps).description).toBeTruthy()
+      expect(makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('resume tool has a non-empty description', () => {
@@ -779,7 +789,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {

@@ -3,11 +3,12 @@ import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
 import { getConfig } from '../config.js'
+import { rruleInputSchema } from '../deferred-prompts/types.js'
 import { logger } from '../logger.js'
-import { describeCompiledRecurrence } from '../recurrence.js'
+import { describeCompiledRecurrence, recurrenceSpecToRrule } from '../recurrence.js'
 import { createRecurringTask as defaultCreateRecurringTask } from '../recurring.js'
 import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from '../types/recurring.js'
-import { semanticScheduleToCompiled, utcToLocal } from '../utils/datetime.js'
+import { utcToLocal } from '../utils/datetime.js'
 
 export interface CreateRecurringTaskDeps {
   createRecurringTask: (input: RecurringTaskInput) => RecurringTaskRecord
@@ -30,18 +31,9 @@ const inputSchema = z.object({
   triggerType: z
     .enum(['cron', 'on_complete'])
     .describe("'cron' for fixed schedule, 'on_complete' for after-completion"),
-  schedule: z
-    .object({
-      frequency: z.enum(['daily', 'weekly', 'monthly', 'weekdays', 'weekends']).describe('How often the task repeats'),
-      time: z.string().describe("Time of day in HH:MM 24-hour format (user's local time)"),
-      days_of_week: z
-        .array(z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']))
-        .optional()
-        .describe('Which days for weekly frequency (e.g. ["mon", "wed", "fri"])'),
-      day_of_month: z.number().int().min(1).max(31).optional().describe('Day of month for monthly frequency (1–31)'),
-    })
+  schedule: rruleInputSchema
     .optional()
-    .describe("Schedule configuration for 'cron' triggerType"),
+    .describe("Schedule for 'cron' triggerType. Call get_current_time first to obtain the user's IANA timezone."),
   catchUp: z.boolean().optional().describe('Create missed occurrences on resume. Default: false'),
 })
 
@@ -54,11 +46,9 @@ function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDe
     return { error: "schedule is required when triggerType is 'cron'" }
   }
 
-  const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-
   const compiled =
     input.triggerType === 'cron' && input.schedule !== undefined
-      ? semanticScheduleToCompiled(input.schedule, timezone)
+      ? recurrenceSpecToRrule({ ...input.schedule, dtstart: new Date().toISOString() })
       : undefined
 
   const record = deps.createRecurringTask({
@@ -74,7 +64,7 @@ function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDe
     rrule: compiled?.rrule,
     dtstartUtc: compiled?.dtstartUtc,
     catchUp: input.catchUp,
-    timezone,
+    timezone: compiled?.timezone ?? getConfig(userId, 'timezone') ?? 'UTC',
   })
 
   const schedule =
