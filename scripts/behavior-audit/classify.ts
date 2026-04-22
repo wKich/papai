@@ -28,16 +28,18 @@ export interface Phase2aDeps {
   readonly maxRetries: number
 }
 
-const defaultPhase2aDeps: Phase2aDeps = {
-  classifyBehaviorWithRetry,
-  readClassifiedFile,
-  writeClassifiedFile,
-  saveManifest,
-  saveProgress,
-  getFailedClassificationAttempts,
-  markClassificationDone,
-  setClassificationFailedAttempts,
-  maxRetries: MAX_RETRIES,
+function createDefaultPhase2aDeps(): Phase2aDeps {
+  return {
+    classifyBehaviorWithRetry,
+    readClassifiedFile,
+    writeClassifiedFile,
+    saveManifest,
+    saveProgress,
+    getFailedClassificationAttempts,
+    markClassificationDone,
+    setClassificationFailedAttempts,
+    maxRetries: MAX_RETRIES,
+  }
 }
 
 interface Phase2aRunInput {
@@ -251,6 +253,7 @@ export async function runPhase2a(
   ...args: readonly [] | readonly [Partial<Phase2aDeps>]
 ): Promise<ReadonlySet<string>> {
   const { progress, selectedTestKeys, manifest } = input
+  const defaultPhase2aDeps = createDefaultPhase2aDeps()
   const resolvedDeps: Phase2aDeps = args.length === 0 ? defaultPhase2aDeps : { ...defaultPhase2aDeps, ...args[0] }
   progress.phase2a.status = 'in-progress'
   const dirtyCandidateFeatureKeys = new Set<string>()

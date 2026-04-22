@@ -3,12 +3,37 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { Output, stepCountIs } from 'ai'
 
 import type { ClassifyAgentDeps } from '../../scripts/behavior-audit/classify-agent.js'
-import { cleanupTempDirs } from './behavior-audit-integration.runtime-helpers.js'
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
+import { cleanupTempDirs, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { loadClassifyAgentModule } from './behavior-audit-integration.support.js'
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   cleanupTempDirs()
 })
+
+function startCountingFailureServer(): {
+  readonly url: string
+  readonly getRequestCount: () => number
+  readonly stop: () => void
+} {
+  let requestCount = 0
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      requestCount += 1
+      return new Response('upstream failure', { status: 500 })
+    },
+  })
+
+  return {
+    url: `http://127.0.0.1:${server.port}/v1`,
+    getRequestCount: () => requestCount,
+    stop: () => {
+      void server.stop(true)
+    },
+  }
+}
 
 describe('behavior-audit phase 2a classify agent', () => {
   test('classifyBehaviorWithRetry does not sleep before the first resumed retry attempt', async () => {
@@ -100,5 +125,29 @@ describe('behavior-audit phase 2a classify agent', () => {
 
     expect(result === null ? null : result.candidateFeatureKey).toBe('task-creation')
     expect(events).toEqual(['generate:1', 'sleep:50', 'generate:2'])
+  })
+
+  test('classifyBehaviorWithRetry default path reads reloaded config after module import', async () => {
+    const initialServer = startCountingFailureServer()
+    const reloadedServer = startCountingFailureServer()
+
+    try {
+      process.env['BEHAVIOR_AUDIT_BASE_URL'] = initialServer.url
+      process.env['BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS'] = '100'
+      process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = '1'
+      reloadBehaviorAuditConfig()
+
+      const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
+
+      process.env['BEHAVIOR_AUDIT_BASE_URL'] = reloadedServer.url
+      reloadBehaviorAuditConfig()
+
+      await expect(classifyAgent.classifyBehaviorWithRetry('prompt', 0)).resolves.toBeNull()
+      expect(initialServer.getRequestCount()).toBe(0)
+      expect(reloadedServer.getRequestCount()).toBe(1)
+    } finally {
+      initialServer.stop()
+      reloadedServer.stop()
+    }
   })
 })

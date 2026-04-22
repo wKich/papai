@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { BehaviorAuditTestConfig } from './behavior-audit-integration.helpers.js'
 
 const tempDirs: string[] = []
@@ -194,6 +195,8 @@ export function restoreBehaviorAuditEnv(): void {
     }
     process.env[key] = originalValue
   }
+
+  reloadBehaviorAuditConfig()
 }
 
 export function cleanupTempDirs(): void {

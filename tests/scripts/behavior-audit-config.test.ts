@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
 
-import { restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
+import * as behaviorAuditConfig from '../../scripts/behavior-audit/config.js'
+import { createAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
+import { applyBehaviorAuditEnv, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { isObject } from './behavior-audit-integration.support.js'
 
 type ReloadableConfigModule = {
@@ -39,4 +41,18 @@ test('reloadBehaviorAuditConfig reapplies env overrides to exported config value
 
   expect(config.REPORTS_DIR).toBe('/tmp/behavior-audit-reports')
   expect(config.MAX_RETRIES).toBe(7)
+})
+
+test('restoreBehaviorAuditEnv also restores live config exports for already-loaded modules', () => {
+  const expectedMaxRetries =
+    process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] === undefined ? 3 : Number(process.env['BEHAVIOR_AUDIT_MAX_RETRIES'])
+
+  const testConfig = createAuditBehaviorConfig('/tmp/behavior-audit-runtime-helper', null)
+  applyBehaviorAuditEnv({ ...testConfig, MAX_RETRIES: 0 })
+  behaviorAuditConfig.reloadBehaviorAuditConfig()
+
+  expect(behaviorAuditConfig.MAX_RETRIES).toBe(0)
+  restoreBehaviorAuditEnv()
+
+  expect(behaviorAuditConfig.MAX_RETRIES).toBe(expectedMaxRetries)
 })

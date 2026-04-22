@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import path from 'node:path'
 
 import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import {
   createAuditBehaviorPaths,
@@ -580,5 +581,58 @@ describe('behavior-audit phase 2a classification', () => {
       throw new Error('Expected repeated failed behavior entry')
     }
     expect(repeatedFailure.attempts).toBe(2)
+  })
+
+  test('runPhase2a default path reads reloaded max retry config after module import', async () => {
+    process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = '1'
+    reloadBehaviorAuditConfig()
+
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > reloaded retry budget'
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > reloaded retry budget',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: null,
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = createExtractedBehaviorFixture({
+      testName: 'reloaded retry budget',
+      fullPath: 'suite > reloaded retry budget',
+      behavior: 'When retries are disabled after import, phase 2a should short-circuit.',
+      context: 'Ensures the default retry budget is read from reloaded config at call time.',
+      keywords: ['classification-retries'],
+    })
+
+    process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = '0'
+    reloadBehaviorAuditConfig()
+
+    const dirty = await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect([...dirty]).toEqual([])
+    expect(progress.phase2a.classifiedBehaviors[testKey]).toBeUndefined()
+    expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
   })
 })

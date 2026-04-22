@@ -71,29 +71,31 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
-const defaultApiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const defaultModel = createOpenAICompatible({
-  name: 'behavior-audit-classify',
-  apiKey: defaultApiKey,
-  baseURL: BASE_URL,
-  supportsStructuredOutputs: true,
-})(MODEL)
+function createDefaultClassifyAgentDeps(): ClassifyAgentDeps {
+  const defaultApiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
+  const defaultModel = createOpenAICompatible({
+    name: 'behavior-audit-classify',
+    apiKey: defaultApiKey,
+    baseURL: BASE_URL,
+    supportsStructuredOutputs: true,
+  })(MODEL)
 
-const defaultClassifyAgentDeps: ClassifyAgentDeps = {
-  config: {
-    BASE_URL,
-    MODEL,
-    PHASE2_TIMEOUT_MS,
-    MAX_RETRIES,
-    RETRY_BACKOFF_MS,
-    MAX_STEPS,
-  },
-  generateText: (input) => generateText(input),
-  outputObject: ({ schema }) => Output.object({ schema }),
-  stepCountIs: (stepCount) => stepCountIs(stepCount),
-  buildModel: () => defaultModel,
-  sleep,
-  createAbortSignal: (timeout) => AbortSignal.timeout(timeout),
+  return {
+    config: {
+      BASE_URL,
+      MODEL,
+      PHASE2_TIMEOUT_MS,
+      MAX_RETRIES,
+      RETRY_BACKOFF_MS,
+      MAX_STEPS,
+    },
+    generateText: (input) => generateText(input),
+    outputObject: ({ schema }) => Output.object({ schema }),
+    stepCountIs: (stepCount) => stepCountIs(stepCount),
+    buildModel: () => defaultModel,
+    sleep,
+    createAbortSignal: (timeout) => AbortSignal.timeout(timeout),
+  }
 }
 
 async function classifySingle(
@@ -168,7 +170,7 @@ export function classifyBehaviorWithRetry(
 ): Promise<ClassificationResult | null> {
   const [prompt, attemptOffset] = args
   if (args.length === 2) {
-    return retryClassification(prompt, attemptOffset, attemptOffset, defaultClassifyAgentDeps)
+    return retryClassification(prompt, attemptOffset, attemptOffset, createDefaultClassifyAgentDeps())
   }
   const [, , deps] = args
   return retryClassification(prompt, attemptOffset, attemptOffset, deps)
