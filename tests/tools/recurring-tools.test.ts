@@ -10,14 +10,14 @@ import type { ListRecurringTasksDeps } from '../../src/tools/list-recurring-task
 import { makeListRecurringTasksTool } from '../../src/tools/list-recurring-tasks.js'
 import type { PauseRecurringTaskDeps } from '../../src/tools/pause-recurring-task.js'
 import { makePauseRecurringTaskTool } from '../../src/tools/pause-recurring-task.js'
+import { makeUpdateRecurringTaskTool } from '../../src/tools/recurring-tools.js'
 import type { ResumeRecurringTaskDeps } from '../../src/tools/resume-recurring-task.js'
 import { makeResumeRecurringTaskTool } from '../../src/tools/resume-recurring-task.js'
 import type { SkipRecurringTaskDeps } from '../../src/tools/skip-recurring-task.js'
 import { makeSkipRecurringTaskTool } from '../../src/tools/skip-recurring-task.js'
 import type { UpdateRecurringTaskDeps } from '../../src/tools/update-recurring-task.js'
-import { makeUpdateRecurringTaskTool } from '../../src/tools/update-recurring-task.js'
 import type { RecurringTaskInput, RecurringTaskRecord } from '../../src/types/recurring.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { mockLogger, schemaValidates } from '../utils/test-helpers.js'
 
 // ============================================================================
 // Helpers
@@ -37,7 +37,8 @@ function makeRecord(overrides: Partial<RecurringTaskRecord> = {}): RecurringTask
     assignee: null,
     labels: [],
     triggerType: 'cron',
-    cronExpression: '0 9 * * 1',
+    rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+    dtstartUtc: '2026-03-01T09:00:00.000Z',
     timezone: 'UTC',
     enabled: true,
     catchUp: false,
@@ -59,6 +60,9 @@ describe('recurring-tools', () => {
 
   let deleteRecurringTaskResult: boolean
   let deleteRecurringTaskCalls: string[]
+
+  let getRecurringTaskResult: RecurringTaskRecord | null
+  let getRecurringTaskCalls: string[]
 
   let updateRecurringTaskResult: RecurringTaskRecord | null
   let updateRecurringTaskCalls: Array<{ id: string; updates: Record<string, unknown> }>
@@ -92,6 +96,8 @@ describe('recurring-tools', () => {
     onMockCall = null
     deleteRecurringTaskResult = true
     deleteRecurringTaskCalls = []
+    getRecurringTaskResult = makeRecord()
+    getRecurringTaskCalls = []
     updateRecurringTaskResult = null
     updateRecurringTaskCalls = []
     resumeRecurringTaskResult = null
@@ -123,8 +129,9 @@ describe('recurring-tools', () => {
           assignee: null,
           labels: [],
           triggerType: input.triggerType,
-          cronExpression: input.cronExpression ?? null,
-          timezone: 'UTC',
+          rrule: input.rrule ?? null,
+          dtstartUtc: input.dtstartUtc ?? null,
+          timezone: input.timezone ?? 'UTC',
           enabled: true,
           catchUp: false,
           lastRun: null,
@@ -144,6 +151,10 @@ describe('recurring-tools', () => {
     }
 
     updateRecurringTaskDeps = {
+      getRecurringTask: (id: string): RecurringTaskRecord | null => {
+        getRecurringTaskCalls.push(id)
+        return getRecurringTaskResult
+      },
       updateRecurringTask: (id: string, updates: Record<string, unknown>): RecurringTaskRecord | null => {
         updateRecurringTaskCalls.push({ id, updates })
         if (onMockCall) onMockCall()
@@ -209,12 +220,9 @@ describe('recurring-tools', () => {
       expect(createRecurringTaskCallCount).toBe(1)
     })
 
-    test('returns error when cron type but no schedule', async () => {
+    test('schema rejects cron without schedule', () => {
       const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-      const result: unknown = await tool.execute({ title: 'Task', projectId: 'p1', triggerType: 'cron' }, toolCtx)
-      expect(result).toHaveProperty('error', "schedule is required when triggerType is 'cron'")
-      expect(createRecurringTaskCallCount).toBe(0)
+      expect(schemaValidates(tool, { title: 'Task', projectId: 'p1', triggerType: 'cron' })).toBe(false)
     })
 
     test('converts semantic schedule to cron expression', async () => {
@@ -225,7 +233,7 @@ describe('recurring-tools', () => {
           title: 'Monday standup',
           projectId: 'p1',
           triggerType: 'cron',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
         },
         toolCtx,
       )
@@ -233,7 +241,7 @@ describe('recurring-tools', () => {
       expect(result).toHaveProperty('title', 'Test')
       expect(result).toHaveProperty('projectId', 'p1')
       expect(result).toHaveProperty('triggerType', 'cron')
-      expect(result).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
+      expect(result).toHaveProperty('schedule', 'weekly at 09:00 UTC on Monday')
       expect(result).toHaveProperty('enabled', true)
       expect(createRecurringTaskCallCount).toBe(1)
     })
@@ -252,22 +260,16 @@ describe('recurring-tools', () => {
       expect(makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps).description).toBeTruthy()
     })
 
-    test('on_complete triggerType ignores schedule when both provided', async () => {
+    test('schema rejects on_complete with schedule', () => {
       const tool = makeCreateRecurringTaskTool('user-1', createRecurringTaskDeps)
-      if (!tool.execute) throw new Error('Tool execute is undefined')
-
-      const result: unknown = await tool.execute(
-        {
+      expect(
+        schemaValidates(tool, {
           title: 'Test',
           projectId: 'p-1',
           triggerType: 'on_complete',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
-        },
-        toolCtx,
-      )
-
-      expect(result).not.toHaveProperty('error')
-      expect(result).toHaveProperty('schedule', 'after completion of current instance')
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
+        }),
+      ).toBe(false)
     })
 
     test('re-throws when createRecurringTask throws', async () => {
@@ -283,7 +285,7 @@ describe('recurring-tools', () => {
             title: 'Task',
             projectId: 'p1',
             triggerType: 'cron',
-            schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+            schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
           },
           toolCtx,
         )
@@ -303,13 +305,36 @@ describe('recurring-tools', () => {
           title: 'Daily',
           projectId: 'p1',
           triggerType: 'cron',
-          schedule: { frequency: 'daily', time: '17:00' },
+          schedule: { freq: 'DAILY', byHour: [17], byMinute: [0], timezone: 'Asia/Karachi' },
         },
         toolCtx,
       )
 
       // nextRun from mock is null by default — verify no crash
       expect(result).toHaveProperty('nextRun', null)
+    })
+
+    test('cron create anchors DTSTART at midnight of the schedule timezone', async () => {
+      let capturedInput: RecurringTaskInput | null = null
+      const deps: CreateRecurringTaskDeps = {
+        createRecurringTask: (input): RecurringTaskRecord => {
+          capturedInput = input
+          return createRecurringTaskDeps.createRecurringTask(input)
+        },
+      }
+      const tool = makeCreateRecurringTaskTool('user-1', deps)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        {
+          title: 'Weekly',
+          projectId: 'p1',
+          triggerType: 'cron',
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], timezone: 'UTC' },
+        },
+        toolCtx,
+      )
+      expect(capturedInput).not.toBeNull()
+      expect(capturedInput!.dtstartUtc).toMatch(/T00:00:00\.000Z$/)
     })
   })
 
@@ -372,7 +397,7 @@ describe('recurring-tools', () => {
     test('returns updated record fields when task exists', async () => {
       const record = makeRecord({ id: 'rec-2', title: 'Updated title', projectId: 'p2', enabled: true })
       updateRecurringTaskResult = record
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-2', title: 'Updated title' }, toolCtx)
       expect(result).toHaveProperty('id', 'rec-2')
@@ -384,40 +409,56 @@ describe('recurring-tools', () => {
     })
 
     test('returns error when task not found', async () => {
-      updateRecurringTaskResult = null
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      getRecurringTaskResult = null
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-missing', title: 'new' }, toolCtx)
       expect(result).toHaveProperty('error', 'Recurring task not found')
+      expect(updateRecurringTaskCalls).toHaveLength(0)
     })
 
-    test('converts semantic schedule to cronExpression when updating', async () => {
+    test('converts RRULE schedule input to compiled recurrence when updating', async () => {
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute(
         {
           recurringTaskId: 'rec-1',
-          schedule: { frequency: 'weekly', time: '09:00', days_of_week: ['mon'] },
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' },
         },
         toolCtx,
       )
-      expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('cronExpression', '0 9 * * 1')
+      expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('rrule', 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0')
     })
 
-    test('passes updates without cronExpression when no schedule provided', async () => {
+    test('preserves existing dtstartUtc anchor when schedule is updated', async () => {
+      getRecurringTaskResult = makeRecord({ dtstartUtc: '2026-03-01T09:00:00.000Z' })
       updateRecurringTaskResult = makeRecord()
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        {
+          recurringTaskId: 'rec-1',
+          schedule: { freq: 'DAILY', byHour: [9], byMinute: [0], timezone: 'UTC' },
+        },
+        toolCtx,
+      )
+      expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('dtstartUtc', '2026-03-01T09:00:00.000Z')
+    })
+
+    test('passes updates without rrule when no schedule provided', async () => {
+      updateRecurringTaskResult = makeRecord()
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-1', title: 'New title' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-1')
       expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('title', 'New title')
-      expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('cronExpression', undefined)
+      expect(updateRecurringTaskCalls[0]?.updates).not.toHaveProperty('rrule')
     })
 
     test('calls updateRecurringTask with correct recurringTaskId', async () => {
       updateRecurringTaskResult = makeRecord({ id: 'rec-42' })
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       await tool.execute({ recurringTaskId: 'rec-42', title: 'x' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-42')
@@ -428,7 +469,7 @@ describe('recurring-tools', () => {
         timezone: 'Asia/Karachi',
         nextRun: '2026-03-25T12:00:00.000Z',
       })
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1', title: 'Updated' }, toolCtx)
       expect(result).toHaveProperty('nextRun', '2026-03-25T17:00:00')
@@ -465,16 +506,20 @@ describe('recurring-tools', () => {
     })
 
     test('returns cron description as schedule for cron-based tasks', async () => {
-      const record = makeRecord({ triggerType: 'cron', cronExpression: '0 9 * * 1', timezone: 'UTC' })
+      const record = makeRecord({
+        triggerType: 'cron',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        timezone: 'UTC',
+      })
       resumeRecurringTaskResult = { record, missedDates: [] }
       const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({ recurringTaskId: 'rec-1' }, toolCtx)
-      expect(result).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
+      expect(result).toHaveProperty('schedule', 'weekly at 09:00 UTC on Monday')
     })
 
     test('returns "after completion" for on_complete tasks', async () => {
-      const record = makeRecord({ triggerType: 'on_complete', cronExpression: null })
+      const record = makeRecord({ triggerType: 'on_complete', rrule: null, dtstartUtc: null })
       resumeRecurringTaskResult = { record, missedDates: [] }
       const tool = makeResumeRecurringTaskTool(resumeRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -606,7 +651,12 @@ describe('recurring-tools', () => {
   describe('makeListRecurringTasksTool', () => {
     test('returns mapped records with schedule for cron tasks', async () => {
       listRecurringTasksResult = [
-        makeRecord({ id: 'rec-10', title: 'Monday standup', cronExpression: '0 9 * * 1', triggerType: 'cron' }),
+        makeRecord({
+          id: 'rec-10',
+          title: 'Monday standup',
+          rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+          triggerType: 'cron',
+        }),
       ]
       const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
@@ -617,8 +667,8 @@ describe('recurring-tools', () => {
       expect(result[0]).toHaveProperty('title', 'Monday standup')
       expect(result[0]).toHaveProperty('projectId', 'p1')
       expect(result[0]).toHaveProperty('triggerType', 'cron')
-      expect(result[0]).toHaveProperty('schedule', 'at 09:00 UTC on Monday')
-      expect(result[0]).toHaveProperty('cronExpression', '0 9 * * 1')
+      expect(result[0]).toHaveProperty('schedule', 'weekly at 09:00 UTC on Monday')
+      expect(result[0]).toHaveProperty('rrule', 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0')
       expect(result[0]).toHaveProperty('enabled', true)
       // nextRun/lastRun converted via utcToLocal (UTC→UTC strips Z suffix)
       expect(result[0]).toHaveProperty('nextRun', '2026-03-22T09:00:00')
@@ -630,7 +680,7 @@ describe('recurring-tools', () => {
     })
 
     test('returns "after completion" for on_complete tasks', async () => {
-      listRecurringTasksResult = [makeRecord({ triggerType: 'on_complete', cronExpression: null })]
+      listRecurringTasksResult = [makeRecord({ triggerType: 'on_complete', rrule: null, dtstartUtc: null })]
       const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
@@ -638,8 +688,8 @@ describe('recurring-tools', () => {
       expect(result[0]).toHaveProperty('schedule', 'after completion')
     })
 
-    test('returns "after completion" for cron task with null cronExpression', async () => {
-      listRecurringTasksResult = [makeRecord({ triggerType: 'cron', cronExpression: null })]
+    test('returns "after completion" for cron task with null rrule', async () => {
+      listRecurringTasksResult = [makeRecord({ triggerType: 'cron', rrule: null, dtstartUtc: null })]
       const tool = makeListRecurringTasksTool('user-1', listRecurringTasksDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       const result: unknown = await tool.execute({}, toolCtx)
@@ -681,12 +731,18 @@ describe('recurring-tools', () => {
 
     test('returns multiple tasks with correct mapping', async () => {
       listRecurringTasksResult = [
-        makeRecord({ id: 'rec-a', title: 'Task A', triggerType: 'cron', cronExpression: '0 9 * * 1' }),
+        makeRecord({
+          id: 'rec-a',
+          title: 'Task A',
+          triggerType: 'cron',
+          rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        }),
         makeRecord({
           id: 'rec-b',
           title: 'Task B',
           triggerType: 'on_complete',
-          cronExpression: null,
+          rrule: null,
+          dtstartUtc: null,
           priority: 'high',
           assignee: 'alice',
           labels: ['bug', 'frontend'],
@@ -718,7 +774,7 @@ describe('recurring-tools', () => {
     })
 
     test('update tool has a non-empty description', () => {
-      expect(makeUpdateRecurringTaskTool(updateRecurringTaskDeps).description).toBeTruthy()
+      expect(makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps).description).toBeTruthy()
     })
 
     test('resume tool has a non-empty description', () => {
@@ -762,7 +818,7 @@ describe('recurring-tools', () => {
       onMockCall = (): never => {
         throw new Error('DB failure')
       }
-      const tool = makeUpdateRecurringTaskTool(updateRecurringTaskDeps)
+      const tool = makeUpdateRecurringTaskTool('user-1', updateRecurringTaskDeps)
       if (!tool.execute) throw new Error('Tool execute is undefined')
       let caught: unknown = null
       try {

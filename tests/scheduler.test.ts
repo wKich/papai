@@ -72,7 +72,7 @@ describe('scheduler', () => {
       CREATE TABLE IF NOT EXISTS recurring_tasks (
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(platform_user_id) ON DELETE CASCADE, project_id TEXT NOT NULL, title TEXT NOT NULL,
         description TEXT, priority TEXT, status TEXT, assignee TEXT, labels TEXT,
-        trigger_type TEXT NOT NULL DEFAULT 'cron', cron_expression TEXT,
+        trigger_type TEXT NOT NULL DEFAULT 'cron', rrule TEXT, dtstart_utc TEXT,
         timezone TEXT NOT NULL DEFAULT 'UTC', enabled TEXT NOT NULL DEFAULT '1',
         catch_up TEXT NOT NULL DEFAULT '0', last_run TEXT, next_run TEXT,
         created_at TEXT DEFAULT (datetime('now')) NOT NULL, updated_at TEXT DEFAULT (datetime('now')) NOT NULL
@@ -110,7 +110,8 @@ describe('scheduler', () => {
       projectId: overrides.projectId ?? 'proj-1',
       title: overrides.title ?? 'Recurring Test',
       triggerType: 'cron',
-      cronExpression: '0 9 * * 1',
+      rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+      dtstartUtc: '2026-04-20T09:00:00Z',
       timezone: 'UTC',
       catchUp: false,
       labels: overrides.labels,
@@ -241,7 +242,8 @@ describe('scheduler', () => {
         projectId: 'proj-1',
         title: 'Future Task',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
         timezone: 'UTC',
         catchUp: false,
       })

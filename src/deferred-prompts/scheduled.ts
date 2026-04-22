@@ -60,7 +60,9 @@ function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
     deliveryTarget: rowToDeliveryTarget(row),
     prompt: row.prompt,
     fireAt: row.fireAt,
-    cronExpression: row.cronExpression,
+    rrule: row.rrule,
+    dtstartUtc: row.dtstartUtc,
+    timezone: row.timezone,
     status: toStatus(row.status),
     createdAt: row.createdAt,
     lastExecutedAt: row.lastExecutedAt,
@@ -71,15 +73,16 @@ function toScheduledPrompt(row: ScheduledPromptRow): ScheduledPrompt {
 export function createScheduledPrompt(
   userId: string,
   prompt: string,
-  schedule: { fireAt: string; cronExpression?: string },
+  schedule: { fireAt: string; cronCompiled?: { rrule: string; dtstartUtc: string; timezone?: string } },
   executionMetadata?: ExecutionMetadata,
   delivery?: DeferredPromptDeliveryInput,
 ): ScheduledPrompt {
-  log.debug({ userId, hasCron: schedule.cronExpression !== undefined }, 'createScheduledPrompt called')
+  log.debug({ userId, hasCron: schedule.cronCompiled !== undefined }, 'createScheduledPrompt called')
 
   const db = getDrizzleDb()
   const id = crypto.randomUUID()
   const fireAt = new Date(schedule.fireAt).toISOString()
+  const translated = schedule.cronCompiled ?? null
 
   const target = delivery ?? dmTarget(userId)
 
@@ -95,7 +98,9 @@ export function createScheduledPrompt(
       mentionUserIds: JSON.stringify(target.mentionUserIds),
       prompt,
       fireAt,
-      cronExpression: schedule.cronExpression ?? null,
+      rrule: translated?.rrule ?? null,
+      dtstartUtc: translated?.dtstartUtc ?? null,
+      timezone: translated?.timezone ?? null,
       status: 'active',
       executionMetadata: JSON.stringify(executionMetadata ?? DEFAULT_EXECUTION_METADATA),
     })
@@ -147,13 +152,17 @@ export function getScheduledPrompt(id: string, userId: string): ScheduledPrompt 
 function buildUpdateValues(updates: {
   prompt?: string
   fireAt?: string
-  cronExpression?: string
+  rrule?: string | null
+  dtstartUtc?: string | null
+  timezone?: string | null
   executionMetadata?: ExecutionMetadata
 }): Partial<typeof scheduledPrompts.$inferInsert> {
   const values: Partial<typeof scheduledPrompts.$inferInsert> = {}
   if (updates.prompt !== undefined) values.prompt = updates.prompt
   if (updates.fireAt !== undefined) values.fireAt = new Date(updates.fireAt).toISOString()
-  if (updates.cronExpression !== undefined) values.cronExpression = updates.cronExpression
+  if (updates.rrule !== undefined) values.rrule = updates.rrule
+  if (updates.dtstartUtc !== undefined) values.dtstartUtc = updates.dtstartUtc
+  if (updates.timezone !== undefined) values.timezone = updates.timezone
   if (updates.executionMetadata !== undefined) values.executionMetadata = JSON.stringify(updates.executionMetadata)
   return values
 }
@@ -161,7 +170,14 @@ function buildUpdateValues(updates: {
 export function updateScheduledPrompt(
   id: string,
   userId: string,
-  updates: { prompt?: string; fireAt?: string; cronExpression?: string; executionMetadata?: ExecutionMetadata },
+  updates: {
+    prompt?: string
+    fireAt?: string
+    rrule?: string | null
+    dtstartUtc?: string | null
+    timezone?: string | null
+    executionMetadata?: ExecutionMetadata
+  },
 ): ScheduledPrompt | null {
   log.debug({ id, userId }, 'updateScheduledPrompt called')
 

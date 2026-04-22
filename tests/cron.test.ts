@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from '../src/cron.js'
+import { allOccurrencesBetween, describeCron, nextCronOccurrence, parseCron } from './recurrence/legacy-cron-oracle.js'
 import { mockLogger } from './utils/test-helpers.js'
 
 beforeEach(() => {

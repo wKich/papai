@@ -90,7 +90,7 @@ describe('pollScheduledOnce', () => {
     const pastTime = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(USER_ID, 'Daily standup', {
       fireAt: pastTime,
-      cronExpression: '0 9 * * *',
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: pastTime },
     })
 
     await pollScheduledOnce(chat, () => provider)
@@ -143,7 +143,7 @@ describe('pollScheduledOnce', () => {
     const oneShot = createScheduledPrompt(USER_ID, 'One-time reminder', { fireAt: pastTime })
     const recurring = createScheduledPrompt(USER_ID, 'Daily standup', {
       fireAt: pastTime,
-      cronExpression: '0 9 * * *',
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: pastTime },
     })
 
     await pollScheduledOnce(chat, () => provider)
@@ -248,7 +248,7 @@ describe('pollScheduledOnce — error handling', () => {
     const pastTime = new Date(Date.now() - 60_000).toISOString()
     const created = createScheduledPrompt(userId, 'daily standup', {
       fireAt: pastTime,
-      cronExpression: '0 9 * * *',
+      cronCompiled: { rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', dtstartUtc: pastTime },
     })
 
     await pollScheduledOnce(chat, () => createMockProvider())

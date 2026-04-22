@@ -60,7 +60,8 @@ describe('recurring tasks', () => {
       assignee TEXT,
       labels TEXT,
       trigger_type TEXT NOT NULL DEFAULT 'cron',
-      cron_expression TEXT,
+      rrule TEXT,
+      dtstart_utc TEXT,
       timezone TEXT NOT NULL DEFAULT 'UTC',
       enabled TEXT NOT NULL DEFAULT '1',
       catch_up TEXT NOT NULL DEFAULT '0',
@@ -93,13 +94,14 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Weekly sync',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       expect(task.id).toBeDefined()
       expect(task.title).toBe('Weekly sync')
       expect(task.triggerType).toBe('cron')
-      expect(task.cronExpression).toBe('0 9 * * 1')
+      expect(task.rrule).toBe('FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0')
       expect(task.enabled).toBe(true)
       expect(task.nextRun).not.toBeNull()
     })
@@ -122,7 +124,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Weekly ops',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
         priority: 'high',
         assignee: 'alice',
         labels: ['label-1', 'label-2'],
@@ -141,14 +144,16 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Task 1',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       createRecurringTask({
         userId: USER_ID,
         projectId: PROJECT_ID,
         title: 'Task 2',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 5',
+        rrule: 'FREQ=WEEKLY;BYDAY=FR;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       testSqlite.run("INSERT INTO users (platform_user_id, added_by) VALUES ('other-user', 'admin')")
       createRecurringTask({
@@ -156,7 +161,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Other',
         triggerType: 'cron',
-        cronExpression: '0 0 * * *',
+        rrule: 'FREQ=DAILY;BYHOUR=0;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T00:00:00Z',
       })
 
       const tasks = listRecurringTasks(USER_ID)
@@ -177,7 +183,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Old',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       const updated = updateRecurringTask(task.id, { title: 'New', priority: 'urgent' })
@@ -186,17 +193,21 @@ describe('recurring tasks', () => {
       expect(updated!.priority).toBe('urgent')
     })
 
-    test('updates cron expression and recomputes nextRun', () => {
+    test('updates rrule and recomputes nextRun', () => {
       const task = createRecurringTask({
         userId: USER_ID,
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       const oldNextRun = task.nextRun
 
-      const updated = updateRecurringTask(task.id, { cronExpression: '0 14 * * 5' })
+      const updated = updateRecurringTask(task.id, {
+        rrule: 'FREQ=WEEKLY;BYDAY=FR;BYHOUR=14;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T14:00:00Z',
+      })
       expect(updated).not.toBeNull()
       expect(updated!.nextRun).not.toBe(oldNextRun)
     })
@@ -214,7 +225,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       expect(task.enabled).toBe(true)
 
@@ -231,7 +243,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       pauseRecurringTask(task.id)
 
@@ -239,7 +252,6 @@ describe('recurring tasks', () => {
       expect(result).not.toBeNull()
       expect(result!.record.enabled).toBe(true)
       expect(result!.record.nextRun).not.toBeNull()
-      // nextRun should be in the future
       expect(new Date(result!.record.nextRun!).getTime()).toBeGreaterThan(Date.now())
       expect(result!.missedDates).toEqual([])
     })
@@ -250,7 +262,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Missed Test',
         triggerType: 'cron',
-        cronExpression: '* * * * *',
+        rrule: 'FREQ=MINUTELY',
+        dtstartUtc: '2026-04-20T00:00:00Z',
       })
       pauseRecurringTask(task.id)
       // Set nextRun to 5 minutes ago so there are missed occurrences
@@ -276,7 +289,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       const originalNextRun = task.nextRun!
 
@@ -287,7 +301,6 @@ describe('recurring tasks', () => {
     })
 
     test('returns null for on_complete task (cannot skip non-cron task)', () => {
-      // Create on_complete task (has no cronExpression, nextRun is null)
       const task = createRecurringTask({
         userId: USER_ID,
         projectId: PROJECT_ID,
@@ -308,7 +321,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       expect(deleteRecurringTask(task.id)).toBe(true)
@@ -325,7 +339,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       deleteRecurringTask(task.id)
 
@@ -339,7 +354,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       recordOccurrence(task.id, 'external-task-cascade')
@@ -363,7 +379,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Due',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       // Manually set nextRun to the past
@@ -383,7 +400,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Paused',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
       pauseRecurringTask(task.id)
 
@@ -398,7 +416,7 @@ describe('recurring tasks', () => {
     })
 
     test('finds enabled tasks when table uses INTEGER columns (migration schema)', () => {
-      // Re-create table with INTEGER columns exactly as migration 009 creates them
+      // Re-create table with INTEGER columns for enabled/catch_up (pre-026 schema shape)
       testSqlite.run('DROP TABLE IF EXISTS recurring_tasks')
       testSqlite.run('DROP INDEX IF EXISTS idx_recurring_tasks_user')
       testSqlite.run('DROP INDEX IF EXISTS idx_recurring_tasks_enabled_next')
@@ -414,7 +432,8 @@ describe('recurring tasks', () => {
         assignee TEXT,
         labels TEXT,
         trigger_type TEXT NOT NULL DEFAULT 'cron',
-        cron_expression TEXT,
+        rrule TEXT,
+        dtstart_utc TEXT,
         timezone TEXT NOT NULL DEFAULT 'UTC',
         enabled INTEGER NOT NULL DEFAULT 1,
         catch_up INTEGER NOT NULL DEFAULT 0,
@@ -448,7 +467,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       markExecuted(task.id)
@@ -467,7 +487,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Test',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       recordOccurrence(task.id, 'external-task-123')
@@ -491,7 +512,8 @@ describe('recurring tasks', () => {
         projectId: PROJECT_ID,
         title: 'Weekly Sync',
         triggerType: 'cron',
-        cronExpression: '0 9 * * 1',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
       })
 
       recordOccurrence(task.id, 'ext-task-1')

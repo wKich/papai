@@ -5,11 +5,13 @@ import type { ToolSet } from 'ai'
 import { setConfig } from '../../src/config.js'
 import { getAlertPrompt } from '../../src/deferred-prompts/alerts.js'
 import { getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
-import { makeCancelDeferredPromptTool } from '../../src/tools/cancel-deferred-prompt.js'
-import { makeCreateDeferredPromptTool } from '../../src/tools/create-deferred-prompt.js'
-import { makeGetDeferredPromptTool } from '../../src/tools/get-deferred-prompt.js'
-import { makeListDeferredPromptsTool } from '../../src/tools/list-deferred-prompts.js'
-import { makeUpdateDeferredPromptTool } from '../../src/tools/update-deferred-prompt.js'
+import {
+  makeCancelDeferredPromptTool,
+  makeCreateDeferredPromptTool,
+  makeGetDeferredPromptTool,
+  makeListDeferredPromptsTool,
+  makeUpdateDeferredPromptTool,
+} from '../../src/deferred-prompts/tools.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
 const USER_ID = 'user-1'
@@ -88,13 +90,16 @@ describe('create_deferred_prompt', () => {
     expect(result).toHaveProperty('fireAt')
   })
 
-  test('creates with cron-only schedule', async () => {
+  test('creates with rrule schedule', async () => {
     const t = getTools()['create_deferred_prompt']!
     if (!t.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await t.execute({ prompt: 'Daily', schedule: { cron: '0 9 * * *' } }, toolCtx)
+    const result: unknown = await t.execute(
+      { prompt: 'Daily', schedule: { rrule: { freq: 'DAILY', byHour: [9], byMinute: [0], timezone: 'UTC' } } },
+      toolCtx,
+    )
     expect(result).toHaveProperty('status', 'created')
     expect(result).toHaveProperty('type', 'scheduled')
-    expect(result).toHaveProperty('cronExpression', '0 9 * * *')
+    expect(result).toHaveProperty('rrule', 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0')
   })
 
   test('creates with condition (returns type alert)', async () => {
@@ -144,11 +149,19 @@ describe('create_deferred_prompt', () => {
     expect(result).toHaveProperty('error')
   })
 
-  test('rejects invalid cron', async () => {
+  test('creates with weekly rrule schedule and stores correct rrule string', async () => {
     const t = getTools()['create_deferred_prompt']!
     if (!t.execute) throw new Error('Tool execute is undefined')
-    const result: unknown = await t.execute({ prompt: 'X', schedule: { cron: 'bad' } }, toolCtx)
-    expect(result).toHaveProperty('error')
+    const result: unknown = await t.execute(
+      {
+        prompt: 'Weekly',
+        schedule: { rrule: { freq: 'WEEKLY', byDay: ['MO'], byHour: [9], byMinute: [0], timezone: 'UTC' } },
+      },
+      toolCtx,
+    )
+    expect(result).toHaveProperty('status', 'created')
+    expect(result).toHaveProperty('type', 'scheduled')
+    expect(result).toHaveProperty('rrule', 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0')
   })
 
   test('rejects empty schedule object', async () => {

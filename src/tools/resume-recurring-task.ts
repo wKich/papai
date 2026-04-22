@@ -2,11 +2,12 @@ import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { describeCron } from '../cron.js'
 import { logger } from '../logger.js'
+import { describeCompiledRecurrence } from '../recurrence.js'
 import { resumeRecurringTask as defaultResumeRecurringTask } from '../recurring.js'
 import type { ResumeResult } from '../recurring.js'
 import { createMissedTasks as defaultCreateMissedTasks } from '../scheduler.js'
+import type { RecurringTaskRecord } from '../types/recurring.js'
 import { utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:resume-recurring-task' })
@@ -28,6 +29,17 @@ const inputSchema = z.object({
 
 type Input = z.infer<typeof inputSchema>
 
+const describeSchedule = (record: RecurringTaskRecord): string => {
+  if (record.triggerType === 'cron' && record.rrule !== null && record.dtstartUtc !== null) {
+    return describeCompiledRecurrence({
+      rrule: record.rrule,
+      dtstartUtc: record.dtstartUtc,
+      timezone: record.timezone,
+    })
+  }
+  return 'after completion'
+}
+
 async function executeResume(input: Input, deps: ResumeRecurringTaskDeps): Promise<unknown> {
   const { recurringTaskId, createMissed } = input
   log.debug({ recurringTaskId, createMissed }, 'Resuming recurring task')
@@ -41,10 +53,7 @@ async function executeResume(input: Input, deps: ResumeRecurringTaskDeps): Promi
   const { record, missedDates } = result
   const createdCount = missedDates.length > 0 ? await deps.createMissedTasks(recurringTaskId, missedDates) : 0
 
-  const schedule =
-    record.triggerType === 'cron' && record.cronExpression !== null
-      ? describeCron(record.cronExpression, record.timezone)
-      : 'after completion'
+  const schedule = describeSchedule(record)
 
   log.info(
     { id: record.id, title: record.title, createMissed, missedCreated: createdCount },

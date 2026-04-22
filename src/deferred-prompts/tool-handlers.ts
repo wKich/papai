@@ -1,10 +1,12 @@
 import type { ContextType } from '../chat/types.js'
 import { dmTarget } from '../chat/types.js'
 import { getConfig } from '../config.js'
-import { nextCronOccurrence, parseCron } from '../cron.js'
 import { logger } from '../logger.js'
-import { localDatetimeToUtc, utcToLocal } from '../utils/datetime.js'
+import type { CompiledRecurrence } from '../recurrence.js'
+import { nextOccurrence, recurrenceSpecToRrule } from '../recurrence.js'
+import { localDatetimeToUtc, midnightUtcForTimezone, utcToLocal } from '../utils/datetime.js'
 import { cancelAlertPrompt, createAlertPrompt, getAlertPrompt, listAlertPrompts, updateAlertPrompt } from './alerts.js'
+import { buildScheduleUpdates, type ScheduleFieldUpdates } from './schedule-update-helpers.js'
 import {
   cancelScheduledPrompt,
   createScheduledPrompt,
@@ -91,7 +93,7 @@ function createScheduled(
   delivery?: DeferredPromptDeliveryInput,
 ): CreateResult {
   const hasFireAt = schedule.fire_at !== undefined
-  const hasCron = schedule.cron !== undefined && schedule.cron !== ''
+  const hasRrule = schedule.rrule !== undefined
   const timezone = getConfig(userId, 'timezone') ?? 'UTC'
 
   if (hasFireAt) {
@@ -102,31 +104,35 @@ function createScheduled(
     if (fireDate.getTime() <= Date.now()) return { error: 'fire_at must be a future date and time.' }
   }
 
-  let cronExpression: string | undefined
-  if (hasCron) {
-    if (parseCron(schedule.cron!) === null) return { error: `Invalid cron expression: '${schedule.cron!}'` }
-    cronExpression = schedule.cron!
+  let cronCompiled: CompiledRecurrence | undefined
+  if (hasRrule) {
+    const { startDate, startTime, ...scheduleRest } = schedule.rrule!
+    const dtstart =
+      startDate === undefined
+        ? midnightUtcForTimezone(scheduleRest.timezone)
+        : localDatetimeToUtc(startDate, startTime, scheduleRest.timezone)
+    cronCompiled = recurrenceSpecToRrule({ ...scheduleRest, dtstart })
   }
 
   let fireAt: string
   if (hasFireAt) {
     fireAt = localDatetimeToUtc(schedule.fire_at!.date, schedule.fire_at!.time, timezone)
-  } else if (hasCron) {
-    const next = nextCronOccurrence(parseCron(cronExpression!)!, new Date(), timezone)
-    if (next === null) return { error: 'Could not compute next occurrence for the given cron expression.' }
+  } else if (hasRrule) {
+    const next = nextOccurrence(cronCompiled!, new Date())
+    if (next === null) return { error: 'Could not compute next occurrence for the given rrule spec.' }
     fireAt = next.toISOString()
   } else {
-    return { error: 'Schedule must include either fire_at or cron.' }
+    return { error: 'Schedule must include either fire_at or rrule.' }
   }
 
-  const result = createScheduledPrompt(userId, prompt, { fireAt, cronExpression }, executionMetadata, delivery)
+  const result = createScheduledPrompt(userId, prompt, { fireAt, cronCompiled }, executionMetadata, delivery)
   log.info({ id: result.id, userId, type: 'scheduled' }, 'Deferred prompt created')
   return {
     status: 'created',
     type: 'scheduled',
     id: result.id,
     fireAt: utcToLocal(result.fireAt, timezone) ?? result.fireAt,
-    cronExpression: result.cronExpression,
+    rrule: result.rrule,
   }
 }
 
@@ -194,23 +200,15 @@ export function executeGet(userId: string, input: { id: string }): GetResult {
 function updateScheduledFields(id: string, userId: string, input: UpdateInput): UpdateResult {
   if (input.condition !== undefined)
     return { error: 'Cannot apply a condition to a scheduled prompt. Use schedule fields instead.' }
-  const updates: { prompt?: string; fireAt?: string; cronExpression?: string; executionMetadata?: ExecutionMetadata } =
-    {}
+  const updates: {
+    prompt?: string
+    executionMetadata?: ExecutionMetadata
+  } & ScheduleFieldUpdates = {}
   if (input.prompt !== undefined) updates.prompt = input.prompt
   if (input.schedule !== undefined) {
-    if (input.schedule.fire_at !== undefined) {
-      const { date, time } = input.schedule.fire_at
-      const timezone = getConfig(userId, 'timezone') ?? 'UTC'
-      const utcStr = localDatetimeToUtc(date, time, timezone)
-      const fireAtDate = new Date(utcStr)
-      if (Number.isNaN(fireAtDate.getTime())) return { error: `Invalid fire_at: '${date}T${time}'` }
-      if (fireAtDate.getTime() <= Date.now()) return { error: 'fire_at must be in the future.' }
-      updates.fireAt = utcStr
-    }
-    if (input.schedule.cron !== undefined) {
-      if (parseCron(input.schedule.cron) === null) return { error: `Invalid cron expression: '${input.schedule.cron}'` }
-      updates.cronExpression = input.schedule.cron
-    }
+    const scheduleUpdates = buildScheduleUpdates(id, userId, input.schedule)
+    if ('error' in scheduleUpdates) return scheduleUpdates
+    Object.assign(updates, scheduleUpdates)
   }
   if (input.execution !== undefined) {
     const parseResult = executionMetadataSchema.safeParse(input.execution)

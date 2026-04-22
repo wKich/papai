@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import { alertConditionSchema, CONDITION_FIELDS, FIELD_OPERATORS } from '../../src/deferred-prompts/types.js'
+import {
+  alertConditionSchema,
+  CONDITION_FIELDS,
+  FIELD_OPERATORS,
+  rruleInputSchema,
+  scheduleSchema,
+} from '../../src/deferred-prompts/types.js'
 
 describe('alertConditionSchema', () => {
   describe('valid leaf conditions', () => {
@@ -189,5 +195,104 @@ describe('alertConditionSchema', () => {
         expect(FIELD_OPERATORS[field].length).toBeGreaterThan(0)
       }
     })
+  })
+})
+
+describe('rruleInputSchema', () => {
+  test('accepts a valid daily spec', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      byHour: [9],
+      byMinute: [0],
+      timezone: 'UTC',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test('rejects invalid IANA timezone', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'Not/A_Zone',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects conflicting until and count', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      until: '2026-12-31T00:00:00Z',
+      count: 2,
+      timezone: 'UTC',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  test('accepts startDate without startTime', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startDate: '2026-05-01',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test('accepts startDate and startTime together', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startDate: '2026-05-01',
+      startTime: '09:00',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test('rejects startTime without startDate', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startTime: '09:00',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byDay array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'WEEKLY', byDay: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byHour array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'DAILY', byHour: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byMinute array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'DAILY', byMinute: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('scheduleSchema', () => {
+  const validFireAt = { date: '2026-12-01', time: '09:00' }
+  const validRrule = { freq: 'DAILY' as const, byHour: [9], byMinute: [0], timezone: 'UTC' }
+
+  test('accepts fire_at only', () => {
+    expect(scheduleSchema.safeParse({ fire_at: validFireAt }).success).toBe(true)
+  })
+
+  test('accepts rrule only', () => {
+    expect(scheduleSchema.safeParse({ rrule: validRrule }).success).toBe(true)
+  })
+
+  test('rejects empty object', () => {
+    expect(scheduleSchema.safeParse({}).success).toBe(false)
+  })
+
+  test('rejects both fire_at and rrule simultaneously', () => {
+    const result = scheduleSchema.safeParse({ fire_at: validFireAt, rrule: validRrule })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'))
+      expect(paths).toContain('rrule')
+    }
   })
 })

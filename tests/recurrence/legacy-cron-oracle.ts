@@ -9,7 +9,7 @@
  *   "0 9 * * 1-5"   → weekdays at 09:00
  */
 
-import { logger } from './logger.js'
+import { logger } from '../../src/logger.js'
 
 const log = logger.child({ scope: 'cron' })
 

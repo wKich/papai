@@ -31,6 +31,8 @@ import { migration022DropUnusedLastSeenIndex } from './migrations/022_drop_unuse
 import { migration023AddForeignKeys } from './migrations/023_add_foreign_keys.js'
 import { migration024AuthorizedGroups } from './migrations/024_authorized_groups.js'
 import { migration025DeferredPromptDeliveryTargets } from './migrations/025_deferred_prompt_delivery_targets.js'
+import { migration026RruleUnification } from './migrations/026_rrule_unification.js'
+import { migration027ScheduledPromptTimezone } from './migrations/027_scheduled_prompt_timezone.js'
 
 const getDbPath = (): string => {
   const dbPath = process.env['DB_PATH']
@@ -91,6 +93,8 @@ export const MIGRATIONS: readonly Migration[] = [
   migration023AddForeignKeys,
   migration024AuthorizedGroups,
   migration025DeferredPromptDeliveryTargets,
+  migration026RruleUnification,
+  migration027ScheduledPromptTimezone,
 ]
 
 export const initDb = (): void => {

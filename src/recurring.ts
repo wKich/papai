@@ -1,10 +1,11 @@
 import { eq, and, lte, sql } from 'drizzle-orm'
 
-import { allOccurrencesBetween, nextCronOccurrence, parseCron } from './cron.js'
 import { getDrizzleDb } from './db/drizzle.js'
 import { recurringTasks } from './db/schema.js'
 import { logger } from './logger.js'
-import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from './types/recurring.js'
+import { nextOccurrence } from './recurrence.js'
+import { buildCompiled, computeMissedDates, computeNextRun, toRecord } from './recurring-utils.js'
+import type { RecurringTaskInput, RecurringTaskRecord } from './types/recurring.js'
 
 export type { TriggerType, RecurringTaskInput, RecurringTaskRecord } from './types/recurring.js'
 export {
@@ -17,55 +18,18 @@ export {
 const log = logger.child({ scope: 'recurring' })
 const generateId = (): string => crypto.randomUUID()
 
-const parseLabels = (raw: string | null): string[] => {
-  if (raw === null || raw === '') return []
-  const parsed: unknown = JSON.parse(raw)
-  if (!Array.isArray(parsed)) return []
-  return parsed.filter((v): v is string => typeof v === 'string')
-}
-
-const parseTriggerType = (raw: string): TriggerType => {
-  if (raw === 'on_complete') return 'on_complete'
-  return 'cron'
-}
-
-const toRecord = (row: typeof recurringTasks.$inferSelect): RecurringTaskRecord => ({
-  id: row.id,
-  userId: row.userId,
-  projectId: row.projectId,
-  title: row.title,
-  description: row.description,
-  priority: row.priority,
-  status: row.status,
-  assignee: row.assignee,
-  labels: parseLabels(row.labels),
-  triggerType: parseTriggerType(row.triggerType),
-  cronExpression: row.cronExpression,
-  timezone: row.timezone,
-  enabled: row.enabled === '1',
-  catchUp: row.catchUp === '1',
-  lastRun: row.lastRun,
-  nextRun: row.nextRun,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-})
-
-const computeNextRun = (cronExpression: string, timezone = 'UTC'): string | null => {
-  const parsed = parseCron(cronExpression)
-  if (parsed === null) return null
-  const next = nextCronOccurrence(parsed, new Date(), timezone)
-  return next === null ? null : next.toISOString()
-}
-
 export const createRecurringTask = (input: RecurringTaskInput): RecurringTaskRecord => {
   log.debug({ userId: input.userId, title: input.title, triggerType: input.triggerType }, 'createRecurringTask called')
 
   const id = generateId()
   const now = new Date().toISOString()
-  const nextRun =
-    input.triggerType === 'cron' && input.cronExpression !== undefined
-      ? computeNextRun(input.cronExpression, input.timezone ?? 'UTC')
+
+  const compiled =
+    input.triggerType === 'cron' && input.rrule !== undefined && input.dtstartUtc !== undefined
+      ? { rrule: input.rrule, dtstartUtc: input.dtstartUtc, timezone: input.timezone ?? 'UTC' }
       : null
+
+  const nextRun = compiled === null ? null : computeNextRun(compiled)
 
   const db = getDrizzleDb()
   db.insert(recurringTasks)
@@ -80,7 +44,8 @@ export const createRecurringTask = (input: RecurringTaskInput): RecurringTaskRec
       assignee: input.assignee ?? null,
       labels: input.labels !== undefined && input.labels.length > 0 ? JSON.stringify(input.labels) : null,
       triggerType: input.triggerType,
-      cronExpression: input.cronExpression ?? null,
+      rrule: input.rrule ?? null,
+      dtstartUtc: input.dtstartUtc ?? null,
       timezone: input.timezone ?? 'UTC',
       enabled: '1',
       catchUp: input.catchUp === true ? '1' : '0',
@@ -120,15 +85,22 @@ export const listRecurringTasks = (userId: string): RecurringTaskRecord[] => {
   return rows.map(toRecord)
 }
 
-export const updateRecurringTask = (
-  id: string,
-  updates: Partial<
-    Pick<
-      RecurringTaskInput,
-      'title' | 'description' | 'priority' | 'status' | 'assignee' | 'labels' | 'cronExpression' | 'catchUp'
-    >
-  >,
-): RecurringTaskRecord | null => {
+type UpdateFields = Pick<
+  RecurringTaskInput,
+  | 'title'
+  | 'description'
+  | 'priority'
+  | 'status'
+  | 'assignee'
+  | 'labels'
+  | 'triggerType'
+  | 'rrule'
+  | 'dtstartUtc'
+  | 'timezone'
+  | 'catchUp'
+>
+
+export const updateRecurringTask = (id: string, updates: Partial<UpdateFields>): RecurringTaskRecord | null => {
   log.debug({ id, updates: Object.keys(updates) }, 'updateRecurringTask called')
 
   const db = getDrizzleDb()
@@ -148,9 +120,27 @@ export const updateRecurringTask = (
   if (updates.labels !== undefined) set.labels = JSON.stringify(updates.labels)
   if (updates.catchUp !== undefined) set.catchUp = updates.catchUp ? '1' : '0'
 
-  if (updates.cronExpression !== undefined) {
-    set.cronExpression = updates.cronExpression
-    set.nextRun = computeNextRun(updates.cronExpression, existing.timezone)
+  if (updates.triggerType !== undefined) {
+    set.triggerType = updates.triggerType
+    if (updates.triggerType === 'on_complete') {
+      set.rrule = null
+      set.dtstartUtc = null
+      set.nextRun = null
+    }
+  }
+  if (updates.timezone !== undefined) set.timezone = updates.timezone
+
+  if (updates.rrule !== undefined) {
+    set.rrule = updates.rrule
+    const newDtstart = updates.dtstartUtc ?? existing.dtstartUtc
+    const tz = updates.timezone ?? existing.timezone
+    if (newDtstart !== null) {
+      set.nextRun = computeNextRun({ rrule: updates.rrule, dtstartUtc: newDtstart, timezone: tz })
+    }
+  }
+
+  if (updates.dtstartUtc !== undefined) {
+    set.dtstartUtc = updates.dtstartUtc
   }
 
   db.update(recurringTasks).set(set).where(eq(recurringTasks.id, id)).run()
@@ -177,15 +167,6 @@ export type ResumeResult = {
   missedDates: string[]
 }
 
-const computeMissedDates = (cronExpr: string, fromDate: string | null, timezone = 'UTC'): string[] => {
-  const parsed = parseCron(cronExpr)
-  if (parsed === null) return []
-  const after = fromDate === null ? new Date(0) : new Date(fromDate)
-  const before = new Date()
-  const missed = allOccurrencesBetween(parsed, after, before, 100, timezone)
-  return missed.map((d) => d.toISOString())
-}
-
 export const resumeRecurringTask = (id: string, createMissed: boolean): ResumeResult | null => {
   log.debug({ id, createMissed }, 'resumeRecurringTask called')
 
@@ -196,13 +177,12 @@ export const resumeRecurringTask = (id: string, createMissed: boolean): ResumeRe
     return null
   }
 
-  const cronExpr = existing.cronExpression
-  const tz = existing.timezone
+  const compiled = buildCompiled(existing.rrule, existing.dtstartUtc, existing.timezone)
   let missedDates: string[] = []
-  const nextRun = cronExpr === null ? existing.nextRun : computeNextRun(cronExpr, tz)
+  const nextRun = compiled === null ? existing.nextRun : computeNextRun(compiled)
 
-  if (createMissed && cronExpr !== null) {
-    missedDates = computeMissedDates(cronExpr, existing.nextRun, tz)
+  if (createMissed && compiled !== null) {
+    missedDates = computeMissedDates(compiled, existing.nextRun)
     log.info({ id, missedCount: missedDates.length }, 'Computed missed occurrences')
   }
 
@@ -226,24 +206,18 @@ export const skipNextOccurrence = (id: string): RecurringTaskRecord | null => {
     return null
   }
 
-  if (existing.cronExpression === null) {
+  const compiled = buildCompiled(existing.rrule, existing.dtstartUtc, existing.timezone)
+  if (compiled === null) {
     log.warn({ id }, 'Cannot skip on-complete triggered task')
     return null
   }
 
-  // Advance nextRun past the current nextRun
-  const parsed = parseCron(existing.cronExpression)
-  if (parsed === null) return toRecord(existing)
-
   const baseDate = existing.nextRun === null ? new Date() : new Date(existing.nextRun)
-  const newNext = nextCronOccurrence(parsed, baseDate, existing.timezone)
+  const newNext = nextOccurrence(compiled, baseDate)
   const newNextRun = newNext === null ? null : newNext.toISOString()
 
   db.update(recurringTasks)
-    .set({
-      nextRun: newNextRun,
-      updatedAt: new Date().toISOString(),
-    })
+    .set({ nextRun: newNextRun, updatedAt: new Date().toISOString() })
     .where(eq(recurringTasks.id, id))
     .run()
 
@@ -286,12 +260,11 @@ export const markExecuted = (id: string): void => {
   const existing = db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get()
   if (existing === undefined) return
 
-  const now = new Date().toISOString()
-  let nextRun: string | null = null
+  const executedAt = new Date()
+  const now = executedAt.toISOString()
 
-  if (existing.triggerType === 'cron' && existing.cronExpression !== null) {
-    nextRun = computeNextRun(existing.cronExpression, existing.timezone)
-  }
+  const compiled = buildCompiled(existing.rrule, existing.dtstartUtc, existing.timezone)
+  const nextRun = existing.triggerType === 'cron' && compiled !== null ? computeNextRun(compiled, executedAt) : null
 
   db.update(recurringTasks).set({ lastRun: now, nextRun, updatedAt: now }).where(eq(recurringTasks.id, id)).run()
 

@@ -40,7 +40,6 @@ src/calendar/
   sync-engine.ts              — Bidirectional sync logic (detect changes, resolve conflicts)
   sync-state.ts               — Sync state persistence (last sync time, sync tokens, ctag)
   event-mapper.ts             — iCalendar ↔ papai domain type mapping
-  rrule-parser.ts             — RRULE → cron expression conversion
   notification-scheduler.ts   — Upcoming event notification logic
 ```
 
@@ -209,16 +208,9 @@ When both sides changed since last sync:
 5. Notify user via chat with both versions
 6. User picks winner → overwrite losing side, clear conflict_state
 
-### RRULE ↔ Cron conversion (`rrule-parser.ts`)
+### RRULE handling
 
-| RRULE                        | Cron                           |
-| ---------------------------- | ------------------------------ |
-| `FREQ=DAILY`                 | `0 9 * * *`                    |
-| `FREQ=WEEKLY;BYDAY=MO,WE,FR` | `0 9 * * 1,3,5`                |
-| `FREQ=MONTHLY;BYMONTHDAY=15` | `0 9 15 * *`                   |
-| `FREQ=YEARLY`                | `0 9 15 1 *` (uses start date) |
-
-Unsupported RRULE patterns (e.g., `FREQ=WEEKLY;BYDAY=MO;BYSETPOS=3`) are detected. The user is told the pattern can't be auto-synced and offered a manual cron override.
+Inbound CalDAV RRULE strings are stored verbatim in `recurring_tasks.rrule`; outbound writes push the same column value to CalDAV unchanged. No translation layer exists. See `docs/superpowers/specs/2026-04-19-rrule-library-adoption-design.md` for the unified recurrence format.
 
 ### Discovery flow
 
@@ -351,19 +343,18 @@ The notification scheduler inserts rows into `calendar_event_reminders` during t
 
 New error kinds following the existing `AppError` pattern:
 
-| Kind                         | When                            | User message                                                                                                 |
-| ---------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `calendar_auth_expired`      | OAuth token refresh fails       | "Your Google Calendar authorization expired. Please reconnect with `connect_calendar`."                      |
-| `calendar_connection_failed` | tsdav can't reach CalDAV server | "Could not reach your calendar. I'll retry on the next sync cycle."                                          |
-| `calendar_rate_limited`      | CalDAV server returns 429       | Logged as warn, retried next cycle with exponential backoff                                                  |
-| `calendar_rrule_unsupported` | RRULE can't map to cron         | "This event's recurrence pattern is too complex for automatic sync. You can set a custom schedule manually." |
-| `calendar_sync_conflict`     | Both sides changed              | Triggers conflict resolution flow                                                                            |
+| Kind                         | When                            | User message                                                                            |
+| ---------------------------- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| `calendar_auth_expired`      | OAuth token refresh fails       | "Your Google Calendar authorization expired. Please reconnect with `connect_calendar`." |
+| `calendar_connection_failed` | tsdav can't reach CalDAV server | "Could not reach your calendar. I'll retry on the next sync cycle."                     |
+| `calendar_rate_limited`      | CalDAV server returns 429       | Logged as warn, retried next cycle with exponential backoff                             |
+| `calendar_sync_conflict`     | Both sides changed              | Triggers conflict resolution flow                                                       |
 
 Transient errors (connection, rate limit) are logged and retried on the next sync cycle. No user notification unless they persist for 3+ consecutive cycles, then a single warning is sent.
 
 ### Testing strategy
 
-- **Unit tests**: `rrule-parser.ts`, `event-mapper.ts`, `sync-engine.ts` with mock CalendarProvider
+- **Unit tests**: `event-mapper.ts`, `sync-engine.ts` with mock CalendarProvider
 - **Integration tests**: full sync flow with mock CalDAV server (tsdav supports configurable `serverUrl`)
 - **Provider tests**: each provider tested against expected CalDAV request/response patterns
 - **Notification tests**: scheduler inserts correct reminder rows, fires at correct time
