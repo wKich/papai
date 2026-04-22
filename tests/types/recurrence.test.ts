@@ -15,6 +15,36 @@ describe('recurrenceSpecSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('rejects empty byDay array', () => {
+    const result = recurrenceSpecSchema.safeParse({
+      freq: 'WEEKLY',
+      byDay: [],
+      dtstart: '2026-04-21T09:00:00Z',
+      timezone: 'UTC',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects empty byHour array', () => {
+    const result = recurrenceSpecSchema.safeParse({
+      freq: 'DAILY',
+      byHour: [],
+      dtstart: '2026-04-21T09:00:00Z',
+      timezone: 'UTC',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects empty byMinute array', () => {
+    const result = recurrenceSpecSchema.safeParse({
+      freq: 'DAILY',
+      byMinute: [],
+      dtstart: '2026-04-21T09:00:00Z',
+      timezone: 'UTC',
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects when until and count are both set', () => {
     const result = recurrenceSpecSchema.safeParse({
       freq: 'DAILY',

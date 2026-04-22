@@ -12,11 +12,12 @@ type ParsedCron = {
   dayOfWeek: CronField
 }
 
-const parseRange = (range: string, min: number, max: number): [number, number] => {
+const parseRange = (range: string, min: number, max: number): [number, number] | null => {
   const parts = range.split('-')
   const start = Number.parseInt(parts[0] ?? String(min), 10)
   const end = Number.parseInt(parts[1] ?? String(max), 10)
-  return [Math.max(min, Math.min(start, max)), Math.max(min, Math.min(end, max))]
+  if (start < min || start > max || end < min || end > max) return null
+  return [start, end]
 }
 
 const parseField = (field: string, min: number, max: number): CronField => {
@@ -31,13 +32,15 @@ const parseField = (field: string, min: number, max: number): CronField => {
         log.warn({ field, part }, 'Invalid cron step value')
         continue
       }
-      const [start, end] = range === '*' ? [min, max] : parseRange(range!, min, max)
-      for (let i = start; i <= end; i += step) values.push(i)
+      const rangeResult = range === '*' ? ([min, max] as [number, number]) : parseRange(range!, min, max)
+      if (rangeResult === null) continue
+      for (let i = rangeResult[0]; i <= rangeResult[1]; i += step) values.push(i)
       continue
     }
     if (part.includes('-')) {
-      const [start, end] = parseRange(part, min, max)
-      for (let i = start; i <= end; i++) values.push(i)
+      const rangeResult = parseRange(part, min, max)
+      if (rangeResult === null) continue
+      for (let i = rangeResult[0]; i <= rangeResult[1]; i++) values.push(i)
       continue
     }
     const num = Number.parseInt(part, 10)
@@ -91,7 +94,7 @@ export const cronToRrule = (expression: string, timezone: string, dtstartUtc: st
 
   let freq: 'YEARLY' | 'MONTHLY' | 'WEEKLY' | 'DAILY' | 'HOURLY'
 
-  if (parsed.month.type === 'values') {
+  if (parsed.month.type === 'values' && parsed.dayOfMonth.type === 'values') {
     freq = 'YEARLY'
   } else if (parsed.dayOfMonth.type === 'values') {
     freq = 'MONTHLY'
@@ -104,9 +107,11 @@ export const cronToRrule = (expression: string, timezone: string, dtstartUtc: st
   }
 
   const parts: string[] = [`FREQ=${freq}`]
-  if (freq === 'YEARLY' && byMonth !== null) parts.push(`BYMONTH=${byMonth}`)
+  if (byMonth !== null) parts.push(`BYMONTH=${byMonth}`)
   if (byMonthDay !== null) parts.push(`BYMONTHDAY=${byMonthDay}`)
-  if (byDay !== null && freq !== 'YEARLY' && freq !== 'MONTHLY') parts.push(`BYDAY=${byDay}`)
+  // Include BYDAY for WEEKLY (pure weekday filter) or when BYMONTHDAY is also present
+  // (MONTHLY/YEARLY with both constraints uses RFC 5545 AND semantics, matching the legacy oracle)
+  if (byDay !== null && (freq === 'WEEKLY' || byMonthDay !== null)) parts.push(`BYDAY=${byDay}`)
   if (byHour !== null && freq !== 'HOURLY') parts.push(`BYHOUR=${byHour}`)
   if (byMinute !== null) parts.push(`BYMINUTE=${byMinute}`)
 

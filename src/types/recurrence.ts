@@ -22,16 +22,19 @@ export const recurrenceSpecSchema = z
       .describe('Interval between occurrences (e.g. interval=2 with freq=WEEKLY = every 2 weeks). Default 1.'),
     byDay: z
       .array(z.enum(BY_DAY))
+      .min(1)
       .optional()
       .describe('Weekdays (e.g. ["MO","WE","FR"]). Required for WEEKLY when picking days; optional otherwise.'),
-    byMonthDay: z.array(z.number().int().min(1).max(31)).optional().describe('Days of month (1..31).'),
-    byMonth: z.array(z.number().int().min(1).max(12)).optional().describe('Months (1..12).'),
+    byMonthDay: z.array(z.number().int().min(1).max(31)).min(1).optional().describe('Days of month (1..31).'),
+    byMonth: z.array(z.number().int().min(1).max(12)).min(1).optional().describe('Months (1..12).'),
     byHour: z
       .array(z.number().int().min(0).max(23))
+      .min(1)
       .optional()
       .describe('Hours of day (0..23). If omitted, RRULE fires at DTSTART time-of-day — do not pass 0s.'),
     byMinute: z
       .array(z.number().int().min(0).max(59))
+      .min(1)
       .optional()
       .describe('Minutes of hour (0..59). If omitted, RRULE fires at DTSTART minute — do not pass 0s.'),
     until: z.iso.datetime().optional().describe('End date (inclusive) in ISO 8601. Mutually exclusive with count.'),

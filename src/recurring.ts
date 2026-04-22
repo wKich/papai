@@ -93,6 +93,7 @@ type UpdateFields = Pick<
   | 'status'
   | 'assignee'
   | 'labels'
+  | 'triggerType'
   | 'rrule'
   | 'dtstartUtc'
   | 'timezone'
@@ -119,6 +120,14 @@ export const updateRecurringTask = (id: string, updates: Partial<UpdateFields>):
   if (updates.labels !== undefined) set.labels = JSON.stringify(updates.labels)
   if (updates.catchUp !== undefined) set.catchUp = updates.catchUp ? '1' : '0'
 
+  if (updates.triggerType !== undefined) {
+    set.triggerType = updates.triggerType
+    if (updates.triggerType === 'on_complete') {
+      set.rrule = null
+      set.dtstartUtc = null
+      set.nextRun = null
+    }
+  }
   if (updates.timezone !== undefined) set.timezone = updates.timezone
 
   if (updates.rrule !== undefined) {

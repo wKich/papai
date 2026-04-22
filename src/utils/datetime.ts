@@ -22,6 +22,16 @@ export const localDatetimeToUtc = (date: string, time: string | undefined, timez
   }
 }
 
+// Stable DTSTART anchor: midnight of today in the given timezone, avoiding wall-clock jitter.
+export const midnightUtcForTimezone = (timezone: string, now: Date = new Date()): string => {
+  try {
+    const date = formatInTimeZone(now, timezone, 'yyyy-MM-dd')
+    return localDatetimeToUtc(date, '00:00', timezone)
+  } catch {
+    return localDatetimeToUtc(now.toISOString().slice(0, 10), '00:00', 'UTC')
+  }
+}
+
 /**
  * Convert a UTC ISO string to a naive local datetime string ("YYYY-MM-DDTHH:MM:SS")
  * for display back to the LLM. No Z suffix — signals local time.

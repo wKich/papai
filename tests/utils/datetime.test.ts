@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { localDatetimeToUtc, utcToLocal } from '../../src/utils/datetime.js'
+import { localDatetimeToUtc, midnightUtcForTimezone, utcToLocal } from '../../src/utils/datetime.js'
 
 describe('localDatetimeToUtc', () => {
   test('converts date+time in UTC (no offset)', () => {
@@ -76,5 +76,31 @@ describe('utcToLocal', () => {
 
   test('falls back to original string on unparseable input', () => {
     expect(utcToLocal('not-a-date', 'Asia/Karachi')).toBe('not-a-date')
+  })
+})
+
+describe('midnightUtcForTimezone', () => {
+  test('UTC timezone returns midnight UTC on the same calendar day', () => {
+    const now = new Date('2026-04-21T15:30:00Z')
+    expect(midnightUtcForTimezone('UTC', now)).toBe('2026-04-21T00:00:00.000Z')
+  })
+
+  test('east-of-UTC timezone (Asia/Karachi, UTC+5) returns correct midnight UTC', () => {
+    // 2026-04-21T00:30Z = 05:30 Karachi → today in Karachi is Apr 21
+    // midnight Karachi = Apr 21 00:00 local = Apr 20 19:00 UTC
+    const now = new Date('2026-04-21T00:30:00Z')
+    expect(midnightUtcForTimezone('Asia/Karachi', now)).toBe('2026-04-20T19:00:00.000Z')
+  })
+
+  test('west-of-UTC timezone (America/New_York, UTC-5 in winter) returns correct midnight UTC', () => {
+    // 2026-01-15T10:00Z = 05:00 EST → today in NY is Jan 15
+    // midnight NY = Jan 15 00:00 EST = Jan 15 05:00 UTC
+    const now = new Date('2026-01-15T10:00:00Z')
+    expect(midnightUtcForTimezone('America/New_York', now)).toBe('2026-01-15T05:00:00.000Z')
+  })
+
+  test('falls back to UTC midnight for invalid timezone', () => {
+    const now = new Date('2026-04-21T15:30:00Z')
+    expect(midnightUtcForTimezone('Not/ATimezone', now)).toBe('2026-04-21T00:00:00.000Z')
   })
 })

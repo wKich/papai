@@ -10,7 +10,7 @@ import {
   updateRecurringTask as defaultUpdateRecurringTask,
 } from '../recurring.js'
 import type { RecurringTaskRecord } from '../types/recurring.js'
-import { utcToLocal } from '../utils/datetime.js'
+import { localDatetimeToUtc, midnightUtcForTimezone, utcToLocal } from '../utils/datetime.js'
 
 const log = logger.child({ scope: 'tool:update-recurring-task' })
 
@@ -24,24 +24,70 @@ const defaultDeps: UpdateRecurringTaskDeps = {
   updateRecurringTask: (...args) => defaultUpdateRecurringTask(...args),
 }
 
-const inputSchema = z.object({
-  recurringTaskId: z.string().describe('ID of the recurring task definition to update'),
-  title: z.string().optional().describe('New title'),
-  description: z.string().optional().describe('New description'),
-  priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('New priority'),
-  status: z.string().optional().describe('New initial status'),
-  assignee: z.string().optional().describe('New assignee'),
-  labels: z.array(z.string()).optional().describe('New label IDs'),
-  schedule: rruleInputSchema
-    .optional()
-    .describe("Updated schedule. Call get_current_time first to obtain the user's IANA timezone."),
-  catchUp: z.boolean().optional().describe('Whether to create missed occurrences on resume'),
-})
+const inputSchema = z
+  .object({
+    recurringTaskId: z.string().describe('ID of the recurring task definition to update'),
+    title: z.string().optional().describe('New title'),
+    description: z.string().optional().describe('New description'),
+    priority: z.enum(['no-priority', 'low', 'medium', 'high', 'urgent']).optional().describe('New priority'),
+    status: z.string().optional().describe('New initial status'),
+    assignee: z.string().optional().describe('New assignee'),
+    labels: z.array(z.string()).optional().describe('New label IDs'),
+    triggerType: z
+      .enum(['cron', 'on_complete'])
+      .optional()
+      .describe(
+        "Switch trigger type. Use 'on_complete' to remove the fixed schedule and trigger after completion instead.",
+      ),
+    schedule: rruleInputSchema
+      .optional()
+      .describe("Updated schedule. Call get_current_time first to obtain the user's IANA timezone."),
+    catchUp: z.boolean().optional().describe('Whether to create missed occurrences on resume'),
+  })
+  .superRefine(({ triggerType, schedule }, ctx) => {
+    if (triggerType === 'on_complete' && schedule !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: "schedule must not be provided when triggerType is 'on_complete'",
+        path: ['schedule'],
+      })
+    }
+    if (triggerType === 'cron' && schedule === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: "schedule is required when triggerType is 'cron'",
+        path: ['schedule'],
+      })
+    }
+  })
 
 type Input = z.infer<typeof inputSchema>
 
+function buildScheduleUpdates(
+  schedule: Input['schedule'],
+  triggerType: Input['triggerType'],
+  existingDtstart: string | null,
+): Record<string, unknown> {
+  if (schedule === undefined) {
+    return triggerType === 'on_complete' ? { triggerType: 'on_complete' } : {}
+  }
+  const { startDate, startTime, ...scheduleRest } = schedule
+  const dtstart =
+    startDate === undefined
+      ? (existingDtstart ?? midnightUtcForTimezone(scheduleRest.timezone))
+      : localDatetimeToUtc(startDate, startTime, scheduleRest.timezone)
+  const compiled = recurrenceSpecToRrule({ ...scheduleRest, dtstart })
+  return {
+    triggerType: 'cron' as const,
+    rrule: compiled.rrule,
+    dtstartUtc: compiled.dtstartUtc,
+    timezone: compiled.timezone,
+  }
+}
+
 function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
-  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, catchUp } = input
+  const { recurringTaskId, title, description, priority, status, assignee, labels, schedule, catchUp, triggerType } =
+    input
   log.debug({ recurringTaskId }, 'Updating recurring task')
 
   const existing = deps.getRecurringTask(recurringTaskId)
@@ -50,11 +96,6 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
     return { error: 'Recurring task not found' }
   }
 
-  const compiled =
-    schedule === undefined
-      ? undefined
-      : recurrenceSpecToRrule({ ...schedule, dtstart: existing.dtstartUtc ?? new Date().toISOString() })
-
   const updated = deps.updateRecurringTask(recurringTaskId, {
     title,
     description,
@@ -62,9 +103,7 @@ function executeUpdate(input: Input, deps: UpdateRecurringTaskDeps): unknown {
     status,
     assignee,
     labels,
-    rrule: compiled?.rrule,
-    dtstartUtc: compiled?.dtstartUtc,
-    timezone: compiled?.timezone,
+    ...buildScheduleUpdates(schedule, triggerType, existing.dtstartUtc),
     catchUp,
   })
 

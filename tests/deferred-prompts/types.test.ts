@@ -226,6 +226,49 @@ describe('rruleInputSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  test('accepts startDate without startTime', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startDate: '2026-05-01',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test('accepts startDate and startTime together', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startDate: '2026-05-01',
+      startTime: '09:00',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test('rejects startTime without startDate', () => {
+    const result = rruleInputSchema.safeParse({
+      freq: 'DAILY',
+      timezone: 'UTC',
+      startTime: '09:00',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byDay array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'WEEKLY', byDay: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byHour array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'DAILY', byHour: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
+
+  test('rejects empty byMinute array', () => {
+    const result = rruleInputSchema.safeParse({ freq: 'DAILY', byMinute: [], timezone: 'UTC' })
+    expect(result.success).toBe(false)
+  })
 })
 
 describe('scheduleSchema', () => {

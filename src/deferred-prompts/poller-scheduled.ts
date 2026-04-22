@@ -30,7 +30,7 @@ export function mergeExecutionMetadata(prompts: ScheduledPrompt[]): ExecutionMet
 function finalizeRecurring(prompt: ScheduledPrompt, now: string, timezone: string): void {
   const next = nextOccurrence(
     { rrule: prompt.rrule!, dtstartUtc: prompt.dtstartUtc!, timezone: prompt.timezone ?? timezone },
-    new Date(),
+    new Date(now),
   )
   if (next === null) {
     completeScheduledPrompt(prompt.id, prompt.createdByUserId, now)

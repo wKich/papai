@@ -82,6 +82,19 @@ describe('executeUpdate — rrule timezone', () => {
     expect(updated.fireAt).toContain('T22:')
   })
 
+  test('create with no byHour/byMinute anchors DTSTART at midnight of the rrule timezone', () => {
+    setConfig(USER_ID, 'timezone', 'UTC')
+    executeCreate(USER_ID, {
+      prompt: 'Weekly on Monday',
+      schedule: { rrule: { freq: 'WEEKLY', byDay: ['MO'], timezone: 'UTC' } },
+    })
+    const { prompts } = executeList(USER_ID, { type: 'scheduled' })
+    expect(prompts).toHaveLength(1)
+    const prompt = prompts[0]!
+    if (prompt.type !== 'scheduled') throw new Error('Expected scheduled')
+    expect(prompt.dtstartUtc).toMatch(/T00:00:00\.000Z$/)
+  })
+
   test('update rrule preserves original dtstartUtc series anchor', () => {
     setConfig(USER_ID, 'timezone', 'UTC')
 

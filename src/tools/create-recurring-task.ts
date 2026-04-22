@@ -5,10 +5,10 @@ import { z } from 'zod'
 import { getConfig } from '../config.js'
 import { rruleInputSchema } from '../deferred-prompts/types.js'
 import { logger } from '../logger.js'
-import { describeCompiledRecurrence, recurrenceSpecToRrule } from '../recurrence.js'
+import { describeCompiledRecurrence, recurrenceSpecToRrule, type CompiledRecurrence } from '../recurrence.js'
 import { createRecurringTask as defaultCreateRecurringTask } from '../recurring.js'
 import type { RecurringTaskInput, RecurringTaskRecord, TriggerType } from '../types/recurring.js'
-import { utcToLocal } from '../utils/datetime.js'
+import { localDatetimeToUtc, midnightUtcForTimezone, utcToLocal } from '../utils/datetime.js'
 
 export interface CreateRecurringTaskDeps {
   createRecurringTask: (input: RecurringTaskInput) => RecurringTaskRecord
@@ -55,10 +55,15 @@ type Input = z.infer<typeof inputSchema>
 function executeCreate(userId: string, input: Input, deps: CreateRecurringTaskDeps): unknown {
   log.debug({ userId, title: input.title, triggerType: input.triggerType }, 'Creating recurring task')
 
-  const compiled =
-    input.triggerType === 'cron' && input.schedule !== undefined
-      ? recurrenceSpecToRrule({ ...input.schedule, dtstart: new Date().toISOString() })
-      : undefined
+  let compiled: CompiledRecurrence | undefined
+  if (input.triggerType === 'cron' && input.schedule !== undefined) {
+    const { startDate, startTime, ...scheduleRest } = input.schedule
+    const dtstart =
+      startDate === undefined
+        ? midnightUtcForTimezone(scheduleRest.timezone)
+        : localDatetimeToUtc(startDate, startTime, scheduleRest.timezone)
+    compiled = recurrenceSpecToRrule({ ...scheduleRest, dtstart })
+  }
 
   const record = deps.createRecurringTask({
     userId,

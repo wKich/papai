@@ -18,7 +18,7 @@ export const recurrenceSpecToRrule = (spec: RecurrenceSpec): CompiledRecurrence 
   if (spec.interval !== undefined) parts.push(`INTERVAL=${spec.interval}`)
   if (spec.count !== undefined) parts.push(`COUNT=${spec.count}`)
   if (spec.until !== undefined) {
-    const until = spec.until.replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+    const until = spec.until.replace(/[-:]/g, '').replace(/\.\d+/, '')
     parts.push(`UNTIL=${until}`)
   }
   if (spec.byMonth !== undefined) parts.push(`BYMONTH=${spec.byMonth.join(',')}`)
@@ -78,8 +78,11 @@ export const occurrencesBetween = (args: CompiledRecurrence, after: Date, before
   const parsed = parseRrule(args)
   if (!parsed.ok) return []
   const results: Date[] = []
+  const afterMs = after.getTime()
   for (const dt of parsed.iter.between(after, before, true)) {
-    results.push(new Date(dt.epochMilliseconds))
+    const d = new Date(dt.epochMilliseconds)
+    if (d.getTime() === afterMs) continue
+    results.push(d)
     if (results.length >= limit) break
   }
   return results

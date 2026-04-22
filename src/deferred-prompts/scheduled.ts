@@ -152,9 +152,9 @@ export function getScheduledPrompt(id: string, userId: string): ScheduledPrompt 
 function buildUpdateValues(updates: {
   prompt?: string
   fireAt?: string
-  rrule?: string
-  dtstartUtc?: string
-  timezone?: string
+  rrule?: string | null
+  dtstartUtc?: string | null
+  timezone?: string | null
   executionMetadata?: ExecutionMetadata
 }): Partial<typeof scheduledPrompts.$inferInsert> {
   const values: Partial<typeof scheduledPrompts.$inferInsert> = {}
@@ -173,9 +173,9 @@ export function updateScheduledPrompt(
   updates: {
     prompt?: string
     fireAt?: string
-    rrule?: string
-    dtstartUtc?: string
-    timezone?: string
+    rrule?: string | null
+    dtstartUtc?: string | null
+    timezone?: string | null
     executionMetadata?: ExecutionMetadata
   },
 ): ScheduledPrompt | null {

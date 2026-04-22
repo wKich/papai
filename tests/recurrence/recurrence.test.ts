@@ -34,7 +34,7 @@ describe('recurrenceSpecToRrule', () => {
     expect(out.rrule).toBe('FREQ=DAILY')
   })
 
-  it('serialises INTERVAL, COUNT, UNTIL', () => {
+  it('serialises INTERVAL and COUNT', () => {
     const spec: RecurrenceSpec = {
       freq: 'DAILY',
       interval: 2,
@@ -44,6 +44,28 @@ describe('recurrenceSpecToRrule', () => {
     }
     const out = recurrenceSpecToRrule(spec)
     expect(out.rrule).toBe('FREQ=DAILY;INTERVAL=2;COUNT=10')
+  })
+
+  it('serialises UNTIL with millisecond precision', () => {
+    const spec: RecurrenceSpec = {
+      freq: 'DAILY',
+      until: '2026-12-31T00:00:00.000Z',
+      dtstart: '2026-04-20T00:00:00Z',
+      timezone: 'UTC',
+    }
+    const out = recurrenceSpecToRrule(spec)
+    expect(out.rrule).toBe('FREQ=DAILY;UNTIL=20261231T000000Z')
+  })
+
+  it('serialises UNTIL with sub-millisecond precision without leaving fractional digits', () => {
+    const spec: RecurrenceSpec = {
+      freq: 'DAILY',
+      until: '2026-12-31T00:00:00.123456Z',
+      dtstart: '2026-04-20T00:00:00Z',
+      timezone: 'UTC',
+    }
+    const out = recurrenceSpecToRrule(spec)
+    expect(out.rrule).toBe('FREQ=DAILY;UNTIL=20261231T000000Z')
   })
 
   it('serialises BYMONTH, BYMONTHDAY', () => {
@@ -164,6 +186,33 @@ describe('occurrencesBetween', () => {
       '2026-05-04T09:00:00.000Z',
       '2026-05-11T09:00:00.000Z',
     ])
+  })
+
+  it('excludes an occurrence that falls exactly on after', () => {
+    // after equals the first occurrence exactly — must not appear in results
+    const occ = occurrencesBetween(
+      {
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
+        timezone: 'UTC',
+      },
+      new Date('2026-04-20T09:00:00Z'),
+      new Date('2026-05-05T00:00:00Z'),
+    )
+    expect(occ.map((d) => d.toISOString())).toEqual(['2026-04-27T09:00:00.000Z', '2026-05-04T09:00:00.000Z'])
+  })
+
+  it('includes an occurrence that falls exactly on before', () => {
+    const occ = occurrencesBetween(
+      {
+        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0',
+        dtstartUtc: '2026-04-20T09:00:00Z',
+        timezone: 'UTC',
+      },
+      new Date('2026-04-20T08:00:00Z'),
+      new Date('2026-04-27T09:00:00Z'),
+    )
+    expect(occ.map((d) => d.toISOString())).toEqual(['2026-04-20T09:00:00.000Z', '2026-04-27T09:00:00.000Z'])
   })
 
   it('caps at the supplied limit', () => {

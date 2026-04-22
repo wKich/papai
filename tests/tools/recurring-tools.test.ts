@@ -313,6 +313,29 @@ describe('recurring-tools', () => {
       // nextRun from mock is null by default — verify no crash
       expect(result).toHaveProperty('nextRun', null)
     })
+
+    test('cron create anchors DTSTART at midnight of the schedule timezone', async () => {
+      let capturedInput: RecurringTaskInput | null = null
+      const deps: CreateRecurringTaskDeps = {
+        createRecurringTask: (input): RecurringTaskRecord => {
+          capturedInput = input
+          return createRecurringTaskDeps.createRecurringTask(input)
+        },
+      }
+      const tool = makeCreateRecurringTaskTool('user-1', deps)
+      if (!tool.execute) throw new Error('Tool execute is undefined')
+      await tool.execute(
+        {
+          title: 'Weekly',
+          projectId: 'p1',
+          triggerType: 'cron',
+          schedule: { freq: 'WEEKLY', byDay: ['MO'], timezone: 'UTC' },
+        },
+        toolCtx,
+      )
+      expect(capturedInput).not.toBeNull()
+      expect(capturedInput!.dtstartUtc).toMatch(/T00:00:00\.000Z$/)
+    })
   })
 
   // ============================================================================
@@ -430,7 +453,7 @@ describe('recurring-tools', () => {
       await tool.execute({ recurringTaskId: 'rec-1', title: 'New title' }, toolCtx)
       expect(updateRecurringTaskCalls[0]?.id).toBe('rec-1')
       expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('title', 'New title')
-      expect(updateRecurringTaskCalls[0]?.updates).toHaveProperty('rrule', undefined)
+      expect(updateRecurringTaskCalls[0]?.updates).not.toHaveProperty('rrule')
     })
 
     test('calls updateRecurringTask with correct recurringTaskId', async () => {

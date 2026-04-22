@@ -3,7 +3,7 @@ import { describe, expect, test, beforeEach } from 'bun:test'
 import type { UpdateRecurringTaskDeps } from '../../src/tools/update-recurring-task.js'
 import { makeUpdateRecurringTaskTool } from '../../src/tools/update-recurring-task.js'
 import type { RecurringTaskRecord } from '../../src/types/recurring.js'
-import { mockLogger } from '../utils/test-helpers.js'
+import { mockLogger, schemaValidates } from '../utils/test-helpers.js'
 
 const toolCtx = { toolCallId: '1', messages: [] as never[] }
 
@@ -123,5 +123,136 @@ describe('makeUpdateRecurringTaskTool — timezone resolution', () => {
     await tool.execute({ recurringTaskId: 'rec-42', title: 'x' }, toolCtx)
 
     expect(getRecurringTaskCalls).toEqual(['rec-42'])
+  })
+
+  test('uses startDate and startTime as new DTSTART when provided', async () => {
+    getRecurringTaskResult = makeRecord({ dtstartUtc: '2026-03-01T09:00:00.000Z' })
+    deps.updateRecurringTask = (id, updates): RecurringTaskRecord | null => {
+      updateRecurringTaskCalls.push({ id, updates })
+      return makeRecord()
+    }
+
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        recurringTaskId: 'rec-1',
+        schedule: {
+          freq: 'DAILY',
+          byHour: [8],
+          byMinute: [30],
+          timezone: 'UTC',
+          startDate: '2026-07-01',
+          startTime: '08:30',
+        },
+      },
+      toolCtx,
+    )
+
+    expect(updateRecurringTaskCalls[0]?.updates['dtstartUtc']).toBe('2026-07-01T08:30:00.000Z')
+  })
+
+  test('preserves existing DTSTART when schedule is updated without startDate', async () => {
+    getRecurringTaskResult = makeRecord({ dtstartUtc: '2026-03-01T09:00:00.000Z' })
+    deps.updateRecurringTask = (id, updates): RecurringTaskRecord | null => {
+      updateRecurringTaskCalls.push({ id, updates })
+      return makeRecord()
+    }
+
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        recurringTaskId: 'rec-1',
+        schedule: { freq: 'DAILY', byHour: [10], byMinute: [0], timezone: 'UTC' },
+      },
+      toolCtx,
+    )
+
+    expect(updateRecurringTaskCalls[0]?.updates['dtstartUtc']).toBe('2026-03-01T09:00:00.000Z')
+  })
+
+  test('promotes triggerType to cron when schedule is provided for an on_complete task', async () => {
+    getRecurringTaskResult = makeRecord({ triggerType: 'on_complete', rrule: null, dtstartUtc: null, nextRun: null })
+    deps.updateRecurringTask = (id, updates): RecurringTaskRecord | null => {
+      updateRecurringTaskCalls.push({ id, updates })
+      return makeRecord({ triggerType: 'cron' })
+    }
+
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        recurringTaskId: 'rec-1',
+        schedule: { freq: 'DAILY', byHour: [9], byMinute: [0], timezone: 'UTC' },
+      },
+      toolCtx,
+    )
+
+    expect(updateRecurringTaskCalls[0]?.updates['triggerType']).toBe('cron')
+  })
+
+  test('anchors DTSTART at midnight when promoting on_complete to cron without startDate', async () => {
+    getRecurringTaskResult = makeRecord({ triggerType: 'on_complete', rrule: null, dtstartUtc: null, nextRun: null })
+    deps.updateRecurringTask = (id, updates): RecurringTaskRecord | null => {
+      updateRecurringTaskCalls.push({ id, updates })
+      return makeRecord({ triggerType: 'cron' })
+    }
+
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute(
+      {
+        recurringTaskId: 'rec-1',
+        schedule: { freq: 'DAILY', timezone: 'UTC' },
+      },
+      toolCtx,
+    )
+
+    expect(updateRecurringTaskCalls[0]?.updates['dtstartUtc']).toMatch(/T00:00:00\.000Z$/)
+  })
+
+  test('does not include triggerType in updates when no schedule is provided', async () => {
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute({ recurringTaskId: 'rec-1', title: 'renamed' }, toolCtx)
+
+    expect(updateRecurringTaskCalls[0]?.updates).not.toHaveProperty('triggerType')
+  })
+
+  test('switches cron task to on_complete and passes triggerType without schedule fields', async () => {
+    getRecurringTaskResult = makeRecord({ triggerType: 'cron' })
+
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    if (!tool.execute) throw new Error('Tool execute is undefined')
+
+    await tool.execute({ recurringTaskId: 'rec-1', triggerType: 'on_complete' }, toolCtx)
+
+    const call = updateRecurringTaskCalls[0]
+    expect(call?.updates['triggerType']).toBe('on_complete')
+    expect(call?.updates).not.toHaveProperty('rrule')
+    expect(call?.updates).not.toHaveProperty('dtstartUtc')
+    expect(call?.updates).not.toHaveProperty('timezone')
+  })
+
+  test('rejects on_complete combined with a schedule', () => {
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    expect(
+      schemaValidates(tool, {
+        recurringTaskId: 'rec-1',
+        triggerType: 'on_complete',
+        schedule: { freq: 'DAILY', timezone: 'UTC' },
+      }),
+    ).toBe(false)
+  })
+
+  test('rejects cron without a schedule', () => {
+    const tool = makeUpdateRecurringTaskTool('user-1', deps)
+    expect(schemaValidates(tool, { recurringTaskId: 'rec-1', triggerType: 'cron' })).toBe(false)
   })
 })
