@@ -10,6 +10,16 @@ import { createRunState } from '../../scripts/review-loop/run-state.js'
 
 const tempDirs: string[] = []
 
+const createSilentLog = () => {
+  const messages: string[] = []
+  return {
+    log: (message: string) => {
+      messages.push(message)
+    },
+    messages,
+  }
+}
+
 const makeTempDir = (): string => {
   const dir = mkdtempSync(path.join(tmpdir(), 'review-loop-controller-'))
   tempDirs.push(dir)
@@ -108,6 +118,7 @@ describe('runReviewLoop', () => {
             stopReason: 'end_turn',
           }),
       },
+      log: createSilentLog(),
     })
 
     expect(result.doneReason).toBe('clean')
@@ -199,6 +210,7 @@ describe('runReviewLoop', () => {
           })
         },
       },
+      log: createSilentLog(),
     })
 
     expect(reviewerPrompts).toHaveLength(2)
@@ -284,6 +296,7 @@ describe('runReviewLoop', () => {
             stopReason: 'end_turn',
           }),
       },
+      log: createSilentLog(),
     })
 
     expect(result.doneReason).toBe('no_progress')
@@ -368,6 +381,7 @@ describe('runReviewLoop', () => {
           })
         },
       },
+      log: createSilentLog(),
     })
 
     // The issue was rejected in round 1. The reviewer raises it again in round 2,
@@ -472,6 +486,7 @@ describe('runReviewLoop', () => {
           })
         },
       },
+      log: createSilentLog(),
     })
 
     expect(result.doneReason).toBe('clean')
@@ -556,6 +571,7 @@ describe('runReviewLoop', () => {
             stopReason: 'end_turn',
           }),
       },
+      log: createSilentLog(),
     })
 
     expect(result.doneReason).toBe('max_rounds')
