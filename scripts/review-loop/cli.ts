@@ -7,6 +7,7 @@ import { loadReviewLoopConfig, type ReviewLoopConfig } from './config.js'
 import { createIssueLedger, loadIssueLedger, type IssueLedger } from './issue-ledger.js'
 import { runReviewLoop } from './loop-controller.js'
 import { decidePermissionOptionId } from './permission-policy.js'
+import type { ProgressLog } from './progress-log.js'
 import { createRunState, loadRunState, saveRunState, type RunState } from './run-state.js'
 import { formatSummary } from './summary.js'
 
@@ -178,12 +179,15 @@ export async function runCli(argv: readonly string[]): Promise<void> {
 
     await persistSessionIds(runState, reviewerSession, fixerSession)
 
+    const log: ProgressLog = { log: console.log }
+
     const result = await runReviewLoop({
       config,
       runState,
       ledger,
       reviewer: reviewerSession,
       fixer: fixerSession,
+      log,
     })
 
     const summary = formatSummary(result)
