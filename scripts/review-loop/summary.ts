@@ -9,6 +9,7 @@ export function formatSummary(result: ReviewLoopResult): string {
     needsHuman: records.filter((record) => record.status === 'needs_human').length,
     reopened: records.filter((record) => record.status === 'reopened').length,
   }
+  const totalFixChanges = records.reduce((acc, record) => acc + record.fixChanges.length, 0)
 
   return [
     `Done reason: ${result.doneReason}`,
@@ -18,5 +19,6 @@ export function formatSummary(result: ReviewLoopResult): string {
     `Already fixed: ${counts.alreadyFixed}`,
     `Needs human: ${counts.needsHuman}`,
     `Reopened issues: ${counts.reopened}`,
+    `Recorded fix changes: ${totalFixChanges}`,
   ].join('\n')
 }

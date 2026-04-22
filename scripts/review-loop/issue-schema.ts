@@ -26,9 +26,22 @@ export const VerifierDecisionSchema = z.object({
   fixPlan: z.string().min(1),
 })
 
+export const FixDescriptionSchema = z.object({
+  whatChanged: z.string().min(1),
+  whyChanged: z.string().min(1),
+})
+
+export const ContradictionCheckSchema = z.object({
+  contradicts: z.boolean(),
+  reasoning: z.string().min(1),
+  conflictingChangeIndices: z.array(z.number().int().nonnegative()).default([]),
+})
+
 export type ReviewerIssue = z.infer<typeof ReviewerIssueSchema>
 export type ReviewerIssues = z.infer<typeof ReviewerIssuesSchema>
 export type VerifierDecision = z.infer<typeof VerifierDecisionSchema>
+export type FixDescription = z.infer<typeof FixDescriptionSchema>
+export type ContradictionCheck = z.infer<typeof ContradictionCheckSchema>
 
 function parseJsonWithWrapperSupport<T>(text: string, schema: z.ZodType<T>, label: string): T {
   const trimmed = text.trim()
@@ -153,4 +166,12 @@ export function parseReviewerIssues(text: string): ReviewerIssues {
 
 export function parseVerifierDecision(text: string): VerifierDecision {
   return parseJsonWithWrapperSupport(text, VerifierDecisionSchema, 'verifier decision')
+}
+
+export function parseFixDescription(text: string): FixDescription {
+  return parseJsonWithWrapperSupport(text, FixDescriptionSchema, 'fix description')
+}
+
+export function parseContradictionCheck(text: string): ContradictionCheck {
+  return parseJsonWithWrapperSupport(text, ContradictionCheckSchema, 'contradiction check')
 }

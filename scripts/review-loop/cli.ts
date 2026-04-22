@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { createAcpProcessClient, type AcpProcessClient } from './acp-process-client.js'
 import { bootstrapAgentSession, type BootstrappedAgentSession } from './agent-session.js'
+import { DEFAULT_MAX_DIFF_BYTES, createGitChangeCapture } from './change-capture.js'
 import { loadReviewLoopConfig, type ReviewLoopConfig } from './config.js'
 import { createIssueLedger, loadIssueLedger, type IssueLedger } from './issue-ledger.js'
 import { runReviewLoop } from './loop-controller.js'
@@ -184,6 +185,7 @@ export async function runCli(argv: readonly string[]): Promise<void> {
       ledger,
       reviewer: reviewerSession,
       fixer: fixerSession,
+      changeCapture: createGitChangeCapture(config.repoRoot, { maxDiffBytes: DEFAULT_MAX_DIFF_BYTES, env: null }),
     })
 
     const summary = formatSummary(result)

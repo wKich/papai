@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import type { LedgerIssueRecord } from '../../scripts/review-loop/issue-ledger.js'
 import type { ReviewerIssue, VerifierDecision } from '../../scripts/review-loop/issue-schema.js'
 import {
+  buildContradictionCheckPrompt,
+  buildFixDescriptionPrompt,
   buildFixPrompt,
   buildRereviewPrompt,
   buildReviewPrompt,
@@ -38,6 +40,7 @@ const ledgerRecord: LedgerIssueRecord = {
   latestSeenRound: 1,
   fixAttempts: 0,
   verifierDecision,
+  fixChanges: [],
 }
 
 describe('prompt templates', () => {
@@ -71,5 +74,48 @@ describe('prompt templates', () => {
     expect(prompt).toContain('Re-review the current implementation against the implementation plan at: /repo/plan.md.')
     expect(prompt).toContain('Use the same schema as the original review prompt.')
     expect(prompt).toContain('No prior issues recorded.')
+  })
+
+  test('buildFixDescriptionPrompt includes issue, files list, and diff', () => {
+    const prompt = buildFixDescriptionPrompt(reviewerIssue, ['src/a.ts', 'src/b.ts'], '-old\n+new')
+
+    expect(prompt).toContain('Describe the code changes just made to fix the issue below.')
+    expect(prompt).toContain('"whatChanged": string, "whyChanged": string')
+    expect(prompt).toContain('Files changed: src/a.ts, src/b.ts')
+    expect(prompt).toContain('-old\n+new')
+  })
+
+  test('buildFixDescriptionPrompt handles an empty files list and empty diff', () => {
+    const prompt = buildFixDescriptionPrompt(reviewerIssue, [], '')
+
+    expect(prompt).toContain('Files changed: (none detected)')
+    expect(prompt).toContain('(no diff captured)')
+  })
+
+  test('buildContradictionCheckPrompt summarizes prior fix changes when present', () => {
+    const prompt = buildContradictionCheckPrompt(reviewerIssue, [
+      {
+        fingerprint: 'abcd1234',
+        issueTitle: 'Earlier closed issue',
+        change: {
+          round: 1,
+          timestamp: '2026-04-22T00:00:00.000Z',
+          files: ['src/foo.ts'],
+          whatChanged: 'Removed the branch.',
+          whyChanged: 'It was dead code.',
+        },
+      },
+    ])
+
+    expect(prompt).toContain('"contradicts": boolean')
+    expect(prompt).toContain('[0] Issue: Earlier closed issue (abcd1234)')
+    expect(prompt).toContain('whatChanged: Removed the branch.')
+    expect(prompt).toContain('whyChanged: It was dead code.')
+  })
+
+  test('buildContradictionCheckPrompt uses empty-list fallback', () => {
+    const prompt = buildContradictionCheckPrompt(reviewerIssue, [])
+
+    expect(prompt).toContain('No prior fix changes recorded.')
   })
 })

@@ -1,18 +1,38 @@
 import pLimit from 'p-limit'
 
 import { resolveInvocationText } from './available-commands.js'
+import type { ChangeCapture } from './change-capture.js'
 import type { ReviewLoopConfig } from './config.js'
 import { computeIssueFingerprint } from './issue-fingerprint.js'
 import {
   applyReviewRound,
+  listAllFixChanges,
+  markNeedsHumanForContradiction,
   recordFixAttempt,
+  recordFixChange,
   recordVerification,
+  saveHumanReview,
   saveIssueLedger,
+  type FixChangeRecord,
   type IssueLedger,
   type LedgerIssueRecord,
 } from './issue-ledger.js'
-import { parseReviewerIssues, parseVerifierDecision } from './issue-schema.js'
-import { buildFixPrompt, buildReviewPrompt, buildRereviewPrompt, buildVerifyPrompt } from './prompt-templates.js'
+import {
+  parseContradictionCheck,
+  parseFixDescription,
+  parseReviewerIssues,
+  parseVerifierDecision,
+} from './issue-schema.js'
+import type { ContradictionCheck } from './issue-schema.js'
+import {
+  buildContradictionCheckPrompt,
+  buildFixDescriptionPrompt,
+  buildFixPrompt,
+  buildRereviewPrompt,
+  buildReviewPrompt,
+  buildVerifyPrompt,
+  type PriorFixChangeForPrompt,
+} from './prompt-templates.js'
 import { saveRunState, type RunState } from './run-state.js'
 
 export interface PromptingSession {
@@ -26,6 +46,7 @@ export interface ReviewLoopDeps {
   ledger: IssueLedger
   reviewer: PromptingSession
   fixer: PromptingSession
+  changeCapture: ChangeCapture
 }
 
 export interface ReviewLoopResult {
@@ -47,10 +68,70 @@ async function promptReviewerForIssues(
   return parseReviewerIssues((await deps.reviewer.promptText(prompt)).text)
 }
 
+async function runContradictionCheck(
+  record: LedgerIssueRecord,
+  deps: ReviewLoopDeps,
+): Promise<{ check: ContradictionCheck; priorChanges: PriorFixChangeForPrompt[] } | null> {
+  const priorChanges = listAllFixChanges(deps.ledger)
+  if (priorChanges.length === 0) {
+    return null
+  }
+  const prompt = resolveInvocationText(
+    deps.config.fixer.verifyInvocationPrefix,
+    deps.fixer.availableCommands,
+    buildContradictionCheckPrompt(record.issue, priorChanges),
+    false,
+  )
+  const check = parseContradictionCheck((await deps.fixer.promptText(prompt)).text)
+  return { check, priorChanges }
+}
+
+async function handleContradiction(
+  record: LedgerIssueRecord,
+  result: { check: ContradictionCheck; priorChanges: PriorFixChangeForPrompt[] },
+  deps: ReviewLoopDeps,
+): Promise<void> {
+  const conflicting = result.check.conflictingChangeIndices
+    .map((index) => result.priorChanges[index])
+    .filter((entry): entry is PriorFixChangeForPrompt => entry !== undefined)
+
+  markNeedsHumanForContradiction(deps.ledger, record.fingerprint, deps.runState.currentRound, result.check, conflicting)
+  await saveHumanReview(deps.ledger)
+  await saveIssueLedger(deps.ledger)
+}
+
+async function captureAndDescribeFix(
+  record: LedgerIssueRecord,
+  baseline: string,
+  deps: ReviewLoopDeps,
+): Promise<FixChangeRecord> {
+  const delta = await deps.changeCapture.describeChangesSinceBaseline(baseline)
+  const describePrompt = resolveInvocationText(
+    deps.config.fixer.fixInvocationPrefix,
+    deps.fixer.availableCommands,
+    buildFixDescriptionPrompt(record.issue, delta.files, delta.diff),
+    false,
+  )
+  const description = parseFixDescription((await deps.fixer.promptText(describePrompt)).text)
+  return {
+    round: deps.runState.currentRound,
+    timestamp: new Date().toISOString(),
+    files: delta.files,
+    whatChanged: description.whatChanged,
+    whyChanged: description.whyChanged,
+  }
+}
+
 async function processIssueVerifyFix(
   record: LedgerIssueRecord,
   deps: ReviewLoopDeps,
 ): Promise<{ fixedThisIssue: boolean }> {
+  const contradictionResult = await runContradictionCheck(record, deps)
+  if (contradictionResult !== null && contradictionResult.check.contradicts) {
+    await handleContradiction(record, contradictionResult, deps)
+    return { fixedThisIssue: false }
+  }
+
   const verifyPrompt = resolveInvocationText(
     deps.config.fixer.verifyInvocationPrefix,
     deps.fixer.availableCommands,
@@ -61,6 +142,7 @@ async function processIssueVerifyFix(
   recordVerification(deps.ledger, record.fingerprint, verifyDecision)
 
   if (verifyDecision.verdict === 'valid' && verifyDecision.fixability === 'auto') {
+    const baseline = await deps.changeCapture.captureBaseline()
     const fixPrompt = resolveInvocationText(
       deps.config.fixer.fixInvocationPrefix,
       deps.fixer.availableCommands,
@@ -69,6 +151,10 @@ async function processIssueVerifyFix(
     )
     await deps.fixer.promptText(fixPrompt)
     recordFixAttempt(deps.ledger, record.fingerprint)
+
+    const fixChange = await captureAndDescribeFix(record, baseline, deps)
+    recordFixChange(deps.ledger, record.fingerprint, fixChange)
+    await saveIssueLedger(deps.ledger)
     return { fixedThisIssue: true }
   }
   return { fixedThisIssue: false }

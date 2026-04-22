@@ -7,9 +7,13 @@ import {
   createIssueLedger,
   applyReviewRound,
   IssueLedgerSnapshotSchema,
+  listAllFixChanges,
   loadIssueLedger,
-  recordVerification,
+  markNeedsHumanForContradiction,
   recordFixAttempt,
+  recordFixChange,
+  recordVerification,
+  saveHumanReview,
   saveIssueLedger,
 } from '../../scripts/review-loop/issue-ledger.js'
 import type { ReviewerIssue, VerifierDecision } from '../../scripts/review-loop/issue-schema.js'
@@ -148,5 +152,76 @@ describe('issue ledger', () => {
 
     expect(persisted.issues[record.fingerprint]?.status).toBe('reopened')
     expect(persisted.issues[record.fingerprint]?.fixAttempts).toBe(1)
+  })
+
+  test('records fix changes and lists them across issues', async () => {
+    const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
+    tempDirs.push(runDir)
+
+    const ledger = await createIssueLedger(runDir)
+    const record = applyReviewRound(ledger, 1, [issue])[0]
+    if (record === undefined) {
+      throw new Error('Expected a ledger record')
+    }
+
+    recordFixChange(ledger, record.fingerprint, {
+      round: 1,
+      timestamp: '2026-04-22T00:00:00.000Z',
+      files: ['src/message-queue/queue.ts'],
+      whatChanged: 'Moved the lock acquisition earlier in the flush path.',
+      whyChanged: 'Prevents the identified race condition.',
+    })
+    await saveIssueLedger(ledger)
+
+    const reloaded = await loadIssueLedger(runDir)
+    expect(reloaded.snapshot.issues[record.fingerprint]?.fixChanges).toHaveLength(1)
+    const all = listAllFixChanges(reloaded)
+    expect(all).toHaveLength(1)
+    expect(all[0]?.issueTitle).toBe(issue.title)
+    expect(all[0]?.change.files).toEqual(['src/message-queue/queue.ts'])
+  })
+
+  test('persists human-review entries for contradictory issues', async () => {
+    const runDir = mkdtempSync(path.join(tmpdir(), 'review-loop-ledger-'))
+    tempDirs.push(runDir)
+
+    const ledger = await createIssueLedger(runDir)
+    const record = applyReviewRound(ledger, 2, [issue])[0]
+    if (record === undefined) {
+      throw new Error('Expected a ledger record')
+    }
+
+    const entry = markNeedsHumanForContradiction(
+      ledger,
+      record.fingerprint,
+      2,
+      {
+        contradicts: true,
+        reasoning: 'Prior fix already removed this code path.',
+        conflictingChangeIndices: [0],
+      },
+      [
+        {
+          fingerprint: 'other',
+          issueTitle: 'Previously closed issue',
+          change: {
+            round: 1,
+            timestamp: '2026-04-22T00:00:00.000Z',
+            files: ['src/foo.ts'],
+            whatChanged: 'Removed the code path.',
+            whyChanged: 'It was unreachable.',
+          },
+        },
+      ],
+    )
+    await saveHumanReview(ledger)
+    await saveIssueLedger(ledger)
+
+    expect(ledger.snapshot.issues[record.fingerprint]?.status).toBe('needs_human')
+    expect(entry.contradictionCheck.contradicts).toBe(true)
+
+    const reloaded = await loadIssueLedger(runDir)
+    expect(reloaded.humanReview.entries).toHaveLength(1)
+    expect(reloaded.humanReview.entries[0]?.conflictingChanges).toHaveLength(1)
   })
 })

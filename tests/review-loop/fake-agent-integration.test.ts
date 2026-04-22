@@ -1,9 +1,27 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { runCli } from '../../scripts/review-loop/cli.js'
+
+async function initGitRepo(cwd: string): Promise<void> {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' }
+  const run = async (args: string[]): Promise<void> => {
+    const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe', env })
+    const exitCode = await proc.exited
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text()
+      throw new Error(`git ${args.join(' ')} failed: ${stderr}`)
+    }
+  }
+  await run(['init', '-q', '-b', 'main'])
+  await run(['config', 'user.email', 'test@example.com'])
+  await run(['config', 'user.name', 'Test'])
+  await run(['config', 'commit.gpgsign', 'false'])
+  await run(['config', 'gpg.format', 'openpgp'])
+  await run(['commit', '--allow-empty', '-q', '-m', 'init'])
+}
 
 const tempDirs: string[] = []
 
@@ -53,23 +71,31 @@ describe('review-loop fake integration', () => {
               text: '{"verdict":"valid","fixability":"auto","reasoning":"The control flow is actually unsafe.","targetFiles":["src/message-queue/queue.ts"],"fixPlan":"Take the lock before the flush branch."}',
             },
             { text: 'Applied fix.' },
+            {
+              text: '{"whatChanged":"Moved the lock earlier in the flush path.","whyChanged":"Prevents the identified race condition."}',
+            },
           ],
         },
         null,
         2,
       ),
     )
+
+    const fakeRepo = path.join(dir, 'repo')
+    mkdirSync(fakeRepo, { recursive: true })
+    await initGitRepo(fakeRepo)
+    const fakeAgentPath = path.resolve(process.cwd(), 'tests/review-loop/fake-agent.ts')
     writeFileSync(
       configPath,
       JSON.stringify(
         {
-          repoRoot: process.cwd(),
+          repoRoot: fakeRepo,
           workDir: path.join(dir, '.review-loop'),
           maxRounds: 5,
           maxNoProgressRounds: 2,
           reviewer: {
             command: 'bun',
-            args: ['tests/review-loop/fake-agent.ts'],
+            args: [fakeAgentPath],
             env: { ACP_SCENARIO_FILE: reviewerScenarioPath },
             sessionConfig: {},
             invocationPrefix: '/review-code',
@@ -77,7 +103,7 @@ describe('review-loop fake integration', () => {
           },
           fixer: {
             command: 'bun',
-            args: ['tests/review-loop/fake-agent.ts'],
+            args: [fakeAgentPath],
             env: { ACP_SCENARIO_FILE: fixerScenarioPath },
             sessionConfig: {},
             verifyInvocationPrefix: '/verify-issue',
@@ -103,6 +129,7 @@ describe('review-loop fake integration', () => {
     const reviewerSession = readFileSync(path.join(runRoot, runId, 'reviewer-session.json'), 'utf8')
 
     expect(summary).toContain('Done reason: clean')
+    expect(summary).toContain('Recorded fix changes: 1')
     expect(reviewerTranscript).toContain('"sessionUpdate":"agent_message_chunk"')
     expect(reviewerTranscript).toContain(
       '/review-code Review the current implementation against the implementation plan at:',
@@ -112,6 +139,14 @@ describe('review-loop fake integration', () => {
     )
     expect(fixerTranscript).toContain('/verify-issue Verify this issue against the implementation plan at:')
     expect(fixerTranscript).toContain('/fix-issue Fix exactly the verified issue below.')
+    expect(fixerTranscript).toContain('/fix-issue Describe the code changes just made to fix the issue below.')
     expect(reviewerSession).toContain('"sessionId"')
+
+    const ledgerRaw = readFileSync(path.join(runRoot, runId, 'ledger.json'), 'utf8')
+    expect(ledgerRaw).toContain('Moved the lock earlier in the flush path.')
+    expect(ledgerRaw).toContain('Prevents the identified race condition.')
+
+    const humanReviewRaw = readFileSync(path.join(runRoot, runId, 'human-review.json'), 'utf8')
+    expect(JSON.parse(humanReviewRaw)).toEqual({ entries: [] })
   })
 })
