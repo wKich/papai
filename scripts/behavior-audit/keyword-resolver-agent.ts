@@ -24,7 +24,12 @@ function getEnvOrFallback(name: string, fallback: string): string {
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const provider = createOpenAICompatible({ name: 'behavior-audit-keyword-resolver', apiKey, baseURL: BASE_URL })
+const provider = createOpenAICompatible({
+  name: 'behavior-audit-keyword-resolver',
+  apiKey,
+  baseURL: BASE_URL,
+  supportsStructuredOutputs: true,
+})
 const model = provider(MODEL)
 
 function sleep(ms: number): Promise<void> {

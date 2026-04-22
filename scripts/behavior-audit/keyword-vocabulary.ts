@@ -33,13 +33,35 @@ export async function saveKeywordVocabulary(entries: readonly KeywordVocabularyE
   await rename(tempPath, KEYWORD_VOCABULARY_PATH)
 }
 
-export async function recordKeywordUsage(keywords: readonly string[]): Promise<void> {
-  const existing = (await loadKeywordVocabulary()) ?? []
+export async function recordKeywordUsage(
+  keywords: readonly string[],
+  ...skipSlugsArg: [] | [ReadonlySet<string>]
+): Promise<void> {
+  const skipSlugs = skipSlugsArg[0]
+  if (skipSlugs === undefined) {
+    return recordKeywordUsage(keywords, new Set())
+  }
+  const loadedVocabulary = await loadKeywordVocabulary()
+  let existing: readonly KeywordVocabularyEntry[] = []
+  if (loadedVocabulary !== null) {
+    existing = loadedVocabulary
+  }
   const keywordSet = new Set(keywords)
   const now = new Date().toISOString()
-  const updated = existing.map((entry) =>
-    keywordSet.has(entry.slug) ? { ...entry, timesUsed: entry.timesUsed + 1, updatedAt: now } : entry,
-  )
+  const updated: KeywordVocabularyEntry[] = []
+  for (const entry of existing) {
+    if (keywordSet.has(entry.slug) && !skipSlugs.has(entry.slug)) {
+      updated.push({
+        slug: entry.slug,
+        description: entry.description,
+        createdAt: entry.createdAt,
+        updatedAt: now,
+        timesUsed: entry.timesUsed + 1,
+      })
+      continue
+    }
+    updated.push(entry)
+  }
   await saveKeywordVocabulary(updated)
 }
 
@@ -47,5 +69,9 @@ export function findExactKeyword(
   entries: readonly KeywordVocabularyEntry[],
   slug: string,
 ): KeywordVocabularyEntry | null {
-  return entries.find((entry) => entry.slug === slug) ?? null
+  const found = entries.find((entry) => entry.slug === slug)
+  if (found === undefined) {
+    return null
+  }
+  return found
 }

@@ -137,7 +137,7 @@ if [ "$STAGED_MODE" = true ]; then
   fi
 else
   # Original behavior: run all checks
-  checks=("lint" "typecheck" "format:check" "knip" "test" "test:client" "duplicates")
+  checks=("lint" "typecheck" "format:check" "knip" "test" "test:client" "duplicates" "codeindex:lint" "codeindex:typecheck" "codeindex:format:check" "codeindex:test")
   failed=0
   pids=()
 

@@ -1,4 +1,5 @@
-import { mkdir } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
@@ -43,6 +44,8 @@ export interface ConsolidatedBehavior {
   readonly userStory: string | null
   readonly context: string
   readonly sourceTestKeys: readonly string[]
+  readonly sourceBehaviorIds: readonly string[]
+  readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
 }
 
 const ConsolidatedBehaviorSchema = z.object({
@@ -54,6 +57,11 @@ const ConsolidatedBehaviorSchema = z.object({
   userStory: z.string().nullable(),
   context: z.string(),
   sourceTestKeys: z.array(z.string()),
+  sourceBehaviorIds: z.array(z.string()).default([]).readonly(),
+  supportingInternalRefs: z
+    .array(z.object({ behaviorId: z.string(), summary: z.string() }).readonly())
+    .default([])
+    .readonly(),
 })
 
 const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).readonly()
@@ -95,13 +103,17 @@ export async function writeConsolidatedFile(
 export async function readConsolidatedFile(domain: string): Promise<readonly ConsolidatedBehavior[] | null> {
   const filePath = join(CONSOLIDATED_DIR, `${domain}.json`)
   try {
-    const text = await Bun.file(filePath).text()
-    const raw: unknown = JSON.parse(text)
-    if (!Array.isArray(raw)) return null
-    return ConsolidatedBehaviorArraySchema.parse(raw)
-  } catch {
-    return null
+    await access(filePath, constants.F_OK)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
   }
+
+  const text = await Bun.file(filePath).text()
+  const raw: unknown = JSON.parse(text)
+  return ConsolidatedBehaviorArraySchema.parse(raw)
 }
 
 function domainTitle(domain: string): string {

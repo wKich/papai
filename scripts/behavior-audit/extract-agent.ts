@@ -18,7 +18,12 @@ function getEnvOrFallback(name: string, fallback: string): string {
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const provider = createOpenAICompatible({ name: 'behavior-audit-extract', apiKey, baseURL: BASE_URL })
+const provider = createOpenAICompatible({
+  name: 'behavior-audit-extract',
+  apiKey,
+  baseURL: BASE_URL,
+  supportsStructuredOutputs: true,
+})
 const model = provider(MODEL)
 
 const SYSTEM_PROMPT = `You are a senior software analyst examining a unit test from a Telegram/Discord/Mattermost chat bot called "papai" that manages tasks via LLM tool-calling.

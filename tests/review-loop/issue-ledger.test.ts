@@ -73,14 +73,14 @@ describe('issue ledger', () => {
       fixability: 'manual',
       reasoning: 'The bug report is not supported by the current code.',
       targetFiles: ['src/message-queue/queue.ts'],
-      fixPlan: 'No fix needed.',
+      needsPlanning: false,
     })
     recordVerification(ledger, alreadyFixedRecord.fingerprint, {
       verdict: 'already_fixed',
       fixability: 'manual',
       reasoning: 'The implementation already contains the described fix.',
       targetFiles: ['src/message-queue/queue.ts'],
-      fixPlan: 'No fix needed.',
+      needsPlanning: false,
     })
 
     await saveIssueLedger(ledger)
@@ -107,7 +107,7 @@ describe('issue ledger', () => {
       fixability: 'auto',
       reasoning: 'The control flow is actually unsafe.',
       targetFiles: ['src/message-queue/queue.ts'],
-      fixPlan: 'Take the lock before the flush branch.',
+      needsPlanning: false,
     }
 
     recordVerification(ledger, record.fingerprint, decision)
@@ -136,7 +136,7 @@ describe('issue ledger', () => {
       fixability: 'auto',
       reasoning: 'The control flow is actually unsafe.',
       targetFiles: ['src/message-queue/queue.ts'],
-      fixPlan: 'Take the lock before the flush branch.',
+      needsPlanning: false,
     }
 
     recordVerification(ledger, record.fingerprint, decision)

@@ -166,8 +166,20 @@ export const executeTask = async (
 
   log.debug({ taskName: task.name }, 'Executing task')
 
+  // Catch synchronous throws before awaiting so Bun does not surface them as
+  // process-level errors via its async context tracker (a void-ed async call
+  // where a sync throw flows through `await` can trigger process exit in
+  // Bun's concurrent test runner even when the error is caught).
+  let handlerResult: void | Promise<void>
   try {
-    await task.handler()
+    handlerResult = task.handler()
+  } catch (error) {
+    handleTaskFailure(task, error, timestamp, schedulerOptions, emitters, stopTask)
+    return
+  }
+
+  try {
+    await handlerResult
     handleTaskSuccess(task, startTime, emitters)
   } catch (error) {
     handleTaskFailure(task, error, timestamp, schedulerOptions, emitters, stopTask)

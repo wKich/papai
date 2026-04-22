@@ -22,10 +22,47 @@ interface Phase3RunInput {
   readonly consolidatedManifest: ConsolidatedManifest | null
 }
 
-function getDomainsFromManifestEntries(
+interface Phase3Selection {
+  readonly ids: ReadonlySet<string>
+  readonly evaluateAll: boolean
+}
+
+export interface Phase3Deps {
+  readonly evaluateWithRetry: typeof evaluateWithRetry
+  readonly readConsolidatedFile: typeof readConsolidatedFile
+  readonly getFailedBehaviorAttempts: typeof getFailedBehaviorAttempts
+  readonly isBehaviorCompleted: typeof isBehaviorCompleted
+  readonly markBehaviorDone: typeof markBehaviorDone
+  readonly markBehaviorFailed: typeof markBehaviorFailed
+  readonly saveProgress: typeof saveProgress
+  readonly recordEval: typeof recordEval
+  readonly recordStoredEvaluation: typeof recordStoredEvaluation
+  readonly writeReports: typeof writeReports
+  readonly log: Pick<typeof console, 'log'>
+  readonly writeStdout: (text: string) => void
+}
+
+const defaultPhase3Deps: Phase3Deps = {
+  evaluateWithRetry,
+  readConsolidatedFile,
+  getFailedBehaviorAttempts,
+  isBehaviorCompleted,
+  markBehaviorDone,
+  markBehaviorFailed,
+  saveProgress,
+  recordEval,
+  recordStoredEvaluation,
+  writeReports,
+  log: console,
+  writeStdout: (text) => {
+    process.stdout.write(text)
+  },
+}
+
+function getConsolidatedFileKeysFromManifestEntries(
   entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>,
 ): readonly string[] {
-  return [...new Set(Object.values(entries).map((entry) => entry.domain))].toSorted()
+  return [...new Set(Object.values(entries).map((entry) => entry.candidateFeatureKey ?? entry.domain))].toSorted()
 }
 
 interface ParsedConsolidatedBehavior {
@@ -37,8 +74,11 @@ interface ParsedConsolidatedBehavior {
   readonly context: string
 }
 
-async function parseConsolidatedFiles(domains: readonly string[]): Promise<readonly ParsedConsolidatedBehavior[]> {
-  const results = await Promise.all(domains.map((domain) => readConsolidatedFile(domain)))
+async function parseConsolidatedFiles(
+  fileKeys: readonly string[],
+  deps: Phase3Deps,
+): Promise<readonly ParsedConsolidatedBehavior[]> {
+  const results = await Promise.all(fileKeys.map((fileKey) => deps.readConsolidatedFile(fileKey)))
   const behaviors: ParsedConsolidatedBehavior[] = []
   for (const consolidated of results) {
     if (consolidated === null) continue
@@ -61,6 +101,23 @@ function buildPrompt(b: ParsedConsolidatedBehavior): string {
   return `${ALL_PERSONAS}\n\n---\n\n**Domain:** ${b.domain}\n**Feature:** ${b.featureName}\n**User Story:** ${b.userStory}\n\n**Behavior:** ${b.behavior}\n\n**Context:** ${b.context}`
 }
 
+function resolvePhase3Selection(
+  selectedConsolidatedIds: ReadonlySet<string>,
+  allBehaviors: readonly ParsedConsolidatedBehavior[],
+): Phase3Selection {
+  if (selectedConsolidatedIds.size === 0) {
+    return { ids: selectedConsolidatedIds, evaluateAll: true }
+  }
+
+  const availableIds = new Set(allBehaviors.map((behavior) => behavior.consolidatedId))
+  const hasOverlap = [...selectedConsolidatedIds].some((id) => availableIds.has(id))
+  if (!hasOverlap) {
+    return { ids: availableIds, evaluateAll: true }
+  }
+
+  return { ids: selectedConsolidatedIds, evaluateAll: false }
+}
+
 function reuseStoredEvaluation(
   key: string,
   domain: string,
@@ -68,10 +125,11 @@ function reuseStoredEvaluation(
   evalsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
+  deps: Phase3Deps,
 ): void {
   const existing = progress.phase3.evaluations[key]
   if (existing !== undefined) {
-    recordStoredEvaluation(existing, domain, evalsByDomain, flawFreq, impFreq)
+    deps.recordStoredEvaluation(existing, domain, evalsByDomain, flawFreq, impFreq)
   }
 }
 
@@ -85,19 +143,20 @@ function shouldSkipBehavior(
   evalsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
-  selectedConsolidatedIds: ReadonlySet<string>,
+  selection: Phase3Selection,
+  deps: Phase3Deps,
 ): boolean {
-  if (!selectedConsolidatedIds.has(key)) {
-    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq)
+  if (!selection.evaluateAll && !selection.ids.has(key)) {
+    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq, deps)
     return true
   }
-  if (isBehaviorCompleted(progress, key)) {
-    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq)
-    console.log(`  [${idx}/${total}] ${domain} :: "${featureName}" (skipped)`)
+  if (deps.isBehaviorCompleted(progress, key) && !selection.ids.has(key)) {
+    reuseStoredEvaluation(key, domain, progress, evalsByDomain, flawFreq, impFreq, deps)
+    deps.log.log(`  [${idx}/${total}] ${domain} :: "${featureName}" (skipped)`)
     return true
   }
-  if (getFailedBehaviorAttempts(progress, key) >= MAX_RETRIES) {
-    console.log(`  [${idx}/${total}] ${domain} :: "${featureName}" (max retries)`)
+  if (deps.getFailedBehaviorAttempts(progress, key) >= MAX_RETRIES) {
+    deps.log.log(`  [${idx}/${total}] ${domain} :: "${featureName}" (max retries)`)
     return true
   }
   return false
@@ -112,14 +171,15 @@ async function evaluateSelectedBehavior(input: {
   readonly evalsByDomain: Map<string, EvaluatedBehavior[]>
   readonly flawFreq: Map<string, number>
   readonly impFreq: Map<string, number>
+  readonly deps: Phase3Deps
 }): Promise<void> {
-  process.stdout.write(`  [${input.idx}/${input.total}] ${input.behavior.domain} :: "${input.behavior.featureName}" `)
-  const result = await evaluateWithRetry(buildPrompt(input.behavior))
+  input.deps.writeStdout(`  [${input.idx}/${input.total}] ${input.behavior.domain} :: "${input.behavior.featureName}" `)
+  const result = await input.deps.evaluateWithRetry(buildPrompt(input.behavior))
   if (result === null) {
-    markBehaviorFailed(input.progress, input.key, 'evaluation failed after retries', 1)
+    input.deps.markBehaviorFailed(input.progress, input.key, 'evaluation failed after retries', 1)
     return
   }
-  recordEval(
+  input.deps.recordEval(
     result,
     {
       domain: input.behavior.domain,
@@ -131,7 +191,7 @@ async function evaluateSelectedBehavior(input: {
     input.flawFreq,
     input.impFreq,
   )
-  markBehaviorDone(input.progress, input.key, {
+  input.deps.markBehaviorDone(input.progress, input.key, {
     testName: input.behavior.featureName,
     behavior: input.behavior.behavior,
     userStory: input.behavior.userStory,
@@ -141,7 +201,7 @@ async function evaluateSelectedBehavior(input: {
     flaws: result.flaws,
     improvements: result.improvements,
   })
-  await saveProgress(input.progress)
+  await input.deps.saveProgress(input.progress)
 }
 
 function processSingleBehavior(
@@ -152,7 +212,8 @@ function processSingleBehavior(
   evalsByDomain: Map<string, EvaluatedBehavior[]>,
   flawFreq: Map<string, number>,
   impFreq: Map<string, number>,
-  selectedConsolidatedIds: ReadonlySet<string>,
+  selection: Phase3Selection,
+  deps: Phase3Deps,
 ): Promise<void> {
   const key = b.consolidatedId
   if (
@@ -166,7 +227,8 @@ function processSingleBehavior(
       evalsByDomain,
       flawFreq,
       impFreq,
-      selectedConsolidatedIds,
+      selection,
+      deps,
     )
   ) {
     return Promise.resolve()
@@ -180,21 +242,24 @@ function processSingleBehavior(
     evalsByDomain,
     flawFreq,
     impFreq,
+    deps,
   })
 }
 
-export async function runPhase3({
-  progress,
-  selectedConsolidatedIds,
-  consolidatedManifest,
-}: Phase3RunInput): Promise<void> {
-  console.log('\n[Phase 3] Reading consolidated behavior files...')
-  const domains = consolidatedManifest === null ? [] : getDomainsFromManifestEntries(consolidatedManifest.entries)
-  const allBehaviors = await parseConsolidatedFiles(domains)
+export async function runPhase3(
+  { progress, selectedConsolidatedIds, consolidatedManifest }: Phase3RunInput,
+  deps: Partial<Phase3Deps> = {},
+): Promise<void> {
+  const resolvedDeps: Phase3Deps = { ...defaultPhase3Deps, ...deps }
+  resolvedDeps.log.log('\n[Phase 3] Reading consolidated behavior files...')
+  const fileKeys =
+    consolidatedManifest === null ? [] : getConsolidatedFileKeysFromManifestEntries(consolidatedManifest.entries)
+  const allBehaviors = await parseConsolidatedFiles(fileKeys, resolvedDeps)
+  const selection = resolvePhase3Selection(selectedConsolidatedIds, allBehaviors)
   progress.phase3.status = 'in-progress'
   progress.phase3.stats.behaviorsTotal = allBehaviors.length
-  await saveProgress(progress)
-  console.log(`[Phase 3] Scoring ${allBehaviors.length} user-facing behaviors...\n`)
+  await resolvedDeps.saveProgress(progress)
+  resolvedDeps.log.log(`[Phase 3] Scoring ${allBehaviors.length} user-facing behaviors...\n`)
 
   const evalsByDomain = new Map<string, EvaluatedBehavior[]>()
   const flawFreq = new Map<string, number>()
@@ -212,17 +277,18 @@ export async function runPhase3({
           evalsByDomain,
           flawFreq,
           impFreq,
-          selectedConsolidatedIds,
+          selection,
+          resolvedDeps,
         ),
       ),
     ),
   )
 
-  await writeReports(evalsByDomain, flawFreq, impFreq, progress)
+  await resolvedDeps.writeReports(evalsByDomain, flawFreq, impFreq, progress)
   progress.phase3.status = 'done'
-  await saveProgress(progress)
-  console.log(
+  await resolvedDeps.saveProgress(progress)
+  resolvedDeps.log.log(
     `\n[Phase 3 complete] ${progress.phase3.stats.behaviorsDone} evaluated, ${progress.phase3.stats.behaviorsFailed} failed`,
   )
-  console.log('→ reports/stories/index.md written')
+  resolvedDeps.log.log('→ reports/stories/index.md written')
 }

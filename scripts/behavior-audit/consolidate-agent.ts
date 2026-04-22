@@ -12,7 +12,12 @@ function getEnvOrFallback(name: string, fallback: string): string {
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const provider = createOpenAICompatible({ name: 'behavior-audit-consolidate', apiKey, baseURL: BASE_URL })
+const provider = createOpenAICompatible({
+  name: 'behavior-audit-consolidate',
+  apiKey,
+  baseURL: BASE_URL,
+  supportsStructuredOutputs: true,
+})
 const model = provider(MODEL)
 
 const SYSTEM_PROMPT = `You are a senior software analyst reviewing extracted test behaviors from a Telegram/Discord/Mattermost chat bot called "papai".
@@ -35,7 +40,9 @@ const ConsolidationItemSchema = z.object({
   behavior: z.string(),
   userStory: z.string().nullable(),
   context: z.string(),
+  sourceBehaviorIds: z.array(z.string()),
   sourceTestKeys: z.array(z.string()),
+  supportingInternalRefs: z.array(z.object({ behaviorId: z.string(), summary: z.string() })),
 })
 
 const ConsolidationResultSchema = z.object({
@@ -45,22 +52,25 @@ const ConsolidationResultSchema = z.object({
 type ConsolidationResult = z.infer<typeof ConsolidationResultSchema>
 
 export interface ConsolidateBehaviorInput {
+  readonly behaviorId: string
   readonly testKey: string
+  readonly domain: string
+  readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
+  readonly candidateFeatureKey: string
+  readonly candidateFeatureLabel: string | null
   readonly behavior: string
   readonly context: string
   readonly keywords: readonly string[]
-  readonly primaryKeyword: string
-  readonly domain: string
 }
 
-function buildPrompt(primaryKeyword: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
+function buildPrompt(candidateFeatureKey: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
   const behaviorList = behaviors
     .map(
       (b, i) =>
-        `${i + 1}. TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Primary keyword: ${b.primaryKeyword}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
+        `${i + 1}. BehaviorId: "${b.behaviorId}"\n   TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Visibility: ${b.visibility}\n   Candidate feature key: ${b.candidateFeatureKey}\n   Candidate feature label: ${b.candidateFeatureLabel ?? '(none)'}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
     )
     .join('\n\n')
-  return `Primary keyword: ${primaryKeyword}\n\nCandidate behavior pool:\n\n${behaviorList}`
+  return `Candidate feature key: ${candidateFeatureKey}\n\nCandidate behavior pool:\n\n${behaviorList}`
 }
 
 function sleep(ms: number): Promise<void> {
@@ -106,7 +116,7 @@ function slugify(name: string): string {
 
 async function attemptConsolidation(
   prompt: string,
-  primaryKeyword: string,
+  candidateFeatureKey: string,
   attempt: number,
   remaining: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
@@ -121,20 +131,20 @@ async function attemptConsolidation(
   const result = await consolidateSingle(prompt, attempt)
   if (result !== null) {
     return result.consolidations.map((item) => ({
-      id: `${primaryKeyword}::${slugify(item.featureName)}`,
+      id: `${candidateFeatureKey}::${slugify(item.featureName)}`,
       item,
     }))
   }
 
-  return attemptConsolidation(prompt, primaryKeyword, attempt + 1, remaining - 1)
+  return attemptConsolidation(prompt, candidateFeatureKey, attempt + 1, remaining - 1)
 }
 
 export function consolidateWithRetry(
-  primaryKeyword: string,
+  candidateFeatureKey: string,
   behaviors: readonly ConsolidateBehaviorInput[],
   attemptOffset: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
-  const prompt = buildPrompt(primaryKeyword, behaviors)
+  const prompt = buildPrompt(candidateFeatureKey, behaviors)
   const remaining = MAX_RETRIES - attemptOffset
-  return attemptConsolidation(prompt, primaryKeyword, attemptOffset, remaining)
+  return attemptConsolidation(prompt, candidateFeatureKey, attemptOffset, remaining)
 }

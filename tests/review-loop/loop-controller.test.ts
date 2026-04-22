@@ -80,7 +80,7 @@ describe('runReviewLoop', () => {
         fixability: 'auto',
         reasoning: 'The control flow is actually unsafe.',
         targetFiles: ['src/message-queue/queue.ts'],
-        fixPlan: 'Take the lock before the flush branch.',
+        needsPlanning: false,
       }),
       'Applied the minimal fix and ran the targeted test.',
     ]
@@ -192,7 +192,7 @@ describe('runReviewLoop', () => {
                     fixability: 'auto',
                     reasoning: 'The control flow is actually unsafe.',
                     targetFiles: ['src/message-queue/queue.ts'],
-                    fixPlan: 'Take the lock before the flush branch.',
+                    needsPlanning: false,
                   })
                 : 'Applied the minimal fix and ran the targeted test.',
             stopReason: 'end_turn',
@@ -279,7 +279,7 @@ describe('runReviewLoop', () => {
               fixability: 'manual',
               reasoning: 'This needs a product decision.',
               targetFiles: ['src/message-queue/queue.ts'],
-              fixPlan: 'Escalate to a human reviewer.',
+              needsPlanning: false,
             }),
             stopReason: 'end_turn',
           }),
@@ -362,7 +362,7 @@ describe('runReviewLoop', () => {
               fixability: 'manual',
               reasoning: 'False positive — the lock is already taken upstream.',
               targetFiles: ['src/message-queue/queue.ts'],
-              fixPlan: 'Do nothing.',
+              needsPlanning: false,
             }),
             stopReason: 'end_turn',
           })
@@ -375,6 +375,110 @@ describe('runReviewLoop', () => {
     expect(verifyCallCount).toBe(1)
     expect(result.doneReason).toBe('no_progress')
     expect(Object.values(result.ledger.issues).every((record) => record.status === 'rejected')).toBe(true)
+  })
+
+  test('plans before fixing when verifier sets needsPlanning to true', async () => {
+    const repoRoot = makeTempDir()
+    const config: ReviewLoopConfig = {
+      repoRoot,
+      workDir: path.join(repoRoot, '.review-loop'),
+      maxRounds: 5,
+      maxNoProgressRounds: 2,
+      reviewer: {
+        command: 'opencode',
+        args: ['acp'],
+        env: {},
+        sessionConfig: {},
+        invocationPrefix: null,
+        requireInvocationPrefix: false,
+      },
+      fixer: {
+        command: '/usr/local/bin/claude-acp-adapter',
+        args: [],
+        env: {},
+        sessionConfig: {},
+        verifyInvocationPrefix: null,
+        fixInvocationPrefix: null,
+        requireVerifyInvocation: false,
+      },
+    }
+
+    const planPath = path.join(repoRoot, 'plan.md')
+    const runState = await createRunState(config, planPath)
+    const ledger = await createIssueLedger(runState.runDir)
+    const fixerPrompts: string[] = []
+
+    let reviewerCallCount = 0
+
+    const result = await runReviewLoop({
+      config,
+      runState,
+      ledger,
+      reviewer: {
+        availableCommands: [],
+        promptText: () => {
+          reviewerCallCount += 1
+          return Promise.resolve({
+            text:
+              reviewerCallCount === 1
+                ? JSON.stringify({
+                    round: 1,
+                    issues: [
+                      {
+                        title: 'Complex refactoring needed',
+                        severity: 'high',
+                        summary: 'Module boundary is wrong.',
+                        whyItMatters: 'Causes import cycles.',
+                        evidence: 'src/a.ts line 10',
+                        file: 'src/a.ts',
+                        lineStart: 10,
+                        lineEnd: 20,
+                        suggestedFix: 'Move interface to shared module.',
+                        confidence: 0.85,
+                      },
+                    ],
+                  })
+                : JSON.stringify({ round: 2, issues: [] }),
+            stopReason: 'end_turn',
+          })
+        },
+      },
+      fixer: {
+        availableCommands: [],
+        promptText: (text) => {
+          fixerPrompts.push(text)
+          const promptIndex = fixerPrompts.length
+          if (promptIndex === 1) {
+            return Promise.resolve({
+              text: JSON.stringify({
+                verdict: 'valid',
+                fixability: 'auto',
+                reasoning: 'Needs multi-file change.',
+                targetFiles: ['src/a.ts', 'src/b.ts'],
+                needsPlanning: true,
+              }),
+              stopReason: 'end_turn',
+            })
+          }
+          if (promptIndex === 2) {
+            return Promise.resolve({
+              text: 'Step 1: Move interface. Step 2: Update imports.',
+              stopReason: 'end_turn',
+            })
+          }
+          return Promise.resolve({
+            text: 'Applied the fix and committed.',
+            stopReason: 'end_turn',
+          })
+        },
+      },
+    })
+
+    expect(result.doneReason).toBe('clean')
+    expect(fixerPrompts).toHaveLength(3)
+    expect(fixerPrompts[1]).toContain('step-by-step plan')
+    expect(fixerPrompts[2]).toContain('Fix Plan:')
+    expect(fixerPrompts[2]).toContain('Step 1: Move interface')
   })
 
   test('stops with max_rounds when unresolved issues remain after the final round', async () => {
@@ -447,7 +551,7 @@ describe('runReviewLoop', () => {
               fixability: 'manual',
               reasoning: 'This is a false positive.',
               targetFiles: ['src/message-queue/queue.ts'],
-              fixPlan: 'Do not change the code.',
+              needsPlanning: false,
             }),
             stopReason: 'end_turn',
           }),

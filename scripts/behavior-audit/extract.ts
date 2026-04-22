@@ -3,21 +3,21 @@ import pLimit from 'p-limit'
 import { MAX_RETRIES } from './config.js'
 import { extractWithRetry } from './extract-agent.js'
 import { updateManifestForExtractedTest } from './extract-incremental.js'
+import {
+  getSelectedTests,
+  markFileDoneWhenSelectedTestsPersisted,
+  shouldSkipCompletedFile,
+  writeValidBehaviorsForFile,
+} from './extract-phase1-helpers.js'
+import { buildExtractionPrompt, buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
 import type { IncrementalManifest } from './incremental.js'
 import { saveManifest } from './incremental.js'
 import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
+import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 import { loadKeywordVocabulary, recordKeywordUsage, saveKeywordVocabulary } from './keyword-vocabulary.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedTestAttempts,
-  markFileDone,
-  markTestDone,
-  markTestFailed,
-  resetPhase2AndPhase3,
-  saveProgress,
-} from './progress.js'
+import { getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3, saveProgress } from './progress.js'
 import type { ExtractedBehavior } from './report-writer.js'
-import { writeBehaviorFile } from './report-writer.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
 interface Phase1RunInput {
@@ -27,43 +27,70 @@ interface Phase1RunInput {
   readonly manifest: IncrementalManifest
 }
 
-function deriveImplPath(testPath: string): string {
-  return testPath.replace(/^tests\//, 'src/').replace(/\.test\.ts$/, '.ts')
+export interface Phase1Deps {
+  readonly extractWithRetry: typeof extractWithRetry
+  readonly resolveKeywordsWithRetry: typeof resolveKeywordsWithRetry
+  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
+  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
+  readonly recordKeywordUsage: typeof recordKeywordUsage
+  readonly updateManifestForExtractedTest: typeof updateManifestForExtractedTest
+  readonly saveManifest: typeof saveManifest
+  readonly saveProgress: typeof saveProgress
+  readonly getFailedTestAttempts: typeof getFailedTestAttempts
+  readonly markTestDone: typeof markTestDone
+  readonly markTestFailed: typeof markTestFailed
+  readonly resetPhase2AndPhase3: typeof resetPhase2AndPhase3
+  readonly getSelectedTests: typeof getSelectedTests
+  readonly shouldSkipCompletedFile: typeof shouldSkipCompletedFile
+  readonly writeValidBehaviorsForFile: typeof writeValidBehaviorsForFile
+  readonly markFileDoneWhenSelectedTestsPersisted: typeof markFileDoneWhenSelectedTestsPersisted
+  readonly log: Pick<typeof console, 'log'>
+  readonly writeStdout: (text: string) => void
 }
 
-function buildExtractionPrompt(testCase: TestCase, testFilePath: string): string {
-  const implPath = deriveImplPath(testFilePath)
-  return `**Test file:** ${testFilePath}\n**Test name:** ${testCase.fullPath}\n**Likely implementation file:** ${implPath}\n\n\`\`\`typescript\n${testCase.source}\n\`\`\``
-}
-
-function buildResolverPrompt(candidateKeywords: readonly string[], vocabularyText: string): string {
-  return [
-    'Resolve the candidate keywords against the existing vocabulary.',
-    'Reuse existing slugs when semantically appropriate.',
-    'Append new entries only when no vocabulary slug adequately fits.',
-    '',
-    `Candidate keywords: ${candidateKeywords.join(', ')}`,
-    '',
-    'Existing vocabulary:',
-    vocabularyText,
-  ].join('\n')
+const defaultPhase1Deps: Phase1Deps = {
+  extractWithRetry,
+  resolveKeywordsWithRetry,
+  loadKeywordVocabulary,
+  saveKeywordVocabulary,
+  recordKeywordUsage,
+  updateManifestForExtractedTest,
+  saveManifest,
+  saveProgress,
+  getFailedTestAttempts,
+  markTestDone,
+  markTestFailed,
+  resetPhase2AndPhase3,
+  getSelectedTests,
+  shouldSkipCompletedFile,
+  writeValidBehaviorsForFile,
+  markFileDoneWhenSelectedTestsPersisted,
+  log: console,
+  writeStdout: (text) => {
+    process.stdout.write(text)
+  },
 }
 
 async function resolveKeywords(
   candidateKeywords: readonly string[],
   testKey: string,
   progress: Progress,
+  deps: Phase1Deps,
 ): Promise<readonly string[] | null> {
-  const existingVocabulary = (await loadKeywordVocabulary()) ?? []
-  const vocabularyText = existingVocabulary.length === 0 ? '(empty)' : JSON.stringify(existingVocabulary, null, 2)
-  const resolved = await resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
+  const loadedVocabulary = await deps.loadKeywordVocabulary()
+  let existingVocabulary: readonly KeywordVocabularyEntry[] = []
+  if (loadedVocabulary !== null) {
+    existingVocabulary = loadedVocabulary
+  }
+  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
+  const resolved = await deps.resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
   if (resolved === null) {
-    markTestFailed(progress, testKey, 'keyword resolution failed')
+    deps.markTestFailed(progress, testKey, 'keyword resolution failed')
     return null
   }
   const nextVocabulary = [...existingVocabulary, ...resolved.appendedEntries]
-  await saveKeywordVocabulary(nextVocabulary)
-  await recordKeywordUsage(resolved.keywords)
+  await deps.saveKeywordVocabulary(nextVocabulary)
+  await deps.recordKeywordUsage(resolved.keywords, new Set(resolved.appendedEntries.map((entry) => entry.slug)))
   return resolved.keywords
 }
 
@@ -82,14 +109,15 @@ async function extractAndSave(
   totalTests: number,
   progress: Progress,
   manifest: IncrementalManifest,
+  deps: Phase1Deps,
 ): Promise<SingleTestResult> {
-  process.stdout.write(`  [${displayIndex}/${totalTests}] "${testCase.name}" `)
-  const extracted = await extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
+  deps.writeStdout(`  [${displayIndex}/${totalTests}] "${testCase.name}" `)
+  const extracted = await deps.extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
   if (extracted === null) {
-    markTestFailed(progress, testKey, 'extraction failed')
+    deps.markTestFailed(progress, testKey, 'extraction failed')
     return null
   }
-  const keywords = await resolveKeywords(extracted.candidateKeywords, testKey, progress)
+  const keywords = await resolveKeywords(extracted.candidateKeywords, testKey, progress, deps)
   if (keywords === null) return null
   const behavior: ExtractedBehavior = {
     testName: testCase.name,
@@ -98,15 +126,15 @@ async function extractAndSave(
     context: extracted.context,
     keywords,
   }
-  markTestDone(progress, testFilePath, testKey, behavior)
-  const { manifest: updatedManifest, phase1Changed } = await updateManifestForExtractedTest({
+  const { manifest: updatedManifest, phase1Changed } = await deps.updateManifestForExtractedTest({
     manifest,
     testFile,
     testCase,
     extractedBehavior: behavior,
   })
-  await saveManifest(updatedManifest)
-  console.log(`    ✓`)
+  await deps.saveManifest(updatedManifest)
+  deps.markTestDone(progress, testFilePath, testKey, behavior)
+  deps.log.log('    ✓')
   return { behavior, manifest: updatedManifest, phase1Changed }
 }
 
@@ -118,17 +146,20 @@ function processSingleTestCase(
   totalTests: number,
   progress: Progress,
   manifest: IncrementalManifest,
+  deps: Phase1Deps,
 ): Promise<SingleTestResult> {
   const testKey = `${testFilePath}::${testCase.fullPath}`
+  const completedTestsForFile = progress.phase1.completedTests[testFilePath]
+  const isSelectedRerun = completedTestsForFile !== undefined && completedTestsForFile[testKey] === 'done'
   const existing = progress.phase1.extractedBehaviors[testKey]
-  if (existing !== undefined) {
+  if (existing !== undefined && !isSelectedRerun) {
     return Promise.resolve({ behavior: existing, manifest, phase1Changed: false })
   }
-  if (getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
-    console.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
+  if (deps.getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
+    deps.log.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
     return Promise.resolve(null)
   }
-  return extractAndSave(testCase, testFile, testFilePath, testKey, displayIndex, totalTests, progress, manifest)
+  return extractAndSave(testCase, testFile, testFilePath, testKey, displayIndex, totalTests, progress, manifest, deps)
 }
 
 async function runSelectedExtractions(input: {
@@ -136,6 +167,7 @@ async function runSelectedExtractions(input: {
   readonly testFile: ParsedTestFile
   readonly progress: Progress
   readonly manifest: IncrementalManifest
+  readonly deps: Phase1Deps
 }): Promise<{
   readonly results: readonly ({
     readonly behavior: ExtractedBehavior
@@ -159,6 +191,7 @@ async function runSelectedExtractions(input: {
           input.selectedTests.length,
           input.progress,
           currentManifest,
+          input.deps,
         )
         if (result !== null) {
           currentManifest = result.manifest
@@ -171,30 +204,6 @@ async function runSelectedExtractions(input: {
   return { results, manifest: currentManifest, anyPhase1Changed }
 }
 
-function getSelectedTests(testFile: ParsedTestFile, selectedTestKeys: ReadonlySet<string>): readonly TestCase[] {
-  return testFile.tests.filter((testCase) => selectedTestKeys.has(`${testFile.filePath}::${testCase.fullPath}`))
-}
-
-function collectValidBehaviors(
-  results: readonly ({
-    readonly behavior: ExtractedBehavior
-    readonly manifest: IncrementalManifest
-    readonly phase1Changed: boolean
-  } | null)[],
-): readonly ExtractedBehavior[] {
-  return results
-    .filter(
-      (
-        result,
-      ): result is {
-        readonly behavior: ExtractedBehavior
-        readonly manifest: IncrementalManifest
-        readonly phase1Changed: boolean
-      } => result !== null,
-    )
-    .map((result) => result.behavior)
-}
-
 async function processTestFile(
   testFile: ParsedTestFile,
   progress: Progress,
@@ -202,50 +211,64 @@ async function processTestFile(
   totalFiles: number,
   selectedTestKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
+  deps: Phase1Deps,
 ): Promise<{ readonly manifest: IncrementalManifest; readonly anyPhase1Changed: boolean }> {
-  if (progress.phase1.completedFiles.includes(testFile.filePath)) {
-    console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, already done)`)
+  const selectedTests = deps.getSelectedTests(testFile.filePath, testFile.tests, selectedTestKeys)
+  if (selectedTests.length === 0) {
+    deps.log.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, no selected tests)`)
     return { manifest, anyPhase1Changed: false }
   }
-  console.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath}`)
-  const selectedTests = getSelectedTests(testFile, selectedTestKeys)
+  if (deps.shouldSkipCompletedFile({ progress, testFilePath: testFile.filePath, selectedTests, selectedTestKeys })) {
+    deps.log.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath} (skipped, already done)`)
+    return { manifest, anyPhase1Changed: false }
+  }
+  deps.log.log(`[Phase 1] ${fileIndex}/${totalFiles} — ${testFile.filePath}`)
   const extractionResult = await runSelectedExtractions({
     selectedTests,
     testFile,
     progress,
     manifest,
+    deps,
   })
-  const valid = collectValidBehaviors(extractionResult.results)
-  if (valid.length > 0) {
-    await writeBehaviorFile(testFile.filePath, valid)
-    console.log(`  → wrote ${valid.length} behaviors`)
-  }
-  markFileDone(progress, testFile.filePath)
-  await saveProgress(progress)
+  await deps.writeValidBehaviorsForFile(testFile.filePath, extractionResult.results)
+  deps.markFileDoneWhenSelectedTestsPersisted(progress, testFile.filePath, selectedTests)
+  await deps.saveProgress(progress)
   return { manifest: extractionResult.manifest, anyPhase1Changed: extractionResult.anyPhase1Changed }
 }
 
-export async function runPhase1({ testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput): Promise<void> {
+export async function runPhase1(
+  { testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput,
+  deps: Partial<Phase1Deps> = {},
+): Promise<void> {
+  const resolvedDeps: Phase1Deps = { ...defaultPhase1Deps, ...deps }
   progress.phase1.status = 'in-progress'
-  await saveProgress(progress)
+  await resolvedDeps.saveProgress(progress)
   const limit = pLimit(1)
   let currentManifest = manifest
   let anyPhase1Changed = false
   await Promise.all(
     testFiles.map((f, i) =>
       limit(async () => {
-        const result = await processTestFile(f, progress, i + 1, testFiles.length, selectedTestKeys, currentManifest)
+        const result = await processTestFile(
+          f,
+          progress,
+          i + 1,
+          testFiles.length,
+          selectedTestKeys,
+          currentManifest,
+          resolvedDeps,
+        )
         currentManifest = result.manifest
         if (result.anyPhase1Changed) anyPhase1Changed = true
       }),
     ),
   )
   if (anyPhase1Changed) {
-    resetPhase2AndPhase3(progress)
+    resolvedDeps.resetPhase2AndPhase3(progress)
   }
   progress.phase1.status = 'done'
-  await saveProgress(progress)
-  console.log(
+  await resolvedDeps.saveProgress(progress)
+  resolvedDeps.log.log(
     `\n[Phase 1 complete] ${progress.phase1.stats.filesDone} files, ${progress.phase1.stats.testsExtracted} behaviors extracted, ${progress.phase1.stats.testsFailed} failed`,
   )
 }

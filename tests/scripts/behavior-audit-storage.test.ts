@@ -1,0 +1,277 @@
+import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { mkdirSync } from 'node:fs'
+import path from 'node:path'
+
+import { mockAuditBehaviorConfig, mockReportsConfig } from './behavior-audit-integration.helpers.js'
+import {
+  restoreBehaviorAuditEnv,
+  cleanupTempDirs,
+  makeTempDir,
+  originalOpenAiApiKey,
+  restoreOpenAiApiKey,
+} from './behavior-audit-integration.runtime-helpers.js'
+import {
+  importWithGuard,
+  isResetModule,
+  loadClassifiedStoreModule,
+  loadReportWriterModule,
+  loadResetModule,
+  type ResetModuleShape,
+} from './behavior-audit-integration.support.js'
+
+beforeEach(() => {
+  if (originalOpenAiApiKey === undefined) {
+    process.env['OPENAI_API_KEY'] = 'test-openai-api-key'
+    return
+  }
+
+  process.env['OPENAI_API_KEY'] = originalOpenAiApiKey
+})
+
+afterEach(() => {
+  restoreBehaviorAuditEnv()
+  restoreOpenAiApiKey()
+  cleanupTempDirs()
+})
+
+test('behavior-audit-reset phase2 clears downstream state without deleting keyword vocabulary', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+
+  mkdirSync(path.join(reportsDir, 'consolidated'), { recursive: true })
+  mkdirSync(path.join(reportsDir, 'stories'), { recursive: true })
+  await Bun.write(
+    path.join(reportsDir, 'keyword-vocabulary.json'),
+    JSON.stringify([
+      {
+        slug: 'group-targeting',
+        description: 'Targeting work at a group context.',
+        createdAt: '2026-04-20T12:00:00.000Z',
+        updatedAt: '2026-04-20T12:00:00.000Z',
+        timesUsed: 1,
+      },
+    ]),
+  )
+  await Bun.write(path.join(reportsDir, 'consolidated', 'tools.md'), '# consolidated')
+  await Bun.write(path.join(reportsDir, 'stories', 'tools.md'), '# stories')
+
+  mockReportsConfig(root, {
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  const reset = await loadResetModule(`phase2-reset-${crypto.randomUUID()}`)
+  await reset.resetBehaviorAudit('phase2')
+
+  expect(await Bun.file(path.join(reportsDir, 'keyword-vocabulary.json')).exists()).toBe(true)
+  expect(await Bun.file(path.join(reportsDir, 'consolidated', 'tools.md')).exists()).toBe(false)
+  expect(await Bun.file(path.join(reportsDir, 'stories', 'tools.md')).exists()).toBe(false)
+})
+
+test('classified-store round-trips sorted classified behaviors under audit root', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadClassifiedStoreModule(crypto.randomUUID())
+  await store.writeClassifiedFile('tools', [
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > beta',
+      testKey: 'tests/tools/sample.test.ts::suite > beta',
+      domain: 'tools',
+      behavior: 'When beta runs, the bot saves a task.',
+      context: 'Calls create_task.',
+      keywords: ['task-create'],
+      visibility: 'user-facing',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'beta',
+    },
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > alpha',
+      testKey: 'tests/tools/sample.test.ts::suite > alpha',
+      domain: 'tools',
+      behavior: 'When alpha runs, the bot validates input.',
+      context: 'Runs guard checks.',
+      keywords: ['task-creation'],
+      visibility: 'internal',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'alpha',
+    },
+  ])
+
+  const loaded = await store.readClassifiedFile('tools')
+  if (loaded === null) {
+    throw new Error('Expected classified data')
+  }
+  expect(loaded.map((item) => item.behaviorId)).toEqual([
+    'tests/tools/sample.test.ts::suite > alpha',
+    'tests/tools/sample.test.ts::suite > beta',
+  ])
+})
+
+test('classified-store throws for malformed classified data but returns null when file is missing', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const classifiedDir = path.join(auditRoot, 'classified')
+
+  mockAuditBehaviorConfig(root, {
+    CLASSIFIED_DIR: classifiedDir,
+  })
+
+  const store = await loadClassifiedStoreModule(crypto.randomUUID())
+
+  expect(await store.readClassifiedFile('missing')).toBeNull()
+
+  mkdirSync(classifiedDir, { recursive: true })
+  await Bun.write(path.join(classifiedDir, 'tools.json'), '{"not":"an array"}\n')
+
+  await expect(store.readClassifiedFile('tools')).rejects.toThrow()
+})
+
+test('report-writer round-trips supporting internal refs as readonly consolidated data', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const writer = await loadReportWriterModule(crypto.randomUUID())
+  await writer.writeConsolidatedFile('tools', [
+    {
+      id: 'task-creation::feature',
+      domain: 'tools',
+      featureName: 'Task creation',
+      isUserFacing: true,
+      behavior: 'When a user creates a task, the bot saves it.',
+      userStory: 'As a user, I can create a task through chat.',
+      context: 'Calls provider create flow.',
+      sourceTestKeys: ['tests/tools/sample.test.ts::suite > create task'],
+      sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > create task'],
+      supportingInternalRefs: [
+        {
+          behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
+          summary: 'Validates the task payload before submission.',
+        },
+      ],
+    },
+  ])
+
+  const loaded = await writer.readConsolidatedFile('tools')
+  expect(loaded).not.toBeNull()
+  expect(loaded).toHaveLength(1)
+
+  const item = loaded![0]
+  if (item === undefined) {
+    throw new Error('Expected consolidated item to exist')
+  }
+  expect(item.supportingInternalRefs).toEqual([
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
+      summary: 'Validates the task payload before submission.',
+    },
+  ])
+  expect(Object.isFrozen(item.supportingInternalRefs)).toBe(true)
+  expect(Object.isFrozen(item.supportingInternalRefs[0])).toBe(true)
+})
+
+test('report-writer throws for malformed consolidated data but returns null when file is missing', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const consolidatedDir = path.join(auditRoot, 'consolidated')
+
+  mockAuditBehaviorConfig(root, {
+    CONSOLIDATED_DIR: consolidatedDir,
+  })
+
+  const writer = await loadReportWriterModule(crypto.randomUUID())
+
+  expect(await writer.readConsolidatedFile('missing')).toBeNull()
+
+  mkdirSync(consolidatedDir, { recursive: true })
+  await Bun.write(path.join(consolidatedDir, 'tools.json'), '{"not":"an array"}\n')
+
+  await expect(writer.readConsolidatedFile('tools')).rejects.toThrow()
+})
+
+test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserves keyword vocabulary', async () => {
+  const root = makeTempDir()
+  const auditRoot = path.join(root, 'reports', 'audit-behavior')
+  const consolidatedDir = path.join(auditRoot, 'consolidated')
+  const classifiedDir = path.join(auditRoot, 'classified')
+  const storiesDir = path.join(auditRoot, 'stories')
+  const vocabularyPath = path.join(auditRoot, 'keyword-vocabulary.json')
+  const progressPath = path.join(auditRoot, 'progress.json')
+
+  mkdirSync(consolidatedDir, { recursive: true })
+  mkdirSync(classifiedDir, { recursive: true })
+  mkdirSync(storiesDir, { recursive: true })
+
+  await Bun.write(path.join(consolidatedDir, 'group-routing.json'), '[]\n')
+  await Bun.write(path.join(classifiedDir, 'tools.json'), '[]\n')
+  await Bun.write(path.join(storiesDir, 'tools.md'), '# tools\n')
+  await Bun.write(vocabularyPath, '[]\n')
+  await Bun.write(
+    progressPath,
+    JSON.stringify({
+      version: 3,
+      startedAt: '2026-04-21T12:00:00.000Z',
+      phase1: {
+        status: 'done',
+        completedTests: {},
+        extractedBehaviors: {},
+        failedTests: {},
+        completedFiles: [],
+        stats: { filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+      },
+      phase2a: {
+        status: 'done',
+        completedBehaviors: {},
+        classifiedBehaviors: {},
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+      },
+      phase2b: {
+        status: 'done',
+        completedCandidateFeatures: {},
+        consolidations: {},
+        failedCandidateFeatures: {},
+        stats: {
+          candidateFeaturesTotal: 0,
+          candidateFeaturesDone: 0,
+          candidateFeaturesFailed: 0,
+          behaviorsConsolidated: 0,
+        },
+      },
+      phase3: {
+        status: 'done',
+        completedBehaviors: {},
+        evaluations: {},
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+      },
+    }) + '\n',
+  )
+
+  mockAuditBehaviorConfig(root, {
+    CLASSIFIED_DIR: classifiedDir,
+    CONSOLIDATED_DIR: consolidatedDir,
+    STORIES_DIR: storiesDir,
+    PROGRESS_PATH: progressPath,
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+  })
+
+  const mod: ResetModuleShape = await importWithGuard(
+    `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
+    isResetModule,
+    'Unexpected reset module shape',
+  )
+  await mod.resetBehaviorAudit('phase2')
+
+  expect(await Bun.file(vocabularyPath).exists()).toBe(true)
+  expect(await Bun.file(path.join(consolidatedDir, 'group-routing.json')).exists()).toBe(false)
+  expect(await Bun.file(path.join(classifiedDir, 'tools.json')).exists()).toBe(false)
+  expect(await Bun.file(path.join(storiesDir, 'tools.md')).exists()).toBe(false)
+})

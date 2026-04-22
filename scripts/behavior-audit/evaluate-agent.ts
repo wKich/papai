@@ -12,7 +12,12 @@ function getEnvOrFallback(name: string, fallback: string): string {
 }
 
 const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const provider = createOpenAICompatible({ name: 'behavior-audit-eval', apiKey, baseURL: BASE_URL })
+const provider = createOpenAICompatible({
+  name: 'behavior-audit-eval',
+  apiKey,
+  baseURL: BASE_URL,
+  supportsStructuredOutputs: true,
+})
 const model = provider(MODEL)
 
 const SYSTEM_PROMPT = `You are evaluating a single feature of a Telegram chat bot from the perspective of three non-technical personas. You have tools to read source files, search the codebase, find files, and list directories. Use them to look at actual bot responses, error messages, system prompts, and command help text to judge the real UX.

@@ -1,187 +1,183 @@
 import pLimit from 'p-limit'
 
+import type { ClassifiedBehavior } from './classified-store.js'
 import { MAX_RETRIES } from './config.js'
 import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
-import { consolidateWithRetry } from './consolidate-agent.js'
-import { getDomain } from './domain-map.js'
 import type { ConsolidatedManifest } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedBatchAttempts,
-  isBatchCompleted,
-  markBatchDone,
-  markBatchFailed,
-  resetPhase3,
-  saveProgress,
-} from './progress.js'
-import type { ConsolidatedBehavior, ExtractedBehavior } from './report-writer.js'
+import { getFailedBatchAttempts, markBatchDone, markBatchFailed, resetPhase3, saveProgress } from './progress.js'
+import type { ConsolidatedBehavior } from './report-writer.js'
 import { writeConsolidatedFile } from './report-writer.js'
 
-interface KeywordBatch {
-  readonly batchKey: string
-  readonly primaryKeyword: string
-  readonly inputs: readonly ConsolidateBehaviorInput[]
+type ConsolidateWithRetry = typeof import('./consolidate-agent.js').consolidateWithRetry
+
+interface Phase2bDeps {
+  readonly consolidateWithRetry: ConsolidateWithRetry
+  readonly writeConsolidatedFile: typeof writeConsolidatedFile
 }
 
-function getPrimaryKeyword(keywords: readonly string[], cardinality: ReadonlyMap<string, number>): string {
-  return [...keywords].toSorted((a, b) => {
-    const countA = cardinality.get(a) ?? Number.MAX_SAFE_INTEGER
-    const countB = cardinality.get(b) ?? Number.MAX_SAFE_INTEGER
-    return countA === countB ? a.localeCompare(b) : countA - countB
-  })[0]!
+const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
+  const { consolidateWithRetry } = await import('./consolidate-agent.js')
+  return consolidateWithRetry(...args)
 }
 
-function groupByPrimaryKeyword(
-  extractedBehaviors: Readonly<Record<string, ExtractedBehavior>>,
-): readonly KeywordBatch[] {
-  const keywordCounts = new Map<string, number>()
-  for (const behavior of Object.values(extractedBehaviors)) {
-    for (const keyword of behavior.keywords) {
-      keywordCounts.set(keyword, (keywordCounts.get(keyword) ?? 0) + 1)
-    }
-  }
-
+function groupByCandidateFeature(
+  classified: Readonly<Record<string, ClassifiedBehavior>>,
+  selectedCandidateFeatureKeys: ReadonlySet<string>,
+): ReadonlyMap<string, readonly ConsolidateBehaviorInput[]> {
   const grouped = new Map<string, ConsolidateBehaviorInput[]>()
-  for (const [testKey, behavior] of Object.entries(extractedBehaviors)) {
-    const primaryKeyword = getPrimaryKeyword(behavior.keywords, keywordCounts)
-    const existing = grouped.get(primaryKeyword) ?? []
-    grouped.set(primaryKeyword, [
-      ...existing,
+  for (const item of Object.values(classified)) {
+    if (item.candidateFeatureKey === null) continue
+    if (selectedCandidateFeatureKeys.size > 0 && !selectedCandidateFeatureKeys.has(item.candidateFeatureKey)) continue
+    grouped.set(item.candidateFeatureKey, [
+      ...(grouped.get(item.candidateFeatureKey) ?? []),
       {
-        testKey,
-        behavior: behavior.behavior,
-        context: behavior.context,
-        keywords: behavior.keywords,
-        primaryKeyword,
-        domain: getDomain(behavior.fullPath),
+        behaviorId: item.behaviorId,
+        testKey: item.testKey,
+        domain: item.domain,
+        visibility: item.visibility,
+        candidateFeatureKey: item.candidateFeatureKey,
+        candidateFeatureLabel: item.candidateFeatureLabel,
+        behavior: item.behavior,
+        context: item.context,
+        keywords: item.keywords,
       },
     ])
   }
-
-  return [...grouped.entries()].map(([batchKey, inputs]) => ({ batchKey, primaryKeyword: batchKey, inputs }))
+  return grouped
 }
 
-function buildConsolidations(
-  result: Awaited<ReturnType<typeof consolidateWithRetry>>,
-  primaryKeyword: string,
-): ConsolidatedBehavior[] {
-  return result!.map(({ id, item }) => ({
+function buildConsolidatedDomain(inputs: readonly ConsolidateBehaviorInput[]): string {
+  const domains = [...new Set(inputs.map((input) => input.domain))].toSorted()
+  return domains.length === 1 ? (domains[0] ?? 'unknown') : 'cross-domain'
+}
+
+function toConsolidations(
+  result: NonNullable<Awaited<ReturnType<ConsolidateWithRetry>>>,
+  inputs: readonly ConsolidateBehaviorInput[],
+): readonly ConsolidatedBehavior[] {
+  const domain = buildConsolidatedDomain(inputs)
+  return result.map(({ id, item }) => ({
     id,
-    domain: primaryKeyword,
+    domain,
     featureName: item.featureName,
     isUserFacing: item.isUserFacing,
     behavior: item.behavior,
-    userStory: item.userStory ?? null,
+    userStory: item.userStory,
     context: item.context,
     sourceTestKeys: item.sourceTestKeys,
+    sourceBehaviorIds: item.sourceBehaviorIds,
+    supportingInternalRefs: item.supportingInternalRefs,
   }))
 }
 
-function applyConsolidationsToManifest(
-  consolidations: ConsolidatedBehavior[],
-  inputs: readonly ConsolidateBehaviorInput[],
-  primaryKeyword: string,
-  sourceDomains: readonly string[],
-  fingerprint: string,
-  currentEntries: ConsolidatedManifest['entries'],
-): ConsolidatedManifest['entries'] {
-  const updatedEntries = { ...currentEntries }
-  for (const cb of consolidations) {
-    updatedEntries[cb.id] = {
-      consolidatedId: cb.id,
-      domain: cb.domain,
-      featureName: cb.featureName,
-      sourceTestKeys: cb.sourceTestKeys,
-      isUserFacing: cb.isUserFacing,
-      primaryKeyword,
-      keywords: [...new Set(inputs.flatMap((input) => input.keywords))].toSorted(),
-      sourceDomains,
-      phase2Fingerprint: fingerprint,
-      lastConsolidatedAt: new Date().toISOString(),
-    }
-  }
-  return updatedEntries
+function updateManifestEntries(input: {
+  readonly currentEntries: ConsolidatedManifest['entries']
+  readonly candidateFeatureKey: string
+  readonly inputs: readonly ConsolidateBehaviorInput[]
+  readonly consolidations: readonly ConsolidatedBehavior[]
+  readonly phase2Version: string
+}): ConsolidatedManifest['entries'] {
+  const keywords = [...new Set(input.inputs.flatMap((item) => item.keywords))].toSorted()
+  const sourceDomains = [...new Set(input.inputs.map((item) => item.domain))].toSorted()
+  return input.consolidations.reduce(
+    (entries, consolidated) => ({
+      ...entries,
+      [consolidated.id]: {
+        consolidatedId: consolidated.id,
+        domain: consolidated.domain,
+        featureName: consolidated.featureName,
+        sourceTestKeys: consolidated.sourceTestKeys,
+        sourceBehaviorIds: consolidated.sourceBehaviorIds,
+        supportingInternalBehaviorIds: consolidated.supportingInternalRefs.map((item) => item.behaviorId),
+        isUserFacing: consolidated.isUserFacing,
+        candidateFeatureKey: input.candidateFeatureKey,
+        keywords,
+        sourceDomains,
+        phase2Fingerprint: buildPhase2ConsolidationFingerprint({
+          candidateFeatureKey: input.candidateFeatureKey,
+          sourceBehaviorIds: consolidated.sourceBehaviorIds,
+          behaviors: input.inputs.map((item) => item.behavior),
+          phaseVersion: input.phase2Version,
+        }),
+        lastConsolidatedAt: new Date().toISOString(),
+      },
+    }),
+    input.currentEntries,
+  )
 }
 
-async function consolidateBatch(
-  group: KeywordBatch,
-  idx: number,
-  total: number,
-  progress: Progress,
-  consolidatedManifest: ConsolidatedManifest,
-  phase2Version: string,
-): Promise<ConsolidatedManifest> {
-  const { batchKey, primaryKeyword, inputs } = group
-  if (isBatchCompleted(progress, batchKey)) {
-    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (already done)`)
-    return consolidatedManifest
-  }
-  const failedAttempts = getFailedBatchAttempts(progress, batchKey)
+async function consolidateCandidateFeature(input: {
+  readonly progress: Progress
+  readonly consolidatedManifest: ConsolidatedManifest
+  readonly phase2Version: string
+  readonly candidateFeatureKey: string
+  readonly inputs: readonly ConsolidateBehaviorInput[]
+  readonly deps: Phase2bDeps
+}): Promise<ConsolidatedManifest> {
+  const failedAttempts = getFailedBatchAttempts(input.progress, input.candidateFeatureKey)
   if (failedAttempts >= MAX_RETRIES) {
-    console.log(`[Phase 2] [${idx}/${total}] ${batchKey} — skipped (max retries exceeded)`)
-    return consolidatedManifest
+    return input.consolidatedManifest
   }
-  console.log(`[Phase 2] [${idx}/${total}] ${batchKey} (${inputs.length} behaviors)...`)
-  const result = await consolidateWithRetry(primaryKeyword, inputs, failedAttempts)
+
+  const result = await input.deps.consolidateWithRetry(input.candidateFeatureKey, input.inputs, failedAttempts)
   if (result === null) {
-    markBatchFailed(progress, batchKey, 'consolidation failed after retries', failedAttempts + 1)
-    await saveProgress(progress)
-    return consolidatedManifest
+    markBatchFailed(input.progress, input.candidateFeatureKey, 'consolidation failed after retries', failedAttempts + 1)
+    await saveProgress(input.progress)
+    return input.consolidatedManifest
   }
-  const fingerprint = buildPhase2ConsolidationFingerprint({
-    sourceTestKeys: inputs.map((i) => i.testKey),
-    behaviors: inputs.map((i) => i.behavior),
-    phaseVersion: phase2Version,
-  })
-  const sourceDomains = [...new Set(inputs.map((i) => i.domain))].toSorted()
-  const consolidations = buildConsolidations(result, primaryKeyword)
-  await writeConsolidatedFile(primaryKeyword, consolidations)
-  markBatchDone(progress, batchKey, consolidations)
-  const updatedEntries = applyConsolidationsToManifest(
-    consolidations,
-    inputs,
-    primaryKeyword,
-    sourceDomains,
-    fingerprint,
-    consolidatedManifest.entries,
-  )
-  const userFacingCount = consolidations.filter((b) => b.isUserFacing).length
-  console.log(
-    `[Phase 2] [${idx}/${total}] ${batchKey} — done (${consolidations.length} consolidated, ${userFacingCount} user-facing)`,
-  )
-  return { ...consolidatedManifest, entries: updatedEntries }
+
+  const consolidations = toConsolidations(result, input.inputs)
+  await input.deps.writeConsolidatedFile(input.candidateFeatureKey, consolidations)
+  markBatchDone(input.progress, input.candidateFeatureKey, consolidations)
+  await saveProgress(input.progress)
+
+  return {
+    ...input.consolidatedManifest,
+    entries: updateManifestEntries({
+      currentEntries: input.consolidatedManifest.entries,
+      candidateFeatureKey: input.candidateFeatureKey,
+      inputs: input.inputs,
+      consolidations,
+      phase2Version: input.phase2Version,
+    }),
+  }
 }
 
-export async function runPhase2(
+export async function runPhase2b(
   progress: Progress,
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
+  selectedCandidateFeatureKeys: ReadonlySet<string>,
+  deps: Phase2bDeps = { consolidateWithRetry: defaultConsolidateWithRetry, writeConsolidatedFile },
 ): Promise<ConsolidatedManifest> {
-  console.log('\n[Phase 2] Grouping extracted behaviors by primary keyword...')
-  const groups = groupByPrimaryKeyword(progress.phase1.extractedBehaviors)
-  progress.phase2.status = 'in-progress'
-  progress.phase2.stats.batchesTotal = groups.length
-
+  const groups = [
+    ...groupByCandidateFeature(progress.phase2a.classifiedBehaviors, selectedCandidateFeatureKeys).entries(),
+  ]
+  progress.phase2b.status = 'in-progress'
+  progress.phase2b.stats.candidateFeaturesTotal = groups.length
   resetPhase3(progress)
   await saveProgress(progress)
-
-  console.log(`[Phase 2] Consolidating ${groups.length} keyword batches...\n`)
 
   const limit = pLimit(1)
   let currentManifest = consolidatedManifest
   await Promise.all(
-    groups.map((group, i) =>
+    groups.map(([candidateFeatureKey, inputs]) =>
       limit(async () => {
-        currentManifest = await consolidateBatch(group, i + 1, groups.length, progress, currentManifest, phase2Version)
+        currentManifest = await consolidateCandidateFeature({
+          progress,
+          consolidatedManifest: currentManifest,
+          phase2Version,
+          candidateFeatureKey,
+          inputs,
+          deps,
+        })
       }),
     ),
   )
 
-  progress.phase2.status = 'done'
+  progress.phase2b.status = 'done'
   await saveProgress(progress)
-  console.log(
-    `\n[Phase 2 complete] ${progress.phase2.stats.batchesDone} batches consolidated, ${progress.phase2.stats.batchesFailed} failed`,
-  )
   return currentManifest
 }

@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+import type { ClassifiedBehavior } from './classified-store.js'
 import { PROGRESS_PATH } from './config.js'
 import { validateOrMigrateProgress } from './progress-migrate.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
@@ -15,7 +16,7 @@ export interface FailedEntry {
   readonly lastAttempt: string
 }
 
-interface Phase1Progress {
+export interface Phase1Progress {
   status: PhaseStatus
   completedTests: Record<string, Record<string, 'done'>>
   extractedBehaviors: Record<string, ExtractedBehavior>
@@ -24,12 +25,25 @@ interface Phase1Progress {
   stats: { filesTotal: number; filesDone: number; testsExtracted: number; testsFailed: number }
 }
 
-export interface Phase2Progress {
+export interface Phase2aProgress {
   status: PhaseStatus
-  completedBatches: Record<string, 'done'>
+  completedBehaviors: Record<string, 'done'>
+  classifiedBehaviors: Record<string, ClassifiedBehavior>
+  failedBehaviors: Record<string, FailedEntry>
+  stats: { behaviorsTotal: number; behaviorsDone: number; behaviorsFailed: number }
+}
+
+export interface Phase2bProgress {
+  status: PhaseStatus
+  completedCandidateFeatures: Record<string, 'done'>
   consolidations: Record<string, readonly ConsolidatedBehavior[]>
-  failedBatches: Record<string, FailedEntry>
-  stats: { batchesTotal: number; batchesDone: number; batchesFailed: number; behaviorsConsolidated: number }
+  failedCandidateFeatures: Record<string, FailedEntry>
+  stats: {
+    candidateFeaturesTotal: number
+    candidateFeaturesDone: number
+    candidateFeaturesFailed: number
+    behaviorsConsolidated: number
+  }
 }
 
 export interface Phase3Progress {
@@ -41,24 +55,40 @@ export interface Phase3Progress {
 }
 
 export interface Progress {
-  version: 2
+  version: 3
   startedAt: string
   phase1: Phase1Progress
-  phase2: Phase2Progress
+  phase2a: Phase2aProgress
+  phase2b: Phase2bProgress
   phase3: Phase3Progress
 }
 
-function emptyPhase2(): Phase2Progress {
+export function emptyPhase2a(): Phase2aProgress {
   return {
     status: 'not-started',
-    completedBatches: {},
-    consolidations: {},
-    failedBatches: {},
-    stats: { batchesTotal: 0, batchesDone: 0, batchesFailed: 0, behaviorsConsolidated: 0 },
+    completedBehaviors: {},
+    classifiedBehaviors: {},
+    failedBehaviors: {},
+    stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
   }
 }
 
-function emptyPhase3(): Phase3Progress {
+export function emptyPhase2b(): Phase2bProgress {
+  return {
+    status: 'not-started',
+    completedCandidateFeatures: {},
+    consolidations: {},
+    failedCandidateFeatures: {},
+    stats: {
+      candidateFeaturesTotal: 0,
+      candidateFeaturesDone: 0,
+      candidateFeaturesFailed: 0,
+      behaviorsConsolidated: 0,
+    },
+  }
+}
+
+export function emptyPhase3(): Phase3Progress {
   return {
     status: 'not-started',
     completedBehaviors: {},
@@ -70,7 +100,7 @@ function emptyPhase3(): Phase3Progress {
 
 export function createEmptyProgress(filesTotal: number): Progress {
   return {
-    version: 2,
+    version: 3,
     startedAt: new Date().toISOString(),
     phase1: {
       status: 'not-started',
@@ -80,7 +110,8 @@ export function createEmptyProgress(filesTotal: number): Progress {
       completedFiles: [],
       stats: { filesTotal, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
     },
-    phase2: emptyPhase2(),
+    phase2a: emptyPhase2a(),
+    phase2b: emptyPhase2b(),
     phase3: emptyPhase3(),
   }
 }
@@ -140,8 +171,71 @@ export function getFailedTestAttempts(progress: Progress, testKey: string): numb
   return progress.phase1.failedTests[testKey]?.attempts ?? 0
 }
 
+export function markClassificationDone(progress: Progress, behaviorId: string, classified: ClassifiedBehavior): void {
+  const hadFailedState = progress.phase2a.failedBehaviors[behaviorId] !== undefined
+  if (hadFailedState) {
+    const { [behaviorId]: _removed, ...remainingFailedBehaviors } = progress.phase2a.failedBehaviors
+    progress.phase2a.failedBehaviors = remainingFailedBehaviors
+    progress.phase2a.stats.behaviorsFailed = Math.max(0, progress.phase2a.stats.behaviorsFailed - 1)
+  }
+
+  if (progress.phase2a.completedBehaviors[behaviorId] === 'done') {
+    progress.phase2a.classifiedBehaviors[behaviorId] = classified
+    return
+  }
+  progress.phase2a.completedBehaviors[behaviorId] = 'done'
+  progress.phase2a.classifiedBehaviors[behaviorId] = classified
+  progress.phase2a.stats.behaviorsDone++
+}
+
+export function markClassificationFailed(progress: Progress, behaviorId: string, error: string): void {
+  const existing = progress.phase2a.failedBehaviors[behaviorId]
+  const attempts = existing === undefined ? 0 : existing.attempts
+  progress.phase2a.failedBehaviors[behaviorId] = {
+    error,
+    attempts: attempts + 1,
+    lastAttempt: new Date().toISOString(),
+  }
+  if (existing === undefined) {
+    progress.phase2a.stats.behaviorsFailed++
+  }
+}
+
+export function setClassificationFailedAttempts(
+  progress: Progress,
+  behaviorId: string,
+  error: string,
+  attempts: number,
+): void {
+  const existing = progress.phase2a.failedBehaviors[behaviorId]
+  progress.phase2a.failedBehaviors[behaviorId] = {
+    error,
+    attempts,
+    lastAttempt: new Date().toISOString(),
+  }
+  if (existing === undefined) {
+    progress.phase2a.stats.behaviorsFailed++
+  }
+}
+
+export function getFailedClassificationAttempts(progress: Progress, behaviorId: string): number {
+  return progress.phase2a.failedBehaviors[behaviorId]?.attempts ?? 0
+}
+
+export function markCandidateFeatureDone(
+  progress: Progress,
+  candidateFeatureKey: string,
+  consolidations: readonly ConsolidatedBehavior[],
+): void {
+  if (progress.phase2b.completedCandidateFeatures[candidateFeatureKey] === 'done') return
+  progress.phase2b.completedCandidateFeatures[candidateFeatureKey] = 'done'
+  progress.phase2b.consolidations[candidateFeatureKey] = consolidations
+  progress.phase2b.stats.candidateFeaturesDone++
+  progress.phase2b.stats.behaviorsConsolidated += consolidations.length
+}
+
 export function isBatchCompleted(progress: Progress, batchKey: string): boolean {
-  return progress.phase2.completedBatches[batchKey] === 'done'
+  return progress.phase2b.completedCandidateFeatures[batchKey] === 'done'
 }
 
 export function markBatchDone(
@@ -149,20 +243,16 @@ export function markBatchDone(
   batchKey: string,
   consolidations: readonly ConsolidatedBehavior[],
 ): void {
-  if (progress.phase2.completedBatches[batchKey] === 'done') return
-  progress.phase2.completedBatches[batchKey] = 'done'
-  progress.phase2.consolidations[batchKey] = consolidations
-  progress.phase2.stats.batchesDone++
-  progress.phase2.stats.behaviorsConsolidated += consolidations.length
+  markCandidateFeatureDone(progress, batchKey, consolidations)
 }
 
 export function markBatchFailed(progress: Progress, batchKey: string, error: string, attempts: number): void {
-  progress.phase2.failedBatches[batchKey] = { error, attempts, lastAttempt: new Date().toISOString() }
-  progress.phase2.stats.batchesFailed++
+  progress.phase2b.failedCandidateFeatures[batchKey] = { error, attempts, lastAttempt: new Date().toISOString() }
+  progress.phase2b.stats.candidateFeaturesFailed++
 }
 
 export function getFailedBatchAttempts(progress: Progress, batchKey: string): number {
-  return progress.phase2.failedBatches[batchKey]?.attempts ?? 0
+  return progress.phase2b.failedCandidateFeatures[batchKey]?.attempts ?? 0
 }
 
 export function isBehaviorCompleted(progress: Progress, key: string): boolean {
@@ -186,7 +276,13 @@ export function getFailedBehaviorAttempts(progress: Progress, key: string): numb
 }
 
 export function resetPhase2AndPhase3(progress: Progress): void {
-  progress.phase2 = emptyPhase2()
+  progress.phase2a = emptyPhase2a()
+  progress.phase2b = emptyPhase2b()
+  progress.phase3 = emptyPhase3()
+}
+
+export function resetPhase2bAndPhase3(progress: Progress): void {
+  progress.phase2b = emptyPhase2b()
   progress.phase3 = emptyPhase3()
 }
 

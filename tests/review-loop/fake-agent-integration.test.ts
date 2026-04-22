@@ -50,7 +50,7 @@ describe('review-loop fake integration', () => {
           ],
           promptReplies: [
             {
-              text: '{"verdict":"valid","fixability":"auto","reasoning":"The control flow is actually unsafe.","targetFiles":["src/message-queue/queue.ts"],"fixPlan":"Take the lock before the flush branch."}',
+              text: '{"verdict":"valid","fixability":"auto","reasoning":"The control flow is actually unsafe.","targetFiles":["src/message-queue/queue.ts"],"needsPlanning":false}',
             },
             { text: 'Applied fix.' },
           ],

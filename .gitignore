@@ -49,3 +49,5 @@ public/
 
 # Review loop state
 .review-loop/
+
+codeindex/.codeindex/

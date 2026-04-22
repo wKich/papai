@@ -4,8 +4,9 @@ import type { LedgerIssueRecord } from '../../scripts/review-loop/issue-ledger.j
 import type { ReviewerIssue, VerifierDecision } from '../../scripts/review-loop/issue-schema.js'
 import {
   buildFixPrompt,
-  buildRereviewPrompt,
+  buildPlanningPrompt,
   buildReviewPrompt,
+  buildRereviewPrompt,
   buildVerifyPrompt,
 } from '../../scripts/review-loop/prompt-templates.js'
 
@@ -27,7 +28,7 @@ const verifierDecision: VerifierDecision = {
   fixability: 'auto',
   reasoning: 'The policy is too permissive and can be tightened safely.',
   targetFiles: ['scripts/review-loop/permission-policy.ts'],
-  fixPlan: 'Add stricter path validation and shell-token checks.',
+  needsPlanning: false,
 }
 
 const ledgerRecord: LedgerIssueRecord = {
@@ -41,23 +42,51 @@ const ledgerRecord: LedgerIssueRecord = {
 }
 
 describe('prompt templates', () => {
-  test('buildReviewPrompt includes the plan path, schema, and ledger summary', () => {
+  test('buildReviewPrompt includes the plan path, expanded schema, and ledger summary', () => {
     const prompt = buildReviewPrompt('/repo/plan.md', [ledgerRecord])
 
     expect(prompt).toContain('Review the current implementation against the implementation plan at: /repo/plan.md.')
-    expect(prompt).toContain('"severity": "critical" | "high"')
+    expect(prompt).toContain('"severity": "critical" | "high" | "medium" | "low"')
+    expect(prompt).toContain('Include all severity levels: critical, high, medium, low.')
     expect(prompt).toContain('- issue-1 [verified] Missing validation')
   })
 
-  test('buildVerifyPrompt includes the verification schema and issue payload', () => {
+  test('buildVerifyPrompt includes the verification schema with needsPlanning and issue payload', () => {
     const prompt = buildVerifyPrompt('/repo/plan.md', reviewerIssue)
 
     expect(prompt).toContain('Verify this issue against the implementation plan at: /repo/plan.md.')
     expect(prompt).toContain('"verdict": "valid" | "invalid" | "already_fixed" | "needs_human"')
+    expect(prompt).toContain('"needsPlanning": boolean')
     expect(prompt).toContain('"title": "Missing validation"')
   })
 
-  test('buildFixPrompt includes the issue and verifier decision payloads', () => {
+  test('buildPlanningPrompt includes issue and decision', () => {
+    const prompt = buildPlanningPrompt(reviewerIssue, verifierDecision)
+
+    expect(prompt).toContain('Produce a step-by-step plan to fix')
+    expect(prompt).toContain('"title": "Missing validation"')
+    expect(prompt).toContain('"verdict": "valid"')
+  })
+
+  test('buildFixPrompt with plan includes the plan text and commit instructions', () => {
+    const prompt = buildFixPrompt(reviewerIssue, verifierDecision, 'Step 1: Update queue.ts')
+
+    expect(prompt).toContain('Fix Plan:')
+    expect(prompt).toContain('Step 1: Update queue.ts')
+    expect(prompt).toContain('Commit with message')
+    expect(prompt).toContain('fix(review-loop):')
+    expect(prompt).toContain('bun check:full')
+  })
+
+  test('buildFixPrompt without plan omits plan section but includes commit instructions', () => {
+    const prompt = buildFixPrompt(reviewerIssue, verifierDecision)
+
+    expect(prompt).not.toContain('Fix Plan:')
+    expect(prompt).toContain('fix(review-loop):')
+    expect(prompt).toContain('bun check:full')
+  })
+
+  test('buildFixPrompt includes issue and verifier decision payloads', () => {
     const prompt = buildFixPrompt(reviewerIssue, verifierDecision)
 
     expect(prompt).toContain('Fix exactly the verified issue below.')
@@ -65,11 +94,12 @@ describe('prompt templates', () => {
     expect(prompt).toContain('"verdict": "valid"')
   })
 
-  test('buildRereviewPrompt includes empty-ledger fallback text', () => {
+  test('buildRereviewPrompt includes expanded severity and empty-ledger fallback', () => {
     const prompt = buildRereviewPrompt('/repo/plan.md', [])
 
     expect(prompt).toContain('Re-review the current implementation against the implementation plan at: /repo/plan.md.')
     expect(prompt).toContain('Use the same schema as the original review prompt.')
     expect(prompt).toContain('No prior issues recorded.')
+    expect(prompt).toContain('critical/high/medium/low')
   })
 })
