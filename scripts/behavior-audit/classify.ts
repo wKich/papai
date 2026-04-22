@@ -16,6 +16,30 @@ import {
 } from './progress.js'
 import type { ExtractedBehavior } from './report-writer.js'
 
+export interface Phase2aDeps {
+  readonly classifyBehaviorWithRetry: typeof classifyBehaviorWithRetry
+  readonly readClassifiedFile: typeof readClassifiedFile
+  readonly writeClassifiedFile: typeof writeClassifiedFile
+  readonly saveManifest: typeof saveManifest
+  readonly saveProgress: typeof saveProgress
+  readonly getFailedClassificationAttempts: typeof getFailedClassificationAttempts
+  readonly markClassificationDone: typeof markClassificationDone
+  readonly setClassificationFailedAttempts: typeof setClassificationFailedAttempts
+  readonly maxRetries: number
+}
+
+const defaultPhase2aDeps: Phase2aDeps = {
+  classifyBehaviorWithRetry,
+  readClassifiedFile,
+  writeClassifiedFile,
+  saveManifest,
+  saveProgress,
+  getFailedClassificationAttempts,
+  markClassificationDone,
+  setClassificationFailedAttempts,
+  maxRetries: MAX_RETRIES,
+}
+
 interface Phase2aRunInput {
   readonly progress: Progress
   readonly selectedTestKeys: ReadonlySet<string>
@@ -32,7 +56,11 @@ function buildBehaviorId(testKey: string): string {
 }
 
 function buildPrompt(testKey: string, behavior: ExtractedBehavior): string {
-  const testFile = testKey.split('::')[0] ?? ''
+  const [firstSegment] = testKey.split('::')
+  let testFile = ''
+  if (firstSegment !== undefined) {
+    testFile = firstSegment
+  }
   return [
     `Test key: ${testKey}`,
     `Domain: ${getDomain(testFile)}`,
@@ -44,7 +72,12 @@ function buildPrompt(testKey: string, behavior: ExtractedBehavior): string {
 
 function selectBehaviors(progress: Progress, selectedTestKeys: ReadonlySet<string>): readonly SelectedBehaviorEntry[] {
   return Object.entries(progress.phase1.extractedBehaviors)
-    .filter(([testKey]) => selectedTestKeys.size === 0 || selectedTestKeys.has(testKey))
+    .filter(([testKey]) => {
+      if (selectedTestKeys.size === 0) {
+        return true
+      }
+      return selectedTestKeys.has(testKey)
+    })
     .map(([testKey, behavior]) => ({ testKey, behavior }))
 }
 
@@ -85,7 +118,12 @@ function toClassifiedBehavior(
   behavior: ExtractedBehavior,
   result: NonNullable<Awaited<ReturnType<typeof classifyBehaviorWithRetry>>>,
 ): ClassifiedBehavior {
-  const domain = getDomain(testKey.split('::')[0] ?? '')
+  const [firstSegment] = testKey.split('::')
+  let domainTestFile = ''
+  if (firstSegment !== undefined) {
+    domainTestFile = firstSegment
+  }
+  const domain = getDomain(domainTestFile)
 
   return {
     behaviorId: buildBehaviorId(testKey),
@@ -106,32 +144,33 @@ function toClassifiedBehavior(
 async function classifySelectedBehavior(
   progress: Progress,
   entry: SelectedBehaviorEntry,
+  deps: Phase2aDeps,
 ): Promise<ClassifiedBehavior | null> {
   const behaviorId = buildBehaviorId(entry.testKey)
-  const failedAttempts = getFailedClassificationAttempts(progress, behaviorId)
-  if (failedAttempts >= MAX_RETRIES) {
+  const failedAttempts = deps.getFailedClassificationAttempts(progress, behaviorId)
+  if (failedAttempts >= deps.maxRetries) {
     return null
   }
 
-  const result = await classifyBehaviorWithRetry(buildPrompt(entry.testKey, entry.behavior), failedAttempts)
+  const result = await deps.classifyBehaviorWithRetry(buildPrompt(entry.testKey, entry.behavior), failedAttempts)
   if (result === null) {
-    setClassificationFailedAttempts(progress, behaviorId, 'classification failed after retries', MAX_RETRIES)
+    deps.setClassificationFailedAttempts(progress, behaviorId, 'classification failed after retries', deps.maxRetries)
     return null
   }
 
   const classified = toClassifiedBehavior(entry.testKey, entry.behavior, result)
-  markClassificationDone(progress, behaviorId, classified)
+  deps.markClassificationDone(progress, behaviorId, classified)
   return classified
 }
 
-function addToDomainMap(byDomain: Map<string, ClassifiedBehavior[]>, classified: ClassifiedBehavior): void {
-  byDomain.set(classified.domain, [...(byDomain.get(classified.domain) ?? []), classified])
-}
-
-async function writeSingleClassification(classified: ClassifiedBehavior): Promise<void> {
-  const existing = (await readClassifiedFile(classified.domain)) ?? []
-  const untouched = existing.filter((item) => item.behaviorId !== classified.behaviorId)
-  await writeClassifiedFile(classified.domain, [...untouched, classified])
+async function writeSingleClassification(classified: ClassifiedBehavior, deps: Phase2aDeps): Promise<void> {
+  const existing = await deps.readClassifiedFile(classified.domain)
+  let existingItems: readonly ClassifiedBehavior[] = []
+  if (existing !== null) {
+    existingItems = existing
+  }
+  const untouched = existingItems.filter((item) => item.behaviorId !== classified.behaviorId)
+  await deps.writeClassifiedFile(classified.domain, [...untouched, classified])
 }
 
 function toManifestEntry(input: {
@@ -140,13 +179,18 @@ function toManifestEntry(input: {
   readonly behavior: ExtractedBehavior
   readonly phase2Version: string
 }): IncrementalManifest['tests'][string] {
-  const testFile = input.classified.testKey.split('::')[0] ?? ''
+  const [firstSegment] = input.classified.testKey.split('::')
+  let testFile = ''
+  if (firstSegment !== undefined) {
+    testFile = firstSegment
+  }
   const completedAt = new Date().toISOString()
+  const previousEntry = input.previousEntry
   return {
-    testFile: input.previousEntry?.testFile ?? testFile,
-    testName: input.previousEntry?.testName ?? input.behavior.fullPath,
-    dependencyPaths: input.previousEntry?.dependencyPaths ?? [testFile],
-    phase1Fingerprint: input.previousEntry?.phase1Fingerprint ?? null,
+    testFile: previousEntry === undefined ? testFile : previousEntry.testFile,
+    testName: previousEntry === undefined ? input.behavior.fullPath : previousEntry.testName,
+    dependencyPaths: previousEntry === undefined ? [testFile] : previousEntry.dependencyPaths,
+    phase1Fingerprint: previousEntry === undefined ? null : previousEntry.phase1Fingerprint,
     phase2aFingerprint: buildPhase2aFingerprint({
       testKey: input.classified.testKey,
       behavior: input.behavior.behavior,
@@ -154,14 +198,14 @@ function toManifestEntry(input: {
       keywords: input.behavior.keywords,
       phaseVersion: input.phase2Version,
     }),
-    phase2Fingerprint: input.previousEntry?.phase2Fingerprint ?? null,
+    phase2Fingerprint: previousEntry === undefined ? null : previousEntry.phase2Fingerprint,
     behaviorId: input.classified.behaviorId,
     candidateFeatureKey: input.classified.candidateFeatureKey,
-    extractedBehaviorPath: input.previousEntry?.extractedBehaviorPath ?? null,
-    domain: input.previousEntry?.domain ?? input.classified.domain,
-    lastPhase1CompletedAt: input.previousEntry?.lastPhase1CompletedAt ?? null,
+    extractedBehaviorPath: previousEntry === undefined ? null : previousEntry.extractedBehaviorPath,
+    domain: previousEntry === undefined ? input.classified.domain : previousEntry.domain,
+    lastPhase1CompletedAt: previousEntry === undefined ? null : previousEntry.lastPhase1CompletedAt,
     lastPhase2aCompletedAt: completedAt,
-    lastPhase2CompletedAt: completedAt,
+    lastPhase2CompletedAt: previousEntry === undefined ? null : previousEntry.lastPhase2CompletedAt,
   }
 }
 
@@ -191,60 +235,63 @@ async function persistSuccessfulClassification(input: {
   readonly manifest: IncrementalManifest
   readonly entry: SelectedBehaviorEntry
   readonly classified: ClassifiedBehavior
+  readonly deps: Phase2aDeps
 }): Promise<IncrementalManifest> {
-  await writeSingleClassification(input.classified)
+  await writeSingleClassification(input.classified, input.deps)
   const updatedManifest = updateManifestForClassification(input.manifest, input.classified, input.entry.behavior)
-  await saveManifest(updatedManifest)
-  await saveProgress(input.progress)
+  await input.deps.saveManifest(updatedManifest)
+  await input.deps.saveProgress(input.progress)
   return updatedManifest
 }
 
-export async function runPhase2a({
-  progress,
-  selectedTestKeys,
-  manifest,
-}: Phase2aRunInput): Promise<ReadonlySet<string>> {
+export async function runPhase2a(input: Phase2aRunInput): Promise<ReadonlySet<string>>
+export async function runPhase2a(input: Phase2aRunInput, deps: Partial<Phase2aDeps>): Promise<ReadonlySet<string>>
+export async function runPhase2a(
+  input: Phase2aRunInput,
+  ...args: readonly [] | readonly [Partial<Phase2aDeps>]
+): Promise<ReadonlySet<string>> {
+  const { progress, selectedTestKeys, manifest } = input
+  const resolvedDeps: Phase2aDeps = args.length === 0 ? defaultPhase2aDeps : { ...defaultPhase2aDeps, ...args[0] }
   progress.phase2a.status = 'in-progress'
   const dirtyCandidateFeatureKeys = new Set<string>()
-  const byDomain = new Map<string, ClassifiedBehavior[]>()
   const limit = pLimit(1)
   let currentManifest = manifest
 
   const selectedEntries = selectBehaviors(progress, selectedTestKeys)
   progress.phase2a.stats.behaviorsTotal = selectedEntries.length
-  await saveProgress(progress)
+  await resolvedDeps.saveProgress(progress)
 
   await Promise.all(
     selectedEntries.map((entry) =>
       limit(async () => {
         if (shouldReuseCompletedClassification(progress, currentManifest, entry)) {
+          const existingClassification = progress.phase2a.classifiedBehaviors[entry.testKey]
           addDirtyCandidateFeatureKey(
             dirtyCandidateFeatureKeys,
-            progress.phase2a.classifiedBehaviors[entry.testKey]?.candidateFeatureKey ?? null,
+            existingClassification === undefined ? null : existingClassification.candidateFeatureKey,
           )
           return
         }
 
-        const classified = await classifySelectedBehavior(progress, entry)
+        const classified = await classifySelectedBehavior(progress, entry, resolvedDeps)
         if (classified === null) {
-          await saveProgress(progress)
+          await resolvedDeps.saveProgress(progress)
           return
         }
 
         addDirtyCandidateFeatureKey(dirtyCandidateFeatureKeys, classified.candidateFeatureKey)
-
-        addToDomainMap(byDomain, classified)
         currentManifest = await persistSuccessfulClassification({
           progress,
           manifest: currentManifest,
           entry,
           classified,
+          deps: resolvedDeps,
         })
       }),
     ),
   )
 
   progress.phase2a.status = 'done'
-  await saveProgress(progress)
+  await resolvedDeps.saveProgress(progress)
   return dirtyCandidateFeatureKeys
 }

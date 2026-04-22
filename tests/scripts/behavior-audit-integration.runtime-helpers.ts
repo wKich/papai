@@ -2,7 +2,92 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import type { BehaviorAuditTestConfig } from './behavior-audit-integration.helpers.js'
+
 const tempDirs: string[] = []
+const behaviorAuditEnvKeys = [
+  'BEHAVIOR_AUDIT_MODEL',
+  'BEHAVIOR_AUDIT_BASE_URL',
+  'BEHAVIOR_AUDIT_PROJECT_ROOT',
+  'BEHAVIOR_AUDIT_REPORTS_DIR',
+  'BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR',
+  'BEHAVIOR_AUDIT_BEHAVIORS_DIR',
+  'BEHAVIOR_AUDIT_CLASSIFIED_DIR',
+  'BEHAVIOR_AUDIT_CONSOLIDATED_DIR',
+  'BEHAVIOR_AUDIT_STORIES_DIR',
+  'BEHAVIOR_AUDIT_PROGRESS_PATH',
+  'BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH',
+  'BEHAVIOR_AUDIT_CONSOLIDATED_MANIFEST_PATH',
+  'BEHAVIOR_AUDIT_KEYWORD_VOCABULARY_PATH',
+  'BEHAVIOR_AUDIT_PHASE1_TIMEOUT_MS',
+  'BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS',
+  'BEHAVIOR_AUDIT_PHASE3_TIMEOUT_MS',
+  'BEHAVIOR_AUDIT_MAX_RETRIES',
+  'BEHAVIOR_AUDIT_MAX_STEPS',
+  'BEHAVIOR_AUDIT_EXCLUDED_PREFIXES',
+] as const
+const originalBehaviorAuditEnv = new Map(behaviorAuditEnvKeys.map((key) => [key, process.env[key]]))
+
+function clearBehaviorAuditEnvKey(key: (typeof behaviorAuditEnvKeys)[number]): void {
+  switch (key) {
+    case 'BEHAVIOR_AUDIT_MODEL':
+      delete process.env['BEHAVIOR_AUDIT_MODEL']
+      return
+    case 'BEHAVIOR_AUDIT_BASE_URL':
+      delete process.env['BEHAVIOR_AUDIT_BASE_URL']
+      return
+    case 'BEHAVIOR_AUDIT_PROJECT_ROOT':
+      delete process.env['BEHAVIOR_AUDIT_PROJECT_ROOT']
+      return
+    case 'BEHAVIOR_AUDIT_REPORTS_DIR':
+      delete process.env['BEHAVIOR_AUDIT_REPORTS_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR':
+      delete process.env['BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_BEHAVIORS_DIR':
+      delete process.env['BEHAVIOR_AUDIT_BEHAVIORS_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_CLASSIFIED_DIR':
+      delete process.env['BEHAVIOR_AUDIT_CLASSIFIED_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATED_DIR':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATED_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_STORIES_DIR':
+      delete process.env['BEHAVIOR_AUDIT_STORIES_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_PROGRESS_PATH':
+      delete process.env['BEHAVIOR_AUDIT_PROGRESS_PATH']
+      return
+    case 'BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH':
+      delete process.env['BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATED_MANIFEST_PATH':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATED_MANIFEST_PATH']
+      return
+    case 'BEHAVIOR_AUDIT_KEYWORD_VOCABULARY_PATH':
+      delete process.env['BEHAVIOR_AUDIT_KEYWORD_VOCABULARY_PATH']
+      return
+    case 'BEHAVIOR_AUDIT_PHASE1_TIMEOUT_MS':
+      delete process.env['BEHAVIOR_AUDIT_PHASE1_TIMEOUT_MS']
+      return
+    case 'BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS':
+      delete process.env['BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS']
+      return
+    case 'BEHAVIOR_AUDIT_PHASE3_TIMEOUT_MS':
+      delete process.env['BEHAVIOR_AUDIT_PHASE3_TIMEOUT_MS']
+      return
+    case 'BEHAVIOR_AUDIT_MAX_RETRIES':
+      delete process.env['BEHAVIOR_AUDIT_MAX_RETRIES']
+      return
+    case 'BEHAVIOR_AUDIT_MAX_STEPS':
+      delete process.env['BEHAVIOR_AUDIT_MAX_STEPS']
+      return
+    case 'BEHAVIOR_AUDIT_EXCLUDED_PREFIXES':
+      delete process.env['BEHAVIOR_AUDIT_EXCLUDED_PREFIXES']
+  }
+}
 
 export const originalProcessExit = process.exit.bind(process)
 export const originalOpenAiApiKey = process.env['OPENAI_API_KEY']
@@ -76,6 +161,39 @@ export function restoreOpenAiApiKey(): void {
     return
   }
   process.env['OPENAI_API_KEY'] = originalOpenAiApiKey
+}
+
+export function applyBehaviorAuditEnv(config: BehaviorAuditTestConfig): void {
+  process.env['BEHAVIOR_AUDIT_MODEL'] = config.MODEL
+  process.env['BEHAVIOR_AUDIT_BASE_URL'] = config.BASE_URL
+  process.env['BEHAVIOR_AUDIT_PROJECT_ROOT'] = config.PROJECT_ROOT
+  process.env['BEHAVIOR_AUDIT_REPORTS_DIR'] = config.REPORTS_DIR
+  process.env['BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR'] = config.AUDIT_BEHAVIOR_DIR
+  process.env['BEHAVIOR_AUDIT_BEHAVIORS_DIR'] = config.BEHAVIORS_DIR
+  process.env['BEHAVIOR_AUDIT_CLASSIFIED_DIR'] = config.CLASSIFIED_DIR
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATED_DIR'] = config.CONSOLIDATED_DIR
+  process.env['BEHAVIOR_AUDIT_STORIES_DIR'] = config.STORIES_DIR
+  process.env['BEHAVIOR_AUDIT_PROGRESS_PATH'] = config.PROGRESS_PATH
+  process.env['BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH'] = config.INCREMENTAL_MANIFEST_PATH
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATED_MANIFEST_PATH'] = config.CONSOLIDATED_MANIFEST_PATH
+  process.env['BEHAVIOR_AUDIT_KEYWORD_VOCABULARY_PATH'] = config.KEYWORD_VOCABULARY_PATH
+  process.env['BEHAVIOR_AUDIT_PHASE1_TIMEOUT_MS'] = String(config.PHASE1_TIMEOUT_MS)
+  process.env['BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS'] = String(config.PHASE2_TIMEOUT_MS)
+  process.env['BEHAVIOR_AUDIT_PHASE3_TIMEOUT_MS'] = String(config.PHASE3_TIMEOUT_MS)
+  process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = String(config.MAX_RETRIES)
+  process.env['BEHAVIOR_AUDIT_MAX_STEPS'] = String(config.MAX_STEPS)
+  process.env['BEHAVIOR_AUDIT_EXCLUDED_PREFIXES'] = config.EXCLUDED_PREFIXES.join('\n')
+}
+
+export function restoreBehaviorAuditEnv(): void {
+  for (const key of behaviorAuditEnvKeys) {
+    const originalValue = originalBehaviorAuditEnv.get(key)
+    if (originalValue === undefined) {
+      clearBehaviorAuditEnvKey(key)
+      continue
+    }
+    process.env[key] = originalValue
+  }
 }
 
 export function cleanupTempDirs(): void {

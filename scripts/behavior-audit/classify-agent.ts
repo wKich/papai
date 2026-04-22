@@ -21,6 +21,30 @@ const ClassificationResultSchema = z.object({
 
 export type ClassificationResult = z.infer<typeof ClassificationResultSchema>
 
+type ClassifyConfig = {
+  readonly BASE_URL: string
+  readonly MODEL: string
+  readonly PHASE2_TIMEOUT_MS: number
+  readonly MAX_RETRIES: number
+  readonly RETRY_BACKOFF_MS: readonly [number, ...number[]]
+  readonly MAX_STEPS: number
+}
+
+type ClassifyAgentInput = Parameters<typeof generateText>[0]
+type ClassifyAgentModel = ClassifyAgentInput['model']
+type ClassifyAgentOutput = NonNullable<ClassifyAgentInput['output']>
+type ClassifyAgentStopWhen = NonNullable<ClassifyAgentInput['stopWhen']>
+
+export interface ClassifyAgentDeps {
+  readonly config: ClassifyConfig
+  readonly generateText: (input: ClassifyAgentInput) => Promise<{ readonly output: ClassificationResult }>
+  readonly outputObject: (input: { readonly schema: typeof ClassificationResultSchema }) => ClassifyAgentOutput
+  readonly stepCountIs: (stepCount: number) => ClassifyAgentStopWhen
+  readonly buildModel: (baseUrl: string, model: string, apiKey: string) => ClassifyAgentModel
+  readonly sleep: (ms: number) => Promise<void>
+  readonly createAbortSignal: (timeout: number) => AbortSignal
+}
+
 function getEnvOrFallback(name: string, fallback: string): string {
   const value = process.env[name]
   if (value === undefined) {
@@ -28,15 +52,6 @@ function getEnvOrFallback(name: string, fallback: string): string {
   }
   return value
 }
-
-const apiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
-const provider = createOpenAICompatible({
-  name: 'behavior-audit-classify',
-  apiKey,
-  baseURL: BASE_URL,
-  supportsStructuredOutputs: true,
-})
-const model = provider(MODEL)
 
 const SYSTEM_PROMPT = `You are classifying one extracted behavior from a test suite into a stable feature-assignment record.
 
@@ -56,16 +71,45 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
-async function classifySingle(prompt: string, attempt: number): Promise<ClassificationResult | null> {
-  const timeout = attempt > 0 ? PHASE2_TIMEOUT_MS * 2 : PHASE2_TIMEOUT_MS
+const defaultApiKey = getEnvOrFallback('OPENAI_API_KEY', 'no-key')
+const defaultModel = createOpenAICompatible({
+  name: 'behavior-audit-classify',
+  apiKey: defaultApiKey,
+  baseURL: BASE_URL,
+  supportsStructuredOutputs: true,
+})(MODEL)
+
+const defaultClassifyAgentDeps: ClassifyAgentDeps = {
+  config: {
+    BASE_URL,
+    MODEL,
+    PHASE2_TIMEOUT_MS,
+    MAX_RETRIES,
+    RETRY_BACKOFF_MS,
+    MAX_STEPS,
+  },
+  generateText: (input) => generateText(input),
+  outputObject: ({ schema }) => Output.object({ schema }),
+  stepCountIs: (stepCount) => stepCountIs(stepCount),
+  buildModel: () => defaultModel,
+  sleep,
+  createAbortSignal: (timeout) => AbortSignal.timeout(timeout),
+}
+
+async function classifySingle(
+  prompt: string,
+  attempt: number,
+  deps: ClassifyAgentDeps,
+): Promise<ClassificationResult | null> {
+  const timeout = attempt > 0 ? deps.config.PHASE2_TIMEOUT_MS * 2 : deps.config.PHASE2_TIMEOUT_MS
   try {
-    const result = await generateText({
-      model,
+    const result = await deps.generateText({
+      model: deps.buildModel(deps.config.BASE_URL, deps.config.MODEL, getEnvOrFallback('OPENAI_API_KEY', 'no-key')),
       system: SYSTEM_PROMPT,
       prompt,
-      output: Output.object({ schema: ClassificationResultSchema }),
-      stopWhen: stepCountIs(MAX_STEPS + 1),
-      abortSignal: AbortSignal.timeout(timeout),
+      output: deps.outputObject({ schema: ClassificationResultSchema }),
+      stopWhen: deps.stepCountIs(deps.config.MAX_STEPS + 1),
+      abortSignal: deps.createAbortSignal(timeout),
     })
     return result.output
   } catch {
@@ -73,38 +117,59 @@ async function classifySingle(prompt: string, attempt: number): Promise<Classifi
   }
 }
 
-function getRetryBackoff(attempt: number): number {
-  return RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
+function getRetryBackoff(attempt: number, deps: ClassifyAgentDeps): number {
+  const [firstBackoff] = deps.config.RETRY_BACKOFF_MS
+  const backoffIndex = Math.min(attempt - 1, deps.config.RETRY_BACKOFF_MS.length - 1)
+  const backoff = deps.config.RETRY_BACKOFF_MS[backoffIndex]
+  if (backoff === undefined) {
+    return firstBackoff
+  }
+  return backoff
 }
 
 async function classifyAttempt(
   prompt: string,
   attempt: number,
   attemptOffset: number,
+  deps: ClassifyAgentDeps,
 ): Promise<ClassificationResult | null> {
   if (attempt > attemptOffset) {
-    await sleep(getRetryBackoff(attempt))
+    await deps.sleep(getRetryBackoff(attempt, deps))
   }
-  return classifySingle(prompt, attempt)
+  return classifySingle(prompt, attempt, deps)
 }
 
 function retryClassification(
   prompt: string,
   attempt: number,
   attemptOffset: number,
+  deps: ClassifyAgentDeps,
 ): Promise<ClassificationResult | null> {
-  if (attempt >= MAX_RETRIES) {
+  if (attempt >= deps.config.MAX_RETRIES) {
     return Promise.resolve(null)
   }
 
-  return classifyAttempt(prompt, attempt, attemptOffset).then((result) => {
+  return classifyAttempt(prompt, attempt, attemptOffset, deps).then((result) => {
     if (result !== null) {
       return result
     }
-    return retryClassification(prompt, attempt + 1, attemptOffset)
+    return retryClassification(prompt, attempt + 1, attemptOffset, deps)
   })
 }
 
-export function classifyBehaviorWithRetry(prompt: string, attemptOffset: number): Promise<ClassificationResult | null> {
-  return retryClassification(prompt, attemptOffset, attemptOffset)
+export function classifyBehaviorWithRetry(prompt: string, attemptOffset: number): Promise<ClassificationResult | null>
+export function classifyBehaviorWithRetry(
+  prompt: string,
+  attemptOffset: number,
+  deps: ClassifyAgentDeps,
+): Promise<ClassificationResult | null>
+export function classifyBehaviorWithRetry(
+  ...args: readonly [string, number] | readonly [string, number, ClassifyAgentDeps]
+): Promise<ClassificationResult | null> {
+  const [prompt, attemptOffset] = args
+  if (args.length === 2) {
+    return retryClassification(prompt, attemptOffset, attemptOffset, defaultClassifyAgentDeps)
+  }
+  const [, , deps] = args
+  return retryClassification(prompt, attemptOffset, attemptOffset, deps)
 }

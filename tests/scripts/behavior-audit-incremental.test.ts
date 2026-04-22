@@ -202,6 +202,8 @@ describe('behavior-audit incremental manifest', () => {
     mkdirSync(testsDir, { recursive: true })
     writeFileSync(path.join(testsDir, 'sample.test.ts'), "test('sample', () => {})\n")
 
+    // This suite intentionally keeps narrow module mocks because it is verifying
+    // entrypoint startup behavior that happens during delayed module import.
     void mock.module('../../scripts/behavior-audit/config.js', () => ({
       MODEL: 'qwen3-30b-a3b',
       BASE_URL: 'http://localhost:1234/v1',
@@ -236,12 +238,6 @@ describe('behavior-audit incremental manifest', () => {
         phase1Calls += 1
         phase1ManifestSnapshot = await Bun.file(manifestPath).text()
       },
-    }))
-    void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
-      runPhase3: async (): Promise<void> => {},
-    }))
-    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2b: (): Promise<IncrementalModule.ConsolidatedManifest> => Promise.resolve({ version: 1, entries: {} }),
     }))
   })
 

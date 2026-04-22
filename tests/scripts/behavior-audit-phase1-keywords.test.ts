@@ -5,6 +5,7 @@ import path from 'node:path'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockReportsConfig } from './behavior-audit-integration.helpers.js'
 import {
+  restoreBehaviorAuditEnv,
   cleanupTempDirs,
   makeTempDir,
   originalOpenAiApiKey,
@@ -65,6 +66,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   restoreOpenAiApiKey()
   cleanupTempDirs()
 })

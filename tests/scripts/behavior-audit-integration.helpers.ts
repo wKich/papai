@@ -1,9 +1,10 @@
-import { mock } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { ConsolidatedManifest, IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
+import { applyBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 
 type ManifestTestEntry = IncrementalManifest['tests'][string]
 type ConsolidatedManifestEntry = ConsolidatedManifest['entries'][string]
@@ -148,11 +149,13 @@ export function createAuditBehaviorConfig(
 }
 
 export function mockReportsConfig(root: string, overrides: Partial<BehaviorAuditTestConfig> | null): void {
-  void mock.module('../../scripts/behavior-audit/config.js', () => createReportsConfig(root, overrides))
+  applyBehaviorAuditEnv(createReportsConfig(root, overrides))
+  reloadBehaviorAuditConfig()
 }
 
 export function mockAuditBehaviorConfig(root: string, overrides: Partial<BehaviorAuditTestConfig> | null): void {
-  void mock.module('../../scripts/behavior-audit/config.js', () => createAuditBehaviorConfig(root, overrides))
+  applyBehaviorAuditEnv(createAuditBehaviorConfig(root, overrides))
+  reloadBehaviorAuditConfig()
 }
 
 export function createEmptyProgressFixture(filesTotal: number): Progress {

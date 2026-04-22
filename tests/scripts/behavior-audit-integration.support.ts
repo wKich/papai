@@ -367,11 +367,14 @@ function isConsolidateModule(value: unknown): value is ConsolidateModuleShape {
 }
 
 export function isClassifyModule(value: unknown): value is {
-  readonly runPhase2a: (input: {
-    readonly progress: Progress
-    readonly selectedTestKeys: ReadonlySet<string>
-    readonly manifest: IncrementalManifest
-  }) => Promise<ReadonlySet<string>>
+  readonly runPhase2a: (
+    input: {
+      readonly progress: Progress
+      readonly selectedTestKeys: ReadonlySet<string>
+      readonly manifest: IncrementalManifest
+    },
+    deps?: unknown,
+  ) => Promise<ReadonlySet<string>>
 } {
   return isObject(value) && hasFunctionProperty(value, 'runPhase2a')
 }

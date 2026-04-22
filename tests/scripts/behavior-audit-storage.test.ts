@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { mockAuditBehaviorConfig, mockReportsConfig } from './behavior-audit-integration.helpers.js'
 import {
+  restoreBehaviorAuditEnv,
   cleanupTempDirs,
   makeTempDir,
   originalOpenAiApiKey,
@@ -28,6 +29,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   restoreOpenAiApiKey()
   cleanupTempDirs()
 })

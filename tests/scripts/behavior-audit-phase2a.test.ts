@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import path from 'node:path'
 
+import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import {
   createAuditBehaviorPaths,
@@ -9,9 +10,8 @@ import {
   createManifestTestEntry,
   mockAuditBehaviorConfig,
 } from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir } from './behavior-audit-integration.runtime-helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import {
-  type ClassifyAgentModuleShape,
   getManifestEntry,
   importWithGuard,
   isClassifyModule,
@@ -22,6 +22,7 @@ import {
 } from './behavior-audit-integration.support.js'
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   cleanupTempDirs()
 })
 
@@ -31,7 +32,7 @@ describe('behavior-audit phase 2a classification', () => {
   let progressPath: string
   let manifestPath: string
   let classifyBehaviorWithRetryCalls: number
-  let classifyBehaviorWithRetryImpl: ClassifyAgentModuleShape['classifyBehaviorWithRetry']
+  let classifyBehaviorWithRetryImpl: Phase2aDeps['classifyBehaviorWithRetry']
 
   beforeEach(() => {
     root = makeTempDir()
@@ -55,16 +56,16 @@ describe('behavior-audit phase 2a classification', () => {
       INCREMENTAL_MANIFEST_PATH: manifestPath,
       EXCLUDED_PREFIXES: [] as const,
     })
-
-    void mock.module('../../scripts/behavior-audit/classify-agent.js', () => ({
-      classifyBehaviorWithRetry: (
-        ...args: Parameters<ClassifyAgentModuleShape['classifyBehaviorWithRetry']>
-      ): Promise<MockClassificationResult> => {
-        classifyBehaviorWithRetryCalls += 1
-        return classifyBehaviorWithRetryImpl(...args)
-      },
-    }))
   })
+
+  function createPhase2aDeps(): Pick<Phase2aDeps, 'classifyBehaviorWithRetry'> {
+    return {
+      classifyBehaviorWithRetry: (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
+        classifyBehaviorWithRetryCalls += 1
+        return classifyBehaviorWithRetryImpl(prompt, attemptOffset)
+      },
+    }
+  }
 
   test('runPhase2a classifies selected extracted behaviors and returns dirty candidate feature keys', async () => {
     const classify = await importWithGuard(
@@ -101,11 +102,14 @@ describe('behavior-audit phase 2a classification', () => {
       keywords: ['task-create'],
     })
 
-    const dirty = await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-      manifest,
-    })
+    const dirty = await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect([...dirty]).toEqual(['task-creation'])
     const classifiedBehavior = progress.phase2a.classifiedBehaviors['tests/tools/sample.test.ts::suite > case']
@@ -139,7 +143,8 @@ describe('behavior-audit phase 2a classification', () => {
     const savedEntry = getManifestEntry(savedManifest, 'tests/tools/sample.test.ts::suite > case')
     expect(savedEntry.phase2aFingerprint).toBeTruthy()
     expect(savedEntry.phase2Fingerprint).toBe('stale-phase2-fp')
-    expect(savedEntry.lastPhase2CompletedAt).toBeTruthy()
+    expect(savedEntry.lastPhase2aCompletedAt).toBeTruthy()
+    expect(savedEntry.lastPhase2CompletedAt).toBeNull()
 
     const progressText = await Bun.file(progressPath).text()
     expect(progressText).toContain('task-creation')
@@ -205,11 +210,14 @@ describe('behavior-audit phase 2a classification', () => {
     progress.phase2a.completedBehaviors[testKey] = 'done'
     progress.phase2a.classifiedBehaviors[testKey] = existingClassified
 
-    const dirty = await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    const dirty = await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect(classifyBehaviorWithRetryCalls).toBe(0)
     expect([...dirty]).toEqual(['task-creation'])
@@ -281,15 +289,22 @@ describe('behavior-audit phase 2a classification', () => {
         classificationNotes: 'Refreshed classification.',
       })
 
-    const dirty = await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    const dirty = await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     expect([...dirty]).toEqual(['task-creation'])
-    expect(progress.phase2a.classifiedBehaviors[testKey]?.visibility).toBe('user-facing')
+    const refreshedBehavior = progress.phase2a.classifiedBehaviors[testKey]
+    if (refreshedBehavior === undefined) {
+      throw new Error('Expected refreshed classified behavior')
+    }
+    expect(refreshedBehavior.visibility).toBe('user-facing')
   })
 
   test('runPhase2a passes persisted retry attempt offset through to the classifier on resumed failures', async () => {
@@ -346,11 +361,14 @@ describe('behavior-audit phase 2a classification', () => {
       lastAttempt: '2026-04-21T12:04:00.000Z',
     }
 
-    await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     expect(classifierArgs).toHaveLength(1)
@@ -413,11 +431,14 @@ describe('behavior-audit phase 2a classification', () => {
     }
     progress.phase2a.stats.behaviorsFailed = 1
 
-    const dirty = await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    const dirty = await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect([...dirty]).toEqual(['task-recovery'])
     expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
@@ -467,11 +488,14 @@ describe('behavior-audit phase 2a classification', () => {
       keywords: ['classification-retries'],
     }
 
-    await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     const firstFailure = progress.phase2a.failedBehaviors[testKey]
@@ -480,11 +504,14 @@ describe('behavior-audit phase 2a classification', () => {
     }
     expect(firstFailure.attempts).toBe(3)
 
-    await classify.runPhase2a({
-      progress,
-      selectedTestKeys: new Set([testKey]),
-      manifest,
-    })
+    await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      createPhase2aDeps(),
+    )
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     const repeatedFailure = progress.phase2a.failedBehaviors[testKey]
@@ -492,5 +519,66 @@ describe('behavior-audit phase 2a classification', () => {
       throw new Error('Expected repeated failed behavior entry')
     }
     expect(repeatedFailure.attempts).toBe(3)
+  })
+
+  test('runPhase2a honors an injected total retry budget for resumed failures', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > custom retry budget'
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > custom retry budget',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2Fingerprint: null,
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2CompletedAt: null,
+        }),
+      },
+    }
+    progress.phase1.extractedBehaviors[testKey] = {
+      testName: 'custom retry budget',
+      fullPath: 'suite > custom retry budget',
+      behavior: 'When classification keeps failing, the injected retry budget caps resumed runs.',
+      context: 'Exercises resume behavior after a custom retry budget is exhausted.',
+      keywords: ['classification-retries'],
+    }
+    progress.phase2a.failedBehaviors[testKey] = {
+      error: 'classification failed after retries',
+      attempts: 2,
+      lastAttempt: '2026-04-21T12:04:00.000Z',
+    }
+
+    await classify.runPhase2a(
+      {
+        progress,
+        selectedTestKeys: new Set([testKey]),
+        manifest,
+      },
+      {
+        ...createPhase2aDeps(),
+        maxRetries: 2,
+      } as Partial<Phase2aDeps>,
+    )
+
+    expect(classifyBehaviorWithRetryCalls).toBe(0)
+    const repeatedFailure = progress.phase2a.failedBehaviors[testKey]
+    if (repeatedFailure === undefined) {
+      throw new Error('Expected repeated failed behavior entry')
+    }
+    expect(repeatedFailure.attempts).toBe(2)
   })
 })

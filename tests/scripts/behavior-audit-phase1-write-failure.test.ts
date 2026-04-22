@@ -4,10 +4,11 @@ import path from 'node:path'
 
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockReportsConfig } from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir } from './behavior-audit-integration.runtime-helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { isObject, loadExtractModule, loadIncrementalModule } from './behavior-audit-integration.support.js'
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   cleanupTempDirs()
 })
 

@@ -11,7 +11,7 @@ import {
   mockReportsConfig,
   writeWorkspaceFile,
 } from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir } from './behavior-audit-integration.runtime-helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import {
   createEmptyManifest,
   getManifestEntry,
@@ -24,6 +24,7 @@ function createEmptyProgress(filesTotal: number): Progress {
 }
 
 afterEach(() => {
+  restoreBehaviorAuditEnv()
   cleanupTempDirs()
 })
 
