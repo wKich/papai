@@ -10,19 +10,19 @@ This folder is a research report, not a patch. Nothing here changes production b
 
 The files are numbered so they can be read top-to-bottom, but each is self-contained.
 
-| # | File | Focus | Primary artifact |
-| - | ---- | ----- | ---------------- |
-| 00 | [this file](./00-overview.md) | Executive summary, TOC, methodology | — |
-| 01 | [`01-current-state-audit.md`](./01-current-state-audit.md) | Verbatim snapshot of today's prompt, tool descriptions, error envelopes, memory block | raw material |
-| 02 | [`02-system-prompt-flaws.md`](./02-system-prompt-flaws.md) | Issues with the current prompt and a proposed rewrite structured with XML sections | prompt rewrite |
-| 03 | [`03-tool-design-schemas.md`](./03-tool-design-schemas.md) | Tool naming, descriptions, input schemas, `.describe()` conventions, consolidation vs granularity | schema checklist |
-| 04 | [`04-tool-output-steering.md`](./04-tool-output-steering.md) | Output envelopes, `next_actions` / `hint` fields, truncation-with-steering, response_format parameter | output envelope spec |
-| 05 | [`05-error-handling-recovery.md`](./05-error-handling-recovery.md) | Error codes, `agentMessage` vs `userMessage`, self-correction loops, retry policy | error catalog |
-| 06 | [`06-confirmation-safety.md`](./06-confirmation-safety.md) | Destructive-action confirmation, HITL patterns, prompt-injection hardening, trust boundaries | safety checklist |
-| 07 | [`07-memory-context.md`](./07-memory-context.md) | Memory-block layout, summary quality, fact decay, context-window budgeting, just-in-time retrieval | memory layout |
-| 08 | [`08-ux-reply-formatting.md`](./08-ux-reply-formatting.md) | Cross-platform markdown, progress signals, "show-your-work" cues, empty/edge/error states | reply guide |
-| 09 | [`09-orchestration-routing.md`](./09-orchestration-routing.md) | `streamText` loop, `stopWhen`, `prepareStep`, small-model routing, planning vs acting | orchestration spec |
-| 10 | [`10-references.md`](./10-references.md) | All sources cited in this report | bibliography |
+| #   | File                                                               | Focus                                                                                                 | Primary artifact     |
+| --- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------- |
+| 00  | [this file](./00-overview.md)                                      | Executive summary, TOC, methodology                                                                   | —                    |
+| 01  | [`01-current-state-audit.md`](./01-current-state-audit.md)         | Verbatim snapshot of today's prompt, tool descriptions, error envelopes, memory block                 | raw material         |
+| 02  | [`02-system-prompt-flaws.md`](./02-system-prompt-flaws.md)         | Issues with the current prompt and a proposed rewrite structured with XML sections                    | prompt rewrite       |
+| 03  | [`03-tool-design-schemas.md`](./03-tool-design-schemas.md)         | Tool naming, descriptions, input schemas, `.describe()` conventions, consolidation vs granularity     | schema checklist     |
+| 04  | [`04-tool-output-steering.md`](./04-tool-output-steering.md)       | Output envelopes, `next_actions` / `hint` fields, truncation-with-steering, response_format parameter | output envelope spec |
+| 05  | [`05-error-handling-recovery.md`](./05-error-handling-recovery.md) | Error codes, `agentMessage` vs `userMessage`, self-correction loops, retry policy                     | error catalog        |
+| 06  | [`06-confirmation-safety.md`](./06-confirmation-safety.md)         | Destructive-action confirmation, HITL patterns, prompt-injection hardening, trust boundaries          | safety checklist     |
+| 07  | [`07-memory-context.md`](./07-memory-context.md)                   | Memory-block layout, summary quality, fact decay, context-window budgeting, just-in-time retrieval    | memory layout        |
+| 08  | [`08-ux-reply-formatting.md`](./08-ux-reply-formatting.md)         | Cross-platform markdown, progress signals, "show-your-work" cues, empty/edge/error states             | reply guide          |
+| 09  | [`09-orchestration-routing.md`](./09-orchestration-routing.md)     | `streamText` loop, `stopWhen`, `prepareStep`, small-model routing, planning vs acting                 | orchestration spec   |
+| 10  | [`10-references.md`](./10-references.md)                           | All sources cited in this report                                                                      | bibliography         |
 
 ## Methodology
 
@@ -49,13 +49,13 @@ A full treatment of each is in the linked files. Numbers in parentheses are roug
 
 These are the external principles I use as the yardstick in every file, quoted verbatim from their sources and indexed in [10](./10-references.md).
 
-- **Simplicity, transparency, tool-documentation-as-UX** — Anthropic, *Building Effective Agents* ([10](./10-references.md) #1).
-- **Structured prompts with clear sections using XML or markdown** — Anthropic, *Effective context engineering for AI agents* ([10](./10-references.md) #2).
-- **Return only high-signal information; prefer natural-language identifiers; steer truncation and errors with instructions** — Anthropic, *Writing effective tools for agents* ([10](./10-references.md) #3).
-- **Agents are not always the answer — add multi-step complexity only when simpler solutions fall short** — Anthropic, *Building Effective Agents* ([10](./10-references.md) #1).
+- **Simplicity, transparency, tool-documentation-as-UX** — Anthropic, _Building Effective Agents_ ([10](./10-references.md) #1).
+- **Structured prompts with clear sections using XML or markdown** — Anthropic, _Effective context engineering for AI agents_ ([10](./10-references.md) #2).
+- **Return only high-signal information; prefer natural-language identifiers; steer truncation and errors with instructions** — Anthropic, _Writing effective tools for agents_ ([10](./10-references.md) #3).
+- **Agents are not always the answer — add multi-step complexity only when simpler solutions fall short** — Anthropic, _Building Effective Agents_ ([10](./10-references.md) #1).
 - **Prompt injection is the #1 LLM risk (OWASP LLM01); treat all tool outputs and external fetches as untrusted data** — OWASP GenAI Security Project ([10](./10-references.md) #8).
-- **A few well-chosen examples beat paragraphs of rules** — Anthropic, *Claude prompting best practices* ([10](./10-references.md) #9); Comet, *Few-shot prompting for agentic systems* ([10](./10-references.md) #10).
-- **Route easy/common questions to small models, hard questions to main models** — Anthropic, *Building Effective Agents* §"Routing" ([10](./10-references.md) #1); MindStudio, *What is an AI model router?* ([10](./10-references.md) #11).
+- **A few well-chosen examples beat paragraphs of rules** — Anthropic, _Claude prompting best practices_ ([10](./10-references.md) #9); Comet, _Few-shot prompting for agentic systems_ ([10](./10-references.md) #10).
+- **Route easy/common questions to small models, hard questions to main models** — Anthropic, _Building Effective Agents_ §"Routing" ([10](./10-references.md) #1); MindStudio, _What is an AI model router?_ ([10](./10-references.md) #11).
 
 ## How to use this report in practice
 

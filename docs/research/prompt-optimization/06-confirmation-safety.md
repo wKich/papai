@@ -25,12 +25,12 @@ The Permission Loop pattern ([10](./10-references.md) #22) frames this well: "A 
     "type": "policy",
     "retryable": true,
     "userMessage": "",
-    "agentMessage": "User intent is not explicit enough. Ask the user the question below; after a 'yes' reply, retry with confidence=1.0."
+    "agentMessage": "User intent is not explicit enough. Ask the user the question below; after a 'yes' reply, retry with confidence=1.0.",
   },
   "recovery": {
     "action": "ask_user",
-    "question": "Delete the task \"Auth bug\"? This is permanent."
-  }
+    "question": "Delete the task \"Auth bug\"? This is permanent.",
+  },
 }
 ```
 
@@ -40,7 +40,7 @@ Every destructive tool returns this shape on refusal. One dispatch path, one que
 
 The model can emit `confidence: 1.0` only when the user has explicitly confirmed **the same action in the same turn chain**. Today's guidance ("Set 1.0 when the user has already confirmed") is correct but too loose — it would permit the model to treat an older unrelated `"yes"` as blanket consent.
 
-**Recommendation:** the system prompt's destructive-actions rule should say "confidence = 1.0 only when the user's last message was a direct confirmation of the *pending* destructive action." A concrete example in the few-shot block (see [`02-system-prompt-flaws.md`](./02-system-prompt-flaws.md) §2 example 5) pins this down.
+**Recommendation:** the system prompt's destructive-actions rule should say "confidence = 1.0 only when the user's last message was a direct confirmation of the _pending_ destructive action." A concrete example in the few-shot block (see [`02-system-prompt-flaws.md`](./02-system-prompt-flaws.md) §2 example 5) pins this down.
 
 ### 1.5 Annotations for UI affordance
 

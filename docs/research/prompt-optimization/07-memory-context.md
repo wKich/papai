@@ -4,7 +4,7 @@ Covers: the `=== Memory context ===` block, the `TRIM_PROMPT` summariser, the cu
 
 ## 1. Principle: the context window is a budget
 
-> "Every new token introduced depletes this budget by some amount, increasing the need to carefully curate the tokens available to the LLM." — Anthropic, *Effective context engineering for AI agents*. ([10](./10-references.md) #2)
+> "Every new token introduced depletes this budget by some amount, increasing the need to carefully curate the tokens available to the LLM." — Anthropic, _Effective context engineering for AI agents_. ([10](./10-references.md) #2)
 
 Treat the context as three logical layers. In papai's codebase these are concatenated but should be distinguishable to the model:
 
@@ -129,16 +129,16 @@ When the user says "always reply in Spanish", that instruction is stored as-is. 
 
 Rough budget for a typical turn on Opus 4.7 (200k window):
 
-| Layer | Target | Notes |
-| ---- | ---- | ---- |
-| System prompt (BASE + provider + custom instructions) | 2–4k tokens | After the proposed rewrite with structured sections and fewer narrative blocks. Currently ~3k depending on custom instructions. |
-| `<capabilities>` block | 150–400 tokens | Generated from tool set. |
-| `<examples>` block | 300–800 tokens | 5 concise examples. |
-| Memory block | 300–600 tokens | Summary (≤200 words) + up to 10 entities. |
-| History (since last trim) | up to ~10k tokens | Trimmer fires above 100 messages. |
-| Tool definitions | 1–3k tokens | Depends on capability-gated subset. |
-| User turn | 20–200 tokens | Chat message. |
-| Tool outputs within this turn | up to ~5k tokens | Bounded by `response_format` + truncation. |
+| Layer                                                 | Target            | Notes                                                                                                                           |
+| ----------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| System prompt (BASE + provider + custom instructions) | 2–4k tokens       | After the proposed rewrite with structured sections and fewer narrative blocks. Currently ~3k depending on custom instructions. |
+| `<capabilities>` block                                | 150–400 tokens    | Generated from tool set.                                                                                                        |
+| `<examples>` block                                    | 300–800 tokens    | 5 concise examples.                                                                                                             |
+| Memory block                                          | 300–600 tokens    | Summary (≤200 words) + up to 10 entities.                                                                                       |
+| History (since last trim)                             | up to ~10k tokens | Trimmer fires above 100 messages.                                                                                               |
+| Tool definitions                                      | 1–3k tokens       | Depends on capability-gated subset.                                                                                             |
+| User turn                                             | 20–200 tokens     | Chat message.                                                                                                                   |
+| Tool outputs within this turn                         | up to ~5k tokens  | Bounded by `response_format` + truncation.                                                                                      |
 
 Headroom is generous on Opus 4.7. The point of the budget is not to conserve capacity — it's to prevent the model from burying signal under noise.
 

@@ -10,7 +10,7 @@ Single call to `generateText()` with `tools` (or `streamText()` where streaming)
 
 ## 2. Principle: simplicity first, routing second
 
-Anthropic's *Building Effective Agents* ([10](./10-references.md) #1):
+Anthropic's _Building Effective Agents_ ([10](./10-references.md) #1):
 
 > "For many applications, optimizing single LLM calls with retrieval and in-context examples is usually enough. Agents trade latency and cost for better task performance—only adopt when simpler solutions demonstrably fail."
 
@@ -42,7 +42,7 @@ This is **optional** — do it last, only if the metrics show a win.
 
 Vercel AI SDK v5+ exposes `prepareStep` inside `streamText`. Use cases for papai:
 
-- **Drop tools after a successful mutation.** After `create_task` succeeds, the next step doesn't usually need the full tool set — in many cases the only next step is an assistant text turn. Emitting a subset (`{ tools: [get_task, list_tasks] }` only, or `tools: {}`) for the *reply* step cuts tokens and discourages unnecessary follow-up calls. ([10](./10-references.md) #35)
+- **Drop tools after a successful mutation.** After `create_task` succeeds, the next step doesn't usually need the full tool set — in many cases the only next step is an assistant text turn. Emitting a subset (`{ tools: [get_task, list_tasks] }` only, or `tools: {}`) for the _reply_ step cuts tokens and discourages unnecessary follow-up calls. ([10](./10-references.md) #35)
 - **Force tool choice on the first step.** If the classifier says `mutation` and the message names a project, `toolChoice: { type: 'tool', name: 'list_projects' }` on step 1 avoids the model guessing project IDs.
 - **Swap models mid-turn.** If a step's result is very long (e.g. `web_fetch` with a 50k-token excerpt), swap to a bigger context window on the synthesis step. This is rarely needed but `prepareStep` makes it cheap.
 
@@ -67,13 +67,13 @@ streamText({
   prepareStep: ({ steps, messages }) => {
     const lastToolResult = lastToolResultFrom(steps)
     if (lastToolResult?.recovery?.action === 'ask_user') {
-      return { toolChoice: 'none' }  // force text reply
+      return { toolChoice: 'none' } // force text reply
     }
-    if (steps.length >= 3 && steps.every(s => !s.toolCalls?.length)) {
-      return { toolChoice: 'none' }  // drifting — no tools
+    if (steps.length >= 3 && steps.every((s) => !s.toolCalls?.length)) {
+      return { toolChoice: 'none' } // drifting — no tools
     }
-    return {}  // default
-  }
+    return {} // default
+  },
 })
 ```
 
@@ -135,4 +135,4 @@ From Vercel AI SDK issues ([10](./10-references.md) #36):
 - **R-09-6 (L):** bulk destructive operations (delete_task ×N) dispatched in parallel with `p-limit`.
 - **R-09-7 (L):** evaluate whether an evaluator-optimiser pattern is justified by metrics; do not adopt preemptively.
 
-External: Anthropic *Building Effective Agents* ([10](./10-references.md) #1), Vercel AI SDK `streamText` reference ([10](./10-references.md) #35), Vercel issue #10269 ([10](./10-references.md) #36), model-routing guidance ([10](./10-references.md) #11).
+External: Anthropic _Building Effective Agents_ ([10](./10-references.md) #1), Vercel AI SDK `streamText` reference ([10](./10-references.md) #35), Vercel issue #10269 ([10](./10-references.md) #36), model-routing guidance ([10](./10-references.md) #11).

@@ -48,20 +48,20 @@ Research ([10](./10-references.md) #34) finds that **correct** rationales and ce
 - **Do** surface decision rationale only when the decision is load-bearing ("Marked as medium priority because the deadline is next week — say if you want urgent instead.").
 - **Don't** surface the model's planning ("Let me first call list_projects, then search_tasks, then…"). That is noise.
 
-In practice: the model should reply with the *result*, optionally with a one-clause rationale. The trace viewer in the debug dashboard (`client/debug/`) is where reasoning is surfaced for auditors.
+In practice: the model should reply with the _result_, optionally with a one-clause rationale. The trace viewer in the debug dashboard (`client/debug/`) is where reasoning is surfaced for auditors.
 
 ## 5. Empty / error / edge states
 
-| State | Today | Recommended reply pattern |
-| ---- | ---- | ---- |
-| Empty list (`list_tasks` returned 0) | raw empty array → model ad-libs | "No tasks in Auth match those filters." + `next_actions.hint` hints the model to offer to create one. |
-| Truncated list (14 matches, 10 shown) | model narrates all 10 | "10 of 14 matches — say narrow it if you want a specific one." |
-| Ambiguous match | model picks one | "I found two: [AUTH-12 Login crash](…) and [AUTH-17 Logout redirect](…). Which one?" |
-| Confirmation required | model echoes the tool message | "Delete \"Auth bug\"? This is permanent." (from `recovery.question`). Await reply. |
-| Provider error (rate limited) | model narrates | "The task tracker is rate-limiting me; let me try again in a moment." (if retryable) OR surface `userMessage` verbatim. |
-| Provider error (workflow validation) | model dumps all required fields | "The project workflow needs a Priority and an Assignee before I can move this to In Progress. What should I set them to?" |
-| `web_fetch` too large | model says "can't" | "That page is too big to fetch whole. What specifically are you looking for?" |
-| Identity unresolved (group) | model asks whoever | "To link you to a tracker user, reply with your username — e.g. `I'm jsmith`." |
+| State                                 | Today                           | Recommended reply pattern                                                                                                 |
+| ------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Empty list (`list_tasks` returned 0)  | raw empty array → model ad-libs | "No tasks in Auth match those filters." + `next_actions.hint` hints the model to offer to create one.                     |
+| Truncated list (14 matches, 10 shown) | model narrates all 10           | "10 of 14 matches — say narrow it if you want a specific one."                                                            |
+| Ambiguous match                       | model picks one                 | "I found two: [AUTH-12 Login crash](…) and [AUTH-17 Logout redirect](…). Which one?"                                      |
+| Confirmation required                 | model echoes the tool message   | "Delete \"Auth bug\"? This is permanent." (from `recovery.question`). Await reply.                                        |
+| Provider error (rate limited)         | model narrates                  | "The task tracker is rate-limiting me; let me try again in a moment." (if retryable) OR surface `userMessage` verbatim.   |
+| Provider error (workflow validation)  | model dumps all required fields | "The project workflow needs a Priority and an Assignee before I can move this to In Progress. What should I set them to?" |
+| `web_fetch` too large                 | model says "can't"              | "That page is too big to fetch whole. What specifically are you looking for?"                                             |
+| Identity unresolved (group)           | model asks whoever              | "To link you to a tracker user, reply with your username — e.g. `I'm jsmith`."                                            |
 
 All of these become `next_actions.suggested_reply` templates in the tool output (see [`04-tool-output-steering.md`](./04-tool-output-steering.md) §1).
 

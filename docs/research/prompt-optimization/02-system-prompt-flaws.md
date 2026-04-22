@@ -220,16 +220,16 @@ Key ideas embedded in the template:
 
 This is sequenced so each step is independently testable against the existing `bun test` suite.
 
-| Step | Change | Files | Reversible? |
-| ---- | ------ | ----- | ----------- |
-| 1 | Introduce an XML-structured `BASE_PROMPT` (no behavior change, just delimiters) | `src/system-prompt.ts` | ✅ revert commit |
-| 2 | Replace `buildInstructionsBlock` output with `<custom_instructions priority="override">` wrapper | `src/instructions.ts` | ✅ |
-| 3 | Replace Kaneo/YouTrack addendums with `<provider name="…">…</provider>` wrappers | `src/providers/kaneo/index.ts`, `src/providers/youtrack/prompt-addendum.ts` | ✅ |
-| 4 | Emit a runtime `<capabilities>` block from the tool-set (one-line-per-group) | new `src/system-prompt-capabilities.ts` | ✅ |
-| 5 | Move RECURRING / DEFERRED / RELATION narrative details into the tool descriptions; keep only one-line pointers in the system prompt | `src/tools/create-recurring-task.ts`, `src/tools/create-deferred-prompt.ts`, `src/tools/add-task-relation.ts` | ✅ |
-| 6 | Add `<examples>` section with 5 canonical turns | `src/system-prompt.ts` | ✅ |
-| 7 | Add `<rule id="external-content">` and `<rule id="memory">` | `src/system-prompt.ts` | ✅ |
-| 8 | Change proactive-mode to a delta prepended to the base prompt instead of a replacement | `src/deferred-prompts/proactive-llm.ts` | ✅ |
+| Step | Change                                                                                                                              | Files                                                                                                         | Reversible?      |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------- |
+| 1    | Introduce an XML-structured `BASE_PROMPT` (no behavior change, just delimiters)                                                     | `src/system-prompt.ts`                                                                                        | ✅ revert commit |
+| 2    | Replace `buildInstructionsBlock` output with `<custom_instructions priority="override">` wrapper                                    | `src/instructions.ts`                                                                                         | ✅               |
+| 3    | Replace Kaneo/YouTrack addendums with `<provider name="…">…</provider>` wrappers                                                    | `src/providers/kaneo/index.ts`, `src/providers/youtrack/prompt-addendum.ts`                                   | ✅               |
+| 4    | Emit a runtime `<capabilities>` block from the tool-set (one-line-per-group)                                                        | new `src/system-prompt-capabilities.ts`                                                                       | ✅               |
+| 5    | Move RECURRING / DEFERRED / RELATION narrative details into the tool descriptions; keep only one-line pointers in the system prompt | `src/tools/create-recurring-task.ts`, `src/tools/create-deferred-prompt.ts`, `src/tools/add-task-relation.ts` | ✅               |
+| 6    | Add `<examples>` section with 5 canonical turns                                                                                     | `src/system-prompt.ts`                                                                                        | ✅               |
+| 7    | Add `<rule id="external-content">` and `<rule id="memory">`                                                                         | `src/system-prompt.ts`                                                                                        | ✅               |
+| 8    | Change proactive-mode to a delta prepended to the base prompt instead of a replacement                                              | `src/deferred-prompts/proactive-llm.ts`                                                                       | ✅               |
 
 Each step corresponds to a small PR. The first four are the largest expected wins.
 

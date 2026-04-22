@@ -4,7 +4,7 @@ Focus: every string that the model sees for each tool — the `description:` pas
 
 ## 1. Principles (sourced)
 
-1. **Tools are an interface, designed for an LLM colleague** — "Consider the context that you might implicitly bring—specialized query formats, definitions of niche terminology, relationships between underlying resources—and make it explicit." Anthropic, *Writing effective tools for agents*. ([10](./10-references.md) #3)
+1. **Tools are an interface, designed for an LLM colleague** — "Consider the context that you might implicitly bring—specialized query formats, definitions of niche terminology, relationships between underlying resources—and make it explicit." Anthropic, _Writing effective tools for agents_. ([10](./10-references.md) #3)
 2. **Use unambiguous parameter names.** "Instead of a parameter named `user`, try a parameter named `user_id`." ([10](./10-references.md) #3)
 3. **Action-oriented verb-first descriptions** — "Fetches…", "Calculates…", "Creates…". ([10](./10-references.md) #4)
 4. **Each description should say: what the tool does, when to use it, what it returns.** ([10](./10-references.md) #5)
@@ -148,7 +148,7 @@ For each input field, verify:
 - [ ] `.describe()` is the **last** call in the chain.
 - [ ] Name ends with the entity type when useful (`taskId`, `projectId`, not `task`, `project`).
 - [ ] If the field accepts an enum, it is a Zod `z.enum(...)` not `z.string()`.
-- [ ] If the field accepts natural language, the description gives two concrete examples separated by ` / ` (e.g. `"priority label — 'high' / 'critical'"`).
+- [ ] If the field accepts natural language, the description gives two concrete examples separated by `/` (e.g. `"priority label — 'high' / 'critical'"`).
 - [ ] No mention of internal architecture (`@kaneo/mcp`, `youtrackFetch`), HTTP codes, or internal table names.
 - [ ] If the field is destructive or low-trust, it is documented as such.
 - [ ] Provider-specific descriptions are stripped when the active provider doesn't support the field (runtime-gated).
@@ -157,7 +157,7 @@ Run a lint rule (as a custom oxlint plugin) that scans `src/tools/*.ts` and fail
 
 ## 5. Output envelope — aligned with the error envelope
 
-Today a tool returns *either* a raw domain object *or* a `ToolFailureResult`. That asymmetry is fine when the consumer is a model that already knows about tool errors, but it leaves the happy-path with no room for steering metadata. Proposed unified envelope (same on success and failure):
+Today a tool returns _either_ a raw domain object _or_ a `ToolFailureResult`. That asymmetry is fine when the consumer is a model that already knows about tool errors, but it leaves the happy-path with no room for steering metadata. Proposed unified envelope (same on success and failure):
 
 ```ts
 // Success
@@ -203,7 +203,7 @@ The envelope change is non-breaking if introduced behind a feature flag on the w
 
 - **R-03-1 (H):** introduce a standard description template and rewrite all 60+ tool descriptions to match.
 - **R-03-2 (H):** introduce the `{ ok, data, next_actions?, meta? } | { ok, error, recovery? }` envelope in `src/tools/wrap-tool-execution.ts`; keep a shim mode for the first release.
-- **R-03-3 (M):** accept natural-language status/priority in `create_task` / `update_task` / `list_tasks`, resolve inside the tool using existing list_* data.
+- **R-03-3 (M):** accept natural-language status/priority in `create_task` / `update_task` / `list_tasks`, resolve inside the tool using existing list\_\* data.
 - **R-03-4 (M):** move per-provider bullet points out of field `.describe()` and into a runtime-gated description builder.
 - **R-03-5 (M):** drop the threshold number from the `confidence` description.
 - **R-03-6 (M):** move RECURRING / DEFERRED narrative from the system prompt into the tools' own descriptions.
