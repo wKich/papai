@@ -1,33 +1,42 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import type { IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
+import type { ConsolidatedManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import {
   createConsolidatedManifestEntry,
   createEmptyProgressFixture,
-  createReportsPaths,
+  createIncrementalManifestFixture,
   mockReportsConfig,
 } from './behavior-audit-integration.helpers.js'
 import {
   cleanupTempDirs,
-  initializeGitRepo,
   makeTempDir,
   originalOpenAiApiKey,
   restoreOpenAiApiKey,
 } from './behavior-audit-integration.runtime-helpers.js'
-import {
-  loadBehaviorAuditEntryPoint,
-  loadEvaluateModule,
-  loadIncrementalModule,
-  loadProgressModule,
-  type MockEvaluationResult,
-  type SelectIncrementalWorkInput,
-} from './behavior-audit-integration.support.js'
+import { loadEvaluateModule, type MockEvaluationResult } from './behavior-audit-integration.support.js'
 
 function createEmptyProgress(filesTotal: number): Progress {
   return createEmptyProgressFixture(filesTotal)
+}
+
+function createEvaluationResult(input: {
+  readonly maria: NonNullable<MockEvaluationResult>['maria']
+  readonly dani: NonNullable<MockEvaluationResult>['dani']
+  readonly viktor: NonNullable<MockEvaluationResult>['viktor']
+  readonly flaws: readonly string[]
+  readonly improvements: readonly string[]
+}): NonNullable<MockEvaluationResult> {
+  return {
+    maria: input.maria,
+    dani: input.dani,
+    viktor: input.viktor,
+    flaws: [...input.flaws],
+    improvements: [...input.improvements],
+  }
 }
 
 beforeEach(() => {
@@ -49,23 +58,31 @@ describe('behavior-audit phase 3 incremental selection', () => {
   let reportsDir: string
   let progressPath: string
   let consolidatedDir: string
-  let evaluateCalls: number
 
-  beforeEach(async () => {
+  beforeEach(() => {
     root = makeTempDir()
-    const paths = createReportsPaths(root)
-    reportsDir = paths.reportsDir
-    progressPath = paths.progressPath
-    consolidatedDir = paths.consolidatedDir
-    evaluateCalls = 0
-
+    reportsDir = path.join(root, 'reports')
+    progressPath = path.join(reportsDir, 'progress.json')
+    consolidatedDir = path.join(reportsDir, 'consolidated')
     mkdirSync(consolidatedDir, { recursive: true })
+
+    mockReportsConfig(root, {
+      PROGRESS_PATH: progressPath,
+      CONSOLIDATED_DIR: consolidatedDir,
+    })
+  })
+
+  test('runPhase3 only evaluates selected consolidated ids and preserves stored unselected evaluations', async () => {
+    const evaluate = await loadEvaluateModule(crypto.randomUUID())
+    const selectedKey = 'tools::selected-case'
+    const unselectedKey = 'tools::unselected-case'
+    const progress = createEmptyProgress(1)
     await Bun.write(
       path.join(consolidatedDir, 'tools.json'),
       JSON.stringify(
         [
           {
-            id: 'tools::selected-case',
+            id: selectedKey,
             domain: 'tools',
             featureName: 'selected case',
             isUserFacing: true,
@@ -75,7 +92,7 @@ describe('behavior-audit phase 3 incremental selection', () => {
             sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
           },
           {
-            id: 'tools::unselected-case',
+            id: unselectedKey,
             domain: 'tools',
             featureName: 'unselected case',
             isUserFacing: true,
@@ -90,34 +107,6 @@ describe('behavior-audit phase 3 incremental selection', () => {
       ) + '\n',
     )
 
-    mockReportsConfig(root, {
-      PROGRESS_PATH: progressPath,
-      CONSOLIDATED_DIR: consolidatedDir,
-    })
-
-    const realProgressModule = await loadProgressModule(`real=${crypto.randomUUID()}`)
-    void mock.module('../../scripts/behavior-audit/progress.js', () => ({ ...realProgressModule }))
-    void mock.module('../../scripts/behavior-audit/evaluate-agent.js', () => ({
-      evaluateWithRetry: (): Promise<MockEvaluationResult> => {
-        evaluateCalls += 1
-        const result: MockEvaluationResult = {
-          maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
-          dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
-          viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
-          flaws: ['Selected flaw'],
-          improvements: ['Selected improvement'],
-        }
-        return Promise.resolve(result)
-      },
-    }))
-  })
-
-  test('runPhase3 only evaluates selected consolidated ids and preserves stored unselected evaluations', async () => {
-    const evaluate = await loadEvaluateModule(crypto.randomUUID())
-    const selectedKey = 'tools::selected-case'
-    const unselectedKey = 'tools::unselected-case'
-    const progress = createEmptyProgress(1)
-
     progress.phase2b.completedCandidateFeatures['tools'] = 'done'
     progress.phase3.evaluations[unselectedKey] = {
       testName: 'suite > unselected case',
@@ -131,43 +120,57 @@ describe('behavior-audit phase 3 incremental selection', () => {
     }
     progress.phase3.completedBehaviors[unselectedKey] = 'done'
 
-    await evaluate.runPhase3({
-      progress,
-      selectedConsolidatedIds: new Set([selectedKey]),
-      consolidatedManifest: {
-        version: 1,
-        entries: {
-          [selectedKey]: {
-            consolidatedId: selectedKey,
-            domain: 'tools',
-            featureName: 'selected case',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
-            supportingInternalBehaviorIds: [],
-            isUserFacing: true,
-            candidateFeatureKey: null,
-            keywords: [],
-            sourceDomains: ['tools'],
-            phase2Fingerprint: null,
-            lastConsolidatedAt: null,
-          },
-          [unselectedKey]: {
-            consolidatedId: unselectedKey,
-            domain: 'tools',
-            featureName: 'unselected case',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > unselected case'],
-            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > unselected case'],
-            supportingInternalBehaviorIds: [],
-            isUserFacing: true,
-            candidateFeatureKey: null,
-            keywords: [],
-            sourceDomains: ['tools'],
-            phase2Fingerprint: null,
-            lastConsolidatedAt: null,
+    await evaluate.runPhase3(
+      {
+        progress,
+        selectedConsolidatedIds: new Set([selectedKey]),
+        consolidatedManifest: {
+          version: 1,
+          entries: {
+            [selectedKey]: {
+              consolidatedId: selectedKey,
+              domain: 'tools',
+              featureName: 'selected case',
+              sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              candidateFeatureKey: null,
+              keywords: [],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: null,
+              lastConsolidatedAt: null,
+            },
+            [unselectedKey]: {
+              consolidatedId: unselectedKey,
+              domain: 'tools',
+              featureName: 'unselected case',
+              sourceTestKeys: ['tests/tools/sample.test.ts::suite > unselected case'],
+              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > unselected case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              candidateFeatureKey: null,
+              keywords: [],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: null,
+              lastConsolidatedAt: null,
+            },
           },
         },
       },
-    })
+      {
+        evaluateWithRetry: () =>
+          Promise.resolve(
+            createEvaluationResult({
+              maria: { discover: 1, use: 1, retain: 1, notes: 'Injected Maria notes' },
+              dani: { discover: 1, use: 1, retain: 1, notes: 'Injected Dani notes' },
+              viktor: { discover: 1, use: 1, retain: 1, notes: 'Injected Viktor notes' },
+              flaws: ['Injected flaw'],
+              improvements: ['Injected improvement'],
+            }),
+          ),
+      },
+    )
 
     const selectedEvaluation = progress.phase3.evaluations[selectedKey]
     if (selectedEvaluation === undefined) {
@@ -177,9 +180,9 @@ describe('behavior-audit phase 3 incremental selection', () => {
     if (unselectedEvaluation === undefined) {
       throw new Error('Expected unselected evaluation to remain stored')
     }
-    expect(evaluateCalls).toBe(1)
     expect(progress.phase3.completedBehaviors[selectedKey]).toBe('done')
     expect(selectedEvaluation.userStory).toBe('As a user, I get the selected behavior outcome.')
+    expect(selectedEvaluation.flaws).toEqual(['Injected flaw'])
     expect(unselectedEvaluation.userStory).toBe('Existing unselected story')
 
     const storyFileText = await Bun.file(path.join(reportsDir, 'stories', 'tools.md')).text()
@@ -192,30 +195,63 @@ describe('behavior-audit phase 3 incremental selection', () => {
     const selectedKey = 'tools::selected-case'
     const progress = createEmptyProgress(1)
     progress.phase2b.completedCandidateFeatures['tools'] = 'done'
-
-    await evaluate.runPhase3({
-      progress,
-      selectedConsolidatedIds: new Set([selectedKey]),
-      consolidatedManifest: {
-        version: 1,
-        entries: {
-          [selectedKey]: {
-            consolidatedId: selectedKey,
+    await Bun.write(
+      path.join(consolidatedDir, 'tools.json'),
+      JSON.stringify(
+        [
+          {
+            id: selectedKey,
             domain: 'tools',
             featureName: 'selected case',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
-            supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            candidateFeatureKey: null,
-            keywords: [],
-            sourceDomains: ['tools'],
-            phase2Fingerprint: null,
-            lastConsolidatedAt: null,
+            behavior: 'When the selected behavior runs, the bot returns fresh results.',
+            userStory: 'As a user, I get the selected behavior outcome.',
+            context: 'Selected context for phase 3.',
+            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+          },
+        ],
+        null,
+        2,
+      ) + '\n',
+    )
+
+    await evaluate.runPhase3(
+      {
+        progress,
+        selectedConsolidatedIds: new Set([selectedKey]),
+        consolidatedManifest: {
+          version: 1,
+          entries: {
+            [selectedKey]: {
+              consolidatedId: selectedKey,
+              domain: 'tools',
+              featureName: 'selected case',
+              sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              candidateFeatureKey: null,
+              keywords: [],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: null,
+              lastConsolidatedAt: null,
+            },
           },
         },
       },
-    })
+      {
+        evaluateWithRetry: () =>
+          Promise.resolve(
+            createEvaluationResult({
+              maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
+              dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
+              viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
+              flaws: ['Selected flaw'],
+              improvements: ['Selected improvement'],
+            }),
+          ),
+      },
+    )
 
     const progressText = await Bun.file(progressPath).text()
     expect(progressText).toContain('As a user, I get the selected behavior outcome.')
@@ -249,31 +285,44 @@ describe('behavior-audit phase 3 incremental selection', () => {
       ) + '\n',
     )
 
-    await evaluate.runPhase3({
-      progress,
-      selectedConsolidatedIds: new Set([staleSelectedKey]),
-      consolidatedManifest: {
-        version: 1,
-        entries: {
-          [freshSelectedKey]: {
-            consolidatedId: freshSelectedKey,
-            domain: 'tools',
-            featureName: 'fresh selected case',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
-            supportingInternalBehaviorIds: [],
-            isUserFacing: true,
-            candidateFeatureKey: null,
-            keywords: [],
-            sourceDomains: ['tools'],
-            phase2Fingerprint: null,
-            lastConsolidatedAt: null,
+    await evaluate.runPhase3(
+      {
+        progress,
+        selectedConsolidatedIds: new Set([staleSelectedKey]),
+        consolidatedManifest: {
+          version: 1,
+          entries: {
+            [freshSelectedKey]: {
+              consolidatedId: freshSelectedKey,
+              domain: 'tools',
+              featureName: 'fresh selected case',
+              sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              candidateFeatureKey: null,
+              keywords: [],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: null,
+              lastConsolidatedAt: null,
+            },
           },
         },
       },
-    })
+      {
+        evaluateWithRetry: () =>
+          Promise.resolve(
+            createEvaluationResult({
+              maria: { discover: 4, use: 4, retain: 4, notes: 'Fresh Maria notes' },
+              dani: { discover: 4, use: 4, retain: 4, notes: 'Fresh Dani notes' },
+              viktor: { discover: 4, use: 4, retain: 4, notes: 'Fresh Viktor notes' },
+              flaws: ['Fresh flaw'],
+              improvements: ['Fresh improvement'],
+            }),
+          ),
+      },
+    )
 
-    expect(evaluateCalls).toBe(1)
     expect(progress.phase3.completedBehaviors[freshSelectedKey]).toBe('done')
     const freshEvaluation = progress.phase3.evaluations[freshSelectedKey]
     if (freshEvaluation === undefined) {
@@ -292,17 +341,6 @@ test('runPhase3 reads consolidated batches by candidate feature from manifest en
     PROGRESS_PATH: progressPath,
     EXCLUDED_PREFIXES: [] as const,
   })
-
-  void mock.module('../../scripts/behavior-audit/evaluate-agent.js', () => ({
-    evaluateWithRetry: (): Promise<MockEvaluationResult> =>
-      Promise.resolve({
-        maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-        dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-        viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-        flaws: [],
-        improvements: [],
-      }),
-  }))
 
   mkdirSync(path.join(reportsDir, 'consolidated'), { recursive: true })
   await Bun.write(
@@ -345,11 +383,25 @@ test('runPhase3 reads consolidated batches by candidate feature from manifest en
     },
   }
 
-  await evaluate.runPhase3({
-    progress,
-    selectedConsolidatedIds: new Set(),
-    consolidatedManifest,
-  })
+  await evaluate.runPhase3(
+    {
+      progress,
+      selectedConsolidatedIds: new Set(),
+      consolidatedManifest,
+    },
+    {
+      evaluateWithRetry: () =>
+        Promise.resolve(
+          createEvaluationResult({
+            maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            flaws: [],
+            improvements: [],
+          }),
+        ),
+    },
+  )
 
   expect(progress.phase3.stats.behaviorsTotal).toBe(1)
   expect(progress.phase3.stats.behaviorsDone).toBe(1)
@@ -357,52 +409,7 @@ test('runPhase3 reads consolidated batches by candidate feature from manifest en
 })
 
 describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
-  let root: string
-  let reportsDir: string
-  let manifestPath: string
-  let progressPath: string
-
-  beforeEach(async () => {
-    root = makeTempDir()
-    reportsDir = path.join(root, 'reports')
-    manifestPath = path.join(reportsDir, 'incremental-manifest.json')
-    progressPath = path.join(reportsDir, 'progress.json')
-
-    const testsDir = path.join(root, 'tests', 'tools')
-    mkdirSync(testsDir, { recursive: true })
-    writeFileSync(
-      path.join(testsDir, 'sample.test.ts'),
-      ["describe('suite', () => {", "  test('first case', () => {})", '})', ''].join('\n'),
-    )
-
-    mockReportsConfig(root, {
-      PROGRESS_PATH: progressPath,
-      INCREMENTAL_MANIFEST_PATH: manifestPath,
-    })
-
-    const realIncrementalModule = await loadIncrementalModule(`passthrough=${crypto.randomUUID()}`)
-    const realProgressModule = await loadProgressModule(`passthrough=${crypto.randomUUID()}`)
-
-    void mock.module('../../scripts/behavior-audit/incremental.js', () => ({
-      ...realIncrementalModule,
-      collectChangedFiles: (): Promise<readonly string[]> => Promise.resolve([]),
-      selectIncrementalWork: (input: SelectIncrementalWorkInput): IncrementalSelection => ({
-        phase1SelectedTestKeys: [...input.discoveredTestKeys],
-        phase2aSelectedTestKeys: [...input.discoveredTestKeys],
-        phase2bSelectedCandidateFeatureKeys: ['group-targeting'],
-        phase3SelectedConsolidatedIds: [],
-        reportRebuildOnly: false,
-      }),
-    }))
-    void mock.module('../../scripts/behavior-audit/progress.js', () => ({ ...realProgressModule }))
-    void mock.module('../../scripts/behavior-audit/extract.js', () => ({
-      runPhase1: (): Promise<void> => Promise.resolve(),
-    }))
-  })
-
   test('main passes the consolidated manifest through to phase3 after phase2 completes', async () => {
-    await initializeGitRepo(root)
-
     const consolidatedManifest = {
       version: 1 as const,
       entries: {
@@ -423,26 +430,48 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       },
     }
 
-    let phase3ManifestArg: typeof consolidatedManifest | null = null
+    let phase3ManifestArg: ConsolidatedManifest | null = null
 
-    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
-      runPhase2a: (): Promise<ReadonlySet<string>> => Promise.resolve(new Set(['group-targeting'])),
-    }))
-    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2b: (): Promise<typeof consolidatedManifest> => Promise.resolve(consolidatedManifest),
-    }))
-    void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
-      runPhase3: (input: {
-        readonly progress: Progress
-        readonly selectedConsolidatedIds: ReadonlySet<string>
-        readonly consolidatedManifest: typeof consolidatedManifest
-      }): Promise<void> => {
-        phase3ManifestArg = input.consolidatedManifest
+    const deps: BehaviorAuditDeps = {
+      requireOpenAiApiKey: () => {},
+      prepareIncrementalRun: () =>
+        Promise.resolve({
+          previousManifest: createIncrementalManifestFixture({
+            phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+            tests: {},
+          }),
+          previousLastStartCommit: null,
+          updatedManifest: createIncrementalManifestFixture({
+            phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
+            tests: {},
+          }),
+        }),
+      selectIncrementalRunWork: () =>
+        Promise.resolve({
+          parsedFiles: [],
+          previousConsolidatedManifest: null,
+          selection: {
+            phase1SelectedTestKeys: [],
+            phase2aSelectedTestKeys: [],
+            phase2bSelectedCandidateFeatureKeys: ['group-targeting'],
+            phase3SelectedConsolidatedIds: [],
+            reportRebuildOnly: false,
+          } satisfies IncrementalSelection,
+        }),
+      loadOrCreateProgress: () => Promise.resolve(createEmptyProgress(0)),
+      rebuildReportsFromStoredResults: () => Promise.resolve(),
+      runPhase1IfNeeded: () => Promise.resolve(),
+      runPhase2aIfNeeded: () => Promise.resolve(new Set(['group-targeting'])),
+      runPhase2bIfNeeded: () => Promise.resolve(consolidatedManifest),
+      saveConsolidatedManifest: () => Promise.resolve(),
+      runPhase3IfNeeded: (_progress, _selectedConsolidatedIds, manifest) => {
+        phase3ManifestArg = manifest
         return Promise.resolve()
       },
-    }))
+      log: { log: mock(() => {}) },
+    }
 
-    await loadBehaviorAuditEntryPoint(crypto.randomUUID())
+    await runBehaviorAudit(deps)
 
     expect(phase3ManifestArg).not.toBeNull()
     expect(phase3ManifestArg).toMatchObject(consolidatedManifest)

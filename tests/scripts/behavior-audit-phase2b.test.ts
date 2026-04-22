@@ -127,8 +127,7 @@ test('runPhase2b consolidates user-facing candidate features and preserves suppo
 })
 
 test('runPhase2b groups classified behaviors by candidate feature and preserves provenance', async () => {
-  const consolidate: { readonly runPhase2b: typeof runPhase2b } =
-    await import('../../scripts/behavior-audit/consolidate.js')
+  const consolidate: { readonly runPhase2b: typeof runPhase2b } = await loadConsolidateModule(crypto.randomUUID())
   const progress = createEmptyProgress(2)
   let capturedCandidateFeatureKey: string | null = null
   let capturedDomains: readonly string[] = []

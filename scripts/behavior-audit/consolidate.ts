@@ -3,13 +3,24 @@ import pLimit from 'p-limit'
 import type { ClassifiedBehavior } from './classified-store.js'
 import { MAX_RETRIES } from './config.js'
 import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
-import { consolidateWithRetry } from './consolidate-agent.js'
 import type { ConsolidatedManifest } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
 import type { Progress } from './progress.js'
 import { getFailedBatchAttempts, markBatchDone, markBatchFailed, resetPhase3, saveProgress } from './progress.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
 import { writeConsolidatedFile } from './report-writer.js'
+
+type ConsolidateWithRetry = typeof import('./consolidate-agent.js').consolidateWithRetry
+
+interface Phase2bDeps {
+  readonly consolidateWithRetry: ConsolidateWithRetry
+  readonly writeConsolidatedFile: typeof writeConsolidatedFile
+}
+
+const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
+  const { consolidateWithRetry } = await import('./consolidate-agent.js')
+  return consolidateWithRetry(...args)
+}
 
 function groupByCandidateFeature(
   classified: Readonly<Record<string, ClassifiedBehavior>>,
@@ -43,7 +54,7 @@ function buildConsolidatedDomain(inputs: readonly ConsolidateBehaviorInput[]): s
 }
 
 function toConsolidations(
-  result: NonNullable<Awaited<ReturnType<typeof consolidateWithRetry>>>,
+  result: NonNullable<Awaited<ReturnType<ConsolidateWithRetry>>>,
   inputs: readonly ConsolidateBehaviorInput[],
 ): readonly ConsolidatedBehavior[] {
   const domain = buildConsolidatedDomain(inputs)
@@ -103,13 +114,14 @@ async function consolidateCandidateFeature(input: {
   readonly phase2Version: string
   readonly candidateFeatureKey: string
   readonly inputs: readonly ConsolidateBehaviorInput[]
+  readonly deps: Phase2bDeps
 }): Promise<ConsolidatedManifest> {
   const failedAttempts = getFailedBatchAttempts(input.progress, input.candidateFeatureKey)
   if (failedAttempts >= MAX_RETRIES) {
     return input.consolidatedManifest
   }
 
-  const result = await consolidateWithRetry(input.candidateFeatureKey, input.inputs, failedAttempts)
+  const result = await input.deps.consolidateWithRetry(input.candidateFeatureKey, input.inputs, failedAttempts)
   if (result === null) {
     markBatchFailed(input.progress, input.candidateFeatureKey, 'consolidation failed after retries', failedAttempts + 1)
     await saveProgress(input.progress)
@@ -117,7 +129,7 @@ async function consolidateCandidateFeature(input: {
   }
 
   const consolidations = toConsolidations(result, input.inputs)
-  await writeConsolidatedFile(input.candidateFeatureKey, consolidations)
+  await input.deps.writeConsolidatedFile(input.candidateFeatureKey, consolidations)
   markBatchDone(input.progress, input.candidateFeatureKey, consolidations)
   await saveProgress(input.progress)
 
@@ -138,6 +150,7 @@ export async function runPhase2b(
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
   selectedCandidateFeatureKeys: ReadonlySet<string>,
+  deps: Phase2bDeps = { consolidateWithRetry: defaultConsolidateWithRetry, writeConsolidatedFile },
 ): Promise<ConsolidatedManifest> {
   const groups = [
     ...groupByCandidateFeature(progress.phase2a.classifiedBehaviors, selectedCandidateFeatureKeys).entries(),
@@ -158,6 +171,7 @@ export async function runPhase2b(
           phase2Version,
           candidateFeatureKey,
           inputs,
+          deps,
         })
       }),
     ),

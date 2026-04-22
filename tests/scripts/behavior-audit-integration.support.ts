@@ -1,4 +1,5 @@
 import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
+import type * as BehaviorAuditModule from '../../scripts/behavior-audit.ts'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as ClassifyAgentModule from '../../scripts/behavior-audit/classify-agent.js'
 import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
@@ -13,6 +14,7 @@ import type * as ReportWriterModule from '../../scripts/behavior-audit/report-wr
 import type { ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
 
 export type IncrementalModuleShape = typeof IncrementalModule
+export type BehaviorAuditModuleShape = typeof BehaviorAuditModule
 export type ProgressModuleShape = typeof ProgressModule
 export type ExtractModuleShape = typeof ExtractModule
 export type ClassifyAgentModuleShape = typeof ClassifyAgentModule
@@ -178,6 +180,10 @@ function isIncrementalModule(value: unknown): value is IncrementalModuleShape {
   )
 }
 
+function isBehaviorAuditModule(value: unknown): value is BehaviorAuditModuleShape {
+  return isObject(value) && hasFunctionProperty(value, 'runBehaviorAudit')
+}
+
 function isProgressModule(value: unknown): value is ProgressModuleShape {
   return (
     isObject(value) &&
@@ -309,7 +315,11 @@ export function normalizePhase2Call(args: readonly unknown[]): {
 }
 
 export async function loadBehaviorAuditEntryPoint(tag: string): Promise<void> {
-  await import(`../../scripts/behavior-audit.ts?test=${tag}`)
+  const behaviorAudit = await loadBehaviorAuditModule(tag)
+  await behaviorAudit.runBehaviorAudit().catch((error: unknown) => {
+    console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })
 }
 
 export function loadIncrementalModule(tag: string): Promise<IncrementalModuleShape> {
@@ -317,6 +327,14 @@ export function loadIncrementalModule(tag: string): Promise<IncrementalModuleSha
     `../../scripts/behavior-audit/incremental.js?test=${tag}`,
     isIncrementalModule,
     'Unexpected incremental module shape',
+  )
+}
+
+export function loadBehaviorAuditModule(tag: string): Promise<BehaviorAuditModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit.ts?test=${tag}`,
+    isBehaviorAuditModule,
+    'Unexpected behavior-audit module shape',
   )
 }
 

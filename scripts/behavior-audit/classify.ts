@@ -48,8 +48,30 @@ function selectBehaviors(progress: Progress, selectedTestKeys: ReadonlySet<strin
     .map(([testKey, behavior]) => ({ testKey, behavior }))
 }
 
-function isClassificationCompleted(progress: Progress, testKey: string): boolean {
-  return progress.phase2a.completedBehaviors[testKey] === 'done'
+function shouldReuseCompletedClassification(
+  progress: Progress,
+  manifest: IncrementalManifest,
+  entry: SelectedBehaviorEntry,
+): boolean {
+  if (progress.phase2a.completedBehaviors[entry.testKey] !== 'done') {
+    return false
+  }
+
+  if (entry.testKey.startsWith('tests/')) {
+    const manifestEntry = manifest.tests[entry.testKey]
+    if (manifestEntry !== undefined) {
+      const nextFingerprint = buildPhase2aFingerprint({
+        testKey: entry.testKey,
+        behavior: entry.behavior.behavior,
+        context: entry.behavior.context,
+        keywords: entry.behavior.keywords,
+        phaseVersion: manifest.phaseVersions.phase2,
+      })
+      return manifestEntry.phase2aFingerprint === nextFingerprint
+    }
+  }
+
+  return true
 }
 
 function addDirtyCandidateFeatureKey(dirtyCandidateFeatureKeys: Set<string>, candidateFeatureKey: string | null): void {
@@ -195,7 +217,7 @@ export async function runPhase2a({
   await Promise.all(
     selectedEntries.map((entry) =>
       limit(async () => {
-        if (isClassificationCompleted(progress, entry.testKey)) {
+        if (shouldReuseCompletedClassification(progress, currentManifest, entry)) {
           addDirtyCandidateFeatureKey(
             dirtyCandidateFeatureKeys,
             progress.phase2a.classifiedBehaviors[entry.testKey]?.candidateFeatureKey ?? null,

@@ -177,9 +177,19 @@ describe('behavior-audit phase 2a classification', () => {
           testName: 'suite > case',
           dependencyPaths: ['tests/tools/sample.test.ts'],
           phase1Fingerprint: 'phase1-fp',
+          phase2aFingerprint: incremental.buildPhase2aFingerprint({
+            testKey,
+            behavior: 'When the user creates a task, the bot saves it.',
+            context: 'Calls create_task and returns the new task.',
+            keywords: ['task-create'],
+            phaseVersion: 'phase2-v1',
+          }),
           phase2Fingerprint: 'phase2-fp',
           extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
           domain: 'tools',
+          behaviorId: testKey,
+          candidateFeatureKey: 'task-creation',
+          lastPhase2aCompletedAt: '2026-04-21T12:05:00.000Z',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: '2026-04-21T12:05:00.000Z',
         }),
@@ -205,6 +215,81 @@ describe('behavior-audit phase 2a classification', () => {
     expect([...dirty]).toEqual(['task-creation'])
     expect(progress.phase2a.classifiedBehaviors[testKey]).toEqual(existingClassified)
     expect(await Bun.file(path.join(auditRoot, 'classified', 'tools.json')).exists()).toBe(false)
+  })
+
+  test('runPhase2a reruns explicitly selected completed classifications when stored phase2a metadata is stale', async () => {
+    const classify = await importWithGuard(
+      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
+      isClassifyModule,
+      'Unexpected classify module shape',
+    )
+    const progressModule = await loadProgressModule(crypto.randomUUID())
+    const incremental = await loadIncrementalModule(crypto.randomUUID())
+    const testKey = 'tests/tools/sample.test.ts::suite > case'
+
+    const progress = progressModule.createEmptyProgress(1)
+    const manifest: IncrementalManifest = {
+      ...incremental.createEmptyManifest(),
+      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v2', reports: 'reports-v1' },
+      tests: {
+        [testKey]: createManifestTestEntry({
+          testFile: 'tests/tools/sample.test.ts',
+          testName: 'suite > case',
+          dependencyPaths: ['tests/tools/sample.test.ts'],
+          phase1Fingerprint: 'phase1-fp',
+          phase2aFingerprint: 'stale-phase2a-fp',
+          phase2Fingerprint: 'phase2-fp',
+          behaviorId: testKey,
+          candidateFeatureKey: 'task-creation',
+          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          domain: 'tools',
+          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
+          lastPhase2aCompletedAt: '2026-04-21T12:05:00.000Z',
+          lastPhase2CompletedAt: '2026-04-21T12:05:00.000Z',
+        }),
+      },
+    }
+
+    progress.phase1.extractedBehaviors[testKey] = createExtractedBehaviorFixture({
+      testName: 'case',
+      fullPath: 'suite > case',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+    })
+    progress.phase2a.completedBehaviors[testKey] = 'done'
+    progress.phase2a.classifiedBehaviors[testKey] = createClassifiedBehaviorFixture({
+      behaviorId: testKey,
+      testKey,
+      domain: 'tools',
+      behavior: 'When the user creates a task, the bot saves it.',
+      context: 'Calls create_task and returns the new task.',
+      keywords: ['task-create'],
+      visibility: 'internal',
+      candidateFeatureKey: 'task-creation',
+      candidateFeatureLabel: 'Task creation',
+      classificationNotes: 'Stale prior classification.',
+    })
+
+    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+      Promise.resolve({
+        visibility: 'user-facing',
+        candidateFeatureKey: 'task-creation',
+        candidateFeatureLabel: 'Task creation',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Refreshed classification.',
+      })
+
+    const dirty = await classify.runPhase2a({
+      progress,
+      selectedTestKeys: new Set([testKey]),
+      manifest,
+    })
+
+    expect(classifyBehaviorWithRetryCalls).toBe(1)
+    expect([...dirty]).toEqual(['task-creation'])
+    expect(progress.phase2a.classifiedBehaviors[testKey]?.visibility).toBe('user-facing')
   })
 
   test('runPhase2a passes persisted retry attempt offset through to the classifier on resumed failures', async () => {

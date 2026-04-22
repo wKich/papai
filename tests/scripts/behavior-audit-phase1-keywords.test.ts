@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { mockReportsConfig } from './behavior-audit-integration.helpers.js'
+import { createEmptyProgressFixture, mockReportsConfig } from './behavior-audit-integration.helpers.js'
 import {
   cleanupTempDirs,
   makeTempDir,
@@ -15,9 +15,45 @@ import {
   loadExtractModule,
   loadIncrementalModule,
   loadKeywordVocabularyModule,
-  loadProgressModule,
   loadReportWriterModule,
 } from './behavior-audit-integration.support.js'
+
+type ExtractResult = NonNullable<
+  Awaited<ReturnType<(typeof import('../../scripts/behavior-audit/extract-agent.js'))['extractWithRetry']>>
+>
+type ResolveKeywordsResult = NonNullable<
+  Awaited<
+    ReturnType<(typeof import('../../scripts/behavior-audit/keyword-resolver-agent.js'))['resolveKeywordsWithRetry']>
+  >
+>
+
+function createExtractResult(input: {
+  readonly behavior: string
+  readonly context: string
+  readonly candidateKeywords: readonly string[]
+}): ExtractResult {
+  return {
+    behavior: input.behavior,
+    context: input.context,
+    candidateKeywords: [...input.candidateKeywords],
+  }
+}
+
+function createResolvedKeywords(input: {
+  readonly keywords: readonly string[]
+  readonly appendedEntries: readonly {
+    readonly slug: string
+    readonly description: string
+    readonly createdAt: string
+    readonly updatedAt: string
+    readonly timesUsed: number
+  }[]
+}): ResolveKeywordsResult {
+  return {
+    keywords: [...input.keywords],
+    appendedEntries: input.appendedEntries.map((entry) => ({ ...entry })),
+  }
+}
 
 beforeEach(() => {
   if (originalOpenAiApiKey === undefined) {
@@ -46,55 +82,43 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
   })
 
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Resolves target context and forwards execution through the group routing path.',
-        candidateKeywords: ['group-routing', 'group-targeting', 'request-routing'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting', 'group-routing'],
-        appendedEntries: [],
-      }),
-  }))
-
   const testFileContent = "describe('suite', () => { test('case', () => {}) })"
   mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
   writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
 
   const tag = crypto.randomUUID()
   const extract = await loadExtractModule(`phase1-keywords-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-keywords-${tag}`)
   const incremental = await loadIncrementalModule(`phase1-keywords-${tag}`)
 
-  const progress = progressModule.createEmptyProgress(1)
+  const progress = createEmptyProgressFixture(1)
   const manifest = incremental.createEmptyManifest()
   const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
 
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest,
-  })
+  await extract.runPhase1(
+    {
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest,
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Resolves target context and forwards execution through the group routing path.',
+            candidateKeywords: ['group-routing', 'group-targeting', 'request-routing'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting', 'group-routing'],
+            appendedEntries: [],
+          }),
+        ),
+    },
+  )
 
   const stored = progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']
   if (stored === undefined) {
@@ -203,62 +227,50 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
     EXCLUDED_PREFIXES: [] as const,
   })
 
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting',
-            description: 'Targeting work at a group context.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
   const testFileContent = "describe('suite', () => { test('case', () => {}) })"
   mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
   writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
 
   const tag = crypto.randomUUID()
   const extract = await loadExtractModule(`phase1-atomic-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-atomic-${tag}`)
   const incremental = await loadIncrementalModule(`phase1-atomic-${tag}`)
 
-  const progress = progressModule.createEmptyProgress(1)
+  const progress = createEmptyProgressFixture(1)
   const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
 
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
+  await extract.runPhase1(
+    {
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Routes through group context selection.',
+            candidateKeywords: ['group-targeting'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting'],
+            appendedEntries: [
+              {
+                slug: 'group-targeting',
+                description: 'Targeting work at a group context.',
+                createdAt: '2026-04-20T12:00:00.000Z',
+                updatedAt: '2026-04-20T12:00:00.000Z',
+                timesUsed: 1,
+              },
+            ],
+          }),
+        ),
+    },
+  )
 
   const savedVocabText = await Bun.file(vocabularyPath).text()
   expect(savedVocabText).toContain('"group-targeting"')
@@ -284,56 +296,15 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
     EXCLUDED_PREFIXES: [] as const,
   })
 
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> => {
-      extractCalls += 1
-      return Promise.resolve({
-        behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
-        context: 'Reprocesses changed test dependencies.',
-        candidateKeywords: ['group-targeting-updated'],
-      })
-    },
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting-updated'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting-updated',
-            description: 'Updated targeting behavior.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
   const testFileContent = "describe('suite', () => { test('case', () => {}) })"
   mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
   writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
 
   const tag = crypto.randomUUID()
   const extract = await loadExtractModule(`phase1-rerun-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-rerun-${tag}`)
   const incremental = await loadIncrementalModule(`phase1-rerun-${tag}`)
 
-  const progress = progressModule.createEmptyProgress(1)
+  const progress = createEmptyProgressFixture(1)
   progress.phase1.completedFiles.push('tests/tools/sample.test.ts')
   progress.phase1.completedTests['tests/tools/sample.test.ts'] = {
     'tests/tools/sample.test.ts::suite > case': 'done',
@@ -347,12 +318,41 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   }
 
   const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
+  await extract.runPhase1(
+    {
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) => {
+        extractCalls += 1
+        return Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
+            context: 'Reprocesses changed test dependencies.',
+            candidateKeywords: ['group-targeting-updated'],
+          }),
+        )
+      },
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting-updated'],
+            appendedEntries: [
+              {
+                slug: 'group-targeting-updated',
+                description: 'Updated targeting behavior.',
+                createdAt: '2026-04-20T12:00:00.000Z',
+                updatedAt: '2026-04-20T12:00:00.000Z',
+                timesUsed: 1,
+              },
+            ],
+          }),
+        ),
+    },
+  )
 
   expect(extractCalls).toBe(1)
   expect(progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']).toMatchObject({
@@ -375,61 +375,49 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
     EXCLUDED_PREFIXES: [] as const,
   })
 
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> =>
-      Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [
-          {
-            slug: 'group-targeting',
-            description: 'Targeting work at a group context.',
-            createdAt: '2026-04-20T12:00:00.000Z',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-            timesUsed: 1,
-          },
-        ],
-      }),
-  }))
-
   const testFileContent = "describe('suite', () => { test('case', () => {}) })"
   mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
   writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
 
   const tag = crypto.randomUUID()
   const extract = await loadExtractModule(`phase1-keyword-count-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-keyword-count-${tag}`)
   const incremental = await loadIncrementalModule(`phase1-keyword-count-${tag}`)
 
-  const progress = progressModule.createEmptyProgress(1)
+  const progress = createEmptyProgressFixture(1)
   const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
-  await extract.runPhase1({
-    testFiles: [parsed],
-    progress,
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
+  await extract.runPhase1(
+    {
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Routes through group context selection.',
+            candidateKeywords: ['group-targeting'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting'],
+            appendedEntries: [
+              {
+                slug: 'group-targeting',
+                description: 'Targeting work at a group context.',
+                createdAt: '2026-04-20T12:00:00.000Z',
+                updatedAt: '2026-04-20T12:00:00.000Z',
+                timesUsed: 1,
+              },
+            ],
+          }),
+        ),
+    },
+  )
 
   const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
   if (!isKeywordVocabulary(savedVocabularyRaw)) {
@@ -454,40 +442,6 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
     EXCLUDED_PREFIXES: [] as const,
   })
-
-  void mock.module('../../scripts/behavior-audit/extract-agent.js', () => ({
-    extractWithRetry: (): Promise<{
-      readonly behavior: string
-      readonly context: string
-      readonly candidateKeywords: readonly string[]
-    }> =>
-      Promise.resolve({
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        context: 'Routes through group context selection.',
-        candidateKeywords: ['group-targeting'],
-      }),
-  }))
-
-  void mock.module('../../scripts/behavior-audit/keyword-resolver-agent.js', () => ({
-    resolveKeywordsWithRetry: (
-      prompt: string,
-    ): Promise<{
-      readonly keywords: readonly string[]
-      readonly appendedEntries: readonly {
-        readonly slug: string
-        readonly description: string
-        readonly createdAt: string
-        readonly updatedAt: string
-        readonly timesUsed: number
-      }[]
-    }> => {
-      capturedResolverPrompt = prompt
-      return Promise.resolve({
-        keywords: ['group-targeting'],
-        appendedEntries: [],
-      })
-    },
-  }))
 
   mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
   writeFileSync(
@@ -520,15 +474,35 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
 
   const tag = crypto.randomUUID()
   const extract = await loadExtractModule(`phase1-slug-prompt-${tag}`)
-  const progressModule = await loadProgressModule(`phase1-slug-prompt-${tag}`)
   const incremental = await loadIncrementalModule(`phase1-slug-prompt-${tag}`)
 
-  await extract.runPhase1({
-    testFiles: [parseTestFile('tests/tools/sample.test.ts', "describe('suite', () => { test('case', () => {}) })")],
-    progress: progressModule.createEmptyProgress(1),
-    selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
-    manifest: incremental.createEmptyManifest(),
-  })
+  await extract.runPhase1(
+    {
+      testFiles: [parseTestFile('tests/tools/sample.test.ts', "describe('suite', () => { test('case', () => {}) })")],
+      progress: createEmptyProgressFixture(1),
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Routes through group context selection.',
+            candidateKeywords: ['group-targeting'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (prompt, _attempt) => {
+        capturedResolverPrompt = prompt
+        return Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting'],
+            appendedEntries: [],
+          }),
+        )
+      },
+    },
+  )
 
   expect(capturedResolverPrompt).toContain('Existing vocabulary:')
   expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')

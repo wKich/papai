@@ -4,6 +4,7 @@ import * as fsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
 import type * as IncrementalModule from '../../scripts/behavior-audit/incremental.js'
 import type * as ProgressMigrateModule from '../../scripts/behavior-audit/progress-migrate.js'
 
@@ -47,6 +48,12 @@ function isProgressMigrateModule(value: unknown): value is typeof ProgressMigrat
   )
 }
 
+function isBehaviorAuditModule(value: unknown): value is {
+  readonly runBehaviorAudit: () => Promise<void>
+} {
+  return isObject(value) && 'runBehaviorAudit' in value && typeof value['runBehaviorAudit'] === 'function'
+}
+
 async function loadIncrementalModule(): Promise<typeof IncrementalModule> {
   const mod: unknown = await import(`../../scripts/behavior-audit/incremental.js?test=${crypto.randomUUID()}`)
   if (!isIncrementalModule(mod)) throw new Error('Unexpected incremental module shape')
@@ -60,7 +67,14 @@ async function loadProgressMigrateModule(): Promise<typeof ProgressMigrateModule
 }
 
 async function loadBehaviorAuditEntryPoint(tag: string): Promise<void> {
-  await import(`../../scripts/behavior-audit.ts?test=${tag}`)
+  const mod: unknown = await import(`../../scripts/behavior-audit.ts?test=${tag}`)
+  if (!isBehaviorAuditModule(mod)) {
+    throw new Error('Unexpected behavior-audit module shape')
+  }
+  await mod.runBehaviorAudit().catch((error: unknown) => {
+    console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })
 }
 
 async function runCommand(command: string[], cwd: string): Promise<string> {
@@ -1078,24 +1092,93 @@ describe('behavior-audit incremental manifest', () => {
   })
 
   test('startup passes changed tests through phase2a and phase2b without touching unrelated candidate features', async () => {
-    await initializeGitRepo(root)
-
     const calls: { readonly phase2a: readonly string[]; readonly phase2b: readonly string[] }[] = []
 
-    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
-      runPhase2a: (input: { readonly selectedTestKeys: ReadonlySet<string> }): Promise<ReadonlySet<string>> => {
-        calls.push({ phase2a: [...input.selectedTestKeys].toSorted(), phase2b: [] })
+    const deps: BehaviorAuditDeps = {
+      requireOpenAiApiKey: () => {},
+      prepareIncrementalRun: () =>
+        Promise.resolve({
+          previousManifest: {
+            version: 1,
+            lastStartCommit: null,
+            lastStartedAt: null,
+            lastCompletedAt: null,
+            phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+            tests: {},
+          },
+          previousLastStartCommit: null,
+          updatedManifest: {
+            version: 1,
+            lastStartCommit: 'head-1',
+            lastStartedAt: '2026-04-22T12:00:00.000Z',
+            lastCompletedAt: null,
+            phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
+            tests: {},
+          },
+        }),
+      selectIncrementalRunWork: () =>
+        Promise.resolve({
+          parsedFiles: [
+            {
+              filePath: 'tests/tools/sample.test.ts',
+              tests: [{ name: 'sample', fullPath: 'sample', source: '', startLine: 1, endLine: 1 }],
+            },
+          ],
+          previousConsolidatedManifest: null,
+          selection: {
+            phase1SelectedTestKeys: ['tests/tools/sample.test.ts::sample'],
+            phase2aSelectedTestKeys: ['tests/tools/sample.test.ts::sample'],
+            phase2bSelectedCandidateFeatureKeys: [],
+            phase3SelectedConsolidatedIds: [],
+            reportRebuildOnly: false,
+          },
+        }),
+      loadOrCreateProgress: () =>
+        Promise.resolve({
+          version: 3,
+          startedAt: '2026-04-22T12:00:00.000Z',
+          phase1: {
+            status: 'not-started',
+            completedTests: {},
+            extractedBehaviors: {},
+            failedTests: {},
+            completedFiles: [],
+            stats: { filesTotal: 1, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+          },
+          phase2a: {
+            status: 'not-started',
+            completedBehaviors: {},
+            classifiedBehaviors: {},
+            failedBehaviors: {},
+            stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+          },
+          phase2b: {
+            status: 'not-started',
+            completedCandidateFeatures: {},
+            consolidations: {},
+            failedCandidateFeatures: {},
+            stats: {
+              candidateFeaturesTotal: 0,
+              candidateFeaturesDone: 0,
+              candidateFeaturesFailed: 0,
+              behaviorsConsolidated: 0,
+            },
+          },
+          phase3: {
+            status: 'not-started',
+            completedBehaviors: {},
+            evaluations: {},
+            failedBehaviors: {},
+            stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+          },
+        }),
+      rebuildReportsFromStoredResults: () => Promise.resolve(),
+      runPhase1IfNeeded: () => Promise.resolve(),
+      runPhase2aIfNeeded: (_progress, _manifest, selectedTestKeys) => {
+        calls.push({ phase2a: [...selectedTestKeys].toSorted(), phase2b: [] })
         return Promise.resolve(new Set(['task-creation']))
       },
-    }))
-
-    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
-      runPhase2b: (
-        _progress: unknown,
-        _manifest: IncrementalModule.ConsolidatedManifest,
-        _phaseVersion: string,
-        selectedCandidateFeatureKeys: ReadonlySet<string>,
-      ): Promise<IncrementalModule.ConsolidatedManifest> => {
+      runPhase2bIfNeeded: (_progress, _phaseVersion, selectedCandidateFeatureKeys) => {
         const last = calls[calls.length - 1]
         if (last === undefined) {
           throw new Error('Expected phase2a call before phase2b')
@@ -1106,9 +1189,12 @@ describe('behavior-audit incremental manifest', () => {
         }
         return Promise.resolve({ version: 1, entries: {} })
       },
-    }))
+      saveConsolidatedManifest: () => Promise.resolve(),
+      runPhase3IfNeeded: () => Promise.resolve(),
+      log: { log: mock(() => {}) },
+    }
 
-    await loadBehaviorAuditEntryPoint(crypto.randomUUID())
+    await runBehaviorAudit(deps)
 
     expect(calls).toEqual([
       {

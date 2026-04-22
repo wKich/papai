@@ -132,6 +132,7 @@ async function prepareIncrementalRun(): Promise<{
 
 async function selectIncrementalRunWork(input: {
   readonly previousManifest: IncrementalManifest
+  readonly updatedManifest: IncrementalManifest
   readonly previousLastStartCommit: string | null
 }): Promise<{
   readonly parsedFiles: readonly ParsedTestFile[]
@@ -147,7 +148,7 @@ async function selectIncrementalRunWork(input: {
   const selection = selectIncrementalWork({
     changedFiles,
     previousManifest: input.previousManifest,
-    currentPhaseVersions: input.previousManifest.phaseVersions,
+    currentPhaseVersions: input.updatedManifest.phaseVersions,
     discoveredTestKeys,
     previousConsolidatedManifest,
   })
@@ -180,46 +181,75 @@ async function resolveHeadCommit(): Promise<string> {
   return output.trim()
 }
 
-async function main(): Promise<void> {
-  requireOpenAiApiKey()
-  console.log('Behavior Audit — discovering test files...\n')
+export interface BehaviorAuditDeps {
+  readonly requireOpenAiApiKey: () => void
+  readonly prepareIncrementalRun: typeof prepareIncrementalRun
+  readonly selectIncrementalRunWork: typeof selectIncrementalRunWork
+  readonly loadOrCreateProgress: typeof loadOrCreateProgress
+  readonly rebuildReportsFromStoredResults: typeof rebuildReportsFromStoredResults
+  readonly runPhase1IfNeeded: typeof runPhase1IfNeeded
+  readonly runPhase2aIfNeeded: typeof runPhase2aIfNeeded
+  readonly runPhase2bIfNeeded: typeof runPhase2bIfNeeded
+  readonly saveConsolidatedManifest: typeof saveConsolidatedManifest
+  readonly runPhase3IfNeeded: typeof runPhase3IfNeeded
+  readonly log: Pick<typeof console, 'log'>
+}
 
-  const { previousManifest, previousLastStartCommit, updatedManifest } = await prepareIncrementalRun()
-  const { parsedFiles, previousConsolidatedManifest, selection } = await selectIncrementalRunWork({
+const defaultBehaviorAuditDeps: BehaviorAuditDeps = {
+  requireOpenAiApiKey,
+  prepareIncrementalRun,
+  selectIncrementalRunWork,
+  loadOrCreateProgress,
+  rebuildReportsFromStoredResults,
+  runPhase1IfNeeded,
+  runPhase2aIfNeeded,
+  runPhase2bIfNeeded,
+  saveConsolidatedManifest,
+  runPhase3IfNeeded,
+  log: console,
+}
+
+export async function runBehaviorAudit(deps: BehaviorAuditDeps = defaultBehaviorAuditDeps): Promise<void> {
+  deps.requireOpenAiApiKey()
+  deps.log.log('Behavior Audit — discovering test files...\n')
+
+  const { previousManifest, previousLastStartCommit, updatedManifest } = await deps.prepareIncrementalRun()
+  const { parsedFiles, previousConsolidatedManifest, selection } = await deps.selectIncrementalRunWork({
     previousManifest,
+    updatedManifest,
     previousLastStartCommit,
   })
 
-  const progress = await loadOrCreateProgress(parsedFiles.length)
+  const progress = await deps.loadOrCreateProgress(parsedFiles.length)
 
   if (selection.reportRebuildOnly) {
-    await rebuildReportsFromStoredResults({
+    await deps.rebuildReportsFromStoredResults({
       manifest: updatedManifest,
       extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
       evaluationsByKey: progress.phase3.evaluations,
       consolidatedManifest: previousConsolidatedManifest,
     })
-    console.log('\nBehavior audit complete.')
+    deps.log.log('\nBehavior audit complete.')
     return
   }
 
-  await runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
-  const dirtyFromPhase2a = await runPhase2aIfNeeded(
+  await deps.runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
+  const dirtyFromPhase2a = await deps.runPhase2aIfNeeded(
     progress,
     updatedManifest,
     new Set(selection.phase2aSelectedTestKeys),
   )
   const phase2bSelectedKeys = new Set([...selection.phase2bSelectedCandidateFeatureKeys, ...dirtyFromPhase2a])
-  const consolidatedManifest = await runPhase2bIfNeeded(
+  const consolidatedManifest = await deps.runPhase2bIfNeeded(
     progress,
     updatedManifest.phaseVersions.phase2,
     phase2bSelectedKeys,
   )
-  await saveConsolidatedManifest(consolidatedManifest)
+  await deps.saveConsolidatedManifest(consolidatedManifest)
 
-  await runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
+  await deps.runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
 
-  console.log('\nBehavior audit complete.')
+  deps.log.log('\nBehavior audit complete.')
 }
 
 function resolveRunStartManifest(manifest: Awaited<ReturnType<typeof loadManifest>>): IncrementalManifest {
@@ -229,7 +259,9 @@ function resolveRunStartManifest(manifest: Awaited<ReturnType<typeof loadManifes
   return manifest
 }
 
-await main().catch((error: unknown) => {
-  console.error('Fatal error:', error instanceof Error ? error.message : String(error))
-  process.exit(1)
-})
+if (import.meta.main) {
+  await runBehaviorAudit().catch((error: unknown) => {
+    console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })
+}
