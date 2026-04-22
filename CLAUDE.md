@@ -43,6 +43,10 @@ All scripts can be run as `bun <script>` or `bun run <script>`.
 - `bun check` — run lint/typecheck/format checks for staged files
 - `bun check:full` — run the broader full check suite via `scripts/check.sh`
 - `bun check:verbose` — run lint, typecheck, format:check, knip, test, and duplicates in parallel
+- `bun codeindex:test` — run the codeindex workspace test suite
+- `bun codeindex:typecheck` — run codeindex workspace TypeScript checks
+- `bun codeindex:lint` — lint the codeindex workspace
+- `bun codeindex:format:check` — check codeindex workspace formatting
 - `bun fix` — auto-fix lint and format issues
 - `bun changelog:preview` — preview changelog generation with git-cliff
 - `bun changelog:generate` — regenerate `CHANGELOG.md`
@@ -277,3 +281,4 @@ Detailed conventions live in path-scoped `CLAUDE.md` files and `.github/instruct
 | `src/commands/CLAUDE.md`  | command handler rules and DM/group setup flow                          |
 | `src/chat/CLAUDE.md`      | chat provider interface, capabilities, context rendering, interactions |
 | `tests/CLAUDE.md`         | helpers, mocks, mock reset, E2E test guidance                          |
+| `codeindex/CLAUDE.md`     | codeindex workspace structure, scripts, storage, and indexing rules    |
