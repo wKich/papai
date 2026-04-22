@@ -8,18 +8,17 @@
     "args": ["acp"],
     "env": {},
     "sessionConfig": {
-      "model": "kimi-k2-0711-ollama-cloud"
+      "model": "ollama-cloud/kimi-k2.6:cloud"
     },
     "invocationPrefix": "/review-code",
     "requireInvocationPrefix": false
   },
   "fixer": {
-    "command": "/usr/local/bin/claude-acp-adapter",
-    "args": [],
+    "command": "opencode",
+    "args": ["acp"],
     "env": {},
     "sessionConfig": {
-      "model": "claude-sonnet-4-20250514",
-      "thinking_effort": "high"
+      "model": "opencode/claude-sonnet-4-6"
     },
     "verifyInvocationPrefix": null,
     "fixInvocationPrefix": null,
