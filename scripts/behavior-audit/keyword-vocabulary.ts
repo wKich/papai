@@ -101,15 +101,3 @@ export async function saveKeywordVocabulary(entries: readonly KeywordVocabularyE
   const parsed = normalizeKeywordVocabularyEntries(KeywordVocabularySchema.parse(entries))
   await writeKeywordVocabularyText(JSON.stringify(parsed, null, 2) + '\n')
 }
-
-export function findExactKeyword(
-  entries: readonly KeywordVocabularyEntry[],
-  slug: string,
-): KeywordVocabularyEntry | null {
-  const normalizedSlug = normalizeKeywordSlug(slug)
-  const found = entries.find((entry) => entry.slug === normalizedSlug)
-  if (found === undefined) {
-    return null
-  }
-  return found
-}

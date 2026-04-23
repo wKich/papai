@@ -286,11 +286,6 @@ export function resetPhase2AndPhase3(progress: Progress): void {
   progress.phase3 = emptyPhase3()
 }
 
-export function resetPhase2bAndPhase3(progress: Progress): void {
-  progress.phase2b = emptyPhase2b()
-  progress.phase3 = emptyPhase3()
-}
-
 export function resetPhase3(progress: Progress): void {
   progress.phase3 = emptyPhase3()
 }
