@@ -99,12 +99,11 @@ async function loadJoinedInput(input: {
     testKey: input.testKey,
     domain: classifiedRecord.domain,
     visibility: classifiedRecord.visibility,
-    candidateFeatureKey: featureKey,
-    candidateFeatureLabel: classifiedRecord.featureLabel,
+    featureKey,
+    featureLabel: classifiedRecord.featureLabel,
     behavior: extractedRecord.behavior,
     context: extractedRecord.context,
     keywords: extractedRecord.keywords,
-    featureKey,
   }
 }
 

@@ -7,7 +7,7 @@ import type { ClassifiedBehavior } from './classified-store.js'
 import { readClassifiedFile, writeClassifiedFile } from './classified-store.js'
 import { classifyBehaviorWithRetry } from './classify-agent.js'
 import {
-  addDirtyCandidateFeatureKey,
+  addDirtyFeatureKey,
   buildBehaviorId,
   buildPrompt,
   loadSelectedBehaviors,
@@ -170,14 +170,11 @@ async function processSelectedClassification(input: {
   readonly progress: Progress
   readonly entry: SelectedBehaviorEntry
   readonly manifest: IncrementalManifest
-  readonly dirtyCandidateFeatureKeys: Set<string>
+  readonly dirtyFeatureKeys: Set<string>
   readonly deps: Phase2aDeps
 }): Promise<IncrementalManifest> {
   if (shouldReuseCompletedClassification(input.progress, input.manifest, input.entry)) {
-    addDirtyCandidateFeatureKey(
-      input.dirtyCandidateFeatureKeys,
-      input.manifest.tests[input.entry.testKey]?.featureKey ?? null,
-    )
+    addDirtyFeatureKey(input.dirtyFeatureKeys, input.manifest.tests[input.entry.testKey]?.featureKey ?? null)
     return input.manifest
   }
 
@@ -187,7 +184,7 @@ async function processSelectedClassification(input: {
     return input.manifest
   }
 
-  addDirtyCandidateFeatureKey(input.dirtyCandidateFeatureKeys, classified.featureKey)
+  addDirtyFeatureKey(input.dirtyFeatureKeys, classified.featureKey)
   return persistSuccessfulClassification({
     progress: input.progress,
     manifest: input.manifest,
@@ -207,7 +204,7 @@ export async function runPhase2a(
   const defaultPhase2aDeps = createDefaultPhase2aDeps()
   const resolvedDeps: Phase2aDeps = args.length === 0 ? defaultPhase2aDeps : { ...defaultPhase2aDeps, ...args[0] }
   progress.phase2a.status = 'in-progress'
-  const dirtyCandidateFeatureKeys = new Set<string>()
+  const dirtyFeatureKeys = new Set<string>()
   const limit = pLimit(1)
   let currentManifest = manifest
 
@@ -222,7 +219,7 @@ export async function runPhase2a(
           progress,
           entry,
           manifest: currentManifest,
-          dirtyCandidateFeatureKeys,
+          dirtyFeatureKeys,
           deps: resolvedDeps,
         })
       }),
@@ -231,5 +228,5 @@ export async function runPhase2a(
 
   progress.phase2a.status = 'done'
   await resolvedDeps.saveProgress(progress)
-  return dirtyCandidateFeatureKeys
+  return dirtyFeatureKeys
 }

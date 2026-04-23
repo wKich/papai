@@ -20,7 +20,7 @@ All scripts can be run as `bun <script>` or `bun run <script>`.
 - `bun start` — build the dashboard client and run the bot
 - `bun start:debug` — build the dashboard client and run the bot with `DEBUG_SERVER=true`
 - `bun build:client` — bundle the debug dashboard UI from `client/debug/` to `public/`
-- `bun review:loop` — run the review-loop workflow
+- `bun review-loop:start` — run the review-loop workflow
 - `bun lint` — lint with oxlint
 - `bun lint:agent-strict -- <paths...>` — stricter agent-focused lint pass for selected paths
 - `bun lint:fix` — lint with auto-fix
@@ -47,6 +47,10 @@ All scripts can be run as `bun <script>` or `bun run <script>`.
 - `bun codeindex:typecheck` — run codeindex workspace TypeScript checks
 - `bun codeindex:lint` — lint the codeindex workspace
 - `bun codeindex:format:check` — check codeindex workspace formatting
+- `bun review-loop:test` — run the review-loop workspace test suite
+- `bun review-loop:typecheck` — run review-loop workspace TypeScript checks
+- `bun review-loop:lint` — lint the review-loop workspace
+- `bun review-loop:format:check` — check review-loop workspace formatting
 - `bun fix` — auto-fix lint and format issues
 - `bun changelog:preview` — preview changelog generation with git-cliff
 - `bun changelog:generate` — regenerate `CHANGELOG.md`
@@ -282,3 +286,4 @@ Detailed conventions live in path-scoped `CLAUDE.md` files and `.github/instruct
 | `src/chat/CLAUDE.md`      | chat provider interface, capabilities, context rendering, interactions |
 | `tests/CLAUDE.md`         | helpers, mocks, mock reset, E2E test guidance                          |
 | `codeindex/CLAUDE.md`     | codeindex workspace structure, scripts, storage, and indexing rules    |
+| `review-loop/CLAUDE.md`   | review-loop workspace structure, scripts, storage, and TDD rules       |

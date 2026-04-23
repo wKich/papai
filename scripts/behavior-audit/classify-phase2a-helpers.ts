@@ -104,12 +104,9 @@ export function shouldReuseCompletedClassification(
   return manifestEntry.phase2aFingerprint === nextFingerprint
 }
 
-export function addDirtyCandidateFeatureKey(
-  dirtyCandidateFeatureKeys: Set<string>,
-  candidateFeatureKey: string | null,
-): void {
-  if (candidateFeatureKey !== null) {
-    dirtyCandidateFeatureKeys.add(candidateFeatureKey)
+export function addDirtyFeatureKey(dirtyFeatureKeys: Set<string>, featureKey: string | null): void {
+  if (featureKey !== null) {
+    dirtyFeatureKeys.add(featureKey)
   }
 }
 
@@ -124,8 +121,8 @@ export function toClassifiedBehavior(
     testKey,
     domain,
     visibility: result.visibility,
-    featureKey: result.candidateFeatureKey,
-    featureLabel: result.candidateFeatureLabel,
+    featureKey: result.featureKey,
+    featureLabel: result.featureLabel,
     supportingBehaviorRefs: result.supportingBehaviorRefs,
     relatedBehaviorHints: result.relatedBehaviorHints,
     classificationNotes: result.classificationNotes,

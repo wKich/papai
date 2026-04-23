@@ -304,7 +304,7 @@ describe('behavior-audit incremental manifest', () => {
     expect(loaded.tests).toEqual({})
   })
 
-  test('loadManifest accepts legacy alias fields but returns canonical entries only', async () => {
+  test('loadManifest ignores legacy alias fields and leaves canonical entries null', async () => {
     const incremental = await loadIncrementalModule()
 
     await Bun.write(
@@ -319,8 +319,8 @@ describe('behavior-audit incremental manifest', () => {
             phase1Fingerprint: 'phase1-fingerprint',
             phase2Fingerprint: 'phase2-fingerprint',
             behaviorId: 'behavior-1',
-            candidateFeatureKey: 'task-creation',
-            extractedBehaviorPath: 'reports/audit-behavior/extracted/tools/create-task.test.json',
+            featureKey: null,
+            extractedArtifactPath: null,
             classifiedArtifactPath: 'reports/audit-behavior/classified/tools/create-task.test.json',
             domain: 'tools',
             lastPhase1CompletedAt: '2026-04-23T12:00:00.000Z',
@@ -337,13 +337,31 @@ describe('behavior-audit incremental manifest', () => {
 
     const entry = loaded.tests['tests/tools/create-task.test.ts::suite > case']
     expect(entry).toBeDefined()
-    expect(entry?.featureKey).toBe('task-creation')
-    expect(entry?.extractedArtifactPath).toBe('reports/audit-behavior/extracted/tools/create-task.test.json')
-    expect(entry).not.toHaveProperty('candidateFeatureKey')
-    expect(entry).not.toHaveProperty('extractedBehaviorPath')
+    expect(entry?.featureKey).toBeNull()
+    expect(entry?.extractedArtifactPath).toBeNull()
+    const unknownKeys = Object.keys(entry ?? {}).filter(
+      (k) =>
+        ![
+          'testFile',
+          'testName',
+          'dependencyPaths',
+          'phase1Fingerprint',
+          'phase2aFingerprint',
+          'phase2Fingerprint',
+          'behaviorId',
+          'featureKey',
+          'extractedArtifactPath',
+          'classifiedArtifactPath',
+          'domain',
+          'lastPhase1CompletedAt',
+          'lastPhase2aCompletedAt',
+          'lastPhase2CompletedAt',
+        ].includes(k),
+    )
+    expect(unknownKeys).toEqual([])
   })
 
-  test('loadConsolidatedManifest accepts legacy alias fields but returns canonical entries only', async () => {
+  test('loadConsolidatedManifest ignores legacy alias fields and leaves canonical entries null', async () => {
     const incremental = await loadIncrementalModule()
     const consolidatedManifestPath = path.join(reportsDir, 'consolidated-manifest.json')
 
@@ -362,7 +380,6 @@ describe('behavior-audit incremental manifest', () => {
             sourceBehaviorIds: ['behavior-1'],
             supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            candidateFeatureKey: 'task-creation',
             keywords: ['task-create'],
             sourceDomains: ['tools'],
             phase2Fingerprint: 'phase2-fingerprint',
@@ -380,8 +397,29 @@ describe('behavior-audit incremental manifest', () => {
 
     const entry = loaded.entries['task-creation::task-creation']
     expect(entry).toBeDefined()
-    expect(entry?.featureKey).toBe('task-creation')
-    expect(entry).not.toHaveProperty('candidateFeatureKey')
+    expect(entry?.featureKey).toBeUndefined()
+    const unknownKeys = Object.keys(entry ?? {}).filter(
+      (k) =>
+        ![
+          'consolidatedId',
+          'domain',
+          'featureName',
+          'consolidatedArtifactPath',
+          'evaluatedArtifactPath',
+          'sourceTestKeys',
+          'sourceBehaviorIds',
+          'supportingInternalBehaviorIds',
+          'isUserFacing',
+          'featureKey',
+          'keywords',
+          'sourceDomains',
+          'phase2Fingerprint',
+          'phase3Fingerprint',
+          'lastConsolidatedAt',
+          'lastEvaluatedAt',
+        ].includes(k),
+    )
+    expect(unknownKeys).toEqual([])
   })
 
   test('loadManifest throws when manifest content is malformed', async () => {
@@ -1032,7 +1070,7 @@ describe('behavior-audit incremental manifest', () => {
             keywords: ['task-create'],
             visibility: 'user-facing',
             featureKey: 'task-creation',
-            candidateFeatureLabel: 'Task creation',
+            featureLabel: 'Task creation',
             supportingBehaviorRefs: [],
             relatedBehaviorHints: [],
             classificationNotes: 'clear primary workflow',

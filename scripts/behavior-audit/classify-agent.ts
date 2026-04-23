@@ -6,8 +6,8 @@ import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKO
 
 const ClassificationResultSchema = z.object({
   visibility: z.enum(['user-facing', 'internal', 'ambiguous']),
-  candidateFeatureKey: z.string().nullable(),
-  candidateFeatureLabel: z.string().nullable(),
+  featureKey: z.string().nullable(),
+  featureLabel: z.string().nullable(),
   supportingBehaviorRefs: z.array(z.object({ behaviorId: z.string(), reason: z.string() })),
   relatedBehaviorHints: z.array(
     z.object({
@@ -57,13 +57,13 @@ const SYSTEM_PROMPT = `You are classifying one extracted behavior from a test su
 
 Return structured output with:
 - visibility: user-facing, internal, or ambiguous
-- candidateFeatureKey: canonical stable feature key when applicable
-- candidateFeatureLabel: short human-readable feature label when applicable
+- featureKey: canonical stable feature key when applicable
+- featureLabel: short human-readable feature label when applicable
 - supportingBehaviorRefs: internal supporting behavior references by behaviorId
 - relatedBehaviorHints: nearby behaviors that are same-feature, supporting-detail, or possibly-related
 - classificationNotes: concise reasoning for maintainers
 
-Prefer reusing an existing candidateFeatureKey when semantically compatible. Preserve ambiguity instead of forcing a merge.`
+Prefer reusing an existing featureKey when semantically compatible. Preserve ambiguity instead of forcing a merge.`
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {

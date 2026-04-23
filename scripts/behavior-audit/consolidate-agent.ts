@@ -56,21 +56,21 @@ export interface ConsolidateBehaviorInput {
   readonly testKey: string
   readonly domain: string
   readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
-  readonly candidateFeatureKey: string
-  readonly candidateFeatureLabel: string | null
+  readonly featureKey: string
+  readonly featureLabel: string | null
   readonly behavior: string
   readonly context: string
   readonly keywords: readonly string[]
 }
 
-function buildPrompt(candidateFeatureKey: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
+function buildPrompt(featureKey: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
   const behaviorList = behaviors
     .map(
       (b, i) =>
-        `${i + 1}. BehaviorId: "${b.behaviorId}"\n   TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Visibility: ${b.visibility}\n   Candidate feature key: ${b.candidateFeatureKey}\n   Candidate feature label: ${b.candidateFeatureLabel ?? '(none)'}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
+        `${i + 1}. BehaviorId: "${b.behaviorId}"\n   TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Visibility: ${b.visibility}\n   Feature key: ${b.featureKey}\n   Feature label: ${b.featureLabel ?? '(none)'}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
     )
     .join('\n\n')
-  return `Candidate feature key: ${candidateFeatureKey}\n\nCandidate behavior pool:\n\n${behaviorList}`
+  return `Feature key: ${featureKey}\n\nBehavior pool:\n\n${behaviorList}`
 }
 
 function sleep(ms: number): Promise<void> {
@@ -116,7 +116,7 @@ function slugify(name: string): string {
 
 async function attemptConsolidation(
   prompt: string,
-  candidateFeatureKey: string,
+  featureKey: string,
   attempt: number,
   remaining: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
@@ -131,20 +131,20 @@ async function attemptConsolidation(
   const result = await consolidateSingle(prompt, attempt)
   if (result !== null) {
     return result.consolidations.map((item) => ({
-      id: `${candidateFeatureKey}::${slugify(item.featureName)}`,
+      id: `${featureKey}::${slugify(item.featureName)}`,
       item,
     }))
   }
 
-  return attemptConsolidation(prompt, candidateFeatureKey, attempt + 1, remaining - 1)
+  return attemptConsolidation(prompt, featureKey, attempt + 1, remaining - 1)
 }
 
 export function consolidateWithRetry(
-  candidateFeatureKey: string,
+  featureKey: string,
   behaviors: readonly ConsolidateBehaviorInput[],
   attemptOffset: number,
 ): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
-  const prompt = buildPrompt(candidateFeatureKey, behaviors)
+  const prompt = buildPrompt(featureKey, behaviors)
   const remaining = MAX_RETRIES - attemptOffset
-  return attemptConsolidation(prompt, candidateFeatureKey, attemptOffset, remaining)
+  return attemptConsolidation(prompt, featureKey, attemptOffset, remaining)
 }

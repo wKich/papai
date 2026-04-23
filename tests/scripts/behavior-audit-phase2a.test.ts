@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
+import type { Phase2aDeps } from '../../scripts/behavior-audit-phase2a.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { ExtractedBehaviorRecord } from '../../scripts/behavior-audit/extracted-store.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
@@ -47,8 +47,8 @@ describe('behavior-audit phase 2a classification', () => {
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
         visibility: 'user-facing',
-        candidateFeatureKey: 'task-creation',
-        candidateFeatureLabel: 'Task creation',
+        featureKey: 'task-creation',
+        featureLabel: 'Task creation',
         supportingBehaviorRefs: [],
         relatedBehaviorHints: [],
         classificationNotes: 'Matches task creation flow.',
@@ -397,8 +397,8 @@ describe('behavior-audit phase 2a classification', () => {
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
         visibility: 'user-facing',
-        candidateFeatureKey: 'task-creation',
-        candidateFeatureLabel: 'Task creation',
+        featureKey: 'task-creation',
+        featureLabel: 'Task creation',
         supportingBehaviorRefs: [],
         relatedBehaviorHints: [],
         classificationNotes: 'Refreshed classification.',
@@ -450,8 +450,8 @@ describe('behavior-audit phase 2a classification', () => {
       classifierArgs.push([prompt, attemptOffset])
       return Promise.resolve({
         visibility: 'user-facing',
-        candidateFeatureKey: 'task-creation',
-        candidateFeatureLabel: 'Task creation',
+        featureKey: 'task-creation',
+        featureLabel: 'Task creation',
         supportingBehaviorRefs: [],
         relatedBehaviorHints: [],
         classificationNotes: 'Resumed from prior failed attempt.',
@@ -526,8 +526,8 @@ describe('behavior-audit phase 2a classification', () => {
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
         visibility: 'user-facing',
-        candidateFeatureKey: 'task-recovery',
-        candidateFeatureLabel: 'Task recovery',
+        featureKey: 'task-recovery',
+        featureLabel: 'Task recovery',
         supportingBehaviorRefs: [],
         relatedBehaviorHints: [],
         classificationNotes: 'Recovered successfully.',

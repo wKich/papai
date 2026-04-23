@@ -45,8 +45,8 @@ describe('behavior-audit phase 2a classify agent', () => {
       return Promise.resolve({
         output: {
           visibility: 'user-facing',
-          candidateFeatureKey: 'task-creation',
-          candidateFeatureLabel: 'Task creation',
+          featureKey: 'task-creation',
+          featureLabel: 'Task creation',
           supportingBehaviorRefs: [],
           relatedBehaviorHints: [],
           classificationNotes: 'Immediate resumed success.',
@@ -75,7 +75,7 @@ describe('behavior-audit phase 2a classify agent', () => {
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.candidateFeatureKey).toBe('task-creation')
+    expect(result === null ? null : result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate'])
   })
 
@@ -94,8 +94,8 @@ describe('behavior-audit phase 2a classify agent', () => {
       return Promise.resolve({
         output: {
           visibility: 'user-facing',
-          candidateFeatureKey: 'task-creation',
-          candidateFeatureLabel: 'Task creation',
+          featureKey: 'task-creation',
+          featureLabel: 'Task creation',
           supportingBehaviorRefs: [],
           relatedBehaviorHints: [],
           classificationNotes: 'Succeeded after one resumed retry.',
@@ -124,7 +124,7 @@ describe('behavior-audit phase 2a classify agent', () => {
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.candidateFeatureKey).toBe('task-creation')
+    expect(result === null ? null : result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate:1', 'sleep:50', 'generate:2'])
   })
 
