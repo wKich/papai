@@ -5,8 +5,8 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import type { ReviewLoopConfig } from '../../scripts/review-loop/config.js'
-import { createRunState, loadRunState, saveRunState } from '../../scripts/review-loop/run-state.js'
+import type { ReviewLoopConfig } from '../../review-loop/src/config.js'
+import { createRunState, loadRunState, saveRunState } from '../../review-loop/src/run-state.js'
 
 const tempDirs: string[] = []
 const SessionPointerSchema = z.object({

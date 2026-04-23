@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test ../tests/review-loop",
+    "test": "cd .. && bun test tests/review-loop",
     "typecheck": "tsgo --project tsconfig.json --noEmit",
     "lint": "cd .. && oxlint --config .oxlintrc.json review-loop/src tests/review-loop",
     "format": "cd .. && oxfmt --write review-loop/src tests/review-loop --ignore-path=.oxfmtignore",

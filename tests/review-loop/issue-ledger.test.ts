@@ -11,8 +11,8 @@ import {
   recordVerification,
   recordFixAttempt,
   saveIssueLedger,
-} from '../../scripts/review-loop/issue-ledger.js'
-import type { ReviewerIssue, VerifierDecision } from '../../scripts/review-loop/issue-schema.js'
+} from '../../review-loop/src/issue-ledger.js'
+import type { ReviewerIssue, VerifierDecision } from '../../review-loop/src/issue-schema.js'
 
 const tempDirs: string[] = []
 

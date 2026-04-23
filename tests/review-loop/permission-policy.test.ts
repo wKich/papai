@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { decidePermissionOptionId } from '../../scripts/review-loop/permission-policy.js'
+import { decidePermissionOptionId } from '../../review-loop/src/permission-policy.js'
 
 describe('decidePermissionOptionId', () => {
   test('allows all request kinds when an allow option exists', () => {

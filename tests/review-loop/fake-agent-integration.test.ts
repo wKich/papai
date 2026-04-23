@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { runCli } from '../../scripts/review-loop/cli.js'
+import { runCli } from '../../review-loop/src/cli.js'
 
 const tempDirs: string[] = []
 

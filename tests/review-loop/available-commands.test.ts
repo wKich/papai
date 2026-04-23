@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { resolveInvocationText } from '../../scripts/review-loop/available-commands.js'
+import { resolveInvocationText } from '../../review-loop/src/available-commands.js'
 
 describe('resolveInvocationText', () => {
   test('uses the slash command prefix only when the command is advertised', () => {

@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { LedgerIssueRecord } from '../../scripts/review-loop/issue-ledger.js'
-import type { ReviewerIssue, VerifierDecision } from '../../scripts/review-loop/issue-schema.js'
+import type { LedgerIssueRecord } from '../../review-loop/src/issue-ledger.js'
+import type { ReviewerIssue, VerifierDecision } from '../../review-loop/src/issue-schema.js'
 import {
   buildFixPrompt,
   buildPlanningPrompt,
   buildReviewPrompt,
   buildRereviewPrompt,
   buildVerifyPrompt,
-} from '../../scripts/review-loop/prompt-templates.js'
+} from '../../review-loop/src/prompt-templates.js'
 
 const reviewerIssue: ReviewerIssue = {
   title: 'Missing validation',
@@ -16,7 +16,7 @@ const reviewerIssue: ReviewerIssue = {
   summary: 'Validation is skipped for permission requests.',
   whyItMatters: 'Unsafe permission decisions can escape the repo sandbox.',
   evidence: 'decidePermissionOptionId allows unsafe args',
-  file: 'scripts/review-loop/permission-policy.ts',
+  file: 'review-loop/src/permission-policy.ts',
   lineStart: 10,
   lineEnd: 20,
   suggestedFix: 'Validate commands and paths before auto-allowing them.',
@@ -27,7 +27,7 @@ const verifierDecision: VerifierDecision = {
   verdict: 'valid',
   fixability: 'auto',
   reasoning: 'The policy is too permissive and can be tightened safely.',
-  targetFiles: ['scripts/review-loop/permission-policy.ts'],
+  targetFiles: ['review-loop/src/permission-policy.ts'],
   needsPlanning: false,
 }
 

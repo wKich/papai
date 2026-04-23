@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { ReviewLoopConfig } from '../../scripts/review-loop/config.js'
-import { createIssueLedger } from '../../scripts/review-loop/issue-ledger.js'
-import { runReviewLoop } from '../../scripts/review-loop/loop-controller.js'
-import type { ProgressLog } from '../../scripts/review-loop/progress-log.js'
-import { createRunState } from '../../scripts/review-loop/run-state.js'
+import type { ReviewLoopConfig } from '../../review-loop/src/config.js'
+import { createIssueLedger } from '../../review-loop/src/issue-ledger.js'
+import { runReviewLoop } from '../../review-loop/src/loop-controller.js'
+import type { ProgressLog } from '../../review-loop/src/progress-log.js'
+import { createRunState } from '../../review-loop/src/run-state.js'
 
 const tempDirs: string[] = []
 

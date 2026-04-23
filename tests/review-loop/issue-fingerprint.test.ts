@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
-import { computeIssueFingerprint } from '../../scripts/review-loop/issue-fingerprint.js'
-import type { ReviewerIssue } from '../../scripts/review-loop/issue-schema.js'
+import { computeIssueFingerprint } from '../../review-loop/src/issue-fingerprint.js'
+import type { ReviewerIssue } from '../../review-loop/src/issue-schema.js'
 
 const issue: ReviewerIssue = {
   title: 'Race condition in queue flush path',

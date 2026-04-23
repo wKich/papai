@@ -92,6 +92,14 @@ describe('test-resolver', () => {
     test('returns false for scripts/foo.ts (scripts/ is not a gateable source root)', () => {
       expect(isGateableImplFile('scripts/foo.ts', projectRoot)).toBe(false)
     })
+
+    test('returns true for review-loop/src/cli.ts', () => {
+      expect(isGateableImplFile('review-loop/src/cli.ts', projectRoot)).toBe(true)
+    })
+
+    test('returns false for review-loop/src/cli.test.ts', () => {
+      expect(isGateableImplFile('review-loop/src/cli.test.ts', projectRoot)).toBe(false)
+    })
   })
 
   describe('suggestTestPath', () => {
@@ -113,6 +121,10 @@ describe('test-resolver', () => {
 
     test('client/index.ts -> tests/client/index.test.ts (flat)', () => {
       expect(suggestTestPath('client/index.ts')).toBe('tests/client/index.test.ts')
+    })
+
+    test('review-loop/src/cli.ts -> tests/review-loop/cli.test.ts', () => {
+      expect(suggestTestPath('review-loop/src/cli.ts')).toBe('tests/review-loop/cli.test.ts')
     })
   })
 
@@ -204,6 +216,18 @@ describe('test-resolver', () => {
 
       expect(result).toBe(colocatedTest)
     })
+
+    test('finds parallel test for review-loop/src/cli.ts at tests/review-loop/cli.test.ts', () => {
+      const testsDir = path.join(tmpDir, 'tests', 'review-loop')
+      fs.mkdirSync(testsDir, { recursive: true })
+      const testFile = path.join(testsDir, 'cli.test.ts')
+      fs.writeFileSync(testFile, '')
+
+      const implFile = path.join(tmpDir, 'review-loop', 'src', 'cli.ts')
+      const result = findTestFile(implFile, tmpDir)
+
+      expect(result).toBe(testFile)
+    })
   })
 
   describe('resolveImplPath', () => {
@@ -225,6 +249,10 @@ describe('test-resolver', () => {
 
     test('tests/scripts/deep/a.test.ts -> scripts/deep/a.ts (nested)', () => {
       expect(resolveImplPath('tests/scripts/deep/a.test.ts')).toBe(path.join('scripts', 'deep', 'a.ts'))
+    })
+
+    test('tests/review-loop/cli.test.ts -> review-loop/src/cli.ts', () => {
+      expect(resolveImplPath('tests/review-loop/cli.test.ts')).toBe(path.join('review-loop', 'src', 'cli.ts'))
     })
   })
 })

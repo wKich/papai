@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync as readFileSyncNode, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { createAcpProcessClient } from '../../scripts/review-loop/acp-process-client.js'
-import { handlePermissionRequest } from '../../scripts/review-loop/acp-process-client.js'
-import { bootstrapAgentSession } from '../../scripts/review-loop/agent-session.js'
+import { createAcpProcessClient } from '../../review-loop/src/acp-process-client.js'
+import { handlePermissionRequest } from '../../review-loop/src/acp-process-client.js'
+import { bootstrapAgentSession } from '../../review-loop/src/agent-session.js'
 
 const tempDirs: string[] = []
 const missingExecutable = 'definitely-not-a-real-command-xyz'

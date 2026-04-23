@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parseReviewerIssues, parseVerifierDecision } from '../../scripts/review-loop/issue-schema.js'
+import { parseReviewerIssues, parseVerifierDecision } from '../../review-loop/src/issue-schema.js'
 
 describe('issue schema parsing', () => {
   test('parseReviewerIssues accepts structured critical/high issues', () => {

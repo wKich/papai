@@ -25,7 +25,8 @@ export function isGateableImplFile(filePath, projectRoot) {
   const isSrc = rel.startsWith('src/') || rel.startsWith('src\\')
   const isClient = rel.startsWith('client/') || rel.startsWith('client\\')
   const isCodeindex = rel.startsWith('codeindex/src/') || rel.startsWith('codeindex\\src\\')
-  if (!isSrc && !isClient && !isCodeindex) return false
+  const isReviewLoop = rel.startsWith('review-loop/src/') || rel.startsWith('review-loop\\src\\')
+  if (!isSrc && !isClient && !isCodeindex && !isReviewLoop) return false
   if (!IMPL_PATTERN.test(rel)) return false
   if (TEST_PATTERN.test(rel)) return false
   return true
@@ -50,9 +51,9 @@ export function suggestTestPath(implRelPath) {
     const base = withoutCodeindexSrc.slice(0, -ext.length)
     return path.join('tests', 'codeindex', `${base}.test${ext}`)
   }
-  // scripts/review-loop/foo.ts → tests/review-loop/foo.test.ts
-  if (implRelPath.startsWith('scripts/review-loop/') || implRelPath.startsWith('scripts\\review-loop\\')) {
-    const withoutPrefix = implRelPath.replace(/^scripts[/\\]review-loop[/\\]/, '')
+  // review-loop/src/foo.ts → tests/review-loop/foo.test.ts
+  if (implRelPath.startsWith('review-loop/src/') || implRelPath.startsWith('review-loop\\src\\')) {
+    const withoutPrefix = implRelPath.replace(/^review-loop[/\\]src[/\\]/, '')
     const ext = path.extname(withoutPrefix)
     const base = withoutPrefix.slice(0, -ext.length)
     return path.join('tests', 'review-loop', `${base}.test${ext}`)
@@ -96,9 +97,9 @@ export function findTestFile(implAbsPath, projectRoot) {
     }
   }
 
-  // scripts/review-loop/foo.ts → tests/review-loop/foo.test.ts
-  if (rel.startsWith('scripts/review-loop/') || rel.startsWith('scripts\\review-loop\\')) {
-    const withoutPrefix = rel.replace(/^scripts[/\\]review-loop[/\\]/, '')
+  // review-loop/src/foo.ts → tests/review-loop/foo.test.ts
+  if (rel.startsWith('review-loop/src/') || rel.startsWith('review-loop\\src\\')) {
+    const withoutPrefix = rel.replace(/^review-loop[/\\]src[/\\]/, '')
     const ext = path.extname(withoutPrefix)
     const base = withoutPrefix.slice(0, -ext.length)
 
@@ -152,9 +153,10 @@ export function resolveImplPath(testRelPath) {
     if (dir.startsWith('scripts/') || dir.startsWith('scripts\\') || dir === 'scripts') {
       return path.join(dir, `${base}${ext}`)
     }
-    // tests/review-loop/foo.test.ts → scripts/review-loop/foo.ts
+    // tests/review-loop/foo.test.ts → review-loop/src/foo.ts
     if (dir === 'review-loop' || dir.startsWith('review-loop/') || dir.startsWith('review-loop\\')) {
-      return path.join('scripts', dir, `${base}${ext}`)
+      const withoutReviewLoop = dir.replace(/^review-loop[/\\]?/, '')
+      return path.join('review-loop', 'src', withoutReviewLoop, `${base}${ext}`)
     }
     // tests/codeindex/foo/bar.test.ts → codeindex/src/foo/bar.ts
     if (dir.startsWith('codeindex/') || dir.startsWith('codeindex\\') || dir === 'codeindex') {

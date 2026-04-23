@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { closeClients, parseCliArgs } from '../../scripts/review-loop/cli.js'
-import { loadReviewLoopConfig } from '../../scripts/review-loop/config.js'
+import { closeClients, parseCliArgs } from '../../review-loop/src/cli.js'
+import { loadReviewLoopConfig } from '../../review-loop/src/config.js'
 
 const tempDirs: string[] = []
 

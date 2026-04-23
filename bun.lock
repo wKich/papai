@@ -26,7 +26,6 @@
         "zod": "^4.0.0",
       },
       "devDependencies": {
-        "@agentclientprotocol/sdk": "^0.18.2",
         "@gramio/types": "^9.6.0",
         "@grammyjs/types": "^3.26.0",
         "@happy-dom/global-registrator": "^20.8.9",
