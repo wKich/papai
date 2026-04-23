@@ -393,8 +393,7 @@ function isKeywordVocabularyModule(value: unknown): value is KeywordVocabularyMo
   return (
     isObject(value) &&
     hasFunctionProperty(value, 'loadKeywordVocabulary') &&
-    hasFunctionProperty(value, 'saveKeywordVocabulary') &&
-    hasFunctionProperty(value, 'recordKeywordUsage')
+    hasFunctionProperty(value, 'saveKeywordVocabulary')
   )
 }
 

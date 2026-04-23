@@ -98,7 +98,6 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
         description: 'Targeting work at a group context.',
         createdAt: '2026-04-20T12:00:00.000Z',
         updatedAt: '2026-04-20T12:00:00.000Z',
-        timesUsed: 1,
       },
     ]),
   )

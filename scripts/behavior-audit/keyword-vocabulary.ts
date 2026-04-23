@@ -5,71 +5,109 @@ import { z } from 'zod'
 
 import { KEYWORD_VOCABULARY_PATH } from './config.js'
 
+export function normalizeKeywordSlug(slug: string): string {
+  return slug
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
+}
+
 const KeywordVocabularyEntrySchema = z.object({
-  slug: z.string(),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((slug) => normalizeKeywordSlug(slug))
+    .refine((slug) => slug.length > 0, 'Keyword slug cannot be empty after normalization'),
   description: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  timesUsed: z.number(),
 })
 
 const KeywordVocabularySchema = z.array(KeywordVocabularyEntrySchema)
 
 export type KeywordVocabularyEntry = z.infer<typeof KeywordVocabularyEntrySchema>
 
+function normalizeKeywordVocabularyEntryGroup(
+  entries: readonly [KeywordVocabularyEntry, ...KeywordVocabularyEntry[]],
+): KeywordVocabularyEntry {
+  const earliestCreatedAt = entries.reduce(
+    (earliest, entry) => (entry.createdAt < earliest ? entry.createdAt : earliest),
+    entries[0].createdAt,
+  )
+  const latestUpdatedAt = entries.reduce(
+    (latest, entry) => (entry.updatedAt > latest ? entry.updatedAt : latest),
+    entries[0].updatedAt,
+  )
+  const mostRecentlyUpdatedEntry = entries.reduce(
+    (latest, entry) => (entry.updatedAt > latest.updatedAt ? entry : latest),
+    entries[0],
+  )
+
+  return {
+    slug: entries[0].slug,
+    description: mostRecentlyUpdatedEntry.description,
+    createdAt: earliestCreatedAt,
+    updatedAt: latestUpdatedAt,
+  }
+}
+
+export function normalizeKeywordVocabularyEntries(
+  entries: readonly KeywordVocabularyEntry[],
+): readonly KeywordVocabularyEntry[] {
+  const groupedEntries = new Map<string, readonly KeywordVocabularyEntry[]>()
+  for (const entry of entries) {
+    const existingGroup = groupedEntries.get(entry.slug)
+    if (existingGroup === undefined) {
+      groupedEntries.set(entry.slug, [entry])
+      continue
+    }
+    groupedEntries.set(entry.slug, [...existingGroup, entry])
+  }
+
+  return [...groupedEntries.values()]
+    .flatMap((grouped) => {
+      const firstEntry = grouped[0]
+      if (firstEntry === undefined) {
+        return []
+      }
+      return [normalizeKeywordVocabularyEntryGroup([firstEntry, ...grouped.slice(1)])]
+    })
+    .toSorted((left, right) => left.slug.localeCompare(right.slug))
+}
+
+async function writeKeywordVocabularyText(text: string): Promise<void> {
+  const dir = dirname(KEYWORD_VOCABULARY_PATH)
+  const tempPath = join(dir, `.${basename(KEYWORD_VOCABULARY_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`)
+  await mkdir(dir, { recursive: true })
+  await Bun.write(tempPath, text)
+  await rename(tempPath, KEYWORD_VOCABULARY_PATH)
+}
+
 export async function loadKeywordVocabulary(): Promise<readonly KeywordVocabularyEntry[] | null> {
   const file = Bun.file(KEYWORD_VOCABULARY_PATH)
   if (!(await file.exists())) return null
   const text = await file.text()
-  return KeywordVocabularySchema.parse(JSON.parse(text))
+  const parsed = normalizeKeywordVocabularyEntries(KeywordVocabularySchema.parse(JSON.parse(text)))
+  const normalizedText = JSON.stringify(parsed, null, 2) + '\n'
+  if (text !== normalizedText) {
+    await writeKeywordVocabularyText(normalizedText)
+  }
+  return parsed
 }
 
 export async function saveKeywordVocabulary(entries: readonly KeywordVocabularyEntry[]): Promise<void> {
-  const parsed = KeywordVocabularySchema.parse(entries)
-  const dir = dirname(KEYWORD_VOCABULARY_PATH)
-  const tempPath = join(dir, `.${basename(KEYWORD_VOCABULARY_PATH)}.${process.pid}.${crypto.randomUUID()}.tmp`)
-  await mkdir(dir, { recursive: true })
-  await Bun.write(tempPath, JSON.stringify(parsed, null, 2) + '\n')
-  await rename(tempPath, KEYWORD_VOCABULARY_PATH)
-}
-
-export async function recordKeywordUsage(
-  keywords: readonly string[],
-  ...skipSlugsArg: [] | [ReadonlySet<string>]
-): Promise<void> {
-  const skipSlugs = skipSlugsArg[0]
-  if (skipSlugs === undefined) {
-    return recordKeywordUsage(keywords, new Set())
-  }
-  const loadedVocabulary = await loadKeywordVocabulary()
-  let existing: readonly KeywordVocabularyEntry[] = []
-  if (loadedVocabulary !== null) {
-    existing = loadedVocabulary
-  }
-  const keywordSet = new Set(keywords)
-  const now = new Date().toISOString()
-  const updated: KeywordVocabularyEntry[] = []
-  for (const entry of existing) {
-    if (keywordSet.has(entry.slug) && !skipSlugs.has(entry.slug)) {
-      updated.push({
-        slug: entry.slug,
-        description: entry.description,
-        createdAt: entry.createdAt,
-        updatedAt: now,
-        timesUsed: entry.timesUsed + 1,
-      })
-      continue
-    }
-    updated.push(entry)
-  }
-  await saveKeywordVocabulary(updated)
+  const parsed = normalizeKeywordVocabularyEntries(KeywordVocabularySchema.parse(entries))
+  await writeKeywordVocabularyText(JSON.stringify(parsed, null, 2) + '\n')
 }
 
 export function findExactKeyword(
   entries: readonly KeywordVocabularyEntry[],
   slug: string,
 ): KeywordVocabularyEntry | null {
-  const found = entries.find((entry) => entry.slug === slug)
+  const normalizedSlug = normalizeKeywordSlug(slug)
+  const found = entries.find((entry) => entry.slug === normalizedSlug)
   if (found === undefined) {
     return null
   }

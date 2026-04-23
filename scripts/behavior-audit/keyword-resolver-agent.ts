@@ -9,7 +9,6 @@ const VocabularyEntrySchema = z.object({
   description: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  timesUsed: z.number(),
 })
 
 const ResolverResultSchema = z.object({

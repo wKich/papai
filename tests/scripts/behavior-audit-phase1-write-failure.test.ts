@@ -61,7 +61,6 @@ test('runPhase1 does not publish manifest or progress completion before extracte
                 description: 'Targeting work at a group context.',
                 createdAt: '2026-04-20T12:00:00.000Z',
                 updatedAt: '2026-04-20T12:00:00.000Z',
-                timesUsed: 1,
               },
             ],
           }),

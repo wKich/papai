@@ -17,7 +17,12 @@ import type { IncrementalManifest } from './incremental.js'
 import { saveManifest } from './incremental.js'
 import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
 import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
-import { loadKeywordVocabulary, recordKeywordUsage, saveKeywordVocabulary } from './keyword-vocabulary.js'
+import {
+  loadKeywordVocabulary,
+  normalizeKeywordSlug,
+  normalizeKeywordVocabularyEntries,
+  saveKeywordVocabulary,
+} from './keyword-vocabulary.js'
 import type { Progress } from './progress.js'
 import { getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3, saveProgress } from './progress.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
@@ -34,7 +39,6 @@ export interface Phase1Deps {
   readonly resolveKeywordsWithRetry: typeof resolveKeywordsWithRetry
   readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
   readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
-  readonly recordKeywordUsage: typeof recordKeywordUsage
   readonly updateManifestForExtractedTest: typeof updateManifestForExtractedTest
   readonly saveManifest: typeof saveManifest
   readonly saveProgress: typeof saveProgress
@@ -55,7 +59,6 @@ const defaultPhase1Deps: Phase1Deps = {
   resolveKeywordsWithRetry,
   loadKeywordVocabulary,
   saveKeywordVocabulary,
-  recordKeywordUsage,
   updateManifestForExtractedTest,
   saveManifest,
   saveProgress,
@@ -90,10 +93,9 @@ async function resolveKeywords(
     deps.markTestFailed(progress, testKey, 'keyword resolution failed')
     return null
   }
-  const nextVocabulary = [...existingVocabulary, ...resolved.appendedEntries]
+  const nextVocabulary = normalizeKeywordVocabularyEntries([...existingVocabulary, ...resolved.appendedEntries])
   await deps.saveKeywordVocabulary(nextVocabulary)
-  await deps.recordKeywordUsage(resolved.keywords, new Set(resolved.appendedEntries.map((entry) => entry.slug)))
-  return resolved.keywords
+  return [...new Set(resolved.keywords.map((keyword) => normalizeKeywordSlug(keyword)))]
 }
 
 type SingleTestResult = {

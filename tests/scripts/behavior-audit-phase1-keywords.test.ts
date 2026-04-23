@@ -64,7 +64,6 @@ function createResolvedKeywords(input: {
     readonly description: string
     readonly createdAt: string
     readonly updatedAt: string
-    readonly timesUsed: number
   }[]
 }): ResolveKeywordsResult {
   return {
@@ -196,7 +195,7 @@ test('behavior-audit agents enable structured outputs for OpenAI-compatible prov
   }
 })
 
-test('keyword-vocabulary persists entries and updates usage counts', async () => {
+test('keyword-vocabulary normalizes duplicate slugs into canonical entries', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
@@ -209,15 +208,18 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
   const typedVocab = await loadKeywordVocabularyModule(`vocab-${crypto.randomUUID()}`)
   await typedVocab.saveKeywordVocabulary([
     {
-      slug: 'group-targeting',
-      description: 'Targeting work at a group context.',
+      slug: 'Group Targeting',
+      description: 'Older description.',
       createdAt: '2026-04-20T12:00:00.000Z',
       updatedAt: '2026-04-20T12:00:00.000Z',
-      timesUsed: 1,
+    },
+    {
+      slug: 'group-targeting',
+      description: 'Newest description.',
+      createdAt: '2026-04-21T12:00:00.000Z',
+      updatedAt: '2026-04-22T12:00:00.000Z',
     },
   ])
-
-  await typedVocab.recordKeywordUsage(['group-targeting'])
 
   const saved = await typedVocab.loadKeywordVocabulary()
   expect(saved).not.toBeNull()
@@ -228,7 +230,13 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
   if (firstSavedEntry === undefined) {
     throw new Error('Expected first saved vocabulary entry')
   }
-  expect(firstSavedEntry.timesUsed).toBe(2)
+  expect(saved).toHaveLength(1)
+  expect(firstSavedEntry).toEqual({
+    slug: 'group-targeting',
+    description: 'Newest description.',
+    createdAt: '2026-04-20T12:00:00.000Z',
+    updatedAt: '2026-04-22T12:00:00.000Z',
+  })
 })
 
 test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
@@ -305,7 +313,6 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
                 description: 'Targeting work at a group context.',
                 createdAt: '2026-04-20T12:00:00.000Z',
                 updatedAt: '2026-04-20T12:00:00.000Z',
-                timesUsed: 1,
               },
             ],
           }),
@@ -401,7 +408,6 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
                 description: 'Updated targeting behavior.',
                 createdAt: '2026-04-20T12:00:00.000Z',
                 updatedAt: '2026-04-20T12:00:00.000Z',
-                timesUsed: 1,
               },
             ],
           }),
@@ -421,7 +427,7 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   ])
 })
 
-test('runPhase1 keeps first use count at one for newly appended keywords', async () => {
+test('runPhase1 writes canonical vocabulary entries without mutable usage telemetry', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
   const progressPath = path.join(reportsDir, 'progress.json')
@@ -471,7 +477,6 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
                 description: 'Targeting work at a group context.',
                 createdAt: '2026-04-20T12:00:00.000Z',
                 updatedAt: '2026-04-20T12:00:00.000Z',
-                timesUsed: 1,
               },
             ],
           }),
@@ -485,7 +490,99 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
   }
   const savedVocabulary = savedVocabularyRaw
   expect(savedVocabulary).toHaveLength(1)
-  expect(savedVocabulary[0]).toMatchObject({ slug: 'group-targeting', timesUsed: 1 })
+  expect(savedVocabulary[0]).toEqual({
+    slug: 'group-targeting',
+    description: 'Targeting work at a group context.',
+    createdAt: '2026-04-20T12:00:00.000Z',
+    updatedAt: '2026-04-20T12:00:00.000Z',
+  })
+})
+
+test('runPhase1 does not append a duplicate slug when resolver returns an already-known slug', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+
+  mockAuditBehaviorConfig(root, {
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(
+    path.join(root, 'tests', 'tools', 'sample.test.ts'),
+    "describe('suite', () => { test('case', () => {}) })",
+  )
+  await Bun.write(
+    vocabularyPath,
+    JSON.stringify(
+      [
+        {
+          slug: 'Group Targeting',
+          description: 'Existing description.',
+          createdAt: '2026-04-20T12:00:00.000Z',
+          updatedAt: '2026-04-20T12:00:00.000Z',
+        },
+      ],
+      null,
+      2,
+    ) + '\n',
+  )
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-known-slug-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-known-slug-${tag}`)
+
+  await extract.runPhase1(
+    {
+      testFiles: [parseTestFile('tests/tools/sample.test.ts', "describe('suite', () => { test('case', () => {}) })")],
+      progress: createEmptyProgressFixture(1),
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Routes through group context selection.',
+            candidateKeywords: ['group-targeting'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['group-targeting'],
+            appendedEntries: [
+              {
+                slug: 'group-targeting',
+                description: 'Duplicate resolver description.',
+                createdAt: '2026-04-21T12:00:00.000Z',
+                updatedAt: '2026-04-23T12:00:00.000Z',
+              },
+            ],
+          }),
+        ),
+    },
+  )
+
+  const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
+  if (!isKeywordVocabulary(savedVocabularyRaw)) {
+    throw new Error('Expected saved keyword vocabulary')
+  }
+
+  expect(savedVocabularyRaw).toEqual([
+    {
+      slug: 'group-targeting',
+      description: 'Duplicate resolver description.',
+      createdAt: '2026-04-20T12:00:00.000Z',
+      updatedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ])
 })
 
 test('runPhase1 sends only existing vocabulary slugs to the keyword resolver prompt', async () => {
@@ -517,14 +614,12 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
           description: 'Targeting work at a group context.',
           createdAt: '2026-04-20T12:00:00.000Z',
           updatedAt: '2026-04-20T12:00:00.000Z',
-          timesUsed: 3,
         },
         {
           slug: 'group-routing',
           description: 'Routing work inside a group context.',
           createdAt: '2026-04-20T12:00:00.000Z',
           updatedAt: '2026-04-20T12:00:00.000Z',
-          timesUsed: 2,
         },
       ],
       null,
@@ -566,7 +661,7 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
 
   expect(capturedResolverPrompt).toContain('Existing vocabulary:')
   expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')
-  expect(capturedResolverPrompt).toContain('[\n  "group-targeting",\n  "group-routing"\n]')
+  expect(capturedResolverPrompt).toContain('[\n  "group-routing",\n  "group-targeting"\n]')
   expect(capturedResolverPrompt).not.toContain('"description"')
   expect(capturedResolverPrompt).not.toContain('"timesUsed"')
 })
