@@ -94,6 +94,7 @@ function createHarness(
     readonly runPhase3IfNeeded: Array<{
       readonly progress: Progress
       readonly selectedConsolidatedIds: readonly string[]
+      readonly selectedFeatureKeys: readonly string[]
       readonly consolidatedManifest: ConsolidatedManifest | null
     }>
     readonly logs: string[]
@@ -152,6 +153,7 @@ function createHarness(
     runPhase3IfNeeded: [] as Array<{
       readonly progress: Progress
       readonly selectedConsolidatedIds: readonly string[]
+      readonly selectedFeatureKeys: readonly string[]
       readonly consolidatedManifest: ConsolidatedManifest | null
     }>,
     logs: [] as string[],
@@ -209,10 +211,11 @@ function createHarness(
       calls.saveConsolidatedManifest.push(manifest)
       return Promise.resolve()
     },
-    runPhase3IfNeeded: (phaseProgress, selectedConsolidatedIds, phaseConsolidatedManifest) => {
+    runPhase3IfNeeded: (phaseProgress, selectedConsolidatedIds, selectedFeatureKeys, phaseConsolidatedManifest) => {
       calls.runPhase3IfNeeded.push({
         progress: phaseProgress,
         selectedConsolidatedIds: [...selectedConsolidatedIds].toSorted(),
+        selectedFeatureKeys: [...selectedFeatureKeys].toSorted(),
         consolidatedManifest: phaseConsolidatedManifest,
       })
       return Promise.resolve()
@@ -281,6 +284,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       {
         progress: phase3Call.progress,
         selectedConsolidatedIds: [],
+        selectedFeatureKeys: [],
         consolidatedManifest: createConsolidatedManifest(),
       },
     ])
@@ -396,6 +400,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       {
         progress: phase3Call.progress,
         selectedConsolidatedIds: ['tools::selected-case'],
+        selectedFeatureKeys: ['candidate-from-phase2a', 'candidate-from-selection'],
         consolidatedManifest,
       },
     ])

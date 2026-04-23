@@ -3,6 +3,7 @@ import type * as BehaviorAuditModule from '../../scripts/behavior-audit.ts'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as ClassifyAgentModule from '../../scripts/behavior-audit/classify-agent.js'
 import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
+import type * as EvaluateReportingModule from '../../scripts/behavior-audit/evaluate-reporting.js'
 import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
 import type * as ExtractModule from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
@@ -19,6 +20,7 @@ export type ProgressModuleShape = typeof ProgressModule
 export type ExtractModuleShape = typeof ExtractModule
 export type ClassifyAgentModuleShape = typeof ClassifyAgentModule
 export type EvaluateModuleShape = typeof EvaluateModule
+export type EvaluateReportingModuleShape = typeof EvaluateReportingModule
 export type ConsolidateModuleShape = typeof ConsolidateModule
 export type ClassifiedStoreModuleShape = typeof ClassifiedStoreModule
 export type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
@@ -199,6 +201,10 @@ function isEvaluateModule(value: unknown): value is EvaluateModuleShape {
   return isObject(value) && hasFunctionProperty(value, 'runPhase3')
 }
 
+function isEvaluateReportingModule(value: unknown): value is EvaluateReportingModuleShape {
+  return isObject(value) && hasFunctionProperty(value, 'writeReports')
+}
+
 export async function importWithGuard<T>(
   specifier: string,
   guard: (value: unknown) => value is T,
@@ -357,6 +363,14 @@ export function loadEvaluateModule(tag: string): Promise<EvaluateModuleShape> {
     `../../scripts/behavior-audit/evaluate.js?test=${tag}`,
     isEvaluateModule,
     'Unexpected evaluate module shape',
+  )
+}
+
+export function loadEvaluateReportingModule(tag: string): Promise<EvaluateReportingModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/evaluate-reporting.js?test=${tag}`,
+    isEvaluateReportingModule,
+    'Unexpected evaluate-reporting module shape',
   )
 }
 

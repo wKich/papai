@@ -159,13 +159,14 @@ async function selectIncrementalRunWork(input: {
 async function runPhase3IfNeeded(
   progress: Progress,
   selectedConsolidatedIds: ReadonlySet<string>,
+  selectedFeatureKeys: ReadonlySet<string>,
   consolidatedManifest: import('./behavior-audit/incremental.js').ConsolidatedManifest | null,
 ): Promise<void> {
   if (progress.phase3.status === 'done' && selectedConsolidatedIds.size === 0) {
     console.log('[Phase 3] Already complete.\n')
     return
   }
-  await runPhase3({ progress, selectedConsolidatedIds, consolidatedManifest })
+  await runPhase3({ progress, selectedConsolidatedIds, selectedFeatureKeys, consolidatedManifest })
 }
 
 async function resolveHeadCommit(): Promise<string> {
@@ -246,7 +247,12 @@ export async function runBehaviorAudit(deps: BehaviorAuditDeps = defaultBehavior
   )
   await deps.saveConsolidatedManifest(consolidatedManifest)
 
-  await deps.runPhase3IfNeeded(progress, new Set(selection.phase3SelectedConsolidatedIds), consolidatedManifest)
+  await deps.runPhase3IfNeeded(
+    progress,
+    new Set(selection.phase3SelectedConsolidatedIds),
+    phase2bSelectedKeys,
+    consolidatedManifest,
+  )
 
   deps.log.log('\nBehavior audit complete.')
 }

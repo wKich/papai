@@ -223,6 +223,12 @@ export function markFeatureKeyDone(
   featureKey: string,
   consolidations: readonly ConsolidatedBehavior[],
 ): void {
+  const hadFailedState = progress.phase2b.failedFeatureKeys[featureKey] !== undefined
+  if (hadFailedState) {
+    const { [featureKey]: _removed, ...remainingFailedFeatureKeys } = progress.phase2b.failedFeatureKeys
+    progress.phase2b.failedFeatureKeys = remainingFailedFeatureKeys
+    progress.phase2b.stats.featureKeysFailed = Math.max(0, progress.phase2b.stats.featureKeysFailed - 1)
+  }
   if (progress.phase2b.completedFeatureKeys[featureKey] === 'done') return
   progress.phase2b.completedFeatureKeys[featureKey] = 'done'
   progress.phase2b.stats.featureKeysDone++
@@ -251,6 +257,12 @@ export function isBehaviorCompleted(progress: Progress, key: string): boolean {
 
 export function markBehaviorDone(progress: Progress, key: string, evaluation: StoryEvaluation): void {
   void evaluation
+  const hadFailedState = progress.phase3.failedConsolidatedIds[key] !== undefined
+  if (hadFailedState) {
+    const { [key]: _removed, ...remainingFailedConsolidatedIds } = progress.phase3.failedConsolidatedIds
+    progress.phase3.failedConsolidatedIds = remainingFailedConsolidatedIds
+    progress.phase3.stats.consolidatedIdsFailed = Math.max(0, progress.phase3.stats.consolidatedIdsFailed - 1)
+  }
   if (progress.phase3.completedConsolidatedIds[key] === 'done') return
   progress.phase3.completedConsolidatedIds[key] = 'done'
   progress.phase3.stats.consolidatedIdsDone++

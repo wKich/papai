@@ -31,6 +31,7 @@ import { readConsolidatedFile } from './report-writer.js'
 interface Phase3RunInput {
   readonly progress: Progress
   readonly selectedConsolidatedIds: ReadonlySet<string>
+  readonly selectedFeatureKeys?: ReadonlySet<string>
   readonly consolidatedManifest: ConsolidatedManifest | null
 }
 
@@ -169,7 +170,7 @@ async function persistEvaluations(
 }
 
 export async function runPhase3(
-  { progress, selectedConsolidatedIds, consolidatedManifest }: Phase3RunInput,
+  { progress, selectedConsolidatedIds, selectedFeatureKeys = new Set(), consolidatedManifest }: Phase3RunInput,
   deps: Partial<Phase3Deps> = {},
 ): Promise<ConsolidatedManifest | null> {
   if (consolidatedManifest === null) return null
@@ -181,7 +182,7 @@ export async function runPhase3(
   await resolvedDeps.saveProgress(progress)
   const collected = await collectNewEvaluations({
     behaviors,
-    selection: resolveSelection(selectedConsolidatedIds, behaviors),
+    selection: resolveSelection(selectedConsolidatedIds, selectedFeatureKeys, behaviors),
     progress,
     deps: resolvedDeps,
   })

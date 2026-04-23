@@ -331,6 +331,119 @@ describe('behavior-audit phase 3 incremental selection', () => {
     const evaluatedRecords = await readEvaluatedArtifact(root, featureKey)
     expect(evaluatedRecords[0]?.consolidatedId).toBe(freshSelectedId)
   })
+
+  test('runPhase3 limits stale selected ids to the dirty feature set after reconsolidation', async () => {
+    const evaluate = await loadEvaluateModule(crypto.randomUUID())
+    const staleSelectedId = 'task-creation::old-selected-case'
+    const freshSelectedId = 'task-creation::fresh-selected-case'
+    const unrelatedId = 'group-routing::stable-case'
+    const progress = createEmptyProgressFixture(2)
+    const calls: string[] = []
+
+    await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', 'task-creation')), [
+      {
+        id: freshSelectedId,
+        domain: 'tools',
+        featureName: 'Fresh selected case',
+        isUserFacing: true,
+        behavior: 'When the fresh behavior runs, the bot returns the regenerated output.',
+        userStory: 'As a user, I get the regenerated selected behavior outcome.',
+        context: 'Fresh context for phase 3.',
+        sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+        sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+        supportingInternalRefs: [],
+      } satisfies ConsolidatedArtifactRecord,
+    ])
+    await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', 'group-routing')), [
+      {
+        id: unrelatedId,
+        domain: 'tools',
+        featureName: 'Unrelated stable case',
+        isUserFacing: true,
+        behavior: 'When the unrelated behavior runs, the bot returns the stable output.',
+        userStory: 'As a user, I get the unrelated stable behavior outcome.',
+        context: 'Unrelated context for phase 3.',
+        sourceTestKeys: ['tests/tools/group.test.ts::suite > stable case'],
+        sourceBehaviorIds: ['tests/tools/group.test.ts::suite > stable case'],
+        supportingInternalRefs: [],
+      } satisfies ConsolidatedArtifactRecord,
+    ])
+
+    await evaluate.runPhase3(
+      {
+        progress,
+        selectedConsolidatedIds: new Set([staleSelectedId]),
+        selectedFeatureKeys: new Set(['task-creation']),
+        consolidatedManifest: {
+          version: 1,
+          entries: {
+            [freshSelectedId]: createConsolidatedManifestEntry({
+              consolidatedId: freshSelectedId,
+              domain: 'tools',
+              featureName: 'Fresh selected case',
+              sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              featureKey: 'task-creation',
+              consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', 'task-creation'),
+              evaluatedArtifactPath: null,
+              keywords: ['task-create'],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: 'phase2-fp',
+              phase3Fingerprint: null,
+              lastConsolidatedAt: '2026-04-21T12:00:00.000Z',
+              lastEvaluatedAt: null,
+            }),
+            [unrelatedId]: createConsolidatedManifestEntry({
+              consolidatedId: unrelatedId,
+              domain: 'tools',
+              featureName: 'Unrelated stable case',
+              sourceTestKeys: ['tests/tools/group.test.ts::suite > stable case'],
+              sourceBehaviorIds: ['tests/tools/group.test.ts::suite > stable case'],
+              supportingInternalBehaviorIds: [],
+              isUserFacing: true,
+              featureKey: 'group-routing',
+              consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', 'group-routing'),
+              evaluatedArtifactPath: null,
+              keywords: ['group-route'],
+              sourceDomains: ['tools'],
+              phase2Fingerprint: 'phase2-fp-unrelated',
+              phase3Fingerprint: null,
+              lastConsolidatedAt: '2026-04-21T12:00:00.000Z',
+              lastEvaluatedAt: null,
+            }),
+          },
+        },
+      },
+      {
+        evaluateWithRetry: (prompt) => {
+          calls.push(prompt)
+          return Promise.resolve(
+            createEvaluationResult({
+              maria: { discover: 4, use: 4, retain: 4, notes: 'Scoped Maria notes' },
+              dani: { discover: 4, use: 4, retain: 4, notes: 'Scoped Dani notes' },
+              viktor: { discover: 4, use: 4, retain: 4, notes: 'Scoped Viktor notes' },
+              flaws: ['Scoped flaw'],
+              improvements: ['Scoped improvement'],
+            }),
+          )
+        },
+      },
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain('Fresh selected case')
+    expect(calls[0]).not.toContain('Unrelated stable case')
+    expect(progress.phase3.completedConsolidatedIds[freshSelectedId]).toBe('done')
+    expect(progress.phase3.completedConsolidatedIds[unrelatedId]).toBeUndefined()
+
+    const selectedFeatureRecords = await readEvaluatedArtifact(root, 'task-creation')
+    expect(selectedFeatureRecords).toHaveLength(1)
+    expect(selectedFeatureRecords[0]?.consolidatedId).toBe(freshSelectedId)
+    const unrelatedFeatureArtifact = Bun.file(path.join(root, buildRelativeArtifactPath('evaluated', 'group-routing')))
+    expect(await unrelatedFeatureArtifact.exists()).toBe(false)
+  })
 })
 
 test('runPhase3 reads consolidated artifacts using feature keys from manifest entries', async () => {
@@ -468,7 +581,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       runPhase2aIfNeeded: () => Promise.resolve(new Set(['group-targeting'])),
       runPhase2bIfNeeded: () => Promise.resolve(consolidatedManifest),
       saveConsolidatedManifest: () => Promise.resolve(),
-      runPhase3IfNeeded: (_progress, _selectedConsolidatedIds, manifest) => {
+      runPhase3IfNeeded: (_progress, _selectedConsolidatedIds, _selectedFeatureKeys, manifest) => {
         phase3ManifestArg = manifest
         return Promise.resolve()
       },

@@ -29,6 +29,17 @@ export interface Phase3Selection {
   readonly evaluateAll: boolean
 }
 
+function getAvailableIdsForFeatureKeys(
+  selectedFeatureKeys: ReadonlySet<string>,
+  behaviors: readonly ParsedBehavior[],
+): ReadonlySet<string> {
+  return new Set(
+    behaviors
+      .filter((behavior) => selectedFeatureKeys.has(behavior.featureKey))
+      .map((behavior) => behavior.consolidatedId),
+  )
+}
+
 function getFeatureKey(entry: ConsolidatedManifestEntry): string | null {
   return entry.featureKey ?? null
 }
@@ -78,13 +89,19 @@ export function parseBehaviors(
 
 export function resolveSelection(
   selectedIds: ReadonlySet<string>,
+  selectedFeatureKeys: ReadonlySet<string>,
   behaviors: readonly ParsedBehavior[],
 ): Phase3Selection {
-  if (selectedIds.size === 0) return { ids: selectedIds, evaluateAll: true }
+  if (selectedIds.size === 0) {
+    if (selectedFeatureKeys.size === 0) return { ids: selectedIds, evaluateAll: true }
+    return { ids: getAvailableIdsForFeatureKeys(selectedFeatureKeys, behaviors), evaluateAll: false }
+  }
   const availableIds = new Set(behaviors.map((behavior) => behavior.consolidatedId))
   return [...selectedIds].some((id) => availableIds.has(id))
     ? { ids: selectedIds, evaluateAll: false }
-    : { ids: availableIds, evaluateAll: true }
+    : selectedFeatureKeys.size > 0
+      ? { ids: getAvailableIdsForFeatureKeys(selectedFeatureKeys, behaviors), evaluateAll: false }
+      : { ids: availableIds, evaluateAll: true }
 }
 
 export function shouldSkip(

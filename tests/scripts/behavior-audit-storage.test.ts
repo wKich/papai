@@ -14,6 +14,7 @@ import {
 import {
   importWithGuard,
   isResetModule,
+  loadEvaluateReportingModule,
   loadClassifiedStoreModule,
   loadProgressModule,
   loadReportWriterModule,
@@ -1151,6 +1152,23 @@ test('markFeatureKeyFailed only increments feature failure stats for a newly fai
   expect(progress.phase2b.stats.featureKeysFailed).toBe(1)
 })
 
+test('markFeatureKeyDone clears stale failure state after a successful retry', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const progress = progressModule.createEmptyProgress(1)
+
+  progressModule.markFeatureKeyFailed(progress, 'task-creation', 'first failure', 2)
+  progressModule.markFeatureKeyDone(progress, 'task-creation', [])
+
+  expect(progress.phase2b.completedFeatureKeys['task-creation']).toBe('done')
+  expect(progress.phase2b.failedFeatureKeys['task-creation']).toBeUndefined()
+  expect(progress.phase2b.stats.featureKeysDone).toBe(1)
+  expect(progress.phase2b.stats.featureKeysFailed).toBe(0)
+})
+
 test('progress module exports only feature-key phase2b helpers', async () => {
   const root = makeTempDir()
 
@@ -1178,4 +1196,79 @@ test('markBehaviorFailed only increments consolidated failure stats for a newly 
   expect(progress.phase3.failedConsolidatedIds['task-creation::feature']?.error).toBe('updated failure')
   expect(progress.phase3.failedConsolidatedIds['task-creation::feature']?.attempts).toBe(2)
   expect(progress.phase3.stats.consolidatedIdsFailed).toBe(1)
+})
+
+test('markBehaviorDone clears stale failure state after a successful retry and reporting omits stale failures', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const evaluateReporting = await loadEvaluateReportingModule(crypto.randomUUID())
+  const progress = progressModule.createEmptyProgress(1)
+
+  progressModule.markBehaviorFailed(progress, 'task-creation::feature', 'first failure', 2)
+  progressModule.markBehaviorDone(progress, 'task-creation::feature', {
+    testName: 'Task creation',
+    behavior: 'Creates a task from chat.',
+    userStory: 'As a user, I can create a task.',
+    maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+    dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+    viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+    flaws: [],
+    improvements: [],
+  })
+
+  expect(progress.phase3.completedConsolidatedIds['task-creation::feature']).toBe('done')
+  expect(progress.phase3.failedConsolidatedIds['task-creation::feature']).toBeUndefined()
+  expect(progress.phase3.stats.consolidatedIdsDone).toBe(1)
+  expect(progress.phase3.stats.consolidatedIdsFailed).toBe(0)
+
+  progress.phase3.status = 'done'
+  progress.phase3.stats.consolidatedIdsTotal = 1
+
+  await evaluateReporting.writeReports({
+    consolidatedManifest: { version: 1, entries: {} },
+    consolidatedByFeatureKey: new Map([
+      [
+        'task-creation',
+        [
+          {
+            id: 'task-creation::feature',
+            domain: 'tools',
+            featureName: 'Task creation',
+            isUserFacing: true,
+            behavior: 'Creates a task from chat.',
+            userStory: 'As a user, I can create a task.',
+            context: 'Task creation context.',
+            sourceTestKeys: ['tests/tools/sample.test.ts::suite > create task'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > create task'],
+            supportingInternalRefs: [],
+          },
+        ],
+      ],
+    ]),
+    evaluatedByFeatureKey: new Map([
+      [
+        'task-creation',
+        [
+          {
+            consolidatedId: 'task-creation::feature',
+            maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            flaws: [],
+            improvements: [],
+            evaluatedAt: '2026-04-23T12:00:00.000Z',
+          },
+        ],
+      ],
+    ]),
+    progress,
+  })
+
+  const indexMarkdown = await Bun.file(path.join(root, 'reports', 'audit-behavior', 'stories', 'index.md')).text()
+  expect(indexMarkdown).toContain('**Behaviors failed:** 0')
+  expect(indexMarkdown).not.toContain('first failure')
+  expect(indexMarkdown).not.toContain('task-creation::feature')
 })
