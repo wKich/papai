@@ -1,0 +1,52 @@
+import { constants } from 'node:fs'
+import { access, mkdir } from 'node:fs/promises'
+import { dirname } from 'node:path'
+
+import { z } from 'zod'
+
+import { extractedArtifactPathForTestFile } from './artifact-paths.js'
+
+const ExtractedBehaviorRecordSchema = z
+  .object({
+    behaviorId: z.string(),
+    testKey: z.string(),
+    testFile: z.string(),
+    domain: z.string(),
+    testName: z.string(),
+    fullPath: z.string(),
+    behavior: z.string(),
+    context: z.string(),
+    keywords: z.array(z.string()).readonly(),
+    extractedAt: z.string(),
+  })
+  .strict()
+  .readonly()
+
+const ExtractedBehaviorRecordArraySchema = z.array(ExtractedBehaviorRecordSchema).readonly()
+
+export type ExtractedBehaviorRecord = z.infer<typeof ExtractedBehaviorRecordSchema>
+
+export async function writeExtractedFile(
+  testFilePath: string,
+  records: readonly ExtractedBehaviorRecord[],
+): Promise<void> {
+  const outPath = extractedArtifactPathForTestFile(testFilePath)
+  await mkdir(dirname(outPath), { recursive: true })
+  const sortedRecords = [...records].toSorted((a, b) => a.behaviorId.localeCompare(b.behaviorId))
+  await Bun.write(outPath, JSON.stringify(sortedRecords, null, 2) + '\n')
+}
+
+export async function readExtractedFile(testFilePath: string): Promise<readonly ExtractedBehaviorRecord[] | null> {
+  const filePath = extractedArtifactPathForTestFile(testFilePath)
+  try {
+    await access(filePath, constants.F_OK)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
+  }
+
+  const raw: unknown = JSON.parse(await Bun.file(filePath).text())
+  return ExtractedBehaviorRecordArraySchema.parse(raw)
+}

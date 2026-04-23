@@ -62,7 +62,9 @@ const defaultPhase3Deps: Phase3Deps = {
 function getConsolidatedFileKeysFromManifestEntries(
   entries: Readonly<Record<string, import('./incremental.js').ConsolidatedManifestEntry>>,
 ): readonly string[] {
-  return [...new Set(Object.values(entries).map((entry) => entry.candidateFeatureKey ?? entry.domain))].toSorted()
+  return [
+    ...new Set(Object.values(entries).map((entry) => entry.featureKey ?? entry.candidateFeatureKey ?? entry.domain)),
+  ].toSorted()
 }
 
 interface ParsedConsolidatedBehavior {
@@ -127,7 +129,9 @@ function reuseStoredEvaluation(
   impFreq: Map<string, number>,
   deps: Phase3Deps,
 ): void {
-  const existing = progress.phase3.evaluations[key]
+  void key
+  void progress
+  const existing = undefined
   if (existing !== undefined) {
     deps.recordStoredEvaluation(existing, domain, evalsByDomain, flawFreq, impFreq)
   }
@@ -257,7 +261,7 @@ export async function runPhase3(
   const allBehaviors = await parseConsolidatedFiles(fileKeys, resolvedDeps)
   const selection = resolvePhase3Selection(selectedConsolidatedIds, allBehaviors)
   progress.phase3.status = 'in-progress'
-  progress.phase3.stats.behaviorsTotal = allBehaviors.length
+  progress.phase3.stats.consolidatedIdsTotal = allBehaviors.length
   await resolvedDeps.saveProgress(progress)
   resolvedDeps.log.log(`[Phase 3] Scoring ${allBehaviors.length} user-facing behaviors...\n`)
 
@@ -288,7 +292,7 @@ export async function runPhase3(
   progress.phase3.status = 'done'
   await resolvedDeps.saveProgress(progress)
   resolvedDeps.log.log(
-    `\n[Phase 3 complete] ${progress.phase3.stats.behaviorsDone} evaluated, ${progress.phase3.stats.behaviorsFailed} failed`,
+    `\n[Phase 3 complete] ${progress.phase3.stats.consolidatedIdsDone} evaluated, ${progress.phase3.stats.consolidatedIdsFailed} failed`,
   )
   resolvedDeps.log.log('→ reports/stories/index.md written')
 }

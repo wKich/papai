@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { createEmptyProgressFixture, mockReportsConfig } from './behavior-audit-integration.helpers.js'
+import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { isObject, loadExtractModule, loadIncrementalModule } from './behavior-audit-integration.support.js'
 
@@ -12,14 +12,14 @@ afterEach(() => {
   cleanupTempDirs()
 })
 
-test('runPhase1 does not persist a file as done when behavior-file write fails after manifest save', async () => {
+test('runPhase1 does not publish manifest or progress completion before extracted artifact write succeeds', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
   const progressPath = path.join(reportsDir, 'progress.json')
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
@@ -73,6 +73,7 @@ test('runPhase1 does not persist a file as done when behavior-file write fails a
   expect(progress.phase1.completedFiles).toEqual([])
   expect(progress.phase1.status).not.toBe('done')
   expect(await Bun.file(progressPath).exists()).toBe(true)
+  expect(await Bun.file(manifestPath).exists()).toBe(false)
 
   const persistedProgressText = await Bun.file(progressPath).text()
   const persistedProgress = JSON.parse(persistedProgressText) as unknown

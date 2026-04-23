@@ -10,7 +10,6 @@ import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile, type ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import {
   createEmptyProgressFixture,
-  createExtractedBehaviorFixture,
   createIncrementalManifestFixture,
   createManifestTestEntry,
 } from './behavior-audit-integration.helpers.js'
@@ -415,12 +414,12 @@ describe('behavior-audit entrypoint incremental selection', () => {
       phase2b: {
         ...baseProgress.phase2b,
         status: 'done' as const,
-        completedCandidateFeatures: { 'candidate-from-selection': 'done' as const },
+        completedFeatureKeys: { 'candidate-from-selection': 'done' as const },
       },
       phase3: {
         ...baseProgress.phase3,
         status: 'done' as const,
-        completedBehaviors: { 'tools::selected-case': 'done' as const },
+        completedConsolidatedIds: { 'tools::selected-case': 'done' as const },
       },
     } satisfies Progress
     const { deps, calls } = createHarness({
@@ -468,23 +467,6 @@ describe('behavior-audit entrypoint incremental selection', () => {
     })
     const previousConsolidatedManifest: ConsolidatedManifest = createConsolidatedManifest()
     const progress = createEmptyProgress(1)
-    progress.phase1.extractedBehaviors[selectedKey] = createExtractedBehaviorFixture({
-      testName: 'first case',
-      fullPath: 'suite > first case',
-      behavior: 'When the user triggers the first case, the stored behavior is reused.',
-      context: 'Stored extracted context for the first case.',
-      keywords: [],
-    })
-    progress.phase3.evaluations[selectedKey] = {
-      testName: 'suite > first case',
-      behavior: 'When the user triggers the first case, the stored behavior is reused.',
-      userStory: 'As a user, I can rely on rebuilt report output.',
-      maria: { discover: 4, use: 4, retain: 4, notes: 'Maria notes' },
-      dani: { discover: 3, use: 3, retain: 3, notes: 'Dani notes' },
-      viktor: { discover: 5, use: 5, retain: 5, notes: 'Viktor notes' },
-      flaws: ['Stored flaw'],
-      improvements: ['Stored improvement'],
-    }
     const { deps, calls } = createHarness({
       previousManifest,
       updatedManifest,
@@ -498,8 +480,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(calls.rebuildReportsFromStoredResults).toEqual([
       {
         manifest: updatedManifest,
-        extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
-        evaluationsByKey: progress.phase3.evaluations,
+        extractedBehaviorsByKey: {},
+        evaluationsByKey: {},
         consolidatedManifest: previousConsolidatedManifest,
       },
     ])

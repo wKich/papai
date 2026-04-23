@@ -55,8 +55,10 @@ export let REPORTS_DIR = DEFAULT_REPORTS_DIR
 export let AUDIT_BEHAVIOR_DIR = DEFAULT_AUDIT_BEHAVIOR_DIR
 
 export let BEHAVIORS_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'behaviors')
+export let EXTRACTED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'extracted')
 export let CLASSIFIED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'classified')
 export let CONSOLIDATED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'consolidated')
+export let EVALUATED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'evaluated')
 export let STORIES_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'stories')
 export let PROGRESS_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'progress.json')
 export let INCREMENTAL_MANIFEST_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'incremental-manifest.json')
@@ -84,11 +86,13 @@ export function reloadBehaviorAuditConfig(): void {
   )
 
   BEHAVIORS_DIR = resolveStringOverride('BEHAVIOR_AUDIT_BEHAVIORS_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'behaviors'))
+  EXTRACTED_DIR = resolveStringOverride('BEHAVIOR_AUDIT_EXTRACTED_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'extracted'))
   CLASSIFIED_DIR = resolveStringOverride('BEHAVIOR_AUDIT_CLASSIFIED_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'classified'))
   CONSOLIDATED_DIR = resolveStringOverride(
     'BEHAVIOR_AUDIT_CONSOLIDATED_DIR',
     resolve(AUDIT_BEHAVIOR_DIR, 'consolidated'),
   )
+  EVALUATED_DIR = resolveStringOverride('BEHAVIOR_AUDIT_EVALUATED_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'evaluated'))
   STORIES_DIR = resolveStringOverride('BEHAVIOR_AUDIT_STORIES_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'stories'))
   PROGRESS_PATH = resolveStringOverride('BEHAVIOR_AUDIT_PROGRESS_PATH', resolve(AUDIT_BEHAVIOR_DIR, 'progress.json'))
   INCREMENTAL_MANIFEST_PATH = resolveStringOverride(

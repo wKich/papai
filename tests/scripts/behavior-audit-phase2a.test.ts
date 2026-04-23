@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import {
   createAuditBehaviorPaths,
   createClassifiedBehaviorFixture,
@@ -68,6 +69,24 @@ describe('behavior-audit phase 2a classification', () => {
     }
   }
 
+  type LegacyPhase2aProgress = Progress & {
+    phase1: Progress['phase1'] & {
+      extractedBehaviors: Record<string, ReturnType<typeof createExtractedBehaviorFixture>>
+    }
+    phase2a: Progress['phase2a'] & {
+      classifiedBehaviors: Record<string, ReturnType<typeof createClassifiedBehaviorFixture>>
+    }
+  }
+
+  function createLegacyPhase2aProgress(progress: Progress): LegacyPhase2aProgress {
+    const legacyPhase1 = Object.assign(progress.phase1, { extractedBehaviors: {} })
+    const legacyPhase2a = Object.assign(progress.phase2a, { classifiedBehaviors: {} })
+    return Object.assign(progress, {
+      phase1: legacyPhase1,
+      phase2a: legacyPhase2a,
+    })
+  }
+
   test('runPhase2a classifies selected extracted behaviors and returns dirty candidate feature keys', async () => {
     const classify = await importWithGuard(
       `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
@@ -77,7 +96,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -173,7 +192,7 @@ describe('behavior-audit phase 2a classification', () => {
       classificationNotes: 'Persisted from a prior run.',
     })
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -236,7 +255,7 @@ describe('behavior-audit phase 2a classification', () => {
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > case'
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v2', reports: 'reports-v1' },
@@ -331,7 +350,7 @@ describe('behavior-audit phase 2a classification', () => {
       })
     }
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -400,7 +419,7 @@ describe('behavior-audit phase 2a classification', () => {
         classificationNotes: 'Recovered successfully.',
       })
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -463,7 +482,7 @@ describe('behavior-audit phase 2a classification', () => {
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> => Promise.resolve(null)
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -532,7 +551,7 @@ describe('behavior-audit phase 2a classification', () => {
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > custom retry budget'
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -596,7 +615,7 @@ describe('behavior-audit phase 2a classification', () => {
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > reloaded retry budget'
 
-    const progress = progressModule.createEmptyProgress(1)
+    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },

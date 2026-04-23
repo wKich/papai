@@ -28,7 +28,7 @@ function computePhase1And2aKeys(
   const phase1Keys = toSortedUnique([...depKeys, ...newKeys])
   const phase2VersionChanged = previousPhaseVersions.phase2 !== input.currentPhaseVersions.phase2
   const phase2aVersionKeys = phase2VersionChanged
-    ? entries.filter(([, e]) => e.extractedBehaviorPath !== null).map(([k]) => k)
+    ? entries.filter(([, e]) => e.extractedArtifactPath !== null).map(([k]) => k)
     : []
   return { phase1Keys, phase2aKeys: toSortedUnique([...phase1Keys, ...phase2aVersionKeys]), phase2VersionChanged }
 }
@@ -36,7 +36,7 @@ function computePhase1And2aKeys(
 function computePhase2bKeys(phase2aKeys: readonly string[], manifest: IncrementalManifest): readonly string[] {
   return toSortedUnique(
     phase2aKeys
-      .map((testKey) => manifest.tests[testKey]?.candidateFeatureKey ?? null)
+      .map((testKey) => manifest.tests[testKey]?.featureKey ?? null)
       .filter((value): value is string => value !== null),
   )
 }
@@ -48,7 +48,10 @@ function computePhase3IdsFromCandidateFeatures(
   if (manifest === null) return []
   const selected = new Set(candidateFeatureKeys)
   return Object.values(manifest.entries)
-    .filter((entry) => entry.candidateFeatureKey !== null && selected.has(entry.candidateFeatureKey))
+    .filter((entry) => {
+      const featureKey = entry.featureKey ?? entry.candidateFeatureKey ?? null
+      return featureKey !== null && selected.has(featureKey)
+    })
     .map((entry) => entry.consolidatedId)
     .toSorted()
 }

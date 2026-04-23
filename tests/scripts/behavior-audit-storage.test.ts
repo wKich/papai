@@ -14,10 +14,59 @@ import {
   importWithGuard,
   isResetModule,
   loadClassifiedStoreModule,
+  loadProgressModule,
   loadReportWriterModule,
   loadResetModule,
   type ResetModuleShape,
 } from './behavior-audit-integration.support.js'
+
+interface ExtractedStoreModuleShape {
+  readonly writeExtractedFile: (testFilePath: string, records: readonly unknown[]) => Promise<void>
+  readonly readExtractedFile: (testFilePath: string) => Promise<readonly unknown[] | null>
+}
+
+interface EvaluatedStoreModuleShape {
+  readonly writeEvaluatedFile: (featureKey: string, records: readonly unknown[]) => Promise<void>
+  readonly readEvaluatedFile: (featureKey: string) => Promise<readonly unknown[] | null>
+}
+
+function isExtractedStoreModule(value: unknown): value is ExtractedStoreModuleShape {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'writeExtractedFile' in value &&
+    typeof value.writeExtractedFile === 'function' &&
+    'readExtractedFile' in value &&
+    typeof value.readExtractedFile === 'function'
+  )
+}
+
+function isEvaluatedStoreModule(value: unknown): value is EvaluatedStoreModuleShape {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'writeEvaluatedFile' in value &&
+    typeof value.writeEvaluatedFile === 'function' &&
+    'readEvaluatedFile' in value &&
+    typeof value.readEvaluatedFile === 'function'
+  )
+}
+
+function loadExtractedStoreModule(tag: string): Promise<ExtractedStoreModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/extracted-store.js?test=${tag}`,
+    isExtractedStoreModule,
+    'Unexpected extracted-store module shape',
+  )
+}
+
+function loadEvaluatedStoreModule(tag: string): Promise<EvaluatedStoreModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/evaluated-store.js?test=${tag}`,
+    isEvaluatedStoreModule,
+    'Unexpected evaluated-store module shape',
+  )
+}
 
 beforeEach(() => {
   if (originalOpenAiApiKey === undefined) {
@@ -131,6 +180,151 @@ test('classified-store throws for malformed classified data but returns null whe
   await Bun.write(path.join(classifiedDir, 'tools.json'), '{"not":"an array"}\n')
 
   await expect(store.readClassifiedFile('tools')).rejects.toThrow()
+})
+
+test('extracted-store round-trips extracted records under the extracted domain directory', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadExtractedStoreModule(crypto.randomUUID())
+  const testFilePath = 'tests/tools/sample.test.ts'
+  const expectedPath = path.join(root, 'reports', 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
+  const records = [
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > create task',
+      testKey: 'tests/tools/sample.test.ts::suite > create task',
+      testFile: testFilePath,
+      domain: 'tools',
+      testName: 'create task',
+      fullPath: 'suite > create task',
+      behavior: 'Creates a task from chat input.',
+      context: 'Uses the task provider create flow.',
+      keywords: ['task-create'],
+      extractedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ] as const
+
+  await store.writeExtractedFile(testFilePath, records)
+
+  expect(await Bun.file(expectedPath).exists()).toBe(true)
+  expect(await store.readExtractedFile(testFilePath)).toEqual(records)
+})
+
+test('evaluated-store round-trips evaluated records under the evaluated feature path', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadEvaluatedStoreModule(crypto.randomUUID())
+  const featureKey = 'task-creation'
+  const expectedPath = path.join(root, 'reports', 'audit-behavior', 'evaluated', 'task-creation.json')
+  const records = [
+    {
+      consolidatedId: 'task-creation::feature',
+      maria: { discover: 4, use: 4, retain: 3, notes: 'Clear primary path.' },
+      dani: { discover: 3, use: 4, retain: 3, notes: 'Works once discovered.' },
+      viktor: { discover: 2, use: 3, retain: 2, notes: 'Needs stronger affordances.' },
+      flaws: ['Validation feedback is easy to miss.'],
+      improvements: ['Make failure states more explicit.'],
+      evaluatedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ] as const
+
+  await store.writeEvaluatedFile(featureKey, records)
+
+  expect(await Bun.file(expectedPath).exists()).toBe(true)
+  expect(await store.readEvaluatedFile(featureKey)).toEqual(records)
+})
+
+test('extracted-store returns null for a missing file and throws on malformed JSON', async () => {
+  const root = makeTempDir()
+  const extractedDir = path.join(root, 'reports', 'audit-behavior', 'extracted', 'tools')
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadExtractedStoreModule(crypto.randomUUID())
+
+  expect(await store.readExtractedFile('tests/tools/missing.test.ts')).toBeNull()
+
+  mkdirSync(extractedDir, { recursive: true })
+  await Bun.write(path.join(extractedDir, 'sample.test.json'), '{"not":"an array"}\n')
+
+  await expect(store.readExtractedFile('tests/tools/sample.test.ts')).rejects.toThrow()
+})
+
+test('extracted-store throws when a stored record includes an unexpected extra key', async () => {
+  const root = makeTempDir()
+  const extractedDir = path.join(root, 'reports', 'audit-behavior', 'extracted', 'tools')
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadExtractedStoreModule(crypto.randomUUID())
+
+  mkdirSync(extractedDir, { recursive: true })
+  await Bun.write(
+    path.join(extractedDir, 'sample.test.json'),
+    JSON.stringify([
+      {
+        behaviorId: 'tests/tools/sample.test.ts::suite > create task',
+        testKey: 'tests/tools/sample.test.ts::suite > create task',
+        testFile: 'tests/tools/sample.test.ts',
+        domain: 'tools',
+        testName: 'create task',
+        fullPath: 'suite > create task',
+        behavior: 'Creates a task from chat input.',
+        context: 'Uses the task provider create flow.',
+        keywords: ['task-create'],
+        extractedAt: '2026-04-23T12:00:00.000Z',
+        unexpected: true,
+      },
+    ]) + '\n',
+  )
+
+  await expect(store.readExtractedFile('tests/tools/sample.test.ts')).rejects.toThrow()
+})
+
+test('evaluated-store returns null for a missing file and throws on malformed JSON', async () => {
+  const root = makeTempDir()
+  const evaluatedDir = path.join(root, 'reports', 'audit-behavior', 'evaluated')
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadEvaluatedStoreModule(crypto.randomUUID())
+
+  expect(await store.readEvaluatedFile('missing-feature')).toBeNull()
+
+  mkdirSync(evaluatedDir, { recursive: true })
+  await Bun.write(path.join(evaluatedDir, 'task-creation.json'), '{"not":"an array"}\n')
+
+  await expect(store.readEvaluatedFile('task-creation')).rejects.toThrow()
+})
+
+test('evaluated-store throws when a stored record includes an unexpected nested key', async () => {
+  const root = makeTempDir()
+  const evaluatedDir = path.join(root, 'reports', 'audit-behavior', 'evaluated')
+
+  mockAuditBehaviorConfig(root, null)
+
+  const store = await loadEvaluatedStoreModule(crypto.randomUUID())
+
+  mkdirSync(evaluatedDir, { recursive: true })
+  await Bun.write(
+    path.join(evaluatedDir, 'task-creation.json'),
+    JSON.stringify([
+      {
+        consolidatedId: 'task-creation::feature',
+        maria: { discover: 4, use: 4, retain: 3, notes: 'Clear primary path.', unexpected: true },
+        dani: { discover: 3, use: 4, retain: 3, notes: 'Works once discovered.' },
+        viktor: { discover: 2, use: 3, retain: 2, notes: 'Needs stronger affordances.' },
+        flaws: ['Validation feedback is easy to miss.'],
+        improvements: ['Make failure states more explicit.'],
+        evaluatedAt: '2026-04-23T12:00:00.000Z',
+      },
+    ]) + '\n',
+  )
+
+  await expect(store.readEvaluatedFile('task-creation')).rejects.toThrow()
 })
 
 test('report-writer round-trips supporting internal refs as readonly consolidated data', async () => {
@@ -274,4 +468,186 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
   expect(await Bun.file(path.join(consolidatedDir, 'group-routing.json')).exists()).toBe(false)
   expect(await Bun.file(path.join(classifiedDir, 'tools.json')).exists()).toBe(false)
   expect(await Bun.file(path.join(storiesDir, 'tools.md')).exists()).toBe(false)
+})
+
+test('progress reset helpers clear checkpoint state without touching canonical artifacts', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const extractedStore = await loadExtractedStoreModule(crypto.randomUUID())
+  const evaluatedStore = await loadEvaluatedStoreModule(crypto.randomUUID())
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+
+  await extractedStore.writeExtractedFile('tests/tools/sample.test.ts', [
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > create task',
+      testKey: 'tests/tools/sample.test.ts::suite > create task',
+      testFile: 'tests/tools/sample.test.ts',
+      domain: 'tools',
+      testName: 'create task',
+      fullPath: 'suite > create task',
+      behavior: 'Creates a task from chat input.',
+      context: 'Uses the task provider create flow.',
+      keywords: ['task-create'],
+      extractedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ])
+  await evaluatedStore.writeEvaluatedFile('task-creation', [
+    {
+      consolidatedId: 'task-creation::feature',
+      maria: { discover: 4, use: 4, retain: 3, notes: 'Clear primary path.' },
+      dani: { discover: 3, use: 4, retain: 3, notes: 'Works once discovered.' },
+      viktor: { discover: 2, use: 3, retain: 2, notes: 'Needs stronger affordances.' },
+      flaws: ['Validation feedback is easy to miss.'],
+      improvements: ['Make failure states more explicit.'],
+      evaluatedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ])
+
+  const progress = progressModule.createEmptyProgress(1)
+  progress.phase2a.status = 'done'
+  progress.phase2a.completedBehaviors['behavior-1'] = 'done'
+  progress.phase2a.failedBehaviors['behavior-2'] = {
+    error: 'failed classification',
+    attempts: 2,
+    lastAttempt: '2026-04-23T12:01:00.000Z',
+  }
+  progress.phase2a.stats = { behaviorsTotal: 2, behaviorsDone: 1, behaviorsFailed: 1 }
+  progress.phase2b.status = 'done'
+  progress.phase2b.completedFeatureKeys['task-creation'] = 'done'
+  progress.phase2b.failedFeatureKeys['task-creation-2'] = {
+    error: 'failed consolidation',
+    attempts: 1,
+    lastAttempt: '2026-04-23T12:02:00.000Z',
+  }
+  progress.phase2b.stats = {
+    featureKeysTotal: 2,
+    featureKeysDone: 1,
+    featureKeysFailed: 1,
+    behaviorsConsolidated: 1,
+  }
+  progress.phase3.status = 'done'
+  progress.phase3.completedConsolidatedIds['task-creation::feature'] = 'done'
+  progress.phase3.failedConsolidatedIds['task-creation::other'] = {
+    error: 'failed evaluation',
+    attempts: 1,
+    lastAttempt: '2026-04-23T12:03:00.000Z',
+  }
+  progress.phase3.stats = { consolidatedIdsTotal: 2, consolidatedIdsDone: 1, consolidatedIdsFailed: 1 }
+
+  progressModule.resetPhase2AndPhase3(progress)
+  await progressModule.saveProgress(progress)
+
+  expect(progress.phase2a.status as string).toBe('not-started')
+  expect(progress.phase2a.completedBehaviors).toEqual({})
+  expect(progress.phase2a.failedBehaviors).toEqual({})
+  expect(progress.phase2b.status as string).toBe('not-started')
+  expect(progress.phase2b.completedFeatureKeys).toEqual({})
+  expect(progress.phase2b.failedFeatureKeys).toEqual({})
+  expect(progress.phase3.status as string).toBe('not-started')
+  expect(progress.phase3.completedConsolidatedIds).toEqual({})
+  expect(progress.phase3.failedConsolidatedIds).toEqual({})
+  expect(await extractedStore.readExtractedFile('tests/tools/sample.test.ts')).toEqual([
+    {
+      behaviorId: 'tests/tools/sample.test.ts::suite > create task',
+      testKey: 'tests/tools/sample.test.ts::suite > create task',
+      testFile: 'tests/tools/sample.test.ts',
+      domain: 'tools',
+      testName: 'create task',
+      fullPath: 'suite > create task',
+      behavior: 'Creates a task from chat input.',
+      context: 'Uses the task provider create flow.',
+      keywords: ['task-create'],
+      extractedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ])
+  expect(await evaluatedStore.readEvaluatedFile('task-creation')).toEqual([
+    {
+      consolidatedId: 'task-creation::feature',
+      maria: { discover: 4, use: 4, retain: 3, notes: 'Clear primary path.' },
+      dani: { discover: 3, use: 4, retain: 3, notes: 'Works once discovered.' },
+      viktor: { discover: 2, use: 3, retain: 2, notes: 'Needs stronger affordances.' },
+      flaws: ['Validation feedback is easy to miss.'],
+      improvements: ['Make failure states more explicit.'],
+      evaluatedAt: '2026-04-23T12:00:00.000Z',
+    },
+  ])
+})
+
+test('loadProgress returns null when the progress file is missing', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+
+  await expect(progressModule.loadProgress()).resolves.toBeNull()
+})
+
+test('loadProgress rethrows malformed JSON errors', async () => {
+  const root = makeTempDir()
+  const progressPath = path.join(root, 'reports', 'audit-behavior', 'progress.json')
+
+  mockAuditBehaviorConfig(root, { PROGRESS_PATH: progressPath })
+  mkdirSync(path.dirname(progressPath), { recursive: true })
+  await Bun.write(progressPath, '{broken json')
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+
+  await expect(progressModule.loadProgress()).rejects.toThrow()
+})
+
+test('loadProgress rethrows schema-invalid progress errors', async () => {
+  const root = makeTempDir()
+  const progressPath = path.join(root, 'reports', 'audit-behavior', 'progress.json')
+
+  mockAuditBehaviorConfig(root, { PROGRESS_PATH: progressPath })
+  mkdirSync(path.dirname(progressPath), { recursive: true })
+  await Bun.write(
+    progressPath,
+    JSON.stringify({
+      version: 4,
+      startedAt: '2026-04-23T12:00:00.000Z',
+      phase1: {
+        status: 'not-started',
+      },
+    }) + '\n',
+  )
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+
+  await expect(progressModule.loadProgress()).rejects.toThrow()
+})
+
+test('markBatchFailed only increments feature failure stats for a newly failed key', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const progress = progressModule.createEmptyProgress(1)
+
+  progressModule.markBatchFailed(progress, 'task-creation', 'first failure', 1)
+  progressModule.markBatchFailed(progress, 'task-creation', 'updated failure', 2)
+
+  expect(progress.phase2b.failedFeatureKeys['task-creation']?.error).toBe('updated failure')
+  expect(progress.phase2b.failedFeatureKeys['task-creation']?.attempts).toBe(2)
+  expect(progress.phase2b.stats.featureKeysFailed).toBe(1)
+})
+
+test('markBehaviorFailed only increments consolidated failure stats for a newly failed key', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const progress = progressModule.createEmptyProgress(1)
+
+  progressModule.markBehaviorFailed(progress, 'task-creation::feature', 'first failure', 1)
+  progressModule.markBehaviorFailed(progress, 'task-creation::feature', 'updated failure', 2)
+
+  expect(progress.phase3.failedConsolidatedIds['task-creation::feature']?.error).toBe('updated failure')
+  expect(progress.phase3.failedConsolidatedIds['task-creation::feature']?.attempts).toBe(2)
+  expect(progress.phase3.stats.consolidatedIdsFailed).toBe(1)
 })

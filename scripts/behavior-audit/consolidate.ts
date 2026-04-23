@@ -17,6 +17,16 @@ interface Phase2bDeps {
   readonly writeConsolidatedFile: typeof writeConsolidatedFile
 }
 
+function isClassifiedBehaviorMap(value: unknown): value is Readonly<Record<string, ClassifiedBehavior>> {
+  return typeof value === 'object' && value !== null
+}
+
+function getLegacyClassifiedBehaviors(progress: Progress): Readonly<Record<string, ClassifiedBehavior>> {
+  return 'classifiedBehaviors' in progress.phase2a && isClassifiedBehaviorMap(progress.phase2a['classifiedBehaviors'])
+    ? progress.phase2a['classifiedBehaviors']
+    : {}
+}
+
 const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
   const { consolidateWithRetry } = await import('./consolidate-agent.js')
   return consolidateWithRetry(...args)
@@ -92,11 +102,12 @@ function updateManifestEntries(input: {
         sourceBehaviorIds: consolidated.sourceBehaviorIds,
         supportingInternalBehaviorIds: consolidated.supportingInternalRefs.map((item) => item.behaviorId),
         isUserFacing: consolidated.isUserFacing,
+        featureKey: input.candidateFeatureKey,
         candidateFeatureKey: input.candidateFeatureKey,
         keywords,
         sourceDomains,
         phase2Fingerprint: buildPhase2ConsolidationFingerprint({
-          candidateFeatureKey: input.candidateFeatureKey,
+          featureKey: input.candidateFeatureKey,
           sourceBehaviorIds: consolidated.sourceBehaviorIds,
           behaviors: input.inputs.map((item) => item.behavior),
           phaseVersion: input.phase2Version,
@@ -153,10 +164,10 @@ export async function runPhase2b(
   deps: Phase2bDeps = { consolidateWithRetry: defaultConsolidateWithRetry, writeConsolidatedFile },
 ): Promise<ConsolidatedManifest> {
   const groups = [
-    ...groupByCandidateFeature(progress.phase2a.classifiedBehaviors, selectedCandidateFeatureKeys).entries(),
+    ...groupByCandidateFeature(getLegacyClassifiedBehaviors(progress), selectedCandidateFeatureKeys).entries(),
   ]
   progress.phase2b.status = 'in-progress'
-  progress.phase2b.stats.candidateFeaturesTotal = groups.length
+  progress.phase2b.stats.featureKeysTotal = groups.length
   resetPhase3(progress)
   await saveProgress(progress)
 

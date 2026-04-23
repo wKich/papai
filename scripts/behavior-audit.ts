@@ -225,8 +225,8 @@ export async function runBehaviorAudit(deps: BehaviorAuditDeps = defaultBehavior
   if (selection.reportRebuildOnly) {
     await deps.rebuildReportsFromStoredResults({
       manifest: updatedManifest,
-      extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
-      evaluationsByKey: progress.phase3.evaluations,
+      extractedBehaviorsByKey: {},
+      evaluationsByKey: {},
       consolidatedManifest: previousConsolidatedManifest,
     })
     deps.log.log('\nBehavior audit complete.')

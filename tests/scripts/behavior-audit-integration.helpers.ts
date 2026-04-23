@@ -8,16 +8,44 @@ import { applyBehaviorAuditEnv } from './behavior-audit-integration.runtime-help
 
 type ManifestTestEntry = IncrementalManifest['tests'][string]
 type ConsolidatedManifestEntry = ConsolidatedManifest['entries'][string]
-type ExtractedBehavior = Progress['phase1']['extractedBehaviors'][string]
-type ClassifiedBehavior = Progress['phase2a']['classifiedBehaviors'][string]
+
+type ExtractedBehavior = {
+  readonly testName: string
+  readonly fullPath: string
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+}
+
+type ClassifiedBehavior = {
+  readonly behaviorId: string
+  readonly testKey: string
+  readonly domain: string
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+  readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
+  readonly candidateFeatureKey: string | null
+  readonly featureKey: string | null
+  readonly candidateFeatureLabel: string | null
+  readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
+  readonly relatedBehaviorHints: readonly {
+    readonly testKey: string
+    readonly relation: 'same-feature' | 'supporting-detail' | 'possibly-related'
+    readonly reason: string
+  }[]
+  readonly classificationNotes: string
+}
 
 export interface BehaviorAuditTestPaths {
   readonly root: string
   readonly reportsDir: string
   readonly auditBehaviorDir: string
   readonly behaviorsDir: string
+  readonly extractedDir: string
   readonly classifiedDir: string
   readonly consolidatedDir: string
+  readonly evaluatedDir: string
   readonly storiesDir: string
   readonly progressPath: string
   readonly incrementalManifestPath: string
@@ -32,8 +60,10 @@ export interface BehaviorAuditTestConfig {
   readonly REPORTS_DIR: string
   readonly AUDIT_BEHAVIOR_DIR: string
   readonly BEHAVIORS_DIR: string
+  readonly EXTRACTED_DIR: string
   readonly CLASSIFIED_DIR: string
   readonly CONSOLIDATED_DIR: string
+  readonly EVALUATED_DIR: string
   readonly STORIES_DIR: string
   readonly PROGRESS_PATH: string
   readonly INCREMENTAL_MANIFEST_PATH: string
@@ -71,8 +101,10 @@ const DEFAULT_CONFIG = {
   | 'REPORTS_DIR'
   | 'AUDIT_BEHAVIOR_DIR'
   | 'BEHAVIORS_DIR'
+  | 'EXTRACTED_DIR'
   | 'CLASSIFIED_DIR'
   | 'CONSOLIDATED_DIR'
+  | 'EVALUATED_DIR'
   | 'STORIES_DIR'
   | 'PROGRESS_PATH'
   | 'INCREMENTAL_MANIFEST_PATH'
@@ -89,8 +121,10 @@ function createPaths(root: string, auditBehaviorRoot: boolean): BehaviorAuditTes
     reportsDir,
     auditBehaviorDir,
     behaviorsDir: path.join(auditBehaviorDir, 'behaviors'),
+    extractedDir: path.join(auditBehaviorDir, 'extracted'),
     classifiedDir: path.join(auditBehaviorDir, 'classified'),
     consolidatedDir: path.join(auditBehaviorDir, 'consolidated'),
+    evaluatedDir: path.join(auditBehaviorDir, 'evaluated'),
     storiesDir: path.join(auditBehaviorDir, 'stories'),
     progressPath: path.join(auditBehaviorDir, 'progress.json'),
     incrementalManifestPath: path.join(auditBehaviorDir, 'incremental-manifest.json'),
@@ -123,8 +157,10 @@ function createConfig(
     REPORTS_DIR: paths.reportsDir,
     AUDIT_BEHAVIOR_DIR: paths.auditBehaviorDir,
     BEHAVIORS_DIR: paths.behaviorsDir,
+    EXTRACTED_DIR: paths.extractedDir,
     CLASSIFIED_DIR: paths.classifiedDir,
     CONSOLIDATED_DIR: paths.consolidatedDir,
+    EVALUATED_DIR: paths.evaluatedDir,
     STORIES_DIR: paths.storiesDir,
     PROGRESS_PATH: paths.progressPath,
     INCREMENTAL_MANIFEST_PATH: paths.incrementalManifestPath,
@@ -160,12 +196,11 @@ export function mockAuditBehaviorConfig(root: string, overrides: Partial<Behavio
 
 export function createEmptyProgressFixture(filesTotal: number): Progress {
   return {
-    version: 3,
+    version: 4,
     startedAt: '2026-04-17T12:00:00.000Z',
     phase1: {
       status: 'not-started',
       completedTests: {},
-      extractedBehaviors: {},
       failedTests: {},
       completedFiles: [],
       stats: { filesTotal, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
@@ -173,28 +208,29 @@ export function createEmptyProgressFixture(filesTotal: number): Progress {
     phase2a: {
       status: 'not-started',
       completedBehaviors: {},
-      classifiedBehaviors: {},
       failedBehaviors: {},
       stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
     },
     phase2b: {
       status: 'not-started',
-      completedCandidateFeatures: {},
-      consolidations: {},
-      failedCandidateFeatures: {},
+      completedFeatureKeys: {},
+      failedFeatureKeys: {},
       stats: {
-        candidateFeaturesTotal: 0,
-        candidateFeaturesDone: 0,
-        candidateFeaturesFailed: 0,
+        featureKeysTotal: 0,
+        featureKeysDone: 0,
+        featureKeysFailed: 0,
         behaviorsConsolidated: 0,
       },
     },
     phase3: {
       status: 'not-started',
-      completedBehaviors: {},
-      evaluations: {},
-      failedBehaviors: {},
-      stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+      completedConsolidatedIds: {},
+      failedConsolidatedIds: {},
+      stats: {
+        consolidatedIdsTotal: 0,
+        consolidatedIdsDone: 0,
+        consolidatedIdsFailed: 0,
+      },
     },
   }
 }
@@ -209,13 +245,21 @@ export function createExtractedBehaviorFixture(
 }
 
 export function createClassifiedBehaviorFixture(
-  input: Omit<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints'> &
-    Partial<Pick<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints'>>,
+  input: Omit<
+    ClassifiedBehavior,
+    'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey' | 'candidateFeatureKey'
+  > &
+    Partial<
+      Pick<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey' | 'candidateFeatureKey'>
+    >,
 ): ClassifiedBehavior {
+  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
   return {
     supportingBehaviorRefs: [],
     relatedBehaviorHints: [],
     ...input,
+    candidateFeatureKey: resolvedFeatureKey,
+    featureKey: resolvedFeatureKey,
   }
 }
 
@@ -228,16 +272,39 @@ export function writeWorkspaceFile(root: string, relativePath: string, content: 
 export function createManifestTestEntry(
   input: Omit<
     ManifestTestEntry,
-    'phase2aFingerprint' | 'behaviorId' | 'candidateFeatureKey' | 'lastPhase2aCompletedAt'
+    | 'phase2aFingerprint'
+    | 'behaviorId'
+    | 'featureKey'
+    | 'candidateFeatureKey'
+    | 'extractedArtifactPath'
+    | 'extractedBehaviorPath'
+    | 'classifiedArtifactPath'
+    | 'lastPhase2aCompletedAt'
   > &
     Partial<
-      Pick<ManifestTestEntry, 'phase2aFingerprint' | 'behaviorId' | 'candidateFeatureKey' | 'lastPhase2aCompletedAt'>
+      Pick<
+        ManifestTestEntry,
+        | 'phase2aFingerprint'
+        | 'behaviorId'
+        | 'featureKey'
+        | 'candidateFeatureKey'
+        | 'extractedArtifactPath'
+        | 'extractedBehaviorPath'
+        | 'classifiedArtifactPath'
+        | 'lastPhase2aCompletedAt'
+      >
     >,
 ): ManifestTestEntry {
+  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
+  const resolvedExtractedArtifactPath = input.extractedArtifactPath ?? input.extractedBehaviorPath ?? null
   return {
     phase2aFingerprint: null,
     behaviorId: null,
-    candidateFeatureKey: null,
+    featureKey: resolvedFeatureKey,
+    candidateFeatureKey: resolvedFeatureKey,
+    extractedArtifactPath: resolvedExtractedArtifactPath,
+    extractedBehaviorPath: resolvedExtractedArtifactPath,
+    classifiedArtifactPath: null,
     lastPhase2aCompletedAt: null,
     ...input,
   }
@@ -275,18 +342,29 @@ export function createIncrementalManifestFixture(
 export function createConsolidatedManifestEntry(
   input: Omit<
     ConsolidatedManifestEntry,
-    'sourceBehaviorIds' | 'supportingInternalBehaviorIds' | 'candidateFeatureKey' | 'keywords' | 'sourceDomains'
+    | 'sourceBehaviorIds'
+    | 'supportingInternalBehaviorIds'
+    | 'featureKey'
+    | 'candidateFeatureKey'
+    | 'keywords'
+    | 'sourceDomains'
   > &
     Partial<
       Pick<
         ConsolidatedManifestEntry,
-        'sourceBehaviorIds' | 'supportingInternalBehaviorIds' | 'candidateFeatureKey' | 'keywords' | 'sourceDomains'
+        | 'sourceBehaviorIds'
+        | 'supportingInternalBehaviorIds'
+        | 'featureKey'
+        | 'candidateFeatureKey'
+        | 'keywords'
+        | 'sourceDomains'
       >
     >,
 ): ConsolidatedManifestEntry {
   return {
     sourceBehaviorIds: [],
     supportingInternalBehaviorIds: [],
+    featureKey: null,
     candidateFeatureKey: null,
     keywords: [],
     sourceDomains: [],

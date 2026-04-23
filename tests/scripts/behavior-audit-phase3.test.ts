@@ -20,8 +20,47 @@ import {
 } from './behavior-audit-integration.runtime-helpers.js'
 import { loadEvaluateModule, type MockEvaluationResult } from './behavior-audit-integration.support.js'
 
-function createEmptyProgress(filesTotal: number): Progress {
-  return createEmptyProgressFixture(filesTotal)
+type LegacyEvaluatedBehavior = {
+  readonly testName: string
+  readonly behavior: string
+  readonly userStory: string
+  readonly maria: NonNullable<MockEvaluationResult>['maria']
+  readonly dani: NonNullable<MockEvaluationResult>['dani']
+  readonly viktor: NonNullable<MockEvaluationResult>['viktor']
+  readonly flaws: readonly string[]
+  readonly improvements: readonly string[]
+}
+
+type LegacyPhase3Progress = Progress & {
+  phase2b: Progress['phase2b'] & {
+    completedCandidateFeatures: Record<string, 'done'>
+  }
+  phase3: Progress['phase3'] & {
+    completedBehaviors: Record<string, 'done'>
+    evaluations: Record<string, LegacyEvaluatedBehavior>
+    stats: Progress['phase3']['stats'] & {
+      behaviorsTotal: number
+      behaviorsDone: number
+    }
+  }
+}
+
+function createEmptyProgress(filesTotal: number): LegacyPhase3Progress {
+  const progress = createEmptyProgressFixture(filesTotal)
+  const legacyPhase2b = Object.assign(progress.phase2b, { completedCandidateFeatures: {} })
+  const legacyPhase3 = Object.assign(progress.phase3, {
+    completedBehaviors: {},
+    evaluations: {},
+    stats: {
+      ...progress.phase3.stats,
+      behaviorsTotal: 0,
+      behaviorsDone: 0,
+    },
+  })
+  return Object.assign(progress, {
+    phase2b: legacyPhase2b,
+    phase3: legacyPhase3,
+  })
 }
 
 function createEvaluationResult(input: {
@@ -405,8 +444,8 @@ test('runPhase3 reads consolidated batches by candidate feature from manifest en
     },
   )
 
-  expect(progress.phase3.stats.behaviorsTotal).toBe(1)
-  expect(progress.phase3.stats.behaviorsDone).toBe(1)
+  expect(progress.phase3.stats.consolidatedIdsTotal).toBe(1)
+  expect(progress.phase3.stats.consolidatedIdsDone).toBe(1)
   expect(progress.phase3.evaluations['group-targeting::feature']).toBeDefined()
 })
 

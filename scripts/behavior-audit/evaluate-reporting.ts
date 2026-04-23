@@ -99,7 +99,7 @@ export async function writeReports(
     [...evaluationsByDomain.entries()].map(([domain, evaluations]) => writeStoryFile(domain, evaluations)),
   )
   const summaries = [...evaluationsByDomain.entries()].map(([domain, evaluations]) => buildSummary(domain, evaluations))
-  const failedItems = Object.entries(progress.phase3.failedBehaviors).map(([key, entry]) => ({
+  const failedItems = Object.entries(progress.phase3.failedConsolidatedIds).map(([key, entry]) => ({
     testFile: key.split('::')[0] ?? 'unknown',
     testName: key.split('::').slice(1).join('::'),
     error: entry.error,
@@ -107,8 +107,8 @@ export async function writeReports(
   }))
   await writeIndexFile(
     summaries,
-    progress.phase3.stats.behaviorsDone,
-    progress.phase3.stats.behaviorsFailed,
+    progress.phase3.stats.consolidatedIdsDone,
+    progress.phase3.stats.consolidatedIdsFailed,
     flawFreq,
     impFreq,
     failedItems,

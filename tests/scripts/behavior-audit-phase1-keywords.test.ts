@@ -2,8 +2,10 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { z } from 'zod'
+
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { createEmptyProgressFixture, mockReportsConfig } from './behavior-audit-integration.helpers.js'
+import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
   cleanupTempDirs,
@@ -27,6 +29,21 @@ type ResolveKeywordsResult = NonNullable<
     ReturnType<(typeof import('../../scripts/behavior-audit/keyword-resolver-agent.js'))['resolveKeywordsWithRetry']>
   >
 >
+
+const ExtractedBehaviorRecordArraySchema = z.array(
+  z.strictObject({
+    behaviorId: z.string(),
+    testKey: z.string(),
+    testFile: z.string(),
+    domain: z.string(),
+    testName: z.string(),
+    fullPath: z.string(),
+    behavior: z.string(),
+    context: z.string(),
+    keywords: z.array(z.string()).readonly(),
+    extractedAt: z.string(),
+  }),
+)
 
 function createExtractResult(input: {
   readonly behavior: string
@@ -77,8 +94,10 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   const progressPath = path.join(reportsDir, 'progress.json')
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+  const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
+  const behaviorMarkdownPath = path.join(reportsDir, 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md')
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
@@ -122,11 +141,30 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     },
   )
 
-  const stored = progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']
-  if (stored === undefined) {
-    throw new Error('Expected extracted behavior to be stored')
+  expect(progress.phase1).not.toHaveProperty('extractedBehaviors')
+
+  const extractedRecords = ExtractedBehaviorRecordArraySchema.parse(
+    JSON.parse(await Bun.file(extractedArtifactPath).text()),
+  )
+  expect(extractedRecords).toHaveLength(1)
+  const firstRecord = extractedRecords[0]
+  if (firstRecord === undefined) {
+    throw new Error('Expected first extracted record')
   }
-  expect(stored.keywords).toEqual(['group-targeting', 'group-routing'])
+  expect(firstRecord.behaviorId).toBe('tests/tools/sample.test.ts::suite > case')
+  expect(firstRecord.testKey).toBe('tests/tools/sample.test.ts::suite > case')
+  expect(firstRecord.testFile).toBe('tests/tools/sample.test.ts')
+  expect(firstRecord.domain).toBe('tools')
+  expect(firstRecord.testName).toBe('case')
+  expect(firstRecord.fullPath).toBe('suite > case')
+  expect(firstRecord.behavior).toBe('When a user targets a group, the bot routes the request correctly.')
+  expect(firstRecord.context).toBe('Resolves target context and forwards execution through the group routing path.')
+  expect(firstRecord.keywords).toEqual(['group-targeting', 'group-routing'])
+  expect(typeof firstRecord.extractedAt).toBe('string')
+
+  const behaviorMarkdown = await Bun.file(behaviorMarkdownPath).text()
+  expect(behaviorMarkdown).toContain('**Behavior:** When a user targets a group, the bot routes the request correctly.')
+  expect(behaviorMarkdown).toContain('**Keywords:** group-targeting, group-routing')
 })
 
 test('extract-agent returns behavior, context, and candidateKeywords', async () => {
@@ -163,7 +201,7 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
   const reportsDir = path.join(root, 'reports')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
     EXCLUDED_PREFIXES: [] as const,
   })
@@ -196,14 +234,13 @@ test('keyword-vocabulary persists entries and updates usage counts', async () =>
 test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
   const root = makeTempDir()
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     EXCLUDED_PREFIXES: [] as const,
   })
 
   const typedWriter = await loadReportWriterModule(`keywords-${crypto.randomUUID()}`)
   await typedWriter.writeBehaviorFile('tests/tools/sample.test.ts', [
     {
-      testName: 'case',
       fullPath: 'suite > case',
       behavior: 'When a user targets a group, the bot routes the request correctly.',
       context: 'Routes through group context selection.',
@@ -211,7 +248,9 @@ test('writeBehaviorFile renders canonical keywords for each extracted behavior',
     },
   ])
 
-  const fileText = await Bun.file(path.join(root, 'reports', 'behaviors', 'tools', 'sample.test.behaviors.md')).text()
+  const fileText = await Bun.file(
+    path.join(root, 'reports', 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md'),
+  ).text()
   expect(fileText).toContain('**Keywords:** group-targeting, group-routing')
 })
 
@@ -222,7 +261,7 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
@@ -291,7 +330,7 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   let extractCalls = 0
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
@@ -311,13 +350,27 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   progress.phase1.completedTests['tests/tools/sample.test.ts'] = {
     'tests/tools/sample.test.ts::suite > case': 'done',
   }
-  progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = {
-    testName: 'case',
-    fullPath: 'suite > case',
-    behavior: 'Stale extracted behavior.',
-    context: 'Stale context.',
-    keywords: ['stale-keyword'],
-  }
+  await Bun.write(
+    path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json'),
+    JSON.stringify(
+      [
+        {
+          behaviorId: 'tests/tools/sample.test.ts::suite > case',
+          testKey: 'tests/tools/sample.test.ts::suite > case',
+          testFile: 'tests/tools/sample.test.ts',
+          domain: 'tools',
+          testName: 'case',
+          fullPath: 'suite > case',
+          behavior: 'Stale extracted behavior.',
+          context: 'Stale context.',
+          keywords: ['stale-keyword'],
+          extractedAt: '2026-04-20T12:00:00.000Z',
+        },
+      ],
+      null,
+      2,
+    ) + '\n',
+  )
 
   const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
   await extract.runPhase1(
@@ -357,10 +410,15 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
   )
 
   expect(extractCalls).toBe(1)
-  expect(progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case']).toMatchObject({
-    behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
-    keywords: ['group-targeting-updated'],
-  })
+  const extractedRecords: unknown = JSON.parse(
+    await Bun.file(path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')).text(),
+  )
+  expect(extractedRecords).toEqual([
+    expect.objectContaining({
+      behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
+      keywords: ['group-targeting-updated'],
+    }),
+  ])
 })
 
 test('runPhase1 keeps first use count at one for newly appended keywords', async () => {
@@ -370,7 +428,7 @@ test('runPhase1 keeps first use count at one for newly appended keywords', async
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,
@@ -438,7 +496,7 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   let capturedResolverPrompt = ''
 
-  mockReportsConfig(root, {
+  mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
     INCREMENTAL_MANIFEST_PATH: manifestPath,
     KEYWORD_VOCABULARY_PATH: vocabularyPath,

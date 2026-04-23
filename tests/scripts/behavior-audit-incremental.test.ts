@@ -7,6 +7,7 @@ import path from 'node:path'
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
 import type * as IncrementalModule from '../../scripts/behavior-audit/incremental.js'
 import type * as ProgressMigrateModule from '../../scripts/behavior-audit/progress-migrate.js'
+import { loadProgressModule } from './behavior-audit-integration.support.js'
 
 type ManifestTestEntry = IncrementalModule.IncrementalManifest['tests'][string]
 
@@ -163,16 +164,39 @@ function isSavedManifest(
 function createManifestTestEntry(
   input: Omit<
     ManifestTestEntry,
-    'phase2aFingerprint' | 'behaviorId' | 'candidateFeatureKey' | 'lastPhase2aCompletedAt'
+    | 'phase2aFingerprint'
+    | 'behaviorId'
+    | 'featureKey'
+    | 'candidateFeatureKey'
+    | 'extractedArtifactPath'
+    | 'extractedBehaviorPath'
+    | 'classifiedArtifactPath'
+    | 'lastPhase2aCompletedAt'
   > &
     Partial<
-      Pick<ManifestTestEntry, 'phase2aFingerprint' | 'behaviorId' | 'candidateFeatureKey' | 'lastPhase2aCompletedAt'>
+      Pick<
+        ManifestTestEntry,
+        | 'phase2aFingerprint'
+        | 'behaviorId'
+        | 'featureKey'
+        | 'candidateFeatureKey'
+        | 'extractedArtifactPath'
+        | 'extractedBehaviorPath'
+        | 'classifiedArtifactPath'
+        | 'lastPhase2aCompletedAt'
+      >
     >,
 ): ManifestTestEntry {
+  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
+  const resolvedExtractedArtifactPath = input.extractedArtifactPath ?? input.extractedBehaviorPath ?? null
   return {
     phase2aFingerprint: null,
     behaviorId: null,
-    candidateFeatureKey: null,
+    featureKey: resolvedFeatureKey,
+    candidateFeatureKey: resolvedFeatureKey,
+    extractedArtifactPath: resolvedExtractedArtifactPath,
+    extractedBehaviorPath: resolvedExtractedArtifactPath,
+    classifiedArtifactPath: null,
     lastPhase2aCompletedAt: null,
     ...input,
   }
@@ -238,6 +262,22 @@ describe('behavior-audit incremental manifest', () => {
         phase1Calls += 1
         phase1ManifestSnapshot = await Bun.file(manifestPath).text()
       },
+    }))
+    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
+      runPhase2a: (): Promise<ReadonlySet<string>> => Promise.resolve(new Set()),
+    }))
+    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
+      runPhase2b: (): Promise<{ readonly version: 1; readonly entries: Record<string, never> }> =>
+        Promise.resolve({
+          version: 1,
+          entries: {},
+        }),
+    }))
+    void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
+      runPhase3: async (): Promise<void> => {},
+    }))
+    void mock.module('../../scripts/behavior-audit/report-writer.js', () => ({
+      rebuildReportsFromStoredResults: async (): Promise<void> => {},
     }))
   })
 
@@ -668,7 +708,7 @@ describe('behavior-audit incremental manifest', () => {
         lastCompletedAt: 'y',
         phaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
         tests: {
-          'tests/tools/create-task.test.ts::suite > case': {
+          'tests/tools/create-task.test.ts::suite > case': createManifestTestEntry({
             testFile: 'tests/tools/create-task.test.ts',
             testName: 'suite > case',
             dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
@@ -682,7 +722,7 @@ describe('behavior-audit incremental manifest', () => {
             lastPhase1CompletedAt: 'x',
             lastPhase2aCompletedAt: 'y',
             lastPhase2CompletedAt: 'z',
-          },
+          }),
         },
       },
       currentPhaseVersions: { phase1: 'p1', phase2: 'p2', reports: 'r1' },
@@ -830,7 +870,7 @@ describe('behavior-audit incremental manifest', () => {
     expect(a).not.toBe(b)
   })
 
-  test('validateOrMigrateProgress upgrades version 2 progress into version 3 with reset phase2a and phase2b', async () => {
+  test('validateOrMigrateProgress upgrades version 2 progress into checkpoint-only version 4 state', async () => {
     const mod = await loadProgressMigrateModule()
 
     const migrated = mod.validateOrMigrateProgress({
@@ -860,14 +900,137 @@ describe('behavior-audit incremental manifest', () => {
       },
     })
 
-    expect(migrated?.version).toBe(3)
-    expect(migrated?.phase1.status).toBe('done')
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
     expect(migrated?.phase2a.status).toBe('not-started')
     expect(migrated?.phase2b.status).toBe('not-started')
     expect(migrated?.phase3.status).toBe('not-started')
   })
 
-  test('validateOrMigrateProgress migrates populated legacy version 2 consolidations without losing phase1 state', async () => {
+  test('createEmptyProgress returns checkpoint-only version 4 progress', async () => {
+    const mod = await loadProgressModule(crypto.randomUUID())
+    const progress = mod.createEmptyProgress(2)
+
+    expect(progress.version).toBe(4)
+    expect(progress.phase1).not.toHaveProperty('extractedBehaviors')
+    expect(progress.phase2a).not.toHaveProperty('classifiedBehaviors')
+    expect(progress.phase2b).not.toHaveProperty('consolidations')
+    expect(progress.phase3).not.toHaveProperty('evaluations')
+  })
+
+  test('validateOrMigrateProgress normalizes payload-heavy version 3 files into checkpoint-only version 4 progress', async () => {
+    const mod = await loadProgressMigrateModule()
+
+    const migrated = mod.validateOrMigrateProgress({
+      version: 3,
+      startedAt: '2026-04-21T12:00:00.000Z',
+      phase1: {
+        status: 'done',
+        completedTests: {
+          'tests/tools/create-task.test.ts': {
+            'tests/tools/create-task.test.ts::suite > case': 'done',
+          },
+        },
+        extractedBehaviors: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testName: 'suite > case',
+            fullPath: 'suite > case',
+            behavior: 'Creates a task for the user.',
+            context: 'Calls provider createTask.',
+            keywords: ['task-create'],
+          },
+        },
+        failedTests: {},
+        completedFiles: ['tests/tools/create-task.test.ts'],
+        stats: { filesTotal: 1, filesDone: 1, testsExtracted: 1, testsFailed: 0 },
+      },
+      phase2a: {
+        status: 'done',
+        completedBehaviors: { 'tests/tools/create-task.test.ts::suite > case': 'done' },
+        classifiedBehaviors: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            behaviorId: 'tests/tools/create-task.test.ts::suite > case',
+            testKey: 'tests/tools/create-task.test.ts::suite > case',
+            domain: 'tools',
+            behavior: 'Creates a task for the user.',
+            context: 'Calls provider createTask.',
+            keywords: ['task-create'],
+            visibility: 'user-facing',
+            candidateFeatureKey: 'task-creation',
+            candidateFeatureLabel: 'Task creation',
+            supportingBehaviorRefs: [],
+            relatedBehaviorHints: [],
+            classificationNotes: 'clear primary workflow',
+          },
+        },
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 1, behaviorsDone: 1, behaviorsFailed: 0 },
+      },
+      phase2b: {
+        status: 'done',
+        completedCandidateFeatures: { 'task-creation': 'done' },
+        consolidations: {
+          'task-creation': [
+            {
+              id: 'task-creation::task-creation',
+              domain: 'tools',
+              featureName: 'Task creation',
+              isUserFacing: true,
+              behavior: 'Creates a task for the user.',
+              userStory: 'As a user, I can create a task.',
+              context: 'Calls provider createTask.',
+              sourceTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+              sourceBehaviorIds: ['tests/tools/create-task.test.ts::suite > case'],
+              supportingInternalRefs: [],
+            },
+          ],
+        },
+        failedCandidateFeatures: {},
+        stats: {
+          candidateFeaturesTotal: 1,
+          candidateFeaturesDone: 1,
+          candidateFeaturesFailed: 0,
+          behaviorsConsolidated: 1,
+        },
+      },
+      phase3: {
+        status: 'done',
+        completedBehaviors: { 'task-creation::task-creation': 'done' },
+        evaluations: {
+          'task-creation::task-creation': {
+            testName: 'suite > case',
+            behavior: 'Creates a task for the user.',
+            userStory: 'As a user, I can create a task.',
+            maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            flaws: [],
+            improvements: [],
+          },
+        },
+        failedBehaviors: {},
+        stats: { behaviorsTotal: 1, behaviorsDone: 1, behaviorsFailed: 0 },
+      },
+    })
+
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
+    expect(migrated?.phase1).not.toHaveProperty('extractedBehaviors')
+    expect(migrated?.phase2a.status).toBe('not-started')
+    expect(migrated?.phase2a).not.toHaveProperty('classifiedBehaviors')
+    expect(migrated?.phase2b.status).toBe('not-started')
+    expect(migrated?.phase2b).not.toHaveProperty('consolidations')
+    expect(migrated?.phase3.status).toBe('not-started')
+    expect(migrated?.phase3).not.toHaveProperty('evaluations')
+  })
+
+  test('validateOrMigrateProgress treats populated legacy version 2 consolidations as incompatible and keeps only safe phase1 checkpoints', async () => {
     const mod = await loadProgressMigrateModule()
 
     const migrated = mod.validateOrMigrateProgress({
@@ -920,22 +1083,58 @@ describe('behavior-audit incremental manifest', () => {
       },
     })
 
-    expect(migrated?.version).toBe(3)
-    expect(migrated?.phase1.status).toBe('done')
-    expect(migrated?.phase1.completedFiles).toEqual(['tests/tools/create-task.test.ts'])
-    expect(migrated?.phase1.extractedBehaviors['tests/tools/create-task.test.ts::suite > case']).toEqual({
-      testName: 'suite > case',
-      fullPath: 'suite > case',
-      behavior: 'Creates a task for the user.',
-      context: 'Calls provider createTask.',
-      keywords: ['task-create'],
-    })
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
+    expect(migrated?.phase1).not.toHaveProperty('extractedBehaviors')
     expect(migrated?.phase2a.status).toBe('not-started')
     expect(migrated?.phase2b.status).toBe('not-started')
     expect(migrated?.phase3.status).toBe('not-started')
   })
 
-  test('validateOrMigrateProgress preserves populated legacy pre-versioned phase1 state', async () => {
+  test('validateOrMigrateProgress resets pre-versioned payload-heavy phase1 state to a clean checkpoint-only baseline', async () => {
+    const mod = await loadProgressMigrateModule()
+
+    const migrated = mod.validateOrMigrateProgress({
+      startedAt: '2026-04-21T12:00:00.000Z',
+      phase1: {
+        status: 'in-progress',
+        completedTests: {
+          'tests/tools/create-task.test.ts': {
+            'tests/tools/create-task.test.ts::suite > case': 'done',
+          },
+        },
+        extractedBehaviors: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testName: 'suite > case',
+            fullPath: 'suite > case',
+            behavior: 'Creates a task for the user.',
+            context: 'Calls provider createTask.',
+            keywords: ['task-create'],
+          },
+        },
+        failedTests: {},
+        completedFiles: ['tests/tools/create-task.test.ts'],
+        stats: { filesTotal: 3, filesDone: 1, testsExtracted: 1, testsFailed: 0 },
+      },
+      phase2: {
+        ignored: true,
+      },
+    })
+
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
+    expect(migrated?.phase2a.status).toBe('not-started')
+    expect(migrated?.phase2b.status).toBe('not-started')
+    expect(migrated?.phase3.status).toBe('not-started')
+  })
+
+  test('validateOrMigrateProgress treats populated legacy pre-versioned phase1 state as incompatible and resets it', async () => {
     const mod = await loadProgressMigrateModule()
 
     const migrated = mod.validateOrMigrateProgress({
@@ -957,21 +1156,17 @@ describe('behavior-audit incremental manifest', () => {
       },
     })
 
-    expect(migrated?.version).toBe(3)
-    expect(migrated?.phase1.status).toBe('in-progress')
-    expect(migrated?.phase1.completedFiles).toEqual(['tests/tools/create-task.test.ts'])
-    expect(migrated?.phase1.stats).toEqual({
-      filesTotal: 3,
-      filesDone: 1,
-      testsExtracted: 1,
-      testsFailed: 0,
-    })
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
     expect(migrated?.phase2a.status).toBe('not-started')
     expect(migrated?.phase2b.status).toBe('not-started')
     expect(migrated?.phase3.status).toBe('not-started')
   })
 
-  test('validateOrMigrateProgress preserves legacy pre-versioned phase1 state when startedAt is missing', async () => {
+  test('validateOrMigrateProgress resets legacy pre-versioned phase1 state when startedAt is missing', async () => {
     const mod = await loadProgressMigrateModule()
 
     const makeLegacyInput = (): {
@@ -1009,26 +1204,22 @@ describe('behavior-audit incremental manifest', () => {
     await Bun.sleep(10)
     const migratedAgain = mod.validateOrMigrateProgress(makeLegacyInput())
 
-    expect(migrated?.version).toBe(3)
+    expect(migrated?.version).toBe(4)
     expect(typeof migrated?.startedAt).toBe('string')
     expect(migrated?.startedAt.length).toBeGreaterThan(0)
     expect(typeof migratedAgain?.startedAt).toBe('string')
     expect(migratedAgain?.startedAt.length).toBeGreaterThan(0)
     expect(migrated?.startedAt).not.toBe(migratedAgain?.startedAt)
-    expect(migrated?.phase1.status).toBe('done')
-    expect(migrated?.phase1.completedFiles).toEqual(['tests/tools/create-task.test.ts'])
-    expect(migrated?.phase1.stats).toEqual({
-      filesTotal: 2,
-      filesDone: 1,
-      testsExtracted: 1,
-      testsFailed: 0,
-    })
+    expect(migrated?.phase1.status).toBe('not-started')
+    expect(migrated?.phase1.completedTests).toEqual({})
+    expect(migrated?.phase1.completedFiles).toEqual([])
+    expect(migrated?.phase1.stats).toEqual({ filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 })
     expect(migrated?.phase2a.status).toBe('not-started')
     expect(migrated?.phase2b.status).toBe('not-started')
     expect(migrated?.phase3.status).toBe('not-started')
   })
 
-  test('validateOrMigrateProgress normalizes legacy phase2a failed attempts to the total retry budget', async () => {
+  test('validateOrMigrateProgress resets payload-heavy version 3 phase2a failure state to checkpoint-only defaults', async () => {
     const mod = await loadProgressMigrateModule()
 
     const migrated = mod.validateOrMigrateProgress({
@@ -1084,7 +1275,10 @@ describe('behavior-audit incremental manifest', () => {
       },
     })
 
-    expect(migrated?.phase2a.failedBehaviors['tests/tools/create-task.test.ts::suite > case']?.attempts).toBe(3)
+    expect(migrated?.version).toBe(4)
+    expect(migrated?.phase2a.status).toBe('not-started')
+    expect(migrated?.phase2a.failedBehaviors).toEqual({})
+    expect(migrated?.phase2a.stats).toEqual({ behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 })
   })
 
   test('startup passes changed tests through phase2a and phase2b without touching unrelated candidate features', async () => {
@@ -1131,12 +1325,11 @@ describe('behavior-audit incremental manifest', () => {
         }),
       loadOrCreateProgress: () =>
         Promise.resolve({
-          version: 3,
+          version: 4,
           startedAt: '2026-04-22T12:00:00.000Z',
           phase1: {
             status: 'not-started',
             completedTests: {},
-            extractedBehaviors: {},
             failedTests: {},
             completedFiles: [],
             stats: { filesTotal: 1, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
@@ -1144,28 +1337,25 @@ describe('behavior-audit incremental manifest', () => {
           phase2a: {
             status: 'not-started',
             completedBehaviors: {},
-            classifiedBehaviors: {},
             failedBehaviors: {},
             stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
           },
           phase2b: {
             status: 'not-started',
-            completedCandidateFeatures: {},
-            consolidations: {},
-            failedCandidateFeatures: {},
+            completedFeatureKeys: {},
+            failedFeatureKeys: {},
             stats: {
-              candidateFeaturesTotal: 0,
-              candidateFeaturesDone: 0,
-              candidateFeaturesFailed: 0,
+              featureKeysTotal: 0,
+              featureKeysDone: 0,
+              featureKeysFailed: 0,
               behaviorsConsolidated: 0,
             },
           },
           phase3: {
             status: 'not-started',
-            completedBehaviors: {},
-            evaluations: {},
-            failedBehaviors: {},
-            stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
+            completedConsolidatedIds: {},
+            failedConsolidatedIds: {},
+            stats: { consolidatedIdsTotal: 0, consolidatedIdsDone: 0, consolidatedIdsFailed: 0 },
           },
         }),
       rebuildReportsFromStoredResults: () => Promise.resolve(),

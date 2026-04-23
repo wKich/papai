@@ -73,7 +73,6 @@ function isKeywordVocabularyEntry(value: unknown): value is {
   readonly description: string
   readonly createdAt: string
   readonly updatedAt: string
-  readonly timesUsed: number
 } {
   return (
     isObject(value) &&
@@ -84,9 +83,7 @@ function isKeywordVocabularyEntry(value: unknown): value is {
     'createdAt' in value &&
     typeof value['createdAt'] === 'string' &&
     'updatedAt' in value &&
-    typeof value['updatedAt'] === 'string' &&
-    'timesUsed' in value &&
-    typeof value['timesUsed'] === 'number'
+    typeof value['updatedAt'] === 'string'
   )
 }
 
@@ -95,7 +92,6 @@ export function isKeywordVocabulary(value: unknown): value is readonly {
   readonly description: string
   readonly createdAt: string
   readonly updatedAt: string
-  readonly timesUsed: number
 }[] {
   return Array.isArray(value) && value.every((entry) => isKeywordVocabularyEntry(entry))
 }
@@ -117,10 +113,12 @@ function isManifestTestEntry(value: unknown): value is ManifestTestEntry {
     isStringOrNull(value['phase2Fingerprint']) &&
     'behaviorId' in value &&
     isStringOrNull(value['behaviorId']) &&
-    'candidateFeatureKey' in value &&
-    isStringOrNull(value['candidateFeatureKey']) &&
-    'extractedBehaviorPath' in value &&
-    isStringOrNull(value['extractedBehaviorPath']) &&
+    'featureKey' in value &&
+    isStringOrNull(value['featureKey']) &&
+    'extractedArtifactPath' in value &&
+    isStringOrNull(value['extractedArtifactPath']) &&
+    'classifiedArtifactPath' in value &&
+    isStringOrNull(value['classifiedArtifactPath']) &&
     'domain' in value &&
     typeof value['domain'] === 'string' &&
     'lastPhase1CompletedAt' in value &&

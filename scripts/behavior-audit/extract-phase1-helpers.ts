@@ -1,6 +1,8 @@
+import { behaviorMarkdownPathForTestFile, extractedArtifactPathForTestFile } from './artifact-paths.js'
+import type { ExtractedBehaviorRecord } from './extracted-store.js'
+import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
 import { markFileDone } from './progress.js'
 import type { Progress } from './progress.js'
-import type { ExtractedBehavior } from './report-writer.js'
 import { writeBehaviorFile } from './report-writer.js'
 import type { TestCase } from './test-parser.js'
 
@@ -22,6 +24,21 @@ function getCompletedTestsForFile(progress: Progress, testFilePath: string): Rea
 
 function getSelectedTestKeySet(testFilePath: string, selectedTests: readonly TestCase[]): ReadonlySet<string> {
   return new Set(selectedTests.map((testCase) => `${testFilePath}::${testCase.fullPath}`))
+}
+
+function removeCompletedFile(progress: Progress, testFilePath: string): void {
+  const hadCompletedFile = progress.phase1.completedFiles.includes(testFilePath)
+  progress.phase1.completedFiles = progress.phase1.completedFiles.filter((filePath) => filePath !== testFilePath)
+  if (hadCompletedFile) {
+    progress.phase1.stats.filesDone = Math.max(0, progress.phase1.stats.filesDone - 1)
+  }
+}
+
+async function deleteFileIfPresent(filePath: string): Promise<void> {
+  const file = Bun.file(filePath)
+  if (await file.exists()) {
+    await file.delete()
+  }
 }
 
 function areSelectedTestsDone(
@@ -49,23 +66,72 @@ export function shouldSkipCompletedFile(input: {
 }
 
 export function collectValidBehaviors(
-  results: readonly ({ readonly behavior: ExtractedBehavior } | null)[],
-): readonly ExtractedBehavior[] {
+  results: readonly ({ readonly record: ExtractedBehaviorRecord } | null)[],
+): readonly ExtractedBehaviorRecord[] {
   return results
-    .filter((result): result is { readonly behavior: ExtractedBehavior } => result !== null)
-    .map((result) => result.behavior)
+    .filter((result): result is { readonly record: ExtractedBehaviorRecord } => result !== null)
+    .map((result) => result.record)
 }
 
 export async function writeValidBehaviorsForFile(
   testFilePath: string,
-  results: readonly ({ readonly behavior: ExtractedBehavior } | null)[],
+  selectedTests: readonly TestCase[],
+  results: readonly ({ readonly record: ExtractedBehaviorRecord } | null)[],
 ): Promise<void> {
   const valid = collectValidBehaviors(results)
-  if (valid.length === 0) {
+  const existing = (await readExtractedFile(testFilePath)) ?? []
+  const selectedTestKeySet = getSelectedTestKeySet(testFilePath, selectedTests)
+  const merged = [
+    ...existing.filter(
+      (record) => !selectedTestKeySet.has(record.testKey) && !selectedTestKeySet.has(record.behaviorId),
+    ),
+    ...valid,
+  ]
+  if (merged.length === 0) {
+    await Promise.all([
+      deleteFileIfPresent(behaviorMarkdownPathForTestFile(testFilePath)),
+      deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath)),
+    ])
     return
   }
-  await writeBehaviorFile(testFilePath, valid)
+  await writeExtractedFile(testFilePath, merged)
+  await writeBehaviorFile(
+    testFilePath,
+    [...merged].toSorted((a, b) => a.fullPath.localeCompare(b.fullPath)),
+  )
   console.log(`  → wrote ${valid.length} behaviors`)
+}
+
+export function reconcileSelectedTestsAfterPersist(
+  progress: Progress,
+  testFilePath: string,
+  selectedTests: readonly TestCase[],
+  persistedTestKeys: ReadonlySet<string>,
+): void {
+  const selectedTestKeySet = getSelectedTestKeySet(testFilePath, selectedTests)
+  const completedTestsForFile = getCompletedTestsForFile(progress, testFilePath)
+  const nextCompletedEntries = Object.entries(completedTestsForFile).filter(([testKey]) => {
+    const shouldKeep = !selectedTestKeySet.has(testKey) || persistedTestKeys.has(testKey)
+    if (!shouldKeep && completedTestsForFile[testKey] === 'done') {
+      progress.phase1.stats.testsExtracted = Math.max(0, progress.phase1.stats.testsExtracted - 1)
+    }
+    return shouldKeep
+  })
+
+  progress.phase1.completedTests =
+    nextCompletedEntries.length === 0
+      ? Object.fromEntries(
+          Object.entries(progress.phase1.completedTests).filter(([filePath]) => filePath !== testFilePath),
+        )
+      : {
+          ...progress.phase1.completedTests,
+          [testFilePath]: Object.fromEntries(nextCompletedEntries),
+        }
+
+  const hasMissingSelectedPersistence = [...selectedTestKeySet].some((testKey) => !persistedTestKeys.has(testKey))
+  if (hasMissingSelectedPersistence) {
+    removeCompletedFile(progress, testFilePath)
+  }
 }
 
 export function markFileDoneWhenSelectedTestsPersisted(

@@ -3,8 +3,16 @@ import pLimit from 'p-limit'
 import type { ClassifiedBehavior } from './classified-store.js'
 import { readClassifiedFile, writeClassifiedFile } from './classified-store.js'
 import { classifyBehaviorWithRetry } from './classify-agent.js'
+import {
+  addDirtyCandidateFeatureKey,
+  buildBehaviorId,
+  buildPrompt,
+  selectBehaviors,
+  shouldReuseCompletedClassification,
+  toClassifiedBehavior,
+  type SelectedBehaviorEntry,
+} from './classify-phase2a-helpers.js'
 import { MAX_RETRIES } from './config.js'
-import { getDomain } from './domain-map.js'
 import type { IncrementalManifest } from './incremental.js'
 import { buildPhase2aFingerprint, saveManifest } from './incremental.js'
 import type { Progress } from './progress.js'
@@ -46,101 +54,6 @@ interface Phase2aRunInput {
   readonly progress: Progress
   readonly selectedTestKeys: ReadonlySet<string>
   readonly manifest: IncrementalManifest
-}
-
-interface SelectedBehaviorEntry {
-  readonly testKey: string
-  readonly behavior: ExtractedBehavior
-}
-
-function buildBehaviorId(testKey: string): string {
-  return testKey
-}
-
-function buildPrompt(testKey: string, behavior: ExtractedBehavior): string {
-  const [firstSegment] = testKey.split('::')
-  let testFile = ''
-  if (firstSegment !== undefined) {
-    testFile = firstSegment
-  }
-  return [
-    `Test key: ${testKey}`,
-    `Domain: ${getDomain(testFile)}`,
-    `Behavior: ${behavior.behavior}`,
-    `Context: ${behavior.context}`,
-    `Keywords: ${behavior.keywords.join(', ')}`,
-  ].join('\n')
-}
-
-function selectBehaviors(progress: Progress, selectedTestKeys: ReadonlySet<string>): readonly SelectedBehaviorEntry[] {
-  return Object.entries(progress.phase1.extractedBehaviors)
-    .filter(([testKey]) => {
-      if (selectedTestKeys.size === 0) {
-        return true
-      }
-      return selectedTestKeys.has(testKey)
-    })
-    .map(([testKey, behavior]) => ({ testKey, behavior }))
-}
-
-function shouldReuseCompletedClassification(
-  progress: Progress,
-  manifest: IncrementalManifest,
-  entry: SelectedBehaviorEntry,
-): boolean {
-  if (progress.phase2a.completedBehaviors[entry.testKey] !== 'done') {
-    return false
-  }
-
-  if (entry.testKey.startsWith('tests/')) {
-    const manifestEntry = manifest.tests[entry.testKey]
-    if (manifestEntry !== undefined) {
-      const nextFingerprint = buildPhase2aFingerprint({
-        testKey: entry.testKey,
-        behavior: entry.behavior.behavior,
-        context: entry.behavior.context,
-        keywords: entry.behavior.keywords,
-        phaseVersion: manifest.phaseVersions.phase2,
-      })
-      return manifestEntry.phase2aFingerprint === nextFingerprint
-    }
-  }
-
-  return true
-}
-
-function addDirtyCandidateFeatureKey(dirtyCandidateFeatureKeys: Set<string>, candidateFeatureKey: string | null): void {
-  if (candidateFeatureKey !== null) {
-    dirtyCandidateFeatureKeys.add(candidateFeatureKey)
-  }
-}
-
-function toClassifiedBehavior(
-  testKey: string,
-  behavior: ExtractedBehavior,
-  result: NonNullable<Awaited<ReturnType<typeof classifyBehaviorWithRetry>>>,
-): ClassifiedBehavior {
-  const [firstSegment] = testKey.split('::')
-  let domainTestFile = ''
-  if (firstSegment !== undefined) {
-    domainTestFile = firstSegment
-  }
-  const domain = getDomain(domainTestFile)
-
-  return {
-    behaviorId: buildBehaviorId(testKey),
-    testKey,
-    domain,
-    behavior: behavior.behavior,
-    context: behavior.context,
-    keywords: behavior.keywords,
-    visibility: result.visibility,
-    candidateFeatureKey: result.candidateFeatureKey,
-    candidateFeatureLabel: result.candidateFeatureLabel,
-    supportingBehaviorRefs: result.supportingBehaviorRefs,
-    relatedBehaviorHints: result.relatedBehaviorHints,
-    classificationNotes: result.classificationNotes,
-  }
 }
 
 async function classifySelectedBehavior(
@@ -202,8 +115,9 @@ function toManifestEntry(input: {
     }),
     phase2Fingerprint: previousEntry === undefined ? null : previousEntry.phase2Fingerprint,
     behaviorId: input.classified.behaviorId,
-    candidateFeatureKey: input.classified.candidateFeatureKey,
-    extractedBehaviorPath: previousEntry === undefined ? null : previousEntry.extractedBehaviorPath,
+    featureKey: input.classified.candidateFeatureKey,
+    extractedArtifactPath: previousEntry === undefined ? null : previousEntry.extractedArtifactPath,
+    classifiedArtifactPath: previousEntry === undefined ? null : previousEntry.classifiedArtifactPath,
     domain: previousEntry === undefined ? input.classified.domain : previousEntry.domain,
     lastPhase1CompletedAt: previousEntry === undefined ? null : previousEntry.lastPhase1CompletedAt,
     lastPhase2aCompletedAt: completedAt,
@@ -268,10 +182,9 @@ export async function runPhase2a(
     selectedEntries.map((entry) =>
       limit(async () => {
         if (shouldReuseCompletedClassification(progress, currentManifest, entry)) {
-          const existingClassification = progress.phase2a.classifiedBehaviors[entry.testKey]
           addDirtyCandidateFeatureKey(
             dirtyCandidateFeatureKeys,
-            existingClassification === undefined ? null : existingClassification.candidateFeatureKey,
+            currentManifest.tests[entry.testKey]?.featureKey ?? null,
           )
           return
         }

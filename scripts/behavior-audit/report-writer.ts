@@ -4,8 +4,9 @@ import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { BEHAVIORS_DIR, CONSOLIDATED_DIR, STORIES_DIR } from './config.js'
-import { getDomain } from './domain-map.js'
+import { behaviorMarkdownPathForTestFile } from './artifact-paths.js'
+import { CONSOLIDATED_DIR, STORIES_DIR } from './config.js'
+import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import {
   buildFailedSection,
@@ -23,6 +24,8 @@ export interface ExtractedBehavior {
   readonly context: string
   readonly keywords: readonly string[]
 }
+
+type BehaviorMarkdownEntry = Pick<ExtractedBehaviorRecord, 'fullPath' | 'behavior' | 'context' | 'keywords'>
 
 export interface EvaluatedBehavior {
   readonly testName: string
@@ -73,10 +76,11 @@ interface RebuildReportsInput {
   readonly consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
 }
 
-export async function writeBehaviorFile(testFilePath: string, behaviors: readonly ExtractedBehavior[]): Promise<void> {
-  const domain = getDomain(testFilePath)
-  const fileName = testFilePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')
-  const outPath = join(BEHAVIORS_DIR, domain, fileName)
+export async function writeBehaviorFile(
+  testFilePath: string,
+  behaviors: readonly BehaviorMarkdownEntry[],
+): Promise<void> {
+  const outPath = behaviorMarkdownPathForTestFile(testFilePath)
   await mkdir(dirname(outPath), { recursive: true })
 
   const lines: string[] = [`# ${testFilePath}\n`]

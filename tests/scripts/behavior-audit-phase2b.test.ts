@@ -7,8 +7,17 @@ import { createClassifiedBehaviorFixture, createEmptyProgressFixture } from './b
 import { cleanupTempDirs } from './behavior-audit-integration.runtime-helpers.js'
 import { getArrayItem, loadConsolidateModule } from './behavior-audit-integration.support.js'
 
-function createEmptyProgress(filesTotal: number): Progress {
-  return createEmptyProgressFixture(filesTotal)
+type LegacyPhase2bProgress = Progress & {
+  phase2a: Progress['phase2a'] & {
+    classifiedBehaviors: Record<string, ReturnType<typeof createClassifiedBehaviorFixture>>
+  }
+}
+
+function createEmptyProgress(filesTotal: number): LegacyPhase2bProgress {
+  const progress = createEmptyProgressFixture(filesTotal)
+  return Object.assign(progress, {
+    phase2a: Object.assign(progress.phase2a, { classifiedBehaviors: {} }),
+  })
 }
 
 afterEach(() => {

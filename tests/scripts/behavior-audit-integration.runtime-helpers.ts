@@ -13,8 +13,10 @@ const behaviorAuditEnvKeys = [
   'BEHAVIOR_AUDIT_REPORTS_DIR',
   'BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR',
   'BEHAVIOR_AUDIT_BEHAVIORS_DIR',
+  'BEHAVIOR_AUDIT_EXTRACTED_DIR',
   'BEHAVIOR_AUDIT_CLASSIFIED_DIR',
   'BEHAVIOR_AUDIT_CONSOLIDATED_DIR',
+  'BEHAVIOR_AUDIT_EVALUATED_DIR',
   'BEHAVIOR_AUDIT_STORIES_DIR',
   'BEHAVIOR_AUDIT_PROGRESS_PATH',
   'BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH',
@@ -49,11 +51,17 @@ function clearBehaviorAuditEnvKey(key: (typeof behaviorAuditEnvKeys)[number]): v
     case 'BEHAVIOR_AUDIT_BEHAVIORS_DIR':
       delete process.env['BEHAVIOR_AUDIT_BEHAVIORS_DIR']
       return
+    case 'BEHAVIOR_AUDIT_EXTRACTED_DIR':
+      delete process.env['BEHAVIOR_AUDIT_EXTRACTED_DIR']
+      return
     case 'BEHAVIOR_AUDIT_CLASSIFIED_DIR':
       delete process.env['BEHAVIOR_AUDIT_CLASSIFIED_DIR']
       return
     case 'BEHAVIOR_AUDIT_CONSOLIDATED_DIR':
       delete process.env['BEHAVIOR_AUDIT_CONSOLIDATED_DIR']
+      return
+    case 'BEHAVIOR_AUDIT_EVALUATED_DIR':
+      delete process.env['BEHAVIOR_AUDIT_EVALUATED_DIR']
       return
     case 'BEHAVIOR_AUDIT_STORIES_DIR':
       delete process.env['BEHAVIOR_AUDIT_STORIES_DIR']
@@ -171,8 +179,10 @@ export function applyBehaviorAuditEnv(config: BehaviorAuditTestConfig): void {
   process.env['BEHAVIOR_AUDIT_REPORTS_DIR'] = config.REPORTS_DIR
   process.env['BEHAVIOR_AUDIT_AUDIT_BEHAVIOR_DIR'] = config.AUDIT_BEHAVIOR_DIR
   process.env['BEHAVIOR_AUDIT_BEHAVIORS_DIR'] = config.BEHAVIORS_DIR
+  process.env['BEHAVIOR_AUDIT_EXTRACTED_DIR'] = config.EXTRACTED_DIR
   process.env['BEHAVIOR_AUDIT_CLASSIFIED_DIR'] = config.CLASSIFIED_DIR
   process.env['BEHAVIOR_AUDIT_CONSOLIDATED_DIR'] = config.CONSOLIDATED_DIR
+  process.env['BEHAVIOR_AUDIT_EVALUATED_DIR'] = config.EVALUATED_DIR
   process.env['BEHAVIOR_AUDIT_STORIES_DIR'] = config.STORIES_DIR
   process.env['BEHAVIOR_AUDIT_PROGRESS_PATH'] = config.PROGRESS_PATH
   process.env['BEHAVIOR_AUDIT_INCREMENTAL_MANIFEST_PATH'] = config.INCREMENTAL_MANIFEST_PATH
