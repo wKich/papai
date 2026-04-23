@@ -18,7 +18,7 @@ function createSelection(overrides: Partial<IncrementalSelection> = {}): Increme
   return {
     phase1SelectedTestKeys: [],
     phase2aSelectedTestKeys: [],
-    phase2bSelectedCandidateFeatureKeys: [],
+    phase2bSelectedFeatureKeys: [],
     phase3SelectedConsolidatedIds: [],
     reportRebuildOnly: false,
     ...overrides,

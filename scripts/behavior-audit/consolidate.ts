@@ -12,7 +12,13 @@ import { readExtractedFile } from './extracted-store.js'
 import type { ConsolidatedManifest, IncrementalManifest, ManifestTestEntry } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
 import type { Progress } from './progress.js'
-import { getFailedBatchAttempts, markBatchDone, markBatchFailed, resetPhase3, saveProgress } from './progress.js'
+import {
+  getFailedFeatureKeyAttempts,
+  markFeatureKeyDone,
+  markFeatureKeyFailed,
+  resetPhase3,
+  saveProgress,
+} from './progress.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
 import { writeConsolidatedFile } from './report-writer.js'
 
@@ -42,7 +48,7 @@ const defaultPhase2bDeps: Phase2bDeps = {
 }
 
 function getManifestFeatureKey(entry: ManifestTestEntry): string | null {
-  return entry.featureKey ?? entry.candidateFeatureKey ?? null
+  return entry.featureKey ?? null
 }
 
 function getManifestBehaviorId(testKey: string, entry: ManifestTestEntry): string {
@@ -169,9 +175,7 @@ function updateManifestEntries(input: {
   readonly phase2Version: string
 }): ConsolidatedManifest['entries'] {
   const baseEntries = Object.fromEntries(
-    Object.entries(input.currentEntries).filter(
-      ([, entry]) => (entry.featureKey ?? entry.candidateFeatureKey) !== input.featureKey,
-    ),
+    Object.entries(input.currentEntries).filter(([, entry]) => entry.featureKey !== input.featureKey),
   )
   const keywords = [...new Set(input.inputs.flatMap((item) => item.keywords))].toSorted()
   const sourceDomains = [...new Set(input.inputs.map((item) => item.domain))].toSorted()
@@ -190,7 +194,6 @@ function updateManifestEntries(input: {
       supportingInternalBehaviorIds: consolidated.supportingInternalRefs.map((item) => item.behaviorId),
       isUserFacing: consolidated.isUserFacing,
       featureKey: input.featureKey,
-      candidateFeatureKey: input.featureKey,
       keywords,
       sourceDomains,
       phase2Fingerprint: buildPhase2ConsolidationFingerprint({
@@ -215,21 +218,21 @@ async function consolidateFeatureKey(input: {
   readonly inputs: readonly ConsolidateBehaviorInput[]
   readonly deps: Phase2bDeps
 }): Promise<ConsolidatedManifest> {
-  const failedAttempts = getFailedBatchAttempts(input.progress, input.featureKey)
+  const failedAttempts = getFailedFeatureKeyAttempts(input.progress, input.featureKey)
   if (failedAttempts >= MAX_RETRIES) {
     return input.consolidatedManifest
   }
 
   const result = await input.deps.consolidateWithRetry(input.featureKey, input.inputs, failedAttempts)
   if (result === null) {
-    markBatchFailed(input.progress, input.featureKey, 'consolidation failed after retries', failedAttempts + 1)
+    markFeatureKeyFailed(input.progress, input.featureKey, 'consolidation failed after retries', failedAttempts + 1)
     await saveProgress(input.progress)
     return input.consolidatedManifest
   }
 
   const consolidations = toConsolidations(result, input.inputs)
   await input.deps.writeConsolidatedFile(input.featureKey, consolidations)
-  markBatchDone(input.progress, input.featureKey, consolidations)
+  markFeatureKeyDone(input.progress, input.featureKey, consolidations)
   await saveProgress(input.progress)
 
   return {
@@ -248,12 +251,12 @@ export async function runPhase2b(
   progress: Progress,
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
-  selectedCandidateFeatureKeys: ReadonlySet<string>,
+  selectedFeatureKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
   deps: Partial<Phase2bDeps> = {},
 ): Promise<ConsolidatedManifest> {
   const resolvedDeps: Phase2bDeps = { ...defaultPhase2bDeps, ...deps }
-  const groups = [...(await loadGroupedInputs(manifest, selectedCandidateFeatureKeys, resolvedDeps)).entries()]
+  const groups = [...(await loadGroupedInputs(manifest, selectedFeatureKeys, resolvedDeps)).entries()]
   progress.phase2b.status = 'in-progress'
   progress.phase2b.stats.featureKeysTotal = groups.length
   resetPhase3(progress)

@@ -30,7 +30,7 @@ export interface Phase3Selection {
 }
 
 function getFeatureKey(entry: ConsolidatedManifestEntry): string | null {
-  return entry.featureKey ?? entry.candidateFeatureKey ?? null
+  return entry.featureKey ?? null
 }
 
 export function getFeatureKeys(manifest: ConsolidatedManifest): readonly string[] {

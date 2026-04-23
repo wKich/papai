@@ -41,17 +41,14 @@ function computePhase2bKeys(phase2aKeys: readonly string[], manifest: Incrementa
   )
 }
 
-function computePhase3IdsFromCandidateFeatures(
-  candidateFeatureKeys: readonly string[],
+function computePhase3IdsFromFeatureKeys(
+  featureKeys: readonly string[],
   manifest: ConsolidatedManifest | null,
 ): readonly string[] {
   if (manifest === null) return []
-  const selected = new Set(candidateFeatureKeys)
+  const selected = new Set(featureKeys)
   return Object.values(manifest.entries)
-    .filter((entry) => {
-      const featureKey = entry.featureKey ?? entry.candidateFeatureKey ?? null
-      return featureKey !== null && selected.has(featureKey)
-    })
+    .filter((entry) => entry.featureKey !== null && entry.featureKey !== undefined && selected.has(entry.featureKey))
     .map((entry) => entry.consolidatedId)
     .toSorted()
 }
@@ -73,9 +70,9 @@ function computePhase3SelectedConsolidatedIds(input: {
   readonly phase2bKeys: readonly string[]
   readonly manifest: ConsolidatedManifest | null
 }): readonly string[] {
-  const idsFromCandidateFeatures = computePhase3IdsFromCandidateFeatures(input.phase2bKeys, input.manifest)
-  if (idsFromCandidateFeatures.length > 0 || input.phase2aKeys.length === 0) {
-    return idsFromCandidateFeatures
+  const idsFromFeatureKeys = computePhase3IdsFromFeatureKeys(input.phase2bKeys, input.manifest)
+  if (idsFromFeatureKeys.length > 0 || input.phase2aKeys.length === 0) {
+    return idsFromFeatureKeys
   }
   return computePhase3IdsFromSourceTests(input.phase2aKeys, input.manifest)
 }
@@ -91,7 +88,7 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
     return {
       phase1SelectedTestKeys: all,
       phase2aSelectedTestKeys: all,
-      phase2bSelectedCandidateFeatureKeys: phase2bKeys,
+      phase2bSelectedFeatureKeys: phase2bKeys,
       phase3SelectedConsolidatedIds: computePhase3SelectedConsolidatedIds({
         phase2aKeys: all,
         phase2bKeys,
@@ -116,7 +113,7 @@ export function selectIncrementalWork(input: SelectIncrementalWorkInput): Increm
   return {
     phase1SelectedTestKeys: phase1Keys,
     phase2aSelectedTestKeys: phase2aKeys,
-    phase2bSelectedCandidateFeatureKeys: phase2bKeys,
+    phase2bSelectedFeatureKeys: phase2bKeys,
     phase3SelectedConsolidatedIds,
     reportRebuildOnly:
       reportVersionChanged &&

@@ -22,7 +22,6 @@ type ClassifiedBehavior = {
   readonly testKey: string
   readonly domain: string
   readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
-  readonly candidateFeatureKey: string | null
   readonly featureKey: string | null
   readonly featureLabel: string | null
   readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
@@ -242,21 +241,14 @@ export function createExtractedBehaviorFixture(
 }
 
 export function createClassifiedBehaviorFixture(
-  input: Omit<
-    ClassifiedBehavior,
-    'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey' | 'candidateFeatureKey'
-  > &
-    Partial<
-      Pick<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey' | 'candidateFeatureKey'>
-    >,
+  input: Omit<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey'> &
+    Partial<Pick<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey'>>,
 ): ClassifiedBehavior {
-  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
   return {
     supportingBehaviorRefs: [],
     relatedBehaviorHints: [],
     ...input,
-    candidateFeatureKey: resolvedFeatureKey,
-    featureKey: resolvedFeatureKey,
+    featureKey: input.featureKey ?? null,
     featureLabel: input.featureLabel ?? null,
   }
 }
@@ -273,9 +265,7 @@ export function createManifestTestEntry(
     | 'phase2aFingerprint'
     | 'behaviorId'
     | 'featureKey'
-    | 'candidateFeatureKey'
     | 'extractedArtifactPath'
-    | 'extractedBehaviorPath'
     | 'classifiedArtifactPath'
     | 'lastPhase2aCompletedAt'
   > &
@@ -285,23 +275,17 @@ export function createManifestTestEntry(
         | 'phase2aFingerprint'
         | 'behaviorId'
         | 'featureKey'
-        | 'candidateFeatureKey'
         | 'extractedArtifactPath'
-        | 'extractedBehaviorPath'
         | 'classifiedArtifactPath'
         | 'lastPhase2aCompletedAt'
       >
     >,
 ): ManifestTestEntry {
-  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
-  const resolvedExtractedArtifactPath = input.extractedArtifactPath ?? input.extractedBehaviorPath ?? null
   return {
     phase2aFingerprint: null,
     behaviorId: null,
-    featureKey: resolvedFeatureKey,
-    candidateFeatureKey: resolvedFeatureKey,
-    extractedArtifactPath: resolvedExtractedArtifactPath,
-    extractedBehaviorPath: resolvedExtractedArtifactPath,
+    featureKey: null,
+    extractedArtifactPath: null,
     classifiedArtifactPath: null,
     lastPhase2aCompletedAt: null,
     ...input,
@@ -340,12 +324,7 @@ export function createIncrementalManifestFixture(
 export function createConsolidatedManifestEntry(
   input: Omit<
     ConsolidatedManifestEntry,
-    | 'sourceBehaviorIds'
-    | 'supportingInternalBehaviorIds'
-    | 'featureKey'
-    | 'candidateFeatureKey'
-    | 'keywords'
-    | 'sourceDomains'
+    'sourceBehaviorIds' | 'supportingInternalBehaviorIds' | 'featureKey' | 'keywords' | 'sourceDomains'
   > &
     Partial<
       Pick<
@@ -353,7 +332,6 @@ export function createConsolidatedManifestEntry(
         | 'sourceBehaviorIds'
         | 'supportingInternalBehaviorIds'
         | 'featureKey'
-        | 'candidateFeatureKey'
         | 'keywords'
         | 'sourceDomains'
         | 'consolidatedArtifactPath'
@@ -367,7 +345,6 @@ export function createConsolidatedManifestEntry(
     sourceBehaviorIds: [],
     supportingInternalBehaviorIds: [],
     featureKey: null,
-    candidateFeatureKey: null,
     consolidatedArtifactPath: null,
     evaluatedArtifactPath: null,
     keywords: [],

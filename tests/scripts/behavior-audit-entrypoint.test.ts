@@ -42,7 +42,7 @@ function createSelection(overrides: Partial<IncrementalSelection> = {}): Increme
   return {
     phase1SelectedTestKeys: [],
     phase2aSelectedTestKeys: [],
-    phase2bSelectedCandidateFeatureKeys: [],
+    phase2bSelectedFeatureKeys: [],
     phase3SelectedConsolidatedIds: [],
     reportRebuildOnly: false,
     ...overrides,
@@ -88,7 +88,7 @@ function createHarness(
     readonly runPhase2bIfNeeded: Array<{
       readonly progress: Progress
       readonly phase2Version: string
-      readonly selectedCandidateFeatureKeys: readonly string[]
+      readonly selectedFeatureKeys: readonly string[]
     }>
     readonly saveConsolidatedManifest: ConsolidatedManifest[]
     readonly runPhase3IfNeeded: Array<{
@@ -146,7 +146,7 @@ function createHarness(
     runPhase2bIfNeeded: [] as Array<{
       readonly progress: Progress
       readonly phase2Version: string
-      readonly selectedCandidateFeatureKeys: readonly string[]
+      readonly selectedFeatureKeys: readonly string[]
     }>,
     saveConsolidatedManifest: [] as ConsolidatedManifest[],
     runPhase3IfNeeded: [] as Array<{
@@ -197,11 +197,11 @@ function createHarness(
       })
       return Promise.resolve(dirtyFromPhase2a)
     },
-    runPhase2bIfNeeded: (phaseProgress, phase2Version, selectedCandidateFeatureKeys) => {
+    runPhase2bIfNeeded: (phaseProgress, phase2Version, selectedFeatureKeys) => {
       calls.runPhase2bIfNeeded.push({
         progress: phaseProgress,
         phase2Version,
-        selectedCandidateFeatureKeys: [...selectedCandidateFeatureKeys].toSorted(),
+        selectedFeatureKeys: [...selectedFeatureKeys].toSorted(),
       })
       return Promise.resolve(consolidatedManifest)
     },
@@ -274,7 +274,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       {
         progress: phase2bCall.progress,
         phase2Version: 'phase2-new',
-        selectedCandidateFeatureKeys: [],
+        selectedFeatureKeys: [],
       },
     ])
     expect(calls.runPhase3IfNeeded).toEqual([
@@ -318,7 +318,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
           dependencyPaths: ['tests/tools/sample.test.ts'],
           phase1Fingerprint: 'fp1',
           phase2Fingerprint: 'fp2',
-          extractedBehaviorPath: 'reports/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: 'reports/behaviors/tools/sample.test.behaviors.md',
           domain: 'tools',
           lastPhase1CompletedAt: 'x',
           lastPhase2CompletedAt: 'y',
@@ -343,7 +343,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
           sourceBehaviorIds: ['behavior-1'],
           supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          candidateFeatureKey: 'candidate-from-selection',
+          featureKey: 'candidate-from-selection',
           keywords: ['selection'],
           sourceDomains: ['tools'],
           phase2Fingerprint: 'phase2-fingerprint',
@@ -361,7 +361,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       selection: createSelection({
         phase1SelectedTestKeys: [selectedKey],
         phase2aSelectedTestKeys: [selectedKey],
-        phase2bSelectedCandidateFeatureKeys: ['candidate-from-selection'],
+        phase2bSelectedFeatureKeys: ['candidate-from-selection'],
         phase3SelectedConsolidatedIds: ['tools::selected-case'],
       }),
       dirtyFromPhase2a: new Set(['candidate-from-phase2a']),
@@ -389,7 +389,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
       {
         progress: phase2bCall.progress,
         phase2Version: 'phase2-new',
-        selectedCandidateFeatureKeys: ['candidate-from-phase2a', 'candidate-from-selection'],
+        selectedFeatureKeys: ['candidate-from-phase2a', 'candidate-from-selection'],
       },
     ])
     expect(calls.runPhase3IfNeeded).toEqual([
@@ -453,7 +453,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
           dependencyPaths: ['tests/tools/sample.test.ts'],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: 'phase2-fp',
-          extractedBehaviorPath: 'reports/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: 'reports/behaviors/tools/sample.test.behaviors.md',
           domain: 'tools',
           lastPhase1CompletedAt: 'old-phase1',
           lastPhase2CompletedAt: 'old-phase2',

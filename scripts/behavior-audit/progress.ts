@@ -218,13 +218,13 @@ export function getFailedClassificationAttempts(progress: Progress, behaviorId: 
   return progress.phase2a.failedBehaviors[behaviorId]?.attempts ?? 0
 }
 
-export function markCandidateFeatureDone(
+export function markFeatureKeyDone(
   progress: Progress,
-  candidateFeatureKey: string,
+  featureKey: string,
   consolidations: readonly ConsolidatedBehavior[],
 ): void {
-  if (progress.phase2b.completedFeatureKeys[candidateFeatureKey] === 'done') return
-  progress.phase2b.completedFeatureKeys[candidateFeatureKey] = 'done'
+  if (progress.phase2b.completedFeatureKeys[featureKey] === 'done') return
+  progress.phase2b.completedFeatureKeys[featureKey] = 'done'
   progress.phase2b.stats.featureKeysDone++
   progress.phase2b.stats.behaviorsConsolidated += consolidations.length
 }
@@ -238,19 +238,27 @@ export function markBatchDone(
   batchKey: string,
   consolidations: readonly ConsolidatedBehavior[],
 ): void {
-  markCandidateFeatureDone(progress, batchKey, consolidations)
+  markFeatureKeyDone(progress, batchKey, consolidations)
 }
 
-export function markBatchFailed(progress: Progress, batchKey: string, error: string, attempts: number): void {
-  const existing = progress.phase2b.failedFeatureKeys[batchKey]
-  progress.phase2b.failedFeatureKeys[batchKey] = { error, attempts, lastAttempt: new Date().toISOString() }
+export function markFeatureKeyFailed(progress: Progress, featureKey: string, error: string, attempts: number): void {
+  const existing = progress.phase2b.failedFeatureKeys[featureKey]
+  progress.phase2b.failedFeatureKeys[featureKey] = { error, attempts, lastAttempt: new Date().toISOString() }
   if (existing === undefined) {
     progress.phase2b.stats.featureKeysFailed++
   }
 }
 
+export function markBatchFailed(progress: Progress, batchKey: string, error: string, attempts: number): void {
+  markFeatureKeyFailed(progress, batchKey, error, attempts)
+}
+
+export function getFailedFeatureKeyAttempts(progress: Progress, featureKey: string): number {
+  return progress.phase2b.failedFeatureKeys[featureKey]?.attempts ?? 0
+}
+
 export function getFailedBatchAttempts(progress: Progress, batchKey: string): number {
-  return progress.phase2b.failedFeatureKeys[batchKey]?.attempts ?? 0
+  return getFailedFeatureKeyAttempts(progress, batchKey)
 }
 
 export function isBehaviorCompleted(progress: Progress, key: string): boolean {

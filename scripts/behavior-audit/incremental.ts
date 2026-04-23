@@ -22,9 +22,7 @@ export interface ManifestTestEntry {
   readonly phase2Fingerprint: string | null
   readonly behaviorId: string | null
   readonly featureKey?: string | null
-  readonly candidateFeatureKey?: string | null
   readonly extractedArtifactPath?: string | null
-  readonly extractedBehaviorPath?: string | null
   readonly classifiedArtifactPath: string | null
   readonly domain: string
   readonly lastPhase1CompletedAt: string | null
@@ -48,7 +46,7 @@ export interface IncrementalManifest {
 export interface IncrementalSelection {
   readonly phase1SelectedTestKeys: readonly string[]
   readonly phase2aSelectedTestKeys: readonly string[]
-  readonly phase2bSelectedCandidateFeatureKeys: readonly string[]
+  readonly phase2bSelectedFeatureKeys: readonly string[]
   readonly phase3SelectedConsolidatedIds: readonly string[]
   readonly reportRebuildOnly: boolean
 }
@@ -67,7 +65,6 @@ export interface ConsolidatedManifestEntry {
   readonly supportingInternalBehaviorIds: readonly string[]
   readonly isUserFacing: boolean
   readonly featureKey?: string | null
-  readonly candidateFeatureKey?: string | null
   readonly keywords: readonly string[]
   readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
@@ -90,9 +87,7 @@ const ManifestTestEntrySchema = z.object({
   phase2Fingerprint: z.string().nullable(),
   behaviorId: z.string().nullable().default(null),
   featureKey: z.string().nullable().default(null),
-  candidateFeatureKey: z.string().nullable().optional(),
   extractedArtifactPath: z.string().nullable(),
-  extractedBehaviorPath: z.string().nullable().optional(),
   classifiedArtifactPath: z.string().nullable().default(null),
   domain: z.string(),
   lastPhase1CompletedAt: z.string().nullable(),
@@ -126,7 +121,6 @@ const ConsolidatedManifestEntrySchema = z.object({
   supportingInternalBehaviorIds: z.array(z.string()).default([]),
   isUserFacing: z.boolean(),
   featureKey: z.string().nullable().default(null),
-  candidateFeatureKey: z.string().nullable().optional(),
   keywords: z.array(z.string()).default([]),
   sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),

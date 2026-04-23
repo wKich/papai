@@ -167,9 +167,7 @@ function createManifestTestEntry(
     | 'phase2aFingerprint'
     | 'behaviorId'
     | 'featureKey'
-    | 'candidateFeatureKey'
     | 'extractedArtifactPath'
-    | 'extractedBehaviorPath'
     | 'classifiedArtifactPath'
     | 'lastPhase2aCompletedAt'
   > &
@@ -179,23 +177,17 @@ function createManifestTestEntry(
         | 'phase2aFingerprint'
         | 'behaviorId'
         | 'featureKey'
-        | 'candidateFeatureKey'
         | 'extractedArtifactPath'
-        | 'extractedBehaviorPath'
         | 'classifiedArtifactPath'
         | 'lastPhase2aCompletedAt'
       >
     >,
 ): ManifestTestEntry {
-  const resolvedFeatureKey = input.featureKey ?? input.candidateFeatureKey ?? null
-  const resolvedExtractedArtifactPath = input.extractedArtifactPath ?? input.extractedBehaviorPath ?? null
   return {
     phase2aFingerprint: null,
     behaviorId: null,
-    featureKey: resolvedFeatureKey,
-    candidateFeatureKey: resolvedFeatureKey,
-    extractedArtifactPath: resolvedExtractedArtifactPath,
-    extractedBehaviorPath: resolvedExtractedArtifactPath,
+    featureKey: null,
+    extractedArtifactPath: null,
     classifiedArtifactPath: null,
     lastPhase2aCompletedAt: null,
     ...input,
@@ -507,7 +499,7 @@ describe('behavior-audit incremental manifest', () => {
             dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
             phase1Fingerprint: 'fp1',
             phase2Fingerprint: 'fp2',
-            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            extractedArtifactPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
             domain: 'tools',
             lastPhase1CompletedAt: 'x',
             lastPhase2CompletedAt: 'y',
@@ -521,7 +513,7 @@ describe('behavior-audit incremental manifest', () => {
 
     expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
     expect(selection.phase2aSelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual([])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual([])
     expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
@@ -544,7 +536,7 @@ describe('behavior-audit incremental manifest', () => {
             dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
             phase1Fingerprint: 'fp1',
             phase2Fingerprint: 'fp2',
-            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            extractedArtifactPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
             domain: 'tools',
             lastPhase1CompletedAt: 'x',
             lastPhase2CompletedAt: 'y',
@@ -555,7 +547,7 @@ describe('behavior-audit incremental manifest', () => {
             dependencyPaths: ['tests/tools/no-behavior.test.ts'],
             phase1Fingerprint: 'fp3',
             phase2Fingerprint: null,
-            extractedBehaviorPath: null,
+            extractedArtifactPath: null,
             domain: 'tools',
             lastPhase1CompletedAt: null,
             lastPhase2CompletedAt: null,
@@ -572,7 +564,7 @@ describe('behavior-audit incremental manifest', () => {
 
     expect(selection.phase1SelectedTestKeys).toEqual([])
     expect(selection.phase2aSelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual([])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual([])
     expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
@@ -595,7 +587,7 @@ describe('behavior-audit incremental manifest', () => {
             dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
             phase1Fingerprint: 'fp1',
             phase2Fingerprint: 'fp2',
-            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            extractedArtifactPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
             domain: 'tools',
             lastPhase1CompletedAt: 'x',
             lastPhase2CompletedAt: 'y',
@@ -609,7 +601,7 @@ describe('behavior-audit incremental manifest', () => {
 
     expect(selection.phase1SelectedTestKeys).toEqual([])
     expect(selection.phase2aSelectedTestKeys).toEqual([])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual([])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual([])
     expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(true)
   })
@@ -634,7 +626,7 @@ describe('behavior-audit incremental manifest', () => {
 
     expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
     expect(selection.phase2aSelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > new case'])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual([])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual([])
     expect(selection.phase3SelectedConsolidatedIds).toEqual([])
     expect(selection.reportRebuildOnly).toBe(false)
   })
@@ -653,7 +645,7 @@ describe('behavior-audit incremental manifest', () => {
           sourceBehaviorIds: ['tests/tools/create-task.test.ts::suite > case'],
           supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          candidateFeatureKey: null,
+          featureKey: null,
           keywords: ['old-keyword'],
           sourceDomains: ['tools'],
           phase2Fingerprint: 'fp',
@@ -677,7 +669,7 @@ describe('behavior-audit incremental manifest', () => {
             dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
             phase1Fingerprint: 'fp1',
             phase2Fingerprint: 'fp2',
-            extractedBehaviorPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
+            extractedArtifactPath: 'reports/behaviors/tools/create-task.test.behaviors.md',
             domain: 'tools',
             lastPhase1CompletedAt: 'x',
             lastPhase2CompletedAt: 'y',
@@ -691,12 +683,12 @@ describe('behavior-audit incremental manifest', () => {
 
     expect(selection.phase1SelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
     expect(selection.phase2aSelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual([])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual([])
     expect(selection.phase3SelectedConsolidatedIds).toEqual(['tools::old-feature'])
     expect(selection.reportRebuildOnly).toBe(false)
   })
 
-  test('selectIncrementalWork selects affected candidate features when phase2a metadata changed', async () => {
+  test('selectIncrementalWork selects affected feature keys when phase2a metadata changed', async () => {
     const incremental = await loadIncrementalModule()
 
     const selection = incremental.selectIncrementalWork({
@@ -716,8 +708,8 @@ describe('behavior-audit incremental manifest', () => {
             phase2aFingerprint: 'fp2a',
             phase2Fingerprint: 'fp2b',
             behaviorId: 'tests/tools/create-task.test.ts::suite > case',
-            candidateFeatureKey: 'task-creation',
-            extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/create-task.test.behaviors.md',
+            featureKey: 'task-creation',
+            extractedArtifactPath: 'reports/audit-behavior/behaviors/tools/create-task.test.behaviors.md',
             domain: 'tools',
             lastPhase1CompletedAt: 'x',
             lastPhase2aCompletedAt: 'y',
@@ -738,7 +730,7 @@ describe('behavior-audit incremental manifest', () => {
             sourceBehaviorIds: ['tests/tools/create-task.test.ts::suite > case'],
             supportingInternalBehaviorIds: [],
             isUserFacing: true,
-            candidateFeatureKey: 'task-creation',
+            featureKey: 'task-creation',
             keywords: ['task-create'],
             sourceDomains: ['tools'],
             phase2Fingerprint: 'fp',
@@ -749,7 +741,7 @@ describe('behavior-audit incremental manifest', () => {
     })
 
     expect(selection.phase2aSelectedTestKeys).toEqual(['tests/tools/create-task.test.ts::suite > case'])
-    expect(selection.phase2bSelectedCandidateFeatureKeys).toEqual(['task-creation'])
+    expect(selection.phase2bSelectedFeatureKeys).toEqual(['task-creation'])
     expect(selection.phase3SelectedConsolidatedIds).toEqual(['task-creation::task-creation'])
   })
 
@@ -959,7 +951,7 @@ describe('behavior-audit incremental manifest', () => {
             context: 'Calls provider createTask.',
             keywords: ['task-create'],
             visibility: 'user-facing',
-            candidateFeatureKey: 'task-creation',
+            featureKey: 'task-creation',
             candidateFeatureLabel: 'Task creation',
             supportingBehaviorRefs: [],
             relatedBehaviorHints: [],
@@ -1318,7 +1310,7 @@ describe('behavior-audit incremental manifest', () => {
           selection: {
             phase1SelectedTestKeys: ['tests/tools/sample.test.ts::sample'],
             phase2aSelectedTestKeys: ['tests/tools/sample.test.ts::sample'],
-            phase2bSelectedCandidateFeatureKeys: [],
+            phase2bSelectedFeatureKeys: [],
             phase3SelectedConsolidatedIds: [],
             reportRebuildOnly: false,
           },
@@ -1364,14 +1356,14 @@ describe('behavior-audit incremental manifest', () => {
         calls.push({ phase2a: [...selectedTestKeys].toSorted(), phase2b: [] })
         return Promise.resolve(new Set(['task-creation']))
       },
-      runPhase2bIfNeeded: (_progress, _phaseVersion, selectedCandidateFeatureKeys) => {
+      runPhase2bIfNeeded: (_progress, _phaseVersion, selectedFeatureKeys) => {
         const last = calls[calls.length - 1]
         if (last === undefined) {
           throw new Error('Expected phase2a call before phase2b')
         }
         calls[calls.length - 1] = {
           phase2a: last.phase2a,
-          phase2b: [...selectedCandidateFeatureKeys].toSorted(),
+          phase2b: [...selectedFeatureKeys].toSorted(),
         }
         return Promise.resolve({ version: 1, entries: {} })
       },

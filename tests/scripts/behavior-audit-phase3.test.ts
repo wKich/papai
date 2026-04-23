@@ -456,7 +456,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
           selection: {
             phase1SelectedTestKeys: [],
             phase2aSelectedTestKeys: [],
-            phase2bSelectedCandidateFeatureKeys: ['group-targeting'],
+            phase2bSelectedFeatureKeys: ['group-targeting'],
             phase3SelectedConsolidatedIds: [],
             reportRebuildOnly: false,
           } satisfies IncrementalSelection,
