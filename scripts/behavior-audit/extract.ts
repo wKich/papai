@@ -95,7 +95,14 @@ async function resolveKeywords(
   }
   const nextVocabulary = normalizeKeywordVocabularyEntries([...existingVocabulary, ...resolved.appendedEntries])
   await deps.saveKeywordVocabulary(nextVocabulary)
-  return [...new Set(resolved.keywords.map((keyword) => normalizeKeywordSlug(keyword)))]
+  const normalizedKeywords = [
+    ...new Set(resolved.keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean)),
+  ]
+  if (normalizedKeywords.length === 0) {
+    deps.markTestFailed(progress, testKey, 'keyword resolution produced no valid canonical keywords')
+    return null
+  }
+  return normalizedKeywords
 }
 
 type SingleTestResult = {

@@ -166,6 +166,62 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   expect(behaviorMarkdown).toContain('**Keywords:** group-targeting, group-routing')
 })
 
+test('runPhase1 fails cleanly when resolver output normalizes to empty keyword slugs', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const progressPath = path.join(reportsDir, 'progress.json')
+  const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+  const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
+
+  mockAuditBehaviorConfig(root, {
+    PROGRESS_PATH: progressPath,
+    INCREMENTAL_MANIFEST_PATH: manifestPath,
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  const testFileContent = "describe('suite', () => { test('case', () => {}) })"
+  mkdirSync(path.join(root, 'tests', 'tools'), { recursive: true })
+  writeFileSync(path.join(root, 'tests', 'tools', 'sample.test.ts'), testFileContent)
+
+  const tag = crypto.randomUUID()
+  const extract = await loadExtractModule(`phase1-empty-keywords-${tag}`)
+  const incremental = await loadIncrementalModule(`phase1-empty-keywords-${tag}`)
+
+  const progress = createEmptyProgressFixture(1)
+  const parsed = parseTestFile('tests/tools/sample.test.ts', testFileContent)
+  await extract.runPhase1(
+    {
+      testFiles: [parsed],
+      progress,
+      selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+      manifest: incremental.createEmptyManifest(),
+    },
+    {
+      extractWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createExtractResult({
+            behavior: 'When a user targets a group, the bot routes the request correctly.',
+            context: 'Routes through group context selection.',
+            candidateKeywords: ['group-targeting'],
+          }),
+        ),
+      resolveKeywordsWithRetry: (_prompt, _attempt) =>
+        Promise.resolve(
+          createResolvedKeywords({
+            keywords: ['   ', '!!!', '---'],
+            appendedEntries: [],
+          }),
+        ),
+    },
+  )
+
+  expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
+  expect(progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']?.error).toContain('keyword')
+  expect(progress.phase1.completedTests['tests/tools/sample.test.ts']).toBeUndefined()
+})
+
 test('extract-agent returns behavior, context, and candidateKeywords', async () => {
   const mod: unknown = await import(`../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`)
   expect(typeof mod).toBe('object')
