@@ -295,6 +295,64 @@ test('keyword-vocabulary normalizes duplicate slugs into canonical entries', asy
   })
 })
 
+test('loadKeywordVocabulary rewrites legacy vocabulary files into canonical schema on read', async () => {
+  const root = makeTempDir()
+  const reportsDir = path.join(root, 'reports')
+  const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
+
+  mockAuditBehaviorConfig(root, {
+    KEYWORD_VOCABULARY_PATH: vocabularyPath,
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  const legacyEntries = [
+    {
+      slug: 'Task Routing',
+      description: 'Routes work through task pipelines.',
+      createdAt: '2026-04-19T12:00:00.000Z',
+      updatedAt: '2026-04-19T12:00:00.000Z',
+      timesUsed: 2,
+    },
+    {
+      slug: 'GROUP TARGETING',
+      description: 'Older description.',
+      createdAt: '2026-04-22T12:00:00.000Z',
+      updatedAt: '2026-04-22T12:00:00.000Z',
+      timesUsed: 1,
+    },
+    {
+      slug: 'group-targeting',
+      description: 'Newest description.',
+      createdAt: '2026-04-20T12:00:00.000Z',
+      updatedAt: '2026-04-23T12:00:00.000Z',
+      timesUsed: 5,
+    },
+  ]
+
+  await Bun.write(vocabularyPath, JSON.stringify(legacyEntries, null, 4))
+
+  const typedVocab = await loadKeywordVocabularyModule(`vocab-load-${crypto.randomUUID()}`)
+  const loaded = await typedVocab.loadKeywordVocabulary()
+
+  const expectedEntries = [
+    {
+      slug: 'group-targeting',
+      description: 'Newest description.',
+      createdAt: '2026-04-20T12:00:00.000Z',
+      updatedAt: '2026-04-23T12:00:00.000Z',
+    },
+    {
+      slug: 'task-routing',
+      description: 'Routes work through task pipelines.',
+      createdAt: '2026-04-19T12:00:00.000Z',
+      updatedAt: '2026-04-19T12:00:00.000Z',
+    },
+  ]
+
+  expect(loaded).toEqual(expectedEntries)
+  expect(await Bun.file(vocabularyPath).text()).toBe(JSON.stringify(expectedEntries, null, 2) + '\n')
+})
+
 test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
   const root = makeTempDir()
 
