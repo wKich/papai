@@ -6,13 +6,13 @@
 
 ## 1. Current State (Hybrid)
 
-| Concern | Legacy (payload-era) | Canonical (artifact-era) | Problem |
-|---------|---------------------|-------------------------|---------|
-| **Storage** | `progress.json` checkpoint payloads | `extracted/`, `classified/`, `consolidated/`, `evaluated/` JSON artifacts | Dual writes; recovery depends on checkpoint state |
-| **Identity** | `candidateFeatureKey`, `extractedBehaviorPath` aliases | `featureKey`, `extractedArtifactPath` canonical names | Schemas and types expose both; consumers inconsistently fall back |
-| **Vocabulary** | `keyword-vocabulary.json` with `timesUsed` telemetry | Same file without normalization | Duplicate slugs allowed; mutable counters violate immutable artifact semantics |
-| **Rebuild** | `report-writer.ts` reads `extractedBehaviorsByKey` / `evaluationsByKey` maps | Artifacts exist but are ignored by rebuild path | `behaviors/` and `extracted/` contain same content via independent paths |
-| **Reset** | `resetBehaviorAudit('phase2')` removes checkpoint files only | Artifact directories (`evaluated/`, `stories/`) left behind | Stale artifacts survive reset and corrupt subsequent runs |
+| Concern        | Legacy (payload-era)                                                         | Canonical (artifact-era)                                                  | Problem                                                                        |
+| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Storage**    | `progress.json` checkpoint payloads                                          | `extracted/`, `classified/`, `consolidated/`, `evaluated/` JSON artifacts | Dual writes; recovery depends on checkpoint state                              |
+| **Identity**   | `candidateFeatureKey`, `extractedBehaviorPath` aliases                       | `featureKey`, `extractedArtifactPath` canonical names                     | Schemas and types expose both; consumers inconsistently fall back              |
+| **Vocabulary** | `keyword-vocabulary.json` with `timesUsed` telemetry                         | Same file without normalization                                           | Duplicate slugs allowed; mutable counters violate immutable artifact semantics |
+| **Rebuild**    | `report-writer.ts` reads `extractedBehaviorsByKey` / `evaluationsByKey` maps | Artifacts exist but are ignored by rebuild path                           | `behaviors/` and `extracted/` contain same content via independent paths       |
+| **Reset**      | `resetBehaviorAudit('phase2')` removes checkpoint files only                 | Artifact directories (`evaluated/`, `stories/`) left behind               | Stale artifacts survive reset and corrupt subsequent runs                      |
 
 ---
 
@@ -30,9 +30,11 @@
 ## 3. Migration Phases
 
 ### Phase A: Remove Legacy Manifest Aliases
+
 **Goal:** Make manifest types and selection surfaces speak only canonical vocabulary.
 
 **Files to modify:**
+
 - `scripts/behavior-audit/incremental.ts`
 - `scripts/behavior-audit/incremental-selection.ts`
 - `scripts/behavior-audit/consolidate.ts`
@@ -64,20 +66,24 @@
    - Assert canonical field names only.
 
 **Verification:**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-incremental.test.ts \
          ./tests/scripts/behavior-audit-entrypoint.test.ts \
          ./tests/scripts/behavior-audit-phase2b.test.ts \
          ./tests/scripts/behavior-audit-phase3.test.ts
 ```
+
 **Expected:** All PASS with no `candidateFeatureKey` references remaining in runtime or tests.
 
 ---
 
 ### Phase B: Remove Payload-Era Fallbacks from Phase Loaders
+
 **Goal:** Make Phase 2a, 2b, and 3 loaders read exclusively from canonical artifacts + manifests.
 
 **Files to modify:**
+
 - `scripts/behavior-audit/classify-phase2a-helpers.ts`
 - `scripts/behavior-audit/classify.ts`
 - `scripts/behavior-audit/consolidate.ts`
@@ -103,19 +109,23 @@ bun test ./tests/scripts/behavior-audit-incremental.test.ts \
    - Delete any helper that accepts `extractedBehaviorsByKey` as an input map.
 
 **Verification:**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-phase2a.test.ts \
          ./tests/scripts/behavior-audit-phase2b.test.ts \
          ./tests/scripts/behavior-audit-phase3.test.ts
 ```
+
 **Expected:** All PASS; no `progress.phase1.extractedBehaviors` references remain.
 
 ---
 
 ### Phase C: Rebuild Reports from Canonical Artifacts Only
+
 **Goal:** Eliminate the duplication root cause: rebuild flow must read artifacts, not legacy keyed maps.
 
 **Files to modify:**
+
 - `scripts/behavior-audit.ts`
 - `scripts/behavior-audit/report-writer.ts`
 - `scripts/behavior-audit/evaluate-reporting.ts`
@@ -142,19 +152,23 @@ bun test ./tests/scripts/behavior-audit-phase2a.test.ts \
    - Remove `rebuildReportsFromStoredResults()` and its `extractedBehaviorsByKey` / `evaluationsByKey` parameters from public API.
 
 **Verification:**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-entrypoint.test.ts \
          ./tests/scripts/behavior-audit-storage.test.ts \
          ./tests/scripts/behavior-audit-phase3.test.ts
 ```
+
 **Expected:** All PASS; rebuild path no longer accepts legacy keyed maps.
 
 ---
 
 ### Phase D: Normalize Keyword Vocabulary
+
 **Goal:** Make `keyword-vocabulary.json` an immutable, normalized artifact.
 
 **Files to modify:**
+
 - `scripts/behavior-audit/keyword-vocabulary.ts`
 - `scripts/behavior-audit/keyword-resolver-agent.ts`
 - `scripts/behavior-audit/extract.ts`
@@ -186,18 +200,22 @@ bun test ./tests/scripts/behavior-audit-entrypoint.test.ts \
    - `keyword-resolver-agent.ts` returns entries without `timesUsed`.
 
 **Verification:**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts \
          ./tests/scripts/behavior-audit-storage.test.ts
 ```
+
 **Expected:** All PASS; vocabulary fixtures rewritten to canonical shape; no `timesUsed` field.
 
 ---
 
 ### Phase E: Fix Phase Reset Behavior for Evaluated Artifacts
+
 **Goal:** Reset must fully clean the artifact tree to prevent stale state from leaking across runs.
 
 **Files to modify:**
+
 - `scripts/behavior-audit-reset.ts`
 
 **Steps:**
@@ -220,19 +238,23 @@ bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts \
    - `resetPhase2AndPhase3()` and `resetPhase3()` still remove checkpoint files, but now also remove the artifact directories listed above.
 
 **Verification:**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-storage.test.ts
 ```
+
 **Expected:** All PASS; `evaluated/` and `stories/` cleaned appropriately per phase.
 
 ---
 
 ### Phase F: Full Verification and Stale Coupling Removal
+
 **Goal:** Confirm the system no longer references legacy aliases, keyed maps, or `timesUsed`.
 
 **Steps:**
 
 1. **Run the full behavior-audit test slice**
+
 ```bash
 bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts \
          ./tests/scripts/behavior-audit-phase1-selection.test.ts \
@@ -243,14 +265,17 @@ bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts \
          ./tests/scripts/behavior-audit-storage.test.ts \
          ./tests/scripts/behavior-audit-entrypoint.test.ts
 ```
+
 **Expected:** PASS.
 
 2. **Run repo-wide verification**
+
 ```bash
 bun test
 bun typecheck
 bun lint
 ```
+
 **Expected:** PASS with zero suppressions.
 
 3. **Static search for forbidden patterns** (manual or scripted)
@@ -285,6 +310,7 @@ bun lint
 ## 6. Post-Migration
 
 Once this plan is complete, the architecture can be simplified further:
+
 - `report-writer.ts` can be split into pure renderers (`behavior-renderer.ts`, `story-renderer.ts`, `index-renderer.ts`) that accept artifact streams.
 - `progress.json` can be narrowed to a smaller cursor schema because it no longer carries payload references.
 - `behaviors/` and `stories/` can be optionally `.gitignore`-d if they are always rebuilt in CI.
@@ -415,6 +441,7 @@ When an authorized user submits a createTask call with a priority field...
 **Feature Key:** `task-manager`
 
 ## Narrative
+
 Core task management behaviors covering creation and authorization.
 
 ## Behaviors
@@ -422,9 +449,10 @@ Core task management behaviors covering creation and authorization.
 - **beh-001-task-create-priority** — category: task-lifecycle/creation (confidence 0.97)
 
 ## Evaluation
-| Metric | Score |
-|--------|-------|
-| Overall | 0.93 |
+
+| Metric  | Score |
+| ------- | ----- |
+| Overall | 0.93  |
 ```
 
 **Key:** both Markdown files are strictly derivative. Delete them, run `reportRebuildOnly`, they regenerate identically from canonical JSON.
