@@ -118,42 +118,39 @@ test('behavior-audit-reset phase2 clears downstream state without deleting keywo
 
 test('classified-store round-trips sorted classified behaviors under audit root', async () => {
   const root = makeTempDir()
+  const testFilePath = 'tests/tools/sample.test.ts'
 
   mockAuditBehaviorConfig(root, null)
 
   const store = await loadClassifiedStoreModule(crypto.randomUUID())
-  await store.writeClassifiedFile('tools', [
+  await store.writeClassifiedFile(testFilePath, [
     {
       behaviorId: 'tests/tools/sample.test.ts::suite > beta',
       testKey: 'tests/tools/sample.test.ts::suite > beta',
       domain: 'tools',
-      behavior: 'When beta runs, the bot saves a task.',
-      context: 'Calls create_task.',
-      keywords: ['task-create'],
       visibility: 'user-facing',
-      candidateFeatureKey: 'task-creation',
-      candidateFeatureLabel: 'Task creation',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
       supportingBehaviorRefs: [],
       relatedBehaviorHints: [],
       classificationNotes: 'beta',
+      classifiedAt: '2026-04-23T12:00:00.000Z',
     },
     {
       behaviorId: 'tests/tools/sample.test.ts::suite > alpha',
       testKey: 'tests/tools/sample.test.ts::suite > alpha',
       domain: 'tools',
-      behavior: 'When alpha runs, the bot validates input.',
-      context: 'Runs guard checks.',
-      keywords: ['task-creation'],
       visibility: 'internal',
-      candidateFeatureKey: 'task-creation',
-      candidateFeatureLabel: 'Task creation',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
       supportingBehaviorRefs: [],
       relatedBehaviorHints: [],
       classificationNotes: 'alpha',
+      classifiedAt: '2026-04-23T12:01:00.000Z',
     },
   ])
 
-  const loaded = await store.readClassifiedFile('tools')
+  const loaded = await store.readClassifiedFile(testFilePath)
   if (loaded === null) {
     throw new Error('Expected classified data')
   }
@@ -167,6 +164,7 @@ test('classified-store throws for malformed classified data but returns null whe
   const root = makeTempDir()
   const auditRoot = path.join(root, 'reports', 'audit-behavior')
   const classifiedDir = path.join(auditRoot, 'classified')
+  const testFilePath = 'tests/tools/sample.test.ts'
 
   mockAuditBehaviorConfig(root, {
     CLASSIFIED_DIR: classifiedDir,
@@ -174,12 +172,12 @@ test('classified-store throws for malformed classified data but returns null whe
 
   const store = await loadClassifiedStoreModule(crypto.randomUUID())
 
-  expect(await store.readClassifiedFile('missing')).toBeNull()
+  expect(await store.readClassifiedFile('tests/tools/missing.test.ts')).toBeNull()
 
-  mkdirSync(classifiedDir, { recursive: true })
-  await Bun.write(path.join(classifiedDir, 'tools.json'), '{"not":"an array"}\n')
+  mkdirSync(path.join(classifiedDir, 'tools'), { recursive: true })
+  await Bun.write(path.join(classifiedDir, 'tools', 'sample.test.json'), '{"not":"an array"}\n')
 
-  await expect(store.readClassifiedFile('tools')).rejects.toThrow()
+  await expect(store.readClassifiedFile(testFilePath)).rejects.toThrow()
 })
 
 test('extracted-store round-trips extracted records under the extracted domain directory', async () => {

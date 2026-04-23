@@ -1,22 +1,18 @@
 import { constants } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
-import { access } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { access, mkdir } from 'node:fs/promises'
+import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { CLASSIFIED_DIR } from './config.js'
+import { classifiedArtifactPathForTestFile } from './artifact-paths.js'
 
 export interface ClassifiedBehavior {
   readonly behaviorId: string
   readonly testKey: string
   readonly domain: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
   readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
-  readonly candidateFeatureKey: string | null
-  readonly candidateFeatureLabel: string | null
+  readonly featureKey: string | null
+  readonly featureLabel: string | null
   readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
   readonly relatedBehaviorHints: readonly {
     readonly testKey: string
@@ -24,6 +20,7 @@ export interface ClassifiedBehavior {
     readonly reason: string
   }[]
   readonly classificationNotes: string
+  readonly classifiedAt: string
 }
 
 const RelatedBehaviorHintSchema = z
@@ -45,28 +42,29 @@ const ClassifiedBehaviorSchema = z.object({
   behaviorId: z.string(),
   testKey: z.string(),
   domain: z.string(),
-  behavior: z.string(),
-  context: z.string(),
-  keywords: z.array(z.string()).readonly(),
   visibility: z.enum(['user-facing', 'internal', 'ambiguous']),
-  candidateFeatureKey: z.string().nullable(),
-  candidateFeatureLabel: z.string().nullable(),
+  featureKey: z.string().nullable(),
+  featureLabel: z.string().nullable(),
   supportingBehaviorRefs: z.array(SupportingBehaviorRefSchema).readonly(),
   relatedBehaviorHints: z.array(RelatedBehaviorHintSchema).readonly(),
   classificationNotes: z.string(),
+  classifiedAt: z.string(),
 })
 
 const ClassifiedBehaviorArraySchema = z.array(ClassifiedBehaviorSchema).readonly()
 
-export async function writeClassifiedFile(domain: string, behaviors: readonly ClassifiedBehavior[]): Promise<void> {
-  const outPath = join(CLASSIFIED_DIR, `${domain}.json`)
+export async function writeClassifiedFile(
+  testFilePath: string,
+  behaviors: readonly ClassifiedBehavior[],
+): Promise<void> {
+  const outPath = classifiedArtifactPathForTestFile(testFilePath)
   await mkdir(dirname(outPath), { recursive: true })
   const sorted = [...behaviors].toSorted((a, b) => a.behaviorId.localeCompare(b.behaviorId))
   await Bun.write(outPath, JSON.stringify(sorted, null, 2) + '\n')
 }
 
-export async function readClassifiedFile(domain: string): Promise<readonly ClassifiedBehavior[] | null> {
-  const filePath = join(CLASSIFIED_DIR, `${domain}.json`)
+export async function readClassifiedFile(testFilePath: string): Promise<readonly ClassifiedBehavior[] | null> {
+  const filePath = classifiedArtifactPathForTestFile(testFilePath)
   try {
     await access(filePath, constants.F_OK)
   } catch (error) {

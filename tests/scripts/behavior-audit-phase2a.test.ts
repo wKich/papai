@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
 import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
+import type { ExtractedBehaviorRecord } from '../../scripts/behavior-audit/extracted-store.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import {
   createAuditBehaviorPaths,
-  createClassifiedBehaviorFixture,
-  createExtractedBehaviorFixture,
   createManifestTestEntry,
   mockAuditBehaviorConfig,
 } from './behavior-audit-integration.helpers.js'
@@ -17,6 +17,7 @@ import {
   getManifestEntry,
   importWithGuard,
   isClassifyModule,
+  loadClassifiedStoreModule,
   loadIncrementalModule,
   loadProgressModule,
   type MockClassificationResult,
@@ -30,19 +31,19 @@ afterEach(() => {
 
 describe('behavior-audit phase 2a classification', () => {
   let root: string
-  let auditRoot: string
   let progressPath: string
   let manifestPath: string
   let classifyBehaviorWithRetryCalls: number
   let classifyBehaviorWithRetryImpl: Phase2aDeps['classifyBehaviorWithRetry']
+  let classifiedStoreTag: string
 
   beforeEach(() => {
     root = makeTempDir()
     const paths = createAuditBehaviorPaths(root)
-    auditRoot = paths.auditBehaviorDir
     progressPath = paths.progressPath
     manifestPath = paths.incrementalManifestPath
     classifyBehaviorWithRetryCalls = 0
+    classifiedStoreTag = crypto.randomUUID()
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
         visibility: 'user-facing',
@@ -69,21 +70,96 @@ describe('behavior-audit phase 2a classification', () => {
     }
   }
 
-  type LegacyPhase2aProgress = Progress & {
-    phase1: Progress['phase1'] & {
-      extractedBehaviors: Record<string, ReturnType<typeof createExtractedBehaviorFixture>>
-    }
-    phase2a: Progress['phase2a'] & {
-      classifiedBehaviors: Record<string, ReturnType<typeof createClassifiedBehaviorFixture>>
+  type ClassifiedArtifactRecord = {
+    readonly behaviorId: string
+    readonly testKey: string
+    readonly domain: string
+    readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
+    readonly featureKey: string | null
+    readonly featureLabel: string | null
+    readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
+    readonly relatedBehaviorHints: readonly {
+      readonly testKey: string
+      readonly relation: 'same-feature' | 'supporting-detail' | 'possibly-related'
+      readonly reason: string
+    }[]
+    readonly classificationNotes: string
+    readonly classifiedAt: string
+  }
+
+  function buildRelativeArtifactPath(directory: 'extracted' | 'classified', testFilePath: string): string {
+    const domain = testFilePath.split('/')[1]
+    const fileName = path.basename(testFilePath).replace('.test.ts', '.test.json')
+    return path.join('reports', 'audit-behavior', directory, domain ?? 'tools', fileName)
+  }
+
+  function buildAbsoluteArtifactPath(directory: 'extracted' | 'classified', testFilePath: string): string {
+    return path.join(root, buildRelativeArtifactPath(directory, testFilePath))
+  }
+
+  function createExtractedRecord(input: {
+    readonly testKey: string
+    readonly testFile: string
+    readonly testName: string
+    readonly fullPath: string
+    readonly behavior: string
+    readonly context: string
+    readonly keywords: readonly string[]
+  }): ExtractedBehaviorRecord {
+    return {
+      behaviorId: input.testKey,
+      testKey: input.testKey,
+      testFile: input.testFile,
+      domain: input.testFile.split('/')[1] ?? 'tools',
+      testName: input.testName,
+      fullPath: input.fullPath,
+      behavior: input.behavior,
+      context: input.context,
+      keywords: input.keywords,
+      extractedAt: '2026-04-21T12:00:00.000Z',
     }
   }
 
-  function createLegacyPhase2aProgress(progress: Progress): LegacyPhase2aProgress {
-    const legacyPhase1 = Object.assign(progress.phase1, { extractedBehaviors: {} })
-    const legacyPhase2a = Object.assign(progress.phase2a, { classifiedBehaviors: {} })
+  async function writeExtractedArtifact(
+    testFilePath: string,
+    records: readonly ExtractedBehaviorRecord[],
+  ): Promise<void> {
+    const filePath = buildAbsoluteArtifactPath('extracted', testFilePath)
+    mkdirSync(path.dirname(filePath), { recursive: true })
+    await Bun.write(filePath, JSON.stringify(records, null, 2) + '\n')
+  }
+
+  async function writeClassifiedArtifact(
+    testFilePath: string,
+    records: readonly ClassifiedArtifactRecord[],
+  ): Promise<void> {
+    const filePath = buildAbsoluteArtifactPath('classified', testFilePath)
+    mkdirSync(path.dirname(filePath), { recursive: true })
+    await Bun.write(filePath, JSON.stringify(records, null, 2) + '\n')
+  }
+
+  async function readClassifiedArtifact(testFilePath: string): Promise<unknown> {
+    return JSON.parse(await Bun.file(buildAbsoluteArtifactPath('classified', testFilePath)).text())
+  }
+
+  async function readTypedClassifiedArtifact(testFilePath: string): Promise<readonly ClassifiedArtifactRecord[]> {
+    const store = await loadClassifiedStoreModule(classifiedStoreTag)
+    const records = await store.readClassifiedFile(testFilePath)
+    if (records === null) {
+      throw new Error(`Expected classified artifact for ${testFilePath}`)
+    }
+    return records
+  }
+
+  function expectClassifiedTimestamp(value: unknown): void {
+    expect(typeof value).toBe('string')
+  }
+
+  function createLegacyPhase2aProgress(progress: Progress): Progress & {
+    phase1: Progress['phase1'] & { extractedBehaviors: Record<string, ExtractedBehaviorRecord> }
+  } {
     return Object.assign(progress, {
-      phase1: legacyPhase1,
-      phase2a: legacyPhase2a,
+      phase1: Object.assign(progress.phase1, { extractedBehaviors: {} }),
     })
   }
 
@@ -96,78 +172,80 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
 
-    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
+    const testFilePath = 'tests/tools/sample.test.ts'
+    const testKey = 'tests/tools/sample.test.ts::suite > case'
+    const progress = progressModule.createEmptyProgress(1)
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
-        'tests/tools/sample.test.ts::suite > case': createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+        [testKey]: createManifestTestEntry({
+          testFile: testFilePath,
           testName: 'suite > case',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: 'stale-phase2-fp',
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors['tests/tools/sample.test.ts::suite > case'] = createExtractedBehaviorFixture({
-      testName: 'case',
-      fullPath: 'suite > case',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-    })
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'case',
+        fullPath: 'suite > case',
+        behavior: 'When the user creates a task, the bot saves it.',
+        context: 'Calls create_task and returns the new task.',
+        keywords: ['task-create'],
+      }),
+    ])
 
     const dirty = await classify.runPhase2a(
       {
         progress,
-        selectedTestKeys: new Set(['tests/tools/sample.test.ts::suite > case']),
+        selectedTestKeys: new Set([testKey]),
         manifest,
       },
       createPhase2aDeps(),
     )
 
     expect([...dirty]).toEqual(['task-creation'])
-    const classifiedBehavior = progress.phase2a.classifiedBehaviors['tests/tools/sample.test.ts::suite > case']
-    if (classifiedBehavior === undefined) {
-      throw new Error('Expected classified behavior to be stored')
-    }
-    expect(classifiedBehavior.candidateFeatureKey).toBe('task-creation')
+    expect(progress.phase2a.completedBehaviors[testKey]).toBe('done')
+    expect(progress.phase2a).not.toHaveProperty('classifiedBehaviors')
 
-    const classifiedPath = path.join(auditRoot, 'classified', 'tools.json')
+    const classifiedPath = buildAbsoluteArtifactPath('classified', testFilePath)
     expect(await Bun.file(classifiedPath).exists()).toBe(true)
 
-    const classifiedRaw: unknown = JSON.parse(await Bun.file(classifiedPath).text())
-    expect(classifiedRaw).toEqual([
-      {
-        behaviorId: 'tests/tools/sample.test.ts::suite > case',
-        testKey: 'tests/tools/sample.test.ts::suite > case',
-        domain: 'tools',
-        behavior: 'When the user creates a task, the bot saves it.',
-        context: 'Calls create_task and returns the new task.',
-        keywords: ['task-create'],
-        visibility: 'user-facing',
-        candidateFeatureKey: 'task-creation',
-        candidateFeatureLabel: 'Task creation',
-        supportingBehaviorRefs: [],
-        relatedBehaviorHints: [],
-        classificationNotes: 'Matches task creation flow.',
-      },
-    ])
+    const classifiedList = await readTypedClassifiedArtifact(testFilePath)
+    expect(classifiedList).toHaveLength(1)
+    const classifiedEntry = classifiedList[0]
+    if (classifiedEntry === undefined) {
+      throw new Error('Expected classified artifact entry')
+    }
+    expect(classifiedEntry.behaviorId).toBe(testKey)
+    expect(classifiedEntry.testKey).toBe(testKey)
+    expect(classifiedEntry.domain).toBe('tools')
+    expect(classifiedEntry.visibility).toBe('user-facing')
+    expect(classifiedEntry.featureKey).toBe('task-creation')
+    expect(classifiedEntry.featureLabel).toBe('Task creation')
+    expect(classifiedEntry.supportingBehaviorRefs).toEqual([])
+    expect(classifiedEntry.relatedBehaviorHints).toEqual([])
+    expect(classifiedEntry.classificationNotes).toBe('Matches task creation flow.')
+    expectClassifiedTimestamp(classifiedEntry.classifiedAt)
 
-    const savedManifest = await readSavedManifest(manifestPath)
-    const savedEntry = getManifestEntry(savedManifest, 'tests/tools/sample.test.ts::suite > case')
+    const savedEntry = getManifestEntry(await readSavedManifest(manifestPath), testKey)
+    expect(savedEntry.behaviorId).toBe(testKey)
+    expect(savedEntry.featureKey).toBe('task-creation')
+    expect(savedEntry.classifiedArtifactPath).toBe(buildRelativeArtifactPath('classified', testFilePath))
     expect(savedEntry.phase2aFingerprint).toBeTruthy()
     expect(savedEntry.phase2Fingerprint).toBe('stale-phase2-fp')
     expect(savedEntry.lastPhase2aCompletedAt).toBeTruthy()
     expect(savedEntry.lastPhase2CompletedAt).toBeNull()
-
-    const progressText = await Bun.file(progressPath).text()
-    expect(progressText).toContain('task-creation')
   })
 
   test('runPhase2a skips already-completed classifications on resumed runs', async () => {
@@ -179,28 +257,29 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > case'
-    const existingClassified = createClassifiedBehaviorFixture({
+    const testFilePath = 'tests/tools/sample.test.ts'
+    const existingClassified = {
       behaviorId: testKey,
       testKey,
       domain: 'tools',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-      visibility: 'user-facing',
-      candidateFeatureKey: 'task-creation',
-      candidateFeatureLabel: 'Task creation',
+      visibility: 'user-facing' as const,
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
       classificationNotes: 'Persisted from a prior run.',
-    })
+      classifiedAt: '2026-04-21T12:05:00.000Z',
+    }
 
-    const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
+    const progress = progressModule.createEmptyProgress(1)
     const manifest: IncrementalManifest = {
       ...incremental.createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > case',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2aFingerprint: incremental.buildPhase2aFingerprint({
             testKey,
@@ -210,25 +289,30 @@ describe('behavior-audit phase 2a classification', () => {
             phaseVersion: 'phase2-v1',
           }),
           phase2Fingerprint: 'phase2-fp',
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: buildRelativeArtifactPath('classified', testFilePath),
           domain: 'tools',
           behaviorId: testKey,
-          candidateFeatureKey: 'task-creation',
+          featureKey: 'task-creation',
           lastPhase2aCompletedAt: '2026-04-21T12:05:00.000Z',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: '2026-04-21T12:05:00.000Z',
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = {
-      testName: 'case',
-      fullPath: 'suite > case',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-    }
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'case',
+        fullPath: 'suite > case',
+        behavior: 'When the user creates a task, the bot saves it.',
+        context: 'Calls create_task and returns the new task.',
+        keywords: ['task-create'],
+      }),
+    ])
+    await writeClassifiedArtifact(testFilePath, [existingClassified])
     progress.phase2a.completedBehaviors[testKey] = 'done'
-    progress.phase2a.classifiedBehaviors[testKey] = existingClassified
 
     const dirty = await classify.runPhase2a(
       {
@@ -241,8 +325,7 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect(classifyBehaviorWithRetryCalls).toBe(0)
     expect([...dirty]).toEqual(['task-creation'])
-    expect(progress.phase2a.classifiedBehaviors[testKey]).toEqual(existingClassified)
-    expect(await Bun.file(path.join(auditRoot, 'classified', 'tools.json')).exists()).toBe(false)
+    expect(await readClassifiedArtifact(testFilePath)).toEqual([existingClassified])
   })
 
   test('runPhase2a reruns explicitly selected completed classifications when stored phase2a metadata is stale', async () => {
@@ -254,6 +337,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > case'
+    const testFilePath = 'tests/tools/sample.test.ts'
 
     const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
@@ -261,15 +345,16 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v2', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > case',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2aFingerprint: 'stale-phase2a-fp',
           phase2Fingerprint: 'phase2-fp',
           behaviorId: testKey,
-          candidateFeatureKey: 'task-creation',
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          featureKey: 'task-creation',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: buildRelativeArtifactPath('classified', testFilePath),
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2aCompletedAt: '2026-04-21T12:05:00.000Z',
@@ -278,26 +363,32 @@ describe('behavior-audit phase 2a classification', () => {
       },
     }
 
-    progress.phase1.extractedBehaviors[testKey] = createExtractedBehaviorFixture({
-      testName: 'case',
-      fullPath: 'suite > case',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-    })
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'case',
+        fullPath: 'suite > case',
+        behavior: 'When the user creates a task, the bot saves it.',
+        context: 'Calls create_task and returns the new task.',
+        keywords: ['task-create'],
+      }),
+    ])
     progress.phase2a.completedBehaviors[testKey] = 'done'
-    progress.phase2a.classifiedBehaviors[testKey] = createClassifiedBehaviorFixture({
-      behaviorId: testKey,
-      testKey,
-      domain: 'tools',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-      visibility: 'internal',
-      candidateFeatureKey: 'task-creation',
-      candidateFeatureLabel: 'Task creation',
-      classificationNotes: 'Stale prior classification.',
-    })
+    await writeClassifiedArtifact(testFilePath, [
+      {
+        behaviorId: testKey,
+        testKey,
+        domain: 'tools',
+        visibility: 'internal',
+        featureKey: 'task-creation',
+        featureLabel: 'Task creation',
+        supportingBehaviorRefs: [],
+        relatedBehaviorHints: [],
+        classificationNotes: 'Stale prior classification.',
+        classifiedAt: '2026-04-21T12:05:00.000Z',
+      },
+    ])
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
@@ -320,11 +411,23 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     expect([...dirty]).toEqual(['task-creation'])
-    const refreshedBehavior = progress.phase2a.classifiedBehaviors[testKey]
-    if (refreshedBehavior === undefined) {
-      throw new Error('Expected refreshed classified behavior')
+    expect(progress.phase2a).not.toHaveProperty('classifiedBehaviors')
+    const refreshedList = await readTypedClassifiedArtifact(testFilePath)
+    expect(refreshedList).toHaveLength(1)
+    const refreshedEntry = refreshedList[0]
+    if (refreshedEntry === undefined) {
+      throw new Error('Expected refreshed classified artifact entry')
     }
-    expect(refreshedBehavior.visibility).toBe('user-facing')
+    expect(refreshedEntry.behaviorId).toBe(testKey)
+    expect(refreshedEntry.testKey).toBe(testKey)
+    expect(refreshedEntry.domain).toBe('tools')
+    expect(refreshedEntry.visibility).toBe('user-facing')
+    expect(refreshedEntry.featureKey).toBe('task-creation')
+    expect(refreshedEntry.featureLabel).toBe('Task creation')
+    expect(refreshedEntry.supportingBehaviorRefs).toEqual([])
+    expect(refreshedEntry.relatedBehaviorHints).toEqual([])
+    expect(refreshedEntry.classificationNotes).toBe('Refreshed classification.')
+    expectClassifiedTimestamp(refreshedEntry.classifiedAt)
   })
 
   test('runPhase2a passes persisted retry attempt offset through to the classifier on resumed failures', async () => {
@@ -336,6 +439,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > case'
+    const testFilePath = 'tests/tools/sample.test.ts'
     const classifierArgs: Array<readonly [string, number]> = []
 
     classifyBehaviorWithRetryImpl = (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
@@ -356,25 +460,30 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > case',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: null,
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = {
-      testName: 'case',
-      fullPath: 'suite > case',
-      behavior: 'When the user creates a task, the bot saves it.',
-      context: 'Calls create_task and returns the new task.',
-      keywords: ['task-create'],
-    }
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'case',
+        fullPath: 'suite > case',
+        behavior: 'When the user creates a task, the bot saves it.',
+        context: 'Calls create_task and returns the new task.',
+        keywords: ['task-create'],
+      }),
+    ])
     progress.phase2a.failedBehaviors[testKey] = {
       error: 'classification failed after retries',
       attempts: 2,
@@ -408,6 +517,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > recovery case'
+    const testFilePath = 'tests/tools/sample.test.ts'
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
@@ -425,25 +535,30 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > recovery case',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: null,
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = {
-      testName: 'recovery case',
-      fullPath: 'suite > recovery case',
-      behavior: 'When the user retries task creation, the bot recovers successfully.',
-      context: 'Repeats the classification after a transient failure.',
-      keywords: ['task-recovery'],
-    }
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'recovery case',
+        fullPath: 'suite > recovery case',
+        behavior: 'When the user retries task creation, the bot recovers successfully.',
+        context: 'Repeats the classification after a transient failure.',
+        keywords: ['task-recovery'],
+      }),
+    ])
     progress.phase2a.failedBehaviors[testKey] = {
       error: 'classification failed after retries',
       attempts: 1,
@@ -463,11 +578,22 @@ describe('behavior-audit phase 2a classification', () => {
     expect([...dirty]).toEqual(['task-recovery'])
     expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
     expect(progress.phase2a.stats.behaviorsFailed).toBe(0)
-    const recoveredBehavior = progress.phase2a.classifiedBehaviors[testKey]
-    if (recoveredBehavior === undefined) {
-      throw new Error('Expected recovered classified behavior')
+    const recoveredList = await readTypedClassifiedArtifact(testFilePath)
+    expect(recoveredList).toHaveLength(1)
+    const recoveredEntry = recoveredList[0]
+    if (recoveredEntry === undefined) {
+      throw new Error('Expected recovered classified artifact entry')
     }
-    expect(recoveredBehavior.candidateFeatureKey).toBe('task-recovery')
+    expect(recoveredEntry.behaviorId).toBe(testKey)
+    expect(recoveredEntry.testKey).toBe(testKey)
+    expect(recoveredEntry.domain).toBe('tools')
+    expect(recoveredEntry.visibility).toBe('user-facing')
+    expect(recoveredEntry.featureKey).toBe('task-recovery')
+    expect(recoveredEntry.featureLabel).toBe('Task recovery')
+    expect(recoveredEntry.supportingBehaviorRefs).toEqual([])
+    expect(recoveredEntry.relatedBehaviorHints).toEqual([])
+    expect(recoveredEntry.classificationNotes).toBe('Recovered successfully.')
+    expectClassifiedTimestamp(recoveredEntry.classifiedAt)
   })
 
   test('runPhase2a does not exceed total retry budget across resumed failed runs', async () => {
@@ -479,6 +605,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > exhausted retries'
+    const testFilePath = 'tests/tools/sample.test.ts'
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> => Promise.resolve(null)
 
@@ -488,25 +615,30 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > exhausted retries',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: null,
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = {
-      testName: 'exhausted retries',
-      fullPath: 'suite > exhausted retries',
-      behavior: 'When classification keeps failing, retries should stop at the total budget.',
-      context: 'Exercises resume behavior after all classifier attempts are consumed.',
-      keywords: ['classification-retries'],
-    }
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'exhausted retries',
+        fullPath: 'suite > exhausted retries',
+        behavior: 'When classification keeps failing, retries should stop at the total budget.',
+        context: 'Exercises resume behavior after all classifier attempts are consumed.',
+        keywords: ['classification-retries'],
+      }),
+    ])
 
     await classify.runPhase2a(
       {
@@ -550,6 +682,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > custom retry budget'
+    const testFilePath = 'tests/tools/sample.test.ts'
 
     const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
@@ -557,25 +690,30 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > custom retry budget',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: null,
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = {
-      testName: 'custom retry budget',
-      fullPath: 'suite > custom retry budget',
-      behavior: 'When classification keeps failing, the injected retry budget caps resumed runs.',
-      context: 'Exercises resume behavior after a custom retry budget is exhausted.',
-      keywords: ['classification-retries'],
-    }
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'custom retry budget',
+        fullPath: 'suite > custom retry budget',
+        behavior: 'When classification keeps failing, the injected retry budget caps resumed runs.',
+        context: 'Exercises resume behavior after a custom retry budget is exhausted.',
+        keywords: ['classification-retries'],
+      }),
+    ])
     progress.phase2a.failedBehaviors[testKey] = {
       error: 'classification failed after retries',
       attempts: 2,
@@ -614,6 +752,7 @@ describe('behavior-audit phase 2a classification', () => {
     const progressModule = await loadProgressModule(crypto.randomUUID())
     const incremental = await loadIncrementalModule(crypto.randomUUID())
     const testKey = 'tests/tools/sample.test.ts::suite > reloaded retry budget'
+    const testFilePath = 'tests/tools/sample.test.ts'
 
     const progress = createLegacyPhase2aProgress(progressModule.createEmptyProgress(1))
     const manifest: IncrementalManifest = {
@@ -621,25 +760,30 @@ describe('behavior-audit phase 2a classification', () => {
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
       tests: {
         [testKey]: createManifestTestEntry({
-          testFile: 'tests/tools/sample.test.ts',
+          testFile: testFilePath,
           testName: 'suite > reloaded retry budget',
-          dependencyPaths: ['tests/tools/sample.test.ts'],
+          dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: null,
-          extractedBehaviorPath: 'reports/audit-behavior/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
+          classifiedArtifactPath: null,
           domain: 'tools',
           lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
           lastPhase2CompletedAt: null,
         }),
       },
     }
-    progress.phase1.extractedBehaviors[testKey] = createExtractedBehaviorFixture({
-      testName: 'reloaded retry budget',
-      fullPath: 'suite > reloaded retry budget',
-      behavior: 'When retries are disabled after import, phase 2a should short-circuit.',
-      context: 'Ensures the default retry budget is read from reloaded config at call time.',
-      keywords: ['classification-retries'],
-    })
+    await writeExtractedArtifact(testFilePath, [
+      createExtractedRecord({
+        testKey,
+        testFile: testFilePath,
+        testName: 'reloaded retry budget',
+        fullPath: 'suite > reloaded retry budget',
+        behavior: 'When retries are disabled after import, phase 2a should short-circuit.',
+        context: 'Ensures the default retry budget is read from reloaded config at call time.',
+        keywords: ['classification-retries'],
+      }),
+    ])
 
     process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = '0'
     reloadBehaviorAuditConfig()
@@ -651,7 +795,6 @@ describe('behavior-audit phase 2a classification', () => {
     })
 
     expect([...dirty]).toEqual([])
-    expect(progress.phase2a.classifiedBehaviors[testKey]).toBeUndefined()
     expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
   })
 })

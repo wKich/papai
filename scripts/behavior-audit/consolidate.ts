@@ -1,6 +1,5 @@
 import pLimit from 'p-limit'
 
-import type { ClassifiedBehavior } from './classified-store.js'
 import { MAX_RETRIES } from './config.js'
 import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
 import type { ConsolidatedManifest } from './incremental.js'
@@ -17,11 +16,23 @@ interface Phase2bDeps {
   readonly writeConsolidatedFile: typeof writeConsolidatedFile
 }
 
-function isClassifiedBehaviorMap(value: unknown): value is Readonly<Record<string, ClassifiedBehavior>> {
+interface LegacyClassifiedBehavior {
+  readonly behaviorId: string
+  readonly testKey: string
+  readonly domain: string
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+  readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
+  readonly candidateFeatureKey: string | null
+  readonly candidateFeatureLabel: string | null
+}
+
+function isClassifiedBehaviorMap(value: unknown): value is Readonly<Record<string, LegacyClassifiedBehavior>> {
   return typeof value === 'object' && value !== null
 }
 
-function getLegacyClassifiedBehaviors(progress: Progress): Readonly<Record<string, ClassifiedBehavior>> {
+function getLegacyClassifiedBehaviors(progress: Progress): Readonly<Record<string, LegacyClassifiedBehavior>> {
   return 'classifiedBehaviors' in progress.phase2a && isClassifiedBehaviorMap(progress.phase2a['classifiedBehaviors'])
     ? progress.phase2a['classifiedBehaviors']
     : {}
@@ -33,7 +44,7 @@ const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
 }
 
 function groupByCandidateFeature(
-  classified: Readonly<Record<string, ClassifiedBehavior>>,
+  classified: Readonly<Record<string, LegacyClassifiedBehavior>>,
   selectedCandidateFeatureKeys: ReadonlySet<string>,
 ): ReadonlyMap<string, readonly ConsolidateBehaviorInput[]> {
   const grouped = new Map<string, ConsolidateBehaviorInput[]>()
