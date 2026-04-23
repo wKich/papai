@@ -81,7 +81,7 @@ function migrateV3toV4(raw: unknown): Progress {
 
 export function validateOrMigrateProgress(raw: unknown): Progress | null {
   const v4Result = ProgressV4Schema.safeParse(raw)
-  if (v4Result.success) return normalizePhase2aFailedAttempts(ProgressV4Schema.parse(v4Result.data))
+  if (v4Result.success) return v4Result.data
 
   const v3Result = LegacyProgressV3Schema.safeParse(raw)
   if (v3Result.success) return migrateV3toV4(v3Result.data)

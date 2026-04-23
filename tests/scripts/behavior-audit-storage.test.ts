@@ -914,47 +914,6 @@ test('resetBehaviorAudit phase3 clears evaluated and stories outputs only', asyn
   await Bun.write(path.join(classifiedDir, 'tools.json'), '[]\n')
   await Bun.write(path.join(evaluatedDir, 'group-routing.json'), '[]\n')
   await Bun.write(path.join(storiesDir, 'tools.md'), '# tools\n')
-  await Bun.write(
-    progressPath,
-    JSON.stringify({
-      version: 4,
-      startedAt: '2026-04-21T12:00:00.000Z',
-      phase1: {
-        status: 'done',
-        completedTests: {},
-        extractedBehaviors: {},
-        failedTests: {},
-        completedFiles: [],
-        stats: { filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
-      },
-      phase2a: {
-        status: 'done',
-        completedBehaviors: {},
-        classifiedBehaviors: {},
-        failedBehaviors: {},
-        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
-      },
-      phase2b: {
-        status: 'done',
-        completedCandidateFeatures: {},
-        consolidations: {},
-        failedCandidateFeatures: {},
-        stats: {
-          candidateFeaturesTotal: 0,
-          candidateFeaturesDone: 0,
-          candidateFeaturesFailed: 0,
-          behaviorsConsolidated: 0,
-        },
-      },
-      phase3: {
-        status: 'done',
-        completedBehaviors: {},
-        evaluations: {},
-        failedBehaviors: {},
-        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
-      },
-    }) + '\n',
-  )
 
   mockAuditBehaviorConfig(root, {
     CLASSIFIED_DIR: classifiedDir,
@@ -963,6 +922,42 @@ test('resetBehaviorAudit phase3 clears evaluated and stories outputs only', asyn
     STORIES_DIR: storiesDir,
     PROGRESS_PATH: progressPath,
   })
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const progress = progressModule.createEmptyProgress(1)
+  progress.startedAt = '2026-04-21T12:00:00.000Z'
+  progress.phase1.status = 'done'
+  progress.phase1.stats = { filesTotal: 1, filesDone: 1, testsExtracted: 1, testsFailed: 0 }
+  progress.phase2a.status = 'done'
+  progress.phase2a.completedBehaviors['behavior-1'] = 'done'
+  progress.phase2a.failedBehaviors['behavior-2'] = {
+    error: 'classification failed once',
+    attempts: 1,
+    lastAttempt: '2026-04-21T12:05:00.000Z',
+  }
+  progress.phase2a.stats = { behaviorsTotal: 2, behaviorsDone: 1, behaviorsFailed: 1 }
+  progress.phase2b.status = 'done'
+  progress.phase2b.completedFeatureKeys['task-creation'] = 'done'
+  progress.phase2b.failedFeatureKeys['group-routing'] = {
+    error: 'consolidation failed once',
+    attempts: 2,
+    lastAttempt: '2026-04-21T12:10:00.000Z',
+  }
+  progress.phase2b.stats = {
+    featureKeysTotal: 2,
+    featureKeysDone: 1,
+    featureKeysFailed: 1,
+    behaviorsConsolidated: 3,
+  }
+  progress.phase3.status = 'done'
+  progress.phase3.completedConsolidatedIds['task-creation::feature'] = 'done'
+  progress.phase3.failedConsolidatedIds['task-creation::other'] = {
+    error: 'evaluation failed once',
+    attempts: 1,
+    lastAttempt: '2026-04-21T12:15:00.000Z',
+  }
+  progress.phase3.stats = { consolidatedIdsTotal: 2, consolidatedIdsDone: 1, consolidatedIdsFailed: 1 }
+  await progressModule.saveProgress(progress)
 
   const mod: ResetModuleShape = await importWithGuard(
     `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
@@ -975,6 +970,19 @@ test('resetBehaviorAudit phase3 clears evaluated and stories outputs only', asyn
   expect(await Bun.file(path.join(classifiedDir, 'tools.json')).exists()).toBe(true)
   expect(await Bun.file(path.join(evaluatedDir, 'group-routing.json')).exists()).toBe(false)
   expect(await Bun.file(path.join(storiesDir, 'tools.md')).exists()).toBe(false)
+
+  const savedProgress = await progressModule.loadProgress()
+  expect(savedProgress).not.toBeNull()
+  expect(savedProgress?.phase2a).toEqual(progress.phase2a)
+  expect(savedProgress?.phase2b).toEqual(progress.phase2b)
+  expect(savedProgress?.phase3.status).toBe('not-started')
+  expect(savedProgress?.phase3.completedConsolidatedIds).toEqual({})
+  expect(savedProgress?.phase3.failedConsolidatedIds).toEqual({})
+  expect(savedProgress?.phase3.stats).toEqual({
+    consolidatedIdsTotal: 0,
+    consolidatedIdsDone: 0,
+    consolidatedIdsFailed: 0,
+  })
 })
 
 test('progress reset helpers clear checkpoint state without touching canonical artifacts', async () => {
