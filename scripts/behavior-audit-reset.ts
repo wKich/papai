@@ -5,6 +5,7 @@ import {
   CLASSIFIED_DIR,
   CONSOLIDATED_DIR,
   CONSOLIDATED_MANIFEST_PATH,
+  EVALUATED_DIR,
   STORIES_DIR,
 } from './behavior-audit/config.js'
 import { loadProgress, resetPhase2AndPhase3, resetPhase3, saveProgress } from './behavior-audit/progress.js'
@@ -20,6 +21,7 @@ export async function resetBehaviorAudit(target: ResetTarget): Promise<void> {
   if (target === 'phase2') {
     await rm(CLASSIFIED_DIR, { recursive: true, force: true })
     await rm(CONSOLIDATED_DIR, { recursive: true, force: true })
+    await rm(EVALUATED_DIR, { recursive: true, force: true })
     await rm(STORIES_DIR, { recursive: true, force: true })
     await rm(CONSOLIDATED_MANIFEST_PATH, { force: true })
 
@@ -31,6 +33,7 @@ export async function resetBehaviorAudit(target: ResetTarget): Promise<void> {
     return
   }
 
+  await rm(EVALUATED_DIR, { recursive: true, force: true })
   await rm(STORIES_DIR, { recursive: true, force: true })
 
   const progress = await loadProgress()
