@@ -229,8 +229,8 @@ export function markFeatureKeyDone(
   progress.phase2b.stats.behaviorsConsolidated += consolidations.length
 }
 
-export function isBatchCompleted(progress: Progress, batchKey: string): boolean {
-  return progress.phase2b.completedFeatureKeys[batchKey] === 'done'
+export function isFeatureKeyCompleted(progress: Progress, featureKey: string): boolean {
+  return progress.phase2b.completedFeatureKeys[featureKey] === 'done'
 }
 
 export function markFeatureKeyFailed(progress: Progress, featureKey: string, error: string, attempts: number): void {

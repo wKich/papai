@@ -304,6 +304,86 @@ describe('behavior-audit incremental manifest', () => {
     expect(loaded.tests).toEqual({})
   })
 
+  test('loadManifest accepts legacy alias fields but returns canonical entries only', async () => {
+    const incremental = await loadIncrementalModule()
+
+    await Bun.write(
+      manifestPath,
+      JSON.stringify({
+        version: 1,
+        tests: {
+          'tests/tools/create-task.test.ts::suite > case': {
+            testFile: 'tests/tools/create-task.test.ts',
+            testName: 'suite > case',
+            dependencyPaths: ['tests/tools/create-task.test.ts', 'src/tools/create-task.ts'],
+            phase1Fingerprint: 'phase1-fingerprint',
+            phase2Fingerprint: 'phase2-fingerprint',
+            behaviorId: 'behavior-1',
+            candidateFeatureKey: 'task-creation',
+            extractedBehaviorPath: 'reports/audit-behavior/extracted/tools/create-task.test.json',
+            classifiedArtifactPath: 'reports/audit-behavior/classified/tools/create-task.test.json',
+            domain: 'tools',
+            lastPhase1CompletedAt: '2026-04-23T12:00:00.000Z',
+            lastPhase2CompletedAt: '2026-04-23T12:05:00.000Z',
+          },
+        },
+      }),
+    )
+
+    const loaded = await incremental.loadManifest()
+
+    expect(loaded).not.toBeNull()
+    if (loaded === null) throw new Error('Expected manifest to load')
+
+    const entry = loaded.tests['tests/tools/create-task.test.ts::suite > case']
+    expect(entry).toBeDefined()
+    expect(entry?.featureKey).toBe('task-creation')
+    expect(entry?.extractedArtifactPath).toBe('reports/audit-behavior/extracted/tools/create-task.test.json')
+    expect(entry).not.toHaveProperty('candidateFeatureKey')
+    expect(entry).not.toHaveProperty('extractedBehaviorPath')
+  })
+
+  test('loadConsolidatedManifest accepts legacy alias fields but returns canonical entries only', async () => {
+    const incremental = await loadIncrementalModule()
+    const consolidatedManifestPath = path.join(reportsDir, 'consolidated-manifest.json')
+
+    await Bun.write(
+      consolidatedManifestPath,
+      JSON.stringify({
+        version: 1,
+        entries: {
+          'task-creation::task-creation': {
+            consolidatedId: 'task-creation::task-creation',
+            domain: 'tools',
+            featureName: 'Task creation',
+            consolidatedArtifactPath: 'reports/audit-behavior/consolidated/task-creation.json',
+            evaluatedArtifactPath: 'reports/audit-behavior/evaluated/task-creation.json',
+            sourceTestKeys: ['tests/tools/create-task.test.ts::suite > case'],
+            sourceBehaviorIds: ['behavior-1'],
+            supportingInternalBehaviorIds: [],
+            isUserFacing: true,
+            candidateFeatureKey: 'task-creation',
+            keywords: ['task-create'],
+            sourceDomains: ['tools'],
+            phase2Fingerprint: 'phase2-fingerprint',
+            lastConsolidatedAt: '2026-04-23T12:10:00.000Z',
+            lastEvaluatedAt: '2026-04-23T12:15:00.000Z',
+          },
+        },
+      }),
+    )
+
+    const loaded = await incremental.loadConsolidatedManifest()
+
+    expect(loaded).not.toBeNull()
+    if (loaded === null) throw new Error('Expected consolidated manifest to load')
+
+    const entry = loaded.entries['task-creation::task-creation']
+    expect(entry).toBeDefined()
+    expect(entry?.featureKey).toBe('task-creation')
+    expect(entry).not.toHaveProperty('candidateFeatureKey')
+  })
+
   test('loadManifest throws when manifest content is malformed', async () => {
     const incremental = await loadIncrementalModule()
 

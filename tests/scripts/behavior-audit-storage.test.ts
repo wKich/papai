@@ -644,6 +644,7 @@ test('progress module exports only feature-key phase2b helpers', async () => {
   expect(Object.hasOwn(progressModule, 'markBatchDone')).toBe(false)
   expect(Object.hasOwn(progressModule, 'markBatchFailed')).toBe(false)
   expect(Object.hasOwn(progressModule, 'getFailedBatchAttempts')).toBe(false)
+  expect(Object.hasOwn(progressModule, 'isBatchCompleted')).toBe(false)
 })
 
 test('markBehaviorFailed only increments consolidated failure stats for a newly failed key', async () => {

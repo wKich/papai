@@ -78,22 +78,32 @@ export interface ConsolidatedManifest {
   readonly entries: Record<string, ConsolidatedManifestEntry>
 }
 
-const ManifestTestEntrySchema = z.object({
-  testFile: z.string(),
-  testName: z.string(),
-  dependencyPaths: z.array(z.string()),
-  phase1Fingerprint: z.string().nullable(),
-  phase2aFingerprint: z.string().nullable().default(null),
-  phase2Fingerprint: z.string().nullable(),
-  behaviorId: z.string().nullable().default(null),
-  featureKey: z.string().nullable().default(null),
-  extractedArtifactPath: z.string().nullable(),
-  classifiedArtifactPath: z.string().nullable().default(null),
-  domain: z.string(),
-  lastPhase1CompletedAt: z.string().nullable(),
-  lastPhase2aCompletedAt: z.string().nullable().default(null),
-  lastPhase2CompletedAt: z.string().nullable(),
-})
+const ManifestTestEntrySchema = z
+  .object({
+    testFile: z.string(),
+    testName: z.string(),
+    dependencyPaths: z.array(z.string()),
+    phase1Fingerprint: z.string().nullable(),
+    phase2aFingerprint: z.string().nullable().default(null),
+    phase2Fingerprint: z.string().nullable(),
+    behaviorId: z.string().nullable().default(null),
+    featureKey: z.string().nullable().optional(),
+    candidateFeatureKey: z.string().nullable().optional(),
+    extractedArtifactPath: z.string().nullable().optional(),
+    extractedBehaviorPath: z.string().nullable().optional(),
+    classifiedArtifactPath: z.string().nullable().default(null),
+    domain: z.string(),
+    lastPhase1CompletedAt: z.string().nullable(),
+    lastPhase2aCompletedAt: z.string().nullable().default(null),
+    lastPhase2CompletedAt: z.string().nullable(),
+  })
+  .transform(
+    ({ candidateFeatureKey: _candidateFeatureKey, extractedBehaviorPath: _extractedBehaviorPath, ...entry }) => ({
+      ...entry,
+      featureKey: entry.featureKey ?? _candidateFeatureKey ?? null,
+      extractedArtifactPath: entry.extractedArtifactPath ?? _extractedBehaviorPath ?? null,
+    }),
+  ) satisfies z.ZodType<ManifestTestEntry>
 
 const IncrementalManifestSchema = z.object({
   version: z.literal(1),
@@ -110,24 +120,30 @@ const IncrementalManifestSchema = z.object({
   tests: z.record(z.string(), ManifestTestEntrySchema).default({}),
 })
 
-const ConsolidatedManifestEntrySchema = z.object({
-  consolidatedId: z.string(),
-  domain: z.string(),
-  featureName: z.string(),
-  consolidatedArtifactPath: z.string().nullable().default(null),
-  evaluatedArtifactPath: z.string().nullable().default(null),
-  sourceTestKeys: z.array(z.string()),
-  sourceBehaviorIds: z.array(z.string()).default([]),
-  supportingInternalBehaviorIds: z.array(z.string()).default([]),
-  isUserFacing: z.boolean(),
-  featureKey: z.string().nullable().default(null),
-  keywords: z.array(z.string()).default([]),
-  sourceDomains: z.array(z.string()).default([]),
-  phase2Fingerprint: z.string().nullable(),
-  phase3Fingerprint: z.string().nullable().default(null),
-  lastConsolidatedAt: z.string().nullable(),
-  lastEvaluatedAt: z.string().nullable().default(null),
-})
+const ConsolidatedManifestEntrySchema = z
+  .object({
+    consolidatedId: z.string(),
+    domain: z.string(),
+    featureName: z.string(),
+    consolidatedArtifactPath: z.string().nullable().default(null),
+    evaluatedArtifactPath: z.string().nullable().default(null),
+    sourceTestKeys: z.array(z.string()),
+    sourceBehaviorIds: z.array(z.string()).default([]),
+    supportingInternalBehaviorIds: z.array(z.string()).default([]),
+    isUserFacing: z.boolean(),
+    featureKey: z.string().nullable().optional(),
+    candidateFeatureKey: z.string().nullable().optional(),
+    keywords: z.array(z.string()).default([]),
+    sourceDomains: z.array(z.string()).default([]),
+    phase2Fingerprint: z.string().nullable(),
+    phase3Fingerprint: z.string().nullable().default(null),
+    lastConsolidatedAt: z.string().nullable(),
+    lastEvaluatedAt: z.string().nullable().default(null),
+  })
+  .transform(({ candidateFeatureKey: _candidateFeatureKey, ...entry }) => ({
+    ...entry,
+    featureKey: entry.featureKey ?? _candidateFeatureKey ?? null,
+  })) satisfies z.ZodType<ConsolidatedManifestEntry>
 
 const ConsolidatedManifestSchema = z.object({
   version: z.literal(1),
