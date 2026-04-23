@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
+import { normalizeKeywordSlug } from '../../scripts/behavior-audit-phase1-keywords.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import {
@@ -139,8 +140,6 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
         ),
     },
   )
-
-  expect(progress.phase1).not.toHaveProperty('extractedBehaviors')
 
   const extractedRecords = ExtractedBehaviorRecordArraySchema.parse(
     JSON.parse(await Bun.file(extractedArtifactPath).text()),
@@ -350,6 +349,7 @@ test('loadKeywordVocabulary rewrites legacy vocabulary files into canonical sche
   ]
 
   expect(loaded).toEqual(expectedEntries)
+  expect(normalizeKeywordSlug('Task Routing')).toBe('task-routing')
   expect(await Bun.file(vocabularyPath).text()).toBe(JSON.stringify(expectedEntries, null, 2) + '\n')
 })
 

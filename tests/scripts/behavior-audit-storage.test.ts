@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
+import { createEmptyProgress } from '../../scripts/behavior-audit-storage.js'
 import type { ConsolidatedManifest, IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import { mockAuditBehaviorConfig, mockReportsConfig } from './behavior-audit-integration.helpers.js'
 import {
@@ -832,47 +833,20 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
   await Bun.write(path.join(evaluatedDir, 'group-routing.json'), '[]\n')
   await Bun.write(path.join(storiesDir, 'tools.md'), '# tools\n')
   await Bun.write(vocabularyPath, '[]\n')
-  await Bun.write(
-    progressPath,
-    JSON.stringify({
-      version: 3,
-      startedAt: '2026-04-21T12:00:00.000Z',
-      phase1: {
-        status: 'done',
-        completedTests: {},
-        extractedBehaviors: {},
-        failedTests: {},
-        completedFiles: [],
-        stats: { filesTotal: 0, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
-      },
-      phase2a: {
-        status: 'done',
-        completedBehaviors: {},
-        classifiedBehaviors: {},
-        failedBehaviors: {},
-        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
-      },
-      phase2b: {
-        status: 'done',
-        completedCandidateFeatures: {},
-        consolidations: {},
-        failedCandidateFeatures: {},
-        stats: {
-          candidateFeaturesTotal: 0,
-          candidateFeaturesDone: 0,
-          candidateFeaturesFailed: 0,
-          behaviorsConsolidated: 0,
-        },
-      },
-      phase3: {
-        status: 'done',
-        completedBehaviors: {},
-        evaluations: {},
-        failedBehaviors: {},
-        stats: { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 },
-      },
-    }) + '\n',
-  )
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+  const progress = createEmptyProgress(0)
+  progress.phase2a.status = 'done'
+  progress.phase2a.stats = { behaviorsTotal: 0, behaviorsDone: 0, behaviorsFailed: 0 }
+  progress.phase2b.status = 'done'
+  progress.phase2b.stats = {
+    featureKeysTotal: 0,
+    featureKeysDone: 0,
+    featureKeysFailed: 0,
+    behaviorsConsolidated: 0,
+  }
+  progress.phase3.status = 'done'
+  progress.phase3.stats = { consolidatedIdsTotal: 0, consolidatedIdsDone: 0, consolidatedIdsFailed: 0 }
+  await progressModule.saveProgress(progress)
 
   mockAuditBehaviorConfig(root, {
     CLASSIFIED_DIR: classifiedDir,
@@ -1123,8 +1097,6 @@ test('loadProgress rethrows schema-invalid progress errors', async () => {
   await Bun.write(
     progressPath,
     JSON.stringify({
-      version: 4,
-      startedAt: '2026-04-23T12:00:00.000Z',
       phase1: {
         status: 'not-started',
       },

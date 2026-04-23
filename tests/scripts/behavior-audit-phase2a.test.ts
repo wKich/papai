@@ -6,7 +6,6 @@ import type { Phase2aDeps } from '../../scripts/behavior-audit-phase2a.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type { ExtractedBehaviorRecord } from '../../scripts/behavior-audit/extracted-store.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
-import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import {
   createAuditBehaviorPaths,
   createManifestTestEntry,
@@ -153,18 +152,6 @@ describe('behavior-audit phase 2a classification', () => {
 
   function expectClassifiedTimestamp(value: unknown): void {
     expect(typeof value).toBe('string')
-  }
-
-  function attachLegacyExtractedBehaviors(
-    progress: Progress,
-    extractedBehaviors: Record<string, ExtractedBehaviorRecord>,
-  ): void {
-    Object.assign(
-      progress.phase1 as Progress['phase1'] & { extractedBehaviors?: Record<string, ExtractedBehaviorRecord> },
-      {
-        extractedBehaviors,
-      },
-    )
   }
 
   test('runPhase2a classifies selected extracted behaviors and returns dirty candidate feature keys', async () => {
@@ -800,64 +787,5 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect([...dirty]).toEqual([])
     expect(progress.phase2a.failedBehaviors[testKey]).toBeUndefined()
-  })
-
-  test('runPhase2a skips missing canonical extracted artifacts instead of falling back to legacy phase1 payloads', async () => {
-    const classify = await importWithGuard(
-      `../../scripts/behavior-audit/classify.js?test=${crypto.randomUUID()}`,
-      isClassifyModule,
-      'Unexpected classify module shape',
-    )
-    const progressModule = await loadProgressModule(crypto.randomUUID())
-    const incremental = await loadIncrementalModule(crypto.randomUUID())
-    const testKey = 'tests/tools/sample.test.ts::suite > missing extracted artifact'
-    const testFilePath = 'tests/tools/sample.test.ts'
-    const progress = progressModule.createEmptyProgress(1)
-
-    attachLegacyExtractedBehaviors(progress, {
-      [testKey]: createExtractedRecord({
-        testKey,
-        testFile: testFilePath,
-        testName: 'missing extracted artifact',
-        fullPath: 'suite > missing extracted artifact',
-        behavior: 'Legacy payload state should not drive classification anymore.',
-        context: 'The extracted artifact file is intentionally absent.',
-        keywords: ['legacy-payload'],
-      }),
-    })
-
-    const manifest: IncrementalManifest = {
-      ...incremental.createEmptyManifest(),
-      phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
-      tests: {
-        [testKey]: createManifestTestEntry({
-          testFile: testFilePath,
-          testName: 'suite > missing extracted artifact',
-          dependencyPaths: [testFilePath],
-          phase1Fingerprint: 'phase1-fp',
-          phase2Fingerprint: null,
-          extractedArtifactPath: buildRelativeArtifactPath('extracted', testFilePath),
-          classifiedArtifactPath: null,
-          domain: 'tools',
-          lastPhase1CompletedAt: '2026-04-21T12:00:00.000Z',
-          lastPhase2CompletedAt: null,
-        }),
-      },
-    }
-
-    const dirty = await classify.runPhase2a(
-      {
-        progress,
-        selectedTestKeys: new Set([testKey]),
-        manifest,
-      },
-      createPhase2aDeps(),
-    )
-
-    expect(classifyBehaviorWithRetryCalls).toBe(0)
-    expect([...dirty]).toEqual([])
-    expect(progress.phase2a.stats.behaviorsTotal).toBe(0)
-    const classifiedPath = buildAbsoluteArtifactPath('classified', testFilePath)
-    expect(await Bun.file(classifiedPath).exists()).toBe(false)
   })
 })

@@ -1,6 +1,69 @@
+import { z } from 'zod'
+
 import { MAX_RETRIES } from './config.js'
-import { LegacyProgressV3Schema, ProgressV2Schema, ProgressV4Schema, V1ProgressSchema } from './progress-schemas.js'
 import { emptyPhase2a, emptyPhase2b, emptyPhase3, type Progress } from './progress.js'
+
+const FailedEntrySchema = z.object({
+  error: z.string(),
+  attempts: z.number(),
+  lastAttempt: z.string(),
+})
+
+const Phase1CheckpointSchema = z.strictObject({
+  status: z.enum(['not-started', 'in-progress', 'done']),
+  completedTests: z.record(z.string(), z.record(z.string(), z.literal('done'))),
+  failedTests: z.record(z.string(), FailedEntrySchema),
+  completedFiles: z.array(z.string()),
+  stats: z.object({
+    filesTotal: z.number(),
+    filesDone: z.number(),
+    testsExtracted: z.number(),
+    testsFailed: z.number(),
+  }),
+})
+
+const Phase2aCheckpointSchema = z.strictObject({
+  status: z.enum(['not-started', 'in-progress', 'done']),
+  completedBehaviors: z.record(z.string(), z.literal('done')),
+  failedBehaviors: z.record(z.string(), FailedEntrySchema),
+  stats: z.object({
+    behaviorsTotal: z.number(),
+    behaviorsDone: z.number(),
+    behaviorsFailed: z.number(),
+  }),
+})
+
+const Phase2bCheckpointSchema = z.strictObject({
+  status: z.enum(['not-started', 'in-progress', 'done']),
+  completedFeatureKeys: z.record(z.string(), z.literal('done')),
+  failedFeatureKeys: z.record(z.string(), FailedEntrySchema),
+  stats: z.object({
+    featureKeysTotal: z.number(),
+    featureKeysDone: z.number(),
+    featureKeysFailed: z.number(),
+    behaviorsConsolidated: z.number(),
+  }),
+})
+
+const Phase3CheckpointSchema = z.strictObject({
+  status: z.enum(['not-started', 'in-progress', 'done']),
+  completedConsolidatedIds: z.record(z.string(), z.literal('done')),
+  failedConsolidatedIds: z.record(z.string(), FailedEntrySchema),
+  stats: z.object({
+    consolidatedIdsTotal: z.number(),
+    consolidatedIdsDone: z.number(),
+    consolidatedIdsFailed: z.number(),
+  }),
+})
+
+const ProgressV4Schema = z.strictObject({
+  version: z.literal(4),
+  startedAt: z.string(),
+  phase1: Phase1CheckpointSchema,
+  phase2a: Phase2aCheckpointSchema,
+  phase2b: Phase2bCheckpointSchema,
+  phase3: Phase3CheckpointSchema,
+})
 
 function normalizePhase2aFailedAttempts(progress: Progress): Progress {
   return {
@@ -64,33 +127,16 @@ function createIncompatibleResetProgress(startedAt: string): Progress {
   })
 }
 
-function migrateV1toV2(raw: unknown): Progress {
-  const parsed = V1ProgressSchema.parse(raw)
-  return createIncompatibleResetProgress(parsed.startedAt)
-}
-
-function migrateV2toV3(raw: unknown): Progress {
-  const parsed = ProgressV2Schema.parse(raw)
-  return createIncompatibleResetProgress(parsed.startedAt)
-}
-
-function migrateV3toV4(raw: unknown): Progress {
-  const parsed = LegacyProgressV3Schema.parse(raw)
-  return createIncompatibleResetProgress(parsed.startedAt)
-}
-
 export function validateOrMigrateProgress(raw: unknown): Progress | null {
   const v4Result = ProgressV4Schema.safeParse(raw)
   if (v4Result.success) return v4Result.data
 
-  const v3Result = LegacyProgressV3Schema.safeParse(raw)
-  if (v3Result.success) return migrateV3toV4(v3Result.data)
-
-  const v2Result = ProgressV2Schema.safeParse(raw)
-  if (v2Result.success) return migrateV2toV3(v2Result.data)
-
-  if (typeof raw === 'object' && raw !== null && 'phase1' in raw) {
-    return migrateV1toV2(raw)
+  if (typeof raw === 'object' && raw !== null && 'startedAt' in raw) {
+    const startedAt = (raw as Record<string, unknown>)['startedAt']
+    if (typeof startedAt === 'string') {
+      return createIncompatibleResetProgress(startedAt)
+    }
   }
+
   return null
 }

@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
+import { createEmptyManifest as barrelCreateEmptyManifest } from '../../scripts/behavior-audit-phase1-selection.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
@@ -97,6 +98,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
   })
 
   test('runPhase1 only processes selected test keys and writes manifest updates after successful extraction', async () => {
+    expect(barrelCreateEmptyManifest().version).toBe(1)
     const extract = await loadExtractModule(crypto.randomUUID())
     const testFilePath = 'tests/tools/sample.test.ts'
     const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
@@ -150,7 +152,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
       },
     )
 
-    expect(progress.phase1).not.toHaveProperty('extractedBehaviors')
     expect(progress.phase1.completedTests[testFilePath]).toEqual({ [selectedKey]: 'done' })
     expect(progress.phase2a.status).toBe('not-started')
     expect(progress.phase2b.status).toBe('not-started')
@@ -193,7 +194,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
     expect(savedEntry.dependencyPaths).toEqual(['tests/tools/sample.test.ts', 'src/tools/sample.ts'])
     expect(savedEntry.domain).toBe('tools')
     expect(savedEntry.extractedArtifactPath).toBe('reports/audit-behavior/extracted/tools/sample.test.json')
-    expect(savedEntry).not.toHaveProperty('extractedBehaviorPath')
     expect(savedEntry.lastPhase1CompletedAt).toBeTruthy()
     expect(savedManifest.tests['tests/tools/sample.test.ts::suite > unselected case']).toBeUndefined()
 
