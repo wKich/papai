@@ -105,16 +105,7 @@ async function evaluateBehavior(input: {
     return null
   }
 
-  input.deps.markBehaviorDone(input.progress, input.behavior.consolidatedId, {
-    testName: input.behavior.featureName,
-    behavior: input.behavior.behavior,
-    userStory: input.behavior.userStory,
-    maria: result.maria,
-    dani: result.dani,
-    viktor: result.viktor,
-    flaws: result.flaws,
-    improvements: result.improvements,
-  })
+  input.deps.markBehaviorDone(input.progress, input.behavior.consolidatedId)
   await input.deps.saveProgress(input.progress)
   return {
     consolidatedId: input.behavior.consolidatedId,
@@ -191,7 +182,6 @@ export async function runPhase3(
   const updatedManifest = updateManifest(consolidatedManifest, storedByFeatureKey)
   await saveConsolidatedManifest(updatedManifest)
   await resolvedDeps.writeReports({
-    consolidatedManifest: updatedManifest,
     ...toReportMaps(storedByFeatureKey),
     progress,
   })

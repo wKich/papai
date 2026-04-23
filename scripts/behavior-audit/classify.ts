@@ -79,7 +79,7 @@ async function classifySelectedBehavior(
   }
 
   const classified = toClassifiedBehavior(entry.testKey, result)
-  deps.markClassificationDone(progress, behaviorId, classified)
+  deps.markClassificationDone(progress, behaviorId)
   return classified
 }
 

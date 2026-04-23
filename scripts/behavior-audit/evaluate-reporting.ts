@@ -1,5 +1,4 @@
 import type { EvaluatedFeatureRecord } from './evaluated-store.js'
-import type { ConsolidatedManifest } from './incremental.js'
 import type { Progress } from './progress.js'
 import type { FailedItem } from './report-index-helpers.js'
 import type { DomainSummary } from './report-index-helpers.js'
@@ -20,7 +19,6 @@ type ConsolidatedStoryRecord = {
 }
 
 interface WriteReportsInput {
-  readonly consolidatedManifest: ConsolidatedManifest
   readonly consolidatedByFeatureKey: ReadonlyMap<string, readonly ConsolidatedStoryRecord[]>
   readonly evaluatedByFeatureKey: ReadonlyMap<string, readonly EvaluatedFeatureRecord[]>
   readonly progress: Progress
@@ -55,7 +53,6 @@ function buildSummaries(
 }
 
 export async function writeReports(input: WriteReportsInput): Promise<void> {
-  void input.consolidatedManifest
   const { evaluationsByDomain, flawFreq, improvementFreq } = collectStoryEvaluations({
     consolidatedByFeatureKey: input.consolidatedByFeatureKey,
     evaluatedByFeatureKey: input.evaluatedByFeatureKey,

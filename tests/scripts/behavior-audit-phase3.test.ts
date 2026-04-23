@@ -603,10 +603,6 @@ test('writeReports aggregates story output from canonical feature-key maps', asy
   })
 
   await writeReports({
-    consolidatedManifest: {
-      version: 1,
-      entries: {},
-    },
     consolidatedByFeatureKey: new Map([
       [
         'task-creation',

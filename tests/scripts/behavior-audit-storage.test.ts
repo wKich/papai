@@ -1208,16 +1208,7 @@ test('markBehaviorDone clears stale failure state after a successful retry and r
   const progress = progressModule.createEmptyProgress(1)
 
   progressModule.markBehaviorFailed(progress, 'task-creation::feature', 'first failure', 2)
-  progressModule.markBehaviorDone(progress, 'task-creation::feature', {
-    testName: 'Task creation',
-    behavior: 'Creates a task from chat.',
-    userStory: 'As a user, I can create a task.',
-    maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-    dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-    viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
-    flaws: [],
-    improvements: [],
-  })
+  progressModule.markBehaviorDone(progress, 'task-creation::feature')
 
   expect(progress.phase3.completedConsolidatedIds['task-creation::feature']).toBe('done')
   expect(progress.phase3.failedConsolidatedIds['task-creation::feature']).toBeUndefined()
@@ -1228,7 +1219,6 @@ test('markBehaviorDone clears stale failure state after a successful retry and r
   progress.phase3.stats.consolidatedIdsTotal = 1
 
   await evaluateReporting.writeReports({
-    consolidatedManifest: { version: 1, entries: {} },
     consolidatedByFeatureKey: new Map([
       [
         'task-creation',

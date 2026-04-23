@@ -1,11 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import type { ClassifiedBehavior } from './classified-store.js'
 import { PROGRESS_PATH } from './config.js'
 import { validateOrMigrateProgress } from './progress-migrate.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
-import type { StoryEvaluation } from './report-writer.js'
 
 export type PhaseStatus = 'not-started' | 'in-progress' | 'done'
 
@@ -170,8 +168,7 @@ export function getFailedTestAttempts(progress: Progress, testKey: string): numb
   return progress.phase1.failedTests[testKey]?.attempts ?? 0
 }
 
-export function markClassificationDone(progress: Progress, behaviorId: string, classified: ClassifiedBehavior): void {
-  void classified
+export function markClassificationDone(progress: Progress, behaviorId: string): void {
   const hadFailedState = progress.phase2a.failedBehaviors[behaviorId] !== undefined
   if (hadFailedState) {
     const { [behaviorId]: _removed, ...remainingFailedBehaviors } = progress.phase2a.failedBehaviors
@@ -255,8 +252,7 @@ export function isBehaviorCompleted(progress: Progress, key: string): boolean {
   return progress.phase3.completedConsolidatedIds[key] === 'done'
 }
 
-export function markBehaviorDone(progress: Progress, key: string, evaluation: StoryEvaluation): void {
-  void evaluation
+export function markBehaviorDone(progress: Progress, key: string): void {
   const hadFailedState = progress.phase3.failedConsolidatedIds[key] !== undefined
   if (hadFailedState) {
     const { [key]: _removed, ...remainingFailedConsolidatedIds } = progress.phase3.failedConsolidatedIds
