@@ -344,7 +344,7 @@ export function createConsolidatedManifestEntry(
   return {
     sourceBehaviorIds: [],
     supportingInternalBehaviorIds: [],
-    featureKey: null,
+    featureKey: 'test-feature',
     consolidatedArtifactPath: null,
     evaluatedArtifactPath: null,
     keywords: [],

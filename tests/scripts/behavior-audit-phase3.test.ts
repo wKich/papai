@@ -534,7 +534,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
           sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > first case'],
           supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          featureKey: 'group-targeting' as string | null,
+          featureKey: 'group-targeting',
           consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', 'group-targeting'),
           evaluatedArtifactPath: buildRelativeArtifactPath('evaluated', 'group-targeting'),
           keywords: ['group-targeting'] as readonly string[],

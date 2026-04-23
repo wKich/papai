@@ -380,6 +380,7 @@ describe('behavior-audit incremental manifest', () => {
             sourceBehaviorIds: ['behavior-1'],
             supportingInternalBehaviorIds: [],
             isUserFacing: true,
+            featureKey: 'task-creation',
             keywords: ['task-create'],
             sourceDomains: ['tools'],
             phase2Fingerprint: 'phase2-fingerprint',
@@ -397,7 +398,7 @@ describe('behavior-audit incremental manifest', () => {
 
     const entry = loaded.entries['task-creation::task-creation']
     expect(entry).toBeDefined()
-    expect(entry?.featureKey).toBeUndefined()
+    expect(entry?.featureKey).toBe('task-creation')
     const unknownKeys = Object.keys(entry ?? {}).filter(
       (k) =>
         ![
@@ -763,7 +764,7 @@ describe('behavior-audit incremental manifest', () => {
           sourceBehaviorIds: ['tests/tools/create-task.test.ts::suite > case'],
           supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          featureKey: null,
+          featureKey: 'old-feature',
           keywords: ['old-keyword'],
           sourceDomains: ['tools'],
           phase2Fingerprint: 'fp',

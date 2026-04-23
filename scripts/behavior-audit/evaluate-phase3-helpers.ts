@@ -40,8 +40,8 @@ function getAvailableIdsForFeatureKeys(
   )
 }
 
-function getFeatureKey(entry: ConsolidatedManifestEntry): string | null {
-  return entry.featureKey ?? null
+function getFeatureKey(entry: ConsolidatedManifestEntry): string {
+  return entry.featureKey
 }
 
 export function getFeatureKeys(manifest: ConsolidatedManifest): readonly string[] {

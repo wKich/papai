@@ -107,10 +107,7 @@ function collectFeatureArtifactPaths(
   >()
 
   for (const entry of Object.values(consolidatedManifest.entries)) {
-    const featureKey = entry.featureKey ?? null
-    if (featureKey === null) {
-      continue
-    }
+    const featureKey = entry.featureKey
 
     const current = artifactPaths.get(featureKey)
     artifactPaths.set(featureKey, {

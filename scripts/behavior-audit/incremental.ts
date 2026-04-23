@@ -63,7 +63,7 @@ export interface ConsolidatedManifestEntry {
   readonly sourceBehaviorIds: readonly string[]
   readonly supportingInternalBehaviorIds: readonly string[]
   readonly isUserFacing: boolean
-  readonly featureKey?: string | null
+  readonly featureKey: string
   readonly keywords: readonly string[]
   readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
@@ -119,7 +119,7 @@ const ConsolidatedManifestEntrySchema = z.object({
   sourceBehaviorIds: z.array(z.string()).default([]),
   supportingInternalBehaviorIds: z.array(z.string()).default([]),
   isUserFacing: z.boolean(),
-  featureKey: z.string().nullable().optional(),
+  featureKey: z.string(),
   keywords: z.array(z.string()).default([]),
   sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),
