@@ -5,6 +5,7 @@ import path from 'node:path'
 import { z } from 'zod'
 
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
+import { writeReports } from '../../scripts/behavior-audit/evaluate-reporting.js'
 import type { ConsolidatedManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
 import {
   createConsolidatedManifestEntry,
@@ -479,4 +480,69 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
     expect(phase3ManifestArg).not.toBeNull()
     expect(phase3ManifestArg).toMatchObject(consolidatedManifest)
   })
+})
+
+test('writeReports aggregates story output from canonical feature-key maps', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, {
+    EXCLUDED_PREFIXES: [] as const,
+  })
+
+  await writeReports({
+    consolidatedManifest: {
+      version: 1,
+      entries: {},
+    },
+    consolidatedByFeatureKey: new Map([
+      [
+        'task-creation',
+        [
+          {
+            id: 'task-creation::feature',
+            domain: 'tools',
+            featureName: 'Task creation',
+            isUserFacing: true,
+            behavior: 'Creates a task from chat.',
+            userStory: 'As a user, I can create a task.',
+            context: 'Task creation context.',
+            sourceTestKeys: ['tests/tools/sample.test.ts::suite > create task'],
+            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > create task'],
+            supportingInternalRefs: [],
+          },
+        ],
+      ],
+    ]),
+    evaluatedByFeatureKey: new Map([
+      [
+        'task-creation',
+        [
+          {
+            consolidatedId: 'task-creation::feature',
+            maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
+            dani: { discover: 3, use: 4, retain: 3, notes: 'usable' },
+            viktor: { discover: 2, use: 3, retain: 2, notes: 'needs polish' },
+            flaws: ['Missing shortcut'],
+            improvements: ['Add shortcut'],
+            evaluatedAt: '2026-04-23T12:00:00.000Z',
+          },
+        ],
+      ],
+    ]),
+    progress: {
+      ...createEmptyProgressFixture(0),
+      phase3: {
+        ...createEmptyProgressFixture(0).phase3,
+        status: 'done',
+        stats: { consolidatedIdsTotal: 1, consolidatedIdsDone: 1, consolidatedIdsFailed: 0 },
+      },
+    },
+  })
+
+  const storyMarkdown = await Bun.file(path.join(root, 'reports', 'audit-behavior', 'stories', 'tools.md')).text()
+  const indexMarkdown = await Bun.file(path.join(root, 'reports', 'audit-behavior', 'stories', 'index.md')).text()
+
+  expect(storyMarkdown).toContain('As a user, I can create a task.')
+  expect(storyMarkdown).toContain('Missing shortcut')
+  expect(indexMarkdown).toContain('Add shortcut')
 })

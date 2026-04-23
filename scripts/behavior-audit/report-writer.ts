@@ -6,7 +6,6 @@ import { z } from 'zod'
 
 import { behaviorMarkdownPathForTestFile } from './artifact-paths.js'
 import { CONSOLIDATED_DIR, STORIES_DIR } from './config.js'
-import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import {
   buildFailedSection,
@@ -15,17 +14,15 @@ import {
   type DomainSummary,
   type FailedItem,
 } from './report-index-helpers.js'
+import {
+  buildSummary,
+  collectStoryEvaluations,
+  loadConsolidatedArtifacts,
+  loadEvaluatedArtifacts,
+  loadExtractedArtifacts,
+  type BehaviorMarkdownEntry,
+} from './report-rebuild-helpers.js'
 export type { DomainSummary, FailedItem } from './report-index-helpers.js'
-
-export interface ExtractedBehavior {
-  readonly testName: string
-  readonly fullPath: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-}
-
-type BehaviorMarkdownEntry = Pick<ExtractedBehaviorRecord, 'fullPath' | 'behavior' | 'context' | 'keywords'>
 
 export interface StoryEvaluation {
   readonly testName: string
@@ -71,8 +68,6 @@ const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).read
 
 interface RebuildReportsInput {
   readonly manifest: IncrementalManifest
-  readonly extractedBehaviorsByKey: Readonly<Record<string, ExtractedBehavior>>
-  readonly evaluationsByKey: Readonly<Record<string, StoryEvaluation>>
   readonly consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
 }
 
@@ -161,57 +156,8 @@ export async function writeStoryFile(domain: string, evaluations: readonly Story
   await Bun.write(outPath, lines.join('\n'))
 }
 
-function buildSummary(domain: string, evals: readonly StoryEvaluation[]): DomainSummary {
-  const avg = (fn: (e: StoryEvaluation) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
-  const pAvg = (p: 'maria' | 'dani' | 'viktor'): number => avg((e) => (e[p].discover + e[p].use + e[p].retain) / 3)
-  const personaScores: ReadonlyArray<readonly [string, number]> = [
-    ['Maria', pAvg('maria')],
-    ['Dani', pAvg('dani')],
-    ['Viktor', pAvg('viktor')],
-  ]
-  const worst = personaScores.reduce((min, cur) => (cur[1] < min[1] ? cur : min))
-  return {
-    domain,
-    count: evals.length,
-    avgDiscover: avg((e) => (e.maria.discover + e.dani.discover + e.viktor.discover) / 3),
-    avgUse: avg((e) => (e.maria.use + e.dani.use + e.viktor.use) / 3),
-    avgRetain: avg((e) => (e.maria.retain + e.dani.retain + e.viktor.retain) / 3),
-    worstPersona: `${worst[0]} (${worst[1].toFixed(1)})`,
-  }
-}
-
-function countFrequency(items: readonly string[]): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const item of items) counts.set(item, (counts.get(item) ?? 0) + 1)
-  return counts
-}
-
-function groupExtractedBehaviorsByFile(
-  manifest: IncrementalManifest,
-  extractedBehaviorsByKey: Readonly<Record<string, ExtractedBehavior>>,
-): Readonly<Record<string, readonly ExtractedBehavior[]>> {
-  const result: Record<string, ExtractedBehavior[]> = {}
-  for (const [testKey, entry] of Object.entries(manifest.tests)) {
-    const behavior = extractedBehaviorsByKey[testKey]
-    if (behavior !== undefined) (result[entry.testFile] ??= []).push(behavior)
-  }
-  return result
-}
-
-function groupEvaluationsByDomain(
-  manifest: IncrementalManifest,
-  evaluationsByKey: Readonly<Record<string, StoryEvaluation>>,
-): Readonly<Record<string, readonly StoryEvaluation[]>> {
-  const result: Record<string, StoryEvaluation[]> = {}
-  for (const [testKey, entry] of Object.entries(manifest.tests)) {
-    const evaluation = evaluationsByKey[testKey]
-    if (evaluation !== undefined) (result[entry.domain] ??= []).push(evaluation)
-  }
-  return result
-}
-
 async function writeRebuiltBehaviorFiles(
-  extractedByFile: Readonly<Record<string, readonly ExtractedBehavior[]>>,
+  extractedByFile: Readonly<Record<string, readonly BehaviorMarkdownEntry[]>>,
 ): Promise<void> {
   await Promise.all(
     Object.entries(extractedByFile).map(([testFile, behaviors]) =>
@@ -224,10 +170,10 @@ async function writeRebuiltBehaviorFiles(
 }
 
 async function writeRebuiltStoryFiles(
-  evaluationsByDomain: Readonly<Record<string, readonly StoryEvaluation[]>>,
+  evaluationsByDomain: ReadonlyMap<string, readonly StoryEvaluation[]>,
 ): Promise<void> {
   await Promise.all(
-    Object.entries(evaluationsByDomain).map(([domain, evaluations]) =>
+    [...evaluationsByDomain.entries()].map(([domain, evaluations]) =>
       writeStoryFile(
         domain,
         [...evaluations].toSorted((a, b) => a.testName.localeCompare(b.testName)),
@@ -259,35 +205,33 @@ export async function writeIndexFile(
 
 export async function rebuildReportsFromStoredResults({
   manifest,
-  extractedBehaviorsByKey,
-  evaluationsByKey,
   consolidatedManifest,
 }: RebuildReportsInput): Promise<void> {
-  const extractedByFile = groupExtractedBehaviorsByFile(manifest, extractedBehaviorsByKey)
+  const extractedByFile = await loadExtractedArtifacts(manifest)
   await writeRebuiltBehaviorFiles(extractedByFile)
 
-  const evaluationsByDomain: Record<string, StoryEvaluation[]> = {}
   if (consolidatedManifest === null) {
-    for (const [domain, evals] of Object.entries(groupEvaluationsByDomain(manifest, evaluationsByKey))) {
-      evaluationsByDomain[domain] = [...evals]
-    }
-  } else {
-    for (const [consolidatedId, entry] of Object.entries(consolidatedManifest.entries)) {
-      const evaluation = evaluationsByKey[consolidatedId]
-      if (evaluation !== undefined) (evaluationsByDomain[entry.domain] ??= []).push(evaluation)
-    }
+    await writeIndexFile([], 0, 0, new Map(), new Map(), [])
+    return
   }
+
+  const consolidatedByFeatureKey = await loadConsolidatedArtifacts(
+    consolidatedManifest,
+    ConsolidatedBehaviorArraySchema,
+  )
+  const evaluatedByFeatureKey = await loadEvaluatedArtifacts(consolidatedManifest)
+  const { evaluationsByDomain, flawFreq, improvementFreq } = collectStoryEvaluations({
+    consolidatedByFeatureKey,
+    evaluatedByFeatureKey,
+  })
 
   await writeRebuiltStoryFiles(evaluationsByDomain)
 
-  const summaries = Object.entries(evaluationsByDomain)
+  const summaries = [...evaluationsByDomain.entries()]
     .map(([domain, evaluations]) => buildSummary(domain, evaluations))
     .toSorted((a, b) => a.domain.localeCompare(b.domain))
 
-  const flawFrequency = countFrequency(Object.values(evaluationsByKey).flatMap((evaluation) => evaluation.flaws))
-  const improvementFrequency = countFrequency(
-    Object.values(evaluationsByKey).flatMap((evaluation) => evaluation.improvements),
-  )
+  const totalProcessed = [...evaluatedByFeatureKey.values()].reduce((sum, evaluations) => sum + evaluations.length, 0)
 
-  await writeIndexFile(summaries, Object.keys(evaluationsByKey).length, 0, flawFrequency, improvementFrequency, [])
+  await writeIndexFile(summaries, totalProcessed, 0, flawFreq, improvementFreq, [])
 }

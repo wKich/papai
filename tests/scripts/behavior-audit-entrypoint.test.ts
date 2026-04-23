@@ -480,8 +480,6 @@ describe('behavior-audit entrypoint incremental selection', () => {
     expect(calls.rebuildReportsFromStoredResults).toEqual([
       {
         manifest: updatedManifest,
-        extractedBehaviorsByKey: {},
-        evaluationsByKey: {},
         consolidatedManifest: previousConsolidatedManifest,
       },
     ])
