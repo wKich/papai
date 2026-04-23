@@ -3,23 +3,10 @@ import type { Progress } from './progress.js'
 import type { FailedItem } from './report-index-helpers.js'
 import type { DomainSummary } from './report-index-helpers.js'
 import { buildSummary, collectStoryEvaluations } from './report-rebuild-helpers.js'
-import { writeIndexFile, writeStoryFile, type StoryEvaluation } from './report-writer.js'
-
-type ConsolidatedStoryRecord = {
-  readonly id: string
-  readonly domain: string
-  readonly featureName: string
-  readonly isUserFacing: boolean
-  readonly behavior: string
-  readonly userStory: string | null
-  readonly context: string
-  readonly sourceTestKeys: readonly string[]
-  readonly sourceBehaviorIds: readonly string[]
-  readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
-}
+import { writeIndexFile, writeStoryFile, type ConsolidatedBehavior, type StoryEvaluation } from './report-writer.js'
 
 interface WriteReportsInput {
-  readonly consolidatedByFeatureKey: ReadonlyMap<string, readonly ConsolidatedStoryRecord[]>
+  readonly consolidatedByFeatureKey: ReadonlyMap<string, readonly ConsolidatedBehavior[]>
   readonly evaluatedByFeatureKey: ReadonlyMap<string, readonly EvaluatedFeatureRecord[]>
   readonly progress: Progress
 }
