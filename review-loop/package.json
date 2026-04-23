@@ -1,0 +1,22 @@
+{
+  "name": "review-loop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ../tests/review-loop",
+    "typecheck": "tsgo --project tsconfig.json --noEmit",
+    "lint": "cd .. && oxlint --config .oxlintrc.json review-loop/src tests/review-loop",
+    "format": "cd .. && oxfmt --write review-loop/src tests/review-loop --ignore-path=.oxfmtignore",
+    "format:check": "cd .. && oxfmt --check review-loop/src tests/review-loop --ignore-path=.oxfmtignore",
+    "start": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.18.2",
+    "p-limit": "^7.3.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260409.1",
+    "typescript": "^6.0.0"
+  }
+}

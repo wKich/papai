@@ -4,7 +4,8 @@
   "private": true,
   "description": "papai — an intelligent Telegram bot for managing Kaneo tasks with LLM.",
   "workspaces": [
-    "codeindex"
+    "codeindex",
+    "review-loop"
   ],
   "type": "module",
   "module": "src/index.ts",
