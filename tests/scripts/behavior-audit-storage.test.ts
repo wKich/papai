@@ -618,7 +618,7 @@ test('loadProgress rethrows schema-invalid progress errors', async () => {
   await expect(progressModule.loadProgress()).rejects.toThrow()
 })
 
-test('markBatchFailed only increments feature failure stats for a newly failed key', async () => {
+test('markFeatureKeyFailed only increments feature failure stats for a newly failed key', async () => {
   const root = makeTempDir()
 
   mockAuditBehaviorConfig(root, null)
@@ -626,12 +626,24 @@ test('markBatchFailed only increments feature failure stats for a newly failed k
   const progressModule = await loadProgressModule(crypto.randomUUID())
   const progress = progressModule.createEmptyProgress(1)
 
-  progressModule.markBatchFailed(progress, 'task-creation', 'first failure', 1)
-  progressModule.markBatchFailed(progress, 'task-creation', 'updated failure', 2)
+  progressModule.markFeatureKeyFailed(progress, 'task-creation', 'first failure', 1)
+  progressModule.markFeatureKeyFailed(progress, 'task-creation', 'updated failure', 2)
 
   expect(progress.phase2b.failedFeatureKeys['task-creation']?.error).toBe('updated failure')
   expect(progress.phase2b.failedFeatureKeys['task-creation']?.attempts).toBe(2)
   expect(progress.phase2b.stats.featureKeysFailed).toBe(1)
+})
+
+test('progress module exports only feature-key phase2b helpers', async () => {
+  const root = makeTempDir()
+
+  mockAuditBehaviorConfig(root, null)
+
+  const progressModule = await loadProgressModule(crypto.randomUUID())
+
+  expect(Object.hasOwn(progressModule, 'markBatchDone')).toBe(false)
+  expect(Object.hasOwn(progressModule, 'markBatchFailed')).toBe(false)
+  expect(Object.hasOwn(progressModule, 'getFailedBatchAttempts')).toBe(false)
 })
 
 test('markBehaviorFailed only increments consolidated failure stats for a newly failed key', async () => {

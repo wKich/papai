@@ -233,14 +233,6 @@ export function isBatchCompleted(progress: Progress, batchKey: string): boolean 
   return progress.phase2b.completedFeatureKeys[batchKey] === 'done'
 }
 
-export function markBatchDone(
-  progress: Progress,
-  batchKey: string,
-  consolidations: readonly ConsolidatedBehavior[],
-): void {
-  markFeatureKeyDone(progress, batchKey, consolidations)
-}
-
 export function markFeatureKeyFailed(progress: Progress, featureKey: string, error: string, attempts: number): void {
   const existing = progress.phase2b.failedFeatureKeys[featureKey]
   progress.phase2b.failedFeatureKeys[featureKey] = { error, attempts, lastAttempt: new Date().toISOString() }
@@ -249,16 +241,8 @@ export function markFeatureKeyFailed(progress: Progress, featureKey: string, err
   }
 }
 
-export function markBatchFailed(progress: Progress, batchKey: string, error: string, attempts: number): void {
-  markFeatureKeyFailed(progress, batchKey, error, attempts)
-}
-
 export function getFailedFeatureKeyAttempts(progress: Progress, featureKey: string): number {
   return progress.phase2b.failedFeatureKeys[featureKey]?.attempts ?? 0
-}
-
-export function getFailedBatchAttempts(progress: Progress, batchKey: string): number {
-  return getFailedFeatureKeyAttempts(progress, batchKey)
 }
 
 export function isBehaviorCompleted(progress: Progress, key: string): boolean {
