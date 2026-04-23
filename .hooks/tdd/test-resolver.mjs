@@ -50,6 +50,13 @@ export function suggestTestPath(implRelPath) {
     const base = withoutCodeindexSrc.slice(0, -ext.length)
     return path.join('tests', 'codeindex', `${base}.test${ext}`)
   }
+  // scripts/review-loop/foo.ts → tests/review-loop/foo.test.ts
+  if (implRelPath.startsWith('scripts/review-loop/') || implRelPath.startsWith('scripts\\review-loop\\')) {
+    const withoutPrefix = implRelPath.replace(/^scripts[/\\]review-loop[/\\]/, '')
+    const ext = path.extname(withoutPrefix)
+    const base = withoutPrefix.slice(0, -ext.length)
+    return path.join('tests', 'review-loop', `${base}.test${ext}`)
+  }
   // src/foo/bar.ts → tests/foo/bar.test.ts (strip src/ prefix)
   const withoutSrc = implRelPath.replace(/^src[/\\]/, '')
   const ext = path.extname(withoutSrc)
@@ -85,6 +92,18 @@ export function findTestFile(implAbsPath, projectRoot) {
 
     for (const suffix of ['.test', '.spec']) {
       const candidate = path.join(projectRoot, 'tests', 'codeindex', `${base}${suffix}${ext}`)
+      if (fs.existsSync(candidate)) return candidate
+    }
+  }
+
+  // scripts/review-loop/foo.ts → tests/review-loop/foo.test.ts
+  if (rel.startsWith('scripts/review-loop/') || rel.startsWith('scripts\\review-loop\\')) {
+    const withoutPrefix = rel.replace(/^scripts[/\\]review-loop[/\\]/, '')
+    const ext = path.extname(withoutPrefix)
+    const base = withoutPrefix.slice(0, -ext.length)
+
+    for (const suffix of ['.test', '.spec']) {
+      const candidate = path.join(projectRoot, 'tests', 'review-loop', `${base}${suffix}${ext}`)
       if (fs.existsSync(candidate)) return candidate
     }
   }
@@ -132,6 +151,10 @@ export function resolveImplPath(testRelPath) {
     // tests/scripts/foo.test.ts → scripts/foo.ts (scripts/ at root — bug fix for old src/scripts/* mapping; scripts/ is NOT a gateable source root)
     if (dir.startsWith('scripts/') || dir.startsWith('scripts\\') || dir === 'scripts') {
       return path.join(dir, `${base}${ext}`)
+    }
+    // tests/review-loop/foo.test.ts → scripts/review-loop/foo.ts
+    if (dir === 'review-loop' || dir.startsWith('review-loop/') || dir.startsWith('review-loop\\')) {
+      return path.join('scripts', dir, `${base}${ext}`)
     }
     // tests/codeindex/foo/bar.test.ts → codeindex/src/foo/bar.ts
     if (dir.startsWith('codeindex/') || dir.startsWith('codeindex\\') || dir === 'codeindex') {

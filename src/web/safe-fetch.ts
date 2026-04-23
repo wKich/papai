@@ -1,5 +1,6 @@
 import type { LookupAddress } from 'node:dns'
 import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 
 import * as ipaddr from 'ipaddr.js'
 
@@ -71,12 +72,28 @@ function isBlockedAddress(address: string): boolean {
   return isBlockedRange(parsed.range())
 }
 
+function normalizeHostname(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+}
+
 export async function assertPublicUrl(url: URL): Promise<void> {
   if (hasBlockedUrlParts(url)) {
     throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public URL')
   }
 
-  const addresses = await lookupPublicAddresses(url.hostname)
+  const hostname = normalizeHostname(url.hostname)
+  if (isIP(hostname) !== 0) {
+    try {
+      if (isBlockedAddress(hostname)) {
+        throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
+      }
+      return
+    } catch {
+      throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
+    }
+  }
+
+  const addresses = await lookupPublicAddresses(hostname)
   if (addresses.length === 0) {
     throwWebFetchError(webFetchError.blockedHost(), 'Blocked non-public host')
   }

@@ -2,624 +2,408 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign `behavior-audit` artifacts so canonical data lives in structured JSON stores, `progress.json` is checkpoint-only, manifest files are index-only, and human-readable Markdown is derived output.
+**Goal:** Finish the remaining behavior-audit artifact-model redesign work from the live codebase baseline by removing legacy compatibility shims, making rebuild and reset flows artifact-driven, and normalizing keyword vocabulary.
 
-**Architecture:** Add dedicated extracted and evaluated stores, convert classified storage to per-test-file canonical JSON, and remove domain payloads from `progress.json`. Phase 2a and Phase 2b join canonical artifacts by `behaviorId`, while rerun logic relies on manifests and fingerprints instead of checkpoint payloads. Vocabulary becomes a unique canonical slug dictionary without `timesUsed`.
+**Architecture:** The current repo already has canonical extracted, classified, consolidated, and evaluated JSON artifacts plus checkpoint-only `progress.json`. The remaining work is cleanup and convergence: remove payload-era aliases and fallbacks, make rebuild-only mode read canonical artifacts directly, and make vocabulary files canonical and unique by `slug`.
 
 **Tech Stack:** TypeScript, Bun, Zod, JSON artifact stores, Bun test
 
 ---
 
+## Live Baseline
+
+The following parts of the redesign are already implemented in the current repo and should be treated as baseline, not new work:
+
+- `scripts/behavior-audit/artifact-paths.ts` already exists.
+- `scripts/behavior-audit/extracted-store.ts` already exists.
+- `scripts/behavior-audit/evaluated-store.ts` already exists.
+- `scripts/behavior-audit/config.ts` already exports `EXTRACTED_DIR` and `EVALUATED_DIR`.
+- `scripts/behavior-audit/progress.ts` is already on `version: 4` and is checkpoint-only.
+- Phase 1 already writes extracted JSON artifacts and derived behavior Markdown.
+- Phase 2a already reads extracted artifacts and writes per-test-file classified artifacts.
+- Phase 2b already joins extracted and classified artifacts and writes consolidated JSON.
+- Phase 3 already writes evaluated JSON artifacts and updates consolidated-manifest evaluation metadata.
+
+This plan only covers the remaining delta from that live baseline.
+
+---
+
 ### File Map
 
-**New files:**
+**Primary runtime files still expected to change:**
 
-- `scripts/behavior-audit/extracted-store.ts` — extracted behavior canonical JSON store
-- `scripts/behavior-audit/evaluated-store.ts` — evaluated feature canonical JSON store
-- `scripts/behavior-audit/artifact-paths.ts` — path builders for extracted, classified, consolidated, evaluated, and derived report files
+- `scripts/behavior-audit.ts` — rebuild-only mode still uses legacy rebuild inputs
+- `scripts/behavior-audit/incremental.ts` — manifest and selection types still expose payload-era aliases
+- `scripts/behavior-audit/incremental-selection.ts` — still uses `candidateFeatureKey` naming
+- `scripts/behavior-audit/classify-phase2a-helpers.ts` — still has legacy fallback to `progress.phase1.extractedBehaviors`
+- `scripts/behavior-audit/consolidate.ts` — still falls back to `candidateFeatureKey`
+- `scripts/behavior-audit/evaluate-phase3-helpers.ts` — still falls back to `candidateFeatureKey`
+- `scripts/behavior-audit/report-writer.ts` — rebuild path still depends on legacy keyed maps instead of canonical artifact loading
+- `scripts/behavior-audit/keyword-vocabulary.ts` — still stores `timesUsed` and allows duplicate slugs
+- `scripts/behavior-audit/keyword-resolver-agent.ts` — still returns vocabulary entries with `timesUsed`
+- `scripts/behavior-audit/extract.ts` — still appends vocabulary entries without normalization
+- `scripts/behavior-audit-reset.ts` — phase reset paths do not yet clean up `evaluated/`
 
-**Modified files:**
+**Primary test and fixture files still expected to change:**
 
-- `scripts/behavior-audit/config.ts` — add extracted and evaluated directory config
-- `scripts/behavior-audit/progress.ts`
-- `scripts/behavior-audit/progress-migrate.ts`
-- `scripts/behavior-audit/incremental.ts`
-- `scripts/behavior-audit/extract.ts`
-- `scripts/behavior-audit/extract-phase1-helpers.ts`
-- `scripts/behavior-audit/classify.ts`
-- `scripts/behavior-audit/classified-store.ts`
-- `scripts/behavior-audit/consolidate.ts`
-- `scripts/behavior-audit/evaluate.ts`
-- `scripts/behavior-audit/evaluate-reporting.ts`
-- `scripts/behavior-audit/report-writer.ts`
-- `scripts/behavior-audit/keyword-vocabulary.ts`
-- `scripts/behavior-audit-reset.ts`
-- `scripts/behavior-audit.ts`
-
-**Primary tests to update or add:**
-
-- `tests/scripts/behavior-audit-phase1-keywords.test.ts`
-- `tests/scripts/behavior-audit-phase1-selection.test.ts`
+- `tests/scripts/behavior-audit-incremental.test.ts`
+- `tests/scripts/behavior-audit-entrypoint.test.ts`
 - `tests/scripts/behavior-audit-phase2a.test.ts`
 - `tests/scripts/behavior-audit-phase2b.test.ts`
 - `tests/scripts/behavior-audit-phase3.test.ts`
-- `tests/scripts/behavior-audit-incremental.test.ts`
+- `tests/scripts/behavior-audit-phase1-keywords.test.ts`
 - `tests/scripts/behavior-audit-storage.test.ts`
-- `tests/scripts/behavior-audit-entrypoint.test.ts`
+- `tests/scripts/behavior-audit-integration.helpers.ts`
+- `tests/scripts/behavior-audit-integration.support.ts`
 
 ---
 
-### Task 1: Add artifact path helpers and new canonical stores
+### Task 1: Remove legacy manifest aliases and rename selection surfaces
 
 **Files:**
 
-- Create: `scripts/behavior-audit/artifact-paths.ts`
-- Create: `scripts/behavior-audit/extracted-store.ts`
-- Create: `scripts/behavior-audit/evaluated-store.ts`
-- Modify: `scripts/behavior-audit/config.ts`
-- Test: `tests/scripts/behavior-audit-storage.test.ts`
-
-- [ ] **Step 1: Write failing storage tests for extracted and evaluated artifacts**
-
-Add tests that expect:
-
-- extracted records round-trip under `reports/audit-behavior/extracted/<domain>/<test-file>.json`
-- evaluated records round-trip under `reports/audit-behavior/evaluated/<featureKey>.json`
-- canonical stores return `null` for missing files and throw on malformed JSON
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: FAIL because extracted and evaluated stores do not exist yet.
-
-- [ ] **Step 2: Add path helper module**
-
-Create `scripts/behavior-audit/artifact-paths.ts` with explicit builders:
-
-```ts
-import { join } from 'node:path'
-
-import { BEHAVIORS_DIR, CLASSIFIED_DIR, CONSOLIDATED_DIR, EVALUATED_DIR, EXTRACTED_DIR } from './config.js'
-import { getDomain } from './domain-map.js'
-
-export function extractedArtifactPathForTestFile(testFilePath: string): string {
-  const domain = getDomain(testFilePath)
-  const fileName = testFilePath.split('/').pop()!.replace('.test.ts', '.test.json')
-  return join(EXTRACTED_DIR, domain, fileName)
-}
-
-export function classifiedArtifactPathForTestFile(testFilePath: string): string {
-  const domain = getDomain(testFilePath)
-  const fileName = testFilePath.split('/').pop()!.replace('.test.ts', '.test.json')
-  return join(CLASSIFIED_DIR, domain, fileName)
-}
-
-export function consolidatedArtifactPathForFeatureKey(featureKey: string): string {
-  return join(CONSOLIDATED_DIR, `${featureKey}.json`)
-}
-
-export function evaluatedArtifactPathForFeatureKey(featureKey: string): string {
-  return join(EVALUATED_DIR, `${featureKey}.json`)
-}
-
-export function behaviorMarkdownPathForTestFile(testFilePath: string): string {
-  const domain = getDomain(testFilePath)
-  const fileName = testFilePath.split('/').pop()!.replace('.test.ts', '.test.behaviors.md')
-  return join(BEHAVIORS_DIR, domain, fileName)
-}
-```
-
-- [ ] **Step 3: Add config entries for extracted and evaluated directories**
-
-Update `scripts/behavior-audit/config.ts` to export:
-
-```ts
-export let EXTRACTED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'extracted')
-export let EVALUATED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'evaluated')
-```
-
-and reload them from env overrides.
-
-- [ ] **Step 4: Implement extracted and evaluated stores**
-
-Create `scripts/behavior-audit/extracted-store.ts` with:
-
-- `ExtractedBehaviorRecord` schema
-- `writeExtractedFile(testFilePath, records)`
-- `readExtractedFile(testFilePath)`
-
-Create `scripts/behavior-audit/evaluated-store.ts` with:
-
-- `EvaluatedFeatureRecord` schema
-- `writeEvaluatedFile(featureKey, records)`
-- `readEvaluatedFile(featureKey)`
-
-- [ ] **Step 5: Run targeted storage tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: PASS for new extracted and evaluated store coverage.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add scripts/behavior-audit/artifact-paths.ts scripts/behavior-audit/extracted-store.ts scripts/behavior-audit/evaluated-store.ts scripts/behavior-audit/config.ts tests/scripts/behavior-audit-storage.test.ts
-git commit -m "refactor(behavior-audit): add canonical extracted and evaluated stores"
-```
-
----
-
-### Task 2: Convert progress.json into a checkpoint-only schema
-
-**Files:**
-
-- Modify: `scripts/behavior-audit/progress.ts`
-- Modify: `scripts/behavior-audit/progress-migrate.ts`
-- Test: `tests/scripts/behavior-audit-incremental.test.ts`
-- Test: `tests/scripts/behavior-audit-storage.test.ts`
-
-- [ ] **Step 1: Write failing tests for payload-free progress**
-
-Add tests that expect:
-
-- new empty progress does not contain `extractedBehaviors`, `classifiedBehaviors`, `consolidations`, or `evaluations`
-- reset helpers clear status and failure maps without touching canonical artifacts
-- legacy payload-heavy progress files are treated as incompatible and normalized to the new version
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: FAIL because current schemas still expose payload maps.
-
-- [ ] **Step 2: Update the progress types and helpers**
-
-Modify `scripts/behavior-audit/progress.ts` so phase state keeps only:
-
-- completion maps by ID
-- failure maps
-- stats
-- status
-
-Use these names:
-
-```ts
-completedTests
-completedBehaviors
-completedFeatureKeys
-completedConsolidatedIds
-```
-
-Remove payload-bearing maps entirely.
-
-- [ ] **Step 3: Update progress migration behavior**
-
-Modify `scripts/behavior-audit/progress-migrate.ts` to:
-
-- parse the new `version: 4` shape
-- treat earlier payload-heavy versions as incompatible with a clean reset result
-- preserve only safe counters or statuses if they still make sense
-
-- [ ] **Step 4: Update reset behavior to the new progress schema**
-
-Ensure `resetPhase2AndPhase3`, `resetPhase2bAndPhase3`, and `resetPhase3` only operate on checkpoint fields.
-
-- [ ] **Step 5: Run focused tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: PASS for progress schema and reset behavior.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add scripts/behavior-audit/progress.ts scripts/behavior-audit/progress-migrate.ts tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit-storage.test.ts
-git commit -m "refactor(behavior-audit): make progress checkpoint-only"
-```
-
----
-
-### Task 3: Rework Phase 1 to write canonical extracted JSON and derived Markdown
-
-**Files:**
-
-- Modify: `scripts/behavior-audit/extract.ts`
-- Modify: `scripts/behavior-audit/extract-phase1-helpers.ts`
-- Modify: `scripts/behavior-audit/report-writer.ts`
 - Modify: `scripts/behavior-audit/incremental.ts`
-- Test: `tests/scripts/behavior-audit-phase1-keywords.test.ts`
-- Test: `tests/scripts/behavior-audit-phase1-selection.test.ts`
-
-- [ ] **Step 1: Write failing Phase 1 tests for canonical extracted storage**
-
-Update tests to expect:
-
-- Phase 1 writes extracted JSON artifacts
-- Phase 1 behavior Markdown is regenerated from extracted JSON
-- `progress.json` no longer stores extracted payloads
-- `incremental-manifest.json` stores `extractedArtifactPath`
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-phase1-selection.test.ts
-```
-
-Expected: FAIL because Phase 1 still stores payloads in progress and uses the old manifest field.
-
-- [ ] **Step 2: Add extracted record conversion in Phase 1**
-
-In `scripts/behavior-audit/extract.ts`, convert each extracted result into an `ExtractedBehaviorRecord` with:
-
-```ts
-const behaviorId = testKey
-const record = {
-  behaviorId,
-  testKey,
-  testFile: testFilePath,
-  domain: getDomain(testFilePath),
-  testName: testCase.name,
-  fullPath: testCase.fullPath,
-  behavior: extracted.behavior,
-  context: extracted.context,
-  keywords,
-  extractedAt: new Date().toISOString(),
-}
-```
-
-- [ ] **Step 3: Replace payload writes with extracted-store writes**
-
-Update `extract-phase1-helpers.ts` to write the selected file’s extracted records through `writeExtractedFile()` and regenerate Markdown from those extracted records.
-
-- [ ] **Step 4: Replace manifest fields**
-
-In `scripts/behavior-audit/incremental.ts` and the Phase 1 update path, rename:
-
-- `candidateFeatureKey` to `featureKey`
-- `extractedBehaviorPath` to `extractedArtifactPath`
-
-and add `classifiedArtifactPath` as a nullable manifest field.
-
-- [ ] **Step 5: Keep startup invalidation safe**
-
-Adjust `runPhase1()` so when selected Phase 1 work exists, downstream checkpoint phases are reset before the first `saveProgress(progress)` call.
-
-- [ ] **Step 6: Run targeted Phase 1 tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-phase1-selection.test.ts
-```
-
-Expected: PASS with payload-free progress and extracted JSON canonical storage.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add scripts/behavior-audit/extract.ts scripts/behavior-audit/extract-phase1-helpers.ts scripts/behavior-audit/report-writer.ts scripts/behavior-audit/incremental.ts tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-phase1-selection.test.ts
-git commit -m "refactor(behavior-audit): make extracted json canonical"
-```
-
----
-
-### Task 4: Rework Phase 2a around extracted artifacts and per-test-file classified artifacts
-
-**Files:**
-
-- Modify: `scripts/behavior-audit/classify.ts`
-- Modify: `scripts/behavior-audit/classified-store.ts`
-- Modify: `scripts/behavior-audit/incremental.ts`
-- Test: `tests/scripts/behavior-audit-phase2a.test.ts`
-- Test: `tests/scripts/behavior-audit-incremental.test.ts`
-
-- [ ] **Step 1: Write failing tests for payload-free Phase 2a**
-
-Update tests to expect:
-
-- Phase 2a reads extracted JSON artifacts instead of `progress.phase1.extractedBehaviors`
-- Phase 2a writes classification-only JSON artifacts per test file
-- `featureKey` replaces `candidateFeatureKey`
-- `progress.phase2a` no longer stores classification payloads
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit-incremental.test.ts
-```
-
-Expected: FAIL because Phase 2a still depends on progress payloads.
-
-- [ ] **Step 2: Change classified-store layout and schema**
-
-Modify `scripts/behavior-audit/classified-store.ts` so:
-
-- file path is per test file, not per domain aggregate
-- schema uses `featureKey` and `featureLabel`
-- classification records do not duplicate extracted `behavior`, `context`, or `keywords`
-
-- [ ] **Step 3: Load extracted inputs from canonical extracted files**
-
-In `scripts/behavior-audit/classify.ts`, replace `selectBehaviors(progress, selectedTestKeys)` with a loader that:
-
-- walks manifest entries for selected tests
-- reads `extractedArtifactPath`
-- selects the right record by `behaviorId` or `testKey`
-
-- [ ] **Step 4: Update manifest writes for Phase 2a**
-
-Write these manifest fields on successful classification:
-
-- `behaviorId`
-- `featureKey`
-- `classifiedArtifactPath`
-- `phase2aFingerprint`
-- `lastPhase2aCompletedAt`
-
-- [ ] **Step 5: Save progress as checkpoint only**
-
-Keep status, completed behavior IDs, failures, and stats. Do not persist `ClassifiedBehaviorRecord` payloads in progress.
-
-- [ ] **Step 6: Run targeted Phase 2a tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit-incremental.test.ts
-```
-
-Expected: PASS with extracted-store-backed Phase 2a behavior.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add scripts/behavior-audit/classify.ts scripts/behavior-audit/classified-store.ts scripts/behavior-audit/incremental.ts tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit-incremental.test.ts
-git commit -m "refactor(behavior-audit): make phase2a read extracted artifacts"
-```
-
----
-
-### Task 5: Rework Phase 2b and Phase 3 around canonical artifacts and manifests
-
-**Files:**
-
+- Modify: `scripts/behavior-audit/incremental-selection.ts`
 - Modify: `scripts/behavior-audit/consolidate.ts`
-- Modify: `scripts/behavior-audit/evaluate.ts`
-- Modify: `scripts/behavior-audit/evaluate-reporting.ts`
-- Modify: `scripts/behavior-audit/report-writer.ts`
-- Modify: `scripts/behavior-audit/incremental.ts`
+- Modify: `scripts/behavior-audit/evaluate-phase3-helpers.ts`
+- Modify: `scripts/behavior-audit/progress.ts`
+- Test: `tests/scripts/behavior-audit-incremental.test.ts`
+- Test: `tests/scripts/behavior-audit-entrypoint.test.ts`
+- Test: `tests/scripts/behavior-audit-phase2b.test.ts`
+- Test: `tests/scripts/behavior-audit-phase3.test.ts`
+- Test helper: `tests/scripts/behavior-audit-integration.helpers.ts`
+- Test helper: `tests/scripts/behavior-audit-integration.support.ts`
+
+- [ ] **Step 1: Write failing tests for feature-key-only manifests and selections**
+
+Update tests to expect:
+
+- `IncrementalSelection` uses `phase2bSelectedFeatureKeys`
+- `ManifestTestEntry` no longer exposes `candidateFeatureKey`
+- `ManifestTestEntry` no longer exposes `extractedBehaviorPath`
+- `ConsolidatedManifestEntry` no longer exposes `candidateFeatureKey`
+- entrypoint wiring and test fixtures use `featureKey` only
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-incremental.test.ts ./tests/scripts/behavior-audit-entrypoint.test.ts ./tests/scripts/behavior-audit-phase2b.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
+```
+
+Expected: FAIL because runtime types and helpers still allow alias fields and old selection names.
+
+- [ ] **Step 2: Remove payload-era aliases from manifest types and schemas**
+
+Update `scripts/behavior-audit/incremental.ts` so:
+
+- `ManifestTestEntry` keeps `featureKey` only
+- `ManifestTestEntry` keeps `extractedArtifactPath` only
+- `ConsolidatedManifestEntry` keeps `featureKey` only
+- schema parsing stops backfilling `candidateFeatureKey` and `extractedBehaviorPath`
+
+- [ ] **Step 3: Rename selection surfaces to feature-key language**
+
+Update `scripts/behavior-audit/incremental.ts`, `incremental-selection.ts`, and `scripts/behavior-audit.ts` so:
+
+- `phase2bSelectedCandidateFeatureKeys` becomes `phase2bSelectedFeatureKeys`
+- helper variable names use `featureKey` consistently
+- phase 2b call sites use the renamed field and no longer mention candidate naming
+
+- [ ] **Step 4: Remove runtime fallback reads of `candidateFeatureKey`**
+
+Update `scripts/behavior-audit/consolidate.ts` and `scripts/behavior-audit/evaluate-phase3-helpers.ts` so feature-key lookup reads only `entry.featureKey`.
+
+- [ ] **Step 5: Rename remaining progress helper names for clarity**
+
+Update `scripts/behavior-audit/progress.ts` so `markCandidateFeatureDone()` and related local names become `markFeatureKeyDone()` or equivalent feature-key terminology.
+
+- [ ] **Step 6: Update test fixtures and support helpers**
+
+Update test helpers so fixture creators stop writing alias fields and tests assert current canonical names only.
+
+- [ ] **Step 7: Run focused manifest and selection tests**
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-incremental.test.ts ./tests/scripts/behavior-audit-entrypoint.test.ts ./tests/scripts/behavior-audit-phase2b.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
+```
+
+Expected: PASS with feature-key-only manifests and renamed selection fields.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add scripts/behavior-audit.ts scripts/behavior-audit/incremental.ts scripts/behavior-audit/incremental-selection.ts scripts/behavior-audit/consolidate.ts scripts/behavior-audit/evaluate-phase3-helpers.ts scripts/behavior-audit/progress.ts tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts tests/scripts/behavior-audit-integration.helpers.ts tests/scripts/behavior-audit-integration.support.ts
+git commit -m "refactor(behavior-audit): remove legacy manifest aliases"
+```
+
+---
+
+### Task 2: Remove payload-era fallbacks from phase loaders
+
+**Files:**
+
+- Modify: `scripts/behavior-audit/classify-phase2a-helpers.ts`
+- Modify: `scripts/behavior-audit/classify.ts`
+- Modify: `scripts/behavior-audit/consolidate.ts`
+- Modify: `scripts/behavior-audit/evaluate-phase3-helpers.ts`
+- Test: `tests/scripts/behavior-audit-phase2a.test.ts`
 - Test: `tests/scripts/behavior-audit-phase2b.test.ts`
 - Test: `tests/scripts/behavior-audit-phase3.test.ts`
 
-- [ ] **Step 1: Write failing Phase 2b and Phase 3 tests**
+- [ ] **Step 1: Write failing tests for artifact-only phase loading**
 
 Update tests to expect:
 
-- Phase 2b joins classified and extracted artifacts by `behaviorId`
-- Phase 2b writes consolidated JSON by `featureKey`
-- Phase 3 writes evaluated JSON by `featureKey`
-- story Markdown rebuilds by joining consolidated and evaluated artifacts
-- `progress.json` stores no consolidations or evaluations
+- Phase 2a no longer falls back to `progress.phase1.extractedBehaviors`
+- Phase 2a skips missing canonical extracted artifacts instead of reading payload-era progress state
+- Phase 2b and Phase 3 rely on manifest `featureKey` only
+- no test fixture needs legacy payload maps to drive classification or evaluation
 
 Run:
 
 ```bash
-bun test tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts
+bun test ./tests/scripts/behavior-audit-phase2a.test.ts ./tests/scripts/behavior-audit-phase2b.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
 ```
 
-Expected: FAIL because both phases still depend on progress payloads.
+Expected: FAIL because `classify-phase2a-helpers.ts` still includes the legacy extracted-behavior fallback.
 
-- [ ] **Step 2: Update Phase 2b input loading**
+- [ ] **Step 2: Remove the legacy progress fallback from Phase 2a**
 
-In `scripts/behavior-audit/consolidate.ts`, replace grouping from `progress.phase2a.classifiedBehaviors` with a load-and-join path:
+Update `scripts/behavior-audit/classify-phase2a-helpers.ts` so `loadSelectedBehaviors()` loads selected inputs from manifest entries plus extracted artifacts only and deletes `getLegacySelectedBehaviors()`.
 
-- load all selected classified artifacts
-- map by `behaviorId`
-- join matching extracted records for `behavior`, `context`, and `keywords`
-- group joined records by `featureKey`
+- [ ] **Step 3: Keep Phase 2a behavior-id selection canonical**
 
-- [ ] **Step 3: Update consolidated manifest schema**
+Ensure the selected extracted record path remains:
 
-Modify `scripts/behavior-audit/incremental.ts` so `ConsolidatedManifestEntry` stores:
+- manifest entry lookup by `testKey`
+- extracted file lookup by `manifestEntry.testFile`
+- record selection by `behaviorId` or `testKey`
 
-- `featureKey`
-- `consolidatedArtifactPath`
-- `evaluatedArtifactPath`
-- `phase3Fingerprint`
-- `lastEvaluatedAt`
+without any dependency on payload-heavy checkpoint state.
 
-- [ ] **Step 4: Add evaluated artifact persistence in Phase 3**
-
-In `scripts/behavior-audit/evaluate.ts`, persist evaluation results through `writeEvaluatedFile(featureKey, records)` and update consolidated-manifest evaluation fields.
-
-- [ ] **Step 5: Rewrite report generation to use canonical artifacts**
-
-In `scripts/behavior-audit/evaluate-reporting.ts` and `report-writer.ts`:
-
-- join consolidated JSON with evaluated JSON for story Markdown
-- rebuild index from evaluated results plus progress failure maps
-- remove dependence on `progress.phase3.evaluations`
-
-- [ ] **Step 6: Run targeted Phase 2b and Phase 3 tests**
+- [ ] **Step 4: Re-run focused phase-loader tests**
 
 Run:
 
 ```bash
-bun test tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts
+bun test ./tests/scripts/behavior-audit-phase2a.test.ts ./tests/scripts/behavior-audit-phase2b.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
 ```
 
-Expected: PASS with canonical consolidated and evaluated stores.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add scripts/behavior-audit/consolidate.ts scripts/behavior-audit/evaluate.ts scripts/behavior-audit/evaluate-reporting.ts scripts/behavior-audit/report-writer.ts scripts/behavior-audit/incremental.ts tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts
-git commit -m "refactor(behavior-audit): make phase2b and phase3 artifact-driven"
-```
-
----
-
-### Task 6: Normalize keyword vocabulary and remove timesUsed
-
-**Files:**
-
-- Modify: `scripts/behavior-audit/keyword-vocabulary.ts`
-- Modify: `scripts/behavior-audit/extract.ts`
-- Test: `tests/scripts/behavior-audit-phase1-keywords.test.ts`
-- Test: `tests/scripts/behavior-audit-storage.test.ts`
-
-- [ ] **Step 1: Write failing tests for unique vocabulary slugs and no timesUsed**
-
-Update or add tests to expect:
-
-- saved vocabulary entries do not contain `timesUsed`
-- duplicate slug entries normalize into one canonical entry
-- Phase 1 does not append a duplicate slug when the resolver returns an already-known slug
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: FAIL because current vocabulary still stores `timesUsed` and allows duplicates.
-
-- [ ] **Step 2: Remove timesUsed from the schema**
-
-Change `KeywordVocabularyEntrySchema` to:
-
-```ts
-const KeywordVocabularyEntrySchema = z.object({
-  slug: z.string(),
-  description: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-```
-
-- [ ] **Step 3: Add deterministic normalization by slug**
-
-Implement a helper in `keyword-vocabulary.ts` that:
-
-- groups entries by `slug`
-- retains earliest `createdAt`
-- retains latest `updatedAt`
-- keeps description from the most recently updated entry
-- sorts output by `slug`
-
-- [ ] **Step 4: Update Phase 1 vocabulary writes**
-
-In `extract.ts`, before saving the next vocabulary, merge appended entries into the normalized existing vocabulary instead of blindly concatenating arrays.
-
-- [ ] **Step 5: Run vocabulary tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: PASS with unique vocabulary slugs and no `timesUsed` field.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add scripts/behavior-audit/keyword-vocabulary.ts scripts/behavior-audit/extract.ts tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-storage.test.ts
-git commit -m "refactor(behavior-audit): normalize keyword vocabulary"
-```
-
----
-
-### Task 7: Rework entrypoint, rebuild-only mode, and reset flows
-
-**Files:**
-
-- Modify: `scripts/behavior-audit.ts`
-- Modify: `scripts/behavior-audit-reset.ts`
-- Test: `tests/scripts/behavior-audit-entrypoint.test.ts`
-- Test: `tests/scripts/behavior-audit-storage.test.ts`
-
-- [ ] **Step 1: Write failing tests for report rebuild-only mode and reset behavior**
-
-Update tests to expect:
-
-- rebuild-only mode loads extracted and evaluated canonical artifacts instead of progress payloads
-- `resetBehaviorAudit('phase2')` removes classified, consolidated, evaluated, and story artifacts but preserves normalized vocabulary
-- `resetBehaviorAudit('phase3')` removes evaluated and story artifacts only
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: FAIL because current entrypoint rebuild path still reads from progress payloads.
-
-- [ ] **Step 2: Update rebuild-only mode**
-
-In `scripts/behavior-audit.ts`, replace:
-
-```ts
-extractedBehaviorsByKey: progress.phase1.extractedBehaviors,
-evaluationsByKey: progress.phase3.evaluations,
-```
-
-with a canonical artifact loading path that scans:
-
-- `incremental-manifest.json` for extracted artifact paths
-- `consolidated-manifest.json` for consolidated and evaluated artifact paths
-
-- [ ] **Step 3: Update reset behavior for new directories**
-
-Modify `scripts/behavior-audit-reset.ts` so:
-
-- phase2 reset removes `classified/`, `consolidated/`, `evaluated/`, and `stories/`
-- phase3 reset removes `evaluated/` and `stories/`
-
-- [ ] **Step 4: Run entrypoint and reset tests**
-
-Run:
-
-```bash
-bun test tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit-storage.test.ts
-```
-
-Expected: PASS with artifact-driven rebuilds and resets.
+Expected: PASS with artifact-only phase loading.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/behavior-audit.ts scripts/behavior-audit-reset.ts tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit-storage.test.ts
+git add scripts/behavior-audit/classify-phase2a-helpers.ts scripts/behavior-audit/classify.ts scripts/behavior-audit/consolidate.ts scripts/behavior-audit/evaluate-phase3-helpers.ts tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts
+git commit -m "refactor(behavior-audit): require canonical artifacts for phase loading"
+```
+
+---
+
+### Task 3: Rebuild reports from canonical artifacts only
+
+**Files:**
+
+- Modify: `scripts/behavior-audit.ts`
+- Modify: `scripts/behavior-audit/report-writer.ts`
+- Modify: `scripts/behavior-audit/evaluate-reporting.ts`
+- Test: `tests/scripts/behavior-audit-entrypoint.test.ts`
+- Test: `tests/scripts/behavior-audit-storage.test.ts`
+- Test: `tests/scripts/behavior-audit-phase3.test.ts`
+
+- [ ] **Step 1: Write failing tests for artifact-driven rebuild-only mode**
+
+Update tests to expect:
+
+- rebuild-only mode scans `incremental-manifest.json` for extracted artifact paths
+- rebuild-only mode scans `consolidated-manifest.json` for consolidated and evaluated artifact paths
+- behavior Markdown rebuild uses extracted JSON artifacts only
+- story Markdown and index rebuild use consolidated plus evaluated JSON artifacts only
+- rebuild path no longer accepts or depends on payload-era `extractedBehaviorsByKey` or `evaluationsByKey`
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-entrypoint.test.ts ./tests/scripts/behavior-audit-storage.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
+```
+
+Expected: FAIL because `runBehaviorAudit()` still passes legacy rebuild inputs and `report-writer.ts` still expects legacy keyed maps.
+
+- [ ] **Step 2: Replace the rebuild-only entrypoint path**
+
+Update `scripts/behavior-audit.ts` so `selection.reportRebuildOnly` triggers canonical artifact loading instead of passing empty legacy maps into `rebuildReportsFromStoredResults()`.
+
+- [ ] **Step 3: Rewrite rebuild helpers around canonical artifact stores**
+
+Update `scripts/behavior-audit/report-writer.ts` so rebuild logic:
+
+- loads extracted records per test file using manifest entries
+- loads consolidated records per feature key
+- loads evaluated records per feature key
+- rebuilds behavior Markdown, stories, and index from those canonical artifacts
+
+- [ ] **Step 4: Keep story-report aggregation aligned with canonical feature-key maps**
+
+If needed, tighten `scripts/behavior-audit/evaluate-reporting.ts` so its story aggregation matches the same feature-key and consolidated-id conventions as the rebuild path.
+
+- [ ] **Step 5: Run focused rebuild tests**
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-entrypoint.test.ts ./tests/scripts/behavior-audit-storage.test.ts ./tests/scripts/behavior-audit-phase3.test.ts
+```
+
+Expected: PASS with artifact-driven rebuilds and no checkpoint payload dependency.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/behavior-audit.ts scripts/behavior-audit/report-writer.ts scripts/behavior-audit/evaluate-reporting.ts tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit-storage.test.ts tests/scripts/behavior-audit-phase3.test.ts
 git commit -m "refactor(behavior-audit): rebuild reports from canonical artifacts"
 ```
 
 ---
 
-### Task 8: Run full verification and clean up remaining test coupling
+### Task 4: Normalize keyword vocabulary and remove `timesUsed`
 
 **Files:**
 
-- Modify: any touched test files that still assume payload-heavy progress
+- Modify: `scripts/behavior-audit/keyword-vocabulary.ts`
+- Modify: `scripts/behavior-audit/keyword-resolver-agent.ts`
+- Modify: `scripts/behavior-audit/extract.ts`
+- Test: `tests/scripts/behavior-audit-phase1-keywords.test.ts`
+- Test: `tests/scripts/behavior-audit-storage.test.ts`
+- Test helper: `tests/scripts/behavior-audit-integration.support.ts`
+
+- [ ] **Step 1: Write failing tests for canonical vocabulary normalization**
+
+Update tests to expect:
+
+- vocabulary entries do not contain `timesUsed`
+- duplicate slug entries normalize into one canonical entry
+- normalization keeps earliest `createdAt`, latest `updatedAt`, and most recently updated description
+- Phase 1 does not append a duplicate slug when the resolver returns an already-known slug
+- any legacy vocabulary fixture with `timesUsed` is rewritten into canonical shape
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts ./tests/scripts/behavior-audit-storage.test.ts
+```
+
+Expected: FAIL because both runtime code and tests still use `timesUsed`.
+
+- [ ] **Step 2: Remove `timesUsed` from runtime schemas**
+
+Update `scripts/behavior-audit/keyword-vocabulary.ts` and `scripts/behavior-audit/keyword-resolver-agent.ts` so canonical vocabulary entries contain only:
+
+- `slug`
+- `description`
+- `createdAt`
+- `updatedAt`
+
+- [ ] **Step 3: Add deterministic slug normalization**
+
+Implement normalization in `scripts/behavior-audit/keyword-vocabulary.ts` that:
+
+- groups by `slug`
+- keeps earliest `createdAt`
+- keeps latest `updatedAt`
+- keeps the description from the most recently updated entry
+- sorts output by `slug`
+
+- [ ] **Step 4: Normalize vocabulary writes in Phase 1**
+
+Update `scripts/behavior-audit/extract.ts` so the next vocabulary file is built by normalizing existing entries plus appended resolver entries instead of blindly concatenating arrays.
+
+- [ ] **Step 5: Remove usage-count behavior**
+
+Delete or simplify `recordKeywordUsage()` so runtime code no longer tries to maintain mutable usage telemetry inside `keyword-vocabulary.json`.
+
+- [ ] **Step 6: Run focused vocabulary tests**
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts ./tests/scripts/behavior-audit-storage.test.ts
+```
+
+Expected: PASS with unique canonical vocabulary slugs and no `timesUsed` field.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/behavior-audit/keyword-vocabulary.ts scripts/behavior-audit/keyword-resolver-agent.ts scripts/behavior-audit/extract.ts tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-storage.test.ts tests/scripts/behavior-audit-integration.support.ts
+git commit -m "refactor(behavior-audit): normalize keyword vocabulary"
+```
+
+---
+
+### Task 5: Fix phase reset behavior for evaluated artifacts
+
+**Files:**
+
+- Modify: `scripts/behavior-audit-reset.ts`
+- Test: `tests/scripts/behavior-audit-storage.test.ts`
+
+- [ ] **Step 1: Write failing reset tests for evaluated artifact cleanup**
+
+Update tests to expect:
+
+- `resetBehaviorAudit('phase2')` removes `classified/`, `consolidated/`, `evaluated/`, and `stories/`
+- `resetBehaviorAudit('phase3')` removes `evaluated/` and `stories/` only
+- `resetBehaviorAudit('phase2')` still preserves canonical `keyword-vocabulary.json`
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-storage.test.ts
+```
+
+Expected: FAIL because current reset paths do not remove `evaluated/`.
+
+- [ ] **Step 2: Update reset flows for the new artifact tree**
+
+Modify `scripts/behavior-audit-reset.ts` so:
+
+- phase 2 reset removes `CLASSIFIED_DIR`, `CONSOLIDATED_DIR`, `EVALUATED_DIR`, `STORIES_DIR`, and `CONSOLIDATED_MANIFEST_PATH`
+- phase 3 reset removes `EVALUATED_DIR` and `STORIES_DIR`
+- checkpoint resets still use `resetPhase2AndPhase3()` and `resetPhase3()` only
+
+- [ ] **Step 3: Run reset tests**
+
+Run:
+
+```bash
+bun test ./tests/scripts/behavior-audit-storage.test.ts
+```
+
+Expected: PASS with evaluated-artifact cleanup in reset flows.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/behavior-audit-reset.ts tests/scripts/behavior-audit-storage.test.ts
+git commit -m "fix(behavior-audit): reset evaluated artifacts with downstream phases"
+```
+
+---
+
+### Task 6: Run full verification and clean up stale test coupling
+
+**Files:**
+
+- Modify: any touched test or helper files that still assume alias fields or `timesUsed`
 
 - [ ] **Step 1: Run the full behavior-audit test slice**
 
 Run:
 
 ```bash
-bun test tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-audit-phase1-selection.test.ts tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit-phase2b.test.ts tests/scripts/behavior-audit-phase3.test.ts tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit-storage.test.ts tests/scripts/behavior-audit-entrypoint.test.ts
+bun test ./tests/scripts/behavior-audit-phase1-keywords.test.ts ./tests/scripts/behavior-audit-phase1-selection.test.ts ./tests/scripts/behavior-audit-phase2a.test.ts ./tests/scripts/behavior-audit-phase2b.test.ts ./tests/scripts/behavior-audit-phase3.test.ts ./tests/scripts/behavior-audit-incremental.test.ts ./tests/scripts/behavior-audit-storage.test.ts ./tests/scripts/behavior-audit-entrypoint.test.ts
 ```
 
 Expected: PASS.
@@ -639,20 +423,20 @@ Expected: PASS.
 - [ ] **Step 3: Commit final cleanup**
 
 ```bash
-git add scripts/behavior-audit tests/scripts docs/superpowers/specs/2026-04-23-behavior-audit-artifact-model-design.md docs/superpowers/plans/2026-04-23-behavior-audit-artifact-model.md
-git commit -m "refactor(behavior-audit): clarify canonical artifacts and checkpoint state"
+git add scripts/behavior-audit scripts/behavior-audit.ts scripts/behavior-audit-reset.ts tests/scripts docs/superpowers/specs/2026-04-23-behavior-audit-artifact-model-design.md docs/superpowers/plans/2026-04-23-behavior-audit-artifact-model.md
+git commit -m "refactor(behavior-audit): finish artifact-model convergence"
 ```
 
 ---
 
 ### Spec Coverage Check
 
-- canonical JSON artifacts: covered by Tasks 1, 3, 4, and 5
-- payload-free progress: covered by Task 2
-- manifest-only indexing: covered by Tasks 3, 4, and 5
-- startup stale state reset: covered by Task 3
-- vocabulary uniqueness and `timesUsed` removal: covered by Task 6
-- rebuild-only mode using canonical artifacts: covered by Task 7
-- reset behavior under the new artifact tree: covered by Task 7
+- canonical JSON artifacts: already implemented in baseline; remaining convergence covered by Tasks 1, 2, and 3
+- payload-free progress: already implemented in baseline; remaining alias cleanup covered by Tasks 1 and 2
+- manifest-only indexing: remaining alias and naming cleanup covered by Task 1
+- startup stale state reset before first save: already implemented in baseline and retained during Task 2 verification
+- vocabulary uniqueness and `timesUsed` removal: covered by Task 4
+- rebuild-only mode using canonical artifacts: covered by Task 3
+- reset behavior under the new artifact tree: covered by Task 5
 
-No gaps found.
+No gaps found relative to the live baseline.
