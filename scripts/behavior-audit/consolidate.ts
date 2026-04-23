@@ -90,7 +90,7 @@ async function loadJoinedInput(input: {
   const behaviorId = getManifestBehaviorId(input.testKey, input.entry)
   const extractedRecord = findExtractedRecord(extractedRecords, behaviorId, input.testKey)
   const classifiedRecord = findClassifiedRecord(classifiedRecords, behaviorId, input.testKey)
-  if (extractedRecord === null || classifiedRecord === null || classifiedRecord.featureKey === null) {
+  if (extractedRecord === null || classifiedRecord === null) {
     return null
   }
 
@@ -99,12 +99,12 @@ async function loadJoinedInput(input: {
     testKey: input.testKey,
     domain: classifiedRecord.domain,
     visibility: classifiedRecord.visibility,
-    candidateFeatureKey: classifiedRecord.featureKey,
+    candidateFeatureKey: featureKey,
     candidateFeatureLabel: classifiedRecord.featureLabel,
     behavior: extractedRecord.behavior,
     context: extractedRecord.context,
     keywords: extractedRecord.keywords,
-    featureKey: classifiedRecord.featureKey,
+    featureKey,
   }
 }
 

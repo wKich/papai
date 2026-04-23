@@ -9,10 +9,6 @@ export interface SelectedBehaviorEntry {
   readonly behavior: ExtractedBehaviorRecord
 }
 
-function isExtractedBehaviorMap(value: unknown): value is Readonly<Record<string, ExtractedBehaviorRecord>> {
-  return typeof value === 'object' && value !== null
-}
-
 export function buildBehaviorId(testKey: string): string {
   return testKey
 }
@@ -30,20 +26,6 @@ export function buildPrompt(testKey: string, behavior: ExtractedBehaviorRecord):
 
 function getBehaviorIdForManifestEntry(manifestEntry: IncrementalManifest['tests'][string], testKey: string): string {
   return manifestEntry.behaviorId ?? testKey
-}
-
-function getLegacySelectedBehaviors(
-  progress: Progress,
-  selectedTestKeys: ReadonlySet<string>,
-): readonly SelectedBehaviorEntry[] {
-  const extractedBehaviors =
-    'extractedBehaviors' in progress.phase1 && isExtractedBehaviorMap(progress.phase1['extractedBehaviors'])
-      ? progress.phase1['extractedBehaviors']
-      : {}
-
-  return Object.entries(extractedBehaviors)
-    .filter(([testKey]) => selectedTestKeys.size === 0 || selectedTestKeys.has(testKey))
-    .map(([testKey, behavior]) => ({ testKey, behavior }))
 }
 
 async function loadSelectedBehaviorFromArtifact(input: {
@@ -70,7 +52,6 @@ async function loadSelectedBehaviorFromArtifact(input: {
 }
 
 export async function loadSelectedBehaviors(
-  progress: Progress,
   manifest: IncrementalManifest,
   selectedTestKeys: ReadonlySet<string>,
   readExtractedFileImpl: typeof readExtractedFile,
@@ -92,11 +73,7 @@ export async function loadSelectedBehaviors(
   )
 
   const artifactEntries = loadedEntries.filter((entry): entry is SelectedBehaviorEntry => entry !== null)
-  if (artifactEntries.length > 0) {
-    return artifactEntries
-  }
-
-  return getLegacySelectedBehaviors(progress, selectedTestKeys)
+  return artifactEntries
 }
 
 export function shouldReuseCompletedClassification(

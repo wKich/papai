@@ -211,12 +211,7 @@ export async function runPhase2a(
   const limit = pLimit(1)
   let currentManifest = manifest
 
-  const selectedEntries = await loadSelectedBehaviors(
-    progress,
-    manifest,
-    selectedTestKeys,
-    resolvedDeps.readExtractedFile,
-  )
+  const selectedEntries = await loadSelectedBehaviors(manifest, selectedTestKeys, resolvedDeps.readExtractedFile)
   progress.phase2a.stats.behaviorsTotal = selectedEntries.length
   await resolvedDeps.saveProgress(progress)
 
