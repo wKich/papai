@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 
 import { z } from 'zod'
 
+import { consolidatedArtifactPathForFeatureKey, evaluatedArtifactPathForFeatureKey } from './artifact-paths.js'
 import { PROJECT_ROOT } from './config.js'
 import type { EvaluatedFeatureRecord } from './evaluated-store.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
@@ -113,8 +114,12 @@ function collectFeatureArtifactPaths(
 
     const current = artifactPaths.get(featureKey)
     artifactPaths.set(featureKey, {
-      consolidatedArtifactPath: entry.consolidatedArtifactPath ?? current?.consolidatedArtifactPath ?? null,
-      evaluatedArtifactPath: entry.evaluatedArtifactPath ?? current?.evaluatedArtifactPath ?? null,
+      consolidatedArtifactPath:
+        entry.consolidatedArtifactPath ??
+        current?.consolidatedArtifactPath ??
+        consolidatedArtifactPathForFeatureKey(featureKey),
+      evaluatedArtifactPath:
+        entry.evaluatedArtifactPath ?? current?.evaluatedArtifactPath ?? evaluatedArtifactPathForFeatureKey(featureKey),
     })
   }
 

@@ -182,6 +182,10 @@ async function writeRebuiltStoryFiles(
   )
 }
 
+function countStoryEvaluations(evaluationsByDomain: ReadonlyMap<string, readonly StoryEvaluation[]>): number {
+  return [...evaluationsByDomain.values()].reduce((sum, evaluations) => sum + evaluations.length, 0)
+}
+
 export async function writeIndexFile(
   summaries: readonly DomainSummary[],
   totalProcessed: number,
@@ -231,7 +235,7 @@ export async function rebuildReportsFromStoredResults({
     .map(([domain, evaluations]) => buildSummary(domain, evaluations))
     .toSorted((a, b) => a.domain.localeCompare(b.domain))
 
-  const totalProcessed = [...evaluatedByFeatureKey.values()].reduce((sum, evaluations) => sum + evaluations.length, 0)
+  const totalProcessed = countStoryEvaluations(evaluationsByDomain)
 
   await writeIndexFile(summaries, totalProcessed, 0, flawFreq, improvementFreq, [])
 }
