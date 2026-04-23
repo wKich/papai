@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 
+import * as realAi from 'ai'
 import { Output, stepCountIs } from 'ai'
 
 import type { ClassifyAgentDeps } from '../../scripts/behavior-audit/classify-agent.js'
@@ -130,6 +131,9 @@ describe('behavior-audit phase 2a classify agent', () => {
   test('classifyBehaviorWithRetry default path reads reloaded config after module import', async () => {
     const initialServer = startCountingFailureServer()
     const reloadedServer = startCountingFailureServer()
+    let capturedBaseUrl: string | null = null
+    let capturedModelValue: unknown = null
+    let generateTextCalls = 0
 
     try {
       process.env['BEHAVIOR_AUDIT_BASE_URL'] = initialServer.url
@@ -137,14 +141,40 @@ describe('behavior-audit phase 2a classify agent', () => {
       process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = '1'
       reloadBehaviorAuditConfig()
 
+      void mock.module('@ai-sdk/openai-compatible', () => ({
+        createOpenAICompatible:
+          ({ baseURL }: { readonly baseURL: string }) =>
+          (model: string): string => {
+            capturedBaseUrl = baseURL
+            return `mock-model:${baseURL}:${model}`
+          },
+      }))
+      void mock.module('ai', () => ({
+        ...realAi,
+        generateText: (input: { readonly model: unknown }): Promise<never> => {
+          generateTextCalls += 1
+          capturedModelValue = input.model
+          return Promise.reject(new Error('forced failure'))
+        },
+      }))
+
       const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
 
       process.env['BEHAVIOR_AUDIT_BASE_URL'] = reloadedServer.url
       reloadBehaviorAuditConfig()
 
       await expect(classifyAgent.classifyBehaviorWithRetry('prompt', 0)).resolves.toBeNull()
+      expect(generateTextCalls).toBe(1)
       expect(initialServer.getRequestCount()).toBe(0)
-      expect(reloadedServer.getRequestCount()).toBe(1)
+      expect(reloadedServer.getRequestCount()).toBe(0)
+      expect(capturedBaseUrl).not.toBeNull()
+      if (capturedBaseUrl === null) {
+        throw new Error('Expected captured base URL')
+      }
+      const resolvedBaseUrl: string = capturedBaseUrl
+      expect(resolvedBaseUrl).toBe(reloadedServer.url)
+      expect(typeof capturedModelValue).toBe('string')
+      expect(String(capturedModelValue)).toContain(reloadedServer.url)
     } finally {
       initialServer.stop()
       reloadedServer.stop()
