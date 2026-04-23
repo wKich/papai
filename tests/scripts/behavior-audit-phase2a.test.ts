@@ -285,7 +285,7 @@ describe('behavior-audit phase 2a classification', () => {
           testName: 'suite > case',
           dependencyPaths: [testFilePath],
           phase1Fingerprint: 'phase1-fp',
-          phase2aFingerprint: incremental.buildPhase2aFingerprint({
+          phase2aFingerprint: incremental.buildPhase2Fingerprint({
             testKey,
             behavior: 'When the user creates a task, the bot saves it.',
             context: 'Calls create_task and returns the new task.',

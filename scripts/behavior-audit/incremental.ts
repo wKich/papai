@@ -7,7 +7,6 @@ import { CONSOLIDATED_MANIFEST_PATH, INCREMENTAL_MANIFEST_PATH, PROJECT_ROOT } f
 export {
   buildPhase1Fingerprint,
   buildPhase2Fingerprint,
-  buildPhase2aFingerprint,
   buildPhase2ConsolidationFingerprint,
   buildPhase3EvaluationFingerprint,
   hashText,

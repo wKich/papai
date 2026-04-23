@@ -16,14 +16,6 @@ interface Phase2FingerprintInput {
   readonly phaseVersion: string
 }
 
-interface Phase2aFingerprintInput {
-  readonly testKey: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-  readonly phaseVersion: string
-}
-
 function sha256Json(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -37,10 +29,6 @@ export function buildPhase1Fingerprint(input: Phase1FingerprintInput): string {
 }
 
 export function buildPhase2Fingerprint(input: Phase2FingerprintInput): string {
-  return sha256Json(input)
-}
-
-export function buildPhase2aFingerprint(input: Phase2aFingerprintInput): string {
   return sha256Json(input)
 }
 

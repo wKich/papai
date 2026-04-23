@@ -1,7 +1,7 @@
 import type { ClassifiedBehavior } from './classified-store.js'
 import { getDomain } from './domain-map.js'
 import { readExtractedFile, type ExtractedBehaviorRecord } from './extracted-store.js'
-import { buildPhase2aFingerprint, type IncrementalManifest } from './incremental.js'
+import { buildPhase2Fingerprint, type IncrementalManifest } from './incremental.js'
 import type { Progress } from './progress.js'
 
 export interface SelectedBehaviorEntry {
@@ -94,7 +94,7 @@ export function shouldReuseCompletedClassification(
     return true
   }
 
-  const nextFingerprint = buildPhase2aFingerprint({
+  const nextFingerprint = buildPhase2Fingerprint({
     testKey: entry.testKey,
     behavior: entry.behavior.behavior,
     context: entry.behavior.context,

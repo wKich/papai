@@ -18,7 +18,7 @@ import {
 import { MAX_RETRIES, PROJECT_ROOT } from './config.js'
 import { readExtractedFile } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
-import { buildPhase2aFingerprint, saveManifest } from './incremental.js'
+import { buildPhase2Fingerprint, saveManifest } from './incremental.js'
 import type { Progress } from './progress.js'
 import {
   getFailedClassificationAttempts,
@@ -112,7 +112,7 @@ function toManifestEntry(input: {
     testName: previousEntry === undefined ? input.behavior.fullPath : previousEntry.testName,
     dependencyPaths: previousEntry === undefined ? [testFile] : previousEntry.dependencyPaths,
     phase1Fingerprint: previousEntry === undefined ? null : previousEntry.phase1Fingerprint,
-    phase2aFingerprint: buildPhase2aFingerprint({
+    phase2aFingerprint: buildPhase2Fingerprint({
       testKey: input.classified.testKey,
       behavior: input.behavior.behavior,
       context: input.behavior.context,
