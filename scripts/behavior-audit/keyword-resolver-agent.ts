@@ -1,7 +1,8 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, Output, stepCountIs } from 'ai'
+import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
+import { verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 
 const VocabularyEntrySchema = z.object({
@@ -40,14 +41,15 @@ function sleep(ms: number): Promise<void> {
 async function resolveSingle(prompt: string, attempt: number): Promise<ResolverResult | null> {
   const timeout = attempt > 0 ? PHASE1_TIMEOUT_MS * 2 : PHASE1_TIMEOUT_MS
   try {
-    const result = await generateText({
+    const result = await verboseGenerateText({
       model,
       prompt,
       output: Output.object({ schema: ResolverResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),
       abortSignal: AbortSignal.timeout(timeout),
     })
-    return result.output
+    const parsed = ResolverResultSchema.safeParse(result.output)
+    return parsed.success ? parsed.data : null
   } catch {
     return null
   }

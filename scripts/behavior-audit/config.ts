@@ -71,6 +71,7 @@ export let PHASE3_TIMEOUT_MS = 600_000
 export let MAX_RETRIES = 3
 export const RETRY_BACKOFF_MS = [100_000, 300_000, 900_000] as const
 export let MAX_STEPS = 20
+export let VERBOSE = false
 
 export let EXCLUDED_PREFIXES: readonly string[] = DEFAULT_EXCLUDED_PREFIXES
 
@@ -113,6 +114,7 @@ export function reloadBehaviorAuditConfig(): void {
   PHASE3_TIMEOUT_MS = resolveNumberOverride('BEHAVIOR_AUDIT_PHASE3_TIMEOUT_MS', 600_000)
   MAX_RETRIES = resolveNumberOverride('BEHAVIOR_AUDIT_MAX_RETRIES', 3)
   MAX_STEPS = resolveNumberOverride('BEHAVIOR_AUDIT_MAX_STEPS', 20)
+  VERBOSE = resolveStringOverride('BEHAVIOR_AUDIT_VERBOSE', '0') === '1'
   EXCLUDED_PREFIXES = resolveReadonlyStringList('BEHAVIOR_AUDIT_EXCLUDED_PREFIXES', DEFAULT_EXCLUDED_PREFIXES)
 }
 

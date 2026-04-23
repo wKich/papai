@@ -1,7 +1,8 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, Output, stepCountIs } from 'ai'
+import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
+import { verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
@@ -44,7 +45,7 @@ function sleep(ms: number): Promise<void> {
 async function extractSingle(prompt: string, attempt: number): Promise<ExtractionResult | null> {
   const timeout = attempt > 0 ? PHASE1_TIMEOUT_MS * 2 : PHASE1_TIMEOUT_MS
   try {
-    const result = await generateText({
+    const result = await verboseGenerateText({
       model,
       system: SYSTEM_PROMPT,
       prompt,
@@ -53,7 +54,8 @@ async function extractSingle(prompt: string, attempt: number): Promise<Extractio
       stopWhen: stepCountIs(MAX_STEPS + 1),
       abortSignal: AbortSignal.timeout(timeout),
     })
-    return result.output
+    const parsed = ExtractionResultSchema.safeParse(result.output)
+    return parsed.success ? parsed.data : null
   } catch {
     return null
   }

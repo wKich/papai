@@ -2,6 +2,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
+import { verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 
 const ClassificationResultSchema = z.object({
@@ -89,7 +90,7 @@ function createDefaultClassifyAgentDeps(): ClassifyAgentDeps {
       RETRY_BACKOFF_MS,
       MAX_STEPS,
     },
-    generateText: (input) => generateText(input),
+    generateText: (input) => verboseGenerateText(input),
     outputObject: ({ schema }) => Output.object({ schema }),
     stepCountIs: (stepCount) => stepCountIs(stepCount),
     buildModel: () => defaultModel,

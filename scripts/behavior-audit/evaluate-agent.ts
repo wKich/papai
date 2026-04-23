@@ -1,7 +1,8 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, Output, stepCountIs } from 'ai'
+import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
+import { verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE3_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
@@ -66,7 +67,7 @@ async function evaluateSingle(prompt: string, attempt: number): Promise<EvalResu
   const tools = makeAuditTools()
   const start = Date.now()
   try {
-    const result = await generateText({
+    const result = await verboseGenerateText({
       model,
       system: SYSTEM_PROMPT,
       prompt,
@@ -80,8 +81,13 @@ async function evaluateSingle(prompt: string, attempt: number): Promise<EvalResu
       console.log(`✗ null output (${elapsed}s)`)
       return null
     }
+    const parsed = EvalResultSchema.safeParse(result.output)
+    if (!parsed.success) {
+      console.log(`✗ parse error (${elapsed}s)`)
+      return null
+    }
     console.log(`✓ (${elapsed}s)`)
-    return result.output
+    return parsed.data
   } catch (error) {
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
     console.log(`✗ ${error instanceof Error ? error.message : String(error)} (${elapsed}s)`)
