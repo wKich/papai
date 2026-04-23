@@ -128,7 +128,7 @@ describe('progress logging', () => {
     expect(messages.some((m) => m.startsWith('[fix] "Missing error handling"'))).toBe(true)
     expect(messages).toContain('[round 1] Fixed 1/1 issues this round')
     expect(messages).toContain('[round 1] Re-review: 0 issues remaining')
-    expect(messages).toContain('[done] clean')
+    expect(messages).toContain('[done] clean after 1 round')
   })
 
   test('logs stall warning when no issues are fixed', async () => {

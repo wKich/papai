@@ -10,10 +10,10 @@ import { createRunState } from '../../scripts/review-loop/run-state.js'
 
 const tempDirs: string[] = []
 
-const createSilentLog = () => {
+const createSilentLog = (): { log: (message: string) => void; messages: string[] } => {
   const messages: string[] = []
   return {
-    log: (message: string) => {
+    log: (message: string): void => {
       messages.push(message)
     },
     messages,
