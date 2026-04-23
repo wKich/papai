@@ -21,13 +21,10 @@ type ClassifiedBehavior = {
   readonly behaviorId: string
   readonly testKey: string
   readonly domain: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
   readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
   readonly candidateFeatureKey: string | null
   readonly featureKey: string | null
-  readonly candidateFeatureLabel: string | null
+  readonly featureLabel: string | null
   readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
   readonly relatedBehaviorHints: readonly {
     readonly testKey: string
@@ -260,6 +257,7 @@ export function createClassifiedBehaviorFixture(
     ...input,
     candidateFeatureKey: resolvedFeatureKey,
     featureKey: resolvedFeatureKey,
+    featureLabel: input.featureLabel ?? null,
   }
 }
 
@@ -358,6 +356,10 @@ export function createConsolidatedManifestEntry(
         | 'candidateFeatureKey'
         | 'keywords'
         | 'sourceDomains'
+        | 'consolidatedArtifactPath'
+        | 'evaluatedArtifactPath'
+        | 'phase3Fingerprint'
+        | 'lastEvaluatedAt'
       >
     >,
 ): ConsolidatedManifestEntry {
@@ -366,8 +368,12 @@ export function createConsolidatedManifestEntry(
     supportingInternalBehaviorIds: [],
     featureKey: null,
     candidateFeatureKey: null,
+    consolidatedArtifactPath: null,
+    evaluatedArtifactPath: null,
     keywords: [],
     sourceDomains: [],
+    phase3Fingerprint: null,
+    lastEvaluatedAt: null,
     ...input,
   }
 }

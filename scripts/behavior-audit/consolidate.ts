@@ -1,8 +1,15 @@
+import { relative } from 'node:path'
+
 import pLimit from 'p-limit'
 
-import { MAX_RETRIES } from './config.js'
+import { consolidatedArtifactPathForFeatureKey } from './artifact-paths.js'
+import type { ClassifiedBehavior } from './classified-store.js'
+import { readClassifiedFile } from './classified-store.js'
+import { MAX_RETRIES, PROJECT_ROOT } from './config.js'
 import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
-import type { ConsolidatedManifest } from './incremental.js'
+import type { ExtractedBehaviorRecord } from './extracted-store.js'
+import { readExtractedFile } from './extracted-store.js'
+import type { ConsolidatedManifest, IncrementalManifest, ManifestTestEntry } from './incremental.js'
 import { buildPhase2ConsolidationFingerprint } from './incremental.js'
 import type { Progress } from './progress.js'
 import { getFailedBatchAttempts, markBatchDone, markBatchFailed, resetPhase3, saveProgress } from './progress.js'
@@ -14,28 +21,12 @@ type ConsolidateWithRetry = typeof import('./consolidate-agent.js').consolidateW
 interface Phase2bDeps {
   readonly consolidateWithRetry: ConsolidateWithRetry
   readonly writeConsolidatedFile: typeof writeConsolidatedFile
+  readonly readExtractedFile: typeof readExtractedFile
+  readonly readClassifiedFile: typeof readClassifiedFile
 }
 
-interface LegacyClassifiedBehavior {
-  readonly behaviorId: string
-  readonly testKey: string
-  readonly domain: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-  readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
-  readonly candidateFeatureKey: string | null
-  readonly candidateFeatureLabel: string | null
-}
-
-function isClassifiedBehaviorMap(value: unknown): value is Readonly<Record<string, LegacyClassifiedBehavior>> {
-  return typeof value === 'object' && value !== null
-}
-
-function getLegacyClassifiedBehaviors(progress: Progress): Readonly<Record<string, LegacyClassifiedBehavior>> {
-  return 'classifiedBehaviors' in progress.phase2a && isClassifiedBehaviorMap(progress.phase2a['classifiedBehaviors'])
-    ? progress.phase2a['classifiedBehaviors']
-    : {}
+interface JoinedBehaviorInput extends ConsolidateBehaviorInput {
+  readonly featureKey: string
 }
 
 const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
@@ -43,34 +34,111 @@ const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
   return consolidateWithRetry(...args)
 }
 
-function groupByCandidateFeature(
-  classified: Readonly<Record<string, LegacyClassifiedBehavior>>,
-  selectedCandidateFeatureKeys: ReadonlySet<string>,
-): ReadonlyMap<string, readonly ConsolidateBehaviorInput[]> {
-  const grouped = new Map<string, ConsolidateBehaviorInput[]>()
-  for (const item of Object.values(classified)) {
-    if (item.candidateFeatureKey === null) continue
-    if (selectedCandidateFeatureKeys.size > 0 && !selectedCandidateFeatureKeys.has(item.candidateFeatureKey)) continue
-    grouped.set(item.candidateFeatureKey, [
-      ...(grouped.get(item.candidateFeatureKey) ?? []),
-      {
-        behaviorId: item.behaviorId,
-        testKey: item.testKey,
-        domain: item.domain,
-        visibility: item.visibility,
-        candidateFeatureKey: item.candidateFeatureKey,
-        candidateFeatureLabel: item.candidateFeatureLabel,
-        behavior: item.behavior,
-        context: item.context,
-        keywords: item.keywords,
-      },
-    ])
+const defaultPhase2bDeps: Phase2bDeps = {
+  consolidateWithRetry: defaultConsolidateWithRetry,
+  writeConsolidatedFile,
+  readExtractedFile,
+  readClassifiedFile,
+}
+
+function getManifestFeatureKey(entry: ManifestTestEntry): string | null {
+  return entry.featureKey ?? entry.candidateFeatureKey ?? null
+}
+
+function getManifestBehaviorId(testKey: string, entry: ManifestTestEntry): string {
+  return entry.behaviorId ?? testKey
+}
+
+function getSelectedManifestEntries(
+  manifest: IncrementalManifest,
+  selectedFeatureKeys: ReadonlySet<string>,
+): readonly (readonly [string, ManifestTestEntry])[] {
+  return Object.entries(manifest.tests).filter(([, entry]) => {
+    const featureKey = getManifestFeatureKey(entry)
+    if (featureKey === null || entry.classifiedArtifactPath === null || entry.extractedArtifactPath === null) {
+      return false
+    }
+    return selectedFeatureKeys.size === 0 || selectedFeatureKeys.has(featureKey)
+  })
+}
+
+async function loadJoinedInput(input: {
+  readonly testKey: string
+  readonly entry: ManifestTestEntry
+  readonly deps: Phase2bDeps
+}): Promise<JoinedBehaviorInput | null> {
+  const featureKey = getManifestFeatureKey(input.entry)
+  if (featureKey === null) {
+    return null
   }
-  return grouped
+
+  const [extractedRecords, classifiedRecords] = await Promise.all([
+    input.deps.readExtractedFile(input.entry.testFile),
+    input.deps.readClassifiedFile(input.entry.testFile),
+  ])
+
+  if (extractedRecords === null || classifiedRecords === null) {
+    return null
+  }
+
+  const behaviorId = getManifestBehaviorId(input.testKey, input.entry)
+  const extractedRecord = findExtractedRecord(extractedRecords, behaviorId, input.testKey)
+  const classifiedRecord = findClassifiedRecord(classifiedRecords, behaviorId, input.testKey)
+  if (extractedRecord === null || classifiedRecord === null || classifiedRecord.featureKey === null) {
+    return null
+  }
+
+  return {
+    behaviorId,
+    testKey: input.testKey,
+    domain: classifiedRecord.domain,
+    visibility: classifiedRecord.visibility,
+    candidateFeatureKey: classifiedRecord.featureKey,
+    candidateFeatureLabel: classifiedRecord.featureLabel,
+    behavior: extractedRecord.behavior,
+    context: extractedRecord.context,
+    keywords: extractedRecord.keywords,
+    featureKey: classifiedRecord.featureKey,
+  }
+}
+
+function findExtractedRecord(
+  extractedRecords: readonly ExtractedBehaviorRecord[],
+  behaviorId: string,
+  testKey: string,
+): ExtractedBehaviorRecord | null {
+  return extractedRecords.find((item) => item.behaviorId === behaviorId || item.testKey === testKey) ?? null
+}
+
+function findClassifiedRecord(
+  classifiedRecords: readonly ClassifiedBehavior[],
+  behaviorId: string,
+  testKey: string,
+): ClassifiedBehavior | null {
+  return classifiedRecords.find((item) => item.behaviorId === behaviorId || item.testKey === testKey) ?? null
+}
+
+async function loadGroupedInputs(
+  manifest: IncrementalManifest,
+  selectedFeatureKeys: ReadonlySet<string>,
+  deps: Phase2bDeps,
+): Promise<ReadonlyMap<string, readonly ConsolidateBehaviorInput[]>> {
+  const joinedInputs = await Promise.all(
+    getSelectedManifestEntries(manifest, selectedFeatureKeys).map(([testKey, entry]) =>
+      loadJoinedInput({ testKey, entry, deps }),
+    ),
+  )
+
+  return joinedInputs
+    .filter((item): item is JoinedBehaviorInput => item !== null)
+    .reduce((grouped, item) => {
+      grouped.set(item.featureKey, [...(grouped.get(item.featureKey) ?? []), item])
+      return grouped
+    }, new Map<string, ConsolidateBehaviorInput[]>())
 }
 
 function buildConsolidatedDomain(inputs: readonly ConsolidateBehaviorInput[]): string {
-  const domains = [...new Set(inputs.map((input) => input.domain))].toSorted()
+  const domains = [...new Set(inputs.map((item) => item.domain))].toSorted()
   return domains.length === 1 ? (domains[0] ?? 'unknown') : 'cross-domain'
 }
 
@@ -95,71 +163,80 @@ function toConsolidations(
 
 function updateManifestEntries(input: {
   readonly currentEntries: ConsolidatedManifest['entries']
-  readonly candidateFeatureKey: string
+  readonly featureKey: string
   readonly inputs: readonly ConsolidateBehaviorInput[]
   readonly consolidations: readonly ConsolidatedBehavior[]
   readonly phase2Version: string
 }): ConsolidatedManifest['entries'] {
+  const baseEntries = Object.fromEntries(
+    Object.entries(input.currentEntries).filter(
+      ([, entry]) => (entry.featureKey ?? entry.candidateFeatureKey) !== input.featureKey,
+    ),
+  )
   const keywords = [...new Set(input.inputs.flatMap((item) => item.keywords))].toSorted()
   const sourceDomains = [...new Set(input.inputs.map((item) => item.domain))].toSorted()
-  return input.consolidations.reduce(
-    (entries, consolidated) => ({
-      ...entries,
-      [consolidated.id]: {
-        consolidatedId: consolidated.id,
-        domain: consolidated.domain,
-        featureName: consolidated.featureName,
-        sourceTestKeys: consolidated.sourceTestKeys,
+  const consolidatedArtifactPath = relative(PROJECT_ROOT, consolidatedArtifactPathForFeatureKey(input.featureKey))
+  const lastConsolidatedAt = new Date().toISOString()
+
+  return input.consolidations.reduce((entries, consolidated) => {
+    entries[consolidated.id] = {
+      consolidatedId: consolidated.id,
+      domain: consolidated.domain,
+      featureName: consolidated.featureName,
+      consolidatedArtifactPath,
+      evaluatedArtifactPath: null,
+      sourceTestKeys: consolidated.sourceTestKeys,
+      sourceBehaviorIds: consolidated.sourceBehaviorIds,
+      supportingInternalBehaviorIds: consolidated.supportingInternalRefs.map((item) => item.behaviorId),
+      isUserFacing: consolidated.isUserFacing,
+      featureKey: input.featureKey,
+      candidateFeatureKey: input.featureKey,
+      keywords,
+      sourceDomains,
+      phase2Fingerprint: buildPhase2ConsolidationFingerprint({
+        featureKey: input.featureKey,
         sourceBehaviorIds: consolidated.sourceBehaviorIds,
-        supportingInternalBehaviorIds: consolidated.supportingInternalRefs.map((item) => item.behaviorId),
-        isUserFacing: consolidated.isUserFacing,
-        featureKey: input.candidateFeatureKey,
-        candidateFeatureKey: input.candidateFeatureKey,
-        keywords,
-        sourceDomains,
-        phase2Fingerprint: buildPhase2ConsolidationFingerprint({
-          featureKey: input.candidateFeatureKey,
-          sourceBehaviorIds: consolidated.sourceBehaviorIds,
-          behaviors: input.inputs.map((item) => item.behavior),
-          phaseVersion: input.phase2Version,
-        }),
-        lastConsolidatedAt: new Date().toISOString(),
-      },
-    }),
-    input.currentEntries,
-  )
+        behaviors: input.inputs.map((item) => item.behavior),
+        phaseVersion: input.phase2Version,
+      }),
+      phase3Fingerprint: null,
+      lastConsolidatedAt,
+      lastEvaluatedAt: null,
+    }
+    return entries
+  }, baseEntries)
 }
 
-async function consolidateCandidateFeature(input: {
+async function consolidateFeatureKey(input: {
   readonly progress: Progress
   readonly consolidatedManifest: ConsolidatedManifest
   readonly phase2Version: string
-  readonly candidateFeatureKey: string
+  readonly featureKey: string
   readonly inputs: readonly ConsolidateBehaviorInput[]
   readonly deps: Phase2bDeps
 }): Promise<ConsolidatedManifest> {
-  const failedAttempts = getFailedBatchAttempts(input.progress, input.candidateFeatureKey)
+  const failedAttempts = getFailedBatchAttempts(input.progress, input.featureKey)
   if (failedAttempts >= MAX_RETRIES) {
     return input.consolidatedManifest
   }
 
-  const result = await input.deps.consolidateWithRetry(input.candidateFeatureKey, input.inputs, failedAttempts)
+  const result = await input.deps.consolidateWithRetry(input.featureKey, input.inputs, failedAttempts)
   if (result === null) {
-    markBatchFailed(input.progress, input.candidateFeatureKey, 'consolidation failed after retries', failedAttempts + 1)
+    markBatchFailed(input.progress, input.featureKey, 'consolidation failed after retries', failedAttempts + 1)
     await saveProgress(input.progress)
     return input.consolidatedManifest
   }
 
   const consolidations = toConsolidations(result, input.inputs)
-  await input.deps.writeConsolidatedFile(input.candidateFeatureKey, consolidations)
-  markBatchDone(input.progress, input.candidateFeatureKey, consolidations)
+  await input.deps.writeConsolidatedFile(input.featureKey, consolidations)
+  markBatchDone(input.progress, input.featureKey, consolidations)
   await saveProgress(input.progress)
 
   return {
     ...input.consolidatedManifest,
     entries: updateManifestEntries({
       currentEntries: input.consolidatedManifest.entries,
-      candidateFeatureKey: input.candidateFeatureKey,
+      featureKey: input.featureKey,
       inputs: input.inputs,
       consolidations,
       phase2Version: input.phase2Version,
@@ -172,11 +249,11 @@ export async function runPhase2b(
   consolidatedManifest: ConsolidatedManifest,
   phase2Version: string,
   selectedCandidateFeatureKeys: ReadonlySet<string>,
-  deps: Phase2bDeps = { consolidateWithRetry: defaultConsolidateWithRetry, writeConsolidatedFile },
+  manifest: IncrementalManifest,
+  deps: Partial<Phase2bDeps> = {},
 ): Promise<ConsolidatedManifest> {
-  const groups = [
-    ...groupByCandidateFeature(getLegacyClassifiedBehaviors(progress), selectedCandidateFeatureKeys).entries(),
-  ]
+  const resolvedDeps: Phase2bDeps = { ...defaultPhase2bDeps, ...deps }
+  const groups = [...(await loadGroupedInputs(manifest, selectedCandidateFeatureKeys, resolvedDeps)).entries()]
   progress.phase2b.status = 'in-progress'
   progress.phase2b.stats.featureKeysTotal = groups.length
   resetPhase3(progress)
@@ -185,15 +262,15 @@ export async function runPhase2b(
   const limit = pLimit(1)
   let currentManifest = consolidatedManifest
   await Promise.all(
-    groups.map(([candidateFeatureKey, inputs]) =>
+    groups.map(([featureKey, inputs]) =>
       limit(async () => {
-        currentManifest = await consolidateCandidateFeature({
+        currentManifest = await consolidateFeatureKey({
           progress,
           consolidatedManifest: currentManifest,
           phase2Version,
-          candidateFeatureKey,
+          featureKey,
           inputs,
-          deps,
+          deps: resolvedDeps,
         })
       }),
     ),

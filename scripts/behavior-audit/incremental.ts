@@ -1,10 +1,17 @@
-import { createHash } from 'node:crypto'
 import { mkdir, rename } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
 import { CONSOLIDATED_MANIFEST_PATH, INCREMENTAL_MANIFEST_PATH, PROJECT_ROOT } from './config.js'
+export {
+  buildPhase1Fingerprint,
+  buildPhase2Fingerprint,
+  buildPhase2aFingerprint,
+  buildPhase2ConsolidationFingerprint,
+  buildPhase3EvaluationFingerprint,
+  hashText,
+} from './fingerprints.js'
 
 export interface ManifestTestEntry {
   readonly testFile: string
@@ -53,6 +60,8 @@ export interface ConsolidatedManifestEntry {
   readonly consolidatedId: string
   readonly domain: string
   readonly featureName: string
+  readonly consolidatedArtifactPath?: string | null
+  readonly evaluatedArtifactPath?: string | null
   readonly sourceTestKeys: readonly string[]
   readonly sourceBehaviorIds: readonly string[]
   readonly supportingInternalBehaviorIds: readonly string[]
@@ -62,36 +71,14 @@ export interface ConsolidatedManifestEntry {
   readonly keywords: readonly string[]
   readonly sourceDomains: readonly string[]
   readonly phase2Fingerprint: string | null
+  readonly phase3Fingerprint?: string | null
   readonly lastConsolidatedAt: string | null
+  readonly lastEvaluatedAt?: string | null
 }
 
 export interface ConsolidatedManifest {
   readonly version: 1
   readonly entries: Record<string, ConsolidatedManifestEntry>
-}
-
-interface Phase1FingerprintInput {
-  readonly testKey: string
-  readonly testFileHash: string
-  readonly testSource: string
-  readonly mirroredSourceHash: string | null
-  readonly phaseVersion: string
-}
-
-interface Phase2FingerprintInput {
-  readonly testKey: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-  readonly phaseVersion: string
-}
-
-interface Phase2aFingerprintInput {
-  readonly testKey: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-  readonly phaseVersion: string
 }
 
 const ManifestTestEntrySchema = z.object({
@@ -103,7 +90,9 @@ const ManifestTestEntrySchema = z.object({
   phase2Fingerprint: z.string().nullable(),
   behaviorId: z.string().nullable().default(null),
   featureKey: z.string().nullable().default(null),
+  candidateFeatureKey: z.string().nullable().optional(),
   extractedArtifactPath: z.string().nullable(),
+  extractedBehaviorPath: z.string().nullable().optional(),
   classifiedArtifactPath: z.string().nullable().default(null),
   domain: z.string(),
   lastPhase1CompletedAt: z.string().nullable(),
@@ -130,15 +119,20 @@ const ConsolidatedManifestEntrySchema = z.object({
   consolidatedId: z.string(),
   domain: z.string(),
   featureName: z.string(),
+  consolidatedArtifactPath: z.string().nullable().default(null),
+  evaluatedArtifactPath: z.string().nullable().default(null),
   sourceTestKeys: z.array(z.string()),
   sourceBehaviorIds: z.array(z.string()).default([]),
   supportingInternalBehaviorIds: z.array(z.string()).default([]),
   isUserFacing: z.boolean(),
   featureKey: z.string().nullable().default(null),
+  candidateFeatureKey: z.string().nullable().optional(),
   keywords: z.array(z.string()).default([]),
   sourceDomains: z.array(z.string()).default([]),
   phase2Fingerprint: z.string().nullable(),
+  phase3Fingerprint: z.string().nullable().default(null),
   lastConsolidatedAt: z.string().nullable(),
+  lastEvaluatedAt: z.string().nullable().default(null),
 })
 
 const ConsolidatedManifestSchema = z.object({
@@ -177,26 +171,6 @@ export function captureRunStart(
       lastStartedAt: startedAt,
     },
   }
-}
-
-function sha256Json(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
-}
-
-export function hashText(text: string): string {
-  return createHash('sha256').update(text).digest('hex')
-}
-
-export function buildPhase1Fingerprint(input: Phase1FingerprintInput): string {
-  return sha256Json(input)
-}
-
-export function buildPhase2Fingerprint(input: Phase2FingerprintInput): string {
-  return sha256Json(input)
-}
-
-export function buildPhase2aFingerprint(input: Phase2aFingerprintInput): string {
-  return sha256Json(input)
 }
 
 function splitGitPathOutput(output: Uint8Array): readonly string[] {
@@ -279,13 +253,4 @@ export async function saveConsolidatedManifest(manifest: ConsolidatedManifest): 
   await mkdir(manifestDir, { recursive: true })
   await Bun.write(tempPath, JSON.stringify(parsed, null, 2) + '\n')
   await rename(tempPath, CONSOLIDATED_MANIFEST_PATH)
-}
-
-export function buildPhase2ConsolidationFingerprint(input: {
-  readonly featureKey: string
-  readonly sourceBehaviorIds: readonly string[]
-  readonly behaviors: readonly string[]
-  readonly phaseVersion: string
-}): string {
-  return sha256Json(input)
 }

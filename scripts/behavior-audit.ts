@@ -111,7 +111,8 @@ async function runPhase2bIfNeeded(
   selectedCandidateFeatureKeys: ReadonlySet<string>,
 ): Promise<import('./behavior-audit/incremental.js').ConsolidatedManifest> {
   const existingManifest = (await loadConsolidatedManifest()) ?? createEmptyConsolidatedManifest()
-  return runPhase2b(progress, existingManifest, phase2Version, selectedCandidateFeatureKeys)
+  const currentManifest = (await loadManifest()) ?? createEmptyManifest()
+  return runPhase2b(progress, existingManifest, phase2Version, selectedCandidateFeatureKeys, currentManifest)
 }
 
 async function prepareIncrementalRun(): Promise<{

@@ -1,116 +1,154 @@
-import type { EvalResult } from './evaluate-agent.js'
+import type { EvaluatedFeatureRecord } from './evaluated-store.js'
+import type { ConsolidatedManifest } from './incremental.js'
 import type { Progress } from './progress.js'
-import type { EvaluatedBehavior } from './report-writer.js'
-import { writeIndexFile, writeStoryFile } from './report-writer.js'
+import type { DomainSummary, FailedItem } from './report-index-helpers.js'
+import { writeIndexFile, writeStoryFile, type StoryEvaluation } from './report-writer.js'
 
-function getExistingEvaluations(
-  evaluationsByDomain: ReadonlyMap<string, EvaluatedBehavior[]>,
-  domain: string,
-): readonly EvaluatedBehavior[] {
-  const existing = evaluationsByDomain.get(domain)
-  if (existing === undefined) return []
-  return existing
+type ConsolidatedStoryRecord = {
+  readonly id: string
+  readonly domain: string
+  readonly featureName: string
+  readonly isUserFacing: boolean
+  readonly behavior: string
+  readonly userStory: string | null
+  readonly context: string
+  readonly sourceTestKeys: readonly string[]
+  readonly sourceBehaviorIds: readonly string[]
+  readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
+}
+
+interface WriteReportsInput {
+  readonly consolidatedManifest: ConsolidatedManifest
+  readonly consolidatedByFeatureKey: ReadonlyMap<string, readonly ConsolidatedStoryRecord[]>
+  readonly evaluatedByFeatureKey: ReadonlyMap<string, readonly EvaluatedFeatureRecord[]>
+  readonly progress: Progress
 }
 
 function incrementCount(map: Map<string, number>, key: string): void {
-  const existing = map.get(key)
-  map.set(key, existing === undefined ? 1 : existing + 1)
+  map.set(key, (map.get(key) ?? 0) + 1)
 }
 
-export function recordEval(
-  evalResult: EvalResult,
-  input: {
-    readonly domain: string
-    readonly featureName: string
-    readonly behavior: string
-    readonly userStory: string
-  },
-  evaluationsByDomain: Map<string, EvaluatedBehavior[]>,
-  flawFreq: Map<string, number>,
-  impFreq: Map<string, number>,
-): void {
-  const evaluated: EvaluatedBehavior = {
+function toStoryEvaluation(input: {
+  readonly featureName: string
+  readonly behavior: string
+  readonly userStory: string
+  readonly evaluation: EvaluatedFeatureRecord
+}): StoryEvaluation {
+  return {
     testName: input.featureName,
     behavior: input.behavior,
     userStory: input.userStory,
-    maria: evalResult.maria,
-    dani: evalResult.dani,
-    viktor: evalResult.viktor,
-    flaws: evalResult.flaws,
-    improvements: evalResult.improvements,
+    maria: input.evaluation.maria,
+    dani: input.evaluation.dani,
+    viktor: input.evaluation.viktor,
+    flaws: input.evaluation.flaws,
+    improvements: input.evaluation.improvements,
   }
-  evaluationsByDomain.set(input.domain, [...getExistingEvaluations(evaluationsByDomain, input.domain), evaluated])
-  for (const flaw of evalResult.flaws) incrementCount(flawFreq, flaw)
-  for (const improvement of evalResult.improvements) incrementCount(impFreq, improvement)
 }
 
-export function recordStoredEvaluation(
-  evaluation: EvaluatedBehavior,
-  domain: string,
-  evaluationsByDomain: Map<string, EvaluatedBehavior[]>,
-  flawFreq: Map<string, number>,
-  impFreq: Map<string, number>,
-): void {
-  evaluationsByDomain.set(domain, [...getExistingEvaluations(evaluationsByDomain, domain), evaluation])
-  for (const flaw of evaluation.flaws) incrementCount(flawFreq, flaw)
-  for (const improvement of evaluation.improvements) incrementCount(impFreq, improvement)
-}
-
-function buildSummary(
-  domain: string,
-  evals: readonly EvaluatedBehavior[],
-): {
-  readonly domain: string
-  readonly count: number
-  readonly avgDiscover: number
-  readonly avgUse: number
-  readonly avgRetain: number
-  readonly worstPersona: string
-} {
-  const avg = (fn: (evaluation: EvaluatedBehavior) => number): number =>
-    evals.reduce((sum, evaluation) => sum + fn(evaluation), 0) / evals.length
-  const pAvg = (persona: 'maria' | 'dani' | 'viktor'): number =>
+function buildSummary(domain: string, evaluations: readonly StoryEvaluation[]): DomainSummary {
+  const avg = (fn: (evaluation: StoryEvaluation) => number): number =>
+    evaluations.reduce((sum, evaluation) => sum + fn(evaluation), 0) / evaluations.length
+  const personaAverage = (persona: 'maria' | 'dani' | 'viktor'): number =>
     avg((evaluation) => (evaluation[persona].discover + evaluation[persona].use + evaluation[persona].retain) / 3)
   const personaScores: ReadonlyArray<readonly [string, number]> = [
-    ['Maria', pAvg('maria')],
-    ['Dani', pAvg('dani')],
-    ['Viktor', pAvg('viktor')],
+    ['Maria', personaAverage('maria')],
+    ['Dani', personaAverage('dani')],
+    ['Viktor', personaAverage('viktor')],
   ]
-  const worst = personaScores.reduce((min, cur) => (cur[1] < min[1] ? cur : min))
+  const worstPersona = personaScores.reduce((min, item) => (item[1] < min[1] ? item : min))
+
   return {
     domain,
-    count: evals.length,
+    count: evaluations.length,
     avgDiscover: avg(
       (evaluation) => (evaluation.maria.discover + evaluation.dani.discover + evaluation.viktor.discover) / 3,
     ),
     avgUse: avg((evaluation) => (evaluation.maria.use + evaluation.dani.use + evaluation.viktor.use) / 3),
     avgRetain: avg((evaluation) => (evaluation.maria.retain + evaluation.dani.retain + evaluation.viktor.retain) / 3),
-    worstPersona: `${worst[0]} (${worst[1].toFixed(1)})`,
+    worstPersona: `${worstPersona[0]} (${worstPersona[1].toFixed(1)})`,
   }
 }
 
-export async function writeReports(
-  evaluationsByDomain: ReadonlyMap<string, EvaluatedBehavior[]>,
-  flawFreq: ReadonlyMap<string, number>,
-  impFreq: ReadonlyMap<string, number>,
-  progress: Progress,
-): Promise<void> {
-  await Promise.all(
-    [...evaluationsByDomain.entries()].map(([domain, evaluations]) => writeStoryFile(domain, evaluations)),
-  )
-  const summaries = [...evaluationsByDomain.entries()].map(([domain, evaluations]) => buildSummary(domain, evaluations))
-  const failedItems = Object.entries(progress.phase3.failedConsolidatedIds).map(([key, entry]) => ({
-    testFile: key.split('::')[0] ?? 'unknown',
-    testName: key.split('::').slice(1).join('::'),
+function buildFailedItems(progress: Progress): readonly FailedItem[] {
+  return Object.entries(progress.phase3.failedConsolidatedIds).map(([consolidatedId, entry]) => ({
+    testFile: consolidatedId,
+    testName: consolidatedId,
     error: entry.error,
     attempts: entry.attempts,
   }))
+}
+
+function collectStoryEvaluations(
+  input: Pick<WriteReportsInput, 'consolidatedByFeatureKey' | 'evaluatedByFeatureKey'>,
+): {
+  readonly evaluationsByDomain: ReadonlyMap<string, readonly StoryEvaluation[]>
+  readonly flawFreq: ReadonlyMap<string, number>
+  readonly improvementFreq: ReadonlyMap<string, number>
+} {
+  const evaluationsByDomain = new Map<string, StoryEvaluation[]>()
+  const flawFreq = new Map<string, number>()
+  const improvementFreq = new Map<string, number>()
+
+  for (const [featureKey, evaluations] of input.evaluatedByFeatureKey.entries()) {
+    const consolidatedRecords = input.consolidatedByFeatureKey.get(featureKey) ?? []
+    const consolidatedById = new Map(consolidatedRecords.map((record) => [record.id, record]))
+
+    for (const evaluation of evaluations) {
+      const consolidated = consolidatedById.get(evaluation.consolidatedId)
+      if (consolidated === undefined || consolidated.userStory === null || !consolidated.isUserFacing) {
+        continue
+      }
+
+      const storyEvaluation = toStoryEvaluation({
+        featureName: consolidated.featureName,
+        behavior: consolidated.behavior,
+        userStory: consolidated.userStory,
+        evaluation,
+      })
+      evaluationsByDomain.set(consolidated.domain, [
+        ...(evaluationsByDomain.get(consolidated.domain) ?? []),
+        storyEvaluation,
+      ])
+      for (const flaw of storyEvaluation.flaws) incrementCount(flawFreq, flaw)
+      for (const improvement of storyEvaluation.improvements) incrementCount(improvementFreq, improvement)
+    }
+  }
+
+  return { evaluationsByDomain, flawFreq, improvementFreq }
+}
+
+async function writeStoryReports(evaluationsByDomain: ReadonlyMap<string, readonly StoryEvaluation[]>): Promise<void> {
+  await Promise.all(
+    [...evaluationsByDomain.entries()].map(([domain, evaluations]) =>
+      writeStoryFile(
+        domain,
+        [...evaluations].toSorted((a, b) => a.testName.localeCompare(b.testName)),
+      ),
+    ),
+  )
+}
+
+function buildSummaries(
+  evaluationsByDomain: ReadonlyMap<string, readonly StoryEvaluation[]>,
+): readonly DomainSummary[] {
+  return [...evaluationsByDomain.entries()]
+    .map(([domain, evaluations]) => buildSummary(domain, evaluations))
+    .toSorted((a, b) => a.domain.localeCompare(b.domain))
+}
+
+export async function writeReports(input: WriteReportsInput): Promise<void> {
+  void input.consolidatedManifest
+  const { evaluationsByDomain, flawFreq, improvementFreq } = collectStoryEvaluations(input)
+  await writeStoryReports(evaluationsByDomain)
+  const summaries = buildSummaries(evaluationsByDomain)
+
   await writeIndexFile(
     summaries,
-    progress.phase3.stats.consolidatedIdsDone,
-    progress.phase3.stats.consolidatedIdsFailed,
+    input.progress.phase3.stats.consolidatedIdsDone,
+    input.progress.phase3.stats.consolidatedIdsFailed,
     flawFreq,
-    impFreq,
-    failedItems,
+    improvementFreq,
+    buildFailedItems(input.progress),
   )
 }

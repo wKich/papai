@@ -2,14 +2,15 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
+import { z } from 'zod'
+
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
 import type { ConsolidatedManifest, IncrementalSelection } from '../../scripts/behavior-audit/incremental.js'
-import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import {
   createConsolidatedManifestEntry,
   createEmptyProgressFixture,
   createIncrementalManifestFixture,
-  mockReportsConfig,
+  mockAuditBehaviorConfig,
 } from './behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
@@ -20,47 +21,52 @@ import {
 } from './behavior-audit-integration.runtime-helpers.js'
 import { loadEvaluateModule, type MockEvaluationResult } from './behavior-audit-integration.support.js'
 
-type LegacyEvaluatedBehavior = {
-  readonly testName: string
+type ConsolidatedArtifactRecord = {
+  readonly id: string
+  readonly domain: string
+  readonly featureName: string
+  readonly isUserFacing: boolean
   readonly behavior: string
-  readonly userStory: string
+  readonly userStory: string | null
+  readonly context: string
+  readonly sourceTestKeys: readonly string[]
+  readonly sourceBehaviorIds: readonly string[]
+  readonly supportingInternalRefs: readonly { readonly behaviorId: string; readonly summary: string }[]
+}
+
+type EvaluatedArtifactRecord = {
+  readonly consolidatedId: string
   readonly maria: NonNullable<MockEvaluationResult>['maria']
   readonly dani: NonNullable<MockEvaluationResult>['dani']
   readonly viktor: NonNullable<MockEvaluationResult>['viktor']
   readonly flaws: readonly string[]
   readonly improvements: readonly string[]
+  readonly evaluatedAt: string
 }
 
-type LegacyPhase3Progress = Progress & {
-  phase2b: Progress['phase2b'] & {
-    completedCandidateFeatures: Record<string, 'done'>
-  }
-  phase3: Progress['phase3'] & {
-    completedBehaviors: Record<string, 'done'>
-    evaluations: Record<string, LegacyEvaluatedBehavior>
-    stats: Progress['phase3']['stats'] & {
-      behaviorsTotal: number
-      behaviorsDone: number
-    }
-  }
+function buildRelativeArtifactPath(directory: 'consolidated' | 'evaluated', featureKey: string): string {
+  return path.join('reports', 'audit-behavior', directory, `${featureKey}.json`)
 }
 
-function createEmptyProgress(filesTotal: number): LegacyPhase3Progress {
-  const progress = createEmptyProgressFixture(filesTotal)
-  const legacyPhase2b = Object.assign(progress.phase2b, { completedCandidateFeatures: {} })
-  const legacyPhase3 = Object.assign(progress.phase3, {
-    completedBehaviors: {},
-    evaluations: {},
-    stats: {
-      ...progress.phase3.stats,
-      behaviorsTotal: 0,
-      behaviorsDone: 0,
-    },
-  })
-  return Object.assign(progress, {
-    phase2b: legacyPhase2b,
-    phase3: legacyPhase3,
-  })
+async function writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
+  mkdirSync(path.dirname(filePath), { recursive: true })
+  await Bun.write(filePath, JSON.stringify(value, null, 2) + '\n')
+}
+
+async function readEvaluatedArtifact(root: string, featureKey: string): Promise<readonly EvaluatedArtifactRecord[]> {
+  const filePath = path.join(root, buildRelativeArtifactPath('evaluated', featureKey))
+  const EvaluatedArtifactRecordSchema = z
+    .object({
+      consolidatedId: z.string(),
+      maria: z.object({ discover: z.number(), use: z.number(), retain: z.number(), notes: z.string() }),
+      dani: z.object({ discover: z.number(), use: z.number(), retain: z.number(), notes: z.string() }),
+      viktor: z.object({ discover: z.number(), use: z.number(), retain: z.number(), notes: z.string() }),
+      flaws: z.array(z.string()),
+      improvements: z.array(z.string()),
+      evaluatedAt: z.string(),
+    })
+    .readonly()
+  return z.array(EvaluatedArtifactRecordSchema).parse(JSON.parse(await Bun.file(filePath).text()))
 }
 
 function createEvaluationResult(input: {
@@ -96,187 +102,145 @@ afterEach(() => {
 
 describe('behavior-audit phase 3 incremental selection', () => {
   let root: string
-  let reportsDir: string
+  let auditRoot: string
   let progressPath: string
-  let consolidatedDir: string
 
   beforeEach(() => {
     root = makeTempDir()
-    reportsDir = path.join(root, 'reports')
-    progressPath = path.join(reportsDir, 'progress.json')
-    consolidatedDir = path.join(reportsDir, 'consolidated')
-    mkdirSync(consolidatedDir, { recursive: true })
+    auditRoot = path.join(root, 'reports', 'audit-behavior')
+    progressPath = path.join(auditRoot, 'progress.json')
 
-    mockReportsConfig(root, {
+    mockAuditBehaviorConfig(root, {
       PROGRESS_PATH: progressPath,
-      CONSOLIDATED_DIR: consolidatedDir,
     })
   })
 
-  test('runPhase3 only evaluates selected consolidated ids and preserves stored unselected evaluations', async () => {
+  test('runPhase3 writes evaluated artifacts for selected consolidated ids and preserves checkpoint-only progress', async () => {
     const evaluate = await loadEvaluateModule(crypto.randomUUID())
-    const selectedKey = 'tools::selected-case'
-    const unselectedKey = 'tools::unselected-case'
-    const progress = createEmptyProgress(1)
-    await Bun.write(
-      path.join(consolidatedDir, 'tools.json'),
-      JSON.stringify(
-        [
-          {
-            id: selectedKey,
-            domain: 'tools',
-            featureName: 'selected case',
-            isUserFacing: true,
-            behavior: 'When the selected behavior runs, the bot returns fresh results.',
-            userStory: 'As a user, I get the selected behavior outcome.',
-            context: 'Selected context for phase 3.',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-          },
-          {
-            id: unselectedKey,
-            domain: 'tools',
-            featureName: 'unselected case',
-            isUserFacing: true,
-            behavior: 'When the unselected behavior runs, the bot keeps prior results.',
-            userStory: 'Existing unselected story',
-            context: 'Unselected context for phase 3.',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > unselected case'],
-          },
-        ],
-        null,
-        2,
-      ) + '\n',
-    )
-
-    progress.phase2b.completedCandidateFeatures['tools'] = 'done'
-    progress.phase3.evaluations[unselectedKey] = {
-      testName: 'suite > unselected case',
-      behavior: 'When the unselected behavior runs, the bot keeps prior results.',
-      userStory: 'Existing unselected story',
-      maria: { discover: 2, use: 2, retain: 2, notes: 'Existing Maria notes' },
-      dani: { discover: 2, use: 2, retain: 2, notes: 'Existing Dani notes' },
-      viktor: { discover: 2, use: 2, retain: 2, notes: 'Existing Viktor notes' },
-      flaws: ['Existing flaw'],
-      improvements: ['Existing improvement'],
+    const selectedId = 'task-creation::selected-case'
+    const featureKey = 'task-creation'
+    const progress = createEmptyProgressFixture(1)
+    const consolidatedManifest: ConsolidatedManifest = {
+      version: 1,
+      entries: {
+        [selectedId]: createConsolidatedManifestEntry({
+          consolidatedId: selectedId,
+          domain: 'tools',
+          featureName: 'Selected case',
+          sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+          sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+          supportingInternalBehaviorIds: [],
+          isUserFacing: true,
+          featureKey,
+          consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', featureKey),
+          evaluatedArtifactPath: null,
+          keywords: ['task-create'],
+          sourceDomains: ['tools'],
+          phase2Fingerprint: 'phase2-fp',
+          phase3Fingerprint: null,
+          lastConsolidatedAt: '2026-04-21T12:00:00.000Z',
+          lastEvaluatedAt: null,
+        }),
+      },
     }
-    progress.phase3.completedBehaviors[unselectedKey] = 'done'
+
+    await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', featureKey)), [
+      {
+        id: selectedId,
+        domain: 'tools',
+        featureName: 'Selected case',
+        isUserFacing: true,
+        behavior: 'When the selected behavior runs, the bot returns fresh results.',
+        userStory: 'As a user, I get the selected behavior outcome.',
+        context: 'Selected context for phase 3.',
+        sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+        sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+        supportingInternalRefs: [],
+      } satisfies ConsolidatedArtifactRecord,
+    ])
 
     await evaluate.runPhase3(
       {
         progress,
-        selectedConsolidatedIds: new Set([selectedKey]),
-        consolidatedManifest: {
-          version: 1,
-          entries: {
-            [selectedKey]: {
-              consolidatedId: selectedKey,
-              domain: 'tools',
-              featureName: 'selected case',
-              sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
-              supportingInternalBehaviorIds: [],
-              isUserFacing: true,
-              candidateFeatureKey: null,
-              keywords: [],
-              sourceDomains: ['tools'],
-              phase2Fingerprint: null,
-              lastConsolidatedAt: null,
-            },
-            [unselectedKey]: {
-              consolidatedId: unselectedKey,
-              domain: 'tools',
-              featureName: 'unselected case',
-              sourceTestKeys: ['tests/tools/sample.test.ts::suite > unselected case'],
-              sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > unselected case'],
-              supportingInternalBehaviorIds: [],
-              isUserFacing: true,
-              candidateFeatureKey: null,
-              keywords: [],
-              sourceDomains: ['tools'],
-              phase2Fingerprint: null,
-              lastConsolidatedAt: null,
-            },
-          },
-        },
+        selectedConsolidatedIds: new Set([selectedId]),
+        consolidatedManifest,
       },
       {
         evaluateWithRetry: () =>
           Promise.resolve(
             createEvaluationResult({
-              maria: { discover: 1, use: 1, retain: 1, notes: 'Injected Maria notes' },
-              dani: { discover: 1, use: 1, retain: 1, notes: 'Injected Dani notes' },
-              viktor: { discover: 1, use: 1, retain: 1, notes: 'Injected Viktor notes' },
-              flaws: ['Injected flaw'],
-              improvements: ['Injected improvement'],
+              maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
+              dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
+              viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
+              flaws: ['Selected flaw'],
+              improvements: ['Selected improvement'],
             }),
           ),
       },
     )
 
-    const selectedEvaluation = progress.phase3.evaluations[selectedKey]
-    if (selectedEvaluation === undefined) {
-      throw new Error('Expected selected evaluation to be stored')
-    }
-    const unselectedEvaluation = progress.phase3.evaluations[unselectedKey]
-    if (unselectedEvaluation === undefined) {
-      throw new Error('Expected unselected evaluation to remain stored')
-    }
-    expect(progress.phase3.completedBehaviors[selectedKey]).toBe('done')
-    expect(selectedEvaluation.userStory).toBe('As a user, I get the selected behavior outcome.')
-    expect(selectedEvaluation.flaws).toEqual(['Injected flaw'])
-    expect(unselectedEvaluation.userStory).toBe('Existing unselected story')
+    expect(progress.phase3.completedConsolidatedIds[selectedId]).toBe('done')
+    expect(progress.phase3).not.toHaveProperty('evaluations')
 
-    const storyFileText = await Bun.file(path.join(reportsDir, 'stories', 'tools.md')).text()
-    expect(storyFileText).toContain('selected case')
-    expect(storyFileText).toContain('suite > unselected case')
+    const evaluatedRecords = await readEvaluatedArtifact(root, featureKey)
+    expect(evaluatedRecords).toHaveLength(1)
+    expect(evaluatedRecords[0]).toMatchObject({
+      consolidatedId: selectedId,
+      maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
+      dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
+      viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
+      flaws: ['Selected flaw'],
+      improvements: ['Selected improvement'],
+    })
+    expect(typeof evaluatedRecords[0]?.evaluatedAt).toBe('string')
   })
 
-  test('runPhase3 saves progress after storing a selected evaluation', async () => {
+  test('runPhase3 persists evaluation artifacts instead of writing user stories into progress checkpoints', async () => {
     const evaluate = await loadEvaluateModule(crypto.randomUUID())
-    const selectedKey = 'tools::selected-case'
-    const progress = createEmptyProgress(1)
-    progress.phase2b.completedCandidateFeatures['tools'] = 'done'
-    await Bun.write(
-      path.join(consolidatedDir, 'tools.json'),
-      JSON.stringify(
-        [
-          {
-            id: selectedKey,
-            domain: 'tools',
-            featureName: 'selected case',
-            isUserFacing: true,
-            behavior: 'When the selected behavior runs, the bot returns fresh results.',
-            userStory: 'As a user, I get the selected behavior outcome.',
-            context: 'Selected context for phase 3.',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-          },
-        ],
-        null,
-        2,
-      ) + '\n',
-    )
+    const selectedId = 'task-creation::selected-case'
+    const featureKey = 'task-creation'
+    const progress = createEmptyProgressFixture(1)
+
+    await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', featureKey)), [
+      {
+        id: selectedId,
+        domain: 'tools',
+        featureName: 'Selected case',
+        isUserFacing: true,
+        behavior: 'When the selected behavior runs, the bot returns fresh results.',
+        userStory: 'As a user, I get the selected behavior outcome.',
+        context: 'Selected context for phase 3.',
+        sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+        sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+        supportingInternalRefs: [],
+      } satisfies ConsolidatedArtifactRecord,
+    ])
 
     await evaluate.runPhase3(
       {
         progress,
-        selectedConsolidatedIds: new Set([selectedKey]),
+        selectedConsolidatedIds: new Set([selectedId]),
         consolidatedManifest: {
           version: 1,
           entries: {
-            [selectedKey]: {
-              consolidatedId: selectedKey,
+            [selectedId]: createConsolidatedManifestEntry({
+              consolidatedId: selectedId,
               domain: 'tools',
-              featureName: 'selected case',
+              featureName: 'Selected case',
               sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
               sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
               supportingInternalBehaviorIds: [],
               isUserFacing: true,
-              candidateFeatureKey: null,
-              keywords: [],
+              featureKey,
+              consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', featureKey),
+              evaluatedArtifactPath: null,
+              keywords: ['task-create'],
               sourceDomains: ['tools'],
-              phase2Fingerprint: null,
-              lastConsolidatedAt: null,
-            },
+              phase2Fingerprint: 'phase2-fp',
+              phase3Fingerprint: null,
+              lastConsolidatedAt: '2026-04-21T12:00:00.000Z',
+              lastEvaluatedAt: null,
+            }),
           },
         },
       },
@@ -295,58 +259,56 @@ describe('behavior-audit phase 3 incremental selection', () => {
     )
 
     const progressText = await Bun.file(progressPath).text()
-    expect(progressText).toContain('As a user, I get the selected behavior outcome.')
+    expect(progressText).not.toContain('As a user, I get the selected behavior outcome.')
   })
 
   test('runPhase3 evaluates newly generated consolidated ids even when selection was based on stale ids', async () => {
     const evaluate = await loadEvaluateModule(crypto.randomUUID())
-    const staleSelectedKey = 'tools::old-selected-case'
-    const freshSelectedKey = 'tools::fresh-selected-case'
-    const progress = createEmptyProgress(1)
+    const staleSelectedId = 'task-creation::old-selected-case'
+    const freshSelectedId = 'task-creation::fresh-selected-case'
+    const featureKey = 'task-creation'
+    const progress = createEmptyProgressFixture(1)
 
-    await Bun.write(
-      path.join(consolidatedDir, 'tools.json'),
-      JSON.stringify(
-        [
-          {
-            id: freshSelectedKey,
-            domain: 'tools',
-            featureName: 'fresh selected case',
-            isUserFacing: true,
-            behavior: 'When the fresh behavior runs, the bot returns the regenerated output.',
-            userStory: 'As a user, I get the regenerated selected behavior outcome.',
-            context: 'Fresh context for phase 3.',
-            sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
-            sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
-            supportingInternalRefs: [],
-          },
-        ],
-        null,
-        2,
-      ) + '\n',
-    )
+    await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', featureKey)), [
+      {
+        id: freshSelectedId,
+        domain: 'tools',
+        featureName: 'Fresh selected case',
+        isUserFacing: true,
+        behavior: 'When the fresh behavior runs, the bot returns the regenerated output.',
+        userStory: 'As a user, I get the regenerated selected behavior outcome.',
+        context: 'Fresh context for phase 3.',
+        sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
+        sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
+        supportingInternalRefs: [],
+      } satisfies ConsolidatedArtifactRecord,
+    ])
 
     await evaluate.runPhase3(
       {
         progress,
-        selectedConsolidatedIds: new Set([staleSelectedKey]),
+        selectedConsolidatedIds: new Set([staleSelectedId]),
         consolidatedManifest: {
           version: 1,
           entries: {
-            [freshSelectedKey]: {
-              consolidatedId: freshSelectedKey,
+            [freshSelectedId]: createConsolidatedManifestEntry({
+              consolidatedId: freshSelectedId,
               domain: 'tools',
-              featureName: 'fresh selected case',
+              featureName: 'Fresh selected case',
               sourceTestKeys: ['tests/tools/sample.test.ts::suite > selected case'],
               sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > selected case'],
               supportingInternalBehaviorIds: [],
               isUserFacing: true,
-              candidateFeatureKey: null,
-              keywords: [],
+              featureKey,
+              consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', featureKey),
+              evaluatedArtifactPath: null,
+              keywords: ['task-create'],
               sourceDomains: ['tools'],
-              phase2Fingerprint: null,
-              lastConsolidatedAt: null,
-            },
+              phase2Fingerprint: 'phase2-fp',
+              phase3Fingerprint: null,
+              lastConsolidatedAt: '2026-04-21T12:00:00.000Z',
+              lastEvaluatedAt: null,
+            }),
           },
         },
       },
@@ -364,63 +326,59 @@ describe('behavior-audit phase 3 incremental selection', () => {
       },
     )
 
-    expect(progress.phase3.completedBehaviors[freshSelectedKey]).toBe('done')
-    const freshEvaluation = progress.phase3.evaluations[freshSelectedKey]
-    if (freshEvaluation === undefined) {
-      throw new Error('Expected fresh evaluation to be stored')
-    }
-    expect(freshEvaluation.userStory).toBe('As a user, I get the regenerated selected behavior outcome.')
+    expect(progress.phase3.completedConsolidatedIds[freshSelectedId]).toBe('done')
+    const evaluatedRecords = await readEvaluatedArtifact(root, featureKey)
+    expect(evaluatedRecords[0]?.consolidatedId).toBe(freshSelectedId)
   })
 })
 
-test('runPhase3 reads consolidated batches by candidate feature from manifest entries', async () => {
+test('runPhase3 reads consolidated artifacts using feature keys from manifest entries', async () => {
   const root = makeTempDir()
-  const reportsDir = path.join(root, 'reports')
-  const progressPath = path.join(reportsDir, 'progress.json')
 
-  mockReportsConfig(root, {
-    PROGRESS_PATH: progressPath,
+  mockAuditBehaviorConfig(root, {
     EXCLUDED_PREFIXES: [] as const,
   })
 
-  mkdirSync(path.join(reportsDir, 'consolidated'), { recursive: true })
-  await Bun.write(
-    path.join(reportsDir, 'consolidated', 'group-targeting.json'),
-    JSON.stringify([
-      {
-        id: 'group-targeting::feature',
-        domain: 'cross-domain',
-        featureName: 'Shared group targeting',
-        isUserFacing: true,
-        behavior: 'When a user targets a group, the bot routes the request correctly.',
-        userStory: 'As a user, I can target a group.',
-        context: 'Routes through group context selection.',
-        sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
-        sourceBehaviorIds: ['tests/tools/a.test.ts::suite > case'],
-        supportingInternalRefs: [],
-      },
-    ]),
-  )
+  const featureKey = 'group-targeting'
+  const consolidatedId = 'group-targeting::feature'
+  await writeJsonArtifact(path.join(root, buildRelativeArtifactPath('consolidated', featureKey)), [
+    {
+      id: consolidatedId,
+      domain: 'cross-domain',
+      featureName: 'Shared group targeting',
+      isUserFacing: true,
+      behavior: 'When a user targets a group, the bot routes the request correctly.',
+      userStory: 'As a user, I can target a group.',
+      context: 'Routes through group context selection.',
+      sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
+      sourceBehaviorIds: ['tests/tools/a.test.ts::suite > case'],
+      supportingInternalRefs: [],
+    } satisfies ConsolidatedArtifactRecord,
+  ])
 
   const evaluate = await loadEvaluateModule(`phase3-keyword-files-${crypto.randomUUID()}`)
-  const progress = createEmptyProgress(1)
-  const consolidatedManifest = {
-    version: 1 as const,
+  const progress = createEmptyProgressFixture(1)
+  const consolidatedManifest: ConsolidatedManifest = {
+    version: 1,
     entries: {
-      'group-targeting::feature': {
-        consolidatedId: 'group-targeting::feature',
+      [consolidatedId]: createConsolidatedManifestEntry({
+        consolidatedId,
         domain: 'cross-domain',
         featureName: 'Shared group targeting',
         sourceTestKeys: ['tests/tools/a.test.ts::suite > case'],
         sourceBehaviorIds: ['tests/tools/a.test.ts::suite > case'],
         supportingInternalBehaviorIds: [],
         isUserFacing: true,
-        candidateFeatureKey: 'group-targeting',
+        featureKey,
+        consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', featureKey),
+        evaluatedArtifactPath: null,
         keywords: ['group-targeting', 'shared-feature'],
         sourceDomains: ['commands', 'tools'],
         phase2Fingerprint: 'phase2-fp',
+        phase3Fingerprint: null,
         lastConsolidatedAt: '2026-04-20T12:00:00.000Z',
-      },
+        lastEvaluatedAt: null,
+      }),
     },
   }
 
@@ -446,7 +404,7 @@ test('runPhase3 reads consolidated batches by candidate feature from manifest en
 
   expect(progress.phase3.stats.consolidatedIdsTotal).toBe(1)
   expect(progress.phase3.stats.consolidatedIdsDone).toBe(1)
-  expect(progress.phase3.evaluations['group-targeting::feature']).toBeDefined()
+  expect((await readEvaluatedArtifact(root, featureKey))[0]?.consolidatedId).toBe(consolidatedId)
 })
 
 describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
@@ -462,11 +420,15 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
           sourceBehaviorIds: ['tests/tools/sample.test.ts::suite > first case'],
           supportingInternalBehaviorIds: [],
           isUserFacing: true,
-          candidateFeatureKey: 'group-targeting' as string | null,
+          featureKey: 'group-targeting' as string | null,
+          consolidatedArtifactPath: buildRelativeArtifactPath('consolidated', 'group-targeting'),
+          evaluatedArtifactPath: buildRelativeArtifactPath('evaluated', 'group-targeting'),
           keywords: ['group-targeting'] as readonly string[],
           sourceDomains: ['tools'] as readonly string[],
           phase2Fingerprint: 'phase2-fp' as string | null,
+          phase3Fingerprint: 'phase3-fp' as string | null,
           lastConsolidatedAt: '2026-04-20T12:00:00.000Z' as string | null,
+          lastEvaluatedAt: '2026-04-20T12:30:00.000Z' as string | null,
         }),
       },
     }
@@ -499,7 +461,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
             reportRebuildOnly: false,
           } satisfies IncrementalSelection,
         }),
-      loadOrCreateProgress: () => Promise.resolve(createEmptyProgress(0)),
+      loadOrCreateProgress: () => Promise.resolve(createEmptyProgressFixture(0)),
       rebuildReportsFromStoredResults: () => Promise.resolve(),
       runPhase1IfNeeded: () => Promise.resolve(),
       runPhase2aIfNeeded: () => Promise.resolve(new Set(['group-targeting'])),

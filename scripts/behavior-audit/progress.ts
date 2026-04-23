@@ -5,7 +5,7 @@ import type { ClassifiedBehavior } from './classified-store.js'
 import { PROGRESS_PATH } from './config.js'
 import { validateOrMigrateProgress } from './progress-migrate.js'
 import type { ConsolidatedBehavior } from './report-writer.js'
-import type { EvaluatedBehavior } from './report-writer.js'
+import type { StoryEvaluation } from './report-writer.js'
 
 export type PhaseStatus = 'not-started' | 'in-progress' | 'done'
 
@@ -257,7 +257,7 @@ export function isBehaviorCompleted(progress: Progress, key: string): boolean {
   return progress.phase3.completedConsolidatedIds[key] === 'done'
 }
 
-export function markBehaviorDone(progress: Progress, key: string, evaluation: EvaluatedBehavior): void {
+export function markBehaviorDone(progress: Progress, key: string, evaluation: StoryEvaluation): void {
   void evaluation
   if (progress.phase3.completedConsolidatedIds[key] === 'done') return
   progress.phase3.completedConsolidatedIds[key] = 'done'

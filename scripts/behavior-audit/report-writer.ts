@@ -27,7 +27,7 @@ export interface ExtractedBehavior {
 
 type BehaviorMarkdownEntry = Pick<ExtractedBehaviorRecord, 'fullPath' | 'behavior' | 'context' | 'keywords'>
 
-export interface EvaluatedBehavior {
+export interface StoryEvaluation {
   readonly testName: string
   readonly behavior: string
   readonly userStory: string
@@ -72,7 +72,7 @@ const ConsolidatedBehaviorArraySchema = z.array(ConsolidatedBehaviorSchema).read
 interface RebuildReportsInput {
   readonly manifest: IncrementalManifest
   readonly extractedBehaviorsByKey: Readonly<Record<string, ExtractedBehavior>>
-  readonly evaluationsByKey: Readonly<Record<string, EvaluatedBehavior>>
+  readonly evaluationsByKey: Readonly<Record<string, StoryEvaluation>>
   readonly consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
 }
 
@@ -127,7 +127,7 @@ function domainTitle(domain: string): string {
     .join(' ')
 }
 
-export async function writeStoryFile(domain: string, evaluations: readonly EvaluatedBehavior[]): Promise<void> {
+export async function writeStoryFile(domain: string, evaluations: readonly StoryEvaluation[]): Promise<void> {
   const outPath = join(STORIES_DIR, `${domain}.md`)
   await mkdir(dirname(outPath), { recursive: true })
 
@@ -161,8 +161,8 @@ export async function writeStoryFile(domain: string, evaluations: readonly Evalu
   await Bun.write(outPath, lines.join('\n'))
 }
 
-function buildSummary(domain: string, evals: readonly EvaluatedBehavior[]): DomainSummary {
-  const avg = (fn: (e: EvaluatedBehavior) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
+function buildSummary(domain: string, evals: readonly StoryEvaluation[]): DomainSummary {
+  const avg = (fn: (e: StoryEvaluation) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
   const pAvg = (p: 'maria' | 'dani' | 'viktor'): number => avg((e) => (e[p].discover + e[p].use + e[p].retain) / 3)
   const personaScores: ReadonlyArray<readonly [string, number]> = [
     ['Maria', pAvg('maria')],
@@ -200,9 +200,9 @@ function groupExtractedBehaviorsByFile(
 
 function groupEvaluationsByDomain(
   manifest: IncrementalManifest,
-  evaluationsByKey: Readonly<Record<string, EvaluatedBehavior>>,
-): Readonly<Record<string, readonly EvaluatedBehavior[]>> {
-  const result: Record<string, EvaluatedBehavior[]> = {}
+  evaluationsByKey: Readonly<Record<string, StoryEvaluation>>,
+): Readonly<Record<string, readonly StoryEvaluation[]>> {
+  const result: Record<string, StoryEvaluation[]> = {}
   for (const [testKey, entry] of Object.entries(manifest.tests)) {
     const evaluation = evaluationsByKey[testKey]
     if (evaluation !== undefined) (result[entry.domain] ??= []).push(evaluation)
@@ -224,7 +224,7 @@ async function writeRebuiltBehaviorFiles(
 }
 
 async function writeRebuiltStoryFiles(
-  evaluationsByDomain: Readonly<Record<string, readonly EvaluatedBehavior[]>>,
+  evaluationsByDomain: Readonly<Record<string, readonly StoryEvaluation[]>>,
 ): Promise<void> {
   await Promise.all(
     Object.entries(evaluationsByDomain).map(([domain, evaluations]) =>
@@ -266,7 +266,7 @@ export async function rebuildReportsFromStoredResults({
   const extractedByFile = groupExtractedBehaviorsByFile(manifest, extractedBehaviorsByKey)
   await writeRebuiltBehaviorFiles(extractedByFile)
 
-  const evaluationsByDomain: Record<string, EvaluatedBehavior[]> = {}
+  const evaluationsByDomain: Record<string, StoryEvaluation[]> = {}
   if (consolidatedManifest === null) {
     for (const [domain, evals] of Object.entries(groupEvaluationsByDomain(manifest, evaluationsByKey))) {
       evaluationsByDomain[domain] = [...evals]
