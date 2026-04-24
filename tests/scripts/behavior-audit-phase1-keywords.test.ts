@@ -63,8 +63,6 @@ function createResolvedKeywords(input: {
   readonly appendedEntries: readonly {
     readonly slug: string
     readonly description: string
-    readonly createdAt: string
-    readonly updatedAt: string
   }[]
 }): ResolveKeywordsResult {
   return {
@@ -425,8 +423,6 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
               {
                 slug: 'group-targeting',
                 description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
@@ -520,8 +516,6 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
               {
                 slug: 'group-targeting-updated',
                 description: 'Updated targeting behavior.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
@@ -589,8 +583,6 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
               {
                 slug: 'group-targeting',
                 description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
@@ -604,12 +596,11 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
   }
   const savedVocabulary = savedVocabularyRaw
   expect(savedVocabulary).toHaveLength(1)
-  expect(savedVocabulary[0]).toEqual({
-    slug: 'group-targeting',
-    description: 'Targeting work at a group context.',
-    createdAt: '2026-04-20T12:00:00.000Z',
-    updatedAt: '2026-04-20T12:00:00.000Z',
-  })
+  expect(savedVocabulary[0]!.slug).toBe('group-targeting')
+  expect(savedVocabulary[0]!.description).toBe('Targeting work at a group context.')
+  expect(typeof savedVocabulary[0]!.createdAt).toBe('string')
+  expect(typeof savedVocabulary[0]!.updatedAt).toBe('string')
+  expect(savedVocabulary[0]!.createdAt).toBe(savedVocabulary[0]!.updatedAt)
 })
 
 test('runPhase1 does not append a duplicate slug when resolver returns an already-known slug', async () => {
@@ -675,8 +666,6 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
               {
                 slug: 'group-targeting',
                 description: 'Duplicate resolver description.',
-                createdAt: '2026-04-21T12:00:00.000Z',
-                updatedAt: '2026-04-23T12:00:00.000Z',
               },
             ],
           }),
@@ -689,14 +678,10 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
     throw new Error('Expected saved keyword vocabulary')
   }
 
-  expect(savedVocabularyRaw).toEqual([
-    {
-      slug: 'group-targeting',
-      description: 'Duplicate resolver description.',
-      createdAt: '2026-04-20T12:00:00.000Z',
-      updatedAt: '2026-04-23T12:00:00.000Z',
-    },
-  ])
+  expect(savedVocabularyRaw).toHaveLength(1)
+  expect(savedVocabularyRaw[0]!.slug).toBe('group-targeting')
+  expect(savedVocabularyRaw[0]!.description).toBe('Duplicate resolver description.')
+  expect(savedVocabularyRaw[0]!.createdAt).toBe('2026-04-20T12:00:00.000Z')
 })
 
 test('runPhase1 sends only existing vocabulary slugs to the keyword resolver prompt', async () => {

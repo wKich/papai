@@ -2,7 +2,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
-import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
@@ -23,7 +23,7 @@ const provider = createOpenAICompatible({
   name: 'behavior-audit-extract',
   apiKey,
   baseURL: BASE_URL,
-  supportsStructuredOutputs: true,
+  fetch: fetchWithoutTimeout,
 })
 const model = provider(MODEL)
 
@@ -56,7 +56,8 @@ async function extractSingle(prompt: string, attempt: number): Promise<Extractio
     })
     const parsed = ExtractionResultSchema.safeParse(result.output)
     return parsed.success ? parsed.data : null
-  } catch {
+  } catch (error) {
+    console.log(`✗ extract: ${error instanceof Error ? error.message : String(error)}`)
     return null
   }
 }

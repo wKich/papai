@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
@@ -59,8 +60,6 @@ test('runPhase1 does not publish manifest or progress completion before extracte
               {
                 slug: 'group-targeting',
                 description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),

@@ -1,5 +1,6 @@
 import pLimit from 'p-limit'
 
+import { formatElapsedMs } from './config.js'
 import { evaluateWithRetry } from './evaluate-agent.js'
 import {
   getFeatureKeys,
@@ -99,14 +100,18 @@ async function evaluateBehavior(input: {
   readonly deps: Phase3Deps
 }): Promise<EvaluatedFeatureRecord | null> {
   input.deps.writeStdout(`  [${input.idx}/${input.total}] ${input.behavior.domain} :: "${input.behavior.featureName}" `)
+  const startMs = performance.now()
   const result = await input.deps.evaluateWithRetry(buildPrompt(input.behavior))
+  const elapsedMs = performance.now() - startMs
   if (result === null) {
     input.deps.markBehaviorFailed(input.progress, input.behavior.consolidatedId, 'evaluation failed after retries', 1)
+    input.deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
     return null
   }
 
   input.deps.markBehaviorDone(input.progress, input.behavior.consolidatedId)
   await input.deps.saveProgress(input.progress)
+  input.deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
   return {
     consolidatedId: input.behavior.consolidatedId,
     maria: result.maria,

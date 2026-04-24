@@ -2,14 +2,12 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
-import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 
 const VocabularyEntrySchema = z.object({
   slug: z.string(),
   description: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
 })
 
 const ResolverResultSchema = z.object({
@@ -28,7 +26,7 @@ const provider = createOpenAICompatible({
   name: 'behavior-audit-keyword-resolver',
   apiKey,
   baseURL: BASE_URL,
-  supportsStructuredOutputs: true,
+  fetch: fetchWithoutTimeout,
 })
 const model = provider(MODEL)
 
@@ -50,7 +48,8 @@ async function resolveSingle(prompt: string, attempt: number): Promise<ResolverR
     })
     const parsed = ResolverResultSchema.safeParse(result.output)
     return parsed.success ? parsed.data : null
-  } catch {
+  } catch (error) {
+    console.log(`✗ resolve: ${error instanceof Error ? error.message : String(error)}`)
     return null
   }
 }

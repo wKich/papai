@@ -15,7 +15,7 @@ import {
   toClassifiedBehavior,
   type SelectedBehaviorEntry,
 } from './classify-phase2a-helpers.js'
-import { MAX_RETRIES, PROJECT_ROOT } from './config.js'
+import { MAX_RETRIES, PROJECT_ROOT, formatElapsedMs } from './config.js'
 import { readExtractedFile } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import { buildPhase2Fingerprint, saveManifest } from './incremental.js'
@@ -26,6 +26,11 @@ import {
   saveProgress,
   setClassificationFailedAttempts,
 } from './progress.js'
+
+type ClassificationProcessResult =
+  | { readonly kind: 'reused'; readonly manifest: IncrementalManifest }
+  | { readonly kind: 'classified'; readonly manifest: IncrementalManifest }
+  | { readonly kind: 'failed'; readonly manifest: IncrementalManifest }
 
 export interface Phase2aDeps {
   readonly classifyBehaviorWithRetry: typeof classifyBehaviorWithRetry
@@ -38,6 +43,8 @@ export interface Phase2aDeps {
   readonly markClassificationDone: typeof markClassificationDone
   readonly setClassificationFailedAttempts: typeof setClassificationFailedAttempts
   readonly maxRetries: number
+  readonly log: Pick<typeof console, 'log'>
+  readonly writeStdout: (text: string) => void
 }
 
 function createDefaultPhase2aDeps(): Phase2aDeps {
@@ -52,6 +59,10 @@ function createDefaultPhase2aDeps(): Phase2aDeps {
     markClassificationDone,
     setClassificationFailedAttempts,
     maxRetries: MAX_RETRIES,
+    log: console,
+    writeStdout: (text) => {
+      process.stdout.write(text)
+    },
   }
 }
 
@@ -172,26 +183,64 @@ async function processSelectedClassification(input: {
   readonly manifest: IncrementalManifest
   readonly dirtyFeatureKeys: Set<string>
   readonly deps: Phase2aDeps
-}): Promise<IncrementalManifest> {
+}): Promise<ClassificationProcessResult> {
   if (shouldReuseCompletedClassification(input.progress, input.manifest, input.entry)) {
     addDirtyFeatureKey(input.dirtyFeatureKeys, input.manifest.tests[input.entry.testKey]?.featureKey ?? null)
-    return input.manifest
+    return { kind: 'reused', manifest: input.manifest }
   }
 
   const classified = await classifySelectedBehavior(input.progress, input.entry, input.deps)
   if (classified === null) {
     await input.deps.saveProgress(input.progress)
-    return input.manifest
+    return { kind: 'failed', manifest: input.manifest }
   }
 
   addDirtyFeatureKey(input.dirtyFeatureKeys, classified.featureKey)
-  return persistSuccessfulClassification({
+  const updatedManifest = await persistSuccessfulClassification({
     progress: input.progress,
     manifest: input.manifest,
     entry: input.entry,
     classified,
     deps: input.deps,
   })
+  return { kind: 'classified', manifest: updatedManifest }
+}
+
+function logClassificationResult(deps: Phase2aDeps, result: ClassificationProcessResult, elapsedMs: number): void {
+  switch (result.kind) {
+    case 'reused':
+      deps.log.log('(reused)')
+      break
+    case 'classified':
+      deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+      break
+    case 'failed':
+      deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+      break
+  }
+}
+
+async function processSelectedEntry(
+  entry: SelectedBehaviorEntry,
+  displayIndex: number,
+  displayTotal: number,
+  progress: Progress,
+  manifest: IncrementalManifest,
+  dirtyFeatureKeys: Set<string>,
+  deps: Phase2aDeps,
+): Promise<ClassificationProcessResult> {
+  deps.writeStdout(`  [${displayIndex}/${displayTotal}] "${entry.behavior.fullPath}" `)
+  const startMs = performance.now()
+  const result = await processSelectedClassification({
+    progress,
+    entry,
+    manifest,
+    dirtyFeatureKeys,
+    deps,
+  })
+  const elapsedMs = performance.now() - startMs
+  logClassificationResult(deps, result, elapsedMs)
+  return result
 }
 
 export async function runPhase2a(input: Phase2aRunInput): Promise<ReadonlySet<string>>
@@ -213,15 +262,18 @@ export async function runPhase2a(
   await resolvedDeps.saveProgress(progress)
 
   await Promise.all(
-    selectedEntries.map((entry) =>
+    selectedEntries.map((entry, index) =>
       limit(async () => {
-        currentManifest = await processSelectedClassification({
-          progress,
+        const result = await processSelectedEntry(
           entry,
-          manifest: currentManifest,
+          index + 1,
+          selectedEntries.length,
+          progress,
+          currentManifest,
           dirtyFeatureKeys,
-          deps: resolvedDeps,
-        })
+          resolvedDeps,
+        )
+        currentManifest = result.manifest
       }),
     ),
   )

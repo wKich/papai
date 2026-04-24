@@ -3,6 +3,7 @@ import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
 import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 
 const ClassificationResultSchema = z.object({
@@ -78,7 +79,7 @@ function createDefaultClassifyAgentDeps(): ClassifyAgentDeps {
     name: 'behavior-audit-classify',
     apiKey: defaultApiKey,
     baseURL: BASE_URL,
-    supportsStructuredOutputs: true,
+    fetch: fetchWithoutTimeout,
   })(MODEL)
 
   return {
@@ -115,7 +116,8 @@ async function classifySingle(
       abortSignal: deps.createAbortSignal(timeout),
     })
     return result.output
-  } catch {
+  } catch (error) {
+    console.log(`✗ classify: ${error instanceof Error ? error.message : String(error)}`)
     return null
   }
 }
