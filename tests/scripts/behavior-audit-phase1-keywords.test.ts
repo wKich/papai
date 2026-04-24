@@ -19,7 +19,6 @@ import {
   loadExtractModule,
   loadIncrementalModule,
   loadKeywordVocabularyModule,
-  loadReportWriterModule,
 } from './behavior-audit-integration.support.js'
 
 type ExtractResult = NonNullable<
@@ -93,7 +92,6 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
-  const behaviorMarkdownPath = path.join(reportsDir, 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md')
 
   mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
@@ -157,10 +155,6 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   expect(firstRecord.context).toBe('Resolves target context and forwards execution through the group routing path.')
   expect(firstRecord.keywords).toEqual(['group-targeting', 'group-routing'])
   expect(typeof firstRecord.extractedAt).toBe('string')
-
-  const behaviorMarkdown = await Bun.file(behaviorMarkdownPath).text()
-  expect(behaviorMarkdown).toContain('**Behavior:** When a user targets a group, the bot routes the request correctly.')
-  expect(behaviorMarkdown).toContain('**Keywords:** group-targeting, group-routing')
 })
 
 test('runPhase1 fails cleanly when resolver output normalizes to empty keyword slugs', async () => {
@@ -349,29 +343,6 @@ test('loadKeywordVocabulary rewrites legacy vocabulary files into canonical sche
   expect(loaded).toEqual(expectedEntries)
   expect(normalizeKeywordSlug('Task Routing')).toBe('task-routing')
   expect(await Bun.file(vocabularyPath).text()).toBe(JSON.stringify(expectedEntries, null, 2) + '\n')
-})
-
-test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
-  const root = makeTempDir()
-
-  mockAuditBehaviorConfig(root, {
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  const typedWriter = await loadReportWriterModule(`keywords-${crypto.randomUUID()}`)
-  await typedWriter.writeBehaviorFile('tests/tools/sample.test.ts', [
-    {
-      fullPath: 'suite > case',
-      behavior: 'When a user targets a group, the bot routes the request correctly.',
-      context: 'Routes through group context selection.',
-      keywords: ['group-targeting', 'group-routing'],
-    },
-  ])
-
-  const fileText = await Bun.file(
-    path.join(root, 'reports', 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md'),
-  ).text()
-  expect(fileText).toContain('**Keywords:** group-targeting, group-routing')
 })
 
 test('runPhase1 persists vocabulary updates before marking a test done', async () => {
@@ -760,7 +731,7 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
 
   expect(capturedResolverPrompt).toContain('Existing vocabulary:')
   expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')
-  expect(capturedResolverPrompt).toContain('[\n  "group-routing",\n  "group-targeting"\n]')
+  expect(capturedResolverPrompt).toContain('group-routing, group-targeting')
   expect(capturedResolverPrompt).not.toContain('"description"')
   expect(capturedResolverPrompt).not.toContain('"timesUsed"')
 })

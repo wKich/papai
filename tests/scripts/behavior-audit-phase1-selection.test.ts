@@ -102,13 +102,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
     const extract = await loadExtractModule(crypto.randomUUID())
     const testFilePath = 'tests/tools/sample.test.ts'
     const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
-    const behaviorMarkdownPath = path.join(
-      reportsDir,
-      'audit-behavior',
-      'behaviors',
-      'tools',
-      'sample.test.behaviors.md',
-    )
     const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
     const selectedKey = 'tests/tools/sample.test.ts::suite > selected case'
     const progress = createEmptyProgress(1)
@@ -196,11 +189,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
     expect(savedEntry.extractedArtifactPath).toBe('reports/audit-behavior/extracted/tools/sample.test.json')
     expect(savedEntry.lastPhase1CompletedAt).toBeTruthy()
     expect(savedManifest.tests['tests/tools/sample.test.ts::suite > unselected case']).toBeUndefined()
-
-    const behaviorFileText = await Bun.file(behaviorMarkdownPath).text()
-    expect(behaviorFileText).toContain('suite > selected case')
-    expect(behaviorFileText).toContain('When the injected test extractor runs, the bot persists the injected behavior.')
-    expect(behaviorFileText).not.toContain('suite > unselected case')
   })
 
   test('runPhase1 removes stale extracted artifacts for a failed selected rerun', async () => {
@@ -208,13 +196,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
     const testFilePath = 'tests/tools/sample.test.ts'
     const selectedKey = 'tests/tools/sample.test.ts::suite > selected case'
     const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
-    const behaviorMarkdownPath = path.join(
-      reportsDir,
-      'audit-behavior',
-      'behaviors',
-      'tools',
-      'sample.test.behaviors.md',
-    )
     const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
     const progress = createEmptyProgress(1)
 
@@ -244,10 +225,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
         2,
       ) + '\n',
     )
-    await Bun.write(
-      behaviorMarkdownPath,
-      '# tests/tools/sample.test.ts\n\n## Test: "suite > selected case"\n\n**Behavior:** Stale selected behavior.\n',
-    )
 
     await extract.runPhase1(
       {
@@ -262,7 +239,6 @@ describe('behavior-audit phase 1 incremental selection', () => {
     )
 
     expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
-    expect(await Bun.file(behaviorMarkdownPath).exists()).toBe(false)
     expect(progress.phase1.completedFiles).toEqual([])
     expect(progress.phase1.completedTests[testFilePath]).toBeUndefined()
     expect(progress.phase1.stats.filesDone).toBe(0)

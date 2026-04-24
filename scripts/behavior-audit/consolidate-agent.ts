@@ -18,6 +18,7 @@ const provider = createOpenAICompatible({
   apiKey,
   baseURL: BASE_URL,
   fetch: fetchWithoutTimeout,
+  supportsStructuredOutputs: true,
 })
 const model = provider(MODEL)
 
@@ -89,6 +90,7 @@ async function consolidateSingle(prompt: string, attempt: number): Promise<Conso
       model,
       system: SYSTEM_PROMPT,
       prompt,
+      maxOutputTokens: 16384,
       tools,
       output: Output.object({ schema: ConsolidationResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),

@@ -27,6 +27,7 @@ const provider = createOpenAICompatible({
   apiKey,
   baseURL: BASE_URL,
   fetch: fetchWithoutTimeout,
+  supportsStructuredOutputs: true,
 })
 const model = provider(MODEL)
 
@@ -42,6 +43,7 @@ async function resolveSingle(prompt: string, attempt: number): Promise<ResolverR
     const result = await verboseGenerateText({
       model,
       prompt,
+      maxOutputTokens: 4096,
       output: Output.object({ schema: ResolverResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),
       abortSignal: AbortSignal.timeout(timeout),

@@ -1,4 +1,4 @@
-import { behaviorMarkdownPathForTestFile, extractedArtifactPathForTestFile } from './artifact-paths.js'
+import { extractedArtifactPathForTestFile } from './artifact-paths.js'
 import { buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
@@ -12,7 +12,6 @@ import {
 } from './keyword-vocabulary.js'
 import { markFileDone, markTestFailed } from './progress.js'
 import type { Progress } from './progress.js'
-import { writeBehaviorFile } from './report-writer.js'
 import type { TestCase } from './test-parser.js'
 
 export interface ResolveKeywordsDeps {
@@ -132,17 +131,10 @@ export async function writeValidBehaviorsForFile(
     ...valid,
   ]
   if (merged.length === 0) {
-    await Promise.all([
-      deleteFileIfPresent(behaviorMarkdownPathForTestFile(testFilePath)),
-      deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath)),
-    ])
+    await deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath))
     return
   }
   await writeExtractedFile(testFilePath, merged)
-  await writeBehaviorFile(
-    testFilePath,
-    [...merged].toSorted((a, b) => a.fullPath.localeCompare(b.fullPath)),
-  )
   console.log(`  → wrote ${valid.length} behaviors`)
 }
 

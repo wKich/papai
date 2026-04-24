@@ -226,7 +226,6 @@ describe('behavior-audit incremental manifest', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       AUDIT_BEHAVIOR_DIR: path.join(reportsDir, 'audit-behavior'),
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
       CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       STORIES_DIR: path.join(reportsDir, 'stories'),

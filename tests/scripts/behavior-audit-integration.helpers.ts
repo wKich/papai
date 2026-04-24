@@ -37,7 +37,6 @@ export interface BehaviorAuditTestPaths {
   readonly root: string
   readonly reportsDir: string
   readonly auditBehaviorDir: string
-  readonly behaviorsDir: string
   readonly extractedDir: string
   readonly classifiedDir: string
   readonly consolidatedDir: string
@@ -55,7 +54,6 @@ export interface BehaviorAuditTestConfig {
   readonly PROJECT_ROOT: string
   readonly REPORTS_DIR: string
   readonly AUDIT_BEHAVIOR_DIR: string
-  readonly BEHAVIORS_DIR: string
   readonly EXTRACTED_DIR: string
   readonly CLASSIFIED_DIR: string
   readonly CONSOLIDATED_DIR: string
@@ -96,7 +94,6 @@ const DEFAULT_CONFIG = {
   | 'PROJECT_ROOT'
   | 'REPORTS_DIR'
   | 'AUDIT_BEHAVIOR_DIR'
-  | 'BEHAVIORS_DIR'
   | 'EXTRACTED_DIR'
   | 'CLASSIFIED_DIR'
   | 'CONSOLIDATED_DIR'
@@ -116,7 +113,6 @@ function createPaths(root: string, auditBehaviorRoot: boolean): BehaviorAuditTes
     root,
     reportsDir,
     auditBehaviorDir,
-    behaviorsDir: path.join(auditBehaviorDir, 'behaviors'),
     extractedDir: path.join(auditBehaviorDir, 'extracted'),
     classifiedDir: path.join(auditBehaviorDir, 'classified'),
     consolidatedDir: path.join(auditBehaviorDir, 'consolidated'),
@@ -152,7 +148,6 @@ function createConfig(
     PROJECT_ROOT: paths.root,
     REPORTS_DIR: paths.reportsDir,
     AUDIT_BEHAVIOR_DIR: paths.auditBehaviorDir,
-    BEHAVIORS_DIR: paths.behaviorsDir,
     EXTRACTED_DIR: paths.extractedDir,
     CLASSIFIED_DIR: paths.classifiedDir,
     CONSOLIDATED_DIR: paths.consolidatedDir,

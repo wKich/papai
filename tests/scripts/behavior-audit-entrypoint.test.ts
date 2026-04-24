@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-entrypoint.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
@@ -322,7 +322,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
           dependencyPaths: ['tests/tools/sample.test.ts'],
           phase1Fingerprint: 'fp1',
           phase2Fingerprint: 'fp2',
-          extractedArtifactPath: 'reports/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: 'reports/audit-behavior/extracted/tools/sample.test.json',
           domain: 'tools',
           lastPhase1CompletedAt: 'x',
           lastPhase2CompletedAt: 'y',
@@ -458,7 +458,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
           dependencyPaths: ['tests/tools/sample.test.ts'],
           phase1Fingerprint: 'phase1-fp',
           phase2Fingerprint: 'phase2-fp',
-          extractedArtifactPath: 'reports/behaviors/tools/sample.test.behaviors.md',
+          extractedArtifactPath: 'reports/audit-behavior/extracted/tools/sample.test.json',
           domain: 'tools',
           lastPhase1CompletedAt: 'old-phase1',
           lastPhase2CompletedAt: 'old-phase2',
@@ -484,7 +484,6 @@ describe('behavior-audit entrypoint incremental selection', () => {
 
     expect(calls.rebuildReportsFromStoredResults).toEqual([
       {
-        manifest: updatedManifest,
         consolidatedManifest: previousConsolidatedManifest,
       },
     ])

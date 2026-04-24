@@ -80,6 +80,7 @@ function createDefaultClassifyAgentDeps(): ClassifyAgentDeps {
     apiKey: defaultApiKey,
     baseURL: BASE_URL,
     fetch: fetchWithoutTimeout,
+    supportsStructuredOutputs: true,
   })(MODEL)
 
   return {
@@ -111,6 +112,7 @@ async function classifySingle(
       model: deps.buildModel(deps.config.BASE_URL, deps.config.MODEL, getEnvOrFallback('OPENAI_API_KEY', 'no-key')),
       system: SYSTEM_PROMPT,
       prompt,
+      maxOutputTokens: 8192,
       output: deps.outputObject({ schema: ClassificationResultSchema }),
       stopWhen: deps.stepCountIs(deps.config.MAX_STEPS + 1),
       abortSignal: deps.createAbortSignal(timeout),

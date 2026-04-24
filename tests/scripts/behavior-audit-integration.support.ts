@@ -412,7 +412,7 @@ function isKeywordVocabularyModule(value: unknown): value is KeywordVocabularyMo
 }
 
 export function isReportWriterModule(value: unknown): value is ReportWriterModuleShape {
-  return isObject(value) && hasFunctionProperty(value, 'writeBehaviorFile')
+  return isObject(value) && hasFunctionProperty(value, 'writeConsolidatedFile')
 }
 
 export function isResetModule(value: unknown): value is ResetModuleShape {
