@@ -52,7 +52,7 @@ describe('behavior-audit phase 2a classify agent', () => {
     }
     const generateText: ClassifyAgentDeps['generateText'] = (_input) => {
       events.push('generate')
-      return Promise.resolve({ output })
+      return Promise.resolve({ output, totalUsage: { inputTokens: 100, outputTokens: 50 }, steps: [] })
     }
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push('sleep')
@@ -76,7 +76,7 @@ describe('behavior-audit phase 2a classify agent', () => {
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.featureKey).toBe('task-creation')
+    expect(result === null ? null : result.result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate'])
   })
 
@@ -100,7 +100,7 @@ describe('behavior-audit phase 2a classify agent', () => {
         return Promise.reject(new Error('temporary failure'))
       }
 
-      return Promise.resolve({ output })
+      return Promise.resolve({ output, totalUsage: { inputTokens: 100, outputTokens: 50 }, steps: [] })
     }
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push(`sleep:${ms}`)
@@ -124,7 +124,7 @@ describe('behavior-audit phase 2a classify agent', () => {
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.featureKey).toBe('task-creation')
+    expect(result === null ? null : result.result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate:1', 'sleep:50', 'generate:2'])
   })
 

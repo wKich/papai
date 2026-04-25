@@ -120,12 +120,12 @@ export function toClassifiedBehavior(
     behaviorId: buildBehaviorId(testKey),
     testKey,
     domain,
-    visibility: result.visibility,
-    featureKey: result.featureKey,
-    featureLabel: result.featureLabel,
-    supportingBehaviorRefs: result.supportingBehaviorRefs,
-    relatedBehaviorHints: result.relatedBehaviorHints,
-    classificationNotes: result.classificationNotes,
+    visibility: result.result.visibility,
+    featureKey: result.result.featureKey,
+    featureLabel: result.result.featureLabel,
+    supportingBehaviorRefs: result.result.supportingBehaviorRefs,
+    relatedBehaviorHints: result.result.relatedBehaviorHints,
+    classificationNotes: result.result.classificationNotes,
     classifiedAt: new Date().toISOString(),
   }
 }

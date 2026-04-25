@@ -45,12 +45,15 @@ describe('behavior-audit phase 2a classification', () => {
     classifiedStoreTag = crypto.randomUUID()
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
-        visibility: 'user-facing',
-        featureKey: 'task-creation',
-        featureLabel: 'Task creation',
-        supportingBehaviorRefs: [],
-        relatedBehaviorHints: [],
-        classificationNotes: 'Matches task creation flow.',
+        result: {
+          visibility: 'user-facing',
+          featureKey: 'task-creation',
+          featureLabel: 'Task creation',
+          supportingBehaviorRefs: [],
+          relatedBehaviorHints: [],
+          classificationNotes: 'Matches task creation flow.',
+        },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
       })
 
     mockAuditBehaviorConfig(root, {
@@ -383,12 +386,15 @@ describe('behavior-audit phase 2a classification', () => {
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
-        visibility: 'user-facing',
-        featureKey: 'task-creation',
-        featureLabel: 'Task creation',
-        supportingBehaviorRefs: [],
-        relatedBehaviorHints: [],
-        classificationNotes: 'Refreshed classification.',
+        result: {
+          visibility: 'user-facing',
+          featureKey: 'task-creation',
+          featureLabel: 'Task creation',
+          supportingBehaviorRefs: [],
+          relatedBehaviorHints: [],
+          classificationNotes: 'Refreshed classification.',
+        },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
       })
 
     const dirty = await classify.runPhase2a(
@@ -436,12 +442,15 @@ describe('behavior-audit phase 2a classification', () => {
     classifyBehaviorWithRetryImpl = (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
       classifierArgs.push([prompt, attemptOffset])
       return Promise.resolve({
-        visibility: 'user-facing',
-        featureKey: 'task-creation',
-        featureLabel: 'Task creation',
-        supportingBehaviorRefs: [],
-        relatedBehaviorHints: [],
-        classificationNotes: 'Resumed from prior failed attempt.',
+        result: {
+          visibility: 'user-facing',
+          featureKey: 'task-creation',
+          featureLabel: 'Task creation',
+          supportingBehaviorRefs: [],
+          relatedBehaviorHints: [],
+          classificationNotes: 'Resumed from prior failed attempt.',
+        },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
       })
     }
 
@@ -512,12 +521,15 @@ describe('behavior-audit phase 2a classification', () => {
 
     classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
       Promise.resolve({
-        visibility: 'user-facing',
-        featureKey: 'task-recovery',
-        featureLabel: 'Task recovery',
-        supportingBehaviorRefs: [],
-        relatedBehaviorHints: [],
-        classificationNotes: 'Recovered successfully.',
+        result: {
+          visibility: 'user-facing',
+          featureKey: 'task-recovery',
+          featureLabel: 'Task recovery',
+          supportingBehaviorRefs: [],
+          relatedBehaviorHints: [],
+          classificationNotes: 'Recovered successfully.',
+        },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
       })
 
     const progress = progressModule.createEmptyProgress(1)

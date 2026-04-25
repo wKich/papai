@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { verboseGenerateText } from './agent-helpers.js'
 import { fetchWithoutTimeout } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
+import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 
 const ClassificationResultSchema = z.object({
   visibility: z.enum(['user-facing', 'internal', 'ambiguous']),
@@ -39,7 +40,11 @@ type ClassifyAgentStopWhen = NonNullable<ClassifyAgentInput['stopWhen']>
 
 export interface ClassifyAgentDeps {
   readonly config: ClassifyConfig
-  readonly generateText: (input: ClassifyAgentInput) => Promise<{ readonly output: ClassificationResult }>
+  readonly generateText: (input: ClassifyAgentInput) => Promise<{
+    readonly output: ClassificationResult
+    readonly totalUsage: { inputTokens?: number; outputTokens?: number }
+    readonly steps: { toolCalls: { toolName: string }[] }[]
+  }>
   readonly outputObject: (input: { readonly schema: typeof ClassificationResultSchema }) => ClassifyAgentOutput
   readonly stepCountIs: (stepCount: number) => ClassifyAgentStopWhen
   readonly buildModel: (baseUrl: string, model: string, apiKey: string) => ClassifyAgentModel
@@ -105,7 +110,8 @@ async function classifySingle(
   prompt: string,
   attempt: number,
   deps: ClassifyAgentDeps,
-): Promise<ClassificationResult | null> {
+): Promise<{ data: ClassificationResult | null; usage: AgentUsage }> {
+  const usage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0, toolNames: [] }
   const timeout = attempt > 0 ? deps.config.PHASE2_TIMEOUT_MS * 2 : deps.config.PHASE2_TIMEOUT_MS
   try {
     const result = await deps.generateText({
@@ -117,10 +123,18 @@ async function classifySingle(
       stopWhen: deps.stepCountIs(deps.config.MAX_STEPS + 1),
       abortSignal: deps.createAbortSignal(timeout),
     })
-    return result.output
+    usage.inputTokens = result.totalUsage.inputTokens ?? 0
+    usage.outputTokens = result.totalUsage.outputTokens ?? 0
+    for (const step of result.steps) {
+      for (const tc of step.toolCalls) {
+        usage.toolCalls += 1
+        usage.toolNames.push(tc.toolName)
+      }
+    }
+    return { data: result.output, usage }
   } catch (error) {
     console.log(`✗ classify: ${error instanceof Error ? error.message : String(error)}`)
-    return null
+    return { data: null, usage }
   }
 }
 
@@ -139,7 +153,7 @@ async function classifyAttempt(
   attempt: number,
   attemptOffset: number,
   deps: ClassifyAgentDeps,
-): Promise<ClassificationResult | null> {
+): Promise<{ data: ClassificationResult | null; usage: AgentUsage }> {
   if (attempt > attemptOffset) {
     await deps.sleep(getRetryBackoff(attempt, deps))
   }
@@ -151,32 +165,38 @@ function retryClassification(
   attempt: number,
   attemptOffset: number,
   deps: ClassifyAgentDeps,
-): Promise<ClassificationResult | null> {
+  accumulatedUsage: AgentUsage,
+): Promise<AgentResult<ClassificationResult> | null> {
   if (attempt >= deps.config.MAX_RETRIES) {
     return Promise.resolve(null)
   }
 
-  return classifyAttempt(prompt, attempt, attemptOffset, deps).then((result) => {
-    if (result !== null) {
-      return result
+  return classifyAttempt(prompt, attempt, attemptOffset, deps).then(({ data, usage }) => {
+    const combined = addAgentUsage(accumulatedUsage, usage)
+    if (data !== null) {
+      return { result: data, usage: combined }
     }
-    return retryClassification(prompt, attempt + 1, attemptOffset, deps)
+    return retryClassification(prompt, attempt + 1, attemptOffset, deps, combined)
   })
 }
 
-export function classifyBehaviorWithRetry(prompt: string, attemptOffset: number): Promise<ClassificationResult | null>
+export function classifyBehaviorWithRetry(
+  prompt: string,
+  attemptOffset: number,
+): Promise<AgentResult<ClassificationResult> | null>
 export function classifyBehaviorWithRetry(
   prompt: string,
   attemptOffset: number,
   deps: ClassifyAgentDeps,
-): Promise<ClassificationResult | null>
+): Promise<AgentResult<ClassificationResult> | null>
 export function classifyBehaviorWithRetry(
   ...args: readonly [string, number] | readonly [string, number, ClassifyAgentDeps]
-): Promise<ClassificationResult | null> {
+): Promise<AgentResult<ClassificationResult> | null> {
   const [prompt, attemptOffset] = args
+  const emptyUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0, toolNames: [] }
   if (args.length === 2) {
-    return retryClassification(prompt, attemptOffset, attemptOffset, createDefaultClassifyAgentDeps())
+    return retryClassification(prompt, attemptOffset, attemptOffset, createDefaultClassifyAgentDeps(), emptyUsage)
   }
   const [, , deps] = args
-  return retryClassification(prompt, attemptOffset, attemptOffset, deps)
+  return retryClassification(prompt, attemptOffset, attemptOffset, deps, emptyUsage)
 }
