@@ -19,7 +19,6 @@ import {
   loadClassifiedStoreModule,
   loadIncrementalModule,
   loadProgressModule,
-  type MockClassificationResult,
   readSavedManifest,
 } from './behavior-audit-integration.support.js'
 
@@ -43,7 +42,7 @@ describe('behavior-audit phase 2a classification', () => {
     manifestPath = paths.incrementalManifestPath
     classifyBehaviorWithRetryCalls = 0
     classifiedStoreTag = crypto.randomUUID()
-    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+    const defaultImpl: Phase2aDeps['classifyBehaviorWithRetry'] = (_prompt, _attempt) =>
       Promise.resolve({
         result: {
           visibility: 'user-facing',
@@ -53,8 +52,9 @@ describe('behavior-audit phase 2a classification', () => {
           relatedBehaviorHints: [],
           classificationNotes: 'Matches task creation flow.',
         },
-        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 1, toolNames: ['readFile'] },
       })
+    classifyBehaviorWithRetryImpl = defaultImpl
 
     mockAuditBehaviorConfig(root, {
       PROGRESS_PATH: progressPath,
@@ -65,9 +65,9 @@ describe('behavior-audit phase 2a classification', () => {
 
   function createPhase2aDeps(): Pick<Phase2aDeps, 'classifyBehaviorWithRetry'> {
     return {
-      classifyBehaviorWithRetry: (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
+      classifyBehaviorWithRetry: (prompt: string, attemptOffset: number) => {
         classifyBehaviorWithRetryCalls += 1
-        return classifyBehaviorWithRetryImpl(prompt, attemptOffset)
+        return classifyBehaviorWithRetryImpl(prompt, attemptOffset) as ReturnType<Phase2aDeps['classifyBehaviorWithRetry']>
       },
     }
   }
@@ -384,7 +384,7 @@ describe('behavior-audit phase 2a classification', () => {
       },
     ])
 
-    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+    classifyBehaviorWithRetryImpl = (_prompt, _attempt) =>
       Promise.resolve({
         result: {
           visibility: 'user-facing',
@@ -394,7 +394,7 @@ describe('behavior-audit phase 2a classification', () => {
           relatedBehaviorHints: [],
           classificationNotes: 'Refreshed classification.',
         },
-        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 1, toolNames: ['readFile'] },
       })
 
     const dirty = await classify.runPhase2a(
@@ -439,7 +439,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testFilePath = 'tests/tools/sample.test.ts'
     const classifierArgs: Array<readonly [string, number]> = []
 
-    classifyBehaviorWithRetryImpl = (prompt: string, attemptOffset: number): Promise<MockClassificationResult> => {
+    classifyBehaviorWithRetryImpl = (prompt, attemptOffset) => {
       classifierArgs.push([prompt, attemptOffset])
       return Promise.resolve({
         result: {
@@ -450,7 +450,7 @@ describe('behavior-audit phase 2a classification', () => {
           relatedBehaviorHints: [],
           classificationNotes: 'Resumed from prior failed attempt.',
         },
-        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 1, toolNames: ['readFile'] },
       })
     }
 
@@ -519,7 +519,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testKey = 'tests/tools/sample.test.ts::suite > recovery case'
     const testFilePath = 'tests/tools/sample.test.ts'
 
-    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> =>
+    classifyBehaviorWithRetryImpl = (_prompt, _attempt) =>
       Promise.resolve({
         result: {
           visibility: 'user-facing',
@@ -529,7 +529,7 @@ describe('behavior-audit phase 2a classification', () => {
           relatedBehaviorHints: [],
           classificationNotes: 'Recovered successfully.',
         },
-        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
+        usage: { inputTokens: 100, outputTokens: 50, toolCalls: 1, toolNames: ['readFile'] },
       })
 
     const progress = progressModule.createEmptyProgress(1)
@@ -610,7 +610,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testKey = 'tests/tools/sample.test.ts::suite > exhausted retries'
     const testFilePath = 'tests/tools/sample.test.ts'
 
-    classifyBehaviorWithRetryImpl = (): Promise<MockClassificationResult> => Promise.resolve(null)
+    classifyBehaviorWithRetryImpl = () => Promise.resolve(null)
 
     const progress = progressModule.createEmptyProgress(1)
     const manifest: IncrementalManifest = {

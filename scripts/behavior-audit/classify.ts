@@ -19,6 +19,16 @@ import { MAX_RETRIES, PROJECT_ROOT, formatElapsedMs } from './config.js'
 import { readExtractedFile } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import { buildPhase2Fingerprint, saveManifest } from './incremental.js'
+import {
+  type AgentUsage,
+  type PhaseStats,
+  createPhaseStats,
+  formatPerItemSuffix,
+  formatPhaseSummary,
+  recordItemDone,
+  recordItemFailed,
+  recordItemSkipped,
+} from './phase-stats.js'
 import type { Progress } from './progress.js'
 import {
   getFailedClassificationAttempts,
@@ -45,6 +55,7 @@ export interface Phase2aDeps {
   readonly maxRetries: number
   readonly log: Pick<typeof console, 'log'>
   readonly writeStdout: (text: string) => void
+  readonly stats?: PhaseStats
 }
 
 function createDefaultPhase2aDeps(): Phase2aDeps {
@@ -76,22 +87,22 @@ async function classifySelectedBehavior(
   progress: Progress,
   entry: SelectedBehaviorEntry,
   deps: Phase2aDeps,
-): Promise<ClassifiedBehavior | null> {
+): Promise<{ classified: ClassifiedBehavior; usage: AgentUsage } | null> {
   const behaviorId = buildBehaviorId(entry.testKey)
   const failedAttempts = deps.getFailedClassificationAttempts(progress, behaviorId)
   if (failedAttempts >= deps.maxRetries) {
     return null
   }
 
-  const result = await deps.classifyBehaviorWithRetry(buildPrompt(entry.testKey, entry.behavior), failedAttempts)
-  if (result === null) {
+  const agentResult = await deps.classifyBehaviorWithRetry(buildPrompt(entry.testKey, entry.behavior), failedAttempts)
+  if (agentResult === null) {
     deps.setClassificationFailedAttempts(progress, behaviorId, 'classification failed after retries', deps.maxRetries)
     return null
   }
 
-  const classified = toClassifiedBehavior(entry.testKey, result)
+  const classified = toClassifiedBehavior(entry.testKey, agentResult.result)
   deps.markClassificationDone(progress, behaviorId)
-  return classified
+  return { classified, usage: agentResult.usage }
 }
 
 async function writeSingleClassification(classified: ClassifiedBehavior, deps: Phase2aDeps): Promise<void> {
@@ -183,36 +194,44 @@ async function processSelectedClassification(input: {
   readonly manifest: IncrementalManifest
   readonly dirtyFeatureKeys: Set<string>
   readonly deps: Phase2aDeps
-}): Promise<ClassificationProcessResult> {
+}): Promise<ClassificationProcessResult & { readonly usage: AgentUsage | null }> {
   if (shouldReuseCompletedClassification(input.progress, input.manifest, input.entry)) {
     addDirtyFeatureKey(input.dirtyFeatureKeys, input.manifest.tests[input.entry.testKey]?.featureKey ?? null)
-    return { kind: 'reused', manifest: input.manifest }
+    return { kind: 'reused', manifest: input.manifest, usage: null }
   }
 
-  const classified = await classifySelectedBehavior(input.progress, input.entry, input.deps)
-  if (classified === null) {
+  const classifyResult = await classifySelectedBehavior(input.progress, input.entry, input.deps)
+  if (classifyResult === null) {
     await input.deps.saveProgress(input.progress)
-    return { kind: 'failed', manifest: input.manifest }
+    return { kind: 'failed', manifest: input.manifest, usage: null }
   }
 
-  addDirtyFeatureKey(input.dirtyFeatureKeys, classified.featureKey)
+  addDirtyFeatureKey(input.dirtyFeatureKeys, classifyResult.classified.featureKey)
   const updatedManifest = await persistSuccessfulClassification({
     progress: input.progress,
     manifest: input.manifest,
     entry: input.entry,
-    classified,
+    classified: classifyResult.classified,
     deps: input.deps,
   })
-  return { kind: 'classified', manifest: updatedManifest }
+  return { kind: 'classified', manifest: updatedManifest, usage: classifyResult.usage }
 }
 
-function logClassificationResult(deps: Phase2aDeps, result: ClassificationProcessResult, elapsedMs: number): void {
+function logClassificationResult(
+  deps: Phase2aDeps,
+  result: ClassificationProcessResult & { readonly usage: AgentUsage | null },
+  elapsedMs: number,
+): void {
   switch (result.kind) {
     case 'reused':
       deps.log.log('(reused)')
       break
     case 'classified':
-      deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+      if (result.usage !== null) {
+        deps.log.log(formatPerItemSuffix(result.usage, elapsedMs))
+      } else {
+        deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+      }
       break
     case 'failed':
       deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
@@ -240,6 +259,15 @@ async function processSelectedEntry(
   })
   const elapsedMs = performance.now() - startMs
   logClassificationResult(deps, result, elapsedMs)
+  if (deps.stats !== undefined) {
+    if (result.kind === 'classified' && result.usage !== null) {
+      recordItemDone(deps.stats, result.usage)
+    } else if (result.kind === 'failed') {
+      recordItemFailed(deps.stats, result.usage ?? undefined)
+    } else if (result.kind === 'reused') {
+      recordItemSkipped(deps.stats)
+    }
+  }
   return result
 }
 
@@ -251,7 +279,9 @@ export async function runPhase2a(
 ): Promise<ReadonlySet<string>> {
   const { progress, selectedTestKeys, manifest } = input
   const defaultPhase2aDeps = createDefaultPhase2aDeps()
-  const resolvedDeps: Phase2aDeps = args.length === 0 ? defaultPhase2aDeps : { ...defaultPhase2aDeps, ...args[0] }
+  const stats = createPhaseStats()
+  const resolvedDeps: Phase2aDeps =
+    args.length === 0 ? { ...defaultPhase2aDeps, stats } : { ...defaultPhase2aDeps, ...args[0], stats }
   progress.phase2a.status = 'in-progress'
   const dirtyFeatureKeys = new Set<string>()
   const limit = pLimit(1)
@@ -280,5 +310,8 @@ export async function runPhase2a(
 
   progress.phase2a.status = 'done'
   await resolvedDeps.saveProgress(progress)
+  const wallMs = performance.now() - stats.wallStartMs
+  const label = `[Phase 2a complete] ${progress.phase2a.stats.behaviorsDone} classified, ${progress.phase2a.stats.behaviorsFailed} failed`
+  resolvedDeps.log.log(`\n${formatPhaseSummary(stats, wallMs, label)}`)
   return dirtyFeatureKeys
 }
