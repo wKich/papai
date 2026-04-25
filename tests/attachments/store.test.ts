@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import {
-  createInMemoryBlobStore,
-  resetBlobStore,
-  setBlobStore,
+  _createInMemoryBlobStore,
+  _resetBlobStore,
+  _setBlobStore,
   type InMemoryBlobStore,
 } from '../../src/attachments/blob-store.js'
 import { loadAttachmentRecord, saveAttachment } from '../../src/attachments/store.js'
@@ -15,12 +15,12 @@ describe('attachment store', () => {
   beforeEach(async () => {
     mockLogger()
     await setupTestDb()
-    blobs = createInMemoryBlobStore()
-    setBlobStore(blobs)
+    blobs = _createInMemoryBlobStore()
+    _setBlobStore(blobs)
   })
 
   afterEach(() => {
-    resetBlobStore()
+    _resetBlobStore()
   })
 
   test('persists metadata in SQLite and bytes in the configured blob store', async () => {

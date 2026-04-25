@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import {
   buildBlobKey,
-  createInMemoryBlobStore,
+  _createInMemoryBlobStore,
   getBlobStore,
-  resetBlobStore,
-  setBlobStore,
+  _resetBlobStore,
+  _setBlobStore,
 } from '../../src/attachments/blob-store.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -15,13 +15,13 @@ describe('blob-store DI', () => {
   })
 
   afterEach(() => {
-    resetBlobStore()
+    _resetBlobStore()
     delete process.env['S3_PREFIX']
   })
 
   test('round-trips bytes through the in-memory store and supports delete', async () => {
-    const store = createInMemoryBlobStore()
-    setBlobStore(store)
+    const store = _createInMemoryBlobStore()
+    _setBlobStore(store)
 
     await getBlobStore().put('ctx/key-1', Buffer.from('hello'), 'text/plain')
     expect((await getBlobStore().get('ctx/key-1')).toString('utf8')).toBe('hello')
@@ -31,8 +31,8 @@ describe('blob-store DI', () => {
   })
 
   test('deleteMany removes a batch of keys at once', async () => {
-    const store = createInMemoryBlobStore()
-    setBlobStore(store)
+    const store = _createInMemoryBlobStore()
+    _setBlobStore(store)
 
     await store.put('a', Buffer.from('1'))
     await store.put('b', Buffer.from('2'))

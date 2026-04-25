@@ -15,7 +15,11 @@ export interface InMemoryBlobStore extends BlobStore {
   size(): number
 }
 
-export function createInMemoryBlobStore(): InMemoryBlobStore {
+/**
+ * In-memory BlobStore implementation. Useful for tests with no S3 backend.
+ * @internal
+ */
+export function _createInMemoryBlobStore(): InMemoryBlobStore {
   const map = new Map<string, Buffer>()
   return {
     put(key, content) {
@@ -99,13 +103,19 @@ export function getBlobStore(): BlobStore {
   return active
 }
 
-/** Test/DI hook: install a custom blob store. */
-export function setBlobStore(store: BlobStore): void {
+/**
+ * Test/DI hook: install a custom blob store.
+ * @internal
+ */
+export function _setBlobStore(store: BlobStore): void {
   active = store
 }
 
-/** Test/DI hook: clear the cached blob store and force re-creation on next access. */
-export function resetBlobStore(): void {
+/**
+ * Test/DI hook: clear the cached blob store and force re-creation on next access.
+ * @internal
+ */
+export function _resetBlobStore(): void {
   active = null
 }
 
