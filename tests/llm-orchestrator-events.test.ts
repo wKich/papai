@@ -35,6 +35,9 @@ describe('llm-orchestrator-events', () => {
           model: 'gpt-4',
           messageCount: 1,
           toolCount: Object.keys(tools).length,
+          exposedToolCount: Object.keys(tools).length,
+          fullToolCount: Object.keys(tools).length,
+          toolSchemaBytes: expect.any(Number),
         })
       } finally {
         unsubscribe(listener)
@@ -84,6 +87,9 @@ describe('llm-orchestrator-events', () => {
         expect(capturedEvent['finishReason']).toBe('stop')
         expect(capturedEvent['messageCount']).toBe(1)
         expect(capturedEvent['toolCount']).toBe(Object.keys(tools).length)
+        expect(capturedEvent['exposedToolCount']).toBe(Object.keys(tools).length)
+        expect(capturedEvent['fullToolCount']).toBe(Object.keys(tools).length)
+        expect(typeof capturedEvent['toolSchemaBytes']).toBe('number')
         expect(capturedEvent['generatedText']).toBe('Done!')
         expect(Array.isArray(capturedEvent['stepsDetail'])).toBe(true)
         expect(typeof capturedEvent['totalDuration']).toBe('number')

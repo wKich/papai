@@ -22,6 +22,7 @@ type ResponseMetadata = Partial<{ id: string; modelId: string }>
 
 type GenerateTextArgs = Partial<{
   messages: unknown[]
+  tools: Record<string, unknown>
   experimental_onToolCallFinish: ToolCallFinishHandler | undefined
 }>
 
@@ -922,7 +923,7 @@ describe('processMessage', () => {
       expect(toolBuildCount).toBe(2)
     })
 
-    test('DM tools are cached per-context without user suffix', async () => {
+  test('DM tools are cached per-context without user suffix', async () => {
       // In DMs, contextId === chatUserId, so caching by contextId is sufficient
       seedConfigForContext('dm-ctx-1')
       seedConfigForContext('dm-ctx-2')
@@ -951,6 +952,24 @@ describe('processMessage', () => {
       // First DM user again - should use cache
       await processMessage(reply1, 'dm-ctx-1', 'user-1', null, 'hello again', 'dm')
       expect(toolBuildCount).toBe(2)
+    })
+  })
+
+  describe('tool routing', () => {
+    test('passes an intent-routed tool subset to the model', async () => {
+      seedConfigForContext(CTX_ID)
+      let capturedToolNames: string[] = []
+      generateTextImpl = (args: GenerateTextArgs): Promise<GenerateTextResult> => {
+        capturedToolNames = Object.keys(args.tools ?? {})
+        return defaultGenerateTextResult()
+      }
+
+      const { reply } = createMockReply()
+      await processMessage(reply, CTX_ID, 'user-1', null, 'remember that I prefer morning standups', 'dm')
+
+      expect(capturedToolNames).toContain('save_memo')
+      expect(capturedToolNames).toContain('search_memos')
+      expect(capturedToolNames).not.toContain('create_task')
     })
   })
 })
