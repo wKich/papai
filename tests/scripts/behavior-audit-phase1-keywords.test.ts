@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { normalizeKeywordSlug } from '../../scripts/behavior-audit-phase1-keywords.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
+
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
@@ -49,7 +50,7 @@ function createExtractResult(input: {
   readonly behavior: string
   readonly context: string
   readonly candidateKeywords: readonly string[]
-}): ExtractResult {
+}): ExtractResult['result'] {
   return {
     behavior: input.behavior,
     context: input.context,
@@ -63,7 +64,7 @@ function createResolvedKeywords(input: {
     readonly slug: string
     readonly description: string
   }[]
-}): ResolveKeywordsResult {
+}): ResolveKeywordsResult['result'] {
   return {
     keywords: [...input.keywords],
     appendedEntries: input.appendedEntries.map((entry) => ({ ...entry })),
@@ -120,20 +121,22 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Resolves target context and forwards execution through the group routing path.',
             candidateKeywords: ['group-routing', 'group-targeting', 'request-routing'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting', 'group-routing'],
             appendedEntries: [],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -191,20 +194,22 @@ test('runPhase1 fails cleanly when resolver output normalizes to empty keyword s
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['   ', '!!!', '---'],
             appendedEntries: [],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -365,16 +370,17 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
@@ -383,7 +389,8 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -457,17 +464,18 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
     {
       extractWithRetry: (_prompt, _attempt) => {
         extractCalls += 1
-        return Promise.resolve(
-          createExtractResult({
+        return Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
             context: 'Reprocesses changed test dependencies.',
             candidateKeywords: ['group-targeting-updated'],
           }),
-        )
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        })
       },
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting-updated'],
             appendedEntries: [
               {
@@ -476,7 +484,8 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -525,16 +534,17 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
@@ -543,7 +553,8 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -608,16 +619,17 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
@@ -626,7 +638,8 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -696,21 +709,23 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (prompt, _attempt) => {
         capturedResolverPrompt = prompt
-        return Promise.resolve(
-          createResolvedKeywords({
+        return Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [],
           }),
-        )
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        })
       },
     },
   )

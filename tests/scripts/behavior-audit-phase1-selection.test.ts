@@ -133,14 +133,20 @@ describe('behavior-audit phase 1 incremental selection', () => {
       {
         extractWithRetry: () =>
           Promise.resolve({
-            behavior: 'When the injected test extractor runs, the bot persists the injected behavior.',
-            context: 'Uses the injected phase 1 extractor dependency.',
-            candidateKeywords: ['injected-extraction'],
+            result: {
+              behavior: 'When the injected test extractor runs, the bot persists the injected behavior.',
+              context: 'Uses the injected phase 1 extractor dependency.',
+              candidateKeywords: ['injected-extraction'],
+            },
+            usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
           }),
         resolveKeywordsWithRetry: () =>
           Promise.resolve({
-            keywords: ['injected-extraction'],
-            appendedEntries: [],
+            result: {
+              keywords: ['injected-extraction'],
+              appendedEntries: [],
+            },
+            usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
           }),
       },
     )
@@ -270,14 +276,20 @@ describe('behavior-audit phase 1 incremental selection', () => {
       {
         extractWithRetry: () =>
           Promise.resolve({
-            behavior: 'When selected work reruns, downstream checkpoints are invalidated first.',
-            context: 'Resets downstream checkpoint state before saving in-progress phase 1 state.',
-            candidateKeywords: ['phase1-reset'],
+            result: {
+              behavior: 'When selected work reruns, downstream checkpoints are invalidated first.',
+              context: 'Resets downstream checkpoint state before saving in-progress phase 1 state.',
+              candidateKeywords: ['phase1-reset'],
+            },
+            usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
           }),
         resolveKeywordsWithRetry: () =>
           Promise.resolve({
-            keywords: ['phase1-reset'],
-            appendedEntries: [],
+            result: {
+              keywords: ['phase1-reset'],
+              appendedEntries: [],
+            },
+            usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
           }),
         saveProgress: (currentProgress) => {
           savedSnapshots.push(structuredClone(currentProgress))

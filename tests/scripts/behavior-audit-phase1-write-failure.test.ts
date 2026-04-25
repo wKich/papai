@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
+
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { isObject, loadExtractModule, loadIncrementalModule } from './behavior-audit-integration.support.js'
@@ -49,19 +50,25 @@ test('runPhase1 does not publish manifest or progress completion before extracte
       {
         extractWithRetry: () =>
           Promise.resolve({
-            behavior: 'When a user targets a group, the bot routes the request correctly.',
-            context: 'Routes through group context selection.',
-            candidateKeywords: ['group-targeting'],
+            result: {
+              behavior: 'When a user targets a group, the bot routes the request correctly.',
+              context: 'Routes through group context selection.',
+              candidateKeywords: ['group-targeting'],
+            },
+            usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
           }),
         resolveKeywordsWithRetry: () =>
           Promise.resolve({
-            keywords: ['group-targeting'],
-            appendedEntries: [
-              {
-                slug: 'group-targeting',
-                description: 'Targeting work at a group context.',
-              },
-            ],
+            result: {
+              keywords: ['group-targeting'],
+              appendedEntries: [
+                {
+                  slug: 'group-targeting',
+                  description: 'Targeting work at a group context.',
+                },
+              ],
+            },
+            usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
           }),
         writeValidBehaviorsForFile: () => Promise.reject(new Error('disk full')),
       },

@@ -18,6 +18,17 @@ import { type IncrementalManifest, saveManifest } from './incremental.js'
 import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
 import { loadKeywordVocabulary, saveKeywordVocabulary } from './keyword-vocabulary.js'
 import {
+  addAgentUsage,
+  createPhaseStats,
+  type AgentUsage,
+  type PhaseStats,
+  recordItemDone,
+  recordItemFailed,
+  recordItemSkipped,
+  formatPerItemSuffix,
+  formatPhaseSummary,
+} from './phase-stats.js'
+import {
   type Progress,
   getFailedTestAttempts,
   markTestDone,
@@ -52,6 +63,7 @@ export interface Phase1Deps {
   readonly markFileDoneWhenSelectedTestsPersisted: typeof markFileDoneWhenSelectedTestsPersisted
   readonly log: Pick<typeof console, 'log'>
   readonly writeStdout: (text: string) => void
+  readonly stats?: PhaseStats
 }
 
 const defaultPhase1Deps: Phase1Deps = {
@@ -95,17 +107,24 @@ async function extractAndSave(
 ): Promise<SingleTestResult> {
   deps.writeStdout(`  [${displayIndex}/${totalTests}] "${testCase.name}" `)
   const startMs = performance.now()
+  let combinedUsage: AgentUsage | null = null
   const extracted = await deps.extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
   if (extracted === null) {
     deps.markTestFailed(progress, testKey, 'extraction failed')
-    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
+    const elapsedMs = performance.now() - startMs
+    deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+    if (deps.stats !== undefined) recordItemFailed(deps.stats)
     return null
   }
-  const keywords = await resolveKeywords(extracted.candidateKeywords, testKey, progress, deps)
-  if (keywords === null) {
-    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
+  combinedUsage = extracted.usage
+  const keywordsResult = await resolveKeywords(extracted.result.candidateKeywords, testKey, progress, deps)
+  if (keywordsResult === null) {
+    const elapsedMs = performance.now() - startMs
+    deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+    if (deps.stats !== undefined) recordItemFailed(deps.stats, combinedUsage)
     return null
   }
+  combinedUsage = addAgentUsage(combinedUsage, keywordsResult.usage)
   const record: ExtractedBehaviorRecord = {
     behaviorId: testKey,
     testKey,
@@ -113,9 +132,9 @@ async function extractAndSave(
     domain: getDomain(testFilePath),
     testName: testCase.name,
     fullPath: testCase.fullPath,
-    behavior: extracted.behavior,
-    context: extracted.context,
-    keywords,
+    behavior: extracted.result.behavior,
+    context: extracted.result.context,
+    keywords: keywordsResult.keywords,
     extractedAt: new Date().toISOString(),
   }
   const { manifest: updatedManifest, phase1Changed } = await deps.updateManifestForExtractedTest({
@@ -125,7 +144,8 @@ async function extractAndSave(
     extractedBehavior: record,
   })
   const elapsedMs = performance.now() - startMs
-  deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+  deps.log.log(formatPerItemSuffix(combinedUsage, elapsedMs))
+  if (deps.stats !== undefined) recordItemDone(deps.stats, combinedUsage)
   return { record, manifest: updatedManifest, phase1Changed }
 }
 
@@ -142,6 +162,7 @@ function processSingleTestCase(
   const testKey = `${testFilePath}::${testCase.fullPath}`
   if (deps.getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
     deps.log.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
+    if (deps.stats !== undefined) recordItemSkipped(deps.stats)
     return Promise.resolve(null)
   }
   return extractAndSave(testCase, testFile, testFilePath, testKey, displayIndex, totalTests, progress, manifest, deps)
@@ -233,7 +254,8 @@ export async function runPhase1(
   { testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput,
   deps: Partial<Phase1Deps> = {},
 ): Promise<void> {
-  const resolvedDeps: Phase1Deps = { ...defaultPhase1Deps, ...deps }
+  const stats = deps.stats ?? createPhaseStats()
+  const resolvedDeps: Phase1Deps = { ...defaultPhase1Deps, ...deps, stats }
   const hasSelectedPhase1Work = testFiles.some(
     (testFile) => resolvedDeps.getSelectedTests(testFile.filePath, testFile.tests, selectedTestKeys).length > 0,
   )
@@ -267,7 +289,7 @@ export async function runPhase1(
   }
   progress.phase1.status = 'done'
   await resolvedDeps.saveProgress(progress)
-  resolvedDeps.log.log(
-    `\n[Phase 1 complete] ${progress.phase1.stats.filesDone} files, ${progress.phase1.stats.testsExtracted} behaviors extracted, ${progress.phase1.stats.testsFailed} failed`,
-  )
+  const wallMs = performance.now() - stats.wallStartMs
+  const label = `[Phase 1 complete] ${progress.phase1.stats.filesDone} files, ${progress.phase1.stats.testsExtracted} behaviors extracted, ${progress.phase1.stats.testsFailed} failed`
+  resolvedDeps.log.log(`\n${formatPhaseSummary(stats, wallMs, label)}`)
 }
