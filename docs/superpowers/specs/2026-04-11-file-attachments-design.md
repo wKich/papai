@@ -132,11 +132,11 @@ This preserves the user expectation of "keep the files around until I clear them
 
 Persist attachment metadata in SQLite and persist binary content in an S3-compatible object store.
 
-| Storage layer        | Contents                                                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| SQLite               | `attachmentId`, `contextId`, provider/source metadata, filename, mime type, size, checksum, timestamps, status, active/cleared state |
+| Storage layer        | Contents                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SQLite               | `attachmentId`, `contextId`, provider/source metadata, filename, mime type, size, checksum, timestamps, status, active/cleared state             |
 | S3-compatible bucket | Raw attachment bytes addressed by stable object key (derived from attachment ID); checksum is stored for integrity checks and future dedupe work |
-| Conversation history | Text placeholders and attachment refs only, never raw bytes                                                                          |
+| Conversation history | Text placeholders and attachment refs only, never raw bytes                                                                                      |
 
 This keeps history and trim logic safe:
 
@@ -184,15 +184,15 @@ The runtime implementation wraps `Bun.S3Client`. Tests inject an in-memory imple
 
 The runtime reads S3 credentials from environment variables and treats them like any other piece of infrastructure config:
 
-| Variable                | Purpose                                                                                       | Required |
-| ----------------------- | --------------------------------------------------------------------------------------------- | -------- |
-| `S3_BUCKET`             | Bucket name where attachment objects live                                                     | yes      |
-| `S3_ENDPOINT`           | Endpoint URL (omit for AWS, set for R2/MinIO/B2/etc.)                                         | no       |
-| `S3_REGION`             | Region — required by AWS, optional for most S3-compatible providers                           | no       |
-| `S3_ACCESS_KEY_ID`      | Access key                                                                                    | yes      |
-| `S3_SECRET_ACCESS_KEY`  | Secret key                                                                                    | yes      |
-| `S3_PREFIX`             | Optional key prefix so multiple environments can share a bucket                               | no       |
-| `S3_FORCE_PATH_STYLE`   | `'true'` for MinIO and other path-style providers                                             | no       |
+| Variable               | Purpose                                                             | Required |
+| ---------------------- | ------------------------------------------------------------------- | -------- |
+| `S3_BUCKET`            | Bucket name where attachment objects live                           | yes      |
+| `S3_ENDPOINT`          | Endpoint URL (omit for AWS, set for R2/MinIO/B2/etc.)               | no       |
+| `S3_REGION`            | Region — required by AWS, optional for most S3-compatible providers | no       |
+| `S3_ACCESS_KEY_ID`     | Access key                                                          | yes      |
+| `S3_SECRET_ACCESS_KEY` | Secret key                                                          | yes      |
+| `S3_PREFIX`            | Optional key prefix so multiple environments can share a bucket     | no       |
+| `S3_FORCE_PATH_STYLE`  | `'true'` for MinIO and other path-style providers                   | no       |
 
 `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY` are validated at startup; the runtime fails fast if any are missing. `bun start:debug` documents the expected variables. Credentials never enter the SQLite database.
 

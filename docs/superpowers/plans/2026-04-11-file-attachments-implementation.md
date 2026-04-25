@@ -561,10 +561,7 @@ export async function saveAttachment(input: SaveAttachmentInput): Promise<Attach
   }
 }
 
-export async function loadAttachmentRecord(
-  contextId: string,
-  attachmentId: string,
-): Promise<StoredAttachment | null> {
+export async function loadAttachmentRecord(contextId: string, attachmentId: string): Promise<StoredAttachment | null> {
   const row = getDrizzleDb()
     .select()
     .from(attachments)
