@@ -104,19 +104,19 @@ describe('runReviewLoop', () => {
       ledger,
       reviewer: {
         availableCommands: ['review-code'],
-        promptText: () =>
-          Promise.resolve({
-            text: reviewerReplies[reviewerIndex++] ?? JSON.stringify({ round: 999, issues: [] }),
-            stopReason: 'end_turn',
-          }),
+        promptText: () => {
+          const reply = reviewerReplies[reviewerIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
+        },
       },
       fixer: {
         availableCommands: ['verify-issue'],
-        promptText: () =>
-          Promise.resolve({
-            text: fixerReplies[fixerIndex++] ?? 'done',
-            stopReason: 'end_turn',
-          }),
+        promptText: () => {
+          const reply = fixerReplies[fixerIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
+        },
       },
       log: createSilentLog(),
     })
@@ -157,6 +157,38 @@ describe('runReviewLoop', () => {
     const ledger = await createIssueLedger(runState.runDir)
     const reviewerPrompts: string[] = []
     const fixerPrompts: string[] = []
+    const reviewerReplyTexts = [
+      JSON.stringify({
+        round: 1,
+        issues: [
+          {
+            title: 'Race condition in queue flush path',
+            severity: 'high',
+            summary: 'Two concurrent messages can bypass the intended lock.',
+            whyItMatters: 'This can produce stale assistant replies.',
+            evidence: 'src/message-queue/queue.ts lines 84-107',
+            file: 'src/message-queue/queue.ts',
+            lineStart: 84,
+            lineEnd: 107,
+            suggestedFix: 'Take the processing lock earlier.',
+            confidence: 0.92,
+          },
+        ],
+      }),
+      JSON.stringify({ round: 2, issues: [] }),
+    ]
+    let reviewerReplyIndex = 0
+    const fixerReplyTexts = [
+      JSON.stringify({
+        verdict: 'valid',
+        fixability: 'auto',
+        reasoning: 'The control flow is actually unsafe.',
+        targetFiles: ['src/message-queue/queue.ts'],
+        needsPlanning: false,
+      }),
+      'Applied the minimal fix and ran the targeted test.',
+    ]
+    let fixerReplyIndex = 0
 
     await runReviewLoop({
       config,
@@ -166,48 +198,18 @@ describe('runReviewLoop', () => {
         availableCommands: ['review-code'],
         promptText: (text) => {
           reviewerPrompts.push(text)
-          return Promise.resolve({
-            text:
-              reviewerPrompts.length === 1
-                ? JSON.stringify({
-                    round: 1,
-                    issues: [
-                      {
-                        title: 'Race condition in queue flush path',
-                        severity: 'high',
-                        summary: 'Two concurrent messages can bypass the intended lock.',
-                        whyItMatters: 'This can produce stale assistant replies.',
-                        evidence: 'src/message-queue/queue.ts lines 84-107',
-                        file: 'src/message-queue/queue.ts',
-                        lineStart: 84,
-                        lineEnd: 107,
-                        suggestedFix: 'Take the processing lock earlier.',
-                        confidence: 0.92,
-                      },
-                    ],
-                  })
-                : JSON.stringify({ round: 2, issues: [] }),
-            stopReason: 'end_turn',
-          })
+          const reply = reviewerReplyTexts[reviewerReplyIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
         },
       },
       fixer: {
         availableCommands: ['verify-issue', 'fix-issue'],
         promptText: (text) => {
           fixerPrompts.push(text)
-          return Promise.resolve({
-            text:
-              fixerPrompts.length === 1
-                ? JSON.stringify({
-                    verdict: 'valid',
-                    fixability: 'auto',
-                    reasoning: 'The control flow is actually unsafe.',
-                    targetFiles: ['src/message-queue/queue.ts'],
-                    needsPlanning: false,
-                  })
-                : 'Applied the minimal fix and ran the targeted test.',
-            stopReason: 'end_turn',
-          })
+          const reply = fixerReplyTexts[fixerReplyIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
         },
       },
       log: createSilentLog(),
@@ -422,7 +424,40 @@ describe('runReviewLoop', () => {
     const ledger = await createIssueLedger(runState.runDir)
     const fixerPrompts: string[] = []
 
-    let reviewerCallCount = 0
+    const reviewerReplyTexts = [
+      JSON.stringify({
+        round: 1,
+        issues: [
+          {
+            title: 'Complex refactoring needed',
+            severity: 'high',
+            summary: 'Module boundary is wrong.',
+            whyItMatters: 'Causes import cycles.',
+            evidence: 'src/a.ts line 10',
+            file: 'src/a.ts',
+            lineStart: 10,
+            lineEnd: 20,
+            suggestedFix: 'Move interface to shared module.',
+            confidence: 0.85,
+          },
+        ],
+      }),
+      JSON.stringify({ round: 2, issues: [] }),
+    ]
+    let reviewerReplyIndex = 0
+
+    const fixerReplyTexts = [
+      JSON.stringify({
+        verdict: 'valid',
+        fixability: 'auto',
+        reasoning: 'Needs multi-file change.',
+        targetFiles: ['src/a.ts', 'src/b.ts'],
+        needsPlanning: true,
+      }),
+      'Step 1: Move interface. Step 2: Update imports.',
+      'Applied the fix and committed.',
+    ]
+    let fixerReplyIndex = 0
 
     const result = await runReviewLoop({
       config,
@@ -431,59 +466,18 @@ describe('runReviewLoop', () => {
       reviewer: {
         availableCommands: [],
         promptText: () => {
-          reviewerCallCount += 1
-          return Promise.resolve({
-            text:
-              reviewerCallCount === 1
-                ? JSON.stringify({
-                    round: 1,
-                    issues: [
-                      {
-                        title: 'Complex refactoring needed',
-                        severity: 'high',
-                        summary: 'Module boundary is wrong.',
-                        whyItMatters: 'Causes import cycles.',
-                        evidence: 'src/a.ts line 10',
-                        file: 'src/a.ts',
-                        lineStart: 10,
-                        lineEnd: 20,
-                        suggestedFix: 'Move interface to shared module.',
-                        confidence: 0.85,
-                      },
-                    ],
-                  })
-                : JSON.stringify({ round: 2, issues: [] }),
-            stopReason: 'end_turn',
-          })
+          const reply = reviewerReplyTexts[reviewerReplyIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
         },
       },
       fixer: {
         availableCommands: [],
         promptText: (text) => {
           fixerPrompts.push(text)
-          const promptIndex = fixerPrompts.length
-          if (promptIndex === 1) {
-            return Promise.resolve({
-              text: JSON.stringify({
-                verdict: 'valid',
-                fixability: 'auto',
-                reasoning: 'Needs multi-file change.',
-                targetFiles: ['src/a.ts', 'src/b.ts'],
-                needsPlanning: true,
-              }),
-              stopReason: 'end_turn',
-            })
-          }
-          if (promptIndex === 2) {
-            return Promise.resolve({
-              text: 'Step 1: Move interface. Step 2: Update imports.',
-              stopReason: 'end_turn',
-            })
-          }
-          return Promise.resolve({
-            text: 'Applied the fix and committed.',
-            stopReason: 'end_turn',
-          })
+          const reply = fixerReplyTexts[fixerReplyIndex++]
+          expect(reply).toBeDefined()
+          return Promise.resolve({ text: reply!, stopReason: 'end_turn' })
         },
       },
       log: createSilentLog(),

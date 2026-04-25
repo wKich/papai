@@ -206,6 +206,53 @@ describe('classifyYouTrackError', () => {
     })
   })
 
+  describe('workflow validation errors', () => {
+    test('classifies 400 with error_type workflow as workflow-validation-failed', () => {
+      const error = new YouTrackApiError('Bad request', 400, {
+        error: 'Assertion failed',
+        error_description: 'Please fill in "URL address" or "Service Discovery name".',
+        error_type: 'workflow',
+      })
+      const result = classifyYouTrackError(error, { projectId: 'PROJ-1' })
+      expect(result.appError.code).toBe('workflow-validation-failed')
+      if (result.appError.code === 'workflow-validation-failed') {
+        expect(result.appError.requiredFields.length).toBeGreaterThan(0)
+      }
+    })
+
+    test('extracts quoted field names from Russian workflow error', () => {
+      const error = new YouTrackApiError('Bad request', 400, {
+        error: 'Assertion failed',
+        error_description:
+          '\u041F\u043E\u0436\u0430\u043B\u0443\u0439\u0441\u0442\u0430, \u0437\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 "URL \u0430\u0434\u0435\u0441\u0430 \u0433\u0434\u0435 \u0431\u0443\u0434\u0435\u0442 \u0440\u0430\u0437\u043C\u0435\u0449\u0430\u0442\u044C\u0441\u044F \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438" (\u0441 \u0443\u043A\u0430\u0437\u0430\u043D\u0438\u0435\u043C \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u0430 http(s)://) \u0438\u043B\u0438 "\u0418\u043C\u044F \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0432 Service Discovery".',
+        error_type: 'workflow',
+      })
+      const result = classifyYouTrackError(error, { projectId: '39-1118' })
+      expect(result.appError.code).toBe('workflow-validation-failed')
+      if (result.appError.code === 'workflow-validation-failed') {
+        const fieldNames = result.appError.requiredFields.map((f) => f.name)
+        expect(fieldNames).toContain('URL адеса где будет размещаться приложени')
+        expect(fieldNames).toContain('Имя приложения в Service Discovery')
+      }
+    })
+
+    test('extracts quoted field names with smart quotes', () => {
+      const error = new YouTrackApiError('Bad request', 400, {
+        error: 'Assertion failed',
+        error_description:
+          '\u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u00ABURL\u00BB \u0438\u043B\u0438 \u00ABName\u00BB.',
+        error_type: 'workflow',
+      })
+      const result = classifyYouTrackError(error)
+      expect(result.appError.code).toBe('workflow-validation-failed')
+      if (result.appError.code === 'workflow-validation-failed') {
+        const fieldNames = result.appError.requiredFields.map((f) => f.name)
+        expect(fieldNames).toContain('URL')
+        expect(fieldNames).toContain('Name')
+      }
+    })
+  })
+
   describe('user-friendly messages', () => {
     test('task-not-found includes taskId', () => {
       const error = new YouTrackApiError('Issue not found', 404, {})
