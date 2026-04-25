@@ -146,7 +146,7 @@ export function buildPluginPromptSection(activePluginIds: string[]): string {
       const rawContent = typeof fragment.content === 'function' ? fragment.content() : fragment.content
       const truncated =
         rawContent.length > MAX_FRAGMENT_LENGTH_PER_PLUGIN
-          ? rawContent.slice(0, MAX_FRAGMENT_LENGTH_PER_PLUGIN) + '[truncated]'
+          ? rawContent.slice(0, MAX_FRAGMENT_LENGTH_PER_PLUGIN - '[truncated]'.length) + '[truncated]'
           : rawContent
 
       const section = `<!-- plugin:${pluginId}:${fragment.name} -->\n${truncated}\n<!-- /plugin:${pluginId}:${fragment.name} -->`

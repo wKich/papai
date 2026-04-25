@@ -85,7 +85,7 @@ export class PluginRegistry {
     }
 
     // If manifest hash changed and plugin was previously approved, revert to discovered
-    if (existing.approvedManifestHash !== null && manifestHash !== existing.approvedManifestHash) {
+    if (existing.approvedManifestHash !== null && existing.approvedManifestHash !== undefined && manifestHash !== existing.approvedManifestHash) {
       updatePluginAdminStateField(manifest.id, {
         state: 'discovered',
         lastSeenManifestHash: manifestHash,

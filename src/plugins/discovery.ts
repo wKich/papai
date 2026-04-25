@@ -34,7 +34,12 @@ function readManifestJson(manifestPath: string): unknown {
 }
 
 function computeManifestHash(manifestContent: string, entryPointContent: string): string {
-  return createHash('sha256').update(manifestContent).update('\x00').update(entryPointContent).digest('hex')
+  return createHash('sha256')
+    .update(`${manifestContent.length}:`)
+    .update(manifestContent)
+    .update(`${entryPointContent.length}:`)
+    .update(entryPointContent)
+    .digest('hex')
 }
 
 function resolveEntryPoint(pluginDir: string, main: string): string | null {

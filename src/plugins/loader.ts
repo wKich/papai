@@ -23,12 +23,19 @@ async function importPluginModule(entryPoint: string): Promise<PluginFactory | n
   return candidate
 }
 
-function buildActivationTimeout(timeoutMs: number): Promise<never> {
-  return new Promise<never>((_, reject) => {
-    setTimeout(() => {
+function buildActivationTimeout(timeoutMs: number): { promise: Promise<never>; cancel: () => void } {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const promise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
       reject(new Error(`Activation timed out after ${timeoutMs}ms`))
     }, timeoutMs)
   })
+  return {
+    promise,
+    cancel() {
+      if (timeout !== undefined) clearTimeout(timeout)
+    },
+  }
 }
 
 const log = logger.child({ scope: 'plugins:loader' })
@@ -55,12 +62,10 @@ async function activateOne(plugin: DiscoveredPlugin): Promise<boolean> {
   if (factory === null) return false
 
   const { ctx, collected } = buildPluginContext(manifest, SYSTEM_CONTEXT_ID)
+  const activationTimeout = buildActivationTimeout(manifest.activationTimeoutMs)
 
   try {
-    const contributions = await Promise.race([
-      Promise.resolve(factory.activate(ctx)),
-      buildActivationTimeout(manifest.activationTimeoutMs),
-    ])
+    const contributions = await Promise.race([Promise.resolve(factory.activate(ctx)), activationTimeout.promise])
 
     if (contributions !== undefined && contributions !== null) {
       collected.tools.push(...contributions.tools)
@@ -80,6 +85,8 @@ async function activateOne(plugin: DiscoveredPlugin): Promise<boolean> {
     pluginRegistry.markError(manifest.id, `Activation failed: ${msg}`)
     recordRuntimeEvent(manifest.id, 'error', `Activation failed: ${msg}`)
     return false
+  } finally {
+    activationTimeout.cancel()
   }
 }
 
