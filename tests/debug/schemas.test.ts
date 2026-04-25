@@ -345,6 +345,12 @@ describe('schemas', () => {
         finishReason: 'stop',
         messageCount: 5,
         toolCount: 10,
+        exposedToolCount: 6,
+        fullToolCount: 10,
+        toolSchemaBytes: 1234,
+        routingIntent: 'task_read',
+        routingConfidence: 0.75,
+        routingReason: 'read-keyword',
         generatedText: 'I created a task for you.',
         stepsDetail: [
           {
@@ -359,6 +365,10 @@ describe('schemas', () => {
       if (result !== null) {
         expect(result.responseId).toBe('resp-123')
         expect(result.actualModel).toBe('gpt-4-0125-preview')
+        expect(result.exposedToolCount).toBe(6)
+        expect(result.fullToolCount).toBe(10)
+        expect(result.toolSchemaBytes).toBe(1234)
+        expect(result.routingIntent).toBe('task_read')
         expect(result.generatedText).toBe('I created a task for you.')
         expect(result.stepsDetail).toHaveLength(1)
       }

@@ -43,6 +43,13 @@ export type InvokeModelArgs = {
   model: ReturnType<ReturnType<typeof createOpenAICompatible>>
   provider: TaskProvider
   tools: ToolSet
+  toolRouting?: {
+    intent: string
+    confidence: number
+    reason: string
+    fullToolCount: number
+    exposedToolCount: number
+  }
   messages: ModelMessage[]
   deps: LlmOrchestratorDeps
 }

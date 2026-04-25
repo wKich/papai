@@ -22,6 +22,7 @@ import type { TaskProvider } from './providers/types.js'
 import { withReplyTypingHeartbeat } from './reply-typing-heartbeat.js'
 import { buildSystemPrompt } from './system-prompt.js'
 import { makeTools } from './tools/index.js'
+import { routeToolsForMessage } from './tools/tool-router.js'
 import { getKaneoWorkspace } from './users.js'
 import { fetchWithoutTimeout } from './utils/fetch.js'
 
@@ -120,7 +121,7 @@ const invokeModel = async (
 ): ReturnType<LlmOrchestratorDeps['generateText']> => {
   const { contextId, mainModel, model, provider, tools, messages, deps, reply } = args
   const start = Date.now()
-  emitLlmStart(contextId, mainModel, messages, tools)
+  emitLlmStart(contextId, mainModel, messages, tools, args.toolRouting)
   const result = await deps.generateText({
     model,
     system: buildSystemPrompt(provider, contextId),
@@ -140,7 +141,7 @@ const invokeModel = async (
       handleToolCallFinish(contextId, reply, event)
     },
   })
-  emitLlmEnd(contextId, mainModel, result, start, messages, tools)
+  emitLlmEnd(contextId, mainModel, result, start, messages, tools, args.toolRouting)
   return result
 }
 
@@ -192,7 +193,19 @@ const callLlm = async (
   const model = deps.buildOpenAI(llmApiKey, llmBaseUrl)(mainModel)
   const provider = deps.buildProviderForUser(configId)
   await maybeAutoLinkIdentity(chatUserId, username, provider)
-  const tools = getOrCreateTools(contextId, chatUserId, username, provider, contextType)
+  const fullTools = getOrCreateTools(contextId, chatUserId, username, provider, contextType)
+  const routedTools = routeToolsForMessage(userText, fullTools)
+  log.debug(
+    {
+      contextId,
+      routingIntent: routedTools.decision.intent,
+      routingConfidence: routedTools.decision.confidence,
+      routingReason: routedTools.decision.reason,
+      fullToolCount: routedTools.fullToolCount,
+      exposedToolCount: routedTools.exposedToolCount,
+    },
+    'Tool routing selected subset',
+  )
   const timezone = resolveTimezone(configId)
   const { messages: messagesWithMemory, memoryMsg } = buildMessagesWithMemory(contextId, history)
   const validatedMessages = validateToolResults(messagesWithMemory)
@@ -205,7 +218,14 @@ const callLlm = async (
     mainModel,
     model,
     provider,
-    tools,
+    tools: routedTools.tools,
+    toolRouting: {
+      intent: routedTools.decision.intent,
+      confidence: routedTools.decision.confidence,
+      reason: routedTools.decision.reason,
+      fullToolCount: routedTools.fullToolCount,
+      exposedToolCount: routedTools.exposedToolCount,
+    },
     messages: validatedMessages,
     deps,
   })
