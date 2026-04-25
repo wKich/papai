@@ -35,9 +35,10 @@ export type ResolvedStreamTextResult = {
   providerMetadata?: unknown
 }
 
-function stringifyToolSchema(toolName: string, value: unknown): string {
+function stringifySingleToolSchema(toolName: string, value: unknown): string {
   try {
-    return JSON.stringify(value, (_key, nestedValue: unknown) => {
+    return JSON.stringify(value, (key, nestedValue: unknown) => {
+      if (key === '') return nestedValue
       if (typeof nestedValue === 'function') return '[function]'
       return nestedValue
     })
@@ -52,7 +53,7 @@ function estimateToolSchemaBytes(tools: ToolSet): number {
   for (const [name, tool] of Object.entries(tools)) {
     total += name.length
     total += typeof tool.description === 'string' ? tool.description.length : 0
-    total += stringifyToolSchema(name, tool.inputSchema).length
+    total += stringifySingleToolSchema(name, tool.inputSchema).length
   }
   return total
 }
