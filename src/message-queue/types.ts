@@ -16,6 +16,7 @@ export type QueueItem = Readonly<{
   username: string | null
   storageContextId: string
   files: readonly IncomingFile[]
+  newAttachmentIds: readonly string[]
 }> &
   QueueContextInfo &
   QueueConfigContextInfo
@@ -26,6 +27,7 @@ export type CoalescedItem = Readonly<{
   username: string | null
   storageContextId: string
   files: readonly IncomingFile[]
+  newAttachmentIds: readonly string[]
   reply: ReplyFn
 }> &
   QueueContextInfo &

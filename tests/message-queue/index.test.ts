@@ -41,6 +41,7 @@ describe('enqueueMessage', () => {
       storageContextId: `ctx1-${crypto.randomUUID()}`,
       contextType: 'dm',
       files: [],
+      newAttachmentIds: [],
     }
     const mockReply: ReplyFn = {
       text: async () => {},
@@ -89,6 +90,7 @@ describe('flushOnShutdown', () => {
       storageContextId: `hang-test-ctx-${crypto.randomUUID()}`,
       contextType: 'dm',
       files: [],
+      newAttachmentIds: [],
     }
 
     enqueueMessage(item, mockReply, hangingHandler)

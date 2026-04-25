@@ -44,6 +44,7 @@ describe('MessageQueue', () => {
         storageContextId: 'user123',
         contextType: 'dm',
         files: [],
+        newAttachmentIds: [],
       }
       queue.enqueue(item, mockReply)
       expect(queue.getBufferedCount()).toBe(1)
@@ -57,6 +58,7 @@ describe('MessageQueue', () => {
         storageContextId: 'user123',
         contextType: 'dm',
         files: [],
+        newAttachmentIds: [],
       }
       queue.enqueue(item, mockReply)
       expect(typingSpy).toHaveBeenCalledTimes(0)
@@ -71,6 +73,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -82,6 +85,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -102,6 +106,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         reply1,
       )
@@ -113,6 +118,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         reply2,
       )
@@ -135,6 +141,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -146,6 +153,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -175,6 +183,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         reply1,
       )
@@ -186,6 +195,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         reply2,
       )
@@ -210,6 +220,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -220,6 +231,38 @@ describe('MessageQueue', () => {
         throw new Error('Expected flushed to not be null')
       }
       expect(flushed.text).toBe('[@alice]: Hello from thread')
+    })
+
+    it('should accumulate newAttachmentIds from all messages', () => {
+      queue.enqueue(
+        {
+          text: 'First',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+          newAttachmentIds: ['att_1'],
+        },
+        mockReply,
+      )
+      queue.enqueue(
+        {
+          text: 'Second',
+          userId: 'user123',
+          username: 'alice',
+          storageContextId: 'user123',
+          contextType: 'dm',
+          files: [],
+          newAttachmentIds: ['att_2', 'att_3'],
+        },
+        mockReply,
+      )
+
+      const flushed = queue.forceFlush()
+      expect(flushed).not.toBeNull()
+      if (flushed === null) throw new Error('Expected flushed to not be null')
+      expect(flushed.newAttachmentIds).toEqual(['att_1', 'att_2', 'att_3'])
     })
 
     it('should accumulate files from all messages', () => {
@@ -234,6 +277,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [file1],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -245,6 +289,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [file2],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -275,6 +320,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -292,6 +338,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -323,6 +370,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -353,6 +401,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -408,6 +457,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -427,6 +477,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -473,6 +524,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -489,6 +541,7 @@ describe('MessageQueue', () => {
           storageContextId: 'user123',
           contextType: 'dm',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -516,6 +569,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -530,6 +584,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -554,6 +609,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -566,6 +622,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -587,6 +644,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -599,6 +657,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -626,6 +685,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )
@@ -638,6 +698,7 @@ describe('MessageQueue', () => {
           storageContextId: 'group123:thread456',
           contextType: 'group',
           files: [],
+          newAttachmentIds: [],
         },
         mockReply,
       )

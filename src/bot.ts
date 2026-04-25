@@ -1,4 +1,5 @@
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './auth.js'
+import { ingestAttachmentsForMessage } from './bot-attachments.js'
 import { emitReplyCompletedIfNeeded, trackReplyUsage } from './bot-reply-tracking.js'
 import { maybeInterceptWizard } from './bot-settings.js'
 import { supportsFileReplies, supportsInteractiveButtons } from './chat/capabilities.js'
@@ -165,6 +166,7 @@ function shouldIgnoreGroupMessage(msg: IncomingMessage): boolean {
   return !msg.isMentioned
 }
 async function handleMessage(
+  chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   auth: AuthorizationResult,
@@ -177,15 +179,22 @@ async function handleMessage(
   if (shouldIgnoreGroupMessage(msg)) return
   let files: readonly IncomingFile[] = []
   if (msg.files !== undefined) files = msg.files
+  const { newAttachmentIds, activeAttachments } = await ingestAttachmentsForMessage({
+    chat,
+    msg,
+    storageContextId: auth.storageContextId,
+    files,
+  })
   enqueueMessage(
     {
-      text: buildPromptWithReplyContext(msg),
+      text: buildPromptWithReplyContext(msg, activeAttachments),
       userId: msg.user.id,
       username: msg.user.username,
       storageContextId: auth.storageContextId,
       configContextId: auth.configContextId,
       contextType: msg.contextType,
       files,
+      newAttachmentIds,
     },
     reply,
     (coalescedItem): Promise<void> => processCoalescedMessage(coalescedItem, deps),
@@ -241,7 +250,7 @@ async function onIncomingMessage(
     return
   }
   const willQueue = willQueueAuthorizedMessage(msg, auth)
-  await handleMessage(msg, tracked.reply, auth, deps)
+  await handleMessage(chat, msg, tracked.reply, auth, deps)
   if (!willQueue) emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
 }
 type InteractionHandler = NonNullable<ChatProvider['onInteraction']>

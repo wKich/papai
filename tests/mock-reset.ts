@@ -16,6 +16,7 @@ import * as _ai from 'ai'
 
 // Capture real module exports BEFORE any test file loads.
 // Spread into plain objects to snapshot current values.
+import { createInMemoryBlobStore, setBlobStore } from '../src/attachments/blob-store.js'
 import * as _interactionRouter from '../src/chat/interaction-router.js'
 import { _resetDrizzleDb } from '../src/db/drizzle.js'
 import * as _logger from '../src/logger.js'
@@ -33,6 +34,7 @@ const originals: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
 
 beforeEach(() => {
   _resetDrizzleDb()
+  setBlobStore(createInMemoryBlobStore())
   for (const [path, exports] of originals) {
     void mock.module(path, () => ({ ...exports }))
   }
