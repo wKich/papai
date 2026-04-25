@@ -1,4 +1,6 @@
 import { buildInstructionsBlock } from './instructions.js'
+import { buildPluginPromptSection } from './plugins/contributions.js'
+import { getPluginsForContext } from './plugins/registry.js'
 import type { TaskProvider } from './providers/types.js'
 
 const STATIC_RULES = `WORKFLOW:
@@ -90,5 +92,15 @@ ${STATIC_RULES}`
 
 export const buildSystemPrompt = (provider: TaskProvider, contextId: string): string => {
   const addendum = provider.getPromptAddendum()
-  return `${buildInstructionsBlock(contextId)}${addendum === '' ? BASE_PROMPT : `${BASE_PROMPT}\n\n${addendum}`}`
+  const basePrompt = `${buildInstructionsBlock(contextId)}${addendum === '' ? BASE_PROMPT : `${BASE_PROMPT}\n\n${addendum}`}`
+
+  // Append active plugin prompt fragments
+  const activePlugins = getPluginsForContext(contextId)
+  if (activePlugins.length === 0) return basePrompt
+
+  const activePluginIds = activePlugins.map((p) => p.manifest.id)
+  const pluginSection = buildPluginPromptSection(activePluginIds)
+  if (pluginSection === '') return basePrompt
+
+  return `${basePrompt}\n\n${pluginSection}`
 }

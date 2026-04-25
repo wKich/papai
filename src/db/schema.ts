@@ -244,3 +244,5 @@ export const groupAdminObservations = sqliteTable(
   ],
 )
 export { webCache, webRateLimit } from './web-schema.js'
+export { pluginAdminState, pluginContextState, pluginKv, pluginRuntimeEvents } from './plugin-schema.js'
+export type { PluginAdminStateRow, PluginContextStateRow, PluginKvRow, PluginRuntimeEventRow } from './plugin-schema.js'

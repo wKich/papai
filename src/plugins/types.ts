@@ -1,0 +1,216 @@
+import type { ToolExecutionOptions } from 'ai'
+import { z } from 'zod'
+
+import type { ChatCapability } from '../chat/types.js'
+import type { TaskCapability } from '../providers/types.js'
+import type { PluginContext } from './context.js'
+
+/** Current plugin API version. Plugins declaring a different apiVersion will be rejected as incompatible. */
+export const PLUGIN_API_VERSION = 1
+
+/** All permissions a plugin may request. */
+export const PLUGIN_PERMISSIONS = [
+  'storage',
+  'scheduler',
+  'commands',
+  'chat.send',
+  'tasks.read',
+  'tasks.write',
+] as const
+
+export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number]
+
+/** Runtime state machine states for a plugin. */
+export type PluginState =
+  | 'discovered'
+  | 'approved'
+  | 'rejected'
+  | 'incompatible'
+  | 'config_missing'
+  | 'active'
+  | 'error'
+
+/** All valid task capability strings (used for manifest validation). */
+const TASK_CAPABILITY_VALUES = [
+  'tasks.delete',
+  'tasks.count',
+  'tasks.relations',
+  'tasks.watchers',
+  'tasks.votes',
+  'tasks.visibility',
+  'tasks.commands',
+  'projects.read',
+  'projects.list',
+  'projects.create',
+  'projects.update',
+  'projects.delete',
+  'projects.team',
+  'comments.read',
+  'comments.create',
+  'comments.update',
+  'comments.delete',
+  'comments.reactions',
+  'labels.list',
+  'labels.create',
+  'labels.update',
+  'labels.delete',
+  'labels.assign',
+  'statuses.list',
+  'statuses.create',
+  'statuses.update',
+  'statuses.delete',
+  'statuses.reorder',
+  'attachments.list',
+  'attachments.upload',
+  'attachments.delete',
+  'workItems.list',
+  'workItems.create',
+  'workItems.update',
+  'workItems.delete',
+  'agiles.list',
+  'sprints.list',
+  'sprints.create',
+  'sprints.update',
+  'sprints.assign',
+  'activities.read',
+  'queries.saved',
+] as const satisfies readonly TaskCapability[]
+
+/** All valid chat capability strings (used for manifest validation). */
+const CHAT_CAPABILITY_VALUES = [
+  'commands.menu',
+  'interactions.callbacks',
+  'messages.buttons',
+  'messages.delete',
+  'messages.files',
+  'messages.redact',
+  'messages.reply-context',
+  'files.receive',
+  'users.resolve',
+] as const satisfies readonly ChatCapability[]
+
+const pluginIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9-]*$/, 'Plugin ID must be lowercase kebab-case starting with a letter')
+
+const toolNameSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*$/, 'Tool name must be snake_case starting with a letter')
+
+const commandNameSchema = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(/^[a-z][a-z0-9_-]*$/, 'Command name must be lowercase')
+
+const configKeySchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*$/, 'Config key must be snake_case starting with a letter')
+
+const pluginContributesSchema = z.object({
+  tools: z.array(toolNameSchema).optional().default([]),
+  promptFragments: z.array(z.string().min(1).max(64)).optional().default([]),
+  commands: z.array(commandNameSchema).optional().default([]),
+  jobs: z.array(z.string().min(1).max(64)).optional().default([]),
+  configKeys: z.array(configKeySchema).optional().default([]),
+})
+
+const pluginConfigRequirementSchema = z.object({
+  key: configKeySchema,
+  label: z.string().min(1),
+  required: z.boolean(),
+  sensitive: z.boolean().optional().default(false),
+})
+
+const mainPathSchema = z.string().refine(
+  (v) => {
+    if (v.startsWith('/')) return false
+    if (v.includes('..')) return false
+    if (!v.endsWith('.ts') && !v.endsWith('.js')) return false
+    return true
+  },
+  {
+    message: 'main must be a relative .ts or .js path without ".." components',
+  },
+)
+
+const taskCapabilityTuple = TASK_CAPABILITY_VALUES
+const chatCapabilityTuple = CHAT_CAPABILITY_VALUES
+const permissionTuple = PLUGIN_PERMISSIONS
+
+/** Zod schema for a plugin manifest (plugin.json). */
+export const pluginManifestSchema = z.object({
+  id: pluginIdSchema,
+  name: z.string().min(1).max(128),
+  version: z.string().regex(/^\d+\.\d+\.\d+/, 'version must be semver (major.minor.patch)'),
+  description: z.string().min(1).max(512),
+  apiVersion: z.literal(PLUGIN_API_VERSION),
+  main: mainPathSchema.optional().default('index.ts'),
+  contributes: pluginContributesSchema.optional().default({
+    tools: [],
+    promptFragments: [],
+    commands: [],
+    jobs: [],
+    configKeys: [],
+  }),
+  permissions: z.array(z.enum(permissionTuple)).optional().default([]),
+  author: z.string().optional(),
+  homepage: z.url().optional(),
+  license: z.string().optional(),
+  defaultEnabled: z.boolean().optional().default(false),
+  requiredTaskCapabilities: z.array(z.enum(taskCapabilityTuple)).optional().default([]),
+  requiredChatCapabilities: z.array(z.enum(chatCapabilityTuple)).optional().default([]),
+  configRequirements: z.array(pluginConfigRequirementSchema).optional().default([]),
+  activationTimeoutMs: z.number().int().min(100).max(10000).optional().default(5000),
+})
+
+export type PluginManifest = z.output<typeof pluginManifestSchema>
+export type PluginManifestInput = z.input<typeof pluginManifestSchema>
+
+export type PluginConfigRequirement = z.output<typeof pluginConfigRequirementSchema>
+
+/** A validated plugin discovered from the filesystem. */
+export type DiscoveredPlugin = {
+  manifest: PluginManifest
+  /** Absolute path to the plugin directory. */
+  pluginDir: string
+  /** Absolute path to the entry point file. */
+  entryPoint: string
+  /** SHA-256 hex hash of the manifest + entry point content. */
+  manifestHash: string
+}
+
+/** A tool contributed by a plugin. */
+export type PluginTool = {
+  /** Raw tool name as declared in the manifest (snake_case). */
+  name: string
+  description: string
+  inputSchema?: z.ZodType
+  execute: (input: unknown, options: ToolExecutionOptions) => Promise<unknown>
+}
+
+/** A prompt fragment contributed by a plugin. */
+export type PluginPromptFragment = {
+  /** Fragment key matching a name in contributes.promptFragments. */
+  name: string
+  /** The fragment text or a synchronous function returning it. */
+  content: string | (() => string)
+}
+
+/** Registration result from a plugin's activate() call. */
+export type PluginContributions = {
+  tools: PluginTool[]
+  promptFragments: PluginPromptFragment[]
+}
+
+/** Interface that a plugin module's default export must satisfy. */
+export type PluginFactory = {
+  activate(ctx: PluginContext): Promise<PluginContributions | undefined> | PluginContributions | undefined
+  deactivate?(ctx: PluginContext): Promise<void> | void
+}

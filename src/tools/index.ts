@@ -1,5 +1,7 @@
 import type { ToolSet } from 'ai'
 
+import { buildPluginToolSet, contributionRegistry } from '../plugins/contributions.js'
+import { getPluginsForContext } from '../plugins/registry.js'
 import type { TaskProvider } from '../providers/types.js'
 import { buildTools } from './tools-builder.js'
 import type { MakeToolsOptions, ToolMode } from './types.js'
@@ -37,5 +39,19 @@ export function makeTools(provider: TaskProvider, options?: MakeToolsOptions): T
   const contextType = options?.contextType
 
   const tools = buildTools(provider, chatUserId, contextId, mode, contextType, username)
-  return wrapToolSet(tools)
+  const wrappedBuiltins = wrapToolSet(tools)
+
+  // Merge active plugin tools for this context (only when we have a contextId)
+  if (contextId !== undefined && chatUserId !== undefined) {
+    const activePlugins = getPluginsForContext(contextId)
+    if (activePlugins.length > 0) {
+      const activePluginIds = activePlugins
+        .map((p) => p.manifest.id)
+        .filter((id) => contributionRegistry.getContributions(id) !== undefined)
+      const pluginTools = buildPluginToolSet(activePluginIds, new Set(Object.keys(wrappedBuiltins)))
+      return { ...wrappedBuiltins, ...pluginTools }
+    }
+  }
+
+  return wrappedBuiltins
 }
