@@ -1,4 +1,5 @@
 import { checkAuthorizationExtended, getThreadScopedStorageContextId } from './auth.js'
+import { ingestAttachmentsForMessage } from './bot-attachments.js'
 import { emitReplyCompletedIfNeeded, trackReplyUsage } from './bot-reply-tracking.js'
 import { maybeInterceptWizard } from './bot-settings.js'
 import { supportsFileReplies, supportsInteractiveButtons } from './chat/capabilities.js'
@@ -16,7 +17,6 @@ import {
 } from './commands/index.js'
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
-import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
@@ -26,15 +26,7 @@ import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
-type ProcessMessageFn = (
-  reply: ReplyFn,
-  contextId: string,
-  chatUserId: string,
-  username: string | null,
-  userText: string,
-  contextType: 'dm' | 'group',
-  configContextId: string | undefined,
-) => Promise<void>
+type ProcessMessageFn = typeof defaultProcessMessage
 export interface BotDeps {
   processMessage: ProcessMessageFn
 }
@@ -142,8 +134,6 @@ async function autoStartWizardIfNeeded(userId: string, storageContextId: string,
 async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps: BotDeps): Promise<void> {
   const start = Date.now()
   const tracked = trackReplyUsage(coalescedItem.reply, true)
-  if (coalescedItem.files.length > 0) storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
-  else clearIncomingFiles(coalescedItem.storageContextId)
   try {
     await deps.processMessage(
       tracked.reply,
@@ -153,9 +143,10 @@ async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps:
       coalescedItem.text,
       coalescedItem.contextType,
       coalescedItem.configContextId,
+      undefined,
+      coalescedItem.newAttachmentIds,
     )
   } finally {
-    clearIncomingFiles(coalescedItem.storageContextId)
     emitReplyCompletedIfNeeded(tracked, coalescedItem.userId, coalescedItem.storageContextId, start)
   }
 }
@@ -165,6 +156,7 @@ function shouldIgnoreGroupMessage(msg: IncomingMessage): boolean {
   return !msg.isMentioned
 }
 async function handleMessage(
+  chat: ChatProvider,
   msg: IncomingMessage,
   reply: ReplyFn,
   auth: AuthorizationResult,
@@ -175,17 +167,22 @@ async function handleMessage(
     return
   }
   if (shouldIgnoreGroupMessage(msg)) return
-  let files: readonly IncomingFile[] = []
-  if (msg.files !== undefined) files = msg.files
+  const files: readonly IncomingFile[] = msg.files ?? []
+  const { newAttachmentIds, activeAttachments } = await ingestAttachmentsForMessage({
+    chat,
+    msg,
+    storageContextId: auth.storageContextId,
+    files,
+  })
   enqueueMessage(
     {
-      text: buildPromptWithReplyContext(msg),
+      text: buildPromptWithReplyContext(msg, activeAttachments),
       userId: msg.user.id,
       username: msg.user.username,
       storageContextId: auth.storageContextId,
       configContextId: auth.configContextId,
       contextType: msg.contextType,
-      files,
+      newAttachmentIds,
     },
     reply,
     (coalescedItem): Promise<void> => processCoalescedMessage(coalescedItem, deps),
@@ -241,7 +238,7 @@ async function onIncomingMessage(
     return
   }
   const willQueue = willQueueAuthorizedMessage(msg, auth)
-  await handleMessage(msg, tracked.reply, auth, deps)
+  await handleMessage(chat, msg, tracked.reply, auth, deps)
   if (!willQueue) emitReplyCompletedIfNeeded(tracked, msg.user.id, auth.storageContextId, start)
 }
 type InteractionHandler = NonNullable<ChatProvider['onInteraction']>

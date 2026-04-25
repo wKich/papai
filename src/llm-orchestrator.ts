@@ -9,6 +9,7 @@ import { emit } from './debug/event-bus.js'
 import { appendHistory, saveHistory } from './history.js'
 import { getIdentityMapping } from './identity/mapping.js'
 import { attemptAutoLink } from './identity/resolver.js'
+import { buildUserTurnMessages } from './llm-orchestrator-attachments.js'
 import { checkRequiredConfig, getLlmConfig, resolveConfigId, resolveTimezone } from './llm-orchestrator-config.js'
 import { emitLlmEnd, emitLlmStart } from './llm-orchestrator-events.js'
 import { handleOrchestratorMessageError, handleToolCallFinish } from './llm-orchestrator-support.js'
@@ -216,40 +217,47 @@ const callLlm = async (
   return result
 }
 
-type ProcessMessageArgs =
-  | [ReplyFn, string, string, string | null, string, 'dm' | 'group']
-  | [ReplyFn, string, string, string | null, string, 'dm' | 'group', string | undefined]
-  | [
-      ReplyFn,
-      string,
-      string,
-      string | null,
-      string,
-      'dm' | 'group',
-      string | undefined,
-      LlmOrchestratorDeps | undefined,
-    ]
+const resolveModelName = (contextId: string, configContextId: string | undefined): string => {
+  const cfgId = resolveConfigId(contextId, configContextId)
+  return getConfig(cfgId, 'main_model') ?? ''
+}
 
-export const processMessage = async (...args: ProcessMessageArgs): Promise<void> => {
-  const [reply, contextId, chatUserId, username, userText, contextType, configContextId, deps] = args
-  let resolvedDeps = defaultDeps
-  if (deps !== undefined) {
-    resolvedDeps = deps
-  }
-  log.debug({ contextId, configContextId, chatUserId, userText }, 'processMessage called')
+export const processMessage = async (
+  reply: ReplyFn,
+  contextId: string,
+  chatUserId: string,
+  username: string | null,
+  userText: string,
+  contextType: 'dm' | 'group',
+  configContextId: string | undefined = undefined,
+  deps: LlmOrchestratorDeps = defaultDeps,
+  newAttachmentIds: readonly string[] = [],
+): Promise<void> => {
+  const resolvedDeps = deps
+  const resolvedNewAttachmentIds = newAttachmentIds
+  log.debug(
+    { contextId, configContextId, chatUserId, userText, newAttachmentIds: resolvedNewAttachmentIds },
+    'processMessage called',
+  )
   log.info({ contextId, chatUserId, messageLength: userText.length }, 'Message received from user')
 
   const baseHistory = getCachedHistory(contextId)
-  const newMessage: ModelMessage = { role: 'user', content: userText }
-  const history = [...baseHistory, newMessage]
-  appendHistory(contextId, [newMessage])
+  const modelName = resolveModelName(contextId, configContextId)
+  const { modelMessage, historyMessage } = await buildUserTurnMessages(
+    contextId,
+    modelName,
+    userText,
+    resolvedNewAttachmentIds,
+  )
+  const history = [...baseHistory, historyMessage]
+  appendHistory(contextId, [historyMessage])
   try {
     const result = await callLlm(
       reply,
       contextId,
       chatUserId,
       username,
-      history,
+      [...baseHistory, modelMessage],
       contextType,
       resolvedDeps,
       configContextId,

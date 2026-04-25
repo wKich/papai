@@ -922,6 +922,89 @@ describe('processMessage', () => {
       expect(toolBuildCount).toBe(2)
     })
 
+    test('sends image parts to multimodal models but stores placeholder text in history', async () => {
+      const { persistIncomingAttachments } = await import('../src/attachments/index.js')
+      const attachmentCtx = 'attachment-ctx-multimodal'
+      seedConfigForContext(attachmentCtx)
+      setCachedConfig(attachmentCtx, 'main_model', 'gpt-4o')
+
+      const refs = await persistIncomingAttachments({
+        contextId: attachmentCtx,
+        sourceProvider: 'telegram',
+        files: [{ fileId: 'platform-1', filename: 'photo.jpg', mimeType: 'image/jpeg', content: Buffer.from('img') }],
+      })
+
+      let capturedMessages: unknown[] = []
+      generateTextImpl = (args: GenerateTextArgs): Promise<GenerateTextResult> => {
+        capturedMessages = args.messages ?? []
+        return defaultGenerateTextResult()
+      }
+
+      const { reply } = createMockReply()
+      await processMessage(
+        reply,
+        attachmentCtx,
+        'user-1',
+        null,
+        `What is in ${refs[0]!.attachmentId}?`,
+        'dm',
+        undefined,
+        undefined,
+        refs.map((ref) => ref.attachmentId),
+      )
+
+      const lastMsg = capturedMessages.at(-1)
+      if (!isRecord(lastMsg)) throw new Error('Expected last message to be an object')
+      const content = lastMsg['content']
+      if (!Array.isArray(content)) throw new Error('Expected content to be an array of parts')
+      const partTypes = content.map((part) => (isRecord(part) && typeof part['type'] === 'string' ? part['type'] : ''))
+      expect(partTypes).toContain('image')
+      expect(partTypes).toContain('text')
+
+      const persisted = getCachedHistory(attachmentCtx)[0]
+      expect(persisted).toBeDefined()
+      expect(typeof persisted!.content).toBe('string')
+      expect(persisted!.content).toContain('[User attached')
+    })
+
+    test('falls back to plain-text user content for non-multimodal models', async () => {
+      const { persistIncomingAttachments } = await import('../src/attachments/index.js')
+      const ctx = 'attachment-ctx-textmodel'
+      seedConfigForContext(ctx)
+      setCachedConfig(ctx, 'main_model', 'llama-3.1-instruct')
+
+      const refs = await persistIncomingAttachments({
+        contextId: ctx,
+        sourceProvider: 'telegram',
+        files: [{ fileId: 'platform-1', filename: 'photo.jpg', mimeType: 'image/jpeg', content: Buffer.from('img') }],
+      })
+
+      let capturedMessages: unknown[] = []
+      generateTextImpl = (args: GenerateTextArgs): Promise<GenerateTextResult> => {
+        capturedMessages = args.messages ?? []
+        return defaultGenerateTextResult()
+      }
+
+      const { reply } = createMockReply()
+      await processMessage(
+        reply,
+        ctx,
+        'user-1',
+        null,
+        'Tell me about the file',
+        'dm',
+        undefined,
+        undefined,
+        refs.map((ref) => ref.attachmentId),
+      )
+
+      const lastMsg = capturedMessages.at(-1)
+      if (!isRecord(lastMsg)) throw new Error('Expected last message to be an object')
+      const content = lastMsg['content']
+      if (typeof content !== 'string') throw new Error('Expected content to be a string for non-multimodal model')
+      expect(content).toContain('[User attached')
+    })
+
     test('DM tools are cached per-context without user suffix', async () => {
       // In DMs, contextId === chatUserId, so caching by contextId is sufficient
       seedConfigForContext('dm-ctx-1')
