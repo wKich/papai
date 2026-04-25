@@ -39,10 +39,10 @@ The original plan referenced `docs/plans/2026-03-30-plugin-system-design.md`, bu
 ## Design decisions
 
 - **Trust boundary:** MVP plugins are trusted, local, first-party extensions loaded from repository-controlled `plugins/` subdirectories. Do not present this as a sandbox for arbitrary third-party code. Third-party marketplace support needs a separate ADR.
-- **Default-disabled:** Discovered plugins are inert until a bot admin approves them. Users or managed group contexts then opt in unless an approved plugin explicitly declares safe default enablement.
+- **Default-disabled:** Discovered plugins are inert until a bot admin approves them. Users or managed group contexts then opt in unless an approved plugin explicitly declares `defaultEnabled: true`.
 - **Compatibility as state:** A plugin can be approved but inactive because task/chat capabilities, app API version, required config, or manifest hash approval are missing.
 - **Context-scoped data:** Opt-in, config, and storage must key by `contextId`, not just user ID, to support personal and group-targeted `/config` flows.
-- **No plaintext secrets:** Omit secret APIs from MVP unless encryption-at-rest is implemented first. If secret APIs are included, use authenticated encryption and never store raw values in `plugin_kv`.
+- **No plaintext secrets:** Secret storage is deferred from the MVP. Plugin config may mark fields as sensitive for display masking, but sensitive values must use the existing config editor/storage path until a dedicated encrypted plugin secret store is designed and implemented.
 - **Synchronous prompt MVP:** Prompt fragments are strings or synchronous functions only.
 - **Narrow service facades:** Plugins receive constrained framework services, not raw `TaskProvider` or `ChatProvider` instances, except through explicit context-bound facades.
 
@@ -120,7 +120,7 @@ Permissions must be enforced when building the plugin context and again at execu
 
 ## Persistence model
 
-Add migration `028_plugins` with these tables unless newer migrations already occupy that number:
+Check `src/db/index.ts` for the highest registered migration and add the plugin migration with the next available immutable ID. At the time of this revision, the next migration is `028_plugins`.
 
 - `plugin_admin_state`
   - `plugin_id`, `state`, `approved_by`, `approved_manifest_hash`, `last_seen_manifest_hash`, `compatibility_reason`, `updated_at`.
@@ -132,7 +132,7 @@ Add migration `028_plugins` with these tables unless newer migrations already oc
 - `plugin_runtime_events` (optional for MVP if logs are sufficient)
   - compact activation/deactivation/error history for admin diagnostics.
 
-Do not store secrets in `plugin_kv` unless encrypted secret storage is implemented in the same task.
+Do not store secrets in `plugin_kv`. Adding `setSecret()`/`getSecret()` requires a separate task that adds authenticated encryption, key-management documentation, migration tests, and explicit security review.
 
 ## Implementation phases
 
@@ -177,6 +177,22 @@ Validation:
 - Track states: `discovered`, `approved`, `rejected`, `incompatible`, `config_missing`, `active`, `error`.
 - Evaluate compatibility against current task provider capabilities, chat provider capabilities, plugin API version, manifest hash approval, and required config.
 - Persist admin/context decisions separately from runtime state.
+
+Valid state transitions:
+
+| From | To | Trigger |
+| ---- | -- | ------- |
+| none | `discovered` | Manifest is discovered and validates. |
+| `discovered` | `approved` | Bot admin approves current manifest hash. |
+| `discovered` | `rejected` | Bot admin rejects plugin. |
+| `rejected` | `approved` | Bot admin explicitly re-approves plugin. |
+| `approved` | `incompatible` | Required task/chat capability or API version is missing. |
+| `approved` | `config_missing` | Required plugin config is absent for the target context. |
+| `approved` | `active` | Plugin loads and activates successfully. |
+| `active` | `approved` | Plugin deactivates cleanly during shutdown/reload. |
+| `active` | `error` | Runtime activation or contribution registration fails. |
+| any approved-derived state | `discovered` | Manifest or entry point hash changes and needs re-approval. |
+| any state | `rejected` | Bot admin rejects or disables plugin globally. |
 
 Validation:
 
