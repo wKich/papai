@@ -194,15 +194,15 @@ const callLlm = async (
   const provider = deps.buildProviderForUser(configId)
   await maybeAutoLinkIdentity(chatUserId, username, provider)
   const fullTools = getOrCreateTools(contextId, chatUserId, username, provider, contextType)
-  const routedTools = routeToolsForMessage(userText, fullTools)
+  const routingResult = routeToolsForMessage(userText, fullTools)
   log.debug(
     {
       contextId,
-      routingIntent: routedTools.decision.intent,
-      routingConfidence: routedTools.decision.confidence,
-      routingReason: routedTools.decision.reason,
-      fullToolCount: routedTools.fullToolCount,
-      exposedToolCount: routedTools.exposedToolCount,
+      routingIntent: routingResult.decision.intent,
+      routingConfidence: routingResult.decision.confidence,
+      routingReason: routingResult.decision.reason,
+      fullToolCount: routingResult.fullToolCount,
+      exposedToolCount: routingResult.exposedToolCount,
     },
     'Tool routing selected subset',
   )
@@ -218,13 +218,13 @@ const callLlm = async (
     mainModel,
     model,
     provider,
-    tools: routedTools.tools,
+    tools: routingResult.tools,
     toolRouting: {
-      intent: routedTools.decision.intent,
-      confidence: routedTools.decision.confidence,
-      reason: routedTools.decision.reason,
-      fullToolCount: routedTools.fullToolCount,
-      exposedToolCount: routedTools.exposedToolCount,
+      intent: routingResult.decision.intent,
+      confidence: routingResult.decision.confidence,
+      reason: routingResult.decision.reason,
+      fullToolCount: routingResult.fullToolCount,
+      exposedToolCount: routingResult.exposedToolCount,
     },
     messages: validatedMessages,
     deps,

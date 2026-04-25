@@ -2,6 +2,9 @@ import type { ModelMessage, ToolSet } from 'ai'
 
 import { emit } from './debug/event-bus.js'
 import { buildStepsDetail } from './llm-orchestrator-steps.js'
+import { logger } from './logger.js'
+
+const log = logger.child({ scope: 'llm-orchestrator-events' })
 
 export type ToolRoutingTelemetry = {
   intent: string
@@ -32,13 +35,14 @@ export type ResolvedStreamTextResult = {
   providerMetadata?: unknown
 }
 
-function stringifyToolSchema(value: unknown): string {
+function stringifyToolSchema(toolName: string, value: unknown): string {
   try {
     return JSON.stringify(value, (_key, nestedValue: unknown) => {
       if (typeof nestedValue === 'function') return '[function]'
       return nestedValue
     })
-  } catch {
+  } catch (error) {
+    log.debug({ toolName, error: error instanceof Error ? error.message : String(error) }, 'Tool schema stringify failed')
     return ''
   }
 }
@@ -48,7 +52,7 @@ function estimateToolSchemaBytes(tools: ToolSet): number {
   for (const [name, tool] of Object.entries(tools)) {
     total += name.length
     total += typeof tool.description === 'string' ? tool.description.length : 0
-    total += stringifyToolSchema(tool.inputSchema).length
+    total += stringifyToolSchema(name, tool.inputSchema).length
   }
   return total
 }

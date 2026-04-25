@@ -26,6 +26,7 @@ export type ToolRoutingResult = {
   exposedToolCount: number
 }
 
+// Route only when deterministic keyword evidence is strong; otherwise keep all tools as a safe fallback.
 const HIGH_CONFIDENCE = 0.65
 
 const TRIVIAL_RE = /^(?:thanks|thank you|thx|ok|okay|cool|great|nice|hi|hello|hey)[!. ]*$/i
