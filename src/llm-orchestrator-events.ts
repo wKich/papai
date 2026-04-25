@@ -36,6 +36,7 @@ export type ResolvedStreamTextResult = {
 }
 
 function stringifySingleToolSchema(toolName: string, value: unknown): string {
+  log.debug({ toolName }, 'stringifySingleToolSchema')
   try {
     return JSON.stringify(value, (key, nestedValue: unknown) => {
       if (key === '') return nestedValue
@@ -49,6 +50,7 @@ function stringifySingleToolSchema(toolName: string, value: unknown): string {
 }
 
 function estimateToolSchemaBytes(tools: ToolSet): number {
+  log.debug({ toolCount: Object.keys(tools).length }, 'estimateToolSchemaBytes')
   let total = 0
   for (const [name, tool] of Object.entries(tools)) {
     total += name.length
@@ -60,6 +62,7 @@ function estimateToolSchemaBytes(tools: ToolSet): number {
 
 function buildToolTelemetry(tools: ToolSet, routing?: ToolRoutingTelemetry): Record<string, unknown> {
   const exposedToolCount = Object.keys(tools).length
+  log.debug({ exposedToolCount, hasRouting: routing !== undefined }, 'buildToolTelemetry')
   return {
     toolCount: exposedToolCount,
     exposedToolCount,

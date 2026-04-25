@@ -1,6 +1,9 @@
 import type { ToolSet } from 'ai'
 
+import { logger } from '../logger.js'
 import { getToolMetadata, type ToolDomain, type ToolMetadata } from './tool-metadata.js'
+
+const log = logger.child({ scope: 'tool-router' })
 
 export type ToolRoutingIntent =
   | 'trivial'
@@ -69,6 +72,7 @@ const WEB_DOMAINS = new Set<ToolDomain>(['web', 'task', 'project', 'memo', 'time
 const IDENTITY_DOMAINS = new Set<ToolDomain>(['identity', 'collaboration', 'time'])
 
 export function classifyToolRoutingIntent(userText: string): ToolRoutingDecision {
+  log.debug({ textLength: userText.length }, 'classifyToolRoutingIntent')
   const text = userText.trim()
   if (text.length === 0) return { intent: 'trivial', confidence: 0.95, reason: 'empty-message' }
   if (TRIVIAL_RE.test(text)) return { intent: 'trivial', confidence: 0.95, reason: 'trivial-acknowledgement' }
@@ -108,6 +112,7 @@ function filterTools(fullTools: ToolSet, decision: ToolRoutingDecision): ToolSet
 }
 
 export function routeToolsForMessage(userText: string, fullTools: ToolSet): ToolRoutingResult {
+  log.debug({ textLength: userText.length, fullToolCount: Object.keys(fullTools).length }, 'routeToolsForMessage')
   const decision = classifyToolRoutingIntent(userText)
   const tools = filterTools(fullTools, decision)
   return {
