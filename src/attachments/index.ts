@@ -6,6 +6,8 @@ export type {
   StoredAttachment,
 } from './types.js'
 export { loadAttachmentRecord, saveAttachment } from './store.js'
+export { persistIncomingAttachments } from './ingest.js'
+export { clearAttachmentWorkspace, listActiveAttachments } from './workspace.js'
 export {
   buildBlobKey,
   createInMemoryBlobStore,
