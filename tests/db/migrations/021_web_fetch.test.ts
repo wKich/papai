@@ -135,4 +135,17 @@ describe('migration021WebFetch', () => {
     const indexNames = getIndexNames(db)
     expect(indexNames).toContain('idx_web_cache_expires')
   })
+
+  test('is idempotent - can run multiple times without error', () => {
+    migration021WebFetch.up(db)
+    migration021WebFetch.up(db)
+    migration021WebFetch.up(db)
+
+    const tableNames = getTableNames(db)
+    expect(tableNames).toContain('web_cache')
+    expect(tableNames).toContain('web_rate_limit')
+
+    const indexNames = getIndexNames(db)
+    expect(indexNames).toContain('idx_web_cache_expires')
+  })
 })
