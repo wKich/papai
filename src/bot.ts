@@ -26,15 +26,7 @@ import { buildPromptWithReplyContext } from './reply-context.js'
 import { isAuthorized, isDemoUser, resolveUserByUsername } from './users.js'
 import { createWizard, hasActiveWizard } from './wizard/index.js'
 import { getWizardSteps } from './wizard/steps.js'
-type ProcessMessageFn = (
-  reply: ReplyFn,
-  contextId: string,
-  chatUserId: string,
-  username: string | null,
-  userText: string,
-  contextType: 'dm' | 'group',
-  configContextId: string | undefined,
-) => Promise<void>
+type ProcessMessageFn = typeof defaultProcessMessage
 export interface BotDeps {
   processMessage: ProcessMessageFn
 }
@@ -151,6 +143,8 @@ async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps:
       coalescedItem.text,
       coalescedItem.contextType,
       coalescedItem.configContextId,
+      undefined,
+      coalescedItem.newAttachmentIds,
     )
   } finally {
     emitReplyCompletedIfNeeded(tracked, coalescedItem.userId, coalescedItem.storageContextId, start)
