@@ -24,6 +24,7 @@ void mock.module('../../src/plugins/registry.js', () => ({
     markDeactivated: mock((): void => {}),
     getApprovedCompatiblePlugins: (): DiscoveredPlugin[] => [],
     getActivePlugins: (): DiscoveredPlugin[] => [],
+    getAllEntries: (): unknown[] => [],
   },
   setPluginEnabledForContext: mock((): void => {}),
   isPluginActiveForContext: mock((): boolean => false),

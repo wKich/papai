@@ -159,13 +159,14 @@ async function runPluginSubcommand(subcommand: string, args: string[], userId: s
 }
 
 export function registerPluginCommand(chat: ChatProvider, adminUserId: string): void {
-  chat.registerCommand('plugin', async (msg, reply) => {
-    if (msg.contextType === 'group') {
-      await reply.text('Plugin management is only available in direct messages.')
+  chat.registerCommand('plugin', async (msg, reply, auth) => {
+    if (!auth.allowed) return
+    if (!auth.isBotAdmin && msg.user.id !== adminUserId) {
+      await reply.text('Only the bot admin can manage plugins.')
       return
     }
-    if (msg.user.id !== adminUserId) {
-      await reply.text('Only the bot admin can manage plugins.')
+    if (msg.contextType === 'group') {
+      await reply.text('Plugin management is only available in direct messages.')
       return
     }
     const args = (msg.commandMatch ?? '')

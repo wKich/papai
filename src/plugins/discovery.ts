@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 import { logger } from '../logger.js'
@@ -42,6 +42,13 @@ function resolveEntryPoint(pluginDir: string, main: string): string | null {
   // Ensure the entry point stays inside the plugin directory (not above or at the dir itself)
   if (!resolved.startsWith(resolve(pluginDir) + '/')) {
     return null
+  }
+  try {
+    const realPluginDir = realpathSync(pluginDir)
+    const realEntryPoint = realpathSync(resolved)
+    if (!realEntryPoint.startsWith(realPluginDir + '/')) return null
+  } catch {
+    return resolved
   }
   return resolved
 }

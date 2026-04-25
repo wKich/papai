@@ -96,6 +96,16 @@ if (pluginErrors.length > 0) {
   log.warn({ errors: pluginErrors.map((e) => e.reason) }, 'Some plugins failed discovery')
 }
 syncRegistryFromDb(discoveredPlugins)
+try {
+  const adminProvider = buildProviderForUser(adminUserId, false)
+  if (adminProvider !== null) {
+    for (const plugin of discoveredPlugins) {
+      pluginRegistry.evaluateCompatibility(plugin.manifest.id, adminProvider.capabilities, chatProvider.capabilities)
+    }
+  }
+} catch (error) {
+  log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Plugin compatibility evaluation skipped')
+}
 const toActivate = pluginRegistry.getApprovedCompatiblePlugins()
 await activatePlugins(toActivate)
 log.info({ count: toActivate.length }, 'Plugin activation complete')

@@ -1,3 +1,5 @@
+import pLimit from 'p-limit'
+
 import { logger } from '../logger.js'
 import { buildPluginContext } from './context.js'
 import { contributionRegistry } from './contributions.js'
@@ -30,6 +32,7 @@ function buildActivationTimeout(timeoutMs: number): Promise<never> {
 }
 
 const log = logger.child({ scope: 'plugins:loader' })
+const PLUGIN_LIFECYCLE_CONCURRENCY = 4
 
 /** Default system context ID used during plugin activation (non-user-specific). */
 const SYSTEM_CONTEXT_ID = '__system__'
@@ -87,7 +90,8 @@ export async function activatePlugins(plugins: DiscoveredPlugin[]): Promise<void
     return
   }
 
-  const results = await Promise.all(plugins.map((p) => activateOne(p)))
+  const limit = pLimit(PLUGIN_LIFECYCLE_CONCURRENCY)
+  const results = await Promise.all(plugins.map((p) => limit(() => activateOne(p))))
   const activated = results.filter(Boolean).length
   const failed = results.length - activated
 
@@ -123,7 +127,8 @@ export async function deactivateAllPlugins(): Promise<void> {
 
   log.info({ count: toDeactivate.length }, 'Deactivating plugins')
 
-  await Promise.all(toDeactivate.map((id) => deactivateOne(id)))
+  const limit = pLimit(PLUGIN_LIFECYCLE_CONCURRENCY)
+  await Promise.all(toDeactivate.map((id) => limit(() => deactivateOne(id))))
 
   activationOrder.length = 0
   log.info('All plugins deactivated')

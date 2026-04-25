@@ -2,8 +2,8 @@ import type { ChatCapability } from '../chat/types.js'
 import { logger } from '../logger.js'
 import type { TaskCapability } from '../providers/types.js'
 import {
+  getPluginContextState,
   getPluginAdminState,
-  isPluginEnabledForContext,
   setPluginContextEnabled,
   upsertPluginAdminState,
   updatePluginAdminStateField,
@@ -227,7 +227,9 @@ export function setPluginEnabledForContext(pluginId: string, contextId: string, 
 export function isPluginActiveForContext(pluginId: string, contextId: string): boolean {
   const entry = pluginRegistry.getEntry(pluginId)
   if (entry === undefined || entry.state !== 'active') return false
-  return isPluginEnabledForContext(pluginId, contextId)
+  const contextState = getPluginContextState(pluginId, contextId)
+  if (contextState !== undefined) return contextState.enabled
+  return entry.discoveredPlugin.manifest.defaultEnabled
 }
 
 /** Load admin state from DB into the in-memory registry for all known plugins. */
@@ -240,5 +242,5 @@ export function syncRegistryFromDb(discoveredPlugins: DiscoveredPlugin[]): void 
 
 /** Get plugins that are active AND enabled for the given context. */
 export function getPluginsForContext(contextId: string): DiscoveredPlugin[] {
-  return pluginRegistry.getActivePlugins().filter((p) => isPluginEnabledForContext(p.manifest.id, contextId))
+  return pluginRegistry.getActivePlugins().filter((p) => isPluginActiveForContext(p.manifest.id, contextId))
 }
