@@ -1,15 +1,9 @@
 import { describe, expect, it, beforeEach, mock } from 'bun:test'
 
-import type { IncomingFile, ReplyFn } from '../../src/chat/types.js'
+import type { ReplyFn } from '../../src/chat/types.js'
 import { MessageQueue } from '../../src/message-queue/queue.js'
 import type { CoalescedItem, QueueItem } from '../../src/message-queue/types.js'
 import { mockLogger } from '../utils/logger-mock.js'
-
-const createMockFile = (fileId: string): IncomingFile => ({
-  fileId,
-  filename: 'test.txt',
-  content: Buffer.from('test'),
-})
 
 function createReplyFn(typingSpy: ReturnType<typeof mock>): ReplyFn {
   return {
@@ -43,7 +37,6 @@ describe('MessageQueue', () => {
         username: 'alice',
         storageContextId: 'user123',
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       }
       queue.enqueue(item, mockReply)
@@ -57,7 +50,6 @@ describe('MessageQueue', () => {
         username: 'alice',
         storageContextId: 'user123',
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       }
       queue.enqueue(item, mockReply)
@@ -72,7 +64,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -84,7 +75,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -105,7 +95,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         reply1,
@@ -117,7 +106,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         reply2,
@@ -140,7 +128,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -152,7 +139,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -182,7 +168,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         reply1,
@@ -194,7 +179,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         reply2,
@@ -219,7 +203,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123:thread456',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -241,7 +224,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: ['att_1'],
         },
         mockReply,
@@ -253,7 +235,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: ['att_2', 'att_3'],
         },
         mockReply,
@@ -263,45 +244,6 @@ describe('MessageQueue', () => {
       expect(flushed).not.toBeNull()
       if (flushed === null) throw new Error('Expected flushed to not be null')
       expect(flushed.newAttachmentIds).toEqual(['att_1', 'att_2', 'att_3'])
-    })
-
-    it('should accumulate files from all messages', () => {
-      const file1 = createMockFile('file1')
-      const file2 = createMockFile('file2')
-
-      queue.enqueue(
-        {
-          text: 'First',
-          userId: 'user123',
-          username: 'alice',
-          storageContextId: 'user123',
-          contextType: 'dm',
-          files: [file1],
-          newAttachmentIds: [],
-        },
-        mockReply,
-      )
-      queue.enqueue(
-        {
-          text: 'Second',
-          userId: 'user123',
-          username: 'alice',
-          storageContextId: 'user123',
-          contextType: 'dm',
-          files: [file2],
-          newAttachmentIds: [],
-        },
-        mockReply,
-      )
-
-      const flushed = queue.forceFlush()
-      expect(flushed).not.toBeNull()
-      if (flushed === null) {
-        throw new Error('Expected flushed to not be null')
-      }
-      expect(flushed.files).toHaveLength(2)
-      expect(flushed.files[0]!.fileId).toBe('file1')
-      expect(flushed.files[1]!.fileId).toBe('file2')
     })
   })
 
@@ -319,7 +261,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -337,7 +278,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -369,7 +309,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -400,7 +339,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -456,7 +394,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -476,7 +413,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -523,7 +459,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -540,7 +475,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'user123',
           contextType: 'dm',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -568,7 +502,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -583,7 +516,6 @@ describe('MessageQueue', () => {
           username: 'bob',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -608,7 +540,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -621,7 +552,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -643,7 +573,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123:thread456',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -656,7 +585,6 @@ describe('MessageQueue', () => {
           username: 'bob',
           storageContextId: 'group123:thread456',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -684,7 +612,6 @@ describe('MessageQueue', () => {
           username: 'alice',
           storageContextId: 'group123:thread456',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,
@@ -697,7 +624,6 @@ describe('MessageQueue', () => {
           username: 'bob',
           storageContextId: 'group123:thread456',
           contextType: 'group',
-          files: [],
           newAttachmentIds: [],
         },
         mockReply,

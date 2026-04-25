@@ -1,3 +1,4 @@
+import { clearAttachmentWorkspace } from '../attachments/index.js'
 import type { AuthorizationResult, ChatProvider, CommandHandler, ReplyFn } from '../chat/types.js'
 import { clearHistory } from '../history.js'
 import { logger } from '../logger.js'
@@ -6,36 +7,35 @@ import { listUsers } from '../users.js'
 
 const log = logger.child({ scope: 'commands:clear' })
 
+async function clearContext(contextId: string): Promise<void> {
+  clearHistory(contextId)
+  clearSummary(contextId)
+  clearFacts(contextId)
+  await clearAttachmentWorkspace(contextId)
+}
+
 async function clearSelf(msg: { user: { id: string } }, reply: ReplyFn, auth: AuthorizationResult): Promise<boolean> {
-  clearHistory(auth.storageContextId)
-  clearSummary(auth.storageContextId)
-  clearFacts(auth.storageContextId)
+  await clearContext(auth.storageContextId)
   log.info(
     { userId: msg.user.id, storageContextId: auth.storageContextId },
-    '/clear command executed — all memory tiers cleared',
+    '/clear command executed — all memory tiers and attachments cleared',
   )
-  await reply.text('Conversation history and memory cleared.')
+  await reply.text('Conversation history, memory, and attachments cleared.')
   return true
 }
 
 async function clearAll(msg: { user: { id: string } }, reply: ReplyFn): Promise<boolean> {
   const users = listUsers()
-  for (const user of users) {
-    clearHistory(user.platform_user_id)
-    clearSummary(user.platform_user_id)
-    clearFacts(user.platform_user_id)
-  }
+  await Promise.all(users.map((user) => clearContext(user.platform_user_id)))
   log.info({ userId: msg.user.id, clearedCount: users.length }, '/clear all executed')
-  await reply.text(`Cleared history and memory for all ${users.length} users.`)
+  await reply.text(`Cleared history, memory, and attachments for all ${users.length} users.`)
   return true
 }
 
 async function clearUser(msg: { user: { id: string } }, reply: ReplyFn, targetId: string): Promise<boolean> {
-  clearHistory(targetId)
-  clearSummary(targetId)
-  clearFacts(targetId)
+  await clearContext(targetId)
   log.info({ userId: msg.user.id, targetId }, '/clear <user_id> executed')
-  await reply.text(`Cleared history and memory for user ${targetId}.`)
+  await reply.text(`Cleared history, memory, and attachments for user ${targetId}.`)
   return true
 }
 

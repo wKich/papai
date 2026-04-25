@@ -1,4 +1,4 @@
-import type { ContextType, IncomingFile, ReplyFn } from '../chat/types.js'
+import type { ContextType, ReplyFn } from '../chat/types.js'
 
 type QueueContextInfo = Readonly<{
   contextType: ContextType
@@ -15,7 +15,6 @@ export type QueueItem = Readonly<{
   userId: string
   username: string | null
   storageContextId: string
-  files: readonly IncomingFile[]
   newAttachmentIds: readonly string[]
 }> &
   QueueContextInfo &
@@ -26,7 +25,6 @@ export type CoalescedItem = Readonly<{
   userId: string
   username: string | null
   storageContextId: string
-  files: readonly IncomingFile[]
   newAttachmentIds: readonly string[]
   reply: ReplyFn
 }> &

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import type { IncomingFile, ReplyFn } from '../../src/chat/types.js'
+import type { ReplyFn } from '../../src/chat/types.js'
 import type { CoalescedItem } from '../../src/message-queue/types.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
@@ -77,7 +77,6 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       mockReply,
@@ -91,7 +90,6 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       mockReply,
@@ -104,10 +102,10 @@ describe('MessageQueue Integration', () => {
     expect(processed[0]).toBe('Message 1\n\nMessage 2')
   })
 
-  test('should accumulate files from multiple messages', async () => {
+  test('should accumulate newAttachmentIds from multiple messages', async () => {
     const { enqueueMessage } = await loadMessageQueueModule()
     const storageContextId = `ctx1-${crypto.randomUUID()}`
-    const fileResults: IncomingFile[] = []
+    const collectedIds: string[] = []
     const mockReply: ReplyFn = {
       text: async (): Promise<void> => {},
       formatted: async (): Promise<void> => {},
@@ -117,12 +115,9 @@ describe('MessageQueue Integration', () => {
     }
 
     const handler = async (coalesced: CoalescedItem): Promise<void> => {
-      fileResults.push(...coalesced.files)
+      collectedIds.push(...coalesced.newAttachmentIds)
       await Promise.resolve()
     }
-
-    const file1: IncomingFile = { fileId: '1', filename: 'a.jpg', content: Buffer.from('a') }
-    const file2: IncomingFile = { fileId: '2', filename: 'b.jpg', content: Buffer.from('b') }
 
     enqueueMessage(
       {
@@ -131,8 +126,7 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId,
         contextType: 'dm',
-        files: [file1],
-        newAttachmentIds: [],
+        newAttachmentIds: ['att_a'],
       },
       mockReply,
       handler,
@@ -145,18 +139,15 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId,
         contextType: 'dm',
-        files: [file2],
-        newAttachmentIds: [],
+        newAttachmentIds: ['att_b'],
       },
       mockReply,
       handler,
     )
 
-    await waitFor(() => fileResults.length === 2)
+    await waitFor(() => collectedIds.length === 2)
 
-    expect(fileResults.length).toBe(2)
-    expect(fileResults[0]?.filename).toBe('a.jpg')
-    expect(fileResults[1]?.filename).toBe('b.jpg')
+    expect(collectedIds).toEqual(['att_a', 'att_b'])
   })
 
   test('should flush on shutdown', async () => {
@@ -183,7 +174,6 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       mockReply,
@@ -236,7 +226,6 @@ describe('MessageQueue Integration', () => {
         username: 'alice',
         storageContextId: firstContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       mockReply1,
@@ -250,7 +239,6 @@ describe('MessageQueue Integration', () => {
         username: 'bob',
         storageContextId: secondContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       mockReply2,
@@ -297,7 +285,6 @@ describe('MessageQueue Integration', () => {
         username: 'a',
         storageContextId: firstContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -311,7 +298,6 @@ describe('MessageQueue Integration', () => {
         username: 'b',
         storageContextId: secondContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -325,7 +311,6 @@ describe('MessageQueue Integration', () => {
         username: 'a',
         storageContextId: firstContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -339,7 +324,6 @@ describe('MessageQueue Integration', () => {
         username: 'b',
         storageContextId: secondContextId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -382,7 +366,6 @@ describe('MessageQueue Integration', () => {
         username: 'a',
         storageContextId: contextAId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -396,7 +379,6 @@ describe('MessageQueue Integration', () => {
         username: 'b',
         storageContextId: contextBId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),
@@ -410,7 +392,6 @@ describe('MessageQueue Integration', () => {
         username: 'c',
         storageContextId: contextCId,
         contextType: 'dm',
-        files: [],
         newAttachmentIds: [],
       },
       createMockReply(),

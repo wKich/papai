@@ -40,7 +40,6 @@ describe('enqueueMessage', () => {
       username: 'alice',
       storageContextId: `ctx1-${crypto.randomUUID()}`,
       contextType: 'dm',
-      files: [],
       newAttachmentIds: [],
     }
     const mockReply: ReplyFn = {
@@ -89,7 +88,6 @@ describe('flushOnShutdown', () => {
       username: 'alice',
       storageContextId: `hang-test-ctx-${crypto.randomUUID()}`,
       contextType: 'dm',
-      files: [],
       newAttachmentIds: [],
     }
 

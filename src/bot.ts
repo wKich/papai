@@ -17,7 +17,6 @@ import {
 } from './commands/index.js'
 import { getAllConfig } from './config.js'
 import { emit } from './debug/event-bus.js'
-import { clearIncomingFiles, storeIncomingFiles } from './file-relay.js'
 import { upsertGroupAdminObservation, upsertKnownGroupContext } from './group-settings/registry.js'
 import { processMessage as defaultProcessMessage } from './llm-orchestrator.js'
 import { logger } from './logger.js'
@@ -143,8 +142,6 @@ async function autoStartWizardIfNeeded(userId: string, storageContextId: string,
 async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps: BotDeps): Promise<void> {
   const start = Date.now()
   const tracked = trackReplyUsage(coalescedItem.reply, true)
-  if (coalescedItem.files.length > 0) storeIncomingFiles(coalescedItem.storageContextId, coalescedItem.files)
-  else clearIncomingFiles(coalescedItem.storageContextId)
   try {
     await deps.processMessage(
       tracked.reply,
@@ -156,7 +153,6 @@ async function processCoalescedMessage(coalescedItem: QueuedCoalescedItem, deps:
       coalescedItem.configContextId,
     )
   } finally {
-    clearIncomingFiles(coalescedItem.storageContextId)
     emitReplyCompletedIfNeeded(tracked, coalescedItem.userId, coalescedItem.storageContextId, start)
   }
 }
@@ -177,8 +173,7 @@ async function handleMessage(
     return
   }
   if (shouldIgnoreGroupMessage(msg)) return
-  let files: readonly IncomingFile[] = []
-  if (msg.files !== undefined) files = msg.files
+  const files: readonly IncomingFile[] = msg.files ?? []
   const { newAttachmentIds, activeAttachments } = await ingestAttachmentsForMessage({
     chat,
     msg,
@@ -193,7 +188,6 @@ async function handleMessage(
       storageContextId: auth.storageContextId,
       configContextId: auth.configContextId,
       contextType: msg.contextType,
-      files,
       newAttachmentIds,
     },
     reply,

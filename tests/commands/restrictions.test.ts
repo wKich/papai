@@ -71,7 +71,7 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Conversation history and memory cleared.')
+      expect(lastReply).toBe('Conversation history, memory, and attachments cleared.')
     })
 
     test('allowed for regular user in DM', async () => {
@@ -87,7 +87,7 @@ describe('command context restrictions', () => {
       await handler!(msg, reply, auth)
 
       lastReply = textCalls[0] ?? null
-      expect(lastReply).toBe('Conversation history and memory cleared.')
+      expect(lastReply).toBe('Conversation history, memory, and attachments cleared.')
     })
   })
 
