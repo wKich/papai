@@ -171,9 +171,7 @@ export async function writeIndexFile(
   await Bun.write(outPath, lines.join('\n'))
 }
 
-export async function rebuildReportsFromStoredResults({
-  consolidatedManifest,
-}: RebuildReportsInput): Promise<void> {
+export async function rebuildReportsFromStoredResults({ consolidatedManifest }: RebuildReportsInput): Promise<void> {
   if (consolidatedManifest === null) {
     await writeIndexFile([], 0, 0, new Map(), new Map(), [])
     return

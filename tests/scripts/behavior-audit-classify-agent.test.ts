@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 import * as realAi from 'ai'
-import { Output, stepCountIs } from 'ai'
+import { stepCountIs } from 'ai'
+import { Output } from 'ai'
 
-import type { ClassifyAgentDeps } from '../../scripts/behavior-audit/classify-agent.js'
+import type { ClassifyAgentDeps } from '../../scripts/behavior-audit-classify-agent.js'
+import type { ClassificationResult } from '../../scripts/behavior-audit/classify-agent.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import { cleanupTempDirs, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { loadClassifyAgentModule } from './behavior-audit-integration.support.js'
@@ -40,18 +42,17 @@ describe('behavior-audit phase 2a classify agent', () => {
   test('classifyBehaviorWithRetry does not sleep before the first resumed retry attempt', async () => {
     const events: string[] = []
     const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
+    const output: ClassificationResult = {
+      visibility: 'user-facing',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'Immediate resumed success.',
+    }
     const generateText: ClassifyAgentDeps['generateText'] = (_input) => {
       events.push('generate')
-      return Promise.resolve({
-        output: {
-          visibility: 'user-facing',
-          featureKey: 'task-creation',
-          featureLabel: 'Task creation',
-          supportingBehaviorRefs: [],
-          relatedBehaviorHints: [],
-          classificationNotes: 'Immediate resumed success.',
-        },
-      })
+      return Promise.resolve({ output })
     }
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push('sleep')
@@ -68,8 +69,8 @@ describe('behavior-audit phase 2a classify agent', () => {
         MAX_STEPS: 20,
       },
       generateText,
+      outputObject: ({ schema }) => Output.object({ schema }),
       buildModel: () => 'mock-model',
-      outputObject: Output.object,
       stepCountIs,
       sleep,
       createAbortSignal: () => AbortSignal.timeout(1),
@@ -83,6 +84,14 @@ describe('behavior-audit phase 2a classify agent', () => {
     const events: string[] = []
     const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
     let attempts = 0
+    const output: ClassificationResult = {
+      visibility: 'user-facing',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'Succeeded after one resumed retry.',
+    }
     const generateText: ClassifyAgentDeps['generateText'] = (_input) => {
       attempts += 1
       events.push(`generate:${attempts}`)
@@ -91,16 +100,7 @@ describe('behavior-audit phase 2a classify agent', () => {
         return Promise.reject(new Error('temporary failure'))
       }
 
-      return Promise.resolve({
-        output: {
-          visibility: 'user-facing',
-          featureKey: 'task-creation',
-          featureLabel: 'Task creation',
-          supportingBehaviorRefs: [],
-          relatedBehaviorHints: [],
-          classificationNotes: 'Succeeded after one resumed retry.',
-        },
-      })
+      return Promise.resolve({ output })
     }
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push(`sleep:${ms}`)
@@ -117,8 +117,8 @@ describe('behavior-audit phase 2a classify agent', () => {
         MAX_STEPS: 20,
       },
       generateText,
+      outputObject: ({ schema }) => Output.object({ schema }),
       buildModel: () => 'mock-model',
-      outputObject: Output.object,
       stepCountIs,
       sleep,
       createAbortSignal: () => AbortSignal.timeout(1),

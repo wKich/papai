@@ -16,7 +16,13 @@
   ],
 
   // All source files (production only)
-  "project": ["src/**/*.ts!", "client/**/*.ts!", "codeindex/src/**/*.ts!", "review-loop/src/**/*.ts!", "scripts/behavior-audit/**/*.ts!"],
+  "project": [
+    "src/**/*.ts!",
+    "client/**/*.ts!",
+    "codeindex/src/**/*.ts!",
+    "review-loop/src/**/*.ts!",
+    "scripts/behavior-audit/**/*.ts!",
+  ],
 
   // All issue types treated as hard errors
   "rules": {

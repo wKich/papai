@@ -9,30 +9,6 @@ import { applyBehaviorAuditEnv } from './behavior-audit-integration.runtime-help
 type ManifestTestEntry = IncrementalManifest['tests'][string]
 type ConsolidatedManifestEntry = ConsolidatedManifest['entries'][string]
 
-type ExtractedBehavior = {
-  readonly testName: string
-  readonly fullPath: string
-  readonly behavior: string
-  readonly context: string
-  readonly keywords: readonly string[]
-}
-
-type ClassifiedBehavior = {
-  readonly behaviorId: string
-  readonly testKey: string
-  readonly domain: string
-  readonly visibility: 'user-facing' | 'internal' | 'ambiguous'
-  readonly featureKey: string | null
-  readonly featureLabel: string | null
-  readonly supportingBehaviorRefs: readonly { readonly behaviorId: string; readonly reason: string }[]
-  readonly relatedBehaviorHints: readonly {
-    readonly testKey: string
-    readonly relation: 'same-feature' | 'supporting-detail' | 'possibly-related'
-    readonly reason: string
-  }[]
-  readonly classificationNotes: string
-}
-
 export interface BehaviorAuditTestPaths {
   readonly root: string
   readonly reportsDir: string
@@ -223,28 +199,6 @@ export function createEmptyProgressFixture(filesTotal: number): Progress {
         consolidatedIdsFailed: 0,
       },
     },
-  }
-}
-
-export function createExtractedBehaviorFixture(
-  input: Omit<ExtractedBehavior, 'keywords'> & Partial<Pick<ExtractedBehavior, 'keywords'>>,
-): ExtractedBehavior {
-  return {
-    keywords: [],
-    ...input,
-  }
-}
-
-export function createClassifiedBehaviorFixture(
-  input: Omit<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey'> &
-    Partial<Pick<ClassifiedBehavior, 'supportingBehaviorRefs' | 'relatedBehaviorHints' | 'featureKey'>>,
-): ClassifiedBehavior {
-  return {
-    supportingBehaviorRefs: [],
-    relatedBehaviorHints: [],
-    ...input,
-    featureKey: input.featureKey ?? null,
-    featureLabel: input.featureLabel ?? null,
   }
 }
 

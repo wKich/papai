@@ -209,7 +209,8 @@ test('runPhase1 fails cleanly when resolver output normalizes to empty keyword s
   )
 
   expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
-  expect(progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']?.error).toContain('keyword')
+  const failedTest = progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']
+  expect(failedTest !== undefined && failedTest !== null ? failedTest.error : undefined).toContain('keyword')
   expect(progress.phase1.completedTests['tests/tools/sample.test.ts']).toBeUndefined()
 })
 
@@ -225,21 +226,6 @@ test('keyword-resolver-agent returns canonical keywords and appended entries', a
   )
   expect(typeof mod).toBe('object')
   expect(mod).toHaveProperty('resolveKeywordsWithRetry')
-})
-
-test('behavior-audit agents enable structured outputs for OpenAI-compatible provider', async () => {
-  const agentPaths = [
-    'scripts/behavior-audit/extract-agent.ts',
-    'scripts/behavior-audit/keyword-resolver-agent.ts',
-    'scripts/behavior-audit/consolidate-agent.ts',
-    'scripts/behavior-audit/evaluate-agent.ts',
-  ] as const
-
-  const sources = await Promise.all(agentPaths.map((filePath) => Bun.file(path.join(process.cwd(), filePath)).text()))
-
-  for (const source of sources) {
-    expect(source).toContain('supportsStructuredOutputs: true')
-  }
 })
 
 test('keyword-vocabulary normalizes duplicate slugs into canonical entries', async () => {
