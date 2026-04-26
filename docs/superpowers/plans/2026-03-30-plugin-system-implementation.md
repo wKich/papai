@@ -180,19 +180,19 @@ Validation:
 
 Valid state transitions:
 
-| From | To | Trigger |
-| ---- | -- | ------- |
-| none | `discovered` | Manifest is discovered and validates. |
-| `discovered` | `approved` | Bot admin approves current manifest hash. |
-| `discovered` | `rejected` | Bot admin rejects plugin. |
-| `rejected` | `approved` | Bot admin explicitly re-approves plugin. |
-| `approved` | `incompatible` | Required task/chat capability or API version is missing. |
-| `approved` | `config_missing` | Required plugin config is absent for the target context. |
-| `approved` | `active` | Plugin loads and activates successfully. |
-| `active` | `approved` | Plugin deactivates cleanly during shutdown/reload. |
-| `active` | `error` | Runtime activation or contribution registration fails. |
-| any approved-derived state | `discovered` | Manifest or entry point hash changes and needs re-approval. |
-| any state | `rejected` | Bot admin rejects or disables plugin globally. |
+| From                       | To               | Trigger                                                     |
+| -------------------------- | ---------------- | ----------------------------------------------------------- |
+| none                       | `discovered`     | Manifest is discovered and validates.                       |
+| `discovered`               | `approved`       | Bot admin approves current manifest hash.                   |
+| `discovered`               | `rejected`       | Bot admin rejects plugin.                                   |
+| `rejected`                 | `approved`       | Bot admin explicitly re-approves plugin.                    |
+| `approved`                 | `incompatible`   | Required task/chat capability or API version is missing.    |
+| `approved`                 | `config_missing` | Required plugin config is absent for the target context.    |
+| `approved`                 | `active`         | Plugin loads and activates successfully.                    |
+| `active`                   | `approved`       | Plugin deactivates cleanly during shutdown/reload.          |
+| `active`                   | `error`          | Runtime activation or contribution registration fails.      |
+| any approved-derived state | `discovered`     | Manifest or entry point hash changes and needs re-approval. |
+| any state                  | `rejected`       | Bot admin rejects or disables plugin globally.              |
 
 Validation:
 

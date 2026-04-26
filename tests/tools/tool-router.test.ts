@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { buildTools } from '../../src/tools/tools-builder.js'
 import { classifyToolRoutingIntent, routeToolsForMessage } from '../../src/tools/tool-router.js'
+import { buildTools } from '../../src/tools/tools-builder.js'
 import { createMockProvider } from './mock-provider.js'
 
-const fullTools = (): ReturnType<typeof buildTools> => buildTools(createMockProvider(), 'user-1', 'ctx-1', 'normal', 'dm')
+const fullTools = (): ReturnType<typeof buildTools> =>
+  buildTools(createMockProvider(), 'user-1', 'ctx-1', 'normal', 'dm')
 
 describe('tool router', () => {
   test('routes trivial acknowledgements to an empty tool set', () => {

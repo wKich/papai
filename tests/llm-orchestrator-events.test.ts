@@ -41,15 +41,15 @@ describe('llm-orchestrator-events', () => {
         const tools = makeTools(provider, { storageContextId: 'ctx-1', chatUserId: 'user-1' })
         emitLlmStart('ctx-1', 'gpt-4', [{ role: 'user', content: 'hi' }], tools)
 
-        expect(capture()).toEqual({
-          userId: 'ctx-1',
-          model: 'gpt-4',
-          messageCount: 1,
-          toolCount: Object.keys(tools).length,
-          exposedToolCount: Object.keys(tools).length,
-          fullToolCount: Object.keys(tools).length,
-          toolSchemaBytes: expect.any(Number),
-        })
+        const capturedEvent = capture()
+        assert.ok(isRecord(capturedEvent))
+        expect(capturedEvent['userId']).toBe('ctx-1')
+        expect(capturedEvent['model']).toBe('gpt-4')
+        expect(capturedEvent['messageCount']).toBe(1)
+        expect(capturedEvent['toolCount']).toBe(Object.keys(tools).length)
+        expect(capturedEvent['exposedToolCount']).toBe(Object.keys(tools).length)
+        expect(capturedEvent['fullToolCount']).toBe(Object.keys(tools).length)
+        expect(typeof capturedEvent['toolSchemaBytes']).toBe('number')
       } finally {
         unsubscribe(listener)
       }
@@ -88,7 +88,7 @@ describe('llm-orchestrator-events', () => {
         emitLlmEnd('ctx-1', 'gpt-4', result, startTime, [{ role: 'user', content: 'hi' }], tools)
 
         const capturedEvent = capture()
-        assert(isRecord(capturedEvent))
+        assert.ok(isRecord(capturedEvent))
         expect(capturedEvent['userId']).toBe('ctx-1')
         expect(capturedEvent['model']).toBe('gpt-4')
         expect(capturedEvent['steps']).toBe(1)

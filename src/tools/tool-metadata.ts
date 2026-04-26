@@ -142,7 +142,3 @@ export const TOOL_METADATA: Readonly<Record<string, ToolMetadata>> = {
 export function getToolMetadata(toolName: string): ToolMetadata | undefined {
   return TOOL_METADATA[toolName]
 }
-
-export function isReadOnlyTool(toolName: string): boolean {
-  return getToolMetadata(toolName)?.risk === 'read'
-}

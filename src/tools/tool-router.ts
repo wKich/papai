@@ -35,7 +35,8 @@ const HIGH_CONFIDENCE = 0.65
 const TRIVIAL_RE = /^(?:thanks|thank you|thx|ok|okay|cool|great|nice|hi|hello|hey)[!. ]*$/i
 const URL_RE = /\bhttps?:\/\/\S+/i
 const MEMO_RE = /\b(?:remember|memo|note that|personal note|save (?:this )?(?:note|memo))\b/i
-const RECURRING_RE = /\b(?:recurring|repeat|repeating|every day|every week|every month|daily|weekly|monthly|pause recurring|resume recurring|skip recurring)\b/i
+const RECURRING_RE =
+  /\b(?:recurring|repeat|repeating|every day|every week|every month|daily|weekly|monthly|pause recurring|resume recurring|skip recurring)\b/i
 const DEFERRED_RE = /\b(?:remind me|notify me|alert me|later|tomorrow|briefing|daily brief|scheduled prompt)\b/i
 const IDENTITY_RE = /\b(?:i am|i'm|my login is|link me|my username is|identity)\b/i
 const MUTATION_RE =

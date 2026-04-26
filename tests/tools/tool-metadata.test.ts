@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import { getToolMetadata, isReadOnlyTool, TOOL_METADATA } from '../../src/tools/tool-metadata.js'
+import { getToolMetadata, TOOL_METADATA } from '../../src/tools/tool-metadata.js'
+
+const getToolRisk = (toolName: string): string | undefined => {
+  const metadata = getToolMetadata(toolName)
+  if (metadata === undefined) return undefined
+  return metadata.risk
+}
 
 describe('tool metadata', () => {
   test('tags core tools with domain, operation, and risk', () => {
@@ -17,7 +23,7 @@ describe('tool metadata', () => {
   })
 
   test('tags destructive and open-world tools distinctly', () => {
-    expect(getToolMetadata('delete_task')?.risk).toBe('destructive')
+    expect(getToolRisk('delete_task')).toBe('destructive')
     expect(getToolMetadata('web_fetch')).toEqual({
       domain: 'web',
       operation: 'read',
@@ -26,9 +32,9 @@ describe('tool metadata', () => {
   })
 
   test('identifies read-only tools', () => {
-    expect(isReadOnlyTool('list_tasks')).toBe(true)
-    expect(isReadOnlyTool('create_task')).toBe(false)
-    expect(isReadOnlyTool('web_fetch')).toBe(false)
+    expect(getToolRisk('list_tasks')).toBe('read')
+    expect(getToolRisk('create_task')).toBe('write')
+    expect(getToolRisk('web_fetch')).toBe('open-world')
   })
 
   test('covers representative high-pollution tool clusters', () => {

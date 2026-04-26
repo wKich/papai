@@ -44,7 +44,10 @@ function stringifySingleToolSchema(toolName: string, value: unknown): string {
       return nestedValue
     })
   } catch (error) {
-    log.debug({ toolName, error: error instanceof Error ? error.message : String(error) }, 'Tool schema stringify failed')
+    log.debug(
+      { toolName, error: error instanceof Error ? error.message : String(error) },
+      'Tool schema stringify failed',
+    )
     return ''
   }
 }
