@@ -19,6 +19,14 @@ import { readEvaluatedFile, writeEvaluatedFile } from './evaluated-store.js'
 import type { ConsolidatedManifest } from './incremental.js'
 import { saveConsolidatedManifest } from './incremental.js'
 import { ALL_PERSONAS } from './personas.js'
+import {
+  type PhaseStats,
+  createPhaseStats,
+  formatPerItemSuffix,
+  formatPhaseSummary,
+  recordItemDone,
+  recordItemFailed,
+} from './phase-stats.js'
 import type { Progress } from './progress.js'
 import {
   getFailedBehaviorAttempts,
@@ -49,6 +57,7 @@ export interface Phase3Deps {
   readonly writeReports: typeof writeReports
   readonly log: Pick<typeof console, 'log'>
   readonly writeStdout: (text: string) => void
+  readonly stats?: PhaseStats
 }
 
 const defaultPhase3Deps: Phase3Deps = {
@@ -101,24 +110,26 @@ async function evaluateBehavior(input: {
 }): Promise<EvaluatedFeatureRecord | null> {
   input.deps.writeStdout(`  [${input.idx}/${input.total}] ${input.behavior.domain} :: "${input.behavior.featureName}" `)
   const startMs = performance.now()
-  const result = await input.deps.evaluateWithRetry(buildPrompt(input.behavior))
+  const agentResult = await input.deps.evaluateWithRetry(buildPrompt(input.behavior))
   const elapsedMs = performance.now() - startMs
-  if (result === null) {
+  if (agentResult === null) {
     input.deps.markBehaviorFailed(input.progress, input.behavior.consolidatedId, 'evaluation failed after retries', 1)
     input.deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+    if (input.deps.stats !== undefined) recordItemFailed(input.deps.stats)
     return null
   }
 
   input.deps.markBehaviorDone(input.progress, input.behavior.consolidatedId)
   await input.deps.saveProgress(input.progress)
-  input.deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+  input.deps.log.log(formatPerItemSuffix(agentResult.usage, elapsedMs))
+  if (input.deps.stats !== undefined) recordItemDone(input.deps.stats, agentResult.usage)
   return {
     consolidatedId: input.behavior.consolidatedId,
-    maria: result.maria,
-    dani: result.dani,
-    viktor: result.viktor,
-    flaws: result.flaws,
-    improvements: result.improvements,
+    maria: agentResult.result.maria,
+    dani: agentResult.result.dani,
+    viktor: agentResult.result.viktor,
+    flaws: agentResult.result.flaws,
+    improvements: agentResult.result.improvements,
     evaluatedAt: new Date().toISOString(),
   }
 }
@@ -171,7 +182,8 @@ export async function runPhase3(
 ): Promise<ConsolidatedManifest | null> {
   if (consolidatedManifest === null) return null
   const resolvedDeps: Phase3Deps = { ...defaultPhase3Deps, ...deps }
-  let storedByFeatureKey = await loadStoredFeatureData(consolidatedManifest, resolvedDeps)
+  const stats = resolvedDeps.stats ?? createPhaseStats()
+  let storedByFeatureKey = await loadStoredFeatureData(consolidatedManifest, { ...resolvedDeps, stats })
   const behaviors = parseBehaviors(consolidatedManifest, storedByFeatureKey)
   progress.phase3.status = 'in-progress'
   progress.phase3.stats.consolidatedIdsTotal = behaviors.length
@@ -180,10 +192,10 @@ export async function runPhase3(
     behaviors,
     selection: resolveSelection(selectedConsolidatedIds, selectedFeatureKeys, behaviors),
     progress,
-    deps: resolvedDeps,
+    deps: { ...resolvedDeps, stats },
   })
-  await persistEvaluations(collected, storedByFeatureKey, resolvedDeps)
-  storedByFeatureKey = await loadStoredFeatureData(consolidatedManifest, resolvedDeps)
+  await persistEvaluations(collected, storedByFeatureKey, { ...resolvedDeps, stats })
+  storedByFeatureKey = await loadStoredFeatureData(consolidatedManifest, { ...resolvedDeps, stats })
   const updatedManifest = updateManifest(consolidatedManifest, storedByFeatureKey)
   await saveConsolidatedManifest(updatedManifest)
   await resolvedDeps.writeReports({
@@ -192,5 +204,8 @@ export async function runPhase3(
   })
   progress.phase3.status = 'done'
   await resolvedDeps.saveProgress(progress)
+  const wallMs = performance.now() - stats.wallStartMs
+  const label = `[Phase 3 complete] ${progress.phase3.stats.consolidatedIdsDone} evaluated, ${progress.phase3.stats.consolidatedIdsFailed} failed`
+  resolvedDeps.log.log(`\n${formatPhaseSummary(stats, wallMs, label)}`)
   return updatedManifest
 }

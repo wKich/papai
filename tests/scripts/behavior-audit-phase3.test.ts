@@ -37,9 +37,9 @@ type ConsolidatedArtifactRecord = {
 
 type EvaluatedArtifactRecord = {
   readonly consolidatedId: string
-  readonly maria: NonNullable<MockEvaluationResult>['maria']
-  readonly dani: NonNullable<MockEvaluationResult>['dani']
-  readonly viktor: NonNullable<MockEvaluationResult>['viktor']
+  readonly maria: NonNullable<MockEvaluationResult>['result']['maria']
+  readonly dani: NonNullable<MockEvaluationResult>['result']['dani']
+  readonly viktor: NonNullable<MockEvaluationResult>['result']['viktor']
   readonly flaws: readonly string[]
   readonly improvements: readonly string[]
   readonly evaluatedAt: string
@@ -71,12 +71,12 @@ async function readEvaluatedArtifact(root: string, featureKey: string): Promise<
 }
 
 function createEvaluationResult(input: {
-  readonly maria: NonNullable<MockEvaluationResult>['maria']
-  readonly dani: NonNullable<MockEvaluationResult>['dani']
-  readonly viktor: NonNullable<MockEvaluationResult>['viktor']
+  readonly maria: NonNullable<MockEvaluationResult>['result']['maria']
+  readonly dani: NonNullable<MockEvaluationResult>['result']['dani']
+  readonly viktor: NonNullable<MockEvaluationResult>['result']['viktor']
   readonly flaws: readonly string[]
   readonly improvements: readonly string[]
-}): NonNullable<MockEvaluationResult> {
+}): NonNullable<MockEvaluationResult>['result'] {
   return {
     maria: input.maria,
     dani: input.dani,
@@ -168,15 +168,16 @@ describe('behavior-audit phase 3 incremental selection', () => {
       },
       {
         evaluateWithRetry: () =>
-          Promise.resolve(
-            createEvaluationResult({
+          Promise.resolve({
+            result: createEvaluationResult({
               maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
               dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
               viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
               flaws: ['Selected flaw'],
               improvements: ['Selected improvement'],
             }),
-          ),
+            usage: { inputTokens: 200, outputTokens: 100, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+          }),
       },
     )
 
@@ -247,15 +248,16 @@ describe('behavior-audit phase 3 incremental selection', () => {
       },
       {
         evaluateWithRetry: () =>
-          Promise.resolve(
-            createEvaluationResult({
+          Promise.resolve({
+            result: createEvaluationResult({
               maria: { discover: 4, use: 4, retain: 4, notes: 'Selected Maria notes' },
               dani: { discover: 3, use: 3, retain: 3, notes: 'Selected Dani notes' },
               viktor: { discover: 5, use: 5, retain: 5, notes: 'Selected Viktor notes' },
               flaws: ['Selected flaw'],
               improvements: ['Selected improvement'],
             }),
-          ),
+            usage: { inputTokens: 200, outputTokens: 100, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+          }),
       },
     )
 
@@ -315,15 +317,16 @@ describe('behavior-audit phase 3 incremental selection', () => {
       },
       {
         evaluateWithRetry: () =>
-          Promise.resolve(
-            createEvaluationResult({
+          Promise.resolve({
+            result: createEvaluationResult({
               maria: { discover: 4, use: 4, retain: 4, notes: 'Fresh Maria notes' },
               dani: { discover: 4, use: 4, retain: 4, notes: 'Fresh Dani notes' },
               viktor: { discover: 4, use: 4, retain: 4, notes: 'Fresh Viktor notes' },
               flaws: ['Fresh flaw'],
               improvements: ['Fresh improvement'],
             }),
-          ),
+            usage: { inputTokens: 200, outputTokens: 100, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+          }),
       },
     )
 
@@ -419,15 +422,16 @@ describe('behavior-audit phase 3 incremental selection', () => {
       {
         evaluateWithRetry: (prompt) => {
           calls.push(prompt)
-          return Promise.resolve(
-            createEvaluationResult({
+          return Promise.resolve({
+            result: createEvaluationResult({
               maria: { discover: 4, use: 4, retain: 4, notes: 'Scoped Maria notes' },
               dani: { discover: 4, use: 4, retain: 4, notes: 'Scoped Dani notes' },
               viktor: { discover: 4, use: 4, retain: 4, notes: 'Scoped Viktor notes' },
               flaws: ['Scoped flaw'],
               improvements: ['Scoped improvement'],
             }),
-          )
+            usage: { inputTokens: 200, outputTokens: 100, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+          })
         },
       },
     )
@@ -504,15 +508,16 @@ test('runPhase3 reads consolidated artifacts using feature keys from manifest en
     },
     {
       evaluateWithRetry: () =>
-        Promise.resolve(
-          createEvaluationResult({
+        Promise.resolve({
+          result: createEvaluationResult({
             maria: { discover: 4, use: 4, retain: 4, notes: 'clear' },
             dani: { discover: 4, use: 4, retain: 4, notes: 'clear' },
             viktor: { discover: 4, use: 4, retain: 4, notes: 'clear' },
             flaws: [],
             improvements: [],
           }),
-        ),
+          usage: { inputTokens: 200, outputTokens: 100, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
     },
   )
 
