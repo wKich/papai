@@ -161,7 +161,7 @@ describe('phase-stats', () => {
         inputTokens: 89421,
         outputTokens: 12847,
         toolCalls: 142,
-        toolNames: Array(89).fill('readFile').concat(Array(53).fill('grep')),
+        toolNames: [...Array<string>(89).fill('readFile'), ...Array<string>(53).fill('grep')],
       })
       recordItemFailed(stats)
       recordItemSkipped(stats)
