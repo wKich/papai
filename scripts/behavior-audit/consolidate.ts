@@ -12,6 +12,16 @@ import {
 import { readExtractedFile } from './extracted-store.js'
 import type { ConsolidatedManifest, IncrementalManifest } from './incremental.js'
 import {
+  type PhaseStats,
+  createPhaseStats,
+  formatPerItemSuffix,
+  formatPhaseSummary,
+  recordItemDone,
+  recordItemFailed,
+  recordItemSkipped,
+} from './phase-stats.js'
+import type { AgentUsage } from './phase-stats.js'
+import {
   getFailedFeatureKeyAttempts,
   markFeatureKeyDone,
   markFeatureKeyFailed,
@@ -22,7 +32,7 @@ import type { Progress } from './progress.js'
 import { writeConsolidatedFile } from './report-writer.js'
 
 type ConsolidationProcessResult =
-  | { readonly kind: 'consolidated'; readonly manifest: ConsolidatedManifest }
+  | { readonly kind: 'consolidated'; readonly manifest: ConsolidatedManifest; readonly usage: AgentUsage }
   | { readonly kind: 'failed'; readonly manifest: ConsolidatedManifest }
   | { readonly kind: 'skipped'; readonly manifest: ConsolidatedManifest }
 
@@ -33,6 +43,7 @@ interface Phase2bDeps {
   readonly readClassifiedFile: typeof readClassifiedFile
   readonly log: Pick<typeof console, 'log'>
   readonly writeStdout: (text: string) => void
+  readonly stats?: PhaseStats
 }
 
 const defaultConsolidateWithRetry: ConsolidateWithRetry = async (...args) => {
@@ -64,14 +75,14 @@ async function consolidateFeatureKey(input: {
     return { kind: 'skipped', manifest: input.consolidatedManifest }
   }
 
-  const result = await input.deps.consolidateWithRetry(input.featureKey, input.inputs, failedAttempts)
-  if (result === null) {
+  const agentResult = await input.deps.consolidateWithRetry(input.featureKey, input.inputs, failedAttempts)
+  if (agentResult === null) {
     markFeatureKeyFailed(input.progress, input.featureKey, 'consolidation failed after retries', failedAttempts + 1)
     await saveProgress(input.progress)
     return { kind: 'failed', manifest: input.consolidatedManifest }
   }
 
-  const consolidations = toConsolidations(result, input.inputs)
+  const consolidations = toConsolidations(agentResult.result, input.inputs)
   await input.deps.writeConsolidatedFile(input.featureKey, consolidations)
   markFeatureKeyDone(input.progress, input.featureKey, consolidations)
   await saveProgress(input.progress)
@@ -88,13 +99,14 @@ async function consolidateFeatureKey(input: {
         phase2Version: input.phase2Version,
       }),
     },
+    usage: agentResult.usage,
   }
 }
 
 function logConsolidationResult(deps: Phase2bDeps, result: ConsolidationProcessResult, elapsedMs: number): void {
   switch (result.kind) {
     case 'consolidated':
-      deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
+      deps.log.log(formatPerItemSuffix(result.usage, elapsedMs))
       break
     case 'failed':
       deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
@@ -127,6 +139,15 @@ async function processFeatureKeyGroup(
   })
   const elapsedMs = performance.now() - startMs
   logConsolidationResult(deps, result, elapsedMs)
+  if (deps.stats !== undefined) {
+    if (result.kind === 'consolidated') {
+      recordItemDone(deps.stats, result.usage)
+    } else if (result.kind === 'failed') {
+      recordItemFailed(deps.stats)
+    } else {
+      recordItemSkipped(deps.stats)
+    }
+  }
   return result
 }
 
@@ -138,7 +159,8 @@ export async function runPhase2b(
   manifest: IncrementalManifest,
   deps: Partial<Phase2bDeps> = {},
 ): Promise<ConsolidatedManifest> {
-  const resolvedDeps: Phase2bDeps = { ...defaultPhase2bDeps, ...deps }
+  const stats = deps.stats ?? createPhaseStats()
+  const resolvedDeps: Phase2bDeps = { ...defaultPhase2bDeps, ...deps, stats }
   const groups = [...(await loadGroupedInputs(manifest, selectedFeatureKeys, resolvedDeps)).entries()]
   progress.phase2b.status = 'in-progress'
   progress.phase2b.stats.featureKeysTotal = groups.length
@@ -167,5 +189,8 @@ export async function runPhase2b(
 
   progress.phase2b.status = 'done'
   await saveProgress(progress)
+  const wallMs = performance.now() - stats.wallStartMs
+  const label = `[Phase 2b complete] ${progress.phase2b.stats.featureKeysDone} feature keys consolidated, ${progress.phase2b.stats.featureKeysFailed} failed`
+  resolvedDeps.log.log(`\n${formatPhaseSummary(stats, wallMs, label)}`)
   return currentManifest
 }

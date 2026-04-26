@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
+import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 import { makeAuditTools } from './tools.js'
 
 function getEnvOrFallback(name: string, fallback: string): string {
@@ -51,7 +52,7 @@ const ConsolidationResultSchema = z.object({
   consolidations: z.array(ConsolidationItemSchema),
 })
 
-type ConsolidationResult = z.infer<typeof ConsolidationResultSchema>
+export type ConsolidationResult = z.infer<typeof ConsolidationResultSchema>
 
 export interface ConsolidateBehaviorInput {
   readonly behaviorId: string
@@ -81,7 +82,11 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
-async function consolidateSingle(prompt: string, attempt: number): Promise<ConsolidationResult | null> {
+async function consolidateSingle(
+  prompt: string,
+  attempt: number,
+): Promise<{ data: ConsolidationResult | null; usage: AgentUsage }> {
+  const usage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0, toolNames: [] }
   const timeout = attempt > 0 ? PHASE2_TIMEOUT_MS * 2 : PHASE2_TIMEOUT_MS
   const tools = makeAuditTools()
   const start = Date.now()
@@ -96,22 +101,29 @@ async function consolidateSingle(prompt: string, attempt: number): Promise<Conso
       stopWhen: stepCountIs(MAX_STEPS + 1),
       abortSignal: AbortSignal.timeout(timeout),
     })
+    usage.inputTokens = result.totalUsage.inputTokens ?? 0
+    usage.outputTokens = result.totalUsage.outputTokens ?? 0
+    for (const step of result.steps) {
+      for (const tc of step.toolCalls) {
+        usage.toolCalls += 1
+        usage.toolNames.push(tc.toolName)
+      }
+    }
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
     if (result.output === null) {
       console.log(`✗ null output (${elapsed}s)`)
-      return null
+      return { data: null, usage }
     }
     const parsed = ConsolidationResultSchema.safeParse(result.output)
     if (!parsed.success) {
       console.log(`✗ parse error (${elapsed}s)`)
-      return null
+      return { data: null, usage }
     }
-    console.log(`✓ (${elapsed}s)`)
-    return parsed.data
+    return { data: parsed.data, usage }
   } catch (err) {
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
     console.log(`✗ error: ${err instanceof Error ? err.message : String(err)} (${elapsed}s)`)
-    return null
+    return { data: null, usage }
   }
 }
 
@@ -127,8 +139,12 @@ async function attemptConsolidation(
   featureKey: string,
   attempt: number,
   remaining: number,
-): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
-  if (remaining <= 0) return null
+  accumulatedUsage: AgentUsage,
+): Promise<{
+  items: readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null
+  usage: AgentUsage
+}> {
+  if (remaining <= 0) return { items: null, usage: accumulatedUsage }
 
   if (attempt > 0) {
     const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1]!
@@ -136,23 +152,33 @@ async function attemptConsolidation(
     await sleep(backoff)
   }
 
-  const result = await consolidateSingle(prompt, attempt)
-  if (result !== null) {
-    return result.consolidations.map((item) => ({
-      id: `${featureKey}::${slugify(item.featureName)}`,
-      item,
-    }))
+  const { data, usage } = await consolidateSingle(prompt, attempt)
+  const combined = addAgentUsage(accumulatedUsage, usage)
+  if (data !== null) {
+    return {
+      items: data.consolidations.map((item) => ({
+        id: `${featureKey}::${slugify(item.featureName)}`,
+        item,
+      })),
+      usage: combined,
+    }
   }
 
-  return attemptConsolidation(prompt, featureKey, attempt + 1, remaining - 1)
+  return attemptConsolidation(prompt, featureKey, attempt + 1, remaining - 1, combined)
 }
 
 export function consolidateWithRetry(
   featureKey: string,
   behaviors: readonly ConsolidateBehaviorInput[],
   attemptOffset: number,
-): Promise<readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[] | null> {
+): Promise<AgentResult<
+  readonly { readonly id: string; readonly item: ConsolidationResult['consolidations'][number] }[]
+> | null> {
   const prompt = buildPrompt(featureKey, behaviors)
   const remaining = MAX_RETRIES - attemptOffset
-  return attemptConsolidation(prompt, featureKey, attemptOffset, remaining)
+  const emptyUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0, toolNames: [] }
+  return attemptConsolidation(prompt, featureKey, attemptOffset, remaining, emptyUsage).then(({ items, usage }) => {
+    if (items === null) return null
+    return { result: items, usage }
+  })
 }
