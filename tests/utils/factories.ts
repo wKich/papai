@@ -36,3 +36,39 @@ export function createMinimalTaskProviderStub(overrides?: Partial<TaskProvider>)
     ...overrides,
   }
 }
+
+export function createMockKaneoTaskSearchResponse(
+  overrides?: Partial<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    results: [
+      {
+        id: 'task-1',
+        type: 'task',
+        title: 'Task 1',
+        taskNumber: 1,
+        status: 'todo',
+        priority: 'medium',
+        projectId: 'proj-1',
+        userId: 'user-123',
+        createdAt: new Date().toISOString(),
+        relevanceScore: 1,
+      },
+      {
+        id: 'task-2',
+        type: 'task',
+        title: 'Task 2',
+        taskNumber: 2,
+        status: 'done',
+        priority: 'high',
+        projectId: 'proj-1',
+        userId: 'user-456',
+        createdAt: new Date().toISOString(),
+        relevanceScore: 1,
+      },
+    ],
+    totalCount: 2,
+    searchQuery: 'test',
+    ...overrides,
+  }
+}
