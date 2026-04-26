@@ -1,4 +1,5 @@
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
+import { getDomain } from './domain-map.js'
 import { buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
@@ -10,9 +11,9 @@ import {
   saveKeywordVocabulary,
   stampVocabularyEntry,
 } from './keyword-vocabulary.js'
+import type { AgentResult, AgentUsage } from './phase-stats.js'
 import { markFileDone, markTestFailed } from './progress.js'
 import type { Progress } from './progress.js'
-import type { AgentResult, AgentUsage } from './phase-stats.js'
 import type { TestCase } from './test-parser.js'
 
 export interface ResolveKeywordsDeps {
@@ -181,5 +182,27 @@ export function markFileDoneWhenSelectedTestsPersisted(
   const allSelectedTestsPersisted = [...selectedTestKeySet].every((testKey) => completedTests[testKey] === 'done')
   if (allSelectedTestsPersisted) {
     markFileDone(progress, testFilePath)
+  }
+}
+
+export function buildBehaviorRecord(
+  testCase: TestCase,
+  testFilePath: string,
+  testKey: string,
+  extractedBehavior: string,
+  extractedContext: string,
+  keywords: readonly string[],
+): ExtractedBehaviorRecord {
+  return {
+    behaviorId: testKey,
+    testKey,
+    testFile: testFilePath,
+    domain: getDomain(testFilePath),
+    testName: testCase.name,
+    fullPath: testCase.fullPath,
+    behavior: extractedBehavior,
+    context: extractedContext,
+    keywords,
+    extractedAt: new Date().toISOString(),
   }
 }

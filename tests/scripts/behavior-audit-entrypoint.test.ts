@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert'
 
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-entrypoint.js'
 import type {
@@ -248,14 +249,10 @@ describe('behavior-audit entrypoint incremental selection', () => {
     const phase2aCall = calls.runPhase2aIfNeeded[0]
     const phase2bCall = calls.runPhase2bIfNeeded[0]
     const phase3Call = calls.runPhase3IfNeeded[0]
-    if (
-      phase1Call === undefined ||
-      phase2aCall === undefined ||
-      phase2bCall === undefined ||
-      phase3Call === undefined
-    ) {
-      throw new Error('Expected all phase calls to be recorded')
-    }
+    assert(phase1Call !== undefined)
+    assert(phase2aCall !== undefined)
+    assert(phase2bCall !== undefined)
+    assert(phase3Call !== undefined)
 
     expect(calls.loadOrCreateProgress).toEqual([1])
     expect(calls.runPhase1IfNeeded).toEqual([
@@ -376,9 +373,8 @@ describe('behavior-audit entrypoint incremental selection', () => {
 
     const phase2bCall = calls.runPhase2bIfNeeded[0]
     const phase3Call = calls.runPhase3IfNeeded[0]
-    if (phase2bCall === undefined || phase3Call === undefined) {
-      throw new Error('Expected phase2b and phase3 calls to be recorded')
-    }
+    assert(phase2bCall !== undefined)
+    assert(phase3Call !== undefined)
 
     expect(calls.selectIncrementalRunWork).toEqual([
       {

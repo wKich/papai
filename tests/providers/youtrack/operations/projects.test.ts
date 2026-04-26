@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -80,6 +81,50 @@ const makeProjectResponse = (overrides: Record<string, unknown> = {}): ProjectFi
   ...overrides,
 })
 
+// Pagination mock helpers — defined outside test blocks to satisfy no-conditional-in-test.
+// Returns a handler that serves a full page on the first call and a single item on the second.
+function makePaginatedFetchHandler(
+  makeProjectFn: (overrides: Record<string, unknown>) => ProjectFixture,
+): (url: string) => Promise<Response> {
+  let callCount = 0
+  return (): Promise<Response> => {
+    callCount++
+    if (callCount === 1) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            Array.from({ length: 100 }, (_, index) => makeProjectFn({ id: `proj-${index}`, shortName: `P${index}` })),
+          ),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify([makeProjectFn({ id: 'proj-last', shortName: 'LAST' })]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  }
+}
+
+// Returns a handler that captures the first URL it receives and then returns an empty array.
+function makeUrlCapturingFetchHandler(): {
+  handler: (url: string) => Promise<Response>
+  getFirstUrl: () => URL | undefined
+} {
+  let firstUrl: URL | undefined
+  return {
+    handler: (url: string): Promise<Response> => {
+      firstUrl ??= new URL(url)
+      return Promise.resolve(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      )
+    },
+    getFirstUrl: (): URL | undefined => firstUrl,
+  }
+}
+
 // --- Tests ---
 
 describe('getYouTrackProject', () => {
@@ -139,10 +184,8 @@ describe('getYouTrackProject', () => {
       await getYouTrackProject(config, 'nonexistent')
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('project-not-found')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('project-not-found')
     }
   })
 
@@ -153,10 +196,8 @@ describe('getYouTrackProject', () => {
       await getYouTrackProject(config, 'proj-1')
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('auth-failed')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('auth-failed')
     }
   })
 })
@@ -235,32 +276,7 @@ describe('listYouTrackProjects', () => {
   })
 
   test('fetches multiple pages when the first page reaches the pagination limit', async () => {
-    let callCount = 0
-    installFetchMock(() => {
-      callCount++
-      if (callCount === 1) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify(
-              Array.from({ length: 100 }, (_, index) =>
-                makeProjectResponse({ id: `proj-${index}`, shortName: `P${index}` }),
-              ),
-            ),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify([makeProjectResponse({ id: 'proj-last', shortName: 'LAST' })]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(makePaginatedFetchHandler(makeProjectResponse))
 
     const projects = await listYouTrackProjects(config)
 
@@ -269,27 +285,13 @@ describe('listYouTrackProjects', () => {
   })
 
   test('requests project pages with $top and $skip pagination params', async () => {
-    let callCount = 0
-    let firstRequestUrl: URL | undefined
-
-    installFetchMock((url: string) => {
-      callCount++
-      const parsedUrl = new URL(url)
-      if (callCount === 1) {
-        firstRequestUrl = parsedUrl
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-      )
-    })
+    const urlCapture = makeUrlCapturingFetchHandler()
+    installFetchMock(urlCapture.handler)
 
     await listYouTrackProjects(config)
 
-    expect(firstRequestUrl).toBeDefined()
-    if (firstRequestUrl === undefined) {
-      throw new Error('Expected first project-list request URL')
-    }
+    const firstRequestUrl = urlCapture.getFirstUrl()
+    assert(firstRequestUrl !== undefined, 'Expected first project-list request URL')
     expect(firstRequestUrl.searchParams.get('$top')).toBe('100')
     expect(firstRequestUrl.searchParams.get('$skip')).toBe('0')
   })
@@ -396,9 +398,7 @@ describe('createYouTrackProject', () => {
 
     const body = getLastFetchBody()
     const shortNameValue = body['shortName']
-    if (typeof shortNameValue !== 'string') {
-      throw new Error('Expected shortName to be a string')
-    }
+    assert(typeof shortNameValue === 'string', 'Expected shortName to be a string')
     const shortName = shortNameValue
     // Should start with cleaned name, be uppercase alphanumeric, max 10 chars
     expect(shortName).toMatch(/^[A-Z0-9]+$/)
@@ -499,10 +499,8 @@ describe('updateYouTrackProject', () => {
       await updateYouTrackProject(config, 'nonexistent', { name: 'X' })
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('project-not-found')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('project-not-found')
     }
   })
 })
@@ -536,10 +534,8 @@ describe('deleteYouTrackProject', () => {
       await deleteYouTrackProject(config, 'nonexistent')
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('project-not-found')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('project-not-found')
     }
   })
 
@@ -550,10 +546,8 @@ describe('deleteYouTrackProject', () => {
       await deleteYouTrackProject(config, 'proj-1')
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('auth-failed')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('auth-failed')
     }
   })
 })

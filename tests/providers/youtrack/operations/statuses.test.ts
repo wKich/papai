@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -105,6 +106,72 @@ const makeCustomField = (bundleId = 'bundle-123'): Record<string, unknown> => ({
   field: { name: 'State' },
   bundle: { id: bundleId },
 })
+
+const extractResultMessage = (result: unknown): unknown => {
+  if (result !== null && typeof result === 'object' && 'message' in result) {
+    return (result as { message: unknown }).message
+  }
+  return undefined
+}
+
+const OrdinalBodySchema = z.looseObject({ ordinal: z.number() })
+
+const assertOrdinalFromCall = (callIndex: number, expectedOrdinal: number): void => {
+  const call = getFetchCall(callIndex)
+  assert(call !== null, `Expected fetch call at index ${callIndex}`)
+  const body = call[1].body
+  assert(typeof body === 'string', `Expected body to be a string at call ${callIndex}`)
+  const parsed = OrdinalBodySchema.parse(JSON.parse(body))
+  expect(parsed.ordinal).toBe(expectedOrdinal)
+}
+
+const makePartialFailureReorderHandler = (): (() => Promise<Response>) => {
+  let callIndex = 0
+  return () => {
+    callIndex++
+    if (callIndex === 1) {
+      return Promise.resolve(
+        new Response(JSON.stringify([makeCustomField()]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+    if (callIndex === 2) {
+      return Promise.resolve(
+        new Response(JSON.stringify(makeBundleInfo()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+    if (callIndex === 3) {
+      return Promise.resolve(
+        new Response(JSON.stringify(makeStateValue({ id: '57-1', ordinal: 0 })), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: 'Conflict' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  }
+}
+
+const installNoPriorityStateFieldMock = (): void => {
+  installFetchMock(() =>
+    Promise.resolve(
+      new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ),
+  )
+}
 
 describe('listYouTrackStatuses', () => {
   beforeEach(() => {
@@ -230,12 +297,9 @@ describe('createYouTrackStatus', () => {
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'Ready' })
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.id).toBe('57-100')
-      expect(result.name).toBe('Ready')
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.id).toBe('57-100')
+    expect(result.name).toBe('Ready')
   })
 
   test('sends name in body', async () => {
@@ -258,11 +322,8 @@ describe('createYouTrackStatus', () => {
 
     const body = getLastFetchBody()
     expect(body['isResolved']).toBe(true)
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.isFinal).toBe(true)
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.isFinal).toBe(true)
   })
 
   test('sends isResolved when isFinal is false', async () => {
@@ -276,11 +337,8 @@ describe('createYouTrackStatus', () => {
 
     const body = getLastFetchBody()
     expect(body['isResolved']).toBe(false)
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.isFinal).toBe(false)
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.isFinal).toBe(false)
   })
 
   test('uses POST method', async () => {
@@ -300,9 +358,7 @@ describe('createYouTrackStatus', () => {
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'New' }, false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    const resultMessage =
-      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
-    expect(String(resultMessage)).toContain('shared')
+    expect(String(extractResultMessage(result))).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -314,11 +370,8 @@ describe('createYouTrackStatus', () => {
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'New' }, true)
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.id).toBe('57-1')
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.id).toBe('57-1')
   })
 
   test('proceeds without confirm for non-shared bundles', async () => {
@@ -326,11 +379,8 @@ describe('createYouTrackStatus', () => {
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'New' })
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.id).toBe('57-1')
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.id).toBe('57-1')
   })
 
   test('throws classified error on API failure', async () => {
@@ -342,25 +392,11 @@ describe('createYouTrackStatus', () => {
   })
 
   test('throws not-found error when state bundle is missing', async () => {
-    // First call returns empty custom fields (no State field)
-    installFetchMock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    )
+    installNoPriorityStateFieldMock()
 
-    try {
-      await createYouTrackStatus(config, 'proj-1', { name: 'Test' })
-      expect.unreachable('Should have thrown')
-    } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('not-found')
-      }
-    }
+    const error = await createYouTrackStatus(config, 'proj-1', { name: 'Test' }).catch((e: unknown) => e)
+    assert(error instanceof YouTrackClassifiedError)
+    expect(error.appError.code).toBe('not-found')
   })
 })
 
@@ -384,11 +420,8 @@ describe('updateYouTrackStatus', () => {
 
     const result = await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'Updated Name' })
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.name).toBe('Updated Name')
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.name).toBe('Updated Name')
   })
 
   test('updates isFinal via isResolved', async () => {
@@ -400,11 +433,8 @@ describe('updateYouTrackStatus', () => {
 
     const result = await updateYouTrackStatus(config, 'proj-1', '57-1', { isFinal: true })
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.isFinal).toBe(true)
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.isFinal).toBe(true)
     const body = getLastFetchBody()
     expect(body['isResolved']).toBe(true)
   })
@@ -438,9 +468,7 @@ describe('updateYouTrackStatus', () => {
     const result = await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'X' }, false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    const resultMessage =
-      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
-    expect(String(resultMessage)).toContain('shared')
+    expect(String(extractResultMessage(result))).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -452,11 +480,8 @@ describe('updateYouTrackStatus', () => {
 
     const result = await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'X' }, true)
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result.id).toBe('57-1')
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result.id).toBe('57-1')
   })
 
   test('throws classified error on 404', async () => {
@@ -468,25 +493,11 @@ describe('updateYouTrackStatus', () => {
   })
 
   test('throws not-found error when state bundle is missing', async () => {
-    // First call returns empty custom fields (no State field)
-    installFetchMock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    )
+    installNoPriorityStateFieldMock()
 
-    try {
-      await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'Test' })
-      expect.unreachable('Should have thrown')
-    } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('not-found')
-      }
-    }
+    const error = await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'Test' }).catch((e: unknown) => e)
+    assert(error instanceof YouTrackClassifiedError)
+    expect(error.appError.code).toBe('not-found')
   })
 })
 
@@ -506,11 +517,8 @@ describe('deleteYouTrackStatus', () => {
 
     const result = await deleteYouTrackStatus(config, 'proj-1', '57-1')
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result).toEqual({ id: '57-1' })
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result).toEqual({ id: '57-1' })
   })
 
   test('uses DELETE method', async () => {
@@ -532,9 +540,7 @@ describe('deleteYouTrackStatus', () => {
     const result = await deleteYouTrackStatus(config, 'proj-1', '57-1', false)
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    const resultMessage =
-      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
-    expect(String(resultMessage)).toContain('shared')
+    expect(String(extractResultMessage(result))).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -546,11 +552,8 @@ describe('deleteYouTrackStatus', () => {
 
     const result = await deleteYouTrackStatus(config, 'proj-1', '57-1', true)
 
-    if ('status' in result) {
-      expect.unreachable('Should not require confirmation')
-    } else {
-      expect(result).toEqual({ id: '57-1' })
-    }
+    assert(!('status' in result), 'Should not require confirmation')
+    expect(result).toEqual({ id: '57-1' })
   })
 
   test('throws classified error on 404', async () => {
@@ -560,25 +563,11 @@ describe('deleteYouTrackStatus', () => {
   })
 
   test('throws not-found error when state bundle is missing', async () => {
-    // First call returns empty custom fields (no State field)
-    installFetchMock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    )
+    installNoPriorityStateFieldMock()
 
-    try {
-      await deleteYouTrackStatus(config, 'proj-1', '57-1')
-      expect.unreachable('Should have thrown')
-    } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('not-found')
-      }
-    }
+    const error = await deleteYouTrackStatus(config, 'proj-1', '57-1').catch((e: unknown) => e)
+    assert(error instanceof YouTrackClassifiedError)
+    expect(error.appError.code).toBe('not-found')
   })
 })
 
@@ -634,35 +623,8 @@ describe('reorderYouTrackStatuses', () => {
       { id: '57-2', position: 10 },
     ])
 
-    const call1 = getFetchCall(2)
-    expect(call1).not.toBeNull()
-    const body1 = call1![1].body
-    if (body1 !== undefined && body1 !== null && typeof body1 === 'string') {
-      const parsed1 = JSON.parse(body1) as unknown
-      if (
-        parsed1 !== null &&
-        typeof parsed1 === 'object' &&
-        'ordinal' in parsed1 &&
-        typeof parsed1.ordinal === 'number'
-      ) {
-        expect(parsed1.ordinal).toBe(5)
-      }
-    }
-
-    const call2 = getFetchCall(3)
-    expect(call2).not.toBeNull()
-    const body2 = call2![1].body
-    if (body2 !== undefined && body2 !== null && typeof body2 === 'string') {
-      const parsed2 = JSON.parse(body2) as unknown
-      if (
-        parsed2 !== null &&
-        typeof parsed2 === 'object' &&
-        'ordinal' in parsed2 &&
-        typeof parsed2.ordinal === 'number'
-      ) {
-        expect(parsed2.ordinal).toBe(10)
-      }
-    }
+    assertOrdinalFromCall(2, 5)
+    assertOrdinalFromCall(3, 10)
   })
 
   test('requires confirmation for shared bundles', async () => {
@@ -682,9 +644,7 @@ describe('reorderYouTrackStatuses', () => {
     )
 
     expect(result).toMatchObject({ status: 'confirmation_required' })
-    const resultMessage =
-      result !== null && typeof result === 'object' && 'message' in result ? result.message : undefined
-    expect(String(resultMessage)).toContain('shared')
+    expect(String(extractResultMessage(result))).toContain('shared')
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
@@ -729,35 +689,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('throws error with details when some reorders fail', async () => {
-    let callIndex = 0
-    installFetchMock(() => {
-      callIndex++
-      // First two calls: get custom field and bundle info
-      if (callIndex <= 2) {
-        return Promise.resolve(
-          new Response(callIndex === 1 ? JSON.stringify([makeCustomField()]) : JSON.stringify(makeBundleInfo()), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-      // Third call: first reorder succeeds
-      if (callIndex === 3) {
-        return Promise.resolve(
-          new Response(JSON.stringify(makeStateValue({ id: '57-1', ordinal: 0 })), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-      // Fourth call: second reorder fails
-      return Promise.resolve(
-        new Response(JSON.stringify({ error: 'Conflict' }), {
-          status: 409,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(makePartialFailureReorderHandler())
 
     const promise = reorderYouTrackStatuses(config, 'proj-1', [
       { id: '57-1', position: 0 },

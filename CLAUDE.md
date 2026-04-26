@@ -111,7 +111,7 @@ The repo also blocks a few unsafe AI-editing escape hatches:
 
 - `.oxlintrc.json` is protected from direct write-tool edits by hook policy
 - inline suppression comments such as `eslint-disable`, `oxlint-disable`, `@ts-ignore`, and `@ts-nocheck` are blocked before writes complete
-- bash-hook policy blocks `git stash` in the Claude/bash flow
+- bash-hook policy blocks `git stash` and `git checkout --` in the Claude/bash flow
 
 Fix the underlying issue instead of trying to bypass linting or hook policy.
 

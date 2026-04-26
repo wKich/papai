@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -153,9 +154,7 @@ test('classified-store round-trips sorted classified behaviors under audit root'
   ])
 
   const loaded = await store.readClassifiedFile(testFilePath)
-  if (loaded === null) {
-    throw new Error('Expected classified data')
-  }
+  assert(loaded !== null, 'Expected classified data')
   expect(loaded.map((item) => item.behaviorId)).toEqual([
     'tests/tools/sample.test.ts::suite > alpha',
     'tests/tools/sample.test.ts::suite > beta',
@@ -358,9 +357,7 @@ test('report-writer round-trips supporting internal refs as readonly consolidate
   expect(loaded).toHaveLength(1)
 
   const item = loaded![0]
-  if (item === undefined) {
-    throw new Error('Expected consolidated item to exist')
-  }
+  assert(item !== undefined, 'Expected consolidated item to exist')
   expect(item.supportingInternalRefs).toEqual([
     {
       behaviorId: 'tests/tools/sample.test.ts::suite > validate task',

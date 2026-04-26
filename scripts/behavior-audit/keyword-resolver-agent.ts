@@ -3,8 +3,8 @@ import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
 import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
-import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
+import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 
 const VocabularyEntrySchema = z.object({
   slug: z.string(),

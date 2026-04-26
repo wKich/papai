@@ -13,6 +13,7 @@
     "tests/review-loop/**/*.test.ts!",
     "scripts/behavior-audit*.ts!",
     "tests/scripts/behavior-audit*.ts!",
+    "tests/scripts/behavior-audit/**/*.ts!",
   ],
 
   // All source files (production only)

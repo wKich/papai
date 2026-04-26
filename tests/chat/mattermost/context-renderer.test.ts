@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { renderMattermostContext } from '../../../src/chat/mattermost/context-renderer.js'
 import type { ContextSnapshot } from '../../../src/chat/types.js'
@@ -39,7 +40,7 @@ describe('renderMattermostContext', () => {
 
   test('contains bold header with model and usage', () => {
     const result = renderMattermostContext(snapshot)
-    if (result.method !== 'formatted') throw new Error('expected formatted')
+    assert(result.method === 'formatted')
     expect(result.content).toContain('**Context**')
     expect(result.content).toContain('gpt-4o')
     expect(result.content).toContain('6,770')
@@ -48,14 +49,14 @@ describe('renderMattermostContext', () => {
 
   test('contains a markdown table', () => {
     const result = renderMattermostContext(snapshot)
-    if (result.method !== 'formatted') throw new Error('expected formatted')
+    assert(result.method === 'formatted')
     expect(result.content).toContain('| Section')
     expect(result.content).toContain('| ------ | ------')
   })
 
   test('table rows use section emojis', () => {
     const result = renderMattermostContext(snapshot)
-    if (result.method !== 'formatted') throw new Error('expected formatted')
+    assert(result.method === 'formatted')
     expect(result.content).toContain('| 🟦 **System prompt**')
     expect(result.content).toContain('| 🟩 **Memory context**')
     expect(result.content).toContain('| 🟨 **Conversation history**')
@@ -64,14 +65,14 @@ describe('renderMattermostContext', () => {
 
   test('contains the emoji grid', () => {
     const result = renderMattermostContext(snapshot)
-    if (result.method !== 'formatted') throw new Error('expected formatted')
+    assert(result.method === 'formatted')
     expect(result.content).toContain('🟦')
     expect(result.content).toContain('⬜')
   })
 
   test('notes approximate counts when applicable', () => {
     const result = renderMattermostContext({ ...snapshot, approximate: true })
-    if (result.method !== 'formatted') throw new Error('expected formatted')
+    assert(result.method === 'formatted')
     expect(result.content).toMatch(/_token counts are approximate_/i)
   })
 })

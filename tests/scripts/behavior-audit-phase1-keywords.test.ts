@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -6,7 +7,6 @@ import { z } from 'zod'
 
 import { normalizeKeywordSlug } from '../../scripts/behavior-audit-phase1-keywords.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
@@ -145,9 +145,7 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   )
   expect(extractedRecords).toHaveLength(1)
   const firstRecord = extractedRecords[0]
-  if (firstRecord === undefined) {
-    throw new Error('Expected first extracted record')
-  }
+  assert(firstRecord !== undefined, 'Expected first extracted record')
   expect(firstRecord.behaviorId).toBe('tests/tools/sample.test.ts::suite > case')
   expect(firstRecord.testKey).toBe('tests/tools/sample.test.ts::suite > case')
   expect(firstRecord.testFile).toBe('tests/tools/sample.test.ts')
@@ -215,7 +213,9 @@ test('runPhase1 fails cleanly when resolver output normalizes to empty keyword s
 
   expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
   const failedTest = progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']
-  expect(failedTest !== undefined && failedTest !== null ? failedTest.error : undefined).toContain('keyword')
+  assert(failedTest !== undefined, 'Expected failedTest entry')
+  assert(failedTest !== null, 'Expected failedTest entry to be non-null')
+  expect(failedTest.error).toContain('keyword')
   expect(progress.phase1.completedTests['tests/tools/sample.test.ts']).toBeUndefined()
 })
 
@@ -260,14 +260,9 @@ test('keyword-vocabulary normalizes duplicate slugs into canonical entries', asy
   ])
 
   const saved = await typedVocab.loadKeywordVocabulary()
-  expect(saved).not.toBeNull()
-  if (saved === null) {
-    throw new Error('Expected saved vocabulary entries')
-  }
+  assert(saved !== null, 'Expected saved vocabulary entries')
   const firstSavedEntry = saved[0]
-  if (firstSavedEntry === undefined) {
-    throw new Error('Expected first saved vocabulary entry')
-  }
+  assert(firstSavedEntry !== undefined, 'Expected first saved vocabulary entry')
   expect(saved).toHaveLength(1)
   expect(firstSavedEntry).toEqual({
     slug: 'group-targeting',
@@ -397,9 +392,7 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
   const savedVocabText = await Bun.file(vocabularyPath).text()
   expect(savedVocabText).toContain('"group-targeting"')
   const completedTests = progress.phase1.completedTests['tests/tools/sample.test.ts']
-  if (completedTests === undefined) {
-    throw new Error('Expected completed tests entry for sample test file')
-  }
+  assert(completedTests !== undefined, 'Expected completed tests entry for sample test file')
   expect(completedTests['tests/tools/sample.test.ts::suite > case']).toBe('done')
 })
 
@@ -559,9 +552,7 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
   )
 
   const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
-  if (!isKeywordVocabulary(savedVocabularyRaw)) {
-    throw new Error('Expected saved keyword vocabulary')
-  }
+  assert(isKeywordVocabulary(savedVocabularyRaw), 'Expected saved keyword vocabulary')
   const savedVocabulary = savedVocabularyRaw
   expect(savedVocabulary).toHaveLength(1)
   expect(savedVocabulary[0]!.slug).toBe('group-targeting')
@@ -644,9 +635,7 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
   )
 
   const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
-  if (!isKeywordVocabulary(savedVocabularyRaw)) {
-    throw new Error('Expected saved keyword vocabulary')
-  }
+  assert(isKeywordVocabulary(savedVocabularyRaw), 'Expected saved keyword vocabulary')
 
   expect(savedVocabularyRaw).toHaveLength(1)
   expect(savedVocabularyRaw[0]!.slug).toBe('group-targeting')

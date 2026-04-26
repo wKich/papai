@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -67,7 +68,7 @@ describe('behavior-audit phase 2a classification', () => {
     return {
       classifyBehaviorWithRetry: (prompt: string, attemptOffset: number) => {
         classifyBehaviorWithRetryCalls += 1
-        return classifyBehaviorWithRetryImpl(prompt, attemptOffset) as ReturnType<Phase2aDeps['classifyBehaviorWithRetry']>
+        return classifyBehaviorWithRetryImpl(prompt, attemptOffset)
       },
     }
   }
@@ -218,9 +219,7 @@ describe('behavior-audit phase 2a classification', () => {
     const classifiedList = await readTypedClassifiedArtifact(testFilePath)
     expect(classifiedList).toHaveLength(1)
     const classifiedEntry = classifiedList[0]
-    if (classifiedEntry === undefined) {
-      throw new Error('Expected classified artifact entry')
-    }
+    assert(classifiedEntry !== undefined, 'Expected classified artifact entry')
     expect(classifiedEntry.behaviorId).toBe(testKey)
     expect(classifiedEntry.testKey).toBe(testKey)
     expect(classifiedEntry.domain).toBe('tools')
@@ -384,7 +383,7 @@ describe('behavior-audit phase 2a classification', () => {
       },
     ])
 
-    classifyBehaviorWithRetryImpl = (_prompt, _attempt) =>
+    classifyBehaviorWithRetryImpl = (_prompt, _attempt): ReturnType<Phase2aDeps['classifyBehaviorWithRetry']> =>
       Promise.resolve({
         result: {
           visibility: 'user-facing',
@@ -412,9 +411,7 @@ describe('behavior-audit phase 2a classification', () => {
     const refreshedList = await readTypedClassifiedArtifact(testFilePath)
     expect(refreshedList).toHaveLength(1)
     const refreshedEntry = refreshedList[0]
-    if (refreshedEntry === undefined) {
-      throw new Error('Expected refreshed classified artifact entry')
-    }
+    assert(refreshedEntry !== undefined, 'Expected refreshed classified artifact entry')
     expect(refreshedEntry.behaviorId).toBe(testKey)
     expect(refreshedEntry.testKey).toBe(testKey)
     expect(refreshedEntry.domain).toBe('tools')
@@ -439,7 +436,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testFilePath = 'tests/tools/sample.test.ts'
     const classifierArgs: Array<readonly [string, number]> = []
 
-    classifyBehaviorWithRetryImpl = (prompt, attemptOffset) => {
+    classifyBehaviorWithRetryImpl = (prompt, attemptOffset): ReturnType<Phase2aDeps['classifyBehaviorWithRetry']> => {
       classifierArgs.push([prompt, attemptOffset])
       return Promise.resolve({
         result: {
@@ -502,9 +499,7 @@ describe('behavior-audit phase 2a classification', () => {
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     expect(classifierArgs).toHaveLength(1)
     const classifierArgsEntry = classifierArgs[0]
-    if (classifierArgsEntry === undefined) {
-      throw new Error('Expected classifier args entry')
-    }
+    assert(classifierArgsEntry !== undefined, 'Expected classifier args entry')
     expect(classifierArgsEntry[1]).toBe(2)
   })
 
@@ -519,7 +514,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testKey = 'tests/tools/sample.test.ts::suite > recovery case'
     const testFilePath = 'tests/tools/sample.test.ts'
 
-    classifyBehaviorWithRetryImpl = (_prompt, _attempt) =>
+    classifyBehaviorWithRetryImpl = (_prompt, _attempt): ReturnType<Phase2aDeps['classifyBehaviorWithRetry']> =>
       Promise.resolve({
         result: {
           visibility: 'user-facing',
@@ -584,9 +579,7 @@ describe('behavior-audit phase 2a classification', () => {
     const recoveredList = await readTypedClassifiedArtifact(testFilePath)
     expect(recoveredList).toHaveLength(1)
     const recoveredEntry = recoveredList[0]
-    if (recoveredEntry === undefined) {
-      throw new Error('Expected recovered classified artifact entry')
-    }
+    assert(recoveredEntry !== undefined, 'Expected recovered classified artifact entry')
     expect(recoveredEntry.behaviorId).toBe(testKey)
     expect(recoveredEntry.testKey).toBe(testKey)
     expect(recoveredEntry.domain).toBe('tools')
@@ -610,7 +603,7 @@ describe('behavior-audit phase 2a classification', () => {
     const testKey = 'tests/tools/sample.test.ts::suite > exhausted retries'
     const testFilePath = 'tests/tools/sample.test.ts'
 
-    classifyBehaviorWithRetryImpl = () => Promise.resolve(null)
+    classifyBehaviorWithRetryImpl = (): ReturnType<Phase2aDeps['classifyBehaviorWithRetry']> => Promise.resolve(null)
 
     const progress = progressModule.createEmptyProgress(1)
     const manifest: IncrementalManifest = {
@@ -654,9 +647,7 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     const firstFailure = progress.phase2a.failedBehaviors[testKey]
-    if (firstFailure === undefined) {
-      throw new Error('Expected failed behavior entry')
-    }
+    assert(firstFailure !== undefined, 'Expected failed behavior entry')
     expect(firstFailure.attempts).toBe(3)
 
     await classify.runPhase2a(
@@ -670,9 +661,7 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect(classifyBehaviorWithRetryCalls).toBe(1)
     const repeatedFailure = progress.phase2a.failedBehaviors[testKey]
-    if (repeatedFailure === undefined) {
-      throw new Error('Expected repeated failed behavior entry')
-    }
+    assert(repeatedFailure !== undefined, 'Expected repeated failed behavior entry')
     expect(repeatedFailure.attempts).toBe(3)
   })
 
@@ -737,9 +726,7 @@ describe('behavior-audit phase 2a classification', () => {
 
     expect(classifyBehaviorWithRetryCalls).toBe(0)
     const repeatedFailure = progress.phase2a.failedBehaviors[testKey]
-    if (repeatedFailure === undefined) {
-      throw new Error('Expected repeated failed behavior entry')
-    }
+    assert(repeatedFailure !== undefined, 'Expected repeated failed behavior entry')
     expect(repeatedFailure.attempts).toBe(2)
   })
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -161,9 +162,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
     )
     expect(extractedRecords).toHaveLength(1)
     const firstRecord = extractedRecords[0]
-    if (firstRecord === undefined) {
-      throw new Error('Expected first extracted record')
-    }
+    assert(firstRecord !== undefined, 'Expected first extracted record')
     expect(firstRecord.behaviorId).toBe(selectedKey)
     expect(firstRecord.testKey).toBe(selectedKey)
     expect(firstRecord.testFile).toBe(testFilePath)
@@ -176,9 +175,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
     expect(typeof firstRecord.extractedAt).toBe('string')
 
     const extractedRecord = extractedRecords[0]
-    if (extractedRecord === undefined) {
-      throw new Error('Expected extracted record')
-    }
+    assert(extractedRecord !== undefined, 'Expected extracted record')
     expectExtractedRecord(extractedRecord, {
       behavior: 'When the injected test extractor runs, the bot persists the injected behavior.',
       context: 'Uses the injected phase 1 extractor dependency.',
@@ -299,9 +296,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
     )
 
     const firstSnapshot = savedSnapshots[0]
-    if (firstSnapshot === undefined) {
-      throw new Error('Expected first saved progress snapshot')
-    }
+    assert(firstSnapshot !== undefined, 'Expected first saved progress snapshot')
     expect(firstSnapshot.phase1.status).toBe('in-progress')
     expect(firstSnapshot.phase2a.status).toBe('not-started')
     expect(firstSnapshot.phase2a.completedBehaviors).toEqual({})

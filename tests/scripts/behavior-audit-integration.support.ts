@@ -24,7 +24,6 @@ export type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
 export type ReportWriterModuleShape = typeof ReportWriterModule
 export type ResetModuleShape = typeof ResetModule
 export type ManifestTestEntry = IncrementalManifest['tests'][string]
-export type MockClassificationResult = Awaited<ReturnType<ClassifyAgentModuleShape['classifyBehaviorWithRetry']>>
 export type MockEvaluationResult = Awaited<
   ReturnType<(typeof import('../../scripts/behavior-audit/evaluate-agent.js'))['evaluateWithRetry']>
 >

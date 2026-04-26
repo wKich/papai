@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
+import assert from 'node:assert/strict'
 
 // Import implementation to satisfy TDD hook requirement
 import '../../../src/providers/kaneo/operations/tasks.js'
@@ -31,10 +32,8 @@ describe('searchTasks', () => {
       userId: 'user-123',
     }
     const parsed = TaskResultSchema.safeParse(validResult)
-    expect(parsed.success).toBe(true)
-    if (parsed.success) {
-      expect(parsed.data.userId).toBe('user-123')
-    }
+    assert(parsed.success, 'Expected TaskResultSchema to parse successfully')
+    expect(parsed.data.userId).toBe('user-123')
   })
 
   test('should filter by assigneeId when provided', async () => {
@@ -85,10 +84,7 @@ describe('searchTasks', () => {
 
     expect(result).toHaveLength(1)
     const [firstResult] = result
-    expect(firstResult).toBeDefined()
-    if (firstResult === undefined) {
-      throw new Error('Expected a filtered Kaneo search result')
-    }
+    assert(firstResult !== undefined, 'Expected a filtered Kaneo search result')
     expect(firstResult.id).toBe('task-1')
     expect(firstResult.userId).toBe('user-123')
   })
@@ -181,10 +177,7 @@ describe('searchTasks', () => {
       limit: 1,
     })
 
-    expect(requestUrl).toBeDefined()
-    if (requestUrl === undefined) {
-      throw new Error('Expected Kaneo search request URL')
-    }
+    assert(requestUrl !== undefined, 'Expected Kaneo search request URL')
     expect(requestUrl.searchParams.get('offset')).toBeNull()
     expect(requestUrl.searchParams.get('limit')).toBeNull()
     expect(result).toHaveLength(1)
@@ -218,10 +211,7 @@ describe('searchTasks', () => {
 
     await searchTasks(params)
 
-    expect(requestUrl).toBeDefined()
-    if (requestUrl === undefined) {
-      throw new Error('Expected Kaneo search request URL')
-    }
+    assert(requestUrl !== undefined, 'Expected Kaneo search request URL')
     expect(requestUrl.pathname).toBe('/api/search')
     expect(requestUrl.searchParams.get('offset')).toBe('30')
   })

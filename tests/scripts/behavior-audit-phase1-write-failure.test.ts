@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { isObject, loadExtractModule, loadIncrementalModule } from './behavior-audit-integration.support.js'
@@ -82,16 +82,14 @@ test('runPhase1 does not publish manifest or progress completion before extracte
 
   const persistedProgressText = await Bun.file(progressPath).text()
   const persistedProgress = JSON.parse(persistedProgressText) as unknown
-  if (!isObject(persistedProgress) || !('phase1' in persistedProgress) || !isObject(persistedProgress['phase1'])) {
-    throw new Error('Expected persisted progress shape')
-  }
+  assert(isObject(persistedProgress), 'Expected persisted progress to be an object')
+  assert('phase1' in persistedProgress, 'Expected persisted progress to have phase1')
+  assert(isObject(persistedProgress['phase1']), 'Expected persisted progress phase1 to be an object')
   const persistedPhase1 = persistedProgress['phase1']
-  if (!('completedFiles' in persistedPhase1) || !Array.isArray(persistedPhase1['completedFiles'])) {
-    throw new Error('Expected persisted phase1 completedFiles array')
-  }
-  if (!('completedTests' in persistedPhase1) || !isObject(persistedPhase1['completedTests'])) {
-    throw new Error('Expected persisted phase1 completedTests record')
-  }
+  assert('completedFiles' in persistedPhase1, 'Expected persisted phase1 to have completedFiles')
+  assert(Array.isArray(persistedPhase1['completedFiles']), 'Expected persisted phase1 completedFiles to be an array')
+  assert('completedTests' in persistedPhase1, 'Expected persisted phase1 to have completedTests')
+  assert(isObject(persistedPhase1['completedTests']), 'Expected persisted phase1 completedTests to be an object')
   expect(persistedPhase1['completedFiles']).toEqual([])
   expect(persistedPhase1['completedTests']['tests/tools/sample.test.ts']).toBeUndefined()
 })

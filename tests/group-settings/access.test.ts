@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { addAuthorizedGroup } from '../../src/authorized-groups.js'
 import { listManageableGroups, matchManageableGroup } from '../../src/group-settings/access.js'
@@ -89,14 +90,12 @@ describe('group settings access', () => {
 
     const exactMatch = matchManageableGroup('user-1', 'group-1')
     expect(exactMatch.kind).toBe('match')
-    if (exactMatch.kind === 'match') {
-      expect(exactMatch.group.contextId).toBe('group-1')
-    }
+    assert(exactMatch.kind === 'match')
+    expect(exactMatch.group.contextId).toBe('group-1')
 
     const ambiguousMatch = matchManageableGroup('user-1', 'operations')
     expect(ambiguousMatch.kind).toBe('ambiguous')
-    if (ambiguousMatch.kind === 'ambiguous') {
-      expect(ambiguousMatch.matches.map((group) => group.contextId)).toEqual(['group-1', 'group-2'])
-    }
+    assert(ambiguousMatch.kind === 'ambiguous')
+    expect(ambiguousMatch.matches.map((group) => group.contextId)).toEqual(['group-1', 'group-2'])
   })
 })

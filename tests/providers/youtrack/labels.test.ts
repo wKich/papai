@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -289,28 +290,24 @@ describe('findYouTrackLabelsByName', () => {
   })
 
   test('paginates through tag results when exact match is not on the first page', async () => {
+    const responses: Response[] = [
+      new Response(
+        JSON.stringify(
+          Array.from({ length: 100 }, (_, index) => makeTagResponse({ id: `tag-${index}`, name: `other-${index}` })),
+        ),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+      new Response(JSON.stringify([makeTagResponse({ id: 'tag-101', name: 'blocked' })]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ]
     let callCount = 0
     installFetchMock(() => {
+      const response = responses[callCount]
+      assert(response !== undefined, `Unexpected fetch call #${callCount}`)
       callCount++
-      if (callCount === 1) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify(
-              Array.from({ length: 100 }, (_, index) =>
-                makeTagResponse({ id: `tag-${index}`, name: `other-${index}` }),
-              ),
-            ),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify([makeTagResponse({ id: 'tag-101', name: 'blocked' })]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
+      return Promise.resolve(response)
     })
 
     const result = await findYouTrackLabelsByName(config, 'blocked')
@@ -374,10 +371,8 @@ describe('updateYouTrackLabel', () => {
       await updateYouTrackLabel(config, 'nonexistent', { name: 'x' })
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('label-not-found')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('label-not-found')
     }
   })
 
@@ -428,10 +423,8 @@ describe('removeYouTrackLabel', () => {
       await removeYouTrackLabel(config, 'nonexistent')
       expect.unreachable('Should have thrown')
     } catch (error) {
-      expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (error instanceof YouTrackClassifiedError) {
-        expect(error.appError.code).toBe('label-not-found')
-      }
+      assert(error instanceof YouTrackClassifiedError)
+      expect(error.appError.code).toBe('label-not-found')
     }
   })
 })

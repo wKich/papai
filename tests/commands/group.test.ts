@@ -26,6 +26,30 @@ const flushMicrotasks = async (): Promise<void> => {
   await Promise.resolve()
 }
 
+// Label-lookup helpers defined outside test blocks — required by no-conditional-in-test
+function resolveGroupLabelByKnownId(groupId: string): Promise<string | null> {
+  if (groupId === 'group-123') return Promise.resolve('Engineering Chat')
+  return Promise.resolve(null)
+}
+
+function resolveUserLabelForAdmin1(userId: string): Promise<string | null> {
+  if (userId === 'admin1') return Promise.resolve('John Johnson (@itsmike)')
+  return Promise.resolve(null)
+}
+
+function resolveUserLabelByContextId(userId: string, context: ResolveUserContext | undefined): Promise<string | null> {
+  if (userId !== 'admin1') return Promise.resolve(null)
+  if (context?.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
+  if (context?.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
+  return Promise.resolve(null)
+}
+
+function resolveUserLabelForMembersAndAdder(userId: string): Promise<string | null> {
+  if (userId === 'user1') return Promise.resolve('John Johnson (@itsmike)')
+  if (userId === 'admin1') return Promise.resolve('Jane Admin (@janeadmin)')
+  return Promise.resolve(null)
+}
+
 const createBlockingLabelLookup = (): {
   readonly lookup: () => Promise<string | null>
   readonly getMaxInFlight: () => number
@@ -606,14 +630,8 @@ describe('group commands', () => {
       const labeledHandlers = new Map<string, CommandHandler>()
       const labeledChat = createMockChat({
         commandHandlers: labeledHandlers,
-        resolveGroupLabel: (groupId: string): Promise<string | null> => {
-          if (groupId === 'group-123') return Promise.resolve('Engineering Chat')
-          return Promise.resolve(null)
-        },
-        resolveUserLabel: (userId: string): Promise<string | null> => {
-          if (userId === 'admin1') return Promise.resolve('John Johnson (@itsmike)')
-          return Promise.resolve(null)
-        },
+        resolveGroupLabel: resolveGroupLabelByKnownId,
+        resolveUserLabel: resolveUserLabelForAdmin1,
       })
       registerGroupCommand(labeledChat)
 
@@ -636,12 +654,7 @@ describe('group commands', () => {
       const labeledChat = createMockChat({
         commandHandlers: labeledHandlers,
         resolveGroupLabel: (groupId: string): Promise<string | null> => Promise.resolve(groupId),
-        resolveUserLabel: (userId: string, context: ResolveUserContext | undefined): Promise<string | null> => {
-          if (userId !== 'admin1') return Promise.resolve(null)
-          if (context !== undefined && context.contextId === 'group-123') return Promise.resolve('Alice One (@admin1)')
-          if (context !== undefined && context.contextId === 'group-456') return Promise.resolve('Alice Two (@admin1)')
-          return Promise.resolve(null)
-        },
+        resolveUserLabel: resolveUserLabelByContextId,
       })
       registerGroupCommand(labeledChat)
 
@@ -663,11 +676,7 @@ describe('group commands', () => {
       const labeledHandlers = new Map<string, CommandHandler>()
       const labeledChat = createMockChat({
         commandHandlers: labeledHandlers,
-        resolveUserLabel: (userId: string): Promise<string | null> => {
-          if (userId === 'user1') return Promise.resolve('John Johnson (@itsmike)')
-          if (userId === 'admin1') return Promise.resolve('Jane Admin (@janeadmin)')
-          return Promise.resolve(null)
-        },
+        resolveUserLabel: resolveUserLabelForMembersAndAdder,
       })
       registerGroupCommand(labeledChat)
 

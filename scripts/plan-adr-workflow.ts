@@ -16,150 +16,24 @@
  *   bun scripts/plan-adr-workflow.ts --port 4097
  */
 
-import { access, constants as fsConstants, readFile, readdir, rename } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 
 import { createOpencode } from '@opencode-ai/sdk/v2'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type PlanStatus = 'fully_implemented' | 'partially_implemented' | 'not_implemented' | 'unclear'
-
-type WorkflowResult =
-  | { readonly kind: 'adr_written'; readonly planFile: string; readonly specFile: string | null }
-  | {
-      readonly kind: 'skipped'
-      readonly planFile: string
-      readonly status: PlanStatus
-      readonly reason: string
-    }
-  | { readonly kind: 'error'; readonly planFile: string; readonly error: string }
-
-interface CliArgs {
-  readonly dryRun: boolean
-  readonly filter: string | null
-  readonly port: number
-}
-
-interface ImplementationCheck {
-  readonly status: PlanStatus
-  readonly is_fully_implemented: boolean
-  readonly evidence: string
-  readonly spec_path?: string
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PROJECT_ROOT = resolve(join(import.meta.dirname, '..'))
-const PLANS_DIR = join(PROJECT_ROOT, 'docs/superpowers/plans')
-const SPECS_DIR = join(PROJECT_ROOT, 'docs/superpowers/specs')
-const ARCHIVE_DIR = join(PROJECT_ROOT, 'docs/archive')
-
-const IMPLEMENTATION_CHECK_SCHEMA = {
-  type: 'object',
-  properties: {
-    status: {
-      type: 'string',
-      enum: ['fully_implemented', 'partially_implemented', 'not_implemented', 'unclear'],
-      description: 'Overall implementation status of the plan',
-    },
-    is_fully_implemented: {
-      type: 'boolean',
-      description:
-        'True only when ALL key features, tasks, and file changes described in the plan exist in the codebase',
-    },
-    evidence: {
-      type: 'string',
-      description:
-        'Concise evidence: list which key files are present or absent, mention checkbox completion ratio if applicable',
-    },
-    spec_path: {
-      type: 'string',
-      description:
-        'Relative path to the design/spec document explicitly referenced in the plan (e.g. docs/superpowers/specs/...). Empty string if none found.',
-    },
-  },
-  required: ['status', 'is_fully_implemented', 'evidence'],
-} as const
-
-// ─── CLI Parsing ──────────────────────────────────────────────────────────────
-
-function parseArgs(argv: readonly string[]): CliArgs {
-  const args = argv.slice(2)
-
-  const dryRun = args.includes('--dry-run')
-
-  const filterIdx = args.indexOf('--filter')
-  const filter = filterIdx >= 0 ? (args[filterIdx + 1] ?? null) : null
-
-  const portIdx = args.indexOf('--port')
-  const port = portIdx >= 0 ? parseInt(args[portIdx + 1] ?? '4097', 10) : 4097
-
-  return { dryRun, filter, port }
-}
-
-// ─── Plan Discovery ───────────────────────────────────────────────────────────
-
-async function discoverPlanFiles(filter: string | null): Promise<readonly string[]> {
-  const files = await readdir(PLANS_DIR)
-  const mdFiles = files.filter((f) => f.endsWith('.md')).toSorted()
-  return filter === null ? mdFiles : mdFiles.filter((f) => f.toLowerCase().includes(filter.toLowerCase()))
-}
-
-// ─── Spec Reference Extraction ────────────────────────────────────────────────
-
-const SPEC_PATTERNS: readonly RegExp[] = [
-  /\*\*Spec:\*\*\s*`([^`]+docs\/superpowers\/specs\/[^`]+)`/i,
-  /\*\*Spec(?:ification)?:\*\*\s*`([^`]+)`/i,
-  /\*\*Design(?:\s+Doc)?:\*\*\s*`([^`]+)`/i,
-  /^Spec:\s*`([^`]+)`/im,
-]
-
-function extractSpecReference(content: string): string | null {
-  for (const pattern of SPEC_PATTERNS) {
-    const match = pattern.exec(content)
-    if (match?.[1]) return match[1]
-  }
-  return null
-}
-
-// ─── File Utilities ───────────────────────────────────────────────────────────
-
-async function fileExists(absolutePath: string): Promise<boolean> {
-  try {
-    await access(absolutePath, fsConstants.F_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function resolveSpecFile(
-  specPathFromLlm: string | undefined,
-  specPathFromContent: string | null,
-): Promise<string | null> {
-  const candidates = [specPathFromLlm, specPathFromContent].filter(
-    (v): v is string => typeof v === 'string' && v.length > 0,
-  )
-
-  for (const candidate of candidates) {
-    const absolute = candidate.startsWith('docs/')
-      ? join(PROJECT_ROOT, candidate)
-      : join(SPECS_DIR, basename(candidate))
-    if (await fileExists(absolute)) return absolute
-  }
-  return null
-}
-
-async function archiveFile(absolutePath: string, dryRun: boolean): Promise<void> {
-  const dest = join(ARCHIVE_DIR, basename(absolutePath))
-  if (dryRun) {
-    console.log(`    [dry-run] would move: ${basename(absolutePath)} -> docs/archive/`)
-    return
-  }
-  await rename(absolutePath, dest)
-  console.log(`    archived: ${basename(absolutePath)}`)
-}
+import {
+  IMPLEMENTATION_CHECK_SCHEMA,
+  PLANS_DIR,
+  SPECS_DIR,
+  PROJECT_ROOT,
+  type ImplementationCheck,
+  type WorkflowResult,
+  archiveFile,
+  discoverPlanFiles,
+  extractSpecReference,
+  parseArgs,
+  resolveSpecFile,
+} from './plan-adr-workflow-helpers.js'
 
 // ─── Session Management ───────────────────────────────────────────────────────
 
@@ -168,7 +42,7 @@ type OpencodeClient = Awaited<ReturnType<typeof createOpencode>>['client']
 async function createSession(client: OpencodeClient, title: string): Promise<string> {
   const result = await client.session.create({ title })
   const sessionID = result.data?.id
-  if (!sessionID) throw new Error('session.create returned no id')
+  if (sessionID === undefined || sessionID === '') throw new Error('session.create returned no id')
   return sessionID
 }
 
@@ -181,6 +55,15 @@ async function deleteSession(client: OpencodeClient, sessionID: string): Promise
 }
 
 // ─── Implementation Check ─────────────────────────────────────────────────────
+
+function isImplementationCheck(value: unknown): value is ImplementationCheck {
+  if (typeof value !== 'object' || value === null) return false
+  return (
+    typeof (value as { status?: unknown })['status'] === 'string' &&
+    typeof (value as { is_fully_implemented?: unknown })['is_fully_implemented'] === 'boolean' &&
+    typeof (value as { evidence?: unknown })['evidence'] === 'string'
+  )
+}
 
 async function checkImplementationStatus(
   client: OpencodeClient,
@@ -211,8 +94,8 @@ async function checkImplementationStatus(
     },
   })
 
-  const structured = result.data?.info?.structured as ImplementationCheck | undefined
-  if (!structured) throw new Error('implementation check returned no structured output')
+  const structured: unknown = result.data?.info?.structured
+  if (!isImplementationCheck(structured)) throw new Error('implementation check returned no structured output')
   return structured
 }
 
@@ -250,22 +133,22 @@ async function processPlan(
       return { kind: 'skipped', planFile, status: check.status, reason: check.evidence }
     }
 
-    if (!dryRun) {
+    if (dryRun) {
+      console.log('  [dry-run] would run /adr command')
+    } else {
       await runAdrCommand(client, sessionID)
       console.log('  /adr command completed')
-    } else {
-      console.log('  [dry-run] would run /adr command')
     }
 
-    const specPath = await resolveSpecFile(check.spec_path, specRefFromContent)
+    const specPath = await resolveSpecFile(check.spec_path, specRefFromContent, SPECS_DIR, PROJECT_ROOT)
 
     await archiveFile(join(PLANS_DIR, planFile), dryRun)
 
-    if (specPath) {
+    if (specPath !== null) {
       await archiveFile(specPath, dryRun)
     }
 
-    return { kind: 'adr_written', planFile, specFile: specPath ? basename(specPath) : null }
+    return { kind: 'adr_written', planFile, specFile: specPath === null ? null : basename(specPath) }
   } catch (error) {
     return {
       kind: 'error',
@@ -273,7 +156,7 @@ async function processPlan(
       error: error instanceof Error ? error.message : String(error),
     }
   } finally {
-    if (sessionID) {
+    if (sessionID !== null) {
       await deleteSession(client, sessionID)
     }
   }
@@ -303,14 +186,44 @@ function printSummary(results: readonly WorkflowResult[]): void {
     console.log('\nADRs written:')
     for (const r of written) {
       if (r.kind === 'adr_written') {
-        const specNote = r.specFile ? ` (+ spec: ${r.specFile})` : ''
+        const specNote = r.specFile === null ? '' : ` (+ spec: ${r.specFile})`
         console.log(`  ${r.planFile}${specNote}`)
       }
     }
   }
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// ─── Plan Execution Loop ──────────────────────────────────────────────────────
+
+// Plans must run sequentially: each uses a fresh opencode session and may
+// archive files that affect subsequent plan discovery. Using reduce avoids
+// awaiting inside a for-loop while preserving order.
+function runPlanSequence(
+  client: OpencodeClient,
+  planFiles: readonly string[],
+  dryRun: boolean,
+): Promise<readonly WorkflowResult[]> {
+  return planFiles.reduce<Promise<WorkflowResult[]>>(async (accPromise, planFile, index) => {
+    const acc = await accPromise
+    console.log(`\n[${index + 1}/${planFiles.length}] ${planFile}`)
+    const planContent = await readFile(join(PLANS_DIR, planFile), 'utf-8')
+    const result = await processPlan(client, planFile, planContent, dryRun)
+    acc.push(result)
+
+    if (result.kind === 'adr_written') {
+      const specNote = result.specFile === null ? '' : ` + spec archived`
+      console.log(`  ADR written, plan archived${specNote}`)
+    } else if (result.kind === 'skipped') {
+      console.log(`  -> skipped (${result.status})`)
+    } else {
+      console.log(`  error: ${result.error}`)
+    }
+
+    return acc
+  }, Promise.resolve([]))
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv)
@@ -319,7 +232,7 @@ async function main(): Promise<void> {
     console.log('-- DRY RUN -- no files moved, no ADRs written\n')
   }
 
-  const planFiles = await discoverPlanFiles(args.filter)
+  const planFiles = await discoverPlanFiles(args.filter, PLANS_DIR)
   if (planFiles.length === 0) {
     console.log('No plan files found matching the filter.')
     return
@@ -332,30 +245,8 @@ async function main(): Promise<void> {
   try {
     opencode = await createOpencode({ port: args.port })
     const { client } = opencode
-
-    // Verify connectivity
     await client.global.health()
-
-    const results: WorkflowResult[] = []
-
-    for (const [index, planFile] of planFiles.entries()) {
-      console.log(`\n[${index + 1}/${planFiles.length}] ${planFile}`)
-
-      const planContent = await readFile(join(PLANS_DIR, planFile), 'utf-8')
-      const result = await processPlan(client, planFile, planContent, args.dryRun)
-
-      results.push(result)
-
-      if (result.kind === 'adr_written') {
-        const specNote = result.specFile ? ` + spec archived` : ''
-        console.log(`  ADR written, plan archived${specNote}`)
-      } else if (result.kind === 'skipped') {
-        console.log(`  -> skipped (${result.status})`)
-      } else {
-        console.log(`  error: ${result.error}`)
-      }
-    }
-
+    const results = await runPlanSequence(client, planFiles, args.dryRun)
     printSummary(results)
   } finally {
     opencode?.server.close()

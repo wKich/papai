@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { getUserMessage, providerError, systemError } from '../../../src/errors.js'
 import { classifyYouTrackError, YouTrackClassifiedError } from '../../../src/providers/youtrack/classify-error.js'
@@ -214,10 +215,8 @@ describe('classifyYouTrackError', () => {
         error_type: 'workflow',
       })
       const result = classifyYouTrackError(error, { projectId: 'PROJ-1' })
-      expect(result.appError.code).toBe('workflow-validation-failed')
-      if (result.appError.code === 'workflow-validation-failed') {
-        expect(result.appError.requiredFields.length).toBeGreaterThan(0)
-      }
+      assert.equal(result.appError.code, 'workflow-validation-failed')
+      expect(result.appError.requiredFields.length).toBeGreaterThan(0)
     })
 
     test('extracts quoted field names from Russian workflow error', () => {
@@ -228,12 +227,10 @@ describe('classifyYouTrackError', () => {
         error_type: 'workflow',
       })
       const result = classifyYouTrackError(error, { projectId: '39-1118' })
-      expect(result.appError.code).toBe('workflow-validation-failed')
-      if (result.appError.code === 'workflow-validation-failed') {
-        const fieldNames = result.appError.requiredFields.map((f) => f.name)
-        expect(fieldNames).toContain('URL адеса где будет размещаться приложени')
-        expect(fieldNames).toContain('Имя приложения в Service Discovery')
-      }
+      assert.equal(result.appError.code, 'workflow-validation-failed')
+      const fieldNames = result.appError.requiredFields.map((f) => f.name)
+      expect(fieldNames).toContain('URL адеса где будет размещаться приложени')
+      expect(fieldNames).toContain('Имя приложения в Service Discovery')
     })
 
     test('extracts quoted field names with smart quotes', () => {
@@ -244,12 +241,10 @@ describe('classifyYouTrackError', () => {
         error_type: 'workflow',
       })
       const result = classifyYouTrackError(error)
-      expect(result.appError.code).toBe('workflow-validation-failed')
-      if (result.appError.code === 'workflow-validation-failed') {
-        const fieldNames = result.appError.requiredFields.map((f) => f.name)
-        expect(fieldNames).toContain('URL')
-        expect(fieldNames).toContain('Name')
-      }
+      assert.equal(result.appError.code, 'workflow-validation-failed')
+      const fieldNames = result.appError.requiredFields.map((f) => f.name)
+      expect(fieldNames).toContain('URL')
+      expect(fieldNames).toContain('Name')
     })
   })
 

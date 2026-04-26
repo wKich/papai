@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import * as behaviorAuditConfig from '../../scripts/behavior-audit/config.js'
 import { createAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
@@ -23,15 +24,18 @@ function isReloadableConfigModule(value: unknown): value is ReloadableConfigModu
   )
 }
 
+// Capture the default MAX_RETRIES before any test mutates the env. This is
+// safe because no setup hook alters BEHAVIOR_AUDIT_MAX_RETRIES before
+// module evaluation, and afterEach restores the env after each test.
+const defaultMaxRetries = Number(process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] ?? '3')
+
 afterEach(() => {
   restoreBehaviorAuditEnv()
 })
 
 test('reloadBehaviorAuditConfig reapplies env overrides to exported config values', async () => {
   const loadedConfig: unknown = await import(`../../scripts/behavior-audit/config.js?test=${crypto.randomUUID()}`)
-  if (!isReloadableConfigModule(loadedConfig)) {
-    throw new Error('Unexpected config module shape')
-  }
+  assert(isReloadableConfigModule(loadedConfig), 'Unexpected config module shape')
   const config = loadedConfig
 
   process.env['BEHAVIOR_AUDIT_REPORTS_DIR'] = '/tmp/behavior-audit-reports'
@@ -44,9 +48,6 @@ test('reloadBehaviorAuditConfig reapplies env overrides to exported config value
 })
 
 test('restoreBehaviorAuditEnv also restores live config exports for already-loaded modules', () => {
-  const expectedMaxRetries =
-    process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] === undefined ? 3 : Number(process.env['BEHAVIOR_AUDIT_MAX_RETRIES'])
-
   const testConfig = createAuditBehaviorConfig('/tmp/behavior-audit-runtime-helper', null)
   applyBehaviorAuditEnv({ ...testConfig, MAX_RETRIES: 0 })
   behaviorAuditConfig.reloadBehaviorAuditConfig()
@@ -54,5 +55,5 @@ test('restoreBehaviorAuditEnv also restores live config exports for already-load
   expect(behaviorAuditConfig.MAX_RETRIES).toBe(0)
   restoreBehaviorAuditEnv()
 
-  expect(behaviorAuditConfig.MAX_RETRIES).toBe(expectedMaxRetries)
+  expect(behaviorAuditConfig.MAX_RETRIES).toBe(defaultMaxRetries)
 })

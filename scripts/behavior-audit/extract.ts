@@ -1,10 +1,10 @@
 import pLimit from 'p-limit'
 
 import { MAX_RETRIES, formatElapsedMs } from './config.js'
-import { getDomain } from './domain-map.js'
 import { extractWithRetry } from './extract-agent.js'
 import { updateManifestForExtractedTest } from './extract-incremental.js'
 import {
+  buildBehaviorRecord,
   getSelectedTests,
   markFileDoneWhenSelectedTestsPersisted,
   reconcileSelectedTestsAfterPersist,
@@ -107,44 +107,36 @@ async function extractAndSave(
 ): Promise<SingleTestResult> {
   deps.writeStdout(`  [${displayIndex}/${totalTests}] "${testCase.name}" `)
   const startMs = performance.now()
-  let combinedUsage: AgentUsage | null = null
   const extracted = await deps.extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
   if (extracted === null) {
     deps.markTestFailed(progress, testKey, 'extraction failed')
-    const elapsedMs = performance.now() - startMs
-    deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
     if (deps.stats !== undefined) recordItemFailed(deps.stats)
     return null
   }
-  combinedUsage = extracted.usage
+  let combinedUsage: AgentUsage = extracted.usage
   const keywordsResult = await resolveKeywords(extracted.result.candidateKeywords, testKey, progress, deps)
   if (keywordsResult === null) {
-    const elapsedMs = performance.now() - startMs
-    deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
+    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
     if (deps.stats !== undefined) recordItemFailed(deps.stats, combinedUsage)
     return null
   }
   combinedUsage = addAgentUsage(combinedUsage, keywordsResult.usage)
-  const record: ExtractedBehaviorRecord = {
-    behaviorId: testKey,
+  const record = buildBehaviorRecord(
+    testCase,
+    testFilePath,
     testKey,
-    testFile: testFilePath,
-    domain: getDomain(testFilePath),
-    testName: testCase.name,
-    fullPath: testCase.fullPath,
-    behavior: extracted.result.behavior,
-    context: extracted.result.context,
-    keywords: keywordsResult.keywords,
-    extractedAt: new Date().toISOString(),
-  }
+    extracted.result.behavior,
+    extracted.result.context,
+    keywordsResult.keywords,
+  )
   const { manifest: updatedManifest, phase1Changed } = await deps.updateManifestForExtractedTest({
     manifest,
     testFile,
     testCase,
     extractedBehavior: record,
   })
-  const elapsedMs = performance.now() - startMs
-  deps.log.log(formatPerItemSuffix(combinedUsage, elapsedMs))
+  deps.log.log(formatPerItemSuffix(combinedUsage, performance.now() - startMs))
   if (deps.stats !== undefined) recordItemDone(deps.stats, combinedUsage)
   return { record, manifest: updatedManifest, phase1Changed }
 }
