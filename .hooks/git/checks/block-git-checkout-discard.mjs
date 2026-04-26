@@ -2,8 +2,16 @@
 //
 // `git checkout -- <path>` discards uncommitted working-tree changes permanently.
 // Agents must not destroy work that may have taken significant effort to produce.
-// Instead, preserve changes by committing them to a temporary branch:
-//   git checkout -b tmp/recovery && git add -A && git commit -m "wip: preserve before rework"
+//
+// Other agents or subagents may be working in the same tree in parallel.
+// Do NOT switch branches in-place — that changes HEAD and disrupts them.
+// Instead, create a git worktree so the current tree is left untouched:
+//
+//   git worktree add ../papai-<descriptive-suffix> -b tmp/<descriptive-suffix>
+//
+// The worktree starts clean from HEAD; uncommitted changes remain in the original
+// tree for other agents. No commit is needed before creating the worktree.
+// The branch name should briefly describe what it is for.
 
 /**
  * @typedef {Object} BlockResult
@@ -24,7 +32,7 @@ export function blockGitCheckoutDiscard(ctx) {
     return {
       decision: 'block',
       reason:
-        'git checkout -- is not allowed. To discard changes, commit them to a temporary branch instead: git checkout -b tmp/recovery && git add -A && git commit -m "wip: preserve before rework"',
+        'git checkout -- is not allowed — it discards work permanently. Other agents may be working in this tree. Instead, create a worktree: git worktree add ../papai-<desc> -b tmp/<desc>',
     }
   }
 
