@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import assert from 'node:assert/strict'
 
 import { z } from 'zod'
@@ -12,79 +12,23 @@ import {
   reorderYouTrackStatuses,
   updateYouTrackStatus,
 } from '../../../../src/providers/youtrack/operations/statuses.js'
-import { mockLogger, restoreFetch, setMockFetch } from '../../../utils/test-helpers.js'
+import { mockLogger, restoreFetch } from '../../../utils/test-helpers.js'
+import {
+  FetchCallSchema,
+  type FetchMockFn,
+  defaultConfig,
+  getLastFetchBody,
+  getLastFetchMethod,
+  getLastFetchUrl,
+  installFetchMock,
+  mockFetchError,
+  mockFetchSequence,
+} from '../fetch-mock-utils.js'
 import { clearBundleCache } from '../test-helpers.js'
 
-let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
+const fetchMock: { current?: FetchMockFn } = {}
 
-const config: YouTrackConfig = {
-  baseUrl: 'https://test.youtrack.cloud',
-  token: 'test-token',
-}
-
-const installFetchMock = (handler: () => Promise<Response>): void => {
-  const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
-  fetchMock = m
-  setMockFetch((url: string, init: RequestInit) => m(url, init))
-}
-
-const mockFetchSequence = (responses: Array<{ data: unknown; status?: number }>): void => {
-  let callIndex = 0
-  installFetchMock(() => {
-    const response = responses[callIndex]
-    callIndex++
-    if (response === undefined) {
-      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
-    }
-    return Promise.resolve(
-      new Response(JSON.stringify(response.data), {
-        status: response.status ?? 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
-  })
-}
-
-const mockFetchError = (status: number, body: unknown = { error: 'Something went wrong' }): void => {
-  installFetchMock(() =>
-    Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })),
-  )
-}
-
-const FetchCallSchema = z.tuple([
-  z.string(),
-  z.looseObject({ method: z.string().optional(), body: z.string().optional() }),
-])
-
-const BodySchema = z.looseObject({})
-
-const getFetchCall = (index: number): [string, RequestInit] | null => {
-  const call = fetchMock.mock.calls[index]
-  if (!Array.isArray(call) || call.length < 2) return null
-  const parsed = FetchCallSchema.safeParse(call)
-  if (!parsed.success) return null
-  return [parsed.data[0], parsed.data[1]]
-}
-
-const getLastFetchUrl = (): URL => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[fetchMock.mock.calls.length - 1])
-  if (!parsed.success) return new URL('https://empty')
-  return new URL(parsed.data[0])
-}
-
-const getLastFetchBody = (): z.infer<typeof BodySchema> => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[fetchMock.mock.calls.length - 1])
-  if (!parsed.success) return {}
-  const { body } = parsed.data[1]
-  if (body === undefined) return {}
-  return BodySchema.parse(JSON.parse(body))
-}
-
-const getLastFetchMethod = (): string => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[fetchMock.mock.calls.length - 1])
-  if (!parsed.success) return ''
-  return parsed.data[1].method ?? ''
-}
+const config: YouTrackConfig = defaultConfig
 
 const makeStateValue = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   id: '57-1',
@@ -115,6 +59,14 @@ const extractResultMessage = (result: unknown): unknown => {
 }
 
 const OrdinalBodySchema = z.looseObject({ ordinal: z.number() })
+
+const getFetchCall = (index: number): [string, { method?: string; body?: unknown }] | null => {
+  const call = fetchMock.current?.mock.calls[index]
+  if (!Array.isArray(call) || call.length < 2) return null
+  const parsed = FetchCallSchema.safeParse(call)
+  if (!parsed.success) return null
+  return [parsed.data[0], parsed.data[1]]
+}
 
 const assertOrdinalFromCall = (callIndex: number, expectedOrdinal: number): void => {
   const call = getFetchCall(callIndex)
@@ -163,7 +115,7 @@ const makePartialFailureReorderHandler = (): (() => Promise<Response>) => {
 }
 
 const installNoPriorityStateFieldMock = (): void => {
-  installFetchMock(() =>
+  installFetchMock(fetchMock, () =>
     Promise.resolve(
       new Response(JSON.stringify([{ $type: 'CustomField', field: { name: 'Priority' } }]), {
         status: 200,
@@ -177,7 +129,6 @@ describe('listYouTrackStatuses', () => {
   beforeEach(() => {
     mockLogger()
     clearBundleCache()
-    fetchMock = undefined!
   })
 
   afterEach(() => {
@@ -185,7 +136,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('lists states from state bundle', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: [makeStateValue(), makeStateValue({ id: '57-2', name: 'In Progress', ordinal: 1 })] },
@@ -201,7 +152,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('returns isFinal as true when isResolved is true', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: [makeStateValue({ isResolved: true })] },
@@ -213,7 +164,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('returns isFinal as false when isResolved is false', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: [makeStateValue({ isResolved: false })] },
@@ -225,12 +176,16 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('uses correct API endpoints', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: [makeStateValue()] }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: [makeStateValue()] },
+    ])
 
     await listYouTrackStatuses(config, 'proj-1')
 
-    const calls = fetchMock.mock.calls
-    expect(calls.length).toBe(3)
+    const calls = fetchMock.current?.mock.calls
+    expect(calls?.length).toBe(3)
 
     const firstCall = getFetchCall(0)
     expect(firstCall).not.toBeNull()
@@ -249,7 +204,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('returns empty array when no states', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: [] }])
+    mockFetchSequence(fetchMock, [{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: [] }])
 
     const statuses = await listYouTrackStatuses(config, 'proj-1')
 
@@ -257,7 +212,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('throws classified error on API failure', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { status: 401, data: { error: 'Unauthorized' } },
@@ -267,7 +222,7 @@ describe('listYouTrackStatuses', () => {
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { status: 404, data: { error: 'Bundle not found' } },
@@ -281,7 +236,6 @@ describe('createYouTrackStatus', () => {
   beforeEach(() => {
     mockLogger()
     clearBundleCache()
-    fetchMock = undefined!
   })
 
   afterEach(() => {
@@ -289,7 +243,7 @@ describe('createYouTrackStatus', () => {
   })
 
   test('creates state in bundle and returns Column', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ id: '57-100', name: 'Ready', ordinal: 2 }) },
@@ -303,16 +257,20 @@ describe('createYouTrackStatus', () => {
   })
 
   test('sends name in body', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     await createYouTrackStatus(config, 'proj-1', { name: 'New State' })
 
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['name']).toBe('New State')
   })
 
   test('sends isResolved when isFinal is true', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ isResolved: true }) },
@@ -320,14 +278,14 @@ describe('createYouTrackStatus', () => {
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'Done', isFinal: true })
 
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['isResolved']).toBe(true)
     assert(!('status' in result), 'Should not require confirmation')
     expect(result.isFinal).toBe(true)
   })
 
   test('sends isResolved when isFinal is false', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ isResolved: false }) },
@@ -335,22 +293,26 @@ describe('createYouTrackStatus', () => {
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'Open', isFinal: false })
 
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['isResolved']).toBe(false)
     assert(!('status' in result), 'Should not require confirmation')
     expect(result.isFinal).toBe(false)
   })
 
   test('uses POST method', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     await createYouTrackStatus(config, 'proj-1', { name: 'Test' })
 
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('POST')
   })
 
   test('requires confirmation for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
     ])
@@ -362,7 +324,7 @@ describe('createYouTrackStatus', () => {
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
       { data: makeStateValue() },
@@ -375,7 +337,11 @@ describe('createYouTrackStatus', () => {
   })
 
   test('proceeds without confirm for non-shared bundles', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     const result = await createYouTrackStatus(config, 'proj-1', { name: 'New' })
 
@@ -384,7 +350,7 @@ describe('createYouTrackStatus', () => {
   })
 
   test('throws classified error on API failure', async () => {
-    mockFetchError(401)
+    mockFetchError(fetchMock, 401)
 
     await expect(createYouTrackStatus(config, 'proj-1', { name: 'Test' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
@@ -404,7 +370,6 @@ describe('updateYouTrackStatus', () => {
   beforeEach(() => {
     mockLogger()
     clearBundleCache()
-    fetchMock = undefined!
   })
 
   afterEach(() => {
@@ -412,7 +377,7 @@ describe('updateYouTrackStatus', () => {
   })
 
   test('updates state name', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ name: 'Updated Name' }) },
@@ -425,7 +390,7 @@ describe('updateYouTrackStatus', () => {
   })
 
   test('updates isFinal via isResolved', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ isResolved: true }) },
@@ -435,32 +400,40 @@ describe('updateYouTrackStatus', () => {
 
     assert(!('status' in result), 'Should not require confirmation')
     expect(result.isFinal).toBe(true)
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['isResolved']).toBe(true)
   })
 
   test('sends only provided fields', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'New' })
 
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['name']).toBe('New')
     expect(body['isResolved']).toBeUndefined()
   })
 
   test('uses POST method with status id in path', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     await updateYouTrackStatus(config, 'proj-1', '57-1', { name: 'X' })
 
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123/values/57-1')
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('POST')
   })
 
   test('requires confirmation for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
     ])
@@ -472,7 +445,7 @@ describe('updateYouTrackStatus', () => {
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
       { data: makeStateValue() },
@@ -485,7 +458,7 @@ describe('updateYouTrackStatus', () => {
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404, { error: 'State not found' })
+    mockFetchError(fetchMock, 404, { error: 'State not found' })
 
     await expect(updateYouTrackStatus(config, 'proj-1', '57-999', { name: 'X' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
@@ -505,7 +478,6 @@ describe('deleteYouTrackStatus', () => {
   beforeEach(() => {
     mockLogger()
     clearBundleCache()
-    fetchMock = undefined!
   })
 
   afterEach(() => {
@@ -513,7 +485,7 @@ describe('deleteYouTrackStatus', () => {
   })
 
   test('deletes state from bundle', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: {} }])
+    mockFetchSequence(fetchMock, [{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: {} }])
 
     const result = await deleteYouTrackStatus(config, 'proj-1', '57-1')
 
@@ -522,17 +494,17 @@ describe('deleteYouTrackStatus', () => {
   })
 
   test('uses DELETE method', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: {} }])
+    mockFetchSequence(fetchMock, [{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: {} }])
 
     await deleteYouTrackStatus(config, 'proj-1', '57-1')
 
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/admin/customFieldSettings/bundles/state/bundle-123/values/57-1')
-    expect(getLastFetchMethod()).toBe('DELETE')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('DELETE')
   })
 
   test('requires confirmation for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
     ])
@@ -544,7 +516,7 @@ describe('deleteYouTrackStatus', () => {
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
       { data: {} },
@@ -557,7 +529,7 @@ describe('deleteYouTrackStatus', () => {
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404, { error: 'State not found' })
+    mockFetchError(fetchMock, 404, { error: 'State not found' })
 
     await expect(deleteYouTrackStatus(config, 'proj-1', '57-999')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
@@ -575,7 +547,6 @@ describe('reorderYouTrackStatuses', () => {
   beforeEach(() => {
     mockLogger()
     clearBundleCache()
-    fetchMock = undefined!
   })
 
   afterEach(() => {
@@ -583,7 +554,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('updates ordinal for each status', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue({ id: '57-1', ordinal: 0 }) },
@@ -595,8 +566,8 @@ describe('reorderYouTrackStatuses', () => {
       { id: '57-2', position: 1 },
     ])
 
-    const calls = fetchMock.mock.calls
-    expect(calls.length).toBe(4)
+    const calls = fetchMock.current?.mock.calls
+    expect(calls?.length).toBe(4)
 
     const thirdCall = getFetchCall(2)
     expect(thirdCall).not.toBeNull()
@@ -611,7 +582,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('sends ordinal in body for each status', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { data: makeStateValue() },
@@ -628,7 +599,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('requires confirmation for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
     ])
@@ -648,7 +619,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('proceeds when confirm=true for shared bundles', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo({ aggregated: { project: [{ id: 'proj-1' }, { id: 'proj-2' }] } }) },
       { data: makeStateValue() },
@@ -665,11 +636,15 @@ describe('reorderYouTrackStatuses', () => {
       true,
     )
 
-    expect(fetchMock.mock.calls.length).toBe(4)
+    expect(fetchMock.current?.mock.calls.length).toBe(4)
   })
 
   test('returns void on success', async () => {
-    mockFetchSequence([{ data: [makeCustomField()] }, { data: makeBundleInfo() }, { data: makeStateValue() }])
+    mockFetchSequence(fetchMock, [
+      { data: [makeCustomField()] },
+      { data: makeBundleInfo() },
+      { data: makeStateValue() },
+    ])
 
     const result = await reorderYouTrackStatuses(config, 'proj-1', [{ id: '57-1', position: 0 }])
 
@@ -677,7 +652,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('throws classified error on API failure', async () => {
-    mockFetchSequence([
+    mockFetchSequence(fetchMock, [
       { data: [makeCustomField()] },
       { data: makeBundleInfo() },
       { status: 401, data: { error: 'Unauthorized' } },
@@ -689,7 +664,7 @@ describe('reorderYouTrackStatuses', () => {
   })
 
   test('throws error with details when some reorders fail', async () => {
-    installFetchMock(makePartialFailureReorderHandler())
+    installFetchMock(fetchMock, makePartialFailureReorderHandler())
 
     const promise = reorderYouTrackStatuses(config, 'proj-1', [
       { id: '57-1', position: 0 },

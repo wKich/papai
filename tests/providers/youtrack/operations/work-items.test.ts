@@ -1,6 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
-
-import { z } from 'zod'
+import { afterEach, describe, expect, test } from 'bun:test'
 
 import { YouTrackClassifiedError } from '../../../../src/providers/youtrack/classify-error.js'
 import type { YouTrackConfig } from '../../../../src/providers/youtrack/client.js'
@@ -10,73 +8,26 @@ import {
   listYouTrackWorkItems,
   updateYouTrackWorkItem,
 } from '../../../../src/providers/youtrack/operations/work-items.js'
-import { mockLogger, restoreFetch, setMockFetch } from '../../../utils/test-helpers.js'
+import { mockLogger, restoreFetch } from '../../../utils/test-helpers.js'
+import {
+  FetchCallSchema,
+  type FetchMockFn,
+  defaultConfig,
+  getFetchBodyAt,
+  getLastFetchBody,
+  getLastFetchMethod,
+  getLastFetchUrl,
+  installFetchMock,
+  mockFetchError,
+  mockFetchNoContent,
+  mockFetchResponse,
+} from '../fetch-mock-utils.js'
 
 mockLogger()
 
-let fetchMock: ReturnType<typeof mock<(url: string, init: RequestInit) => Promise<Response>>>
+const fetchMock: { current?: FetchMockFn } = {}
 
-const config: YouTrackConfig = {
-  baseUrl: 'https://test.youtrack.cloud',
-  token: 'test-token',
-}
-
-const installFetchMock = (handler: (url: string, init: RequestInit) => Promise<Response>): void => {
-  const m = mock<(url: string, init: RequestInit) => Promise<Response>>(handler)
-  fetchMock = m
-  setMockFetch((url: string, init: RequestInit) => m(url, init))
-}
-
-const mockFetchResponse = (data: unknown, status = 200): void => {
-  installFetchMock(() =>
-    Promise.resolve(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })),
-  )
-}
-
-const mockFetchNoContent = (): void => {
-  installFetchMock(() => Promise.resolve(new Response(null, { status: 204 })))
-}
-
-const mockFetchError = (status: number, body: unknown = { error: 'Something went wrong' }): void => {
-  installFetchMock(() =>
-    Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })),
-  )
-}
-
-const FetchCallSchema = z.tuple([
-  z.string(),
-  z.looseObject({ method: z.string().optional(), body: z.string().optional() }),
-])
-
-const BodySchema = z.looseObject({})
-
-const getLastFetchUrl = (): URL => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
-  if (!parsed.success) return new URL('https://empty')
-  return new URL(parsed.data[0])
-}
-
-const getLastFetchBody = (): z.infer<typeof BodySchema> => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
-  if (!parsed.success) return {}
-  const { body } = parsed.data[1]
-  if (body === undefined) return {}
-  return BodySchema.parse(JSON.parse(body))
-}
-
-const getLastFetchMethod = (): string => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[0])
-  if (!parsed.success) return ''
-  return parsed.data[1].method ?? ''
-}
-
-const getFetchBodyAt = (index: number): z.infer<typeof BodySchema> => {
-  const parsed = FetchCallSchema.safeParse(fetchMock.mock.calls[index])
-  if (!parsed.success) return {}
-  const { body } = parsed.data[1]
-  if (body === undefined) return {}
-  return BodySchema.parse(JSON.parse(body))
-}
+const config: YouTrackConfig = defaultConfig
 
 const makeWorkItemResponse = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   id: '8-1',
@@ -126,11 +77,6 @@ const makeWorkItemTypesRoutingFetch =
     )
   }
 
-const DurationSchema = z.object({ minutes: z.number() })
-
-/** Extracts the `minutes` value from a duration object in a fetch body. */
-const getDurationMinutes = (duration: unknown): number => DurationSchema.parse(duration).minutes
-
 afterEach(() => {
   restoreFetch()
 })
@@ -139,7 +85,7 @@ afterEach(() => {
 
 describe('listYouTrackWorkItems', () => {
   test('returns mapped work items from API', async () => {
-    mockFetchResponse([makeWorkItemResponse()])
+    mockFetchResponse(fetchMock, [makeWorkItemResponse()])
     const result = await listYouTrackWorkItems(config, 'PROJ-1')
     expect(result).toHaveLength(1)
     const wi = result[0]
@@ -152,32 +98,32 @@ describe('listYouTrackWorkItems', () => {
   })
 
   test('normalises date to YYYY-MM-DD', async () => {
-    mockFetchResponse([makeWorkItemResponse({ date: 1700000000000 })])
+    mockFetchResponse(fetchMock, [makeWorkItemResponse({ date: 1700000000000 })])
     const result = await listYouTrackWorkItems(config, 'PROJ-1')
     // 1700000000000ms = 2023-11-14
     expect(result[0]?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   test('returns empty array when no work items', async () => {
-    mockFetchResponse([])
+    mockFetchResponse(fetchMock, [])
     const result = await listYouTrackWorkItems(config, 'PROJ-1')
     expect(result).toHaveLength(0)
   })
 
   test('calls correct endpoint', async () => {
-    mockFetchResponse([])
+    mockFetchResponse(fetchMock, [])
     await listYouTrackWorkItems(config, 'PROJ-42')
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/issues/PROJ-42/timeTracking/workItems')
-    expect(getLastFetchMethod()).toBe('GET')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('GET')
   })
 
   test('passes $top and $skip when pagination params are provided', async () => {
-    mockFetchResponse([])
+    mockFetchResponse(fetchMock, [])
 
     await listYouTrackWorkItems(config, 'PROJ-42', { limit: 10, offset: 30 })
 
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/issues/PROJ-42/timeTracking/workItems')
     expect(url.searchParams.get('$top')).toBe('10')
     expect(url.searchParams.get('$skip')).toBe('30')
@@ -185,6 +131,7 @@ describe('listYouTrackWorkItems', () => {
 
   test('uses paginated fetching for offset-only requests so results are not silently truncated', async () => {
     installFetchMock(
+      fetchMock,
       makePaginatedWorkItemFetch({
         '30/100': Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${31 + index}` })),
         '130/100': [makeWorkItemResponse({ id: '8-131' })],
@@ -204,10 +151,10 @@ describe('listYouTrackWorkItems', () => {
       type: 'Development',
     })
     expect(result[100]?.id).toBe('8-131')
-    expect(fetchMock.mock.calls).toHaveLength(2)
+    expect(fetchMock.current?.mock.calls).toHaveLength(2)
 
-    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[0])[0])
-    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[1])[0])
+    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.current?.mock.calls[0])[0])
+    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.current?.mock.calls[1])[0])
 
     expect(firstUrl.searchParams.get('$skip')).toBe('30')
     expect(firstUrl.searchParams.get('$top')).toBe('100')
@@ -217,6 +164,7 @@ describe('listYouTrackWorkItems', () => {
 
   test('uses paginated fetching for high offset-only requests without skipping the first page', async () => {
     installFetchMock(
+      fetchMock,
       makePaginatedWorkItemFetch({
         '1000/100': Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${1001 + index}` })),
         '1100/100': [makeWorkItemResponse({ id: '8-1101' })],
@@ -228,10 +176,10 @@ describe('listYouTrackWorkItems', () => {
     expect(result).toHaveLength(101)
     expect(result[0]?.id).toBe('8-1001')
     expect(result[100]?.id).toBe('8-1101')
-    expect(fetchMock.mock.calls).toHaveLength(2)
+    expect(fetchMock.current?.mock.calls).toHaveLength(2)
 
-    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[0])[0])
-    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.mock.calls[1])[0])
+    const firstUrl = new URL(FetchCallSchema.parse(fetchMock.current?.mock.calls[0])[0])
+    const secondUrl = new URL(FetchCallSchema.parse(fetchMock.current?.mock.calls[1])[0])
 
     expect(firstUrl.searchParams.get('$skip')).toBe('1000')
     expect(firstUrl.searchParams.get('$top')).toBe('100')
@@ -240,7 +188,7 @@ describe('listYouTrackWorkItems', () => {
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404)
+    mockFetchError(fetchMock, 404)
     await expect(listYouTrackWorkItems(config, 'PROJ-99')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
 })
@@ -249,7 +197,7 @@ describe('listYouTrackWorkItems', () => {
 
 describe('createYouTrackWorkItem', () => {
   test('creates work item and returns mapped result', async () => {
-    mockFetchResponse(makeWorkItemResponse({ id: '8-2', duration: { minutes: 60, presentation: '1h' } }))
+    mockFetchResponse(fetchMock, makeWorkItemResponse({ id: '8-2', duration: { minutes: 60, presentation: '1h' } }))
     const result = await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h' })
     expect(result.id).toBe('8-2')
     expect(result.taskId).toBe('PROJ-1')
@@ -257,78 +205,84 @@ describe('createYouTrackWorkItem', () => {
   })
 
   test('parses natural duration strings in request', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '90m' })
-    const body = getLastFetchBody()
-    expect(getDurationMinutes(body['duration'])).toBe(90)
+    const body = getLastFetchBody(fetchMock.current)
+    expect(body['duration']).toEqual({ minutes: 90 })
   })
 
   test('parses "1.5h" duration in request', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1.5h' })
-    const body = getLastFetchBody()
-    expect(getDurationMinutes(body['duration'])).toBe(90)
+    const body = getLastFetchBody(fetchMock.current)
+    expect(body['duration']).toEqual({ minutes: 90 })
   })
 
   test('includes description in request body', async () => {
-    mockFetchResponse(makeWorkItemResponse({ text: 'Fixed bug' }))
+    mockFetchResponse(fetchMock, makeWorkItemResponse({ text: 'Fixed bug' }))
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '30m', description: 'Fixed bug' })
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['text']).toBe('Fixed bug')
   })
 
   test('includes date in request body when provided', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h', date: '2024-01-15' })
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(typeof body['date']).toBe('number')
   })
 
   test('uses the start of the current UTC day when not provided', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h' })
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     const now = new Date()
     expect(body['date']).toBe(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   })
 
   test('calls correct endpoint with POST', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-3', { duration: '2h' })
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/issues/PROJ-3/timeTracking/workItems')
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('POST')
   })
 
   test('throws classified error on 400', async () => {
-    mockFetchError(400, { error: 'Invalid duration' })
+    mockFetchError(fetchMock, 400, { error: 'Invalid duration' })
     await expect(createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
     )
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404)
+    mockFetchError(fetchMock, 404)
     await expect(createYouTrackWorkItem(config, 'PROJ-99', { duration: '1h' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
     )
   })
 
   test('uses a resolved stable work item type ID when type is already an ID', async () => {
-    installFetchMock(makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()))
+    installFetchMock(
+      fetchMock,
+      makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()),
+    )
 
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h', type: '5-0' })
 
-    expect(getFetchBodyAt(1)['type']).toEqual({ id: '5-0' })
+    expect(getFetchBodyAt(fetchMock.current, 1)['type']).toEqual({ id: '5-0' })
   })
 
   test('rejects unknown work item types instead of falling back to a name payload', async () => {
-    installFetchMock(makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()))
+    installFetchMock(
+      fetchMock,
+      makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()),
+    )
 
     await expect(createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h', type: 'Unknown' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
     )
-    expect(fetchMock.mock.calls).toHaveLength(1)
+    expect(fetchMock.current?.mock.calls).toHaveLength(1)
   })
 })
 
@@ -336,7 +290,10 @@ describe('createYouTrackWorkItem', () => {
 
 describe('updateYouTrackWorkItem', () => {
   test('updates work item and returns mapped result', async () => {
-    mockFetchResponse(makeWorkItemResponse({ duration: { minutes: 120, presentation: '2h' }, text: 'Updated' }))
+    mockFetchResponse(
+      fetchMock,
+      makeWorkItemResponse({ duration: { minutes: 120, presentation: '2h' }, text: 'Updated' }),
+    )
     const result = await updateYouTrackWorkItem(config, 'PROJ-1', '8-1', { duration: '2h', description: 'Updated' })
     expect(result.id).toBe('8-1')
     expect(result.duration).toBe('PT2H')
@@ -344,30 +301,30 @@ describe('updateYouTrackWorkItem', () => {
   })
 
   test('sends duration as minutes', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await updateYouTrackWorkItem(config, 'PROJ-1', '8-1', { duration: '2h 30m' })
-    const body = getLastFetchBody()
-    expect(getDurationMinutes(body['duration'])).toBe(150)
+    const body = getLastFetchBody(fetchMock.current)
+    expect(body['duration']).toEqual({ minutes: 150 })
   })
 
   test('calls correct endpoint with POST', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await updateYouTrackWorkItem(config, 'PROJ-5', '8-2', { duration: '1h' })
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/issues/PROJ-5/timeTracking/workItems/8-2')
-    expect(getLastFetchMethod()).toBe('POST')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('POST')
   })
 
   test('does not send duration if not provided', async () => {
-    mockFetchResponse(makeWorkItemResponse())
+    mockFetchResponse(fetchMock, makeWorkItemResponse())
     await updateYouTrackWorkItem(config, 'PROJ-1', '8-1', { description: 'Only text update' })
-    const body = getLastFetchBody()
+    const body = getLastFetchBody(fetchMock.current)
     expect(body['duration']).toBeUndefined()
     expect(body['text']).toBe('Only text update')
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404)
+    mockFetchError(fetchMock, 404)
     await expect(updateYouTrackWorkItem(config, 'PROJ-1', '8-999', { duration: '1h' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
     )
@@ -378,26 +335,26 @@ describe('updateYouTrackWorkItem', () => {
 
 describe('deleteYouTrackWorkItem', () => {
   test('returns the deleted work item id', async () => {
-    mockFetchNoContent()
+    mockFetchNoContent(fetchMock)
     const result = await deleteYouTrackWorkItem(config, 'PROJ-1', '8-5')
     expect(result.id).toBe('8-5')
   })
 
   test('calls correct endpoint with DELETE', async () => {
-    mockFetchNoContent()
+    mockFetchNoContent(fetchMock)
     await deleteYouTrackWorkItem(config, 'PROJ-3', '8-99')
-    const url = getLastFetchUrl()
+    const url = getLastFetchUrl(fetchMock.current)
     expect(url.pathname).toBe('/api/issues/PROJ-3/timeTracking/workItems/8-99')
-    expect(getLastFetchMethod()).toBe('DELETE')
+    expect(getLastFetchMethod(fetchMock.current)).toBe('DELETE')
   })
 
   test('throws classified error on 404', async () => {
-    mockFetchError(404)
+    mockFetchError(fetchMock, 404)
     await expect(deleteYouTrackWorkItem(config, 'PROJ-1', '8-999')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
 
   test('throws classified error on 403', async () => {
-    mockFetchError(403)
+    mockFetchError(fetchMock, 403)
     await expect(deleteYouTrackWorkItem(config, 'PROJ-1', '8-1')).rejects.toBeInstanceOf(YouTrackClassifiedError)
   })
 })
