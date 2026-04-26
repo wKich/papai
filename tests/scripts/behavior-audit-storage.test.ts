@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
 import { createEmptyProgress } from '../../scripts/behavior-audit-storage.js'
-import type { ConsolidatedManifest, IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import type { ConsolidatedManifest } from '../../scripts/behavior-audit/incremental.js'
 import { mockAuditBehaviorConfig, mockReportsConfig } from './behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
@@ -153,9 +154,7 @@ test('classified-store round-trips sorted classified behaviors under audit root'
   ])
 
   const loaded = await store.readClassifiedFile(testFilePath)
-  if (loaded === null) {
-    throw new Error('Expected classified data')
-  }
+  assert(loaded !== null, 'Expected classified data')
   expect(loaded.map((item) => item.behaviorId)).toEqual([
     'tests/tools/sample.test.ts::suite > alpha',
     'tests/tools/sample.test.ts::suite > beta',
@@ -358,9 +357,7 @@ test('report-writer round-trips supporting internal refs as readonly consolidate
   expect(loaded).toHaveLength(1)
 
   const item = loaded![0]
-  if (item === undefined) {
-    throw new Error('Expected consolidated item to exist')
-  }
+  assert(item !== undefined, 'Expected consolidated item to exist')
   expect(item.supportingInternalRefs).toEqual([
     {
       behaviorId: 'tests/tools/sample.test.ts::suite > validate task',
@@ -390,7 +387,7 @@ test('report-writer throws for malformed consolidated data but returns null when
   await expect(writer.readConsolidatedFile('tools')).rejects.toThrow()
 })
 
-test('report-writer rebuilds behavior, story, and index markdown from canonical artifacts only', async () => {
+test('report-writer rebuilds story and index markdown from canonical artifacts only', async () => {
   const root = makeTempDir()
   const paths = path.join(root, 'reports', 'audit-behavior')
   const testKey = 'tests/tools/sample.test.ts::suite > create task'
@@ -466,31 +463,6 @@ test('report-writer rebuilds behavior, story, and index markdown from canonical 
     ) + '\n',
   )
 
-  const manifest: IncrementalManifest = {
-    version: 1 as const,
-    lastStartCommit: null,
-    lastStartedAt: null,
-    lastCompletedAt: null,
-    phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
-    tests: {
-      [testKey]: {
-        testFile: 'tests/tools/sample.test.ts',
-        testName: 'suite > create task',
-        dependencyPaths: ['tests/tools/sample.test.ts'],
-        phase1Fingerprint: 'phase1-fp',
-        phase2aFingerprint: 'phase2a-fp',
-        phase2Fingerprint: 'phase2-fp',
-        behaviorId: testKey,
-        featureKey,
-        extractedArtifactPath: path.join('reports', 'audit-behavior', 'extracted', 'tools', 'sample.test.json'),
-        classifiedArtifactPath: path.join('reports', 'audit-behavior', 'classified', 'tools', 'sample.test.json'),
-        domain: 'tools',
-        lastPhase1CompletedAt: '2026-04-23T12:00:00.000Z',
-        lastPhase2aCompletedAt: '2026-04-23T12:01:00.000Z',
-        lastPhase2CompletedAt: '2026-04-23T12:02:00.000Z',
-      },
-    },
-  }
   const consolidatedManifest: ConsolidatedManifest = {
     version: 1 as const,
     entries: {
@@ -515,15 +487,11 @@ test('report-writer rebuilds behavior, story, and index markdown from canonical 
     },
   }
 
-  await writer.rebuildReportsFromStoredResults({ manifest, consolidatedManifest })
+  await writer.rebuildReportsFromStoredResults({ consolidatedManifest })
 
-  const behaviorMarkdown = await Bun.file(path.join(paths, 'behaviors', 'tools', 'sample.test.behaviors.md')).text()
   const storyMarkdown = await Bun.file(path.join(paths, 'stories', 'tools.md')).text()
   const indexMarkdown = await Bun.file(path.join(paths, 'stories', 'index.md')).text()
 
-  expect(behaviorMarkdown).toContain('Creates a task from the canonical extracted artifact.')
-  expect(behaviorMarkdown).toContain('Canonical extracted context.')
-  expect(behaviorMarkdown).toContain('canonical-extracted')
   expect(storyMarkdown).toContain('As a user, I can create a task from canonical artifacts.')
   expect(storyMarkdown).toContain('Canonical flaw')
   expect(storyMarkdown).toContain('Canonical improvement')
@@ -607,31 +575,6 @@ test('report-writer rebuild falls back to the canonical evaluated artifact path 
     ) + '\n',
   )
 
-  const manifest: IncrementalManifest = {
-    version: 1 as const,
-    lastStartCommit: null,
-    lastStartedAt: null,
-    lastCompletedAt: null,
-    phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
-    tests: {
-      [testKey]: {
-        testFile: 'tests/tools/sample.test.ts',
-        testName: 'suite > create task',
-        dependencyPaths: ['tests/tools/sample.test.ts'],
-        phase1Fingerprint: 'phase1-fp',
-        phase2aFingerprint: 'phase2a-fp',
-        phase2Fingerprint: 'phase2-fp',
-        behaviorId: testKey,
-        featureKey,
-        extractedArtifactPath: path.join('reports', 'audit-behavior', 'extracted', 'tools', 'sample.test.json'),
-        classifiedArtifactPath: path.join('reports', 'audit-behavior', 'classified', 'tools', 'sample.test.json'),
-        domain: 'tools',
-        lastPhase1CompletedAt: '2026-04-23T12:00:00.000Z',
-        lastPhase2aCompletedAt: '2026-04-23T12:01:00.000Z',
-        lastPhase2CompletedAt: '2026-04-23T12:02:00.000Z',
-      },
-    },
-  }
   const consolidatedManifest: ConsolidatedManifest = {
     version: 1 as const,
     entries: {
@@ -656,7 +599,7 @@ test('report-writer rebuild falls back to the canonical evaluated artifact path 
     },
   }
 
-  await writer.rebuildReportsFromStoredResults({ manifest, consolidatedManifest })
+  await writer.rebuildReportsFromStoredResults({ consolidatedManifest })
 
   const storyMarkdown = await Bun.file(path.join(paths, 'stories', 'tools.md')).text()
   const indexMarkdown = await Bun.file(path.join(paths, 'stories', 'index.md')).text()
@@ -752,31 +695,6 @@ test('report-writer rebuild counts only joined story evaluations in the rebuilt 
     ) + '\n',
   )
 
-  const manifest: IncrementalManifest = {
-    version: 1 as const,
-    lastStartCommit: null,
-    lastStartedAt: null,
-    lastCompletedAt: null,
-    phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
-    tests: {
-      [testKey]: {
-        testFile: 'tests/tools/sample.test.ts',
-        testName: 'suite > create task',
-        dependencyPaths: ['tests/tools/sample.test.ts'],
-        phase1Fingerprint: 'phase1-fp',
-        phase2aFingerprint: 'phase2a-fp',
-        phase2Fingerprint: 'phase2-fp',
-        behaviorId: testKey,
-        featureKey,
-        extractedArtifactPath: path.join('reports', 'audit-behavior', 'extracted', 'tools', 'sample.test.json'),
-        classifiedArtifactPath: path.join('reports', 'audit-behavior', 'classified', 'tools', 'sample.test.json'),
-        domain: 'tools',
-        lastPhase1CompletedAt: '2026-04-23T12:00:00.000Z',
-        lastPhase2aCompletedAt: '2026-04-23T12:01:00.000Z',
-        lastPhase2CompletedAt: '2026-04-23T12:02:00.000Z',
-      },
-    },
-  }
   const consolidatedManifest: ConsolidatedManifest = {
     version: 1 as const,
     entries: {
@@ -801,7 +719,7 @@ test('report-writer rebuild counts only joined story evaluations in the rebuilt 
     },
   }
 
-  await writer.rebuildReportsFromStoredResults({ manifest, consolidatedManifest })
+  await writer.rebuildReportsFromStoredResults({ consolidatedManifest })
 
   const storyMarkdown = await Bun.file(path.join(paths, 'stories', 'tools.md')).text()
   const indexMarkdown = await Bun.file(path.join(paths, 'stories', 'index.md')).text()

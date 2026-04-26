@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-interrupted-run.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
@@ -22,6 +23,41 @@ function createSelection(overrides: Partial<IncrementalSelection> = {}): Increme
     phase3SelectedConsolidatedIds: [],
     reportRebuildOnly: false,
     ...overrides,
+  }
+}
+
+// Returns a prepareIncrementalRun callback that emits the first-run result on
+// the first invocation and the second-run result on every subsequent invocation.
+// The routing is expressed as a lookup table so no conditional lives inside the
+// test block itself.
+function makePrepareIncrementalRun(
+  firstResult: Awaited<ReturnType<BehaviorAuditDeps['prepareIncrementalRun']>>,
+  subsequentResult: Awaited<ReturnType<BehaviorAuditDeps['prepareIncrementalRun']>>,
+  runCount: { current: number },
+): BehaviorAuditDeps['prepareIncrementalRun'] {
+  const resultByRun: ReadonlyArray<Awaited<ReturnType<BehaviorAuditDeps['prepareIncrementalRun']>>> = [
+    firstResult,
+    subsequentResult,
+  ]
+  return () => {
+    runCount.current += 1
+    const result = resultByRun[Math.min(runCount.current - 1, resultByRun.length - 1)]
+    assert(result !== undefined)
+    return Promise.resolve(result)
+  }
+}
+
+// Returns a runPhase2bIfNeeded callback that rejects on the first invocation
+// (simulating interruption) and resolves on every subsequent invocation.
+function makeRunPhase2bIfNeeded(
+  interruptionError: Error,
+  successResult: ConsolidatedManifest,
+  runCount: { current: number },
+): BehaviorAuditDeps['runPhase2bIfNeeded'] {
+  const firstRunIndex = 1
+  return () => {
+    const isFirstRun = runCount.current === firstRunIndex
+    return isFirstRun ? Promise.reject(interruptionError) : Promise.resolve(successResult)
   }
 }
 
@@ -58,26 +94,24 @@ describe('behavior-audit interrupted-run baseline', () => {
       tests: firstUpdatedManifest.tests,
     })
 
-    let runCount = 0
+    const runCount = { current: 0 }
     const runPhase1SelectedKeys: string[][] = []
 
     const deps: BehaviorAuditDeps = {
       requireOpenAiApiKey: () => {},
-      prepareIncrementalRun: () => {
-        runCount += 1
-        if (runCount === 1) {
-          return Promise.resolve({
-            previousManifest: firstPreviousManifest,
-            previousLastStartCommit: null,
-            updatedManifest: firstUpdatedManifest,
-          })
-        }
-        return Promise.resolve({
+      prepareIncrementalRun: makePrepareIncrementalRun(
+        {
+          previousManifest: firstPreviousManifest,
+          previousLastStartCommit: null,
+          updatedManifest: firstUpdatedManifest,
+        },
+        {
           previousManifest: firstUpdatedManifest,
           previousLastStartCommit: 'head-1',
           updatedManifest: secondUpdatedManifest,
-        })
-      },
+        },
+        runCount,
+      ),
       selectIncrementalRunWork: (input) => {
         selectionInputs.push(input)
         return Promise.resolve({
@@ -96,12 +130,11 @@ describe('behavior-audit interrupted-run baseline', () => {
         return Promise.resolve()
       },
       runPhase2aIfNeeded: () => Promise.resolve(new Set()),
-      runPhase2bIfNeeded: () => {
-        if (runCount === 1) {
-          return Promise.reject(new Error('simulated interruption after run start'))
-        }
-        return Promise.resolve(consolidatedManifest)
-      },
+      runPhase2bIfNeeded: makeRunPhase2bIfNeeded(
+        new Error('simulated interruption after run start'),
+        consolidatedManifest,
+        runCount,
+      ),
       saveConsolidatedManifest: () => Promise.resolve(),
       runPhase3IfNeeded: () => Promise.resolve(),
       log: { log: mock(() => {}) },

@@ -2,7 +2,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
-import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE3_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
@@ -17,6 +17,7 @@ const provider = createOpenAICompatible({
   name: 'behavior-audit-eval',
   apiKey,
   baseURL: BASE_URL,
+  fetch: fetchWithoutTimeout,
   supportsStructuredOutputs: true,
 })
 const model = provider(MODEL)
@@ -71,6 +72,7 @@ async function evaluateSingle(prompt: string, attempt: number): Promise<EvalResu
       model,
       system: SYSTEM_PROMPT,
       prompt,
+      maxOutputTokens: 16384,
       tools,
       output: Output.object({ schema: EvalResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),

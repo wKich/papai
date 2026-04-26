@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import * as realAi from 'ai'
-import { Output, stepCountIs } from 'ai'
+import { stepCountIs } from 'ai'
+import { Output } from 'ai'
 
-import type { ClassifyAgentDeps } from '../../scripts/behavior-audit/classify-agent.js'
+import type { ClassifyAgentDeps } from '../../scripts/behavior-audit-classify-agent.js'
+import type { ClassificationResult } from '../../scripts/behavior-audit/classify-agent.js'
 import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import { cleanupTempDirs, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import { loadClassifyAgentModule } from './behavior-audit-integration.support.js'
@@ -36,22 +39,36 @@ function startCountingFailureServer(): {
   }
 }
 
+type GenerateTextResult = Awaited<ReturnType<ClassifyAgentDeps['generateText']>>
+
+function makeSequencedGenerateText(
+  results: Array<Promise<GenerateTextResult>>,
+  events: string[],
+): ClassifyAgentDeps['generateText'] {
+  let callIndex = 0
+  return (_input) => {
+    const index = callIndex
+    callIndex += 1
+    events.push(`generate:${callIndex}`)
+    return results[index]!
+  }
+}
+
 describe('behavior-audit phase 2a classify agent', () => {
   test('classifyBehaviorWithRetry does not sleep before the first resumed retry attempt', async () => {
     const events: string[] = []
     const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
+    const output: ClassificationResult = {
+      visibility: 'user-facing',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'Immediate resumed success.',
+    }
     const generateText: ClassifyAgentDeps['generateText'] = (_input) => {
       events.push('generate')
-      return Promise.resolve({
-        output: {
-          visibility: 'user-facing',
-          featureKey: 'task-creation',
-          featureLabel: 'Task creation',
-          supportingBehaviorRefs: [],
-          relatedBehaviorHints: [],
-          classificationNotes: 'Immediate resumed success.',
-        },
-      })
+      return Promise.resolve({ output, totalUsage: { inputTokens: 100, outputTokens: 50 }, steps: [] })
     }
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push('sleep')
@@ -68,40 +85,34 @@ describe('behavior-audit phase 2a classify agent', () => {
         MAX_STEPS: 20,
       },
       generateText,
+      outputObject: ({ schema }) => Output.object({ schema }),
       buildModel: () => 'mock-model',
-      outputObject: Output.object,
       stepCountIs,
       sleep,
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.featureKey).toBe('task-creation')
+    assert(result !== null)
+    expect(result.result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate'])
   })
 
   test('classifyBehaviorWithRetry sleeps before the next resumed retry attempt after a failure', async () => {
     const events: string[] = []
     const classifyAgent = await loadClassifyAgentModule(crypto.randomUUID())
-    let attempts = 0
-    const generateText: ClassifyAgentDeps['generateText'] = (_input) => {
-      attempts += 1
-      events.push(`generate:${attempts}`)
-
-      if (attempts === 1) {
-        return Promise.reject(new Error('temporary failure'))
-      }
-
-      return Promise.resolve({
-        output: {
-          visibility: 'user-facing',
-          featureKey: 'task-creation',
-          featureLabel: 'Task creation',
-          supportingBehaviorRefs: [],
-          relatedBehaviorHints: [],
-          classificationNotes: 'Succeeded after one resumed retry.',
-        },
-      })
+    const output: ClassificationResult = {
+      visibility: 'user-facing',
+      featureKey: 'task-creation',
+      featureLabel: 'Task creation',
+      supportingBehaviorRefs: [],
+      relatedBehaviorHints: [],
+      classificationNotes: 'Succeeded after one resumed retry.',
     }
+    const successResult = { output, totalUsage: { inputTokens: 100, outputTokens: 50 }, steps: [] as never[] }
+    const generateText = makeSequencedGenerateText(
+      [Promise.reject(new Error('temporary failure')), Promise.resolve(successResult)],
+      events,
+    )
     const sleep: ClassifyAgentDeps['sleep'] = (ms) => {
       events.push(`sleep:${ms}`)
       return Promise.resolve(ms).then((): void => undefined)
@@ -117,14 +128,15 @@ describe('behavior-audit phase 2a classify agent', () => {
         MAX_STEPS: 20,
       },
       generateText,
+      outputObject: ({ schema }) => Output.object({ schema }),
       buildModel: () => 'mock-model',
-      outputObject: Output.object,
       stepCountIs,
       sleep,
       createAbortSignal: () => AbortSignal.timeout(1),
     })
 
-    expect(result === null ? null : result.featureKey).toBe('task-creation')
+    assert(result !== null)
+    expect(result.result.featureKey).toBe('task-creation')
     expect(events).toEqual(['generate:1', 'sleep:50', 'generate:2'])
   })
 
@@ -168,9 +180,7 @@ describe('behavior-audit phase 2a classify agent', () => {
       expect(initialServer.getRequestCount()).toBe(0)
       expect(reloadedServer.getRequestCount()).toBe(0)
       expect(capturedBaseUrl).not.toBeNull()
-      if (capturedBaseUrl === null) {
-        throw new Error('Expected captured base URL')
-      }
+      assert(capturedBaseUrl !== null)
       const resolvedBaseUrl: string = capturedBaseUrl
       expect(resolvedBaseUrl).toBe(reloadedServer.url)
       expect(typeof capturedModelValue).toBe('string')

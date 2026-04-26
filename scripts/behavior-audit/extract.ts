@@ -1,30 +1,41 @@
 import pLimit from 'p-limit'
 
-import { MAX_RETRIES } from './config.js'
-import { getDomain } from './domain-map.js'
+import { MAX_RETRIES, formatElapsedMs } from './config.js'
 import { extractWithRetry } from './extract-agent.js'
 import { updateManifestForExtractedTest } from './extract-incremental.js'
 import {
+  buildBehaviorRecord,
   getSelectedTests,
   markFileDoneWhenSelectedTestsPersisted,
   reconcileSelectedTestsAfterPersist,
+  resolveKeywords,
   shouldSkipCompletedFile,
   writeValidBehaviorsForFile,
 } from './extract-phase1-helpers.js'
-import { buildExtractionPrompt, buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
+import { buildExtractionPrompt } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
-import type { IncrementalManifest } from './incremental.js'
-import { saveManifest } from './incremental.js'
+import { type IncrementalManifest, saveManifest } from './incremental.js'
 import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
-import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
+import { loadKeywordVocabulary, saveKeywordVocabulary } from './keyword-vocabulary.js'
 import {
-  loadKeywordVocabulary,
-  normalizeKeywordSlug,
-  normalizeKeywordVocabularyEntries,
-  saveKeywordVocabulary,
-} from './keyword-vocabulary.js'
-import type { Progress } from './progress.js'
-import { getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3, saveProgress } from './progress.js'
+  addAgentUsage,
+  createPhaseStats,
+  type AgentUsage,
+  type PhaseStats,
+  recordItemDone,
+  recordItemFailed,
+  recordItemSkipped,
+  formatPerItemSuffix,
+  formatPhaseSummary,
+} from './phase-stats.js'
+import {
+  type Progress,
+  getFailedTestAttempts,
+  markTestDone,
+  markTestFailed,
+  resetPhase2AndPhase3,
+  saveProgress,
+} from './progress.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
 interface Phase1RunInput {
@@ -52,6 +63,7 @@ export interface Phase1Deps {
   readonly markFileDoneWhenSelectedTestsPersisted: typeof markFileDoneWhenSelectedTestsPersisted
   readonly log: Pick<typeof console, 'log'>
   readonly writeStdout: (text: string) => void
+  readonly stats?: PhaseStats
 }
 
 const defaultPhase1Deps: Phase1Deps = {
@@ -76,35 +88,6 @@ const defaultPhase1Deps: Phase1Deps = {
   },
 }
 
-async function resolveKeywords(
-  candidateKeywords: readonly string[],
-  testKey: string,
-  progress: Progress,
-  deps: Phase1Deps,
-): Promise<readonly string[] | null> {
-  const loadedVocabulary = await deps.loadKeywordVocabulary()
-  let existingVocabulary: readonly KeywordVocabularyEntry[] = []
-  if (loadedVocabulary !== null) {
-    existingVocabulary = loadedVocabulary
-  }
-  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
-  const resolved = await deps.resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
-  if (resolved === null) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution failed')
-    return null
-  }
-  const nextVocabulary = normalizeKeywordVocabularyEntries([...existingVocabulary, ...resolved.appendedEntries])
-  await deps.saveKeywordVocabulary(nextVocabulary)
-  const normalizedKeywords = [
-    ...new Set(resolved.keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean)),
-  ]
-  if (normalizedKeywords.length === 0) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution produced no valid canonical keywords')
-    return null
-  }
-  return normalizedKeywords
-}
-
 type SingleTestResult = {
   readonly record: ExtractedBehaviorRecord
   readonly manifest: IncrementalManifest
@@ -123,32 +106,38 @@ async function extractAndSave(
   deps: Phase1Deps,
 ): Promise<SingleTestResult> {
   deps.writeStdout(`  [${displayIndex}/${totalTests}] "${testCase.name}" `)
+  const startMs = performance.now()
   const extracted = await deps.extractWithRetry(buildExtractionPrompt(testCase, testFilePath), 0)
   if (extracted === null) {
     deps.markTestFailed(progress, testKey, 'extraction failed')
+    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
+    if (deps.stats !== undefined) recordItemFailed(deps.stats)
     return null
   }
-  const keywords = await resolveKeywords(extracted.candidateKeywords, testKey, progress, deps)
-  if (keywords === null) return null
-  const record: ExtractedBehaviorRecord = {
-    behaviorId: testKey,
-    testKey,
-    testFile: testFilePath,
-    domain: getDomain(testFilePath),
-    testName: testCase.name,
-    fullPath: testCase.fullPath,
-    behavior: extracted.behavior,
-    context: extracted.context,
-    keywords,
-    extractedAt: new Date().toISOString(),
+  let combinedUsage: AgentUsage = extracted.usage
+  const keywordsResult = await resolveKeywords(extracted.result.candidateKeywords, testKey, progress, deps)
+  if (keywordsResult === null) {
+    deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
+    if (deps.stats !== undefined) recordItemFailed(deps.stats, combinedUsage)
+    return null
   }
+  combinedUsage = addAgentUsage(combinedUsage, keywordsResult.usage)
+  const record = buildBehaviorRecord(
+    testCase,
+    testFilePath,
+    testKey,
+    extracted.result.behavior,
+    extracted.result.context,
+    keywordsResult.keywords,
+  )
   const { manifest: updatedManifest, phase1Changed } = await deps.updateManifestForExtractedTest({
     manifest,
     testFile,
     testCase,
     extractedBehavior: record,
   })
-  deps.log.log('    ✓')
+  deps.log.log(formatPerItemSuffix(combinedUsage, performance.now() - startMs))
+  if (deps.stats !== undefined) recordItemDone(deps.stats, combinedUsage)
   return { record, manifest: updatedManifest, phase1Changed }
 }
 
@@ -163,11 +152,9 @@ function processSingleTestCase(
   deps: Phase1Deps,
 ): Promise<SingleTestResult> {
   const testKey = `${testFilePath}::${testCase.fullPath}`
-  const completedTestsForFile = progress.phase1.completedTests[testFilePath]
-  const isSelectedRerun = completedTestsForFile !== undefined && completedTestsForFile[testKey] === 'done'
-  void isSelectedRerun
   if (deps.getFailedTestAttempts(progress, testKey) >= MAX_RETRIES) {
     deps.log.log(`  [${displayIndex}/${totalTests}] "${testCase.name}" (skipped, max retries reached)`)
+    if (deps.stats !== undefined) recordItemSkipped(deps.stats)
     return Promise.resolve(null)
   }
   return extractAndSave(testCase, testFile, testFilePath, testKey, displayIndex, totalTests, progress, manifest, deps)
@@ -259,7 +246,8 @@ export async function runPhase1(
   { testFiles, progress, selectedTestKeys, manifest }: Phase1RunInput,
   deps: Partial<Phase1Deps> = {},
 ): Promise<void> {
-  const resolvedDeps: Phase1Deps = { ...defaultPhase1Deps, ...deps }
+  const stats = deps.stats ?? createPhaseStats()
+  const resolvedDeps: Phase1Deps = { ...defaultPhase1Deps, ...deps, stats }
   const hasSelectedPhase1Work = testFiles.some(
     (testFile) => resolvedDeps.getSelectedTests(testFile.filePath, testFile.tests, selectedTestKeys).length > 0,
   )
@@ -293,7 +281,7 @@ export async function runPhase1(
   }
   progress.phase1.status = 'done'
   await resolvedDeps.saveProgress(progress)
-  resolvedDeps.log.log(
-    `\n[Phase 1 complete] ${progress.phase1.stats.filesDone} files, ${progress.phase1.stats.testsExtracted} behaviors extracted, ${progress.phase1.stats.testsFailed} failed`,
-  )
+  const wallMs = performance.now() - stats.wallStartMs
+  const label = `[Phase 1 complete] ${progress.phase1.stats.filesDone} files, ${progress.phase1.stats.testsExtracted} behaviors extracted, ${progress.phase1.stats.testsFailed} failed`
+  resolvedDeps.log.log(`\n${formatPhaseSummary(stats, wallMs, label)}`)
 }

@@ -1,4 +1,5 @@
 import { mock, describe, expect, test, beforeEach, afterAll } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { APICallError } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
@@ -17,6 +18,25 @@ const realOpenAICompatible = await import('@ai-sdk/openai-compatible')
 const realProvisionMod = await import('../src/providers/kaneo/provision.js')
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+/** Returns true when a reply text mentions both the task/project ID and "not found". */
+const mentionsNotFound =
+  (id: string) =>
+  (text: string): boolean =>
+    text.includes(id) && text.includes('not found')
+
+/** Returns true when a reply text mentions the tool name and the error/content string. */
+const mentionsToolAndContent =
+  (toolName: string, content: string) =>
+  (call: string): boolean =>
+    call.includes(toolName) && call.includes(content)
+
+/** Creates a DebugEvent listener that captures the stepsDetail payload of llm:end events. */
+const makeLlmEndListener =
+  (onDetail: (detail: unknown) => void) =>
+  (event: DebugEvent): void => {
+    if (event.type === 'llm:end') onDetail(event.data['stepsDetail'])
+  }
 
 type ResponseMetadata = Partial<{ id: string; modelId: string }>
 
@@ -317,7 +337,7 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls.some((text) => text.includes('T-1') && text.includes('not found'))).toBe(true)
+      expect(textCalls.some(mentionsNotFound('T-1'))).toBe(true)
     })
 
     test('ProviderClassifiedError routes through error.error', async () => {
@@ -328,7 +348,7 @@ describe('processMessage', () => {
 
       await processMessage(reply, CTX_ID, 'user-1', null, 'hello', 'dm')
 
-      expect(textCalls.some((text) => text.includes('P-1') && text.includes('not found'))).toBe(true)
+      expect(textCalls.some(mentionsNotFound('P-1'))).toBe(true)
     })
 
     test('unknown Error produces generic message', async () => {
@@ -399,9 +419,9 @@ describe('processMessage', () => {
         })
 
       let capturedStepsDetail: unknown = null
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'llm:end') capturedStepsDetail = event.data['stepsDetail']
-      }
+      const listener = makeLlmEndListener((detail) => {
+        capturedStepsDetail = detail
+      })
       subscribe(listener)
       try {
         const { reply } = createMockReply()
@@ -411,19 +431,20 @@ describe('processMessage', () => {
       }
 
       expect(Array.isArray(capturedStepsDetail)).toBe(true)
-      if (!Array.isArray(capturedStepsDetail)) return
+      assert(Array.isArray(capturedStepsDetail))
       const stepValue: unknown = capturedStepsDetail[0]
-      if (!isRecord(stepValue)) throw new Error('expected step record')
+      assert(isRecord(stepValue))
       expect(stepValue['stepNumber']).toBe(1)
       expect(stepValue['text']).toBe('Calling search now.')
       expect(stepValue['finishReason']).toBe('tool-calls')
 
       const toolCalls: unknown = stepValue['toolCalls']
       expect(Array.isArray(toolCalls)).toBe(true)
-      if (!Array.isArray(toolCalls)) return
+      assert(Array.isArray(toolCalls))
       const tc0: unknown = toolCalls[0]
       const tc1: unknown = toolCalls[1]
-      if (!isRecord(tc0) || !isRecord(tc1)) throw new Error('expected tool call records')
+      assert(isRecord(tc0))
+      assert(isRecord(tc1))
       expect(tc0['toolName']).toBe('search')
       expect(tc0['result']).toEqual({ hits: 3 })
       expect(tc0['error']).toBeUndefined()
@@ -459,9 +480,9 @@ describe('processMessage', () => {
         })
 
       let capturedStepsDetail: unknown = null
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'llm:end') capturedStepsDetail = event.data['stepsDetail']
-      }
+      const listener = makeLlmEndListener((detail) => {
+        capturedStepsDetail = detail
+      })
       subscribe(listener)
       try {
         const { reply } = createMockReply()
@@ -470,9 +491,9 @@ describe('processMessage', () => {
         unsubscribe(listener)
       }
 
-      if (!Array.isArray(capturedStepsDetail)) throw new Error('expected stepsDetail array')
+      assert(Array.isArray(capturedStepsDetail))
       const step: unknown = capturedStepsDetail[0]
-      if (!isRecord(step)) throw new Error('expected step record')
+      assert(isRecord(step))
       expect(step['text']).toBeUndefined()
       expect(step['finishReason']).toBeUndefined()
     })
@@ -517,17 +538,16 @@ describe('processMessage', () => {
       await processMessage(reply, 'tool-fail-ctx', 'user-1', null, 'create a task', 'dm')
 
       // Simulate a tool failure by calling the captured callback
-      if (capturedOnToolCallFinish !== undefined) {
-        capturedOnToolCallFinish({
-          toolCall: { toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } },
-          durationMs: 100,
-          success: false,
-          error: new Error('Task creation failed'),
-        })
-      }
+      assert(capturedOnToolCallFinish !== undefined)
+      capturedOnToolCallFinish({
+        toolCall: { toolName: 'create_task', toolCallId: 'call-1', input: { title: 'Test' } },
+        durationMs: 100,
+        success: false,
+        error: new Error('Task creation failed'),
+      })
 
       // Should have received immediate feedback about the tool failure
-      expect(textCalls.some((call) => call.includes('create_task') && call.includes('failed'))).toBe(true)
+      expect(textCalls.some(mentionsToolAndContent('create_task', 'failed'))).toBe(true)
     })
 
     test('handles non-Error objects in tool failure callback', async () => {
@@ -552,18 +572,15 @@ describe('processMessage', () => {
       await processMessage(reply, 'tool-fail-string-ctx', 'user-1', null, 'do something', 'dm')
 
       // Simulate a tool failure with a string error
-      if (capturedOnToolCallFinish !== undefined) {
-        capturedOnToolCallFinish({
-          toolCall: { toolName: 'search_tasks', toolCallId: 'call-2', input: { q: 'test' } },
-          durationMs: 50,
-          success: false,
-          error: 'String error message',
-        })
-      }
+      assert(capturedOnToolCallFinish !== undefined)
+      capturedOnToolCallFinish({
+        toolCall: { toolName: 'search_tasks', toolCallId: 'call-2', input: { q: 'test' } },
+        durationMs: 50,
+        success: false,
+        error: 'String error message',
+      })
 
-      expect(textCalls.some((call) => call.includes('search_tasks') && call.includes('String error message'))).toBe(
-        true,
-      )
+      expect(textCalls.some(mentionsToolAndContent('search_tasks', 'String error message'))).toBe(true)
     })
 
     test('sends immediate user feedback when a tool returns a structured failure result', async () => {
@@ -587,20 +604,19 @@ describe('processMessage', () => {
 
       await processMessage(reply, 'tool-fail-structured-ctx', 'user-1', null, 'create a task', 'dm')
 
-      if (capturedOnToolCallFinish !== undefined) {
-        capturedOnToolCallFinish({
-          toolCall: { toolName: 'create_task', toolCallId: 'call-3', input: { title: 'Test' } },
-          durationMs: 42,
-          success: true,
-          output: buildToolFailureResult(
-            new ProviderClassifiedError('Task lookup failed', providerError.taskNotFound('TASK-9')),
-            'create_task',
-            'call-3',
-          ),
-        })
-      }
+      assert(capturedOnToolCallFinish !== undefined)
+      capturedOnToolCallFinish({
+        toolCall: { toolName: 'create_task', toolCallId: 'call-3', input: { title: 'Test' } },
+        durationMs: 42,
+        success: true,
+        output: buildToolFailureResult(
+          new ProviderClassifiedError('Task lookup failed', providerError.taskNotFound('TASK-9')),
+          'create_task',
+          'call-3',
+        ),
+      })
 
-      expect(textCalls.some((call) => call.includes('create_task') && call.includes('TASK-9'))).toBe(true)
+      expect(textCalls.some(mentionsToolAndContent('create_task', 'TASK-9'))).toBe(true)
     })
   })
 
@@ -824,7 +840,7 @@ describe('processMessage', () => {
       // Existing mapping should be preserved (stored under user ID)
       const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
-      if (mapping === null) throw new Error('expected identity mapping')
+      assert(mapping !== null)
       expect(mapping.providerUserLogin).toBe('existing')
       expect(mapping.matchMethod).toBe('manual_nl')
     })
@@ -850,7 +866,7 @@ describe('processMessage', () => {
       // Auto-link should have created a mapping under the user ID (not group context)
       const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
-      if (mapping === null) throw new Error('expected identity mapping')
+      assert(mapping !== null)
       expect(mapping.providerUserLogin).toBe(USERNAME)
       expect(mapping.matchMethod).toBe('auto')
       expect(mapping.confidence).toBe(100)
@@ -877,7 +893,7 @@ describe('processMessage', () => {
       // Should store unmatched mapping under the user ID (not group context)
       const mapping = getIdentityMapping(USER_ID, 'mock')
       expect(mapping).not.toBeNull()
-      if (mapping === null) throw new Error('expected identity mapping')
+      assert(mapping !== null)
       expect(mapping.providerUserId).toBeNull()
       expect(mapping.matchMethod).toBe('unmatched')
     })

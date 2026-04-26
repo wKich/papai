@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -19,7 +20,6 @@ import {
   loadExtractModule,
   loadIncrementalModule,
   loadKeywordVocabularyModule,
-  loadReportWriterModule,
 } from './behavior-audit-integration.support.js'
 
 type ExtractResult = NonNullable<
@@ -50,7 +50,7 @@ function createExtractResult(input: {
   readonly behavior: string
   readonly context: string
   readonly candidateKeywords: readonly string[]
-}): ExtractResult {
+}): ExtractResult['result'] {
   return {
     behavior: input.behavior,
     context: input.context,
@@ -63,10 +63,8 @@ function createResolvedKeywords(input: {
   readonly appendedEntries: readonly {
     readonly slug: string
     readonly description: string
-    readonly createdAt: string
-    readonly updatedAt: string
   }[]
-}): ResolveKeywordsResult {
+}): ResolveKeywordsResult['result'] {
   return {
     keywords: [...input.keywords],
     appendedEntries: input.appendedEntries.map((entry) => ({ ...entry })),
@@ -95,7 +93,6 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   const manifestPath = path.join(reportsDir, 'incremental-manifest.json')
   const vocabularyPath = path.join(reportsDir, 'keyword-vocabulary.json')
   const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
-  const behaviorMarkdownPath = path.join(reportsDir, 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md')
 
   mockAuditBehaviorConfig(root, {
     PROGRESS_PATH: progressPath,
@@ -124,20 +121,22 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Resolves target context and forwards execution through the group routing path.',
             candidateKeywords: ['group-routing', 'group-targeting', 'request-routing'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting', 'group-routing'],
             appendedEntries: [],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -146,9 +145,7 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   )
   expect(extractedRecords).toHaveLength(1)
   const firstRecord = extractedRecords[0]
-  if (firstRecord === undefined) {
-    throw new Error('Expected first extracted record')
-  }
+  assert(firstRecord !== undefined, 'Expected first extracted record')
   expect(firstRecord.behaviorId).toBe('tests/tools/sample.test.ts::suite > case')
   expect(firstRecord.testKey).toBe('tests/tools/sample.test.ts::suite > case')
   expect(firstRecord.testFile).toBe('tests/tools/sample.test.ts')
@@ -159,10 +156,6 @@ test('runPhase1 stores canonical keywords after extraction and vocabulary resolu
   expect(firstRecord.context).toBe('Resolves target context and forwards execution through the group routing path.')
   expect(firstRecord.keywords).toEqual(['group-targeting', 'group-routing'])
   expect(typeof firstRecord.extractedAt).toBe('string')
-
-  const behaviorMarkdown = await Bun.file(behaviorMarkdownPath).text()
-  expect(behaviorMarkdown).toContain('**Behavior:** When a user targets a group, the bot routes the request correctly.')
-  expect(behaviorMarkdown).toContain('**Keywords:** group-targeting, group-routing')
 })
 
 test('runPhase1 fails cleanly when resolver output normalizes to empty keyword slugs', async () => {
@@ -199,25 +192,30 @@ test('runPhase1 fails cleanly when resolver output normalizes to empty keyword s
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['   ', '!!!', '---'],
             appendedEntries: [],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
   expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
-  expect(progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']?.error).toContain('keyword')
+  const failedTest = progress.phase1.failedTests['tests/tools/sample.test.ts::suite > case']
+  assert(failedTest !== undefined, 'Expected failedTest entry')
+  assert(failedTest !== null, 'Expected failedTest entry to be non-null')
+  expect(failedTest.error).toContain('keyword')
   expect(progress.phase1.completedTests['tests/tools/sample.test.ts']).toBeUndefined()
 })
 
@@ -233,21 +231,6 @@ test('keyword-resolver-agent returns canonical keywords and appended entries', a
   )
   expect(typeof mod).toBe('object')
   expect(mod).toHaveProperty('resolveKeywordsWithRetry')
-})
-
-test('behavior-audit agents enable structured outputs for OpenAI-compatible provider', async () => {
-  const agentPaths = [
-    'scripts/behavior-audit/extract-agent.ts',
-    'scripts/behavior-audit/keyword-resolver-agent.ts',
-    'scripts/behavior-audit/consolidate-agent.ts',
-    'scripts/behavior-audit/evaluate-agent.ts',
-  ] as const
-
-  const sources = await Promise.all(agentPaths.map((filePath) => Bun.file(path.join(process.cwd(), filePath)).text()))
-
-  for (const source of sources) {
-    expect(source).toContain('supportsStructuredOutputs: true')
-  }
 })
 
 test('keyword-vocabulary normalizes duplicate slugs into canonical entries', async () => {
@@ -277,14 +260,9 @@ test('keyword-vocabulary normalizes duplicate slugs into canonical entries', asy
   ])
 
   const saved = await typedVocab.loadKeywordVocabulary()
-  expect(saved).not.toBeNull()
-  if (saved === null) {
-    throw new Error('Expected saved vocabulary entries')
-  }
+  assert(saved !== null, 'Expected saved vocabulary entries')
   const firstSavedEntry = saved[0]
-  if (firstSavedEntry === undefined) {
-    throw new Error('Expected first saved vocabulary entry')
-  }
+  assert(firstSavedEntry !== undefined, 'Expected first saved vocabulary entry')
   expect(saved).toHaveLength(1)
   expect(firstSavedEntry).toEqual({
     slug: 'group-targeting',
@@ -353,29 +331,6 @@ test('loadKeywordVocabulary rewrites legacy vocabulary files into canonical sche
   expect(await Bun.file(vocabularyPath).text()).toBe(JSON.stringify(expectedEntries, null, 2) + '\n')
 })
 
-test('writeBehaviorFile renders canonical keywords for each extracted behavior', async () => {
-  const root = makeTempDir()
-
-  mockAuditBehaviorConfig(root, {
-    EXCLUDED_PREFIXES: [] as const,
-  })
-
-  const typedWriter = await loadReportWriterModule(`keywords-${crypto.randomUUID()}`)
-  await typedWriter.writeBehaviorFile('tests/tools/sample.test.ts', [
-    {
-      fullPath: 'suite > case',
-      behavior: 'When a user targets a group, the bot routes the request correctly.',
-      context: 'Routes through group context selection.',
-      keywords: ['group-targeting', 'group-routing'],
-    },
-  ])
-
-  const fileText = await Bun.file(
-    path.join(root, 'reports', 'audit-behavior', 'behaviors', 'tools', 'sample.test.behaviors.md'),
-  ).text()
-  expect(fileText).toContain('**Keywords:** group-targeting, group-routing')
-})
-
 test('runPhase1 persists vocabulary updates before marking a test done', async () => {
   const root = makeTempDir()
   const reportsDir = path.join(root, 'reports')
@@ -410,36 +365,34 @@ test('runPhase1 persists vocabulary updates before marking a test done', async (
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
                 slug: 'group-targeting',
                 description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
   const savedVocabText = await Bun.file(vocabularyPath).text()
   expect(savedVocabText).toContain('"group-targeting"')
   const completedTests = progress.phase1.completedTests['tests/tools/sample.test.ts']
-  if (completedTests === undefined) {
-    throw new Error('Expected completed tests entry for sample test file')
-  }
+  assert(completedTests !== undefined, 'Expected completed tests entry for sample test file')
   expect(completedTests['tests/tools/sample.test.ts::suite > case']).toBe('done')
 })
 
@@ -504,28 +457,28 @@ test('runPhase1 re-extracts selected changed tests even when prior extraction ex
     {
       extractWithRetry: (_prompt, _attempt) => {
         extractCalls += 1
-        return Promise.resolve(
-          createExtractResult({
+        return Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot refreshes the extracted behavior.',
             context: 'Reprocesses changed test dependencies.',
             candidateKeywords: ['group-targeting-updated'],
           }),
-        )
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        })
       },
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting-updated'],
             appendedEntries: [
               {
                 slug: 'group-targeting-updated',
                 description: 'Updated targeting behavior.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
@@ -574,42 +527,39 @@ test('runPhase1 writes canonical vocabulary entries without mutable usage teleme
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
                 slug: 'group-targeting',
                 description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
   const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
-  if (!isKeywordVocabulary(savedVocabularyRaw)) {
-    throw new Error('Expected saved keyword vocabulary')
-  }
+  assert(isKeywordVocabulary(savedVocabularyRaw), 'Expected saved keyword vocabulary')
   const savedVocabulary = savedVocabularyRaw
   expect(savedVocabulary).toHaveLength(1)
-  expect(savedVocabulary[0]).toEqual({
-    slug: 'group-targeting',
-    description: 'Targeting work at a group context.',
-    createdAt: '2026-04-20T12:00:00.000Z',
-    updatedAt: '2026-04-20T12:00:00.000Z',
-  })
+  expect(savedVocabulary[0]!.slug).toBe('group-targeting')
+  expect(savedVocabulary[0]!.description).toBe('Targeting work at a group context.')
+  expect(typeof savedVocabulary[0]!.createdAt).toBe('string')
+  expect(typeof savedVocabulary[0]!.updatedAt).toBe('string')
+  expect(savedVocabulary[0]!.createdAt).toBe(savedVocabulary[0]!.updatedAt)
 })
 
 test('runPhase1 does not append a duplicate slug when resolver returns an already-known slug', async () => {
@@ -660,43 +610,37 @@ test('runPhase1 does not append a duplicate slug when resolver returns an alread
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createResolvedKeywords({
+        Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [
               {
                 slug: 'group-targeting',
                 description: 'Duplicate resolver description.',
-                createdAt: '2026-04-21T12:00:00.000Z',
-                updatedAt: '2026-04-23T12:00:00.000Z',
               },
             ],
           }),
-        ),
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        }),
     },
   )
 
   const savedVocabularyRaw: unknown = JSON.parse(await Bun.file(vocabularyPath).text())
-  if (!isKeywordVocabulary(savedVocabularyRaw)) {
-    throw new Error('Expected saved keyword vocabulary')
-  }
+  assert(isKeywordVocabulary(savedVocabularyRaw), 'Expected saved keyword vocabulary')
 
-  expect(savedVocabularyRaw).toEqual([
-    {
-      slug: 'group-targeting',
-      description: 'Duplicate resolver description.',
-      createdAt: '2026-04-20T12:00:00.000Z',
-      updatedAt: '2026-04-23T12:00:00.000Z',
-    },
-  ])
+  expect(savedVocabularyRaw).toHaveLength(1)
+  expect(savedVocabularyRaw[0]!.slug).toBe('group-targeting')
+  expect(savedVocabularyRaw[0]!.description).toBe('Duplicate resolver description.')
+  expect(savedVocabularyRaw[0]!.createdAt).toBe('2026-04-20T12:00:00.000Z')
 })
 
 test('runPhase1 sends only existing vocabulary slugs to the keyword resolver prompt', async () => {
@@ -754,28 +698,30 @@ test('runPhase1 sends only existing vocabulary slugs to the keyword resolver pro
     },
     {
       extractWithRetry: (_prompt, _attempt) =>
-        Promise.resolve(
-          createExtractResult({
+        Promise.resolve({
+          result: createExtractResult({
             behavior: 'When a user targets a group, the bot routes the request correctly.',
             context: 'Routes through group context selection.',
             candidateKeywords: ['group-targeting'],
           }),
-        ),
+          usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
+        }),
       resolveKeywordsWithRetry: (prompt, _attempt) => {
         capturedResolverPrompt = prompt
-        return Promise.resolve(
-          createResolvedKeywords({
+        return Promise.resolve({
+          result: createResolvedKeywords({
             keywords: ['group-targeting'],
             appendedEntries: [],
           }),
-        )
+          usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
+        })
       },
     },
   )
 
   expect(capturedResolverPrompt).toContain('Existing vocabulary:')
   expect(capturedResolverPrompt).toContain('Candidate keywords: group-targeting')
-  expect(capturedResolverPrompt).toContain('[\n  "group-routing",\n  "group-targeting"\n]')
+  expect(capturedResolverPrompt).toContain('group-routing, group-targeting')
   expect(capturedResolverPrompt).not.toContain('"description"')
   expect(capturedResolverPrompt).not.toContain('"timesUsed"')
 })

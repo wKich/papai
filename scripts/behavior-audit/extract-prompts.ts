@@ -24,11 +24,8 @@ export function buildResolverPrompt(candidateKeywords: readonly string[], vocabu
 }
 
 export function buildVocabularySlugListText(existingVocabulary: readonly KeywordVocabularyEntry[]): string {
-  return existingVocabulary.length === 0
-    ? '(empty)'
-    : JSON.stringify(
-        existingVocabulary.map((entry) => entry.slug),
-        null,
-        2,
-      )
+  if (existingVocabulary.length === 0) {
+    return '(empty)'
+  }
+  return existingVocabulary.map((entry) => entry.slug).join(', ')
 }

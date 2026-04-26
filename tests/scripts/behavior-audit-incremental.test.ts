@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -161,6 +162,22 @@ function isSavedManifest(
   return true
 }
 
+function assertLoaded<T>(value: T | null, message: string): asserts value is T {
+  assert(value !== null, message)
+}
+
+function objectKeys(value: object | undefined): string[] {
+  return value === undefined ? [] : Object.keys(value)
+}
+
+function makeProcessExitThrow(code: number | undefined): never {
+  throw new Error(code === undefined ? 'process.exit:0' : `process.exit:${code}`)
+}
+
+function assertPhase2aBeforePhase2b<T>(value: T | undefined, message: string): asserts value is T {
+  assert(value !== undefined, message)
+}
+
 function createManifestTestEntry(
   input: Omit<
     ManifestTestEntry,
@@ -226,7 +243,6 @@ describe('behavior-audit incremental manifest', () => {
       PROJECT_ROOT: root,
       REPORTS_DIR: reportsDir,
       AUDIT_BEHAVIOR_DIR: path.join(reportsDir, 'audit-behavior'),
-      BEHAVIORS_DIR: path.join(reportsDir, 'behaviors'),
       CLASSIFIED_DIR: path.join(reportsDir, 'classified'),
       CONSOLIDATED_DIR: path.join(reportsDir, 'consolidated'),
       STORIES_DIR: path.join(reportsDir, 'stories'),
@@ -295,7 +311,7 @@ describe('behavior-audit incremental manifest', () => {
     const loaded = await incremental.loadManifest()
 
     expect(loaded).not.toBeNull()
-    if (loaded === null) throw new Error('Expected manifest to load')
+    assertLoaded(loaded, 'Expected manifest to load')
 
     expect(loaded.lastStartCommit).toBeNull()
     expect(loaded.lastStartedAt).toBeNull()
@@ -333,13 +349,13 @@ describe('behavior-audit incremental manifest', () => {
     const loaded = await incremental.loadManifest()
 
     expect(loaded).not.toBeNull()
-    if (loaded === null) throw new Error('Expected manifest to load')
+    assertLoaded(loaded, 'Expected manifest to load')
 
     const entry = loaded.tests['tests/tools/create-task.test.ts::suite > case']
     expect(entry).toBeDefined()
     expect(entry?.featureKey).toBeNull()
     expect(entry?.extractedArtifactPath).toBeNull()
-    const unknownKeys = Object.keys(entry ?? {}).filter(
+    const unknownKeys = objectKeys(entry).filter(
       (k) =>
         ![
           'testFile',
@@ -394,12 +410,12 @@ describe('behavior-audit incremental manifest', () => {
     const loaded = await incremental.loadConsolidatedManifest()
 
     expect(loaded).not.toBeNull()
-    if (loaded === null) throw new Error('Expected consolidated manifest to load')
+    assertLoaded(loaded, 'Expected consolidated manifest to load')
 
     const entry = loaded.entries['task-creation::task-creation']
     expect(entry).toBeDefined()
     expect(entry?.featureKey).toBe('task-creation')
-    const unknownKeys = Object.keys(entry ?? {}).filter(
+    const unknownKeys = objectKeys(entry).filter(
       (k) =>
         ![
           'consolidatedId',
@@ -874,9 +890,7 @@ describe('behavior-audit incremental manifest', () => {
     expect(reportEntries).toEqual(['incremental-manifest.json'])
     expect(renameSpy).toHaveBeenCalledTimes(1)
     const firstRenameCall = renameSpy.mock.calls[0]
-    if (firstRenameCall === undefined) {
-      throw new Error('Expected rename to be called')
-    }
+    assert(firstRenameCall !== undefined, 'Expected rename to be called')
     expect(firstRenameCall[0]).not.toBe(manifestPath)
     expect(firstRenameCall[1]).toBe(manifestPath)
   })
@@ -888,17 +902,13 @@ describe('behavior-audit incremental manifest', () => {
     await loadBehaviorAuditEntryPoint(crypto.randomUUID())
 
     const savedManifestJson: unknown = JSON.parse(await Bun.file(manifestPath).text())
-    if (!isSavedManifest(savedManifestJson)) {
-      throw new Error('Saved manifest shape mismatch')
-    }
+    assert(isSavedManifest(savedManifestJson), 'Saved manifest shape mismatch')
 
     expect(savedManifestJson.lastStartCommit).toBe(currentHead)
     expect(savedManifestJson.lastStartedAt).not.toBeNull()
     expect(phase1Calls).toBe(1)
     expect(phase1ManifestSnapshot).not.toBeNull()
-    if (phase1ManifestSnapshot === null) {
-      throw new Error('Expected phase1 manifest snapshot')
-    }
+    assert(phase1ManifestSnapshot !== null, 'Expected phase1 manifest snapshot')
     expect(JSON.parse(phase1ManifestSnapshot)).toMatchObject({
       lastStartCommit: currentHead,
     })
@@ -913,12 +923,7 @@ describe('behavior-audit incremental manifest', () => {
     const consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: readonly unknown[]) => {
       errorCalls.push(args.map(String).join(' '))
     })
-    const processExitSpy = spyOn(process, 'exit').mockImplementation(((code: number | undefined) => {
-      if (code === undefined) {
-        throw new Error('process.exit:0')
-      }
-      throw new Error(`process.exit:${code}`)
-    }) as typeof process.exit)
+    const processExitSpy = spyOn(process, 'exit').mockImplementation(makeProcessExitThrow as typeof process.exit)
 
     await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
     expect(await Bun.file(manifestPath).text()).toBe('{broken json')
@@ -944,12 +949,7 @@ describe('behavior-audit incremental manifest', () => {
     const consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: readonly unknown[]) => {
       errorCalls.push(args.map(String).join(' '))
     })
-    const processExitSpy = spyOn(process, 'exit').mockImplementation(((code: number | undefined) => {
-      if (code === undefined) {
-        throw new Error('process.exit:0')
-      }
-      throw new Error(`process.exit:${code}`)
-    }) as typeof process.exit)
+    const processExitSpy = spyOn(process, 'exit').mockImplementation(makeProcessExitThrow as typeof process.exit)
 
     await expect(loadBehaviorAuditEntryPoint(crypto.randomUUID())).rejects.toThrow('process.exit:1')
     expect(await Bun.file(manifestPath).text()).toBe('{"version":2,"tests":{}}')
@@ -1084,9 +1084,7 @@ describe('behavior-audit incremental manifest', () => {
       },
       runPhase2bIfNeeded: (_progress, _phaseVersion, selectedFeatureKeys) => {
         const last = calls[calls.length - 1]
-        if (last === undefined) {
-          throw new Error('Expected phase2a call before phase2b')
-        }
+        assertPhase2aBeforePhase2b(last, 'Expected phase2a call before phase2b')
         calls[calls.length - 1] = {
           phase2a: last.phase2a,
           phase2b: [...selectedFeatureKeys].toSorted(),

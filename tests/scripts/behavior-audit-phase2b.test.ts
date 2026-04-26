@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -246,16 +247,12 @@ test('runPhase2b joins classified and extracted artifacts by behavior id and wri
   )
 
   const entry = result.entries['task-creation::task-creation']
-  if (entry === undefined) {
-    throw new Error('Expected consolidated entry')
-  }
+  assert(entry !== undefined, 'Expected consolidated entry')
   expect(entry.featureKey).toBe('task-creation')
   expect(entry.consolidatedArtifactPath).toBe(buildRelativeArtifactPath('consolidated', 'task-creation'))
 
   const fileText = writtenFiles.get('task-creation')
-  if (fileText === undefined) {
-    throw new Error('Expected consolidated file contents to be captured')
-  }
+  assert(fileText !== undefined, 'Expected consolidated file contents to be captured')
   expect(fileText).toContain('supportingInternalRefs')
 })
 
@@ -408,10 +405,9 @@ test('runPhase2b groups joined artifact inputs by feature key and preserves cros
   )
 
   expect(Object.keys(result.entries).length).toBeGreaterThan(0)
-  if (capturedFeatureKey === null) {
-    throw new Error('Expected captured feature key')
-  }
-  expect(capturedFeatureKey === 'group-targeting').toBe(true)
+  assert(capturedFeatureKey !== null, 'Expected captured feature key')
+  const featureKey: string = capturedFeatureKey
+  expect(featureKey).toBe('group-targeting')
   expect(capturedDomains).toEqual(['tools', 'commands'])
   const savedEntries = Object.values(result.entries) as readonly ConsolidatedEntry[]
   expect(savedEntries).toHaveLength(1)

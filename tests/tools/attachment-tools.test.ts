@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import type { IncomingFile } from '../../src/chat/types.js'
 import { clearIncomingFiles, storeIncomingFiles } from '../../src/file-relay.js'
-import { makeListAttachmentsTool } from '../../src/tools/list-attachments.js'
-import { makeRemoveAttachmentTool } from '../../src/tools/remove-attachment.js'
-import { makeUploadAttachmentTool } from '../../src/tools/upload-attachment.js'
+import {
+  makeListAttachmentsTool,
+  makeRemoveAttachmentTool,
+  makeUploadAttachmentTool,
+} from '../../src/tools/attachment-tools.js'
 import { getToolExecutor, mockLogger, schemaValidates } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
 
@@ -181,16 +184,19 @@ describe('Attachment Tools', () => {
     test('uses label in confirmation message', async () => {
       const provider = createMockProvider()
       const execute = getToolExecutor(makeRemoveAttachmentTool(provider))
-      const result = await execute({
+      const result: unknown = await execute({
         taskId: 't1',
         attachmentId: 'att-1',
         label: 'screenshot.png',
         confidence: 0.5,
       })
       expect(result).toMatchObject({ status: 'confirmation_required' })
-      if (typeof result === 'object' && result !== null && 'message' in result) {
-        expect(result.message).toContain('screenshot.png')
-      }
+      assert(typeof result === 'object')
+      assert(result !== null)
+      assert('message' in result)
+      const message = (result as Record<string, unknown>)['message']
+      assert(typeof message === 'string')
+      expect(message).toContain('screenshot.png')
     })
 
     test('propagates provider errors', async () => {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -465,9 +466,7 @@ describe('assignYouTrackTaskToSprint', () => {
       throw new Error('Expected assignYouTrackTaskToSprint to throw')
     } catch (error) {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (!(error instanceof YouTrackClassifiedError)) {
-        throw error
-      }
+      assert(error instanceof YouTrackClassifiedError)
       expect(error.appError).toEqual({
         type: 'provider',
         code: 'not-found',

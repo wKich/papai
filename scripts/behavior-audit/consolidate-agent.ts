@@ -2,7 +2,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
-import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE2_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
 import { makeAuditTools } from './tools.js'
 
@@ -17,6 +17,7 @@ const provider = createOpenAICompatible({
   name: 'behavior-audit-consolidate',
   apiKey,
   baseURL: BASE_URL,
+  fetch: fetchWithoutTimeout,
   supportsStructuredOutputs: true,
 })
 const model = provider(MODEL)
@@ -89,6 +90,7 @@ async function consolidateSingle(prompt: string, attempt: number): Promise<Conso
       model,
       system: SYSTEM_PROMPT,
       prompt,
+      maxOutputTokens: 16384,
       tools,
       output: Output.object({ schema: ConsolidationResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),

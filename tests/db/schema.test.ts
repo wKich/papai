@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { eq, and } from 'drizzle-orm'
 
@@ -51,11 +52,9 @@ describe('userIdentityMappings', () => {
       )
       .get()
 
-    expect(row).toBeDefined()
-    if (row !== undefined) {
-      expect(row.providerUserId).toBeNull()
-      expect(row.matchMethod).toBe('unmatched')
-    }
+    assert(row !== undefined)
+    expect(row.providerUserId).toBeNull()
+    expect(row.matchMethod).toBe('unmatched')
 
     // Cleanup
     db.delete(userIdentityMappings).where(eq(userIdentityMappings.contextId, 'test-user-123')).run()
@@ -123,11 +122,9 @@ describe('web fetch schema', () => {
 
     const row = db.select().from(webCache).where(eq(webCache.urlHash, 'hash-1')).get()
 
-    expect(row).toBeDefined()
-    if (row !== undefined) {
-      expect(row.truncated).toBe(false)
-      expect(row.finalUrl).toBe('https://example.com/article')
-    }
+    assert(row !== undefined)
+    expect(row.truncated).toBe(false)
+    expect(row.finalUrl).toBe('https://example.com/article')
   })
 
   it('enforces the webRateLimit composite primary key', () => {

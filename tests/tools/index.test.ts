@@ -1,10 +1,27 @@
 import { describe, expect, it, test, mock, beforeEach } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { setConfig } from '../../src/config.js'
 import { getScheduledPrompt } from '../../src/deferred-prompts/scheduled.js'
 import { makeTools, type MakeToolsOptions } from '../../src/tools/index.js'
 import { getToolExecutor, mockLogger, setupTestDb } from '../utils/test-helpers.js'
 import { createMockProvider } from './mock-provider.js'
+
+const COLLABORATION_CAPABILITIES = new Set([
+  'tasks.watchers',
+  'tasks.votes',
+  'tasks.visibility',
+  'comments.reactions',
+  'projects.team',
+])
+
+function excludesCollaborationCapabilities(capability: string): boolean {
+  return !COLLABORATION_CAPABILITIES.has(capability)
+}
+
+function hasId(val: unknown): val is Record<string, unknown> & { id: unknown } {
+  return typeof val === 'object' && val !== null && 'id' in val
+}
 
 describe('makeTools', () => {
   beforeEach(() => {
@@ -158,11 +175,9 @@ describe('makeTools', () => {
       { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
     )
 
-    if (typeof result !== 'object' || result === null || !('id' in result)) {
-      throw new Error('Expected create_deferred_prompt result with id')
-    }
+    assert(hasId(result), 'Expected create_deferred_prompt result with id')
     const id = result['id']
-    if (typeof id !== 'string') throw new Error('Expected id to be string')
+    assert(typeof id === 'string', 'Expected id to be string')
 
     const created = getScheduledPrompt(id, 'user-1')
     expect(created).not.toBeNull()
@@ -307,16 +322,7 @@ describe('makeTools', () => {
 
   test('excludes collaboration tools when provider lacks related capabilities', () => {
     const limitedProvider = createMockProvider({
-      capabilities: new Set(
-        [...provider.capabilities].filter(
-          (capability) =>
-            capability !== 'tasks.watchers' &&
-            capability !== 'tasks.votes' &&
-            capability !== 'tasks.visibility' &&
-            capability !== 'comments.reactions' &&
-            capability !== 'projects.team',
-        ),
-      ),
+      capabilities: new Set([...provider.capabilities].filter(excludesCollaborationCapabilities)),
     })
     const tools = makeTools(limitedProvider, { storageContextId: 'user-1', chatUserId: 'user-1' })
     expect(tools).not.toHaveProperty('list_watchers')

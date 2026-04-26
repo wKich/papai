@@ -88,6 +88,49 @@ const makeWorkItemResponse = (overrides: Record<string, unknown> = {}): Record<s
   ...overrides,
 })
 
+/**
+ * Builds a paginated fetch handler. `pageMap` maps "$skip/$top" keys to the
+ * items array to return for that page. All other pages return an empty array.
+ */
+const makePaginatedWorkItemFetch =
+  (pageMap: Record<string, unknown[]>) =>
+  (url: string): Promise<Response> => {
+    const parsedUrl = new URL(url)
+    const skip = parsedUrl.searchParams.get('$skip') ?? ''
+    const top = parsedUrl.searchParams.get('$top') ?? ''
+    const key = `${skip}/${top}`
+    const items = Object.prototype.hasOwnProperty.call(pageMap, key) ? pageMap[key] : []
+    return Promise.resolve(
+      new Response(JSON.stringify(items), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  }
+
+/**
+ * Builds a fetch handler that returns `workItemTypes` for the
+ * `/timeTrackingSettings/workItemTypes` endpoint and `workItemBody` for all
+ * other requests.
+ */
+const makeWorkItemTypesRoutingFetch =
+  (workItemTypes: unknown[], workItemBody: unknown) =>
+  (url: string): Promise<Response> => {
+    const parsedUrl = new URL(url)
+    const body = parsedUrl.pathname.endsWith('/timeTrackingSettings/workItemTypes') ? workItemTypes : workItemBody
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  }
+
+const DurationSchema = z.object({ minutes: z.number() })
+
+/** Extracts the `minutes` value from a duration object in a fetch body. */
+const getDurationMinutes = (duration: unknown): number => DurationSchema.parse(duration).minutes
+
 afterEach(() => {
   restoreFetch()
 })
@@ -141,39 +184,12 @@ describe('listYouTrackWorkItems', () => {
   })
 
   test('uses paginated fetching for offset-only requests so results are not silently truncated', async () => {
-    installFetchMock((url: string) => {
-      const parsedUrl = new URL(url)
-      const skip = parsedUrl.searchParams.get('$skip')
-      const top = parsedUrl.searchParams.get('$top')
-
-      if (skip === '30' && top === '100') {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify(Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${31 + index}` }))),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
-      }
-
-      if (skip === '130' && top === '100') {
-        return Promise.resolve(
-          new Response(JSON.stringify([makeWorkItemResponse({ id: '8-131' })]), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(
+      makePaginatedWorkItemFetch({
+        '30/100': Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${31 + index}` })),
+        '130/100': [makeWorkItemResponse({ id: '8-131' })],
+      }),
+    )
 
     const result = await listYouTrackWorkItems(config, 'PROJ-42', { offset: 30 })
 
@@ -200,41 +216,12 @@ describe('listYouTrackWorkItems', () => {
   })
 
   test('uses paginated fetching for high offset-only requests without skipping the first page', async () => {
-    installFetchMock((url: string) => {
-      const parsedUrl = new URL(url)
-      const skip = parsedUrl.searchParams.get('$skip')
-      const top = parsedUrl.searchParams.get('$top')
-
-      if (skip === '1000' && top === '100') {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify(
-              Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${1001 + index}` })),
-            ),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
-      }
-
-      if (skip === '1100' && top === '100') {
-        return Promise.resolve(
-          new Response(JSON.stringify([makeWorkItemResponse({ id: '8-1101' })]), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(
+      makePaginatedWorkItemFetch({
+        '1000/100': Array.from({ length: 100 }, (_, index) => makeWorkItemResponse({ id: `8-${1001 + index}` })),
+        '1100/100': [makeWorkItemResponse({ id: '8-1101' })],
+      }),
+    )
 
     const result = await listYouTrackWorkItems(config, 'PROJ-42', { offset: 1000 })
 
@@ -273,20 +260,14 @@ describe('createYouTrackWorkItem', () => {
     mockFetchResponse(makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '90m' })
     const body = getLastFetchBody()
-    const duration = body['duration']
-    expect(
-      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
-    ).toBe(90)
+    expect(getDurationMinutes(body['duration'])).toBe(90)
   })
 
   test('parses "1.5h" duration in request', async () => {
     mockFetchResponse(makeWorkItemResponse())
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1.5h' })
     const body = getLastFetchBody()
-    const duration = body['duration']
-    expect(
-      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
-    ).toBe(90)
+    expect(getDurationMinutes(body['duration'])).toBe(90)
   })
 
   test('includes description in request body', async () => {
@@ -334,24 +315,7 @@ describe('createYouTrackWorkItem', () => {
   })
 
   test('uses a resolved stable work item type ID when type is already an ID', async () => {
-    installFetchMock((url: string) => {
-      const parsedUrl = new URL(url)
-      if (parsedUrl.pathname.endsWith('/timeTrackingSettings/workItemTypes')) {
-        return Promise.resolve(
-          new Response(JSON.stringify([{ id: '5-0', name: 'Development' }]), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify(makeWorkItemResponse()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()))
 
     await createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h', type: '5-0' })
 
@@ -359,24 +323,7 @@ describe('createYouTrackWorkItem', () => {
   })
 
   test('rejects unknown work item types instead of falling back to a name payload', async () => {
-    installFetchMock((url: string) => {
-      const parsedUrl = new URL(url)
-      if (parsedUrl.pathname.endsWith('/timeTrackingSettings/workItemTypes')) {
-        return Promise.resolve(
-          new Response(JSON.stringify([{ id: '5-0', name: 'Development' }]), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify(makeWorkItemResponse()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
+    installFetchMock(makeWorkItemTypesRoutingFetch([{ id: '5-0', name: 'Development' }], makeWorkItemResponse()))
 
     await expect(createYouTrackWorkItem(config, 'PROJ-1', { duration: '1h', type: 'Unknown' })).rejects.toBeInstanceOf(
       YouTrackClassifiedError,
@@ -400,10 +347,7 @@ describe('updateYouTrackWorkItem', () => {
     mockFetchResponse(makeWorkItemResponse())
     await updateYouTrackWorkItem(config, 'PROJ-1', '8-1', { duration: '2h 30m' })
     const body = getLastFetchBody()
-    const duration = body['duration']
-    expect(
-      typeof duration === 'object' && duration !== null && 'minutes' in duration ? duration.minutes : undefined,
-    ).toBe(150)
+    expect(getDurationMinutes(body['duration'])).toBe(150)
   })
 
   test('calls correct endpoint with POST', async () => {

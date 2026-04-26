@@ -5,30 +5,9 @@ import { z } from 'zod'
 import { consolidatedArtifactPathForFeatureKey, evaluatedArtifactPathForFeatureKey } from './artifact-paths.js'
 import { PROJECT_ROOT } from './config.js'
 import type { EvaluatedFeatureRecord } from './evaluated-store.js'
-import type { ExtractedBehaviorRecord } from './extracted-store.js'
-import type { ConsolidatedManifest, IncrementalManifest } from './incremental.js'
+import type { ConsolidatedManifest } from './incremental.js'
 import type { DomainSummary } from './report-index-helpers.js'
 import type { ConsolidatedBehavior, StoryEvaluation } from './report-writer.js'
-
-export type BehaviorMarkdownEntry = Pick<ExtractedBehaviorRecord, 'fullPath' | 'behavior' | 'context' | 'keywords'>
-
-const ExtractedBehaviorRecordSchema = z
-  .object({
-    behaviorId: z.string(),
-    testKey: z.string(),
-    testFile: z.string(),
-    domain: z.string(),
-    testName: z.string(),
-    fullPath: z.string(),
-    behavior: z.string(),
-    context: z.string(),
-    keywords: z.array(z.string()).readonly(),
-    extractedAt: z.string(),
-  })
-  .strict()
-  .readonly()
-
-const ExtractedBehaviorRecordArraySchema = z.array(ExtractedBehaviorRecordSchema).readonly()
 
 const PersonaScoreSchema = z
   .object({
@@ -82,17 +61,6 @@ function toStoryEvaluation(input: {
 
 function incrementCount(map: Map<string, number>, key: string): void {
   map.set(key, (map.get(key) ?? 0) + 1)
-}
-
-function collectExtractedArtifactPaths(manifest: IncrementalManifest): ReadonlyMap<string, string> {
-  const artifactPaths = new Map<string, string>()
-  for (const entry of Object.values(manifest.tests)) {
-    const artifactPath = entry.extractedArtifactPath
-    if (artifactPath !== null && artifactPath !== undefined) {
-      artifactPaths.set(entry.testFile, artifactPath)
-    }
-  }
-  return artifactPaths
 }
 
 function collectFeatureArtifactPaths(
@@ -176,19 +144,6 @@ export function collectStoryEvaluations(input: {
   }
 
   return { evaluationsByDomain, flawFreq, improvementFreq }
-}
-
-export async function loadExtractedArtifacts(
-  manifest: IncrementalManifest,
-): Promise<Readonly<Record<string, readonly BehaviorMarkdownEntry[]>>> {
-  const loaded = await Promise.all(
-    [...collectExtractedArtifactPaths(manifest).entries()].map(
-      async ([testFile, artifactPath]) =>
-        [testFile, (await readArtifactFile(artifactPath, ExtractedBehaviorRecordArraySchema)) ?? []] as const,
-    ),
-  )
-
-  return Object.fromEntries(loaded)
 }
 
 export async function loadConsolidatedArtifacts(

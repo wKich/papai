@@ -2,8 +2,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
-import { verboseGenerateText } from './agent-helpers.js'
+import { fetchWithoutTimeout, verboseGenerateText } from './agent-helpers.js'
 import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKOFF_MS } from './config.js'
+import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 import { makeAuditTools } from './tools.js'
 
 const ExtractionResultSchema = z.object({
@@ -23,6 +24,7 @@ const provider = createOpenAICompatible({
   name: 'behavior-audit-extract',
   apiKey,
   baseURL: BASE_URL,
+  fetch: fetchWithoutTimeout,
   supportsStructuredOutputs: true,
 })
 const model = provider(MODEL)
@@ -42,32 +44,48 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
-async function extractSingle(prompt: string, attempt: number): Promise<ExtractionResult | null> {
+async function extractSingle(
+  prompt: string,
+  attempt: number,
+): Promise<{ data: ExtractionResult | null; usage: AgentUsage }> {
+  const usage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0, toolNames: [] }
   const timeout = attempt > 0 ? PHASE1_TIMEOUT_MS * 2 : PHASE1_TIMEOUT_MS
   try {
     const result = await verboseGenerateText({
       model,
       system: SYSTEM_PROMPT,
       prompt,
+      maxOutputTokens: 8192,
       tools: makeAuditTools(),
       output: Output.object({ schema: ExtractionResultSchema }),
       stopWhen: stepCountIs(MAX_STEPS + 1),
       abortSignal: AbortSignal.timeout(timeout),
     })
+    usage.inputTokens = result.totalUsage.inputTokens ?? 0
+    usage.outputTokens = result.totalUsage.outputTokens ?? 0
+    for (const step of result.steps) {
+      for (const tc of step.toolCalls) {
+        usage.toolCalls += 1
+        usage.toolNames.push(tc.toolName)
+      }
+    }
     const parsed = ExtractionResultSchema.safeParse(result.output)
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
+    return { data: parsed.success ? parsed.data : null, usage }
+  } catch (error) {
+    console.log(`✗ extract: ${error instanceof Error ? error.message : String(error)}`)
+    return { data: null, usage }
   }
 }
 
-export async function extractWithRetry(prompt: string, attempt: number): Promise<ExtractionResult | null> {
+export async function extractWithRetry(prompt: string, attempt: number): Promise<AgentResult<ExtractionResult> | null> {
   if (attempt > 0) {
     const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]!
     await sleep(backoff)
   }
-  const result = await extractSingle(prompt, attempt)
-  if (result !== null) return result
+  const { data, usage } = await extractSingle(prompt, attempt)
+  if (data !== null) return { result: data, usage }
   if (attempt >= MAX_RETRIES - 1) return null
-  return extractWithRetry(prompt, attempt + 1)
+  const nextResult = await extractWithRetry(prompt, attempt + 1)
+  if (nextResult === null) return null
+  return { result: nextResult.result, usage: addAgentUsage(usage, nextResult.usage) }
 }

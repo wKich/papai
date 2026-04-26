@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -81,7 +82,7 @@ describe('applyYouTrackCommand', () => {
       expect.unreachable('Should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (!(error instanceof YouTrackClassifiedError)) throw error
+      assert(error instanceof YouTrackClassifiedError)
 
       expect(error.appError).toEqual(providerError.validationFailed('unknown', 'Command not valid'))
     }
@@ -102,7 +103,7 @@ describe('applyYouTrackCommand', () => {
       expect.unreachable('Should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(YouTrackClassifiedError)
-      if (!(error instanceof YouTrackClassifiedError)) throw error
+      assert(error instanceof YouTrackClassifiedError)
 
       expect(error.appError).toEqual(providerError.invalidResponse())
     }

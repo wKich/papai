@@ -54,7 +54,6 @@ export let PROJECT_ROOT = DEFAULT_PROJECT_ROOT
 export let REPORTS_DIR = DEFAULT_REPORTS_DIR
 export let AUDIT_BEHAVIOR_DIR = DEFAULT_AUDIT_BEHAVIOR_DIR
 
-export let BEHAVIORS_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'behaviors')
 export let EXTRACTED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'extracted')
 export let CLASSIFIED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'classified')
 export let CONSOLIDATED_DIR = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'consolidated')
@@ -69,7 +68,7 @@ export let PHASE1_TIMEOUT_MS = 1_200_000
 export let PHASE2_TIMEOUT_MS = 300_000
 export let PHASE3_TIMEOUT_MS = 600_000
 export let MAX_RETRIES = 3
-export const RETRY_BACKOFF_MS = [100_000, 300_000, 900_000] as const
+export const RETRY_BACKOFF_MS = [10_000, 30_000, 90_000] as const
 export let MAX_STEPS = 20
 export let VERBOSE = false
 
@@ -86,7 +85,6 @@ export function reloadBehaviorAuditConfig(): void {
     resolve(REPORTS_DIR, 'audit-behavior'),
   )
 
-  BEHAVIORS_DIR = resolveStringOverride('BEHAVIOR_AUDIT_BEHAVIORS_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'behaviors'))
   EXTRACTED_DIR = resolveStringOverride('BEHAVIOR_AUDIT_EXTRACTED_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'extracted'))
   CLASSIFIED_DIR = resolveStringOverride('BEHAVIOR_AUDIT_CLASSIFIED_DIR', resolve(AUDIT_BEHAVIOR_DIR, 'classified'))
   CONSOLIDATED_DIR = resolveStringOverride(
@@ -117,5 +115,8 @@ export function reloadBehaviorAuditConfig(): void {
   VERBOSE = resolveStringOverride('BEHAVIOR_AUDIT_VERBOSE', '0') === '1'
   EXCLUDED_PREFIXES = resolveReadonlyStringList('BEHAVIOR_AUDIT_EXCLUDED_PREFIXES', DEFAULT_EXCLUDED_PREFIXES)
 }
+
+export const formatElapsedMs = (ms: number): string =>
+  ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
 
 reloadBehaviorAuditConfig()

@@ -12,12 +12,11 @@ const mockProvider: TaskProvider = {
   configRequirements: [],
   preferredUserIdentifier: 'id',
   identityResolver: {
-    searchUsers: mock((query: string) => {
-      if (query === 'jsmith') {
-        return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-      }
-      return Promise.resolve([])
-    }),
+    searchUsers: mock((query: string) =>
+      query === 'jsmith'
+        ? Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
+        : Promise.resolve([]),
+    ),
   },
   buildTaskUrl: () => '',
   buildProjectUrl: () => '',
@@ -46,6 +45,44 @@ const mockProvider: TaskProvider = {
     throw new Error('not implemented')
   },
 }
+
+const bobProvider: TaskProvider = {
+  ...mockProvider,
+  identityResolver: {
+    searchUsers: mock((query: string) =>
+      query === 'bobsmith'
+        ? Promise.resolve([{ id: 'user-789', login: 'bobsmith', name: 'Bob Smith' }])
+        : Promise.resolve([]),
+    ),
+  },
+}
+
+function searchUsersJsmithEmail(query: string): Promise<{ id: string; login: string; name: string }[]> {
+  const results = new Map([['jsmith', [{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }]]])
+  return Promise.resolve(results.get(query) ?? [])
+}
+
+const kaneoLikeProvider: TaskProvider = {
+  ...mockProvider,
+  identityResolver: {
+    searchUsers: mock(searchUsersJsmithEmail),
+  },
+} as TaskProvider
+
+function searchUsersJsmithOrEmail(query: string): Promise<{ id: string; login: string; name: string }[]> {
+  const results = new Map([
+    ['jsmith', [{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }]],
+    ['jsmith@example.com', [{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }]],
+  ])
+  return Promise.resolve(results.get(query) ?? [])
+}
+
+const kaneoLikeProviderWithEmail: TaskProvider = {
+  ...mockProvider,
+  identityResolver: {
+    searchUsers: mock(searchUsersJsmithOrEmail),
+  },
+} as TaskProvider
 
 describe('set_my_identity tool', () => {
   const testUserId = 'test-user-tool-123'
@@ -113,18 +150,6 @@ describe('set_my_identity tool', () => {
     expect(groupMapping).toBeNull()
 
     // Bob sets his identity using his chatUserId
-    const bobProvider = {
-      ...mockProvider,
-      identityResolver: {
-        searchUsers: mock((query: string) => {
-          if (query === 'bobsmith') {
-            return Promise.resolve([{ id: 'user-789', login: 'bobsmith', name: 'Bob Smith' }])
-          }
-          return Promise.resolve([])
-        }),
-      },
-    }
-
     const bobTool = makeSetMyIdentityTool(bobProvider, 'user-bob')
     await getToolExecutor(bobTool)({ claim: "I'm bobsmith" }, { toolCallId: '2', messages: [] })
 
@@ -138,19 +163,6 @@ describe('set_my_identity tool', () => {
   })
 
   test('should match user when login is email and claim is username prefix', async () => {
-    // Simulate Kaneo provider where login is email
-    const kaneoLikeProvider: TaskProvider = {
-      ...mockProvider,
-      identityResolver: {
-        searchUsers: mock((query: string) => {
-          if (query === 'jsmith') {
-            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
-          }
-          return Promise.resolve([])
-        }),
-      },
-    } as TaskProvider
-
     const tool = makeSetMyIdentityTool(kaneoLikeProvider, testUserId)
     const result: unknown = await getToolExecutor(tool)({ claim: "I'm jsmith" }, { toolCallId: '1', messages: [] })
 
@@ -160,21 +172,8 @@ describe('set_my_identity tool', () => {
   })
 
   test('should match user with exact email claim when login is email', async () => {
-    // Simulate Kaneo provider where login is email
-    const kaneoLikeProvider: TaskProvider = {
-      ...mockProvider,
-      identityResolver: {
-        searchUsers: mock((query: string) => {
-          // Search matches both local part and full email
-          if (query === 'jsmith' || query === 'jsmith@example.com') {
-            return Promise.resolve([{ id: 'user-123', login: 'jsmith@example.com', name: 'John Smith' }])
-          }
-          return Promise.resolve([])
-        }),
-      },
-    } as TaskProvider
-
-    const tool = makeSetMyIdentityTool(kaneoLikeProvider, testUserId)
+    // Simulate Kaneo provider where login is email; search matches both local part and full email
+    const tool = makeSetMyIdentityTool(kaneoLikeProviderWithEmail, testUserId)
     const result: unknown = await getToolExecutor(tool)(
       { claim: "I'm jsmith@example.com" },
       { toolCallId: '1', messages: [] },

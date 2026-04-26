@@ -1,10 +1,55 @@
-import { behaviorMarkdownPathForTestFile, extractedArtifactPathForTestFile } from './artifact-paths.js'
+import { extractedArtifactPathForTestFile } from './artifact-paths.js'
+import { getDomain } from './domain-map.js'
+import { buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
-import { markFileDone } from './progress.js'
+import type { ResolverResult } from './keyword-resolver-agent.js'
+import {
+  loadKeywordVocabulary,
+  normalizeKeywordSlug,
+  normalizeKeywordVocabularyEntries,
+  saveKeywordVocabulary,
+  stampVocabularyEntry,
+} from './keyword-vocabulary.js'
+import type { AgentResult, AgentUsage } from './phase-stats.js'
+import { markFileDone, markTestFailed } from './progress.js'
 import type { Progress } from './progress.js'
-import { writeBehaviorFile } from './report-writer.js'
 import type { TestCase } from './test-parser.js'
+
+export interface ResolveKeywordsDeps {
+  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
+  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
+  readonly resolveKeywordsWithRetry: (prompt: string, attempt: number) => Promise<AgentResult<ResolverResult> | null>
+  readonly markTestFailed: typeof markTestFailed
+}
+
+export async function resolveKeywords(
+  candidateKeywords: readonly string[],
+  testKey: string,
+  progress: Progress,
+  deps: ResolveKeywordsDeps,
+): Promise<{ keywords: readonly string[]; usage: AgentUsage } | null> {
+  const existingVocabulary = (await deps.loadKeywordVocabulary()) ?? []
+  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
+  const resolved = await deps.resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
+  if (resolved === null) {
+    deps.markTestFailed(progress, testKey, 'keyword resolution failed')
+    return null
+  }
+  const nextVocabulary = normalizeKeywordVocabularyEntries([
+    ...existingVocabulary,
+    ...resolved.result.appendedEntries.map((entry) => stampVocabularyEntry(entry)),
+  ])
+  await deps.saveKeywordVocabulary(nextVocabulary)
+  const normalizedKeywords = [
+    ...new Set(resolved.result.keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean)),
+  ]
+  if (normalizedKeywords.length === 0) {
+    deps.markTestFailed(progress, testKey, 'keyword resolution produced no valid canonical keywords')
+    return null
+  }
+  return { keywords: normalizedKeywords, usage: resolved.usage }
+}
 
 export function getSelectedTests(
   testFilePath: string,
@@ -88,17 +133,10 @@ export async function writeValidBehaviorsForFile(
     ...valid,
   ]
   if (merged.length === 0) {
-    await Promise.all([
-      deleteFileIfPresent(behaviorMarkdownPathForTestFile(testFilePath)),
-      deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath)),
-    ])
+    await deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath))
     return
   }
   await writeExtractedFile(testFilePath, merged)
-  await writeBehaviorFile(
-    testFilePath,
-    [...merged].toSorted((a, b) => a.fullPath.localeCompare(b.fullPath)),
-  )
   console.log(`  → wrote ${valid.length} behaviors`)
 }
 
@@ -144,5 +182,27 @@ export function markFileDoneWhenSelectedTestsPersisted(
   const allSelectedTestsPersisted = [...selectedTestKeySet].every((testKey) => completedTests[testKey] === 'done')
   if (allSelectedTestsPersisted) {
     markFileDone(progress, testFilePath)
+  }
+}
+
+export function buildBehaviorRecord(
+  testCase: TestCase,
+  testFilePath: string,
+  testKey: string,
+  extractedBehavior: string,
+  extractedContext: string,
+  keywords: readonly string[],
+): ExtractedBehaviorRecord {
+  return {
+    behaviorId: testKey,
+    testKey,
+    testFile: testFilePath,
+    domain: getDomain(testFilePath),
+    testName: testCase.name,
+    fullPath: testCase.fullPath,
+    behavior: extractedBehavior,
+    context: extractedContext,
+    keywords,
+    extractedAt: new Date().toISOString(),
   }
 }

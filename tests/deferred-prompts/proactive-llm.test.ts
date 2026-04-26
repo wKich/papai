@@ -25,6 +25,11 @@ type GenerateTextResult = {
 }
 type GenerateTextCall = { model: string; system: string; messages: ModelMessage[]; tools: unknown }
 
+// Helper defined outside test blocks — no-conditional-in-test requires predicate helpers at module scope
+function messageIncludesText(msgs: readonly ModelMessage[], text: string): boolean {
+  return msgs.some((m) => typeof m.content === 'string' && m.content.includes(text))
+}
+
 const USER_ID = 'exec-mode-user'
 
 function makeExecCtx(userId: string = USER_ID): DeferredExecutionContext {
@@ -139,10 +144,8 @@ describe('dispatchExecution', () => {
       await dispatchExecution(makeExecCtx(), 'scheduled', 'drink water', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
       const systemMsgs = messages.filter((m) => m.role === 'system')
-      expect(systemMsgs.some((m) => typeof m.content === 'string' && m.content.includes('[DELIVERY BRIEF]'))).toBe(true)
-      expect(
-        systemMsgs.some((m) => typeof m.content === 'string' && m.content.includes('Friendly hydration reminder')),
-      ).toBe(true)
+      expect(messageIncludesText(systemMsgs, '[DELIVERY BRIEF]')).toBe(true)
+      expect(messageIncludesText(systemMsgs, 'Friendly hydration reminder')).toBe(true)
     })
 
     test('wraps prompt in deferred task delimiters', async () => {
@@ -150,10 +153,8 @@ describe('dispatchExecution', () => {
       await dispatchExecution(makeExecCtx(), 'scheduled', 'drink water', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
       const userMsgs = messages.filter((m) => m.role === 'user')
-      expect(userMsgs.some((m) => typeof m.content === 'string' && m.content.includes('===DEFERRED_TASK==='))).toBe(
-        true,
-      )
-      expect(userMsgs.some((m) => typeof m.content === 'string' && m.content.includes('drink water'))).toBe(true)
+      expect(messageIncludesText(userMsgs, '===DEFERRED_TASK===')).toBe(true)
+      expect(messageIncludesText(userMsgs, 'drink water')).toBe(true)
     })
 
     test('does not load conversation history', async () => {
@@ -161,7 +162,7 @@ describe('dispatchExecution', () => {
       appendHistory(USER_ID, [{ role: 'user', content: 'old message' }])
       await dispatchExecution(makeExecCtx(), 'scheduled', 'drink water', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
-      expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('old message'))).toBe(false)
+      expect(messageIncludesText(messages, 'old message')).toBe(false)
     })
 
     test('includes context snapshot when present', async () => {
@@ -170,18 +171,14 @@ describe('dispatchExecution', () => {
       await dispatchExecution(makeExecCtx(), 'scheduled', 'remind about migration', withSnapshot, () => null)
       const messages = generateTextCalls[0]!.messages
       const systemMsgs = messages.filter((m) => m.role === 'system')
-      expect(
-        systemMsgs.some((m) => typeof m.content === 'string' && m.content.includes('[CONTEXT FROM CREATION TIME]')),
-      ).toBe(true)
+      expect(messageIncludesText(systemMsgs, '[CONTEXT FROM CREATION TIME]')).toBe(true)
     })
 
     test('omits context snapshot message when null', async () => {
       setupUserConfig()
       await dispatchExecution(makeExecCtx(), 'scheduled', 'drink water', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
-      expect(
-        messages.some((m) => typeof m.content === 'string' && m.content.includes('[CONTEXT FROM CREATION TIME]')),
-      ).toBe(false)
+      expect(messageIncludesText(messages, '[CONTEXT FROM CREATION TIME]')).toBe(false)
     })
 
     test('persists lightweight history to group thread delivery context instead of creator DM', async () => {
@@ -221,7 +218,7 @@ describe('dispatchExecution', () => {
       appendHistory(USER_ID, [{ role: 'user', content: 'history message' }])
       await dispatchExecution(makeExecCtx(), 'scheduled', 'standup reminder', metadata, () => null)
       const messages = generateTextCalls[0]!.messages
-      expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('history message'))).toBe(true)
+      expect(messageIncludesText(messages, 'history message')).toBe(true)
     })
 
     test('includes get_current_time tool only', async () => {
@@ -280,7 +277,7 @@ describe('dispatchExecution', () => {
       appendHistory(USER_ID, [{ role: 'user', content: 'full mode history' }])
       await dispatchExecution(makeExecCtx(), 'scheduled', 'check overdue', metadata, () => provider)
       const messages = generateTextCalls[0]!.messages
-      expect(messages.some((m) => typeof m.content === 'string' && m.content.includes('full mode history'))).toBe(true)
+      expect(messageIncludesText(messages, 'full mode history')).toBe(true)
     })
 
     test('returns error when provider cannot be built', async () => {

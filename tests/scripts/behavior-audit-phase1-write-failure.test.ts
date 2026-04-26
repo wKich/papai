@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
@@ -48,21 +50,25 @@ test('runPhase1 does not publish manifest or progress completion before extracte
       {
         extractWithRetry: () =>
           Promise.resolve({
-            behavior: 'When a user targets a group, the bot routes the request correctly.',
-            context: 'Routes through group context selection.',
-            candidateKeywords: ['group-targeting'],
+            result: {
+              behavior: 'When a user targets a group, the bot routes the request correctly.',
+              context: 'Routes through group context selection.',
+              candidateKeywords: ['group-targeting'],
+            },
+            usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
           }),
         resolveKeywordsWithRetry: () =>
           Promise.resolve({
-            keywords: ['group-targeting'],
-            appendedEntries: [
-              {
-                slug: 'group-targeting',
-                description: 'Targeting work at a group context.',
-                createdAt: '2026-04-20T12:00:00.000Z',
-                updatedAt: '2026-04-20T12:00:00.000Z',
-              },
-            ],
+            result: {
+              keywords: ['group-targeting'],
+              appendedEntries: [
+                {
+                  slug: 'group-targeting',
+                  description: 'Targeting work at a group context.',
+                },
+              ],
+            },
+            usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
           }),
         writeValidBehaviorsForFile: () => Promise.reject(new Error('disk full')),
       },
@@ -76,16 +82,14 @@ test('runPhase1 does not publish manifest or progress completion before extracte
 
   const persistedProgressText = await Bun.file(progressPath).text()
   const persistedProgress = JSON.parse(persistedProgressText) as unknown
-  if (!isObject(persistedProgress) || !('phase1' in persistedProgress) || !isObject(persistedProgress['phase1'])) {
-    throw new Error('Expected persisted progress shape')
-  }
+  assert(isObject(persistedProgress), 'Expected persisted progress to be an object')
+  assert('phase1' in persistedProgress, 'Expected persisted progress to have phase1')
+  assert(isObject(persistedProgress['phase1']), 'Expected persisted progress phase1 to be an object')
   const persistedPhase1 = persistedProgress['phase1']
-  if (!('completedFiles' in persistedPhase1) || !Array.isArray(persistedPhase1['completedFiles'])) {
-    throw new Error('Expected persisted phase1 completedFiles array')
-  }
-  if (!('completedTests' in persistedPhase1) || !isObject(persistedPhase1['completedTests'])) {
-    throw new Error('Expected persisted phase1 completedTests record')
-  }
+  assert('completedFiles' in persistedPhase1, 'Expected persisted phase1 to have completedFiles')
+  assert(Array.isArray(persistedPhase1['completedFiles']), 'Expected persisted phase1 completedFiles to be an array')
+  assert('completedTests' in persistedPhase1, 'Expected persisted phase1 to have completedTests')
+  assert(isObject(persistedPhase1['completedTests']), 'Expected persisted phase1 completedTests to be an object')
   expect(persistedPhase1['completedFiles']).toEqual([])
   expect(persistedPhase1['completedTests']['tests/tools/sample.test.ts']).toBeUndefined()
 })

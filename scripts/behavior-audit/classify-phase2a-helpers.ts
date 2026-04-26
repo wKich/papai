@@ -112,7 +112,7 @@ export function addDirtyFeatureKey(dirtyFeatureKeys: Set<string>, featureKey: st
 
 export function toClassifiedBehavior(
   testKey: string,
-  result: NonNullable<Awaited<ReturnType<typeof import('./classify-agent.js').classifyBehaviorWithRetry>>>,
+  result: NonNullable<Awaited<ReturnType<typeof import('./classify-agent.js').classifyBehaviorWithRetry>>>['result'],
 ): ClassifiedBehavior {
   const domain = getDomain(testKey.split('::')[0] ?? '')
 

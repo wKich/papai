@@ -1,4 +1,5 @@
 import { describe, expect, mock, test, beforeEach, afterEach } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { and, eq } from 'drizzle-orm'
 
@@ -77,6 +78,20 @@ void mock.module('../src/message-queue/index.js', () => ({
   },
   flushOnShutdown: (): Promise<void> => Promise.resolve(),
 }))
+
+// ---------------------------------------------------------------------------
+// Listener helpers defined outside test blocks to avoid no-conditional-in-test
+// ---------------------------------------------------------------------------
+
+function makeRepliedEventListener(repliedEvents: DebugEvent[]): (event: DebugEvent) => void {
+  return (event: DebugEvent): void => {
+    if (event.type === 'message:replied') {
+      repliedEvents.push(event)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 describe('Authorization Logic', () => {
   beforeEach(async () => {
@@ -465,11 +480,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
       setupUserConfig('auth-user')
 
       const repliedEvents: DebugEvent[] = []
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'message:replied') {
-          repliedEvents.push(event)
-        }
-      }
+      const listener = makeRepliedEventListener(repliedEvents)
       subscribe(listener)
 
       const { provider: replyingChat, getMessageHandler: getReplyingHandler } = createMockChatForBot()
@@ -529,18 +540,14 @@ describe('Bot Authorization Gate (setupBot)', () => {
       setupUserConfig('auth-user')
 
       const repliedEvents: DebugEvent[] = []
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'message:replied') {
-          repliedEvents.push(event)
-        }
-      }
+      const listener = makeRepliedEventListener(repliedEvents)
       subscribe(listener)
 
       const { provider: replyingChat, getMessageHandler: getReplyingHandler } = createMockChatForBot()
       setupBot(replyingChat, ADMIN_ID, {
         processMessage: async (reply: ReplyFn): Promise<void> => {
-          const replaceText = reply.replaceText
-          if (replaceText !== undefined) await replaceText('queued replacement')
+          assert(reply.replaceText !== undefined)
+          await reply.replaceText('queued replacement')
         },
       })
 
@@ -567,18 +574,14 @@ describe('Bot Authorization Gate (setupBot)', () => {
       setupUserConfig('auth-user')
 
       const repliedEvents: DebugEvent[] = []
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'message:replied') {
-          repliedEvents.push(event)
-        }
-      }
+      const listener = makeRepliedEventListener(repliedEvents)
       subscribe(listener)
 
       const { provider: replyingChat, getMessageHandler: getReplyingHandler } = createMockChatForBot()
       setupBot(replyingChat, ADMIN_ID, {
         processMessage: async (reply: ReplyFn): Promise<void> => {
-          const replaceButtons = reply.replaceButtons
-          if (replaceButtons !== undefined) await replaceButtons('queued replacement buttons', { buttons: [] })
+          assert(reply.replaceButtons !== undefined)
+          await reply.replaceButtons('queued replacement buttons', { buttons: [] })
         },
       })
 
@@ -605,11 +608,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
       setupUserConfig('auth-user')
 
       const repliedEvents: DebugEvent[] = []
-      const listener = (event: DebugEvent): void => {
-        if (event.type === 'message:replied') {
-          repliedEvents.push(event)
-        }
-      }
+      const listener = makeRepliedEventListener(repliedEvents)
       subscribe(listener)
 
       const { provider: failingChat, getMessageHandler: getFailingHandler } = createMockChatForBot()
@@ -695,9 +694,11 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
     expect(knownGroup).toBeDefined()
     expect(adminObservation).toBeDefined()
-    expect(knownGroup && knownGroup.displayName).toBe('Operations')
-    expect(knownGroup && knownGroup.parentName).toBe('Platform')
-    expect(adminObservation && adminObservation.isAdmin).toBe(true)
+    assert(knownGroup !== undefined)
+    assert(adminObservation !== undefined)
+    expect(knownGroup.displayName).toBe('Operations')
+    expect(knownGroup.parentName).toBe('Platform')
+    expect(adminObservation.isAdmin).toBe(true)
   })
 
   test('does not surface unauthorized mentioned group admin as manageable', async () => {
@@ -829,9 +830,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
     const contextHandler = commandHandlers.get('context')
     expect(contextHandler).toBeDefined()
-    if (contextHandler === undefined) {
-      throw new TypeError('Expected context command to be registered')
-    }
+    assert(contextHandler !== undefined, 'Expected context command to be registered')
 
     const { reply, textCalls } = createMockReply()
     await contextHandler(createDmMessage('context-user', '/context'), reply, createAuth('context-user'))
@@ -1009,11 +1008,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
     setupUserConfig('group-admin')
 
     const repliedEvents: DebugEvent[] = []
-    const listener = (event: DebugEvent): void => {
-      if (event.type === 'message:replied') {
-        repliedEvents.push(event)
-      }
-    }
+    const listener = makeRepliedEventListener(repliedEvents)
     subscribe(listener)
 
     try {
@@ -1044,11 +1039,7 @@ describe('Bot Authorization Gate (setupBot)', () => {
 
   test('emits message:replied for unauthorized mention denial path', async () => {
     const repliedEvents: DebugEvent[] = []
-    const listener = (event: DebugEvent): void => {
-      if (event.type === 'message:replied') {
-        repliedEvents.push(event)
-      }
-    }
+    const listener = makeRepliedEventListener(repliedEvents)
     subscribe(listener)
 
     try {
@@ -1514,7 +1505,8 @@ describe('File relay integration (setupBot)', () => {
     expect(capturedStorageId).toBe('relay-user')
     // Files are cleared after processing, so check what was captured during processing
     expect(filesAtProcessingTime).toHaveLength(1)
-    expect(filesAtProcessingTime[0] && filesAtProcessingTime[0].fileId).toBe('f1')
+    assert(filesAtProcessingTime[0] !== undefined)
+    expect(filesAtProcessingTime[0].fileId).toBe('f1')
   })
 
   test('clears relay when message has no files', async () => {

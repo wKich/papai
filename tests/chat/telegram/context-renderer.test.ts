@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { renderTelegramContext } from '../../../src/chat/telegram/context-renderer.js'
 import type { ContextSnapshot } from '../../../src/chat/types.js'
@@ -39,7 +40,7 @@ describe('renderTelegramContext', () => {
 
   test('contains header with model and usage', () => {
     const result = renderTelegramContext(snapshot)
-    if (result.method !== 'text') throw new Error('expected text')
+    assert(result.method === 'text')
     expect(result.content).toContain('gpt-4o')
     expect(result.content).toContain('6,770')
     expect(result.content).toContain('128,000')
@@ -48,14 +49,14 @@ describe('renderTelegramContext', () => {
 
   test('contains the emoji grid', () => {
     const result = renderTelegramContext(snapshot)
-    if (result.method !== 'text') throw new Error('expected text')
+    assert(result.method === 'text')
     expect(result.content).toContain('🟦')
     expect(result.content).toContain('⬜')
   })
 
   test('wraps detail section in a code block', () => {
     const result = renderTelegramContext(snapshot)
-    if (result.method !== 'text') throw new Error('expected text')
+    assert(result.method === 'text')
     expect(result.content).toContain('```')
     expect(result.content).toContain('System prompt')
     expect(result.content).toContain('820')
@@ -65,14 +66,14 @@ describe('renderTelegramContext', () => {
 
   test('omits percentage when maxTokens is null', () => {
     const result = renderTelegramContext({ ...snapshot, maxTokens: null })
-    if (result.method !== 'text') throw new Error('expected text')
+    assert(result.method === 'text')
     expect(result.content).not.toMatch(/%/)
     expect(result.content).toContain('6,770 tokens')
   })
 
   test('notes approximate counts when applicable', () => {
     const result = renderTelegramContext({ ...snapshot, approximate: true })
-    if (result.method !== 'text') throw new Error('expected text')
+    assert(result.method === 'text')
     expect(result.content).toMatch(/approximate/i)
   })
 })

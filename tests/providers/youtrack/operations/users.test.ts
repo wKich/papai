@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { z } from 'zod'
 
@@ -215,11 +216,8 @@ describe('resolveYouTrackUserRingId', () => {
     const error = await resolveYouTrackUserRingId(config, 'missing-user').catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(YouTrackClassifiedError)
-    const classifiedError = error instanceof YouTrackClassifiedError ? error : null
-    if (classifiedError === null) {
-      throw new Error('Expected YouTrackClassifiedError')
-    }
-    expect(classifiedError.appError).toEqual({
+    assert(error instanceof YouTrackClassifiedError)
+    expect(error.appError).toEqual({
       type: 'provider',
       code: 'not-found',
       resourceType: 'User',

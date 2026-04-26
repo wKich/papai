@@ -111,7 +111,7 @@ The repo also blocks a few unsafe AI-editing escape hatches:
 
 - `.oxlintrc.json` is protected from direct write-tool edits by hook policy
 - inline suppression comments such as `eslint-disable`, `oxlint-disable`, `@ts-ignore`, and `@ts-nocheck` are blocked before writes complete
-- bash-hook policy blocks `git stash` in the Claude/bash flow
+- bash-hook policy blocks `git stash` and `git checkout --` in the Claude/bash flow
 
 Fix the underlying issue instead of trying to bypass linting or hook policy.
 
@@ -287,3 +287,32 @@ Detailed conventions live in path-scoped `CLAUDE.md` files and `.github/instruct
 | `tests/CLAUDE.md`         | helpers, mocks, mock reset, E2E test guidance                          |
 | `codeindex/CLAUDE.md`     | codeindex workspace structure, scripts, storage, and indexing rules    |
 | `review-loop/CLAUDE.md`   | review-loop workspace structure, scripts, storage, and TDD rules       |
+
+## Codebase Search Protocol
+
+When working inside this project, you **MUST prefer** the `codeindex` MCP server tools for structural code queries.
+
+### Preferred tool priority
+
+1. **First** — Use `codeindex` MCP tools:
+   - `code_search` for keyword/FTS lookups, symbol names, and concept queries
+   - `code_symbol` for exact symbol resolution (qualified name, export name, or local name)
+   - `code_impact` for finding callers, references, and dependents of a symbol
+   - `code_index` to trigger incremental reindexing when stale data is suspected
+2. **Fallback** — Use `grep` or `glob` ONLY for files outside the indexed source tree (config files, markdown, `.json`, non-JS/TS assets)
+3. **Last resort** — Use `read` on individual files when `codeindex` returns no results and the file is known to exist
+
+### Never do
+
+- Do NOT use `grep` to search for symbol definitions or usage inside `src/` or `client/`
+- Do NOT use `glob` with `src/**/*.ts` to discover symbols by filename
+- Do NOT use `task explore` for structural codebase navigation when the repository is indexed
+- Do NOT run `bun run codeindex/src/cli.ts ...` directly in conversation; use the MCP tools instead
+
+### Rationale
+
+The `codeindex` server provides resolved, symbol-aware search with exact matching, FTS rank, cross-reference impact analysis, and scope-tier filtering. It is faster, more precise, and avoids token-heavy file-globbing or regex scanning.
+
+### Auto-reindexing
+
+This repository includes an auto-reindex plugin. After `write`/`edit`/`multiedit` calls on files under `src/` or `client/`, incremental reindexing happens automatically. If you suspect stale data, call `code_index` with mode `incremental` explicitly.

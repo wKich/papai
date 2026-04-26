@@ -11,10 +11,19 @@
     "tests/codeindex/**/*.test.ts!",
     "review-loop/src/cli.ts!",
     "tests/review-loop/**/*.test.ts!",
+    "scripts/behavior-audit*.ts!",
+    "tests/scripts/behavior-audit*.ts!",
+    "tests/scripts/behavior-audit/**/*.ts!",
   ],
 
   // All source files (production only)
-  "project": ["src/**/*.ts!", "client/**/*.ts!", "codeindex/src/**/*.ts!", "review-loop/src/**/*.ts!"],
+  "project": [
+    "src/**/*.ts!",
+    "client/**/*.ts!",
+    "codeindex/src/**/*.ts!",
+    "review-loop/src/**/*.ts!",
+    "scripts/behavior-audit/**/*.ts!",
+  ],
 
   // All issue types treated as hard errors
   "rules": {
