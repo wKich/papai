@@ -129,6 +129,7 @@ describe('behavior-audit interrupted-run baseline', () => {
         runPhase1SelectedKeys.push([...selectedTestKeys].toSorted())
         return Promise.resolve()
       },
+      runPhase1bIfNeeded: () => Promise.resolve(),
       runPhase2aIfNeeded: () => Promise.resolve(new Set()),
       runPhase2bIfNeeded: makeRunPhase2bIfNeeded(
         new Error('simulated interruption after run start'),

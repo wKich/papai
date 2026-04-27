@@ -1084,6 +1084,7 @@ describe('behavior-audit incremental manifest', () => {
         }),
       rebuildReportsFromStoredResults: () => Promise.resolve(),
       runPhase1IfNeeded: () => Promise.resolve(),
+      runPhase1bIfNeeded: () => Promise.resolve(),
       runPhase2aIfNeeded: (_progress, _manifest, selectedTestKeys) => {
         calls.push({ phase2a: [...selectedTestKeys].toSorted(), phase2b: [] })
         return Promise.resolve(new Set(['task-creation']))

@@ -1,6 +1,7 @@
 import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as ClassifyAgentModule from '../../scripts/behavior-audit/classify-agent.js'
+import type * as ConsolidateKeywordsModule from '../../scripts/behavior-audit/consolidate-keywords.js'
 import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
 import type * as EvaluateReportingModule from '../../scripts/behavior-audit/evaluate-reporting.js'
 import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
@@ -19,6 +20,7 @@ export type ClassifyAgentModuleShape = typeof ClassifyAgentModule
 export type EvaluateModuleShape = typeof EvaluateModule
 export type EvaluateReportingModuleShape = typeof EvaluateReportingModule
 export type ConsolidateModuleShape = typeof ConsolidateModule
+export type ConsolidateKeywordsModuleShape = typeof ConsolidateKeywordsModule
 export type ClassifiedStoreModuleShape = typeof ClassifiedStoreModule
 export type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
 export type ReportWriterModuleShape = typeof ReportWriterModule
@@ -327,5 +329,17 @@ export function loadResetModule(tag: string): Promise<ResetModuleShape> {
     `../../scripts/behavior-audit-reset.js?test=${tag}`,
     isResetModule,
     'Unexpected reset module shape',
+  )
+}
+
+function isConsolidateKeywordsModule(value: unknown): value is ConsolidateKeywordsModuleShape {
+  return isObject(value) && hasFunctionProperty(value, 'runPhase1b')
+}
+
+export function loadConsolidateKeywordsModule(tag: string): Promise<ConsolidateKeywordsModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/consolidate-keywords.js?test=${tag}`,
+    isConsolidateKeywordsModule,
+    'Unexpected consolidate-keywords module shape',
   )
 }

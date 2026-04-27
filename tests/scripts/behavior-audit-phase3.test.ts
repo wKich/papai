@@ -583,6 +583,7 @@ describe('behavior-audit entrypoint phase3 manifest passthrough', () => {
       loadOrCreateProgress: () => Promise.resolve(createEmptyProgressFixture(0)),
       rebuildReportsFromStoredResults: () => Promise.resolve(),
       runPhase1IfNeeded: () => Promise.resolve(),
+      runPhase1bIfNeeded: () => Promise.resolve(),
       runPhase2aIfNeeded: () => Promise.resolve(new Set(['group-targeting'])),
       runPhase2bIfNeeded: () => Promise.resolve(consolidatedManifest),
       saveConsolidatedManifest: () => Promise.resolve(),

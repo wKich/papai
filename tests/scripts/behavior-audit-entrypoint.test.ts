@@ -81,6 +81,7 @@ function createHarness(
       readonly selectedTestKeys: readonly string[]
       readonly manifest: IncrementalManifest
     }>
+    readonly runPhase1bIfNeeded: { count: number }
     readonly runPhase2aIfNeeded: Array<{
       readonly progress: Progress
       readonly manifest: IncrementalManifest
@@ -140,6 +141,7 @@ function createHarness(
       readonly selectedTestKeys: readonly string[]
       readonly manifest: IncrementalManifest
     }>,
+    runPhase1bIfNeeded: { count: 0 },
     runPhase2aIfNeeded: [] as Array<{
       readonly progress: Progress
       readonly manifest: IncrementalManifest
@@ -190,6 +192,10 @@ function createHarness(
         selectedTestKeys: [...selectedTestKeys].toSorted(),
         manifest,
       })
+      return Promise.resolve()
+    },
+    runPhase1bIfNeeded: (_progress) => {
+      calls.runPhase1bIfNeeded.count += 1
       return Promise.resolve()
     },
     runPhase2aIfNeeded: (phaseProgress, manifest, selectedTestKeys) => {

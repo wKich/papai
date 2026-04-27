@@ -5,6 +5,7 @@ import { dirname } from 'node:path'
 import { z } from 'zod'
 
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
+import { remapKeywords } from './consolidate-keywords-helpers.js'
 
 const ExtractedBehaviorRecordSchema = z
   .object({
@@ -49,4 +50,30 @@ export async function readExtractedFile(testFilePath: string): Promise<readonly 
 
   const raw: unknown = JSON.parse(await Bun.file(filePath).text())
   return ExtractedBehaviorRecordArraySchema.parse(raw)
+}
+
+export async function remapKeywordsInExtractedFile(
+  testFilePath: string,
+  mergeMap: ReadonlyMap<string, string>,
+): Promise<{ readonly updated: boolean; readonly remappedCount: number }> {
+  const records = await readExtractedFile(testFilePath)
+  if (records === null) return { updated: false, remappedCount: 0 }
+
+  const remapResults = records.map((record) => {
+    const remappedCount = record.keywords.filter((kw) => mergeMap.has(kw)).length
+    if (remappedCount === 0) return { record, changed: false, remappedCount: 0 }
+    const newKeywords = remapKeywords(record.keywords, mergeMap)
+    return { record: { ...record, keywords: newKeywords }, changed: true, remappedCount }
+  })
+
+  const totalRemapped = remapResults.reduce((sum, r) => sum + r.remappedCount, 0)
+  const anyChanged = remapResults.some((r) => r.changed)
+
+  if (!anyChanged) return { updated: false, remappedCount: 0 }
+
+  await writeExtractedFile(
+    testFilePath,
+    remapResults.map((r) => r.record),
+  )
+  return { updated: true, remappedCount: totalRemapped }
 }

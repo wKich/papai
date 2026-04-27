@@ -1,0 +1,166 @@
+import {
+  CONSOLIDATION_DRY_RUN,
+  CONSOLIDATION_MIN_CLUSTER_SIZE,
+  CONSOLIDATION_THRESHOLD,
+  EMBEDDING_MODEL,
+} from './config.js'
+import type { embedSlugBatch as EmbedSlugBatch } from './consolidate-keywords-agent.js'
+import { embedSlugBatch } from './consolidate-keywords-agent.js'
+import { buildClusters, buildConsolidatedVocabulary, buildMergeMap } from './consolidate-keywords-helpers.js'
+import type { remapKeywordsInExtractedFile as RemapFn } from './extracted-store.js'
+import { remapKeywordsInExtractedFile } from './extracted-store.js'
+import type { IncrementalManifest } from './incremental.js'
+import { loadManifest } from './incremental.js'
+import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
+import { loadKeywordVocabulary, saveKeywordVocabulary } from './keyword-vocabulary.js'
+import { emptyPhase1b, resetPhase2AndPhase3, type Progress } from './progress.js'
+import { saveProgress } from './progress.js'
+
+export interface Phase1bDeps {
+  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
+  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
+  readonly embedSlugBatch: typeof EmbedSlugBatch
+  readonly loadManifest: () => Promise<IncrementalManifest | null>
+  readonly remapKeywordsInExtractedFile: typeof RemapFn
+  readonly saveProgress: typeof saveProgress
+  readonly log: Pick<typeof console, 'log'>
+}
+
+const defaultPhase1bDeps: Phase1bDeps = {
+  loadKeywordVocabulary,
+  saveKeywordVocabulary,
+  embedSlugBatch,
+  loadManifest,
+  remapKeywordsInExtractedFile,
+  saveProgress,
+  log: console,
+}
+
+async function markDoneAndSave(
+  progress: Progress,
+  threshold: number,
+  slugsBefore: number,
+  now: string,
+  deps: Pick<Phase1bDeps, 'saveProgress'>,
+): Promise<void> {
+  progress.phase1b = {
+    status: 'done',
+    lastRunAt: now,
+    threshold,
+    stats: { slugsBefore, slugsAfter: slugsBefore, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
+  }
+  await deps.saveProgress(progress)
+}
+
+async function computeMergeMap(
+  vocabulary: readonly KeywordVocabularyEntry[],
+  deps: Pick<Phase1bDeps, 'embedSlugBatch' | 'log'>,
+): Promise<ReadonlyMap<string, string>> {
+  deps.log.log(`[Phase 1b] Embedding ${vocabulary.length} slugs...`)
+  const slugInputs = vocabulary.map((e) => `${e.slug}: ${e.description}`)
+  const embeddings = await deps.embedSlugBatch(slugInputs)
+  deps.log.log(`[Phase 1b] Clustering at threshold ${CONSOLIDATION_THRESHOLD}...`)
+  const clusters = buildClusters(embeddings, CONSOLIDATION_THRESHOLD, CONSOLIDATION_MIN_CLUSTER_SIZE)
+  return buildMergeMap(vocabulary, clusters)
+}
+
+function logDryRunMerges(mergeMap: ReadonlyMap<string, string>, deps: Pick<Phase1bDeps, 'log'>): void {
+  deps.log.log(`[Phase 1b DRY RUN] Proposed merges at threshold ${CONSOLIDATION_THRESHOLD}:`)
+  mergeMap.forEach((canonicalSlug, oldSlug) => {
+    deps.log.log(`  ${oldSlug.padEnd(30)} → ${canonicalSlug}`)
+  })
+  deps.log.log(`No files were modified.`)
+}
+
+async function applyMergesAndSave(
+  progress: Progress,
+  vocabulary: readonly KeywordVocabularyEntry[],
+  mergeMap: ReadonlyMap<string, string>,
+  now: string,
+  deps: Phase1bDeps,
+): Promise<void> {
+  const consolidatedVocabulary = buildConsolidatedVocabulary(vocabulary, mergeMap, now)
+  await deps.saveKeywordVocabulary(consolidatedVocabulary)
+
+  const manifest = await deps.loadManifest()
+  const testFiles = manifest === null ? [] : [...new Set(Object.values(manifest.tests).map((e) => e.testFile))]
+
+  const remapResults = await Promise.all(
+    testFiles.map((testFile) => deps.remapKeywordsInExtractedFile(testFile, mergeMap)),
+  )
+
+  const behaviorsUpdated = remapResults.filter((r) => r.updated).length
+  const keywordsRemapped = remapResults.reduce((sum, r) => sum + r.remappedCount, 0)
+
+  resetPhase2AndPhase3(progress)
+
+  const slugsAfter = consolidatedVocabulary.length
+  deps.log.log(`[Phase 1b complete] ${vocabulary.length} → ${slugsAfter} slugs, ${mergeMap.size} merges applied\n`)
+
+  progress.phase1b = {
+    status: 'done',
+    lastRunAt: now,
+    threshold: CONSOLIDATION_THRESHOLD,
+    stats: {
+      slugsBefore: vocabulary.length,
+      slugsAfter,
+      mergesApplied: mergeMap.size,
+      behaviorsUpdated,
+      keywordsRemapped,
+    },
+  }
+  await deps.saveProgress(progress)
+}
+
+export async function runPhase1b(progress: Progress, deps: Phase1bDeps = defaultPhase1bDeps): Promise<void> {
+  if (progress.phase1.status !== 'done') {
+    deps.log.log('[Phase 1b] Phase 1 not complete, skipping.\n')
+    return
+  }
+
+  const now = new Date().toISOString()
+
+  if (EMBEDDING_MODEL === '') {
+    deps.log.log('[Phase 1b] Embedding model not configured, skipping.\n')
+    await markDoneAndSave(progress, 0, 0, now, deps)
+    return
+  }
+
+  const vocabulary = await deps.loadKeywordVocabulary()
+  if (vocabulary === null) {
+    deps.log.log('[Phase 1b] No vocabulary found, skipping.\n')
+    await markDoneAndSave(progress, CONSOLIDATION_THRESHOLD, 0, now, deps)
+    return
+  }
+
+  if (
+    !CONSOLIDATION_DRY_RUN &&
+    progress.phase1b.status === 'done' &&
+    vocabulary.length === progress.phase1b.stats.slugsBefore
+  ) {
+    deps.log.log('[Phase 1b] Already complete, skipping.\n')
+    return
+  }
+
+  if (!CONSOLIDATION_DRY_RUN) {
+    progress.phase1b.status = 'in-progress'
+    await deps.saveProgress(progress)
+  }
+
+  const mergeMap = await computeMergeMap(vocabulary, deps)
+
+  if (CONSOLIDATION_DRY_RUN) {
+    logDryRunMerges(mergeMap, deps)
+    return
+  }
+
+  if (mergeMap.size === 0) {
+    deps.log.log('[Phase 1b] No merges needed.\n')
+    await markDoneAndSave(progress, CONSOLIDATION_THRESHOLD, vocabulary.length, now, deps)
+    return
+  }
+
+  await applyMergesAndSave(progress, vocabulary, mergeMap, now, deps)
+}
+
+export { emptyPhase1b }

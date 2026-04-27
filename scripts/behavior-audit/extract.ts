@@ -25,7 +25,7 @@ import {
   formatPhaseSummary,
 } from './phase-stats.js'
 import { saveProgress } from './progress-io.js'
-import { type Progress, getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3 } from './progress.js'
+import { type Progress, getFailedTestAttempts, markTestDone, markTestFailed, resetPhase1bAndBelow } from './progress.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
 interface Phase1RunInput {
@@ -43,7 +43,7 @@ export interface Phase1Deps {
   readonly getFailedTestAttempts: typeof getFailedTestAttempts
   readonly markTestDone: typeof markTestDone
   readonly markTestFailed: typeof markTestFailed
-  readonly resetPhase2AndPhase3: typeof resetPhase2AndPhase3
+  readonly resetPhase1bAndBelow: typeof resetPhase1bAndBelow
   readonly getSelectedTests: typeof getSelectedTests
   readonly shouldSkipCompletedFile: typeof shouldSkipCompletedFile
   readonly writeValidBehaviorsForFile: typeof writeValidBehaviorsForFile
@@ -61,7 +61,7 @@ const defaultPhase1Deps: Phase1Deps = {
   getFailedTestAttempts,
   markTestDone,
   markTestFailed,
-  resetPhase2AndPhase3,
+  resetPhase1bAndBelow,
   getSelectedTests,
   shouldSkipCompletedFile,
   writeValidBehaviorsForFile,
@@ -235,7 +235,7 @@ export async function runPhase1(
     (testFile) => resolvedDeps.getSelectedTests(testFile.filePath, testFile.tests, selectedTestKeys).length > 0,
   )
   if (hasSelectedPhase1Work) {
-    resolvedDeps.resetPhase2AndPhase3(progress)
+    resolvedDeps.resetPhase1bAndBelow(progress)
   }
   progress.phase1.status = 'in-progress'
   await resolvedDeps.saveProgress(progress)
@@ -260,7 +260,7 @@ export async function runPhase1(
     ),
   )
   if (anyPhase1Changed && !hasSelectedPhase1Work) {
-    resolvedDeps.resetPhase2AndPhase3(progress)
+    resolvedDeps.resetPhase1bAndBelow(progress)
   }
   progress.phase1.status = 'done'
   await resolvedDeps.saveProgress(progress)

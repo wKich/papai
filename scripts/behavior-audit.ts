@@ -3,6 +3,7 @@ import { join, relative } from 'node:path'
 
 import { runPhase2a } from './behavior-audit/classify.js'
 import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './behavior-audit/config.js'
+import { runPhase1b } from './behavior-audit/consolidate-keywords.js'
 import { runPhase2b } from './behavior-audit/consolidate.js'
 import { runPhase3 } from './behavior-audit/evaluate.js'
 import { runPhase1 } from './behavior-audit/extract.js'
@@ -93,6 +94,10 @@ async function runPhase1IfNeeded(
     return
   }
   await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest })
+}
+
+function runPhase1bIfNeeded(progress: Progress): Promise<void> {
+  return runPhase1b(progress)
 }
 
 function runPhase2aIfNeeded(
@@ -191,6 +196,7 @@ export interface BehaviorAuditDeps {
   readonly loadOrCreateProgress: typeof loadOrCreateProgress
   readonly rebuildReportsFromStoredResults: typeof rebuildReportsFromStoredResults
   readonly runPhase1IfNeeded: typeof runPhase1IfNeeded
+  readonly runPhase1bIfNeeded: typeof runPhase1bIfNeeded
   readonly runPhase2aIfNeeded: typeof runPhase2aIfNeeded
   readonly runPhase2bIfNeeded: typeof runPhase2bIfNeeded
   readonly saveConsolidatedManifest: typeof saveConsolidatedManifest
@@ -205,6 +211,7 @@ const defaultBehaviorAuditDeps: BehaviorAuditDeps = {
   loadOrCreateProgress,
   rebuildReportsFromStoredResults,
   runPhase1IfNeeded,
+  runPhase1bIfNeeded,
   runPhase2aIfNeeded,
   runPhase2bIfNeeded,
   saveConsolidatedManifest,
@@ -234,6 +241,7 @@ export async function runBehaviorAudit(deps: BehaviorAuditDeps = defaultBehavior
   }
 
   await deps.runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
+  await deps.runPhase1bIfNeeded(progress)
   const dirtyFromPhase2a = await deps.runPhase2aIfNeeded(
     progress,
     updatedManifest,
