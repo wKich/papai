@@ -239,26 +239,18 @@ export async function runPhase1(
   }
   progress.phase1.status = 'in-progress'
   await resolvedDeps.saveProgress(progress)
-  const limit = pLimit(1)
-  let currentManifest = manifest
-  let anyPhase1Changed = false
-  await Promise.all(
+  const limit = pLimit(4)
+  const fileResults = await Promise.all(
     testFiles.map((f, i) =>
-      limit(async () => {
-        const result = await processTestFile(
-          f,
-          progress,
-          i + 1,
-          testFiles.length,
-          selectedTestKeys,
-          currentManifest,
-          resolvedDeps,
-        )
-        currentManifest = result.manifest
-        if (result.anyPhase1Changed) anyPhase1Changed = true
-      }),
+      limit(() => processTestFile(f, progress, i + 1, testFiles.length, selectedTestKeys, manifest, resolvedDeps)),
     ),
   )
+  const anyPhase1Changed = fileResults.some((r) => r.anyPhase1Changed)
+  const mergedManifest = fileResults.reduce<IncrementalManifest>(
+    (acc, r) => ({ ...acc, tests: { ...acc.tests, ...r.manifest.tests } }),
+    manifest,
+  )
+  await resolvedDeps.saveManifest(mergedManifest)
   if (anyPhase1Changed && !hasSelectedPhase1Work) {
     resolvedDeps.resetPhase1bAndBelow(progress)
   }
