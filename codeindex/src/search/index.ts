@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
 
-import type { SearchResult } from '../types.js'
+import type { RankedSearchResult, SearchResult } from '../types.js'
 import { runExactSearch, type SearchFilters } from './exact.js'
 import { runFtsSearch } from './fts.js'
 import { rerankSearchResults } from './rank.js'
@@ -22,22 +22,20 @@ export interface ImpactResult {
 export const searchSymbols = (
   db: Database,
   input: Readonly<{ query: string; limit: number } & SearchFilters>,
-): readonly SearchResult[] => {
+): readonly RankedSearchResult[] => {
   const exactResults = runExactSearch(db, input.query, input.limit, input)
   const ftsResults = runFtsSearch(db, input.query, input.limit, input)
-  const deduped = [...exactResults]
-  for (const result of ftsResults) {
-    if (!deduped.some((entry) => entry.symbolKey === result.symbolKey)) {
-      deduped.push(result)
-    }
-  }
+  const deduped: readonly SearchResult[] = [
+    ...exactResults,
+    ...ftsResults.filter((fts) => !exactResults.some((exact) => exact.symbolKey === fts.symbolKey)),
+  ]
   return rerankSearchResults(deduped).slice(0, input.limit)
 }
 
-export const findSymbolCandidates = (db: Database, query: string, limit: number): readonly SearchResult[] => {
+export const findSymbolCandidates = (db: Database, query: string, limit: number): readonly RankedSearchResult[] => {
   const exactResults = runExactSearch(db, query, limit, {})
   if (exactResults.length > 0) {
-    return exactResults
+    return rerankSearchResults(exactResults)
   }
   return searchSymbols(db, { query, limit })
 }

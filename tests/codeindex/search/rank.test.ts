@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { rerankSearchResults, scoreSearchResult } from '../../codeindex/src/search.js'
-import type { SearchResult } from '../../codeindex/src/types.js'
+import { rerankSearchResults, scoreSearchResult } from '../../../codeindex/src/search/rank.js'
+import type { SearchResult } from '../../../codeindex/src/types.js'
 
 const localResult: SearchResult = {
   symbolKey: 'a',
@@ -35,44 +35,28 @@ const exportedResult: SearchResult = {
 
 describe('scoreSearchResult', () => {
   test('computes scope + match score for an exported exact match', () => {
-    const score = scoreSearchResult(exportedResult)
-    expect(score).toBe(400 + 500)
+    expect(scoreSearchResult(exportedResult)).toBe(400 + 500)
   })
 
   test('computes scope + match score for a local exact match', () => {
-    const score = scoreSearchResult(localResult)
-    expect(score).toBe(100 + 425)
+    expect(scoreSearchResult(localResult)).toBe(100 + 425)
   })
 
   test('returns scope-only score when matchReason is non-exact', () => {
-    const ftsResult: SearchResult = {
-      ...exportedResult,
-      matchReason: 'fts identifier_terms',
-    }
+    const ftsResult: SearchResult = { ...exportedResult, matchReason: 'fts identifier_terms' }
     expect(scoreSearchResult(ftsResult)).toBe(400)
   })
 })
 
 describe('rerankSearchResults', () => {
-  test('prefers exported and module-level hits over locals', () => {
-    const ranked = rerankSearchResults([localResult, exportedResult])
-
-    expect(ranked.map((entry) => entry.symbolKey)).toEqual(['b', 'a'])
-  })
-
   test('attaches rankScore to each result', () => {
     const ranked = rerankSearchResults([localResult, exportedResult])
-
-    expect(ranked[0]!.rankScore).toBe(400 + 500)
-    expect(ranked[1]!.rankScore).toBe(100 + 425)
+    expect(ranked[0]!.rankScore).toBe(900)
+    expect(ranked[1]!.rankScore).toBe(525)
   })
 
-  test('returns RankedSearchResult with all SearchResult fields plus rankScore', () => {
-    const ranked = rerankSearchResults([exportedResult])
-    const first = ranked[0]!
-
-    expect(first.symbolKey).toBe('b')
-    expect(first.qualifiedName).toBe('src/bar#helper')
-    expect(first.rankScore).toBe(900)
+  test('sorts by descending rankScore', () => {
+    const ranked = rerankSearchResults([localResult, exportedResult])
+    expect(ranked.map((r) => r.symbolKey)).toEqual(['b', 'a'])
   })
 })

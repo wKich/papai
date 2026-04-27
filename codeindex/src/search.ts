@@ -7,4 +7,4 @@ export {
   type ImpactLookupInput,
   type ImpactResult,
 } from './search/index.js'
-export { rerankSearchResults } from './search/rank.js'
+export { rerankSearchResults, scoreSearchResult } from './search/rank.js'

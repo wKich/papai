@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createCodeindexServer } from '../../codeindex/src/mcp.js'
+import { createCodeindexServer } from '../../../codeindex/src/mcp/server.js'
 
 describe('createCodeindexServer', () => {
-  test('registers the Tier 1 MCP tools', () => {
+  test('registers tools with output schemas and returns structured responses', () => {
     const server = createCodeindexServer({
       codeSearch: () => Promise.resolve([]),
       codeSymbol: () => Promise.resolve([]),
