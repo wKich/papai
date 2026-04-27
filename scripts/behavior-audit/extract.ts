@@ -8,19 +8,15 @@ import {
   getSelectedTests,
   markFileDoneWhenSelectedTestsPersisted,
   reconcileSelectedTestsAfterPersist,
-  resolveKeywords,
   shouldSkipCompletedFile,
   writeValidBehaviorsForFile,
 } from './extract-phase1-helpers.js'
 import { buildExtractionPrompt } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { type IncrementalManifest, saveManifest } from './incremental.js'
-import { resolveKeywordsWithRetry } from './keyword-resolver-agent.js'
-import { loadKeywordVocabulary, saveKeywordVocabulary } from './keyword-vocabulary.js'
+import { normalizeKeywordSlug } from './keyword-vocabulary.js'
 import {
-  addAgentUsage,
   createPhaseStats,
-  type AgentUsage,
   type PhaseStats,
   recordItemDone,
   recordItemFailed,
@@ -47,9 +43,6 @@ interface Phase1RunInput {
 
 export interface Phase1Deps {
   readonly extractWithRetry: typeof extractWithRetry
-  readonly resolveKeywordsWithRetry: typeof resolveKeywordsWithRetry
-  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
-  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
   readonly updateManifestForExtractedTest: typeof updateManifestForExtractedTest
   readonly saveManifest: typeof saveManifest
   readonly saveProgress: typeof saveProgress
@@ -68,9 +61,6 @@ export interface Phase1Deps {
 
 const defaultPhase1Deps: Phase1Deps = {
   extractWithRetry,
-  resolveKeywordsWithRetry,
-  loadKeywordVocabulary,
-  saveKeywordVocabulary,
   updateManifestForExtractedTest,
   saveManifest,
   saveProgress,
@@ -114,21 +104,20 @@ async function extractAndSave(
     if (deps.stats !== undefined) recordItemFailed(deps.stats)
     return null
   }
-  let combinedUsage: AgentUsage = extracted.usage
-  const keywordsResult = await resolveKeywords(extracted.result.candidateKeywords, testKey, progress, deps)
-  if (keywordsResult === null) {
+  const normalizedKeywords = [...new Set(extracted.result.keywords.map((k) => normalizeKeywordSlug(k)).filter(Boolean))]
+  if (normalizedKeywords.length === 0) {
+    deps.markTestFailed(progress, testKey, 'extraction produced no valid canonical keywords')
     deps.log.log(`(${formatElapsedMs(performance.now() - startMs)}) ✗`)
-    if (deps.stats !== undefined) recordItemFailed(deps.stats, combinedUsage)
+    if (deps.stats !== undefined) recordItemFailed(deps.stats, extracted.usage)
     return null
   }
-  combinedUsage = addAgentUsage(combinedUsage, keywordsResult.usage)
   const record = buildBehaviorRecord(
     testCase,
     testFilePath,
     testKey,
     extracted.result.behavior,
     extracted.result.context,
-    keywordsResult.keywords,
+    normalizedKeywords,
   )
   const { manifest: updatedManifest, phase1Changed } = await deps.updateManifestForExtractedTest({
     manifest,
@@ -136,8 +125,8 @@ async function extractAndSave(
     testCase,
     extractedBehavior: record,
   })
-  deps.log.log(formatPerItemSuffix(combinedUsage, performance.now() - startMs))
-  if (deps.stats !== undefined) recordItemDone(deps.stats, combinedUsage)
+  deps.log.log(formatPerItemSuffix(extracted.usage, performance.now() - startMs))
+  if (deps.stats !== undefined) recordItemDone(deps.stats, extracted.usage)
   return { record, manifest: updatedManifest, phase1Changed }
 }
 

@@ -31,7 +31,7 @@ export interface ImplementationCheck {
   readonly status: PlanStatus
   readonly is_fully_implemented: boolean
   readonly evidence: string
-  readonly spec_path?: string
+  readonly spec_path: string | undefined
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,10 +76,18 @@ export function parseArgs(argv: readonly string[]): CliArgs {
   const dryRun = args.includes('--dry-run')
 
   const filterIdx = args.indexOf('--filter')
-  const filter = filterIdx >= 0 ? (args[filterIdx + 1] ?? null) : null
+  let filter: string | null = null
+  if (filterIdx >= 0) {
+    const arg = args[filterIdx + 1]
+    if (arg !== undefined) filter = arg
+  }
 
   const portIdx = args.indexOf('--port')
-  const port = portIdx >= 0 ? parseInt(args[portIdx + 1] ?? '4097', 10) : 4097
+  let port = 4097
+  if (portIdx >= 0) {
+    const portArg = args[portIdx + 1]
+    port = portArg === undefined ? 4097 : parseInt(portArg, 10)
+  }
 
   return { dryRun, filter, port }
 }
@@ -135,7 +143,7 @@ export async function resolveSpecFile(
     candidate.startsWith('docs/') ? join(projectRoot, candidate) : join(specsDir, basename(candidate)),
   )
 
-  const existsResults = await Promise.all(absolutePaths.map(fileExists))
+  const existsResults = await Promise.all(absolutePaths.map((p) => fileExists(p)))
 
   for (const [i, exists] of existsResults.entries()) {
     const path = absolutePaths[i]

@@ -3,11 +3,12 @@
  *
  * Walks through docs/superpowers/plans/, checks each plan's implementation
  * status via opencode, writes ADR documents for fully-implemented plans
- * using the /adr skill, and archives both the plan and its spec file.
+ * using the architecture-decision-records skill, and archives both the plan
+ * and its spec file.
  *
  * Prerequisites:
  *   - opencode installed and in PATH
- *   - /adr skill configured in .opencode/commands/adr.md
+ *   - architecture-decision-records skill in .agents/skills/
  *
  * Usage:
  *   bun scripts/plan-adr-workflow.ts
@@ -41,7 +42,8 @@ type OpencodeClient = Awaited<ReturnType<typeof createOpencode>>['client']
 
 async function createSession(client: OpencodeClient, title: string): Promise<string> {
   const result = await client.session.create({ title })
-  const sessionID = result.data?.id
+  const sessionData = result.data
+  const sessionID = sessionData === undefined ? undefined : sessionData.id
   if (sessionID === undefined || sessionID === '') throw new Error('session.create returned no id')
   return sessionID
 }
@@ -59,9 +61,12 @@ async function deleteSession(client: OpencodeClient, sessionID: string): Promise
 function isImplementationCheck(value: unknown): value is ImplementationCheck {
   if (typeof value !== 'object' || value === null) return false
   return (
-    typeof (value as { status?: unknown })['status'] === 'string' &&
-    typeof (value as { is_fully_implemented?: unknown })['is_fully_implemented'] === 'boolean' &&
-    typeof (value as { evidence?: unknown })['evidence'] === 'string'
+    'status' in value &&
+    typeof value.status === 'string' &&
+    'is_fully_implemented' in value &&
+    typeof value.is_fully_implemented === 'boolean' &&
+    'evidence' in value &&
+    typeof value.evidence === 'string'
   )
 }
 
@@ -94,19 +99,34 @@ async function checkImplementationStatus(
     },
   })
 
-  const structured: unknown = result.data?.info?.structured
+  const responseData = result.data
+  if (responseData === undefined) throw new Error('session.prompt returned no data')
+  const responseInfo = responseData.info
+  const structured: unknown = responseInfo === undefined ? undefined : responseInfo.structured
   if (!isImplementationCheck(structured)) throw new Error('implementation check returned no structured output')
   return structured
 }
 
 // ─── ADR Command ─────────────────────────────────────────────────────────────
 
-async function runAdrCommand(client: OpencodeClient, sessionID: string): Promise<void> {
-  // /adr is a custom skill command configured in .opencode/commands/adr.md
-  await client.session.command({
+async function runAdrCommand(client: OpencodeClient, sessionID: string, planFile: string): Promise<void> {
+  await client.session.prompt({
     sessionID,
-    command: 'adr',
-    arguments: '',
+    parts: [
+      {
+        type: 'text',
+        text: [
+          `Use the architecture-decision-records skill to write an ADR for the decision implemented in @docs/superpowers/plans/${planFile}.`,
+          '',
+          'Steps:',
+          '1. Load the architecture-decision-records skill',
+          '2. List existing files in docs/adr/ to determine the next sequential ADR number',
+          '3. Write the ADR using the MADR template from the skill with status "Accepted"',
+          '4. Save it to docs/adr/<NNNN>-<kebab-case-title>.md',
+          '5. The ADR must document the architectural decision: what was chosen, why, and the consequences',
+        ].join('\n'),
+      },
+    ],
   })
 }
 
@@ -134,10 +154,10 @@ async function processPlan(
     }
 
     if (dryRun) {
-      console.log('  [dry-run] would run /adr command')
+      console.log('  [dry-run] would run architecture-decision-records skill')
     } else {
-      await runAdrCommand(client, sessionID)
-      console.log('  /adr command completed')
+      await runAdrCommand(client, sessionID, planFile)
+      console.log('  ADR skill completed')
     }
 
     const specPath = await resolveSpecFile(check.spec_path, specRefFromContent, SPECS_DIR, PROJECT_ROOT)
@@ -249,7 +269,7 @@ async function main(): Promise<void> {
     const results = await runPlanSequence(client, planFiles, args.dryRun)
     printSummary(results)
   } finally {
-    opencode?.server.close()
+    if (opencode !== null) opencode.server.close()
   }
 }
 

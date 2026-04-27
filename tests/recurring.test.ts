@@ -257,14 +257,13 @@ describe('recurring tasks', () => {
     })
 
     test('returns missed dates when createMissed is true', () => {
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
       const task = createRecurringTask({
         userId: USER_ID,
         projectId: PROJECT_ID,
         title: 'Missed Test',
         triggerType: 'cron',
         rrule: 'FREQ=MINUTELY',
-        dtstartUtc: tenMinutesAgo,
+        dtstartUtc: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
       })
       pauseRecurringTask(task.id)
       // Set nextRun to 5 minutes ago so there are missed occurrences

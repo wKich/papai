@@ -10,7 +10,7 @@ import { makeAuditTools } from './tools.js'
 const ExtractionResultSchema = z.object({
   behavior: z.string(),
   context: z.string(),
-  candidateKeywords: z.array(z.string()).min(8).max(16),
+  keywords: z.array(z.string()).min(1).max(20),
 })
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>
@@ -34,7 +34,7 @@ const SYSTEM_PROMPT = `You are a senior software analyst examining a unit test f
 Return structured output with:
 - behavior: plain-language feature description beginning with "When..."
 - context: technical implementation summary for developers
-- candidateKeywords: 8-16 canonical lowercase slug keywords describing the behavior
+- keywords: 1-20 canonical lowercase slug keywords describing the behavior
 
 Keywords must be short canonical slugs like group-targeting or identity-resolution.`
 

@@ -71,12 +71,7 @@ describe('set_my_identity tool', () => {
     const tool = makeSetMyIdentityTool(
       createMinimalTaskProviderStub({
         identityResolver: {
-          searchUsers: mock((query: string) => {
-            if (query === 'jsmith') {
-              return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-            }
-            return Promise.resolve([])
-          }),
+          searchUsers: mock(searchUsersJsmith),
         },
       }),
       testUserId,
@@ -92,12 +87,7 @@ describe('set_my_identity tool', () => {
     const tool = makeSetMyIdentityTool(
       createMinimalTaskProviderStub({
         identityResolver: {
-          searchUsers: mock((query: string) => {
-            if (query === 'jsmith') {
-              return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-            }
-            return Promise.resolve([])
-          }),
+          searchUsers: mock(searchUsersJsmith),
         },
       }),
       testUserId,
@@ -122,12 +112,7 @@ describe('set_my_identity tool', () => {
     const tool = makeSetMyIdentityTool(
       createMinimalTaskProviderStub({
         identityResolver: {
-          searchUsers: mock((query: string) => {
-            if (query === 'jsmith') {
-              return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-            }
-            return Promise.resolve([])
-          }),
+          searchUsers: mock(searchUsersJsmith),
         },
       }),
       testUserId,
@@ -145,12 +130,7 @@ describe('set_my_identity tool', () => {
     const aliceTool = makeSetMyIdentityTool(
       createMinimalTaskProviderStub({
         identityResolver: {
-          searchUsers: mock((query: string) => {
-            if (query === 'jsmith') {
-              return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-            }
-            return Promise.resolve([])
-          }),
+          searchUsers: mock(searchUsersJsmith),
         },
       }),
       'user-alice',
@@ -220,12 +200,7 @@ describe('set_my_identity tool', () => {
     const tool = makeSetMyIdentityTool(
       createMinimalTaskProviderStub({
         identityResolver: {
-          searchUsers: mock((query: string) => {
-            if (query === 'jsmith') {
-              return Promise.resolve([{ id: 'user-123', login: 'jsmith', name: 'John Smith' }])
-            }
-            return Promise.resolve([])
-          }),
+          searchUsers: mock(searchUsersJsmith),
         },
       }),
       testUserId,

@@ -58,34 +58,6 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
 }
 
-function isKeywordVocabularyEntry(value: unknown): value is {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-} {
-  return (
-    isObject(value) &&
-    'slug' in value &&
-    typeof value['slug'] === 'string' &&
-    'description' in value &&
-    typeof value['description'] === 'string' &&
-    'createdAt' in value &&
-    typeof value['createdAt'] === 'string' &&
-    'updatedAt' in value &&
-    typeof value['updatedAt'] === 'string'
-  )
-}
-
-export function isKeywordVocabulary(value: unknown): value is readonly {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-}[] {
-  return Array.isArray(value) && value.every((entry) => isKeywordVocabularyEntry(entry))
-}
-
 function isManifestTestEntry(value: unknown): value is ManifestTestEntry {
   return (
     isObject(value) &&

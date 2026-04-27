@@ -53,22 +53,9 @@ test('runPhase1 does not publish manifest or progress completion before extracte
             result: {
               behavior: 'When a user targets a group, the bot routes the request correctly.',
               context: 'Routes through group context selection.',
-              candidateKeywords: ['group-targeting'],
+              keywords: ['group-targeting'],
             },
             usage: { inputTokens: 100, outputTokens: 50, toolCalls: 0, toolNames: [] },
-          }),
-        resolveKeywordsWithRetry: () =>
-          Promise.resolve({
-            result: {
-              keywords: ['group-targeting'],
-              appendedEntries: [
-                {
-                  slug: 'group-targeting',
-                  description: 'Targeting work at a group context.',
-                },
-              ],
-            },
-            usage: { inputTokens: 50, outputTokens: 20, toolCalls: 0, toolNames: [] },
           }),
         writeValidBehaviorsForFile: () => Promise.reject(new Error('disk full')),
       },

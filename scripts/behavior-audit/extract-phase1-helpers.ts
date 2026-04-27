@@ -1,55 +1,10 @@
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
 import { getDomain } from './domain-map.js'
-import { buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
-import type { ResolverResult } from './keyword-resolver-agent.js'
-import {
-  loadKeywordVocabulary,
-  normalizeKeywordSlug,
-  normalizeKeywordVocabularyEntries,
-  saveKeywordVocabulary,
-  stampVocabularyEntry,
-} from './keyword-vocabulary.js'
-import type { AgentResult, AgentUsage } from './phase-stats.js'
-import { markFileDone, markTestFailed } from './progress.js'
+import { markFileDone } from './progress.js'
 import type { Progress } from './progress.js'
 import type { TestCase } from './test-parser.js'
-
-export interface ResolveKeywordsDeps {
-  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
-  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
-  readonly resolveKeywordsWithRetry: (prompt: string, attempt: number) => Promise<AgentResult<ResolverResult> | null>
-  readonly markTestFailed: typeof markTestFailed
-}
-
-export async function resolveKeywords(
-  candidateKeywords: readonly string[],
-  testKey: string,
-  progress: Progress,
-  deps: ResolveKeywordsDeps,
-): Promise<{ keywords: readonly string[]; usage: AgentUsage } | null> {
-  const existingVocabulary = (await deps.loadKeywordVocabulary()) ?? []
-  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
-  const resolved = await deps.resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
-  if (resolved === null) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution failed')
-    return null
-  }
-  const nextVocabulary = normalizeKeywordVocabularyEntries([
-    ...existingVocabulary,
-    ...resolved.result.appendedEntries.map((entry) => stampVocabularyEntry(entry)),
-  ])
-  await deps.saveKeywordVocabulary(nextVocabulary)
-  const normalizedKeywords = [
-    ...new Set(resolved.result.keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean)),
-  ]
-  if (normalizedKeywords.length === 0) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution produced no valid canonical keywords')
-    return null
-  }
-  return { keywords: normalizedKeywords, usage: resolved.usage }
-}
 
 export function getSelectedTests(
   testFilePath: string,
