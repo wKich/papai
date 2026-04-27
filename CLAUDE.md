@@ -290,28 +290,35 @@ Detailed conventions live in path-scoped `CLAUDE.md` files and `.github/instruct
 
 ## Codebase Search Protocol
 
-When working inside this project, you **MUST prefer** the `codeindex` MCP server tools for structural code queries.
+When working inside this project, prefer the `codeindex` MCP server tools for structural code queries.
 
-### Preferred tool priority
+### Tool selection
 
-1. **First** — Use `codeindex` MCP tools:
-   - `code_search` for keyword/FTS lookups, symbol names, and concept queries
-   - `code_symbol` for exact symbol resolution (qualified name, export name, or local name)
-   - `code_impact` for finding callers, references, and dependents of a symbol
-   - `code_index` to trigger incremental reindexing when stale data is suspected
-2. **Fallback** — Use `grep` or `glob` ONLY for files outside the indexed source tree (config files, markdown, `.json`, non-JS/TS assets)
-3. **Last resort** — Use `read` on individual files when `codeindex` returns no results and the file is known to exist
+| When                                                      | Use                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------- |
+| You know the exact symbol, export name, or qualified name | `code_symbol` with `limit: 5`                           |
+| Keyword, concept, or exploratory search                   | `code_search` with `scopeTiers: ["exported", "member"]` |
+| You found a symbol and need callers/references/dependents | `code_impact`                                           |
+| Stale data suspected after edits                          | `code_index` with `mode: "incremental"`                 |
 
-### Never do
+### Query-shaping tips
 
-- Do NOT use `grep` to search for symbol definitions or usage inside `src/` or `client/`
-- Do NOT use `glob` with `src/**/*.ts` to discover symbols by filename
-- Do NOT use `task explore` for structural codebase navigation when the repository is indexed
-- Do NOT run `bun run codeindex/src/cli.ts ...` directly in conversation; use the MCP tools instead
+- Use `kinds` to narrow results to specific declarations (e.g., `["function_declaration", "class_declaration", "interface_declaration"]`).
+- Use `scopeTiers` to skip local-variable noise. Prefer `["exported", "member"]` unless local symbols are intentionally needed.
+- Use `code_symbol` for names you know (e.g., `resolveMattermostUserId`, `src/chat/mattermost/index#MattermostChatProvider>resolveUserId`).
+- Use `code_search` for concepts (e.g., `mattermost user identity`, `task provider resolver`).
 
-### Rationale
+### Fallback
 
-The `codeindex` server provides resolved, symbol-aware search with exact matching, FTS rank, cross-reference impact analysis, and scope-tier filtering. It is faster, more precise, and avoids token-heavy file-globbing or regex scanning.
+1. **Fallback** — Use `grep` or `glob` ONLY for files outside the indexed source tree (config files, markdown, `.json`, non-JS/TS assets).
+2. **Last resort** — Use `read` on individual files when `codeindex` returns no results and the file is known to exist.
+
+### Do not
+
+- Do NOT use `grep` to search for symbol definitions or usage inside `src/` or `client/`.
+- Do NOT use `glob` with `src/**/*.ts` to discover symbols by filename.
+- Do NOT use `task explore` for structural codebase navigation when the repository is indexed.
+- Do NOT run `bun run codeindex/src/cli.ts ...` directly in conversation; use the MCP tools instead.
 
 ### Auto-reindexing
 
