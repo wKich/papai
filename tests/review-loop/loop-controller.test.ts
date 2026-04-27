@@ -6,7 +6,7 @@ import { runReviewLoop } from '../../review-loop/src/loop-controller.js'
 import { createRunState } from '../../review-loop/src/run-state.js'
 import { cleanupTempDirs, createReviewLoopConfigFixture, makeTempDir } from './test-helpers.js'
 
-const createSilentLog = (): { log: (message: string) => void; messages: string[] } => {
+function createSilentLog(): { log: (message: string) => void; messages: string[] } {
   const messages: string[] = []
   return {
     log: (message: string): void => {
@@ -14,6 +14,34 @@ const createSilentLog = (): { log: (message: string) => void; messages: string[]
     },
     messages,
   }
+}
+
+function reviewerThatFindsRaceCondition(): () => Promise<{
+  text: string
+  stopReason: string
+}> {
+  let reviewerPromptCount = 0
+  return () =>
+    Promise.resolve({
+      text: JSON.stringify({
+        round: (reviewerPromptCount += 1),
+        issues: [
+          {
+            title: 'Race condition in queue flush path',
+            severity: 'high',
+            summary: 'Two concurrent messages can bypass the intended lock.',
+            whyItMatters: 'This can produce stale assistant replies.',
+            evidence: 'src/message-queue/queue.ts lines 84-107',
+            file: 'src/message-queue/queue.ts',
+            lineStart: 84,
+            lineEnd: 107,
+            suggestedFix: 'Take the processing lock earlier.',
+            confidence: 0.92,
+          },
+        ],
+      }),
+      stopReason: 'end_turn',
+    })
 }
 
 afterEach(cleanupTempDirs)
@@ -201,7 +229,6 @@ describe('runReviewLoop', () => {
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
     const ledger = await createIssueLedger(runState.runDir)
-    let reviewerPromptCount = 0
 
     const result = await runReviewLoop({
       config,
@@ -209,29 +236,7 @@ describe('runReviewLoop', () => {
       ledger,
       reviewer: {
         availableCommands: ['review-code'],
-        promptText: () => {
-          reviewerPromptCount += 1
-          return Promise.resolve({
-            text: JSON.stringify({
-              round: reviewerPromptCount,
-              issues: [
-                {
-                  title: 'Race condition in queue flush path',
-                  severity: 'high',
-                  summary: 'Two concurrent messages can bypass the intended lock.',
-                  whyItMatters: 'This can produce stale assistant replies.',
-                  evidence: 'src/message-queue/queue.ts lines 84-107',
-                  file: 'src/message-queue/queue.ts',
-                  lineStart: 84,
-                  lineEnd: 107,
-                  suggestedFix: 'Take the processing lock earlier.',
-                  confidence: 0.92,
-                },
-              ],
-            }),
-            stopReason: 'end_turn',
-          })
-        },
+        promptText: reviewerThatFindsRaceCondition(),
       },
       fixer: {
         availableCommands: ['verify-issue', 'fix-issue'],
@@ -430,7 +435,6 @@ describe('runReviewLoop', () => {
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
     const ledger = await createIssueLedger(runState.runDir)
-    let reviewerPromptCount = 0
 
     const result = await runReviewLoop({
       config,
@@ -438,29 +442,7 @@ describe('runReviewLoop', () => {
       ledger,
       reviewer: {
         availableCommands: ['review-code'],
-        promptText: () => {
-          reviewerPromptCount += 1
-          return Promise.resolve({
-            text: JSON.stringify({
-              round: reviewerPromptCount,
-              issues: [
-                {
-                  title: 'Race condition in queue flush path',
-                  severity: 'high',
-                  summary: 'Two concurrent messages can bypass the intended lock.',
-                  whyItMatters: 'This can produce stale assistant replies.',
-                  evidence: 'src/message-queue/queue.ts lines 84-107',
-                  file: 'src/message-queue/queue.ts',
-                  lineStart: 84,
-                  lineEnd: 107,
-                  suggestedFix: 'Take the processing lock earlier.',
-                  confidence: 0.92,
-                },
-              ],
-            }),
-            stopReason: 'end_turn',
-          })
-        },
+        promptText: reviewerThatFindsRaceCondition(),
       },
       fixer: {
         availableCommands: ['verify-issue', 'fix-issue'],
