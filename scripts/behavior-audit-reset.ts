@@ -8,7 +8,8 @@ import {
   EVALUATED_DIR,
   STORIES_DIR,
 } from './behavior-audit/config.js'
-import { loadProgress, resetPhase2AndPhase3, resetPhase3, saveProgress } from './behavior-audit/progress.js'
+import { loadProgress, saveProgress } from './behavior-audit/progress-io.js'
+import { resetPhase2AndPhase3, resetPhase3 } from './behavior-audit/progress.js'
 
 export type ResetTarget = 'phase2' | 'phase3' | 'all'
 

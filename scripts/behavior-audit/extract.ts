@@ -24,14 +24,8 @@ import {
   formatPerItemSuffix,
   formatPhaseSummary,
 } from './phase-stats.js'
-import {
-  type Progress,
-  getFailedTestAttempts,
-  markTestDone,
-  markTestFailed,
-  resetPhase2AndPhase3,
-  saveProgress,
-} from './progress.js'
+import { saveProgress } from './progress-io.js'
+import { type Progress, getFailedTestAttempts, markTestDone, markTestFailed, resetPhase2AndPhase3 } from './progress.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
 
 interface Phase1RunInput {

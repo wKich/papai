@@ -18,8 +18,9 @@ import {
   saveManifest,
   selectIncrementalWork,
 } from './behavior-audit/incremental.js'
+import { loadProgress, saveProgress } from './behavior-audit/progress-io.js'
 import type { Progress } from './behavior-audit/progress.js'
-import { createEmptyProgress, loadProgress, saveProgress } from './behavior-audit/progress.js'
+import { createEmptyProgress } from './behavior-audit/progress.js'
 import { rebuildReportsFromStoredResults } from './behavior-audit/report-writer.js'
 import type { ParsedTestFile } from './behavior-audit/test-parser.js'
 import { parseTestFile } from './behavior-audit/test-parser.js'

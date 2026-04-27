@@ -981,21 +981,21 @@ describe('behavior-audit incremental manifest', () => {
     expect(a).not.toBe(b)
   })
 
-  test('createEmptyProgress returns checkpoint-only version 4 progress', async () => {
+  test('createEmptyProgress returns checkpoint-only version 5 progress', async () => {
     const mod = await loadProgressModule(crypto.randomUUID())
     const progress = mod.createEmptyProgress(2)
 
-    expect(progress.version).toBe(4)
+    expect(progress.version).toBe(5)
     expect(progress.phase2a).not.toHaveProperty('classifiedBehaviors')
     expect(progress.phase2b).not.toHaveProperty('consolidations')
     expect(progress.phase3).not.toHaveProperty('evaluations')
   })
 
-  test('validateOrMigrateProgress resets non-V4 progress to fresh V4', async () => {
+  test('validateOrMigrateProgress resets non-V4/V5 progress to fresh V5', async () => {
     const { validateOrMigrateProgress } = await loadProgressMigrateModule()
     const result = validateOrMigrateProgress({ startedAt: '2025-01-01T00:00:00Z', phase1: {} })
     expect(result).not.toBeNull()
-    expect(result!.version).toBe(4)
+    expect(result!.version).toBe(5)
     expect(result!.phase1.status).toBe('not-started')
   })
 
@@ -1043,7 +1043,7 @@ describe('behavior-audit incremental manifest', () => {
         }),
       loadOrCreateProgress: () =>
         Promise.resolve({
-          version: 4,
+          version: 5,
           startedAt: '2026-04-22T12:00:00.000Z',
           phase1: {
             status: 'not-started',
@@ -1051,6 +1051,12 @@ describe('behavior-audit incremental manifest', () => {
             failedTests: {},
             completedFiles: [],
             stats: { filesTotal: 1, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+          },
+          phase1b: {
+            status: 'not-started',
+            lastRunAt: null,
+            threshold: 0,
+            stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
           },
           phase2a: {
             status: 'not-started',

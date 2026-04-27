@@ -163,7 +163,7 @@ export function mockAuditBehaviorConfig(root: string, overrides: Partial<Behavio
 
 export function createEmptyProgressFixture(filesTotal: number): Progress {
   return {
-    version: 4,
+    version: 5,
     startedAt: '2026-04-17T12:00:00.000Z',
     phase1: {
       status: 'not-started',
@@ -171,6 +171,12 @@ export function createEmptyProgressFixture(filesTotal: number): Progress {
       failedTests: {},
       completedFiles: [],
       stats: { filesTotal, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+    },
+    phase1b: {
+      status: 'not-started',
+      lastRunAt: null,
+      threshold: 0,
+      stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
     },
     phase2a: {
       status: 'not-started',

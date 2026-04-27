@@ -21,13 +21,8 @@ import {
   recordItemSkipped,
 } from './phase-stats.js'
 import type { AgentUsage } from './phase-stats.js'
-import {
-  getFailedFeatureKeyAttempts,
-  markFeatureKeyDone,
-  markFeatureKeyFailed,
-  resetPhase3,
-  saveProgress,
-} from './progress.js'
+import { saveProgress } from './progress-io.js'
+import { getFailedFeatureKeyAttempts, markFeatureKeyDone, markFeatureKeyFailed, resetPhase3 } from './progress.js'
 import type { Progress } from './progress.js'
 import { writeConsolidatedFile } from './report-writer.js'
 

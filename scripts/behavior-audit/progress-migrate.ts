@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { MAX_RETRIES } from './config.js'
-import { emptyPhase2a, emptyPhase2b, emptyPhase3, type Progress } from './progress.js'
+import { emptyPhase1b, emptyPhase2a, emptyPhase2b, emptyPhase3, type Progress } from './progress.js'
 
 const FailedEntrySchema = z.object({
   error: z.string(),
@@ -19,6 +19,19 @@ const Phase1CheckpointSchema = z.strictObject({
     filesDone: z.number(),
     testsExtracted: z.number(),
     testsFailed: z.number(),
+  }),
+})
+
+const Phase1bCheckpointSchema = z.strictObject({
+  status: z.enum(['not-started', 'in-progress', 'done']),
+  lastRunAt: z.string().nullable(),
+  threshold: z.number(),
+  stats: z.object({
+    slugsBefore: z.number(),
+    slugsAfter: z.number(),
+    mergesApplied: z.number(),
+    behaviorsUpdated: z.number(),
+    keywordsRemapped: z.number(),
   }),
 })
 
@@ -65,6 +78,16 @@ const ProgressV4Schema = z.strictObject({
   phase3: Phase3CheckpointSchema,
 })
 
+const ProgressV5Schema = z.strictObject({
+  version: z.literal(5),
+  startedAt: z.string(),
+  phase1: Phase1CheckpointSchema,
+  phase1b: Phase1bCheckpointSchema,
+  phase2a: Phase2aCheckpointSchema,
+  phase2b: Phase2bCheckpointSchema,
+  phase3: Phase3CheckpointSchema,
+})
+
 function normalizePhase2aFailedAttempts(progress: Progress): Progress {
   return {
     ...progress,
@@ -86,18 +109,23 @@ function normalizePhase2aFailedAttempts(progress: Progress): Progress {
   }
 }
 
-function toVersion4Progress(input: {
+function toVersion5Progress(input: {
   readonly startedAt: string
   readonly phase1: Progress['phase1']
+  readonly phase1b?: Partial<Progress['phase1b']>
   readonly phase2a?: Partial<Progress['phase2a']>
   readonly phase2b?: Partial<Progress['phase2b']>
   readonly phase3?: Partial<Progress['phase3']>
 }): Progress {
   return normalizePhase2aFailedAttempts(
-    ProgressV4Schema.parse({
-      version: 4,
+    ProgressV5Schema.parse({
+      version: 5,
       startedAt: input.startedAt,
       phase1: input.phase1,
+      phase1b: {
+        ...emptyPhase1b(),
+        ...input.phase1b,
+      },
       phase2a: {
         ...emptyPhase2a(),
         ...input.phase2a,
@@ -115,7 +143,7 @@ function toVersion4Progress(input: {
 }
 
 function createIncompatibleResetProgress(startedAt: string): Progress {
-  return toVersion4Progress({
+  return toVersion5Progress({
     startedAt,
     phase1: {
       status: 'not-started',
@@ -128,8 +156,19 @@ function createIncompatibleResetProgress(startedAt: string): Progress {
 }
 
 export function validateOrMigrateProgress(raw: unknown): Progress | null {
+  const v5Result = ProgressV5Schema.safeParse(raw)
+  if (v5Result.success) return v5Result.data
+
   const v4Result = ProgressV4Schema.safeParse(raw)
-  if (v4Result.success) return v4Result.data
+  if (v4Result.success) {
+    return toVersion5Progress({
+      startedAt: v4Result.data.startedAt,
+      phase1: v4Result.data.phase1,
+      phase2a: v4Result.data.phase2a,
+      phase2b: v4Result.data.phase2b,
+      phase3: v4Result.data.phase3,
+    })
+  }
 
   if (typeof raw === 'object' && raw !== null && 'startedAt' in raw) {
     const startedAt = (raw as Record<string, unknown>)['startedAt']

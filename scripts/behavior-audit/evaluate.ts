@@ -27,14 +27,9 @@ import {
   recordItemDone,
   recordItemFailed,
 } from './phase-stats.js'
+import { saveProgress } from './progress-io.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedBehaviorAttempts,
-  isBehaviorCompleted,
-  markBehaviorDone,
-  markBehaviorFailed,
-  saveProgress,
-} from './progress.js'
+import { getFailedBehaviorAttempts, isBehaviorCompleted, markBehaviorDone, markBehaviorFailed } from './progress.js'
 import { readConsolidatedFile } from './report-writer.js'
 
 interface Phase3RunInput {

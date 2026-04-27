@@ -27,13 +27,9 @@ import {
   recordItemFailed,
   recordItemSkipped,
 } from './phase-stats.js'
+import { saveProgress } from './progress-io.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedClassificationAttempts,
-  markClassificationDone,
-  saveProgress,
-  setClassificationFailedAttempts,
-} from './progress.js'
+import { getFailedClassificationAttempts, markClassificationDone, setClassificationFailedAttempts } from './progress.js'
 
 type ClassificationProcessResult =
   | { readonly kind: 'reused'; readonly manifest: IncrementalManifest }
