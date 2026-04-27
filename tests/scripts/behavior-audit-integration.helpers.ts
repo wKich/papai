@@ -46,6 +46,12 @@ export interface BehaviorAuditTestConfig {
   readonly RETRY_BACKOFF_MS: readonly [number, number, number]
   readonly MAX_STEPS: number
   readonly EXCLUDED_PREFIXES: readonly string[]
+  readonly EMBEDDING_MODEL: string
+  readonly EMBEDDING_BASE_URL: string
+  readonly CONSOLIDATION_THRESHOLD: number
+  readonly CONSOLIDATION_MIN_CLUSTER_SIZE: number
+  readonly CONSOLIDATION_DRY_RUN: boolean
+  readonly CONSOLIDATION_EMBED_BATCH_SIZE: number
 }
 
 const DEFAULT_CONFIG = {
@@ -65,6 +71,12 @@ const DEFAULT_CONFIG = {
     'tests/review-loop/',
     'tests/types/',
   ] as const,
+  EMBEDDING_MODEL: '',
+  EMBEDDING_BASE_URL: 'http://localhost:1234/v1',
+  CONSOLIDATION_THRESHOLD: 0.92,
+  CONSOLIDATION_MIN_CLUSTER_SIZE: 2,
+  CONSOLIDATION_DRY_RUN: false,
+  CONSOLIDATION_EMBED_BATCH_SIZE: 100,
 } satisfies Omit<
   BehaviorAuditTestConfig,
   | 'PROJECT_ROOT'

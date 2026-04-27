@@ -74,6 +74,13 @@ export let VERBOSE = false
 
 export let EXCLUDED_PREFIXES: readonly string[] = DEFAULT_EXCLUDED_PREFIXES
 
+export let EMBEDDING_MODEL = ''
+export let EMBEDDING_BASE_URL = BASE_URL
+export let CONSOLIDATION_THRESHOLD = 0.92
+export let CONSOLIDATION_MIN_CLUSTER_SIZE = 2
+export let CONSOLIDATION_DRY_RUN = false
+export let CONSOLIDATION_EMBED_BATCH_SIZE = 100
+
 export function reloadBehaviorAuditConfig(): void {
   MODEL = resolveStringOverride('BEHAVIOR_AUDIT_MODEL', 'Gemma-4-26B-A4B')
   BASE_URL = resolveStringOverride('BEHAVIOR_AUDIT_BASE_URL', 'http://localhost:8000/v1')
@@ -114,6 +121,12 @@ export function reloadBehaviorAuditConfig(): void {
   MAX_STEPS = resolveNumberOverride('BEHAVIOR_AUDIT_MAX_STEPS', 20)
   VERBOSE = resolveStringOverride('BEHAVIOR_AUDIT_VERBOSE', '0') === '1'
   EXCLUDED_PREFIXES = resolveReadonlyStringList('BEHAVIOR_AUDIT_EXCLUDED_PREFIXES', DEFAULT_EXCLUDED_PREFIXES)
+  EMBEDDING_MODEL = resolveStringOverride('BEHAVIOR_AUDIT_EMBEDDING_MODEL', '')
+  EMBEDDING_BASE_URL = resolveStringOverride('BEHAVIOR_AUDIT_EMBEDDING_BASE_URL', BASE_URL)
+  CONSOLIDATION_THRESHOLD = resolveNumberOverride('BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD', 0.92)
+  CONSOLIDATION_MIN_CLUSTER_SIZE = resolveNumberOverride('BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE', 2)
+  CONSOLIDATION_DRY_RUN = resolveStringOverride('BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN', '0') === '1'
+  CONSOLIDATION_EMBED_BATCH_SIZE = resolveNumberOverride('BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE', 100)
 }
 
 export const formatElapsedMs = (ms: number): string =>

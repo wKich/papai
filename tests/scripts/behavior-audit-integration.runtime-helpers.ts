@@ -27,6 +27,12 @@ const behaviorAuditEnvKeys = [
   'BEHAVIOR_AUDIT_MAX_RETRIES',
   'BEHAVIOR_AUDIT_MAX_STEPS',
   'BEHAVIOR_AUDIT_EXCLUDED_PREFIXES',
+  'BEHAVIOR_AUDIT_EMBEDDING_MODEL',
+  'BEHAVIOR_AUDIT_EMBEDDING_BASE_URL',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE',
 ] as const
 const originalBehaviorAuditEnv = new Map(behaviorAuditEnvKeys.map((key) => [key, process.env[key]]))
 
@@ -91,6 +97,24 @@ function clearBehaviorAuditEnvKey(key: (typeof behaviorAuditEnvKeys)[number]): v
       return
     case 'BEHAVIOR_AUDIT_EXCLUDED_PREFIXES':
       delete process.env['BEHAVIOR_AUDIT_EXCLUDED_PREFIXES']
+      return
+    case 'BEHAVIOR_AUDIT_EMBEDDING_MODEL':
+      delete process.env['BEHAVIOR_AUDIT_EMBEDDING_MODEL']
+      return
+    case 'BEHAVIOR_AUDIT_EMBEDDING_BASE_URL':
+      delete process.env['BEHAVIOR_AUDIT_EMBEDDING_BASE_URL']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE']
   }
 }
 
@@ -131,6 +155,12 @@ export function applyBehaviorAuditEnv(config: BehaviorAuditTestConfig): void {
   process.env['BEHAVIOR_AUDIT_MAX_RETRIES'] = String(config.MAX_RETRIES)
   process.env['BEHAVIOR_AUDIT_MAX_STEPS'] = String(config.MAX_STEPS)
   process.env['BEHAVIOR_AUDIT_EXCLUDED_PREFIXES'] = config.EXCLUDED_PREFIXES.join('\n')
+  process.env['BEHAVIOR_AUDIT_EMBEDDING_MODEL'] = config.EMBEDDING_MODEL
+  process.env['BEHAVIOR_AUDIT_EMBEDDING_BASE_URL'] = config.EMBEDDING_BASE_URL
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD'] = String(config.CONSOLIDATION_THRESHOLD)
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE'] = String(config.CONSOLIDATION_MIN_CLUSTER_SIZE)
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN'] = config.CONSOLIDATION_DRY_RUN ? '1' : '0'
+  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE'] = String(config.CONSOLIDATION_EMBED_BATCH_SIZE)
 }
 
 export function restoreBehaviorAuditEnv(): void {
