@@ -34,7 +34,7 @@ const SYSTEM_PROMPT = `You are a senior software analyst examining a unit test f
 Return structured output with:
 - behavior: plain-language feature description beginning with "When..."
 - context: technical implementation summary for developers
-- keywords: 1-20 canonical lowercase slug keywords describing the behavior
+- keywords: 10-20 canonical lowercase slug keywords describing the behavior
 
 Keywords must be short canonical slugs like group-targeting or identity-resolution.`
 

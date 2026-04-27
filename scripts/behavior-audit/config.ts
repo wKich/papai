@@ -75,7 +75,7 @@ export let VERBOSE = false
 export let EXCLUDED_PREFIXES: readonly string[] = DEFAULT_EXCLUDED_PREFIXES
 
 export let EMBEDDING_MODEL = ''
-export let EMBEDDING_BASE_URL = BASE_URL
+export let EMBEDDING_BASE_URL = ''
 export let CONSOLIDATION_THRESHOLD = 0.92
 export let CONSOLIDATION_MIN_CLUSTER_SIZE = 2
 export let CONSOLIDATION_DRY_RUN = false
