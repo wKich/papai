@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { rerankSearchResults } from '../../codeindex/src/search/rank.js'
+import { rerankSearchResults } from '../../codeindex/src/search.js'
 
 describe('rerankSearchResults', () => {
   test('prefers exported and module-level hits over locals', () => {

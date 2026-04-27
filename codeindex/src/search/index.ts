@@ -34,8 +34,13 @@ export const searchSymbols = (
   return rerankSearchResults(deduped).slice(0, input.limit)
 }
 
-export const findSymbolCandidates = (db: Database, query: string, limit: number): readonly SearchResult[] =>
-  searchSymbols(db, { query, limit })
+export const findSymbolCandidates = (db: Database, query: string, limit: number): readonly SearchResult[] => {
+  const exactResults = runExactSearch(db, query, limit, {})
+  if (exactResults.length > 0) {
+    return exactResults
+  }
+  return searchSymbols(db, { query, limit })
+}
 
 export const findIncomingReferences = (db: Database, input: Readonly<ImpactLookupInput>): readonly ImpactResult[] => {
   if (input.symbolKey === undefined && input.qualifiedName === undefined) {
