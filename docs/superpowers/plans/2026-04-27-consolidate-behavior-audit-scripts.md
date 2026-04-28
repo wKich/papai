@@ -73,95 +73,49 @@
 
 - Create: `scripts/behavior-audit/index.ts`
 
-This is a copy of `scripts/behavior-audit.ts` with every `./behavior-audit/` import prefix stripped to `./` (since the file now lives inside the subdir), and inline type imports similarly updated.
+This is a copy of `scripts/behavior-audit.ts` with every `./behavior-audit/` import prefix stripped to `./` (since the file now lives inside the subdir). The current `behavior-audit.ts` delegates helpers to `entrypoint-helpers.js` and uses a progress reporter; the moved file preserves this structure.
 
 - [ ] **Step 1: Create the file**
 
 ```typescript
 // scripts/behavior-audit/index.ts
-import { readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
-
 import { runPhase2a } from './classify.js'
-import { EXCLUDED_PREFIXES, PROJECT_ROOT } from './config.js'
+import { PROGRESS_RENDERER } from './config.js'
 import { runPhase1b } from './consolidate-keywords.js'
-import { runPhase2b } from './consolidate.js'
+import {
+  createRunReporter,
+  isTestEnvironment,
+  loadOrCreateProgress,
+  prepareIncrementalRun,
+  requireOpenAiApiKey,
+  runPhase2bIfNeeded,
+  selectIncrementalRunWork as selectIncrementalRunWorkWithLog,
+} from './entrypoint-helpers.js'
 import { runPhase3 } from './evaluate.js'
 import { runPhase1 } from './extract.js'
 import type { IncrementalManifest } from './incremental.js'
+import { saveConsolidatedManifest } from './incremental.js'
 import {
-  captureRunStart,
-  collectChangedFiles,
-  createEmptyConsolidatedManifest,
-  createEmptyManifest,
-  loadConsolidatedManifest,
-  loadManifest,
-  saveConsolidatedManifest,
-  saveManifest,
-  selectIncrementalWork,
-} from './incremental.js'
-import { loadProgress, saveProgress } from './progress-io.js'
+  createProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type CreateProgressReporterInput,
+} from './progress-reporter.js'
 import type { Progress } from './progress.js'
-import { createEmptyProgress } from './progress.js'
 import { rebuildReportsFromStoredResults } from './report-writer.js'
 import type { ParsedTestFile } from './test-parser.js'
-import { parseTestFile } from './test-parser.js'
 
-function requireOpenAiApiKey(): void {
-  if ((process.env['OPENAI_API_KEY'] ?? '').trim().length > 0) {
-    return
-  }
-  throw new Error('Behavior audit requires OPENAI_API_KEY to be set')
-}
-
-async function discoverTestFiles(): Promise<string[]> {
-  const testDir = join(PROJECT_ROOT, 'tests')
-  const files: string[] = []
-
-  async function walk(dir: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true })
-    const subdirs: string[] = []
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        subdirs.push(fullPath)
-      } else if (entry.name.endsWith('.test.ts')) {
-        const relPath = relative(PROJECT_ROOT, fullPath)
-        const excluded = EXCLUDED_PREFIXES.some((p) => relPath.startsWith(p))
-        if (excluded) continue
-        files.push(relPath)
-      }
-    }
-    await Promise.all(subdirs.map((d) => walk(d)))
-  }
-
-  await walk(testDir)
-  return files.toSorted()
-}
-
-async function loadOrCreateProgress(testCount: number): Promise<Progress> {
-  const loaded = await loadProgress()
-  if (loaded === null) {
-    const fresh = createEmptyProgress(testCount)
-    await saveProgress(fresh)
-    return fresh
-  }
-  return loaded
-}
-
-function parseDiscoveredTestFiles(testFilePaths: readonly string[]): Promise<readonly ParsedTestFile[]> {
-  return Promise.all(
-    testFilePaths.map(async (filePath) => {
-      const content = await Bun.file(join(PROJECT_ROOT, filePath)).text()
-      return parseTestFile(filePath, content)
-    }),
-  )
-}
-
-function getDiscoveredTestKeys(parsedFiles: readonly ParsedTestFile[]): readonly string[] {
-  return parsedFiles
-    .flatMap((parsedFile) => parsedFile.tests.map((testCase) => `${parsedFile.filePath}::${testCase.fullPath}`))
-    .toSorted()
+function defaultRunPhase2bIfNeeded(
+  progress: Progress,
+  phase2Version: string,
+  selectedFeatureKeys: ReadonlySet<string>,
+  reporter: BehaviorAuditProgressReporter,
+): Promise<import('./incremental.js').ConsolidatedManifest> {
+  return runPhase2bIfNeeded({
+    progress,
+    phase2Version,
+    selectedFeatureKeys,
+    reporter,
+  })
 }
 
 async function runPhase1IfNeeded(
@@ -169,12 +123,13 @@ async function runPhase1IfNeeded(
   progress: Progress,
   selectedTestKeys: ReadonlySet<string>,
   manifest: IncrementalManifest,
+  reporter: BehaviorAuditProgressReporter,
 ): Promise<void> {
   if (progress.phase1.status === 'done' && selectedTestKeys.size === 0) {
     console.log('[Phase 1] Already complete, skipping.\n')
     return
   }
-  await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest })
+  await runPhase1({ testFiles: parsedFiles, progress, selectedTestKeys, manifest }, { reporter })
 }
 
 function runPhase1bIfNeeded(progress: Progress): Promise<void> {
@@ -185,40 +140,29 @@ function runPhase2aIfNeeded(
   progress: Progress,
   manifest: IncrementalManifest,
   selectedTestKeys: ReadonlySet<string>,
+  reporter: BehaviorAuditProgressReporter,
 ): Promise<ReadonlySet<string>> {
   if (progress.phase2a.status === 'done' && selectedTestKeys.size === 0) {
     return Promise.resolve(new Set())
   }
-  return runPhase2a({ progress, selectedTestKeys, manifest })
+  return runPhase2a({ progress, selectedTestKeys, manifest }, { reporter })
 }
 
-async function runPhase2bIfNeeded(
+async function runPhase3IfNeeded(
   progress: Progress,
-  phase2Version: string,
+  selectedConsolidatedIds: ReadonlySet<string>,
   selectedFeatureKeys: ReadonlySet<string>,
-): Promise<import('./incremental.js').ConsolidatedManifest> {
-  const existingManifest = (await loadConsolidatedManifest()) ?? createEmptyConsolidatedManifest()
-  const currentManifest = (await loadManifest()) ?? createEmptyManifest()
-  return runPhase2b(progress, existingManifest, phase2Version, selectedFeatureKeys, currentManifest)
+  consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null,
+  reporter: BehaviorAuditProgressReporter,
+): Promise<void> {
+  if (progress.phase3.status === 'done' && selectedConsolidatedIds.size === 0) {
+    console.log('[Phase 3] Already complete.\n')
+    return
+  }
+  await runPhase3({ progress, selectedConsolidatedIds, selectedFeatureKeys, consolidatedManifest }, { reporter })
 }
 
-async function prepareIncrementalRun(): Promise<{
-  readonly previousManifest: IncrementalManifest
-  readonly previousLastStartCommit: string | null
-  readonly updatedManifest: IncrementalManifest
-}> {
-  const previousManifest = resolveRunStartManifest(await loadManifest())
-  const currentHead = await resolveHeadCommit()
-  const { previousLastStartCommit, updatedManifest } = captureRunStart(
-    previousManifest,
-    currentHead,
-    new Date().toISOString(),
-  )
-  await saveManifest(updatedManifest)
-  return { previousManifest, previousLastStartCommit, updatedManifest }
-}
-
-async function selectIncrementalRunWork(input: {
+function defaultSelectIncrementalRunWork(input: {
   readonly previousManifest: IncrementalManifest
   readonly updatedManifest: IncrementalManifest
   readonly previousLastStartCommit: string | null
@@ -227,130 +171,163 @@ async function selectIncrementalRunWork(input: {
   readonly previousConsolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
   readonly selection: import('./incremental.js').IncrementalSelection
 }> {
-  const testFilePaths = await discoverTestFiles()
-  console.log(`Found ${testFilePaths.length} test files (after exclusions)\n`)
-  const parsedFiles = await parseDiscoveredTestFiles(testFilePaths)
-  const discoveredTestKeys = getDiscoveredTestKeys(parsedFiles)
-  const changedFiles = await collectChangedFiles(input.previousLastStartCommit)
-  const previousConsolidatedManifest = await loadConsolidatedManifest()
-  const selection = selectIncrementalWork({
-    changedFiles,
-    previousManifest: input.previousManifest,
-    currentPhaseVersions: input.updatedManifest.phaseVersions,
-    discoveredTestKeys,
-    previousConsolidatedManifest,
+  return selectIncrementalRunWorkWithLog({
+    ...input,
+    log: console,
   })
-  return { parsedFiles, previousConsolidatedManifest, selection }
-}
-
-async function runPhase3IfNeeded(
-  progress: Progress,
-  selectedConsolidatedIds: ReadonlySet<string>,
-  selectedFeatureKeys: ReadonlySet<string>,
-  consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null,
-): Promise<void> {
-  if (progress.phase3.status === 'done' && selectedConsolidatedIds.size === 0) {
-    console.log('[Phase 3] Already complete.\n')
-    return
-  }
-  await runPhase3({ progress, selectedConsolidatedIds, selectedFeatureKeys, consolidatedManifest })
-}
-
-async function resolveHeadCommit(): Promise<string> {
-  const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], {
-    cwd: PROJECT_ROOT,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  const output = await new Response(proc.stdout).text()
-  const exitCode = await proc.exited
-  if (exitCode !== 0) {
-    throw new Error('Failed to resolve HEAD commit')
-  }
-  return output.trim()
 }
 
 export interface BehaviorAuditDeps {
   readonly requireOpenAiApiKey: () => void
   readonly prepareIncrementalRun: typeof prepareIncrementalRun
-  readonly selectIncrementalRunWork: typeof selectIncrementalRunWork
+  readonly selectIncrementalRunWork: typeof defaultSelectIncrementalRunWork
   readonly loadOrCreateProgress: typeof loadOrCreateProgress
+  readonly createProgressReporter: (input: CreateProgressReporterInput) => BehaviorAuditProgressReporter
   readonly rebuildReportsFromStoredResults: typeof rebuildReportsFromStoredResults
-  readonly runPhase1IfNeeded: typeof runPhase1IfNeeded
+  readonly runPhase1IfNeeded: (
+    parsedFiles: readonly ParsedTestFile[],
+    progress: Progress,
+    selectedTestKeys: ReadonlySet<string>,
+    manifest: IncrementalManifest,
+    reporter: BehaviorAuditProgressReporter,
+  ) => Promise<void>
   readonly runPhase1bIfNeeded: typeof runPhase1bIfNeeded
-  readonly runPhase2aIfNeeded: typeof runPhase2aIfNeeded
-  readonly runPhase2bIfNeeded: typeof runPhase2bIfNeeded
+  readonly runPhase2aIfNeeded: (
+    progress: Progress,
+    manifest: IncrementalManifest,
+    selectedTestKeys: ReadonlySet<string>,
+    reporter: BehaviorAuditProgressReporter,
+  ) => Promise<ReadonlySet<string>>
+  readonly runPhase2bIfNeeded: (
+    progress: Progress,
+    phase2Version: string,
+    selectedFeatureKeys: ReadonlySet<string>,
+    reporter: BehaviorAuditProgressReporter,
+  ) => Promise<import('./incremental.js').ConsolidatedManifest>
   readonly saveConsolidatedManifest: typeof saveConsolidatedManifest
-  readonly runPhase3IfNeeded: typeof runPhase3IfNeeded
+  readonly runPhase3IfNeeded: (
+    progress: Progress,
+    selectedConsolidatedIds: ReadonlySet<string>,
+    selectedFeatureKeys: ReadonlySet<string>,
+    consolidatedManifest: import('./incremental.js').ConsolidatedManifest | null,
+    reporter: BehaviorAuditProgressReporter,
+  ) => Promise<void>
+  readonly stdout: Pick<NodeJS.WriteStream, 'isTTY'>
+  readonly isTestEnvironment: boolean
   readonly log: Pick<typeof console, 'log'>
 }
 
 const defaultBehaviorAuditDeps: BehaviorAuditDeps = {
   requireOpenAiApiKey,
   prepareIncrementalRun,
-  selectIncrementalRunWork,
+  selectIncrementalRunWork: defaultSelectIncrementalRunWork,
   loadOrCreateProgress,
+  createProgressReporter,
   rebuildReportsFromStoredResults,
   runPhase1IfNeeded,
   runPhase1bIfNeeded,
   runPhase2aIfNeeded,
-  runPhase2bIfNeeded,
+  runPhase2bIfNeeded: defaultRunPhase2bIfNeeded,
   saveConsolidatedManifest,
   runPhase3IfNeeded,
+  stdout: process.stdout,
+  isTestEnvironment: isTestEnvironment(),
   log: console,
 }
 
-export async function runBehaviorAudit(deps: BehaviorAuditDeps = defaultBehaviorAuditDeps): Promise<void> {
-  deps.requireOpenAiApiKey()
-  deps.log.log('Behavior Audit — discovering test files...\n')
+async function executeSelectedBehaviorAuditWork(input: {
+  readonly deps: BehaviorAuditDeps
+  readonly parsedFiles: readonly ParsedTestFile[]
+  readonly updatedManifest: IncrementalManifest
+  readonly previousConsolidatedManifest: import('./incremental.js').ConsolidatedManifest | null
+  readonly selection: import('./incremental.js').IncrementalSelection
+  readonly progress: Progress
+  readonly reporter: BehaviorAuditProgressReporter
+}): Promise<void> {
+  if (input.selection.reportRebuildOnly) {
+    await input.deps.rebuildReportsFromStoredResults({
+      consolidatedManifest: input.previousConsolidatedManifest,
+    })
+    input.deps.log.log('\nBehavior audit complete.')
+    return
+  }
 
-  const { previousManifest, previousLastStartCommit, updatedManifest } = await deps.prepareIncrementalRun()
-  const { parsedFiles, previousConsolidatedManifest, selection } = await deps.selectIncrementalRunWork({
+  await input.deps.runPhase1IfNeeded(
+    input.parsedFiles,
+    input.progress,
+    new Set(input.selection.phase1SelectedTestKeys),
+    input.updatedManifest,
+    input.reporter,
+  )
+  await input.deps.runPhase1bIfNeeded(input.progress)
+  const dirtyFromPhase2a = await input.deps.runPhase2aIfNeeded(
+    input.progress,
+    input.updatedManifest,
+    new Set(input.selection.phase2aSelectedTestKeys),
+    input.reporter,
+  )
+  const phase2bSelectedKeys = new Set([...input.selection.phase2bSelectedFeatureKeys, ...dirtyFromPhase2a])
+  const consolidatedManifest = await input.deps.runPhase2bIfNeeded(
+    input.progress,
+    input.updatedManifest.phaseVersions.phase2,
+    phase2bSelectedKeys,
+    input.reporter,
+  )
+  await input.deps.saveConsolidatedManifest(consolidatedManifest)
+
+  await input.deps.runPhase3IfNeeded(
+    input.progress,
+    new Set(input.selection.phase3SelectedConsolidatedIds),
+    phase2bSelectedKeys,
+    consolidatedManifest,
+    input.reporter,
+  )
+
+  input.deps.log.log('\nBehavior audit complete.')
+}
+
+export async function runBehaviorAudit(): Promise<void>
+export async function runBehaviorAudit(deps: BehaviorAuditDeps): Promise<void>
+export async function runBehaviorAudit(...args: readonly [] | readonly [BehaviorAuditDeps]): Promise<void> {
+  const deps = args[0]
+  let resolvedDeps: BehaviorAuditDeps
+  if (deps === undefined) {
+    resolvedDeps = defaultBehaviorAuditDeps
+  } else {
+    resolvedDeps = deps
+  }
+  resolvedDeps.requireOpenAiApiKey()
+  resolvedDeps.log.log('Behavior Audit — discovering test files...\n')
+
+  const { previousManifest, previousLastStartCommit, updatedManifest } = await resolvedDeps.prepareIncrementalRun()
+  const { parsedFiles, previousConsolidatedManifest, selection } = await resolvedDeps.selectIncrementalRunWork({
     previousManifest,
     updatedManifest,
     previousLastStartCommit,
   })
 
-  const progress = await deps.loadOrCreateProgress(parsedFiles.length)
+  const progress = await resolvedDeps.loadOrCreateProgress(parsedFiles.length)
+  const reporter = createRunReporter({
+    createProgressReporter: resolvedDeps.createProgressReporter,
+    configuredRenderer: PROGRESS_RENDERER,
+    isTTY: resolvedDeps.stdout.isTTY,
+    isTestEnvironment: resolvedDeps.isTestEnvironment,
+    log: resolvedDeps.log,
+  })
 
-  if (selection.reportRebuildOnly) {
-    await deps.rebuildReportsFromStoredResults({
-      consolidatedManifest: previousConsolidatedManifest,
+  try {
+    await executeSelectedBehaviorAuditWork({
+      deps: resolvedDeps,
+      parsedFiles,
+      updatedManifest,
+      previousConsolidatedManifest,
+      selection,
+      progress,
+      reporter,
     })
-    deps.log.log('\nBehavior audit complete.')
-    return
+  } finally {
+    reporter.end()
   }
-
-  await deps.runPhase1IfNeeded(parsedFiles, progress, new Set(selection.phase1SelectedTestKeys), updatedManifest)
-  await deps.runPhase1bIfNeeded(progress)
-  const dirtyFromPhase2a = await deps.runPhase2aIfNeeded(
-    progress,
-    updatedManifest,
-    new Set(selection.phase2aSelectedTestKeys),
-  )
-  const phase2bSelectedKeys = new Set([...selection.phase2bSelectedFeatureKeys, ...dirtyFromPhase2a])
-  const consolidatedManifest = await deps.runPhase2bIfNeeded(
-    progress,
-    updatedManifest.phaseVersions.phase2,
-    phase2bSelectedKeys,
-  )
-  await deps.saveConsolidatedManifest(consolidatedManifest)
-
-  await deps.runPhase3IfNeeded(
-    progress,
-    new Set(selection.phase3SelectedConsolidatedIds),
-    phase2bSelectedKeys,
-    consolidatedManifest,
-  )
-
-  deps.log.log('\nBehavior audit complete.')
-}
-
-function resolveRunStartManifest(manifest: Awaited<ReturnType<typeof loadManifest>>): IncrementalManifest {
-  if (manifest === null) {
-    return createEmptyManifest()
-  }
-  return manifest
 }
 
 if (import.meta.main) {
@@ -401,7 +378,7 @@ import {
   STORIES_DIR,
 } from './config.js'
 import { loadProgress, saveProgress } from './progress-io.js'
-import { resetPhase2AndPhase3, resetPhase3 } from './progress.js'
+import { resetPhase2AndPhase3, resetPhase3 } from './progress-resets.js'
 
 export type ResetTarget = 'phase2' | 'phase3' | 'all'
 
@@ -478,17 +455,22 @@ cp tests/scripts/behavior-audit-entrypoint.test.ts tests/scripts/behavior-audit/
 
 - [ ] **Step 2: Update imports in `tests/scripts/behavior-audit/entrypoint.test.ts`**
 
-Replace the four import lines at the top of the file:
+Replace imports at the top of the file. The current file has these imports:
 
-Old:
+Old (actual current content):
 
 ```typescript
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-entrypoint.js'
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
 } from '../../scripts/behavior-audit/incremental.js'
+import {
+  resolveProgressRenderer,
+  type BehaviorAuditProgressReporter,
+} from '../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile, type ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import {
@@ -502,11 +484,16 @@ New:
 
 ```typescript
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
+import { reloadBehaviorAuditConfig } from '../../../scripts/behavior-audit/config.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
 } from '../../../scripts/behavior-audit/incremental.js'
+import {
+  resolveProgressRenderer,
+  type BehaviorAuditProgressReporter,
+} from '../../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../../scripts/behavior-audit/progress.js'
 import { parseTestFile, type ParsedTestFile } from '../../../scripts/behavior-audit/test-parser.js'
 import {
@@ -554,7 +541,7 @@ cp tests/scripts/behavior-audit-interrupted-run.test.ts tests/scripts/behavior-a
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-interrupted-run.js'
@@ -617,7 +604,7 @@ cp tests/scripts/behavior-audit-incremental.test.ts tests/scripts/behavior-audit
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import type * as IncrementalModule from '../../scripts/behavior-audit-incremental.js'
@@ -670,7 +657,7 @@ cp tests/scripts/behavior-audit-classify-agent.test.ts tests/scripts/behavior-au
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import type { ClassifyAgentDeps } from '../../scripts/behavior-audit-classify-agent.js'
@@ -724,7 +711,7 @@ cp tests/scripts/behavior-audit-storage.test.ts tests/scripts/behavior-audit/sto
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import { createEmptyProgress } from '../../scripts/behavior-audit-storage.js'
@@ -742,11 +729,14 @@ import {
   isResetModule,
   loadEvaluateReportingModule,
   loadClassifiedStoreModule,
-  // … (any further imports from this file)
+  loadProgressModule,
+  loadReportWriterModule,
+  loadResetModule,
+  type ResetModuleShape,
 } from './behavior-audit-integration.support.js'
 ```
 
-New (update paths; keep all import names and named imports identical):
+New:
 
 ```typescript
 import { createEmptyProgress } from '../../../scripts/behavior-audit/progress.js'
@@ -764,7 +754,10 @@ import {
   isResetModule,
   loadEvaluateReportingModule,
   loadClassifiedStoreModule,
-  // … (keep all existing named imports unchanged)
+  loadProgressModule,
+  loadReportWriterModule,
+  loadResetModule,
+  type ResetModuleShape,
 } from '../behavior-audit-integration.support.js'
 ```
 
@@ -805,7 +798,7 @@ cp tests/scripts/behavior-audit-phase1-keywords.test.ts tests/scripts/behavior-a
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import { normalizeKeywordSlug } from '../../scripts/behavior-audit-phase1-keywords.js'
@@ -821,7 +814,10 @@ import {
 import {
   loadExtractModule,
   loadIncrementalModule,
-  // … (keep all existing named imports)
+  isExtractModule,
+  isIncrementalModule,
+  type ExtractModuleShape,
+  type IncrementalModuleShape,
 } from './behavior-audit-integration.support.js'
 ```
 
@@ -841,7 +837,10 @@ import {
 import {
   loadExtractModule,
   loadIncrementalModule,
-  // … (keep all existing named imports)
+  isExtractModule,
+  isIncrementalModule,
+  type ExtractModuleShape,
+  type IncrementalModuleShape,
 } from '../behavior-audit-integration.support.js'
 ```
 
@@ -880,11 +879,18 @@ cp tests/scripts/behavior-audit-phase1-selection.test.ts tests/scripts/behavior-
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import { createEmptyManifest as barrelCreateEmptyManifest } from '../../scripts/behavior-audit-phase1-selection.js'
+import type { Phase1Deps } from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import {
+  createTextProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type ProgressEvent,
+  type ProgressOutcome,
+} from '../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import {
@@ -896,7 +902,12 @@ import {
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
 import {
   createEmptyManifest,
-  // … (keep all existing named imports)
+  loadExtractModule,
+  loadIncrementalModule,
+  isExtractModule,
+  isIncrementalModule,
+  type ExtractModuleShape,
+  type IncrementalModuleShape,
 } from './behavior-audit-integration.support.js'
 ```
 
@@ -904,7 +915,14 @@ New:
 
 ```typescript
 import { createEmptyManifest as barrelCreateEmptyManifest } from '../../../scripts/behavior-audit/incremental.js'
+import type { Phase1Deps } from '../../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest } from '../../../scripts/behavior-audit/incremental.js'
+import {
+  createTextProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type ProgressEvent,
+  type ProgressOutcome,
+} from '../../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../../scripts/behavior-audit/progress.js'
 import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
 import {
@@ -916,7 +934,12 @@ import {
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
 import {
   createEmptyManifest,
-  // … (keep all existing named imports)
+  loadExtractModule,
+  loadIncrementalModule,
+  isExtractModule,
+  isIncrementalModule,
+  type ExtractModuleShape,
+  type IncrementalModuleShape,
 } from '../behavior-audit-integration.support.js'
 ```
 
@@ -955,10 +978,15 @@ cp tests/scripts/behavior-audit-phase1-write-failure.test.ts tests/scripts/behav
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
+import {
+  createTextProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type ProgressEvent,
+} from '../../scripts/behavior-audit/progress-reporter.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
@@ -969,6 +997,11 @@ New:
 
 ```typescript
 import * as _impl from '../../../scripts/behavior-audit/extract.js'
+import {
+  createTextProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type ProgressEvent,
+} from '../../../scripts/behavior-audit/progress-reporter.js'
 import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
 import { createEmptyProgressFixture, mockAuditBehaviorConfig } from '../behavior-audit-integration.helpers.js'
 import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
@@ -1010,7 +1043,7 @@ cp tests/scripts/behavior-audit-phase2a.test.ts tests/scripts/behavior-audit/pha
 
 - [ ] **Step 2: Update imports**
 
-Old:
+Old (actual current content):
 
 ```typescript
 import type { Phase2aDeps } from '../../scripts/behavior-audit-phase2a.js'
@@ -1028,7 +1061,9 @@ import {
   importWithGuard,
   isClassifyModule,
   loadClassifiedStoreModule,
-  // … (keep all existing named imports)
+  loadIncrementalModule,
+  loadProgressModule,
+  readSavedManifest,
 } from './behavior-audit-integration.support.js'
 ```
 
@@ -1050,7 +1085,9 @@ import {
   importWithGuard,
   isClassifyModule,
   loadClassifiedStoreModule,
-  // … (keep all existing named imports)
+  loadIncrementalModule,
+  loadProgressModule,
+  readSavedManifest,
 } from '../behavior-audit-integration.support.js'
 ```
 
@@ -1219,6 +1256,7 @@ Explanation:
 - `scripts/behavior-audit/reset.ts` has no package.json script reference, so it needs an explicit entry to avoid being flagged as an unused file.
 - The `tests/scripts/behavior-audit*.ts!` pattern still covers the remaining top-level test files (`behavior-audit-phase1b.test.ts`, `behavior-audit-phase2b.test.ts`, `behavior-audit-phase3.test.ts`, `behavior-audit-config.test.ts`, and the integration helpers).
 - `tests/scripts/behavior-audit/**/*.ts!` already existed and covers the moved test files.
+- The existing `"scripts/behavior-audit/**/*.ts!"` in the `project` section remains unchanged.
 
 - [ ] **Step 3: Commit**
 
@@ -1292,3 +1330,10 @@ git commit -m "fix: post-consolidation cleanup"
 **Placeholder scan:** No TBD, TODO, or vague steps — each step shows exact content or exact commands.
 
 **Type consistency:** All renamed imports use the same identifiers (`runBehaviorAudit`, `BehaviorAuditDeps`, `Phase2aDeps`, etc.) as the originals.
+
+**Verified against current codebase (2026-04-28):**
+
+- Task 1: `index.ts` now mirrors current `behavior-audit.ts` (reporter-aware, delegates to `entrypoint-helpers.js`) instead of the stale inline-helper version
+- Task 2: `reset.ts` imports from `./progress-resets.js` matching the current source (which re-exports via `progress.js` but the direct import is clearer)
+- Tasks 3–11: All "Old" import blocks match actual current file content, including additional imports for `progress-reporter.js`, `config.js`, and full support-module named imports
+- Task 14: `knip.jsonc` update accounts for the existing `scripts/behavior-audit/**/*.ts!` in the `project` section
