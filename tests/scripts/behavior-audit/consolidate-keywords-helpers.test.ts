@@ -278,6 +278,25 @@ describe('buildClustersAdvanced gap threshold', () => {
       expect(withGap).toEqual([])
     },
   )
+
+  test.each<LinkageMode>(['average', 'complete'])(
+    '%s linkage continues searching after rejecting an ambiguous best merge',
+    (linkage) => {
+      const embeddings = makeNormalized([
+        [1, 0, 0, 0, 0],
+        [0.95, Math.sqrt(1 - 0.95 ** 2), 0, 0, 0],
+        [0.9, (0.72 - 0.95 * 0.9) / Math.sqrt(1 - 0.95 ** 2), 0.055677643628300216, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 0.85, Math.sqrt(1 - 0.85 ** 2)],
+      ])
+
+      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage)
+      const withGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0.06)
+
+      expect(normalizeClusters(withoutGap)).toContainEqual([3, 4])
+      expect(normalizeClusters(withGap)).toEqual([[3, 4]])
+    },
+  )
 })
 
 describe('subdivideOversizedClusters', () => {

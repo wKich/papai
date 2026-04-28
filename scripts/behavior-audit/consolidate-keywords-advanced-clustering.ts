@@ -12,6 +12,7 @@ type LinkageSimilarity = (
   clusterA: readonly number[],
   clusterB: readonly number[],
 ) => number
+type AgglomerativeMerge = { readonly pair: readonly [number, number]; readonly similarity: number } | undefined
 
 function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number, number]): readonly Cluster[] {
   const [bestA, bestB] = mergePair
@@ -29,7 +30,6 @@ function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number
 function filterClusters(clusters: readonly Cluster[], minClusterSize: number): readonly Cluster[] {
   return clusters.filter((cluster) => cluster.length >= minClusterSize)
 }
-
 function getLinkageSimilarity(linkage: Exclude<LinkageMode, 'single'>): LinkageSimilarity {
   return linkage === 'average' ? averageLinkageSimilarity : completeLinkageSimilarity
 }
@@ -39,7 +39,7 @@ function findBestAgglomerativeMerge(
   threshold: number,
   linkageSimilarity: LinkageSimilarity,
   normalizedEmbeddings: readonly Float64Array[],
-): { readonly pair: readonly [number, number]; readonly similarity: number } | undefined {
+): AgglomerativeMerge {
   let bestSimilarity = Number.NEGATIVE_INFINITY
   let bestPair: readonly [number, number] | undefined
   for (let i = 0; i < clusters.length; i++) {
@@ -53,6 +53,39 @@ function findBestAgglomerativeMerge(
         bestSimilarity = similarity
         bestPair = [i, j]
       }
+    }
+  }
+  return bestPair === undefined ? undefined : { pair: bestPair, similarity: bestSimilarity }
+}
+
+function findBestAgglomerativeMergeWithGap(
+  clusters: readonly Cluster[],
+  threshold: number,
+  linkageSimilarity: LinkageSimilarity,
+  normalizedEmbeddings: readonly Float64Array[],
+  gapThreshold: number,
+): AgglomerativeMerge {
+  let bestSimilarity = Number.NEGATIVE_INFINITY
+  let bestPair: readonly [number, number] | undefined
+  for (let i = 0; i < clusters.length; i++) {
+    const clusterA = clusters[i]
+    if (clusterA === undefined) continue
+    for (let j = i + 1; j < clusters.length; j++) {
+      const clusterB = clusters[j]
+      if (clusterB === undefined) continue
+      const similarity = linkageSimilarity(normalizedEmbeddings, clusterA, clusterB)
+      if (similarity < threshold || similarity <= bestSimilarity) continue
+
+      const nextBestSimilarity = findBestAlternativeSimilarity(
+        clusters,
+        [i, j],
+        linkageSimilarity,
+        normalizedEmbeddings,
+      )
+      if (similarity - nextBestSimilarity < gapThreshold) continue
+
+      bestSimilarity = similarity
+      bestPair = [i, j]
     }
   }
   return bestPair === undefined ? undefined : { pair: bestPair, similarity: bestSimilarity }
@@ -135,50 +168,31 @@ function buildClustersSingleWithGap(
   return filterClusters(clusters, minClusterSize)
 }
 
-function buildClustersAdvancedNoGap(
-  normalizedEmbeddings: readonly Float64Array[],
-  threshold: number,
-  minClusterSize: number,
-  linkage: LinkageMode,
-): readonly Cluster[] {
-  if (linkage === 'single') {
-    return buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize)
-  }
-
-  let clusters: readonly Cluster[] = normalizedEmbeddings.map((_, index) => [index])
-  const linkageSimilarity = getLinkageSimilarity(linkage)
-
-  for (;;) {
-    const bestMerge = findBestAgglomerativeMerge(clusters, threshold, linkageSimilarity, normalizedEmbeddings)
-    if (bestMerge === undefined) return filterClusters(clusters, minClusterSize)
-    clusters = mergeClusters(clusters, bestMerge.pair)
-  }
-}
-
-function buildClustersNonSingleWithGap(
+function buildClustersNonSingle(
   normalizedEmbeddings: readonly Float64Array[],
   threshold: number,
   minClusterSize: number,
   linkage: Exclude<LinkageMode, 'single'>,
-  gapThreshold: number,
+  gapThreshold: number = 0,
 ): readonly Cluster[] {
   let clusters: readonly Cluster[] = normalizedEmbeddings.map((_, index) => [index])
   const linkageSimilarity = getLinkageSimilarity(linkage)
+  const findBestMerge: (currentClusters: readonly Cluster[]) => AgglomerativeMerge =
+    gapThreshold > 0
+      ? (currentClusters: readonly Cluster[]) =>
+          findBestAgglomerativeMergeWithGap(
+            currentClusters,
+            threshold,
+            linkageSimilarity,
+            normalizedEmbeddings,
+            gapThreshold,
+          )
+      : (currentClusters: readonly Cluster[]) =>
+          findBestAgglomerativeMerge(currentClusters, threshold, linkageSimilarity, normalizedEmbeddings)
 
   for (;;) {
-    const bestMerge = findBestAgglomerativeMerge(clusters, threshold, linkageSimilarity, normalizedEmbeddings)
+    const bestMerge = findBestMerge(clusters)
     if (bestMerge === undefined) return filterClusters(clusters, minClusterSize)
-
-    const nextBestSimilarity = findBestAlternativeSimilarity(
-      clusters,
-      bestMerge.pair,
-      linkageSimilarity,
-      normalizedEmbeddings,
-    )
-    if (bestMerge.similarity - nextBestSimilarity < gapThreshold) {
-      return filterClusters(clusters, minClusterSize)
-    }
-
     clusters = mergeClusters(clusters, bestMerge.pair)
   }
 }
@@ -191,13 +205,15 @@ export function buildClustersAdvanced(
   gapThreshold: number = 0,
 ): readonly Cluster[] {
   if (gapThreshold <= 0) {
-    return buildClustersAdvancedNoGap(normalizedEmbeddings, threshold, minClusterSize, linkage)
+    return linkage === 'single'
+      ? buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize)
+      : buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage)
   }
   if (normalizedEmbeddings.length === 0) return []
   if (linkage === 'single') {
     return buildClustersSingleWithGap(normalizedEmbeddings, threshold, minClusterSize, gapThreshold)
   }
-  return buildClustersNonSingleWithGap(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
+  return buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
 }
 
 function findWeakestInternalSimilarity(
