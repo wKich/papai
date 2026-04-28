@@ -11,7 +11,7 @@
     "tests/codeindex/**/*.test.ts!",
     "review-loop/src/cli.ts!",
     "tests/review-loop/**/*.test.ts!",
-    "scripts/behavior-audit*.ts!",
+    "scripts/behavior-audit/reset.ts!",
     "tests/scripts/behavior-audit*.ts!",
     "tests/scripts/behavior-audit/**/*.ts!",
   ],

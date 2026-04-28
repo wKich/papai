@@ -44,7 +44,7 @@
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md",
-    "audit:behavior": "bun scripts/behavior-audit.ts",
+    "audit:behavior": "bun scripts/behavior-audit/index.ts",
     "plan-adr-workflow": "bun scripts/plan-adr-workflow.ts",
     "codeindex:index": "bun run codeindex/src/cli.ts index",
     "codeindex:reindex": "bun run codeindex/src/cli.ts reindex",
