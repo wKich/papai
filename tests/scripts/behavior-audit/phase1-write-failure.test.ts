@@ -3,16 +3,16 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import * as _impl from '../../scripts/behavior-audit-phase1-write-failure.js'
+import * as _impl from '../../../scripts/behavior-audit/extract.js'
 import {
   createTextProgressReporter,
   type BehaviorAuditProgressReporter,
   type ProgressEvent,
-} from '../../scripts/behavior-audit/progress-reporter.js'
-import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
-import { isObject, loadExtractModule, loadIncrementalModule } from './behavior-audit-integration.support.js'
+} from '../../../scripts/behavior-audit/progress-reporter.js'
+import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
+import { createEmptyProgressFixture, mockAuditBehaviorConfig } from '../behavior-audit-integration.helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
+import { isObject, loadExtractModule, loadIncrementalModule } from '../behavior-audit-integration.support.js'
 
 function createRecordingReporter(): {
   readonly events: ProgressEvent[]
