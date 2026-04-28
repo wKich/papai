@@ -47,14 +47,14 @@ test('reloadBehaviorAuditConfig reapplies env overrides to exported config value
   expect(config.MAX_RETRIES).toBe(7)
 })
 
-test('EMBEDDING_MODEL defaults to empty string when not set', async () => {
+test('EMBEDDING_MODEL defaults to Qwen3-Embedding-8B when not set', async () => {
   const loadedConfig: unknown = await import(`../../scripts/behavior-audit/config.js?test=${crypto.randomUUID()}`)
   assert(isReloadableConfigModule(loadedConfig), 'Unexpected config module shape')
 
   delete process.env['BEHAVIOR_AUDIT_EMBEDDING_MODEL']
   loadedConfig.reloadBehaviorAuditConfig()
 
-  expect((loadedConfig as Record<string, unknown>)['EMBEDDING_MODEL']).toBe('')
+  expect((loadedConfig as Record<string, unknown>)['EMBEDDING_MODEL']).toBe('Qwen3-Embedding-8B')
 })
 
 test('EMBEDDING_BASE_URL defaults to BASE_URL when not set', async () => {
