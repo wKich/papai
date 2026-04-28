@@ -5,10 +5,10 @@ import * as fsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type * as IncrementalModule from '../../scripts/behavior-audit-incremental.js'
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
-import type * as ProgressMigrateModule from '../../scripts/behavior-audit/progress-migrate.js'
-import { loadProgressModule } from './behavior-audit-integration.support.js'
+import type * as IncrementalModule from '../../../scripts/behavior-audit/incremental.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
+import type * as ProgressMigrateModule from '../../../scripts/behavior-audit/progress-migrate.js'
+import { loadProgressModule } from '../behavior-audit-integration.support.js'
 
 type ManifestTestEntry = IncrementalModule.IncrementalManifest['tests'][string]
 
@@ -57,19 +57,19 @@ function isBehaviorAuditModule(value: unknown): value is {
 }
 
 async function loadIncrementalModule(): Promise<typeof IncrementalModule> {
-  const mod: unknown = await import(`../../scripts/behavior-audit-incremental.js?test=${crypto.randomUUID()}`)
+  const mod: unknown = await import(`../../../scripts/behavior-audit/incremental.js?test=${crypto.randomUUID()}`)
   if (!isIncrementalModule(mod)) throw new Error('Unexpected incremental module shape')
   return mod
 }
 
 async function loadProgressMigrateModule(): Promise<typeof ProgressMigrateModule> {
-  const mod: unknown = await import(`../../scripts/behavior-audit/progress-migrate.js?test=${crypto.randomUUID()}`)
+  const mod: unknown = await import(`../../../scripts/behavior-audit/progress-migrate.js?test=${crypto.randomUUID()}`)
   if (!isProgressMigrateModule(mod)) throw new Error('Unexpected progress-migrate module shape')
   return mod
 }
 
 async function loadBehaviorAuditEntryPoint(tag: string): Promise<void> {
-  const mod: unknown = await import(`../../scripts/behavior-audit.ts?test=${tag}`)
+  const mod: unknown = await import(`../../../scripts/behavior-audit/index.js?test=${tag}`)
   if (!isBehaviorAuditModule(mod)) {
     throw new Error('Unexpected behavior-audit module shape')
   }
@@ -247,7 +247,7 @@ describe('behavior-audit incremental manifest', () => {
 
     // This suite intentionally keeps narrow module mocks because it is verifying
     // entrypoint startup behavior that happens during delayed module import.
-    void mock.module('../../scripts/behavior-audit/config.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/config.js', () => ({
       MODEL: 'qwen3-30b-a3b',
       BASE_URL: 'http://localhost:1234/v1',
       PROJECT_ROOT: root,
@@ -275,26 +275,26 @@ describe('behavior-audit incremental manifest', () => {
         'tests/types/',
       ] as const,
     }))
-    void mock.module('../../scripts/behavior-audit/extract.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/extract.js', () => ({
       runPhase1: async (): Promise<void> => {
         phase1Calls += 1
         phase1ManifestSnapshot = await Bun.file(manifestPath).text()
       },
     }))
-    void mock.module('../../scripts/behavior-audit/classify.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/classify.js', () => ({
       runPhase2a: (): Promise<ReadonlySet<string>> => Promise.resolve(new Set()),
     }))
-    void mock.module('../../scripts/behavior-audit/consolidate.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/consolidate.js', () => ({
       runPhase2b: (): Promise<{ readonly version: 1; readonly entries: Record<string, never> }> =>
         Promise.resolve({
           version: 1,
           entries: {},
         }),
     }))
-    void mock.module('../../scripts/behavior-audit/evaluate.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/evaluate.js', () => ({
       runPhase3: async (): Promise<void> => {},
     }))
-    void mock.module('../../scripts/behavior-audit/report-writer.js', () => ({
+    void mock.module('../../../scripts/behavior-audit/report-writer.js', () => ({
       rebuildReportsFromStoredResults: async (): Promise<void> => {},
     }))
   })
