@@ -182,6 +182,22 @@ describe('buildClustersAdvanced', () => {
     expect(normalizeClusters(clusters)).toEqual(normalizeClusters(original))
   })
 
+  test('complete linkage is most conservative across linkage modes', () => {
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [0.8, 0.6, 0],
+      [0.8, -1 / 15, Math.sqrt(80) / 15],
+    ])
+
+    const singleClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'single')
+    const averageClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'average')
+    const completeClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'complete')
+
+    expect(normalizeClusters(singleClusters)).toEqual([[0, 1, 2]])
+    expect(normalizeClusters(averageClusters)).toEqual([[0, 1, 2]])
+    expect(normalizeClusters(completeClusters)).toEqual([[0, 1]])
+  })
+
   test('returns empty for threshold above all similarities', () => {
     const embeddings = makeNormalized([
       [1, 0],
