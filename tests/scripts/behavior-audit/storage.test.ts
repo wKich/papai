@@ -3,16 +3,16 @@ import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import { createEmptyProgress } from '../../scripts/behavior-audit-storage.js'
-import type { ConsolidatedManifest } from '../../scripts/behavior-audit/incremental.js'
-import { mockAuditBehaviorConfig, mockReportsConfig } from './behavior-audit-integration.helpers.js'
+import { createEmptyProgress } from '../../../scripts/behavior-audit/progress.js'
+import type { ConsolidatedManifest } from '../../../scripts/behavior-audit/incremental.js'
+import { mockAuditBehaviorConfig, mockReportsConfig } from '../behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
   cleanupTempDirs,
   makeTempDir,
   originalOpenAiApiKey,
   restoreOpenAiApiKey,
-} from './behavior-audit-integration.runtime-helpers.js'
+} from '../behavior-audit-integration.runtime-helpers.js'
 import {
   importWithGuard,
   isResetModule,
@@ -22,7 +22,7 @@ import {
   loadReportWriterModule,
   loadResetModule,
   type ResetModuleShape,
-} from './behavior-audit-integration.support.js'
+} from '../behavior-audit-integration.support.js'
 
 interface ExtractedStoreModuleShape {
   readonly writeExtractedFile: (testFilePath: string, records: readonly unknown[]) => Promise<void>
