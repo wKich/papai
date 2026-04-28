@@ -235,6 +235,51 @@ describe('buildClustersAdvanced', () => {
   })
 })
 
+describe('buildClustersAdvanced gap threshold', () => {
+  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
+    return vectors.map((vector) => {
+      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
+    })
+  }
+
+  function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (readonly number[])[] {
+    return [...clusters].map((cluster) => [...cluster].sort((a, b) => a - b)).sort((a, b) => a[0]! - b[0]!)
+  }
+
+  test('single linkage gap threshold blocks ambiguous merges', () => {
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [0.85, 0.53, 0],
+      [0.85, -0.53, 0],
+    ])
+
+    const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, 'single')
+    const withGap = buildClustersAdvanced(embeddings, 0.8, 2, 'single', 0.2)
+
+    expect(normalizeClusters(withoutGap)).toEqual([[0, 1, 2]])
+    expect(withGap).toEqual([])
+  })
+
+  test.each<LinkageMode>(['average', 'complete'])(
+    '%s linkage gap threshold blocks ambiguous first merge',
+    (linkage) => {
+      const embeddings = makeNormalized([
+        [1, 0, 0],
+        [0.85, 0.53, 0],
+        [0.85, -0.53, 0],
+      ])
+
+      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage)
+      const withGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0.2)
+
+      expect(withoutGap).toHaveLength(1)
+      expect(withoutGap[0]).toHaveLength(2)
+      expect(withGap).toEqual([])
+    },
+  )
+})
+
 describe('subdivideOversizedClusters', () => {
   function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
     return vectors.map((vector) => {
